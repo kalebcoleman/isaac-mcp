@@ -80,7 +80,7 @@ e.g. `ur5e_lab`) and, in the Isaac Lab interpreter, import them plus `isaaclab_t
 (without starting Kit; check `isaaclab_rl/entrypoints/dispatch.py::_resolve_default_library` for how Lab does it). Passing a
 custom task id to `isaaclab__train` already works. Needs the section 4 env to test.
 
-**B. `quick_start_with_workstation` hang flake.** Twice on 2026-10-29 the first call after boot never returned
+**B. `quick_start_with_workstation` hang flake.** *(2026-10-29, lab RTX PRO 6000: `scripts/catch_hang.sh 30` ran 30 boots + quick_starts with NO hang, 6-7 s each, so the flake is not a plain boot-then-call race; still worth one run on the 5080.)* Twice on 2026-10-29 the first call after boot never returned
 (app log ends with PhysX warnings; earlier a "Nested app.update() deferred asyncio work" warning); normally ~5 s; never
 reproduced since; trees were byte-identical. Run `scripts/catch_hang.sh 30` on the 5080: it loops boot+quick_start and,
 on a hang, saves the log, a process snapshot, nvidia-smi and (if `py-spy` is installed) a stack dump to
