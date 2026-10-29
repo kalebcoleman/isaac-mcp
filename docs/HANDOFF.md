@@ -104,7 +104,7 @@ upstream-written pages (`mcp/docs/*`) that predate the rename and may mention ol
   PR #1 (consolidation) was closed; branch `consolidate-62` is the archive of that work and contains the 6.2 probe, TF rewiring,
   packaging and `learning6/`. Its `CLAUDE.md` still refers to MCP server `ur5e` and `scripts/launch_ur5e_dt.sh`; update it if that
   repo should use `isaac-mcp`.
-- Old `external/` tree (pre-consolidation) is at `~/Desktop/../archive/external-pre-consolidation-20261029` on the lab box only.
+- Old `external/` tree (pre-consolidation) is at `~/archive/external-pre-consolidation-20261029` on the lab box only.
 - Two stray T3 worktrees from agent runs: `~/.t3/worktrees/ur5e-digital-twin/t3-101d33d3` and `t3-53acd119` (safe to delete).
 - Transient job state lives in `~/.local/share/isaac-mcp/jobs/`; screenshots/videos in `~/Pictures/screen-mcp/`, `~/Videos/screen-mcp/`.
 
