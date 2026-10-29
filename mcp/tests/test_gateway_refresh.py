@@ -11,8 +11,8 @@ pytest.importorskip("mcp")
 
 from mcp.server.fastmcp import FastMCP
 
-import kit_mcp.server as gw
-from omni_kit_mcp.schema import field_specs
+import isaac_mcp.server as gw
+from isaac_mcp_bridge.schema import field_specs
 
 
 def _meta(description, parameters, namespace, owner_id):
@@ -95,12 +95,12 @@ def test_bridge_without_field_specs_is_a_loud_error(fresh_gateway, monkeypatch):
 
 def test_curated_view_filter_holds_on_refresh(fresh_gateway, monkeypatch):
     server = fresh_gateway
-    monkeypatch.setenv("KIT_MCP_NAMESPACE", "pm")
-    monkeypatch.setenv("KIT_MCP_BUILTINS", "0")
+    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "pm")
+    monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
     _fake_registry(monkeypatch, {
         "pm.read_state": _meta("d", {}, "pm", "P"),
         "demo.ping": _meta("d", {}, "demo", "A"),
-        "run_python": _meta("d", {}, None, "omni.kit.mcp"),
+        "run_python": _meta("d", {}, None, "isaac.mcp.bridge"),
     })
     added = gw.discover_and_register_tools(server)
     assert added == ["pm.read_state"]           # namespace + builtins gates hold

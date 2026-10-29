@@ -1,4 +1,4 @@
-# isaaclab_bridge_launch.py — template: wire the omni.kit.mcp bridge into an
+# isaaclab_bridge_launch.py — template: wire the isaac.mcp.bridge bridge into an
 # Isaac Lab STANDALONE script (train/play/custom env loop).
 #
 # Isaac Lab differs from the Isaac Sim app in three ways that change the setup:
@@ -9,8 +9,8 @@
 #      app is pumped (env.step()/sim.step()/app.update()). A request sent while
 #      the script blocks between steps stalls until the next pump. Keep
 #      stepping (training loops naturally do).
-#   3. Configuration is env-var only (no carb persistence): OMNI_KIT_MCP_PORT,
-#      KIT_MCP_TOOL_PATHS, KIT_MCP_TOOL_MODULES.
+#   3. Configuration is env-var only (no carb persistence): ISAAC_MCP_PORT,
+#      ISAAC_MCP_TOOL_PATHS, ISAAC_MCP_TOOL_MODULES.
 #
 # Everything else — protocol, tool packages, canonical names, the isaac-mcp
 # front-end — is identical to the Isaac Sim setup (see repo README).
@@ -22,12 +22,12 @@ import os
 # A Lab standalone run is its OWN Kit process — "one bridge, one port, per Kit
 # process" means each concurrently-running process needs its own port. The
 # installed Isaac Sim app typically holds 9009; Lab runs take 9010 by convention.
-os.environ.setdefault("OMNI_KIT_MCP_PORT", "9010")
+os.environ.setdefault("ISAAC_MCP_PORT", "9010")
 # Optional: autoload your project's tool package(s), same contract as Isaac Sim:
-# os.environ.setdefault("KIT_MCP_TOOL_PATHS", os.path.expanduser("~/myproj/isaac"))
-# os.environ.setdefault("KIT_MCP_TOOL_MODULES", "myproj_tools")
+# os.environ.setdefault("ISAAC_MCP_TOOL_PATHS", os.path.expanduser("~/myproj/isaac"))
+# os.environ.setdefault("ISAAC_MCP_TOOL_MODULES", "myproj_tools")
 
-_OMNI_KIT_MCP_EXTS = os.path.expanduser("~/Documents/omni-isaac-mcp/exts")
+_ISAAC_MCP_EXTS = os.path.expanduser("~/Documents/omni-isaac-mcp/exts")
 
 from isaaclab.app import AppLauncher
 
@@ -37,18 +37,18 @@ AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 
 # Enable the bridge at boot. If the user passed their own --kit_args, append.
-# Kit args use the SPACE form ("--enable omni.kit.mcp"); the "=" form is
+# Kit args use the SPACE form ("--enable isaac.mcp.bridge"); the "=" form is
 # silently ignored for --enable. To also livestream to a remote viewer, add:
 #   LIVESTREAM=2 in env, and "--/app/livestream/publicEndpointAddress=<box-ip>"
 #   to kit_args — the PUBLIC_IP env var alone does NOT set the endpoint, and an
 #   empty endpoint yields an SDP with no ICE candidates (track connects, no
 #   frames ever arrive).
-_bridge_args = f"--ext-folder {_OMNI_KIT_MCP_EXTS} --enable omni.kit.mcp"
+_bridge_args = f"--ext-folder {_ISAAC_MCP_EXTS} --enable isaac.mcp.bridge"
 args.kit_args = f"{args.kit_args} {_bridge_args}".strip() if args.kit_args else _bridge_args
 
 app_launcher = AppLauncher(args)
 simulation_app = app_launcher.app
-# Bridge is now listening on OMNI_KIT_MCP_PORT (run_python + your tools).
+# Bridge is now listening on ISAAC_MCP_PORT (run_python + your tools).
 
 # ---- your normal Isaac Lab code below; imports must come after app launch ----
 import isaaclab.sim as sim_utils

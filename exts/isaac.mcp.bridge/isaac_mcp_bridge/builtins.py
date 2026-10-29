@@ -284,7 +284,7 @@ def builtin_tools(bridge) -> List:
         ),
         ToolDefinition(
             name="list_bridges",
-            description="List all omni.kit.mcp bridges advertised on this box "
+            description="List all isaac.mcp.bridge bridges advertised on this box "
                         "(this Kit process and any siblings, e.g. a second "
                         "instance on an ephemeral port).",
             parameters={},

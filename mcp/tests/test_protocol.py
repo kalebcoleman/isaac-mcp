@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from omni_kit_mcp import protocol
+from isaac_mcp_bridge import protocol
 
 
 def test_encode_frame_is_one_line():

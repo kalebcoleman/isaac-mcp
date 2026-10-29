@@ -7,9 +7,9 @@ import types
 
 import pytest
 
-from omni_kit_mcp.autoload import load_tool_modules, reload_tool_module
-from omni_kit_mcp.bridge import McpBridge
-from omni_kit_mcp.toolset import derive_parameters, register_toolset, source_hash
+from isaac_mcp_bridge.autoload import load_tool_modules, reload_tool_module
+from isaac_mcp_bridge.bridge import McpBridge
+from isaac_mcp_bridge.toolset import derive_parameters, register_toolset, source_hash
 
 
 def make_bridge():
@@ -191,7 +191,7 @@ def test_the_loaders_own_entrypoints_are_not_derived_as_tools():
         fn.__name__ = name
         setattr(mod, name, fn)
 
-    from omni_kit_mcp.toolset import derive_tools
+    from isaac_mcp_bridge.toolset import derive_tools
 
     derived = {tool.name for tool in derive_tools(mod)}
     assert derived == {"a_real_verb"}, derived

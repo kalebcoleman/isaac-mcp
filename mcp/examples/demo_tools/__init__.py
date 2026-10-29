@@ -1,4 +1,4 @@
-"""demo_tools — the template tool package for the omni.kit.mcp bridge.
+"""demo_tools — the template tool package for the isaac.mcp.bridge bridge.
 
 Copy this package into your project to onboard it. A tool project is a plain
 Python package (NOT a Kit extension) that declares a namespace and exposes one
@@ -9,7 +9,7 @@ Register it once, persistently (no launch flags ever again):
 
     python3 scripts/install.py add-project --path <this dir's parent> --module demo_tools
 
-or per-launch:  KIT_MCP_TOOL_PATHS=<parent> KIT_MCP_TOOL_MODULES=demo_tools
+or per-launch:  ISAAC_MCP_TOOL_PATHS=<parent> ISAAC_MCP_TOOL_MODULES=demo_tools
 
 Handler contract: receive params as kwargs, return a JSON-serializable payload
 (or raise; ``ToolError`` attaches structured diagnostics). Never build the

@@ -1,4 +1,4 @@
-# omni.kit.mcp
+# isaac.mcp.bridge
 
 Generic MCP socket bridge for Omniverse Kit. One bridge, one port, per Kit
 process: projects are plain tool packages (`MCP_NAMESPACE` + an optional

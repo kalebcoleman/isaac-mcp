@@ -19,13 +19,13 @@ from typing import Dict, Any
 from isaacsim.core.api.world import World
 from isaacsim.gui.components.element_wrappers import ScrollingWindow
 
-# Generic MCP socket bridge (omni.kit.mcp) — this extension is a CONSUMER: it
+# Generic MCP socket bridge (isaac.mcp.bridge) — this extension is a CONSUMER: it
 # registers its tools on the shared bridge and starts it on a port, instead of
 # hand-rolling its own socket server. Declared as a dependency in extension.toml.
-from omni_kit_mcp import McpBridge, ToolDefinition
+from isaac_mcp_bridge import McpBridge, ToolDefinition
 
 # ur5e-dt keeps its established port 8766 (consumers connect here for the twin
-# tools). It runs its OWN bridge instance (not the shared omni.kit.mcp singleton),
+# tools). It runs its OWN bridge instance (not the shared isaac.mcp.bridge singleton),
 # so it coexists with the permanent base bridge, which lives on its own port (9099).
 # Env override: UR5E_DT_PORT, or the legacy ISAAC_SIM_PORT the consumer already sets.
 MCP_PORT = int(os.getenv("UR5E_DT_PORT") or os.getenv("ISAAC_SIM_PORT") or "8766")
@@ -416,7 +416,7 @@ ASSEMBLIES["fmb_jenga"] = ASSEMBLIES["fmb4"]
 # =============================================================================
 
 MCP_TOOL_REGISTRY = {
-    # NOTE: run_python is provided by the omni.kit.mcp bridge as a
+    # NOTE: run_python is provided by the isaac.mcp.bridge bridge as a
     # built-in verb — do not re-declare it here.
     "play_scene": {
         "description": "Start/resume the simulation timeline in Isaac Sim.",
@@ -2846,7 +2846,7 @@ class DigitalTwin(omni.ext.IExt):
         #     Step 11 below creates the workspace-camera action graph (a stage/OmniGraph mutation) and
         #     switches the viewport camera; if that runs while PhysX is still cooking, the kit main
         #     thread wedges/native-crashes ~1s into play (clean Kit log, NO Python traceback — this was
-        #     the "parked quick_start crash"). prismatic drives the SAME omni.kit.mcp with no crash
+        #     the "parked quick_start crash"). prismatic drives the SAME isaac.mcp.bridge with no crash
         #     precisely because its play_scene waits here. Same warmup loop as _cmd_play_scene /
         #     _cmd_add_objects. See SKILL.md 5.1 warmup addendum.
         print("--- Playing scene ---")

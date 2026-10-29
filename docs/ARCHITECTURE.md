@@ -11,7 +11,7 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 ```
 +-------------------------------------------------------------------------------+
 | Layer 1: Host MCP Server (mcp/)                                               |
-| Package: kit_mcp  |  CLI: isaac-mcp               |
+| Package: isaac_mcp  |  CLI: isaac-mcp               |
 | - Runs in host Python environment (uv tool / isolated venv)                  |
 | - Speaks stdio MCP to AI agents (Claude Code, Claude Desktop, OpenCode)       |
 | - Provides desktop capture: screenshot, screen recording, window management  |
@@ -19,13 +19,13 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 +---------------------------------------+---------------------------------------+
                                         | NDJSON over TCP (:8766)
 +---------------------------------------v---------------------------------------+
-| Layer 2: Generic Kit MCP Bridge (exts/omni.kit.mcp/)                          |
-| Package: omni_kit_mcp  |  Extension ID: omni.kit.mcp                          |
+| Layer 2: Generic Kit MCP Bridge (exts/isaac.mcp.bridge/)                          |
+| Package: isaac_mcp_bridge  |  Extension ID: isaac.mcp.bridge                          |
 | - Runs inside Omniverse Kit main loop                                         |
 | - Provides TCP NDJSON server, request queuing, admission control              |
 | - Dispatches tool calls onto Kit's main thread                                |
 | - Built-ins: run_python, list_tools, reload_tools, list_bridges, file access  |
-| - Optional UI inspector: omni.kit.mcp.panel                                   |
+| - Optional UI inspector: isaac.mcp.panel                                   |
 +---------------------------------------+---------------------------------------+
                                         | Python registrar / event hook
 +---------------------------------------v---------------------------------------+
@@ -49,9 +49,9 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 ### Why Layers Are Kept Separate
 
 - **`mcp/`** must start instantly on the host and must never require loading or syncing a 20+ GB Isaac Sim simulation environment just to run desktop screen capture or manage processes.
-- **`exts/omni.kit.mcp`** is a generic, robot-agnostic transport layer. It can connect to any Kit application and exposes a uniform registration API for any tool package.
+- **`exts/isaac.mcp.bridge`** is a generic, robot-agnostic transport layer. It can connect to any Kit application and exposes a uniform registration API for any tool package.
 - **`exts/ur5e-dt`** encapsulates the robot model, physics parameters, workstation USD assets (111 MB), and manipulation logic.
-- **`exts/omni.kit.mcp.panel`** is vendored alongside the bridge to provide an in-editor GUI inspector for registered tools.
+- **`exts/isaac.mcp.panel`** is vendored alongside the bridge to provide an in-editor GUI inspector for registered tools.
 
 ---
 
@@ -61,9 +61,9 @@ Consistency across extensions, packages, and CLI commands is strictly maintained
 
 | Entity | Format | Rule | Examples |
 |---|---|---|---|
-| Kit Extension ID | Dotted / Hyphenated | Matches Omniverse extension identifier | `ur5e-dt`, `omni.kit.mcp`, `omni.kit.mcp.panel` |
-| Extension Folder | Exact Match | Directory under `exts/` matches Extension ID | `exts/ur5e-dt/`, `exts/omni.kit.mcp/` |
-| Python Package | Underscored | Standard valid Python import identifier | `ur5e_dt`, `omni_kit_mcp`, `kit_mcp` |
+| Kit Extension ID | Dotted / Hyphenated | Matches Omniverse extension identifier | `ur5e-dt`, `isaac.mcp.bridge`, `isaac.mcp.panel` |
+| Extension Folder | Exact Match | Directory under `exts/` matches Extension ID | `exts/ur5e-dt/`, `exts/isaac.mcp.bridge/` |
+| Python Package | Underscored | Standard valid Python import identifier | `ur5e_dt`, `isaac_mcp_bridge`, `isaac_mcp` |
 | CLI / Server Name | Hyphenated | User-facing executable installed by `uv tool` | `isaac-mcp` |
 
 ---
@@ -77,7 +77,7 @@ Consistency across extensions, packages, and CLI commands is strictly maintained
 | **`8766`** | `ur5e-dt` extension | Default primary twin bridge port. Used by `run.sh`, `verify.sh`, and MCP clients. |
 | **`8767`** | `ur5e-dt` secondary | Optional secondary twin instance when running dual sessions. |
 | **`8799`** | Probe script | Dedicated port for `scripts/probe_62.sh` to run non-interfering diagnostic probes. |
-| *(none)* | `omni.kit.mcp` base bridge | Normally autostarts on a port advertised through a portfile, which clients discover. Twin launches set `OMNI_KIT_MCP_PORT=0` to disable it so each Kit process exposes exactly one endpoint (the twin bridge). |
+| *(none)* | `isaac.mcp.bridge` base bridge | Normally autostarts on a port advertised through a portfile, which clients discover. Twin launches set `ISAAC_MCP_PORT=0` to disable it so each Kit process exposes exactly one endpoint (the twin bridge). |
 
 ### Endpoint Precedence Chain
 
@@ -85,8 +85,8 @@ When an MCP client or host utility connects to a running bridge, the target port
 
 1. **Explicit argument:** Parameter passed directly to a tool call (e.g., `use_bridge(8766)`) or CLI flag (`--port 8766`).
 2. **`UR5E_DT_PORT`:** Specific environment variable targeting the twin bridge.
-3. **`OMNI_KIT_MCP_PORT`:** Generic environment variable fallback.
-4. **Portfile discovery:** Active portfiles published by running Kit instances in `~/.local/share/omni.kit.mcp/bridges/`. If multiple instances are running without an explicit pin, discovery refuses to guess and lists available ports.
+3. **`ISAAC_MCP_PORT`:** Generic environment variable fallback.
+4. **Portfile discovery:** Active portfiles published by running Kit instances in `~/.local/share/isaac.mcp.bridge/bridges/`. If multiple instances are running without an explicit pin, discovery refuses to guess and lists available ports.
 
 ---
 
@@ -103,7 +103,7 @@ Communication between the host MCP server and the Kit bridge uses JSON lines ove
        │
        │ TCP NDJSON (:8766)
        ▼
-[Kit Bridge: omni.kit.mcp (:8766)]
+[Kit Bridge: isaac.mcp.bridge (:8766)]
        │
        │ Main-thread dispatch
        ▼
@@ -114,7 +114,7 @@ Communication between the host MCP server and the Kit bridge uses JSON lines ove
 
 - Inside Kit, the twin registers tools under its canonical namespace with dots: `ur5e_dt.<tool_name>`.
   Examples: `ur5e_dt.play_scene`, `ur5e_dt.quick_start_with_workstation`, `ur5e_dt.get_joint_positions`.
-- Because dots (`.`) are not valid characters in MCP tool names per the Model Context Protocol specification, the host server (`kit_mcp/server.py`) translates dots to double underscores (`__`).
+- Because dots (`.`) are not valid characters in MCP tool names per the Model Context Protocol specification, the host server (`isaac_mcp/server.py`) translates dots to double underscores (`__`).
 - Consequently, MCP clients see and invoke tools as: `ur5e_dt__<tool_name>` (e.g., `ur5e_dt__play_scene`).
 - Tools built into the bridge itself (such as `list_bridges`, `use_bridge`, `run_python`) and host desktop capture tools (`screenshot`, `start_screen_recording`, `stop_screen_recording`, `list_windows`) do not carry the `ur5e_dt__` prefix.
 

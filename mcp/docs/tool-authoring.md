@@ -13,7 +13,7 @@ advertise their `model_json_schema()` — and the description from the
 docstring's first line. Sync and async functions alike (async handlers are
 awaited on Kit's loop). Adding a public function to the library IS publishing
 it. Programmatic form: `register_toolset(bridge, module)` (importable from
-`omni_kit_mcp`). `status` reports a per-namespace `source_hash` of the served
+`isaac_mcp_bridge`). `status` reports a per-namespace `source_hash` of the served
 code so a client can detect staleness; `reload_tools` re-derives the surface
 after an edit.
 
@@ -30,9 +30,9 @@ Same binary, same socket, different env:
 ```json
 "robot-demo-agent": {
   "command": "isaac-mcp",
-  "env": { "OMNI_KIT_MCP_PORT": "9009",
-           "KIT_MCP_NAMESPACE": "robot_demo",
-           "KIT_MCP_BUILTINS": "0" }
+  "env": { "ISAAC_MCP_PORT": "9009",
+           "ISAAC_MCP_NAMESPACE": "robot_demo",
+           "ISAAC_MCP_BUILTINS": "0" }
 }
 ```
 
@@ -87,7 +87,7 @@ package's files, `reload_tools` picks them up without a restart.
 
 ## Control panel
 
-`omni.kit.mcp.panel` renders the live registry: one section per namespace,
+`isaac.mcp.panel` renders the live registry: one section per namespace,
 parameter widgets generated from each tool's schema. Every button goes through
 `bridge.dispatch(...)` — the same entrance a socket request takes — so a human
 click and an agent call are the same code path by construction. Projects that

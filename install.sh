@@ -2,7 +2,7 @@
 # TARGET LAYOUT: This script is drafted for the consolidated layout described in
 # docs/PLAN-consolidation-62.md Section 4 (mcp/, exts/, config/, scripts/).
 # In the consolidated tree, the host MCP package is located at mcp/ and exts/ holds
-# the Kit extensions (omni.kit.mcp and ur5e-dt).
+# the Kit extensions (isaac.mcp.bridge and ur5e-dt).
 #
 # install.sh — idempotent one-time setup for isaac-mcp.
 #

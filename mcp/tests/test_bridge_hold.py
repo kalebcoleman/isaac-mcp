@@ -14,9 +14,9 @@ import time
 
 import pytest
 
-from kit_mcp import client as reference_client
-from omni_kit_mcp import bridge as bridge_module
-from omni_kit_mcp.bridge import McpBridge
+from isaac_mcp import client as reference_client
+from isaac_mcp_bridge import bridge as bridge_module
+from isaac_mcp_bridge.bridge import McpBridge
 from test_bridge_admission import Served, pumping_verb, until
 
 
@@ -165,7 +165,7 @@ def test_a_holder_killed_outright_releases_the_hold(served, tmp_path):
     script = textwrap.dedent(f"""
         import sys, time
         sys.path.insert(0, {os.path.dirname(os.path.dirname(reference_client.__file__))!r})
-        from kit_mcp.client import DoorwayHold
+        from isaac_mcp.client import DoorwayHold
         hold = DoorwayHold("doomed", "killed mid-hold", host="127.0.0.1", port={served.port})
         hold.place()
         open({str(ready)!r}, "w").write("1")

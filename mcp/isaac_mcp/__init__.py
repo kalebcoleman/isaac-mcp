@@ -1,21 +1,21 @@
-"""kit_mcp — the caller side of the omni.kit.mcp bridge.
+"""isaac_mcp — the caller side of the isaac.mcp.bridge bridge.
 
 Two layers with different weights:
 
-- ``kit_mcp.client`` — the reference NDJSON client + CLI. Stdlib-only; imports
+- ``isaac_mcp.client`` — the reference NDJSON client + CLI. Stdlib-only; imports
   anywhere. This is the layer scripts, tests, and doctors use. The bridge's
   wire protocol is not MCP — this client needs no SDK.
-- ``kit_mcp.server`` — the MCP gateway (FastMCP front-end that makes bridge
+- ``isaac_mcp.server`` — the MCP gateway (FastMCP front-end that makes bridge
   tools native for Claude/Cursor via .mcp.json). The only component in the
   ecosystem that speaks the Model Context Protocol; requires the ``mcp`` SDK.
 
-The server import is lazy (PEP 562) so ``import kit_mcp`` / ``kit_mcp.client``
+The server import is lazy (PEP 562) so ``import isaac_mcp`` / ``isaac_mcp.client``
 work in environments without the SDK; touching a server attribute (or running
 the ``isaac-mcp`` command) is what requires it.
 """
 
 # Both layers resolve lazily (PEP 562): the package itself imports for free,
-# `python -m kit_mcp.client` runs without the runpy double-import warning, and
+# `python -m isaac_mcp.client` runs without the runpy double-import warning, and
 # the SDK is only demanded when a server attribute is actually touched.
 _CLIENT_ATTRS = {"client", "BridgeClient", "BridgeError", "call"}
 _SERVER_ATTRS = {

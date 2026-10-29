@@ -21,9 +21,9 @@ import time
 
 import pytest
 
-from kit_mcp import client as reference_client
-from omni_kit_mcp import bridge as bridge_module
-from omni_kit_mcp.bridge import EXCLUSIVE_ATTRIBUTE, McpBridge, ToolDefinition
+from isaac_mcp import client as reference_client
+from isaac_mcp_bridge import bridge as bridge_module
+from isaac_mcp_bridge.bridge import EXCLUSIVE_ATTRIBUTE, McpBridge, ToolDefinition
 
 #: The acceptance pump. 30 s is the ruled length; the suite runs it scaled, and the full length
 #: runs when asked for by name (`DOORWAY_ACCEPTANCE_PUMP_S=30`).
@@ -352,7 +352,7 @@ def test_a_queue_budget_that_runs_out_is_refused_WHILE_the_pump_still_holds_the_
 
 
 def test_a_stated_budget_is_capped_by_the_server_and_says_so(served, monkeypatch):
-    monkeypatch.setenv("OMNI_KIT_MCP_QUEUE_CAP_S", "0.2")
+    monkeypatch.setenv("ISAAC_MCP_QUEUE_CAP_S", "0.2")
     capped = Served()
     try:
         entered, release = pumping_verb(capped)
@@ -369,7 +369,7 @@ def test_a_stated_budget_is_capped_by_the_server_and_says_so(served, monkeypatch
 
 
 def test_the_queue_holds_exactly_its_limit_and_the_next_is_refused_at_once(served, monkeypatch):
-    monkeypatch.setenv("OMNI_KIT_MCP_QUEUE_LIMIT", "3")
+    monkeypatch.setenv("ISAAC_MCP_QUEUE_LIMIT", "3")
     small = Served()
     try:
         entered, release = pumping_verb(small)

@@ -5,17 +5,17 @@ import types
 
 import pytest
 
-from omni_kit_mcp import knobs
+from isaac_mcp_bridge import knobs
 
 
 def test_knob_identity_shape():
-    assert knobs.PORT.env == "OMNI_KIT_MCP_PORT"
+    assert knobs.PORT.env == "ISAAC_MCP_PORT"
     assert knobs.PORT.leaf == "autostartPort"
     assert knobs.PORT.settings_keys == (
-        "/persistent/exts/omni.kit.mcp/autostartPort",
-        "/exts/omni.kit.mcp/autostartPort",
+        "/persistent/exts/isaac.mcp.bridge/autostartPort",
+        "/exts/isaac.mcp.bridge/autostartPort",
     )
-    assert knobs.BIND.env == "OMNI_KIT_MCP_BIND"
+    assert knobs.BIND.env == "ISAAC_MCP_BIND"
     assert knobs.BIND.leaf == "autostartHost"
     assert knobs.TOOL_MODULES.leaf == "toolModules"
     assert knobs.TOOL_PATHS.leaf == "toolPaths"
@@ -51,8 +51,8 @@ def test_none_when_nothing_set(monkeypatch):
 
 def test_gateway_env_name_pinned():
     """The gateway shares the env NAME as a cross-process contract — pinned
-    here rather than imported (kit_mcp.client must stay dependency-free)."""
-    from kit_mcp import client
+    here rather than imported (isaac_mcp.client must stay dependency-free)."""
+    from isaac_mcp import client
     assert client.PORT_ENV == knobs.PORT.env
 
 

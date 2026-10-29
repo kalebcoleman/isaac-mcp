@@ -9,7 +9,7 @@ This repository consolidates two previously submodule-managed codebases into a s
 | Component | Upstream Repository | Fork Repository | Pinned SHA | License Status | Local Delta / Patches |
 |---|---|---|---|---|---|
 | **`exts/ur5e-dt`** | `https://github.com/inbarajaldrin/isaac-sim-mcp` | `https://github.com/kalebcoleman/isaac-sim-mcp` | `27f6100` | MIT (`docs/provenance/isaac-sim-mcp-LICENSE`) | 1 file modified (`extension.py`); preserved in `docs/provenance/isaac-sim-mcp-ur5e-dt-owner-registrar.patch` |
-| **`mcp/`** & **`exts/omni.kit.mcp`** | `https://github.com/inbarajaldrin/omni-kit-mcp` | `https://github.com/kalebcoleman/ur5e-mcp` | `9d0366b` | **No LICENSE file upstream** | Clean at `9d0366b` (no local patch) |
+| **`mcp/`** & **`exts/isaac.mcp.bridge`** | `https://github.com/inbarajaldrin/omni-kit-mcp` | `https://github.com/kalebcoleman/ur5e-mcp` | `9d0366b` | **No LICENSE file upstream** | Clean at `9d0366b` (no local patch) |
 
 > [!NOTE]
 > The `ur5e-dt` digital twin extension is this project's own work developed in a fork of Aldrin's upstream repository. The UR5e workstation digital twin, its scene definitions, controllers, checkpoints, and checks are **not** upstream's work.
@@ -31,9 +31,9 @@ This repository consolidates two previously submodule-managed codebases into a s
 - **Fork:** `https://github.com/kalebcoleman/ur5e-mcp`
 - **Pinned Commit:** `9d0366b` (*"feat(screen): default captures to the Isaac window for this port"*)
 - **Vendored Paths:**
-  - `mcp/` (host-side Python package `kit_mcp`, exposing CLI `isaac-mcp`)
-  - `exts/omni.kit.mcp/` (Kit bridge extension)
-  - `exts/omni.kit.mcp.panel/` (Kit bridge GUI inspector panel)
+  - `mcp/` (host-side Python package `isaac_mcp`, exposing CLI `isaac-mcp`)
+  - `exts/isaac.mcp.bridge/` (Kit bridge extension)
+  - `exts/isaac.mcp.panel/` (Kit bridge GUI inspector panel)
 - **Local modifications:** None at the time of consolidation. Fork commit `9d0366b` vendored clean.
 
 ---
@@ -50,7 +50,7 @@ This repository consolidates two previously submodule-managed codebases into a s
 Prior to consolidation, UR5e-specific additions to `ur5e-dt` were applied during setup via `patches/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`. During repository consolidation, this patch was permanently integrated into `exts/ur5e-dt/ur5e_dt/extension.py` and the original patch file was archived to `docs/provenance/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`.
 
 Key modifications incorporated from the patch:
-1. **Owner-Registrar Integration:** Added support for registering tools under an owner-bound namespace with `omni.kit.mcp`.
+1. **Owner-Registrar Integration:** Added support for registering tools under an owner-bound namespace with `isaac.mcp.bridge`.
 2. **Force-Callback Guard:** Guarded force sensor callback registration to prevent null-pointer crashes during rapid stage reopenings.
 3. **Workstation Scene Fixes:** Hardened collider configurations for the Vention workstation, QuickChanger, and RG2 gripper; disabled gravity on the kinematic robot chain.
 4. **Fixed Person-View Camera:** Added automatic creation and configuration of `/World/person_view` for consistent third-person viewing.

@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-from omni_kit_mcp.bridge import McpBridge, ToolDefinition
+from isaac_mcp_bridge.bridge import McpBridge, ToolDefinition
 
 
 def make_bridge():

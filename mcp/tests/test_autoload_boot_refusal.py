@@ -15,11 +15,11 @@ import types
 
 import pytest
 
-from omni_kit_mcp import autoload
-from omni_kit_mcp.autoload import (
+from isaac_mcp_bridge import autoload
+from isaac_mcp_bridge.autoload import (
     BOOT_REFUSAL_EXIT, TOOL_MODULE_LOAD_REFUSED, ToolModuleLoadRefusal,
     load_configured_tool_modules, refuse_boot)
-from omni_kit_mcp.bridge import LOG_DIR_ENV, McpBridge
+from isaac_mcp_bridge.bridge import LOG_DIR_ENV, McpBridge
 
 
 @pytest.fixture()
@@ -30,7 +30,7 @@ def bridge():
 @pytest.fixture(autouse=True)
 def no_held_refusal_leaks():
     """`refuse_boot` holds the refusal on the bridge module; no test leaves one behind."""
-    from omni_kit_mcp import bridge as bridge_module
+    from isaac_mcp_bridge import bridge as bridge_module
     yield
     bridge_module._BOOT_REFUSAL = None
 
@@ -208,7 +208,7 @@ def test_the_refusal_says_a_hand_launched_windowed_isaac_quits_too():
 def test_asking_for_the_bridge_after_a_boot_refusal_raises_that_refusal(tmp_path, monkeypatch):
     """What a standalone carrier does: it asks in-process. Both measured incidents were standalone
     runs, and "bridge not initialized, declare a dependency" would have named the wrong thing."""
-    from omni_kit_mcp import bridge as bridge_module
+    from isaac_mcp_bridge import bridge as bridge_module
     monkeypatch.setenv(LOG_DIR_ENV, str(tmp_path))
     monkeypatch.setattr(bridge_module, "_BRIDGE", None)
     monkeypatch.setattr(bridge_module, "_BOOT_REFUSAL", None)
@@ -270,13 +270,13 @@ def test_the_record_name_a_cells_bringup_reads_is_pinned_on_both_sides():
     `simcell.DOORWAY_BOOT_REFUSAL_PREFIX` spells the same literal and asserts it in
     `tests/test_simcell_doorway_boot_refusal.py`. Move one and the other must move with it."""
     assert autoload.BOOT_REFUSAL_PREFIX == "boot-refusal-"
-    assert LOG_DIR_ENV == "OMNI_KIT_MCP_LOG_DIR"
+    assert LOG_DIR_ENV == "ISAAC_MCP_LOG_DIR"
 
 
 # ------------------------------------------------------------------ the extension's startup
 @pytest.fixture()
 def extension(monkeypatch):
-    """`omni_kit_mcp.extension` imported against stand-ins for the two Kit modules it names."""
+    """`isaac_mcp_bridge.extension` imported against stand-ins for the two Kit modules it names."""
     logged = []
     carb = types.ModuleType("carb")
     for level in ("info", "warn", "error"):
@@ -289,20 +289,20 @@ def extension(monkeypatch):
     monkeypatch.setitem(sys.modules, "carb", carb)
     monkeypatch.setitem(sys.modules, "omni", omni)
     monkeypatch.setitem(sys.modules, "omni.ext", omni_ext)
-    monkeypatch.delitem(sys.modules, "omni_kit_mcp.extension", raising=False)
+    monkeypatch.delitem(sys.modules, "isaac_mcp_bridge.extension", raising=False)
     import importlib
-    module = importlib.import_module("omni_kit_mcp.extension")
+    module = importlib.import_module("isaac_mcp_bridge.extension")
     module.logged = logged
     yield module
-    sys.modules.pop("omni_kit_mcp.extension", None)
+    sys.modules.pop("isaac_mcp_bridge.extension", None)
     module._destroy_bridge()
-    from omni_kit_mcp import bridge as bridge_module
+    from isaac_mcp_bridge import bridge as bridge_module
     bridge_module._BOOT_REFUSAL = None
 
 
 def test_startup_refuses_and_binds_no_socket_when_a_configured_module_fails(
         extension, tool_dir, tmp_path, monkeypatch):
-    from omni_kit_mcp import bridge as bridge_module, knobs
+    from isaac_mcp_bridge import bridge as bridge_module, knobs
     tool_dir("fine_a", GOOD.format(ns="fa"))
     tool_dir("breaks_at_import", RAISES_AT_IMPORT)
     log_dir = tmp_path / "doorway"
@@ -316,7 +316,7 @@ def test_startup_refuses_and_binds_no_socket_when_a_configured_module_fails(
                         lambda refusal: refuse_boot(refusal, quit_app=quits.append))
 
     with pytest.raises(ToolModuleLoadRefusal) as caught:
-        extension.McpBridgeExtension().on_startup("omni.kit.mcp-test")
+        extension.McpBridgeExtension().on_startup("isaac.mcp.bridge-test")
 
     assert list(caught.value.failures) == ["breaks_at_import"]
     assert started == []                                   # no socket: nothing to dial
@@ -332,7 +332,7 @@ def test_startup_refuses_and_binds_no_socket_when_a_configured_module_fails(
 
 def test_startup_with_a_healthy_set_binds_and_refuses_nothing(
         extension, tool_dir, tmp_path, monkeypatch):
-    from omni_kit_mcp import bridge as bridge_module, knobs
+    from isaac_mcp_bridge import bridge as bridge_module, knobs
     tool_dir("fine_a", GOOD.format(ns="fa"))
     log_dir = tmp_path / "doorway"
     monkeypatch.setenv(LOG_DIR_ENV, str(log_dir))
@@ -344,7 +344,7 @@ def test_startup_with_a_healthy_set_binds_and_refuses_nothing(
     monkeypatch.setattr(extension, "refuse_boot",
                         lambda refusal: refuse_boot(refusal, quit_app=quits.append))
 
-    extension.McpBridgeExtension().on_startup("omni.kit.mcp-test")
+    extension.McpBridgeExtension().on_startup("isaac.mcp.bridge-test")
 
     assert [port for port, _host in started] == [49999]
     assert quits == []

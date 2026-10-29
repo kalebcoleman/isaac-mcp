@@ -1,4 +1,4 @@
-"""omni.kit.mcp — generic MCP socket bridge for Omniverse Kit.
+"""isaac.mcp.bridge — generic MCP socket bridge for Omniverse Kit.
 
 Public API:
     get_mcp_bridge() -> McpBridge   # the process-global bridge singleton

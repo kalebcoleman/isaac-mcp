@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 from Xlib import X
 
-import kit_mcp.screen as screen
+import isaac_mcp.screen as screen
 
 
 def _make_window(wid, title, viewable=True, size=(1440, 900)):

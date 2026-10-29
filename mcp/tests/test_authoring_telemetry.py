@@ -6,9 +6,9 @@ import os
 import subprocess
 import sys
 
-from omni_kit_mcp import bridge as bridge_module
-from omni_kit_mcp.bridge import McpBridge, ToolDefinition
-from omni_kit_mcp import telemetry
+from isaac_mcp_bridge import bridge as bridge_module
+from isaac_mcp_bridge.bridge import McpBridge, ToolDefinition
+from isaac_mcp_bridge import telemetry
 
 
 def _bridge():
@@ -48,7 +48,7 @@ def test_a_completed_counter_survives_immediate_process_death(tmp_path):
     path = tmp_path / "authoring-telemetry.jsonl"
     code = (
         "import os\n"
-        "from omni_kit_mcp.telemetry import Sink\n"
+        "from isaac_mcp_bridge.telemetry import Sink\n"
         f"Sink({str(path)!r}).record('run_python', {{}}, 1.0, {{'status':'success'}})\n"
         "os._exit(17)\n"
     )

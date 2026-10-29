@@ -1,8 +1,8 @@
-# omni.kit.mcp.panel
+# isaac.mcp.panel
 
-Registry-driven control panel for the `omni.kit.mcp` bridge. One collapsible
+Registry-driven control panel for the `isaac.mcp.bridge` bridge. One collapsible
 section per namespace, one row per registered tool, parameter widgets generated
-from each tool's bridge-served field specs (`omni_kit_mcp.schema`). Install once; every project's tools appear
+from each tool's bridge-served field specs (`isaac_mcp_bridge.schema`). Install once; every project's tools appear
 automatically when their packages register — nothing per-project, nothing
 generated on disk.
 

@@ -47,16 +47,16 @@ All notable changes to this extension are documented here. Format follows
   exposing `register(registrar)`; the autoloader owns the owner lifecycle and
   hands the entrypoint an `OwnerRegistrar`.
 - Persistent registration: tool modules/paths from carb settings
-  (`/persistent/exts/omni.kit.mcp/toolModules|toolPaths`, written by
-  `scripts/install.py add-project`); `KIT_MCP_TOOL_*` env vars are per-launch
-  overrides. Port from `OMNI_KIT_MCP_PORT` or the `autostartPort` setting.
+  (`/persistent/exts/isaac.mcp.bridge/toolModules|toolPaths`, written by
+  `scripts/install.py add-project`); `ISAAC_MCP_TOOL_*` env vars are per-launch
+  overrides. Port from `ISAAC_MCP_PORT` or the `autostartPort` setting.
 - Builtins: `run_python` (persistent in-memory sessions), `list_tools`
   (discovery, internal), `reload_tools` (hot-reload one tool package in place;
   the `_state` submodule preserved, stale bytecode purged; doubles as first load
   for projects registered after launch), `list_bridges` (this box's advertised
   bridges — how remote callers find ephemeral-port siblings).
 - Config knobs defined once (`knobs.py`): port (`autostartPort` /
-  `OMNI_KIT_MCP_PORT`), bind address (`autostartHost` / `OMNI_KIT_MCP_BIND`,
+  `ISAAC_MCP_PORT`), bind address (`autostartHost` / `ISAAC_MCP_BIND`,
   default localhost), tool modules/paths — env overrides settings, and
   `scripts/install.py` writes the same identities it reads.
 - Port discovery: each bridge advertises `{pid, port, host, app}` in a
@@ -65,5 +65,5 @@ All notable changes to this extension are documented here. Format follows
   back to an OS-assigned ephemeral port, still advertised.
 - Injectable coroutine scheduler — the full socket server is unit-testable
   outside Kit (see repository `tests/`).
-- Companion extension `omni.kit.mcp.panel`: registry-driven control panel;
+- Companion extension `isaac.mcp.panel`: registry-driven control panel;
   every button dispatches through `bridge.dispatch` (click == agent call).

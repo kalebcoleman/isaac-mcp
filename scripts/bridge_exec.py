@@ -13,8 +13,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = ROOT / 'mcp'
 code = Path(sys.argv[1]).read_text().replace('__ROOT__', str(ROOT))
-command = [sys.executable, '-m', 'kit_mcp.client', 'run_python', json.dumps({'code': code}), '--timeout', '90']
+command = [sys.executable, '-m', 'isaac_mcp.client', 'run_python', json.dumps({'code': code}), '--timeout', '90']
 env = {**os.environ, 'PYTHONPATH': str(BRIDGE)}
-if 'UR5E_DT_PORT' not in env and 'OMNI_KIT_MCP_PORT' not in env:
+if 'UR5E_DT_PORT' not in env and 'ISAAC_MCP_PORT' not in env:
     env['UR5E_DT_PORT'] = '8766'
 subprocess.run(command, cwd=BRIDGE, env=env, check=False)

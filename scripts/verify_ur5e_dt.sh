@@ -4,7 +4,7 @@
 # Prints each check's result and the number of [Error] lines in the app log, if LOG is set.
 set -u
 # Discovery is unreliable across Isaac versions; the twin bridge port is fixed.
-export UR5E_DT_PORT="${UR5E_DT_PORT:-${OMNI_KIT_MCP_PORT:-8766}}"
+export UR5E_DT_PORT="${UR5E_DT_PORT:-${ISAAC_MCP_PORT:-8766}}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$ROOT/.venv/bin/python"
 BRIDGE="$ROOT/mcp"
@@ -15,10 +15,10 @@ run_check() {
   echo "== $1"
   "$PY" "$ROOT/scripts/bridge_exec.py" "$ROOT/scripts/checks/$1.py" 2>&1
 }
-echo "== quick_start (1st)"; (cd "$BRIDGE" && PYTHONPATH=$PWD "$PY" -m kit_mcp.client ur5e_dt.quick_start_with_workstation '{}' --timeout 90)
+echo "== quick_start (1st)"; (cd "$BRIDGE" && PYTHONPATH=$PWD "$PY" -m isaac_mcp.client ur5e_dt.quick_start_with_workstation '{}' --timeout 90)
 if [ "${REBUILD:-0}" = "1" ]; then  # opt-in stress test: rebuilding a loaded scene logs Kit viewport UI errors
   sleep 10
-  echo "== quick_start (2nd, rebuild)"; (cd "$BRIDGE" && PYTHONPATH=$PWD "$PY" -m kit_mcp.client ur5e_dt.quick_start_with_workstation '{}' --timeout 90)
+  echo "== quick_start (2nd, rebuild)"; (cd "$BRIDGE" && PYTHONPATH=$PWD "$PY" -m isaac_mcp.client ur5e_dt.quick_start_with_workstation '{}' --timeout 90)
 fi
 run_check scene_prims
 run_check gravity_robot_chain

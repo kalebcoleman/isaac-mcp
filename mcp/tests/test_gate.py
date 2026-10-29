@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from kit_mcp import gate
+from isaac_mcp import gate
 
 
 def _hooks(*entries, event="PreToolUse"):

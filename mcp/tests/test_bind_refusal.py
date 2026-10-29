@@ -13,7 +13,7 @@ import socket
 
 import pytest
 
-from omni_kit_mcp.bind import declared_bind_refusal
+from isaac_mcp_bridge.bind import declared_bind_refusal
 
 
 def _oserror(number: int) -> OSError:

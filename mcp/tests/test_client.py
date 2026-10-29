@@ -1,4 +1,4 @@
-"""kit_mcp.client — the reference client, exercised against a live bridge.
+"""isaac_mcp.client — the reference client, exercised against a live bridge.
 
 test_bridge.py stays raw-socket on purpose (protocol conformance: literal
 bytes in, literal envelope out — a symmetric client/server bug can't hide
@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-from kit_mcp.client import BridgeClient, BridgeError, call
+from isaac_mcp.client import BridgeClient, BridgeError, call
 from test_bridge import LiveBridge, td
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -44,7 +44,7 @@ def test_missing_port_is_loud(monkeypatch, tmp_path):
     # No env, no explicit port, and an EMPTY runtime dir (no bridge to discover)
     # -> resolution must fail loudly rather than guess.
     monkeypatch.delenv("UR5E_DT_PORT", raising=False)
-    monkeypatch.delenv("OMNI_KIT_MCP_PORT", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     with pytest.raises(RuntimeError):
         call("list_tools")
@@ -52,15 +52,15 @@ def test_missing_port_is_loud(monkeypatch, tmp_path):
 
 def test_port_from_env(live, monkeypatch):
     monkeypatch.delenv("UR5E_DT_PORT", raising=False)
-    monkeypatch.setenv("OMNI_KIT_MCP_PORT", str(live.port))
+    monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
     assert "demo.ping" in call("list_tools")["tools"]
 
 
 def test_twin_port_env_wins_over_generic(live, monkeypatch):
-    # UR5E_DT_PORT names the twin bridge; OMNI_KIT_MCP_PORT is the generic
+    # UR5E_DT_PORT names the twin bridge; ISAAC_MCP_PORT is the generic
     # fallback. The twin variable must win when both are set.
     monkeypatch.setenv("UR5E_DT_PORT", str(live.port))
-    monkeypatch.setenv("OMNI_KIT_MCP_PORT", "1")
+    monkeypatch.setenv("ISAAC_MCP_PORT", "1")
     assert "demo.ping" in call("list_tools")["tools"]
 
 
@@ -91,8 +91,8 @@ def test_reconnects_after_bridge_restart(live):
 # ==================== CLI ====================
 
 def _cli(args, port):
-    env = dict(os.environ, PYTHONPATH=REPO_ROOT, OMNI_KIT_MCP_PORT=str(port))
-    return subprocess.run([sys.executable, "-m", "kit_mcp.client", *args],
+    env = dict(os.environ, PYTHONPATH=REPO_ROOT, ISAAC_MCP_PORT=str(port))
+    return subprocess.run([sys.executable, "-m", "isaac_mcp.client", *args],
                           capture_output=True, text=True, env=env, timeout=30)
 
 
@@ -133,10 +133,10 @@ def test_client_imports_without_mcp_sdk():
         "        if name == 'mcp' or name.startswith('mcp.'):\n"
         "            raise ImportError('mcp SDK blocked by test')\n"
         "sys.meta_path.insert(0, _Block())\n"
-        "import kit_mcp, kit_mcp.client\n"                 # must succeed
-        "kit_mcp.client.BridgeError('x')\n"
+        "import isaac_mcp, isaac_mcp.client\n"                 # must succeed
+        "isaac_mcp.client.BridgeError('x')\n"
         "try:\n"
-        "    kit_mcp.server\n"                              # must require the SDK
+        "    isaac_mcp.server\n"                              # must require the SDK
         "except ImportError:\n"
         "    print('OK')\n"
         "else:\n"
@@ -154,8 +154,8 @@ def test_client_imports_without_mcp_sdk():
 def test_runtime_dir_derivation_pinned(monkeypatch, tmp_path):
     """Bridge and client derive the SAME runtime dir — the cross-process
     contract is pinned here, not shared by import."""
-    from omni_kit_mcp import bridge as bridge_mod
-    from kit_mcp import client as client_mod
+    from isaac_mcp_bridge import bridge as bridge_mod
+    from isaac_mcp import client as client_mod
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     assert bridge_mod._runtime_dir() == client_mod._runtime_dir()
     monkeypatch.delenv("XDG_RUNTIME_DIR")
@@ -164,23 +164,23 @@ def test_runtime_dir_derivation_pinned(monkeypatch, tmp_path):
 
 def test_discovery_single_bridge_zero_config(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    monkeypatch.delenv("OMNI_KIT_MCP_PORT", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
     with LiveBridge() as live:
         live.bridge.register_owner("A", "demo").add(td("ping", lambda: {"ok": 1}))
         # portfile advertised
-        files = os.listdir(os.path.join(str(tmp_path), "omni-kit-mcp"))
+        files = os.listdir(os.path.join(str(tmp_path), "isaac-mcp"))
         assert files and files[0].endswith(f"-{live.port}.json")
         # no port, no env -> discovered
         assert call("demo.ping") == {"ok": 1}
     # bridge stopped -> portfile removed -> resolution is loud again
-    assert os.listdir(os.path.join(str(tmp_path), "omni-kit-mcp")) == []
+    assert os.listdir(os.path.join(str(tmp_path), "isaac-mcp")) == []
     with pytest.raises(RuntimeError, match="no bridge found"):
         call("demo.ping")
 
 
 def test_discovery_multiple_bridges_is_loud(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    monkeypatch.delenv("OMNI_KIT_MCP_PORT", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
     with LiveBridge() as a, LiveBridge() as b:
         assert a.port != b.port
         with pytest.raises(RuntimeError, match="multiple bridges"):
@@ -194,11 +194,11 @@ def test_cli_list_bridges(monkeypatch, tmp_path):
     with LiveBridge() as live:
         # write portfiles under our isolated runtime dir for the subprocess
         monkeypatch.setenv("XDG_RUNTIME_DIR", env_dir)
-        from omni_kit_mcp import bridge as bridge_mod
+        from isaac_mcp_bridge import bridge as bridge_mod
         bridge_mod._write_portfile("localhost", live.port)
         env = dict(os.environ, PYTHONPATH=REPO_ROOT, XDG_RUNTIME_DIR=env_dir)
-        env.pop("OMNI_KIT_MCP_PORT", None)
-        r = subprocess.run([sys.executable, "-m", "kit_mcp.client", "--list-bridges"],
+        env.pop("ISAAC_MCP_PORT", None)
+        r = subprocess.run([sys.executable, "-m", "isaac_mcp.client", "--list-bridges"],
                            capture_output=True, text=True, env=env, timeout=30)
         assert r.returncode == 0, r.stderr
         listed = json.loads(r.stdout)
@@ -219,8 +219,8 @@ def test_discovery_uses_advertised_host(monkeypatch, tmp_path):
         probe.close()
 
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    monkeypatch.delenv("OMNI_KIT_MCP_PORT", raising=False)
-    monkeypatch.delenv("OMNI_KIT_MCP_HOST", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_HOST", raising=False)
     import asyncio, threading
     import test_bridge
     loop = asyncio.new_event_loop()
@@ -230,7 +230,7 @@ def test_discovery_uses_advertised_host(monkeypatch, tmp_path):
     bridge.register_owner("A", "demo").add(td("ping", lambda: {"ok": 1}))
     try:
         bridge.start(0, host=alias)          # NOT reachable on 127.0.0.1
-        from kit_mcp.client import discover_bridges
+        from isaac_mcp.client import discover_bridges
         assert discover_bridges()[0]["host"] == alias
         assert call("demo.ping") == {"ok": 1}   # no host, no port -> discovered pair
     finally:
@@ -241,9 +241,9 @@ def test_discovery_uses_advertised_host(monkeypatch, tmp_path):
 
 
 def test_host_env_is_honored(live, monkeypatch):
-    """$OMNI_KIT_MCP_HOST is the dial override between explicit and discovery."""
-    monkeypatch.setenv("OMNI_KIT_MCP_HOST", "localhost")
-    monkeypatch.setenv("OMNI_KIT_MCP_PORT", str(live.port))
+    """$ISAAC_MCP_HOST is the dial override between explicit and discovery."""
+    monkeypatch.setenv("ISAAC_MCP_HOST", "localhost")
+    monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
     assert call("demo.ping", {"message": "env"}) == {"echo": "env"}
 
 
@@ -251,7 +251,7 @@ def test_ephemeral_bind_and_discovery(monkeypatch, tmp_path):
     """port=0 binds an OS-assigned port, learns it, advertises it — the
     same-app-second-instance fallback path."""
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    monkeypatch.delenv("OMNI_KIT_MCP_PORT", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
     import asyncio, threading
     import test_bridge
     loop = asyncio.new_event_loop()
@@ -261,7 +261,7 @@ def test_ephemeral_bind_and_discovery(monkeypatch, tmp_path):
     try:
         bridge.start(0)
         assert bridge._port and bridge._port != 0    # real port learned
-        bridges = __import__("kit_mcp.client", fromlist=["x"]).discover_bridges()
+        bridges = __import__("isaac_mcp.client", fromlist=["x"]).discover_bridges()
         assert len(bridges) == 1 and bridges[0]["port"] == bridge._port
         assert "run_python" in call("list_tools")["tools"]   # zero-config reach
     finally:

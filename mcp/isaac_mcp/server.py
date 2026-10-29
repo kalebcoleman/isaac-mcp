@@ -1,4 +1,4 @@
-"""Generic MCP server (front-end) for the omni.kit.mcp bridge.
+"""Generic MCP server (front-end) for the isaac.mcp.bridge bridge.
 
 The LLM-facing half: a FastMCP server that is a TCP *client* to the Kit-side
 bridge. It connects, discovers the registry via ``list_tools``, and registers
@@ -7,15 +7,15 @@ each canonical tool dynamically — hardcoding nothing about any project.
 One bridge socket serves N of these front-ends concurrently; a "per-project
 MCP server" is just this binary with a namespace filter, not a separate port:
 
-    OMNI_KIT_MCP_PORT   bridge port. Optional: unset, the client discovers a
+    ISAAC_MCP_PORT   bridge port. Optional: unset, the client discovers a
                         lone running bridge via its runtime portfile (and
                         errors loudly on ambiguity). Set it to pin a process.
-                        OMNI_KIT_MCP_HOST optional dial override; unset, the
+                        ISAAC_MCP_HOST optional dial override; unset, the
                         discovered bridge's advertised host (else loopback).
-    KIT_MCP_NAMESPACE   comma-separated namespace allowlist; unset => all.
-    KIT_MCP_BUILTINS    "0" hides the bridge's bare builtins (run_python,
+    ISAAC_MCP_NAMESPACE   comma-separated namespace allowlist; unset => all.
+    ISAAC_MCP_BUILTINS    "0" hides the bridge's bare builtins (run_python,
                         reload_tools) — the curated-agent view.
-    KIT_MCP_NAME / KIT_MCP_INSTRUCTIONS   cosmetic server identity.
+    ISAAC_MCP_NAME / ISAAC_MCP_INSTRUCTIONS   cosmetic server identity.
 
 Canonical bridge names are ``<namespace>.<tool>``; MCP tool names cannot
 contain dots, so they are exposed as ``<namespace>__<tool>`` and mapped back
@@ -32,7 +32,7 @@ Project-specific POLICY plugs in via three hook lists (it must not live here):
   - register_meta_category_hook(fn): fn(name) -> Optional[str]
         Returns an MCP ``_meta`` category for a tool name, or None.
 
-``kit_mcp.gate`` is the mechanism a policy hook can be written against: a pure
+``isaac_mcp.gate`` is the mechanism a policy hook can be written against: a pure
 deny-gate over a declared policy file. It, too, holds no policy.
 """
 
@@ -52,9 +52,9 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("KitMCPServer")
 
-SERVER_NAME = os.getenv("KIT_MCP_NAME", "ur5e")
+SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "ur5e")
 SERVER_INSTRUCTIONS = os.getenv(
-    "KIT_MCP_INSTRUCTIONS",
+    "ISAAC_MCP_INSTRUCTIONS",
     "UR5e lab server. Isaac Sim tools are discovered from the running Kit "
     "bridge; screenshot, list_windows, raise_window and the screen recording "
     "tools capture this Linux desktop. screenshot() and "
@@ -67,14 +67,14 @@ RESPONSE_TIMEOUT_S = 300.0
 
 
 def _namespace_filter() -> Optional[set]:
-    raw = os.getenv("KIT_MCP_NAMESPACE", "").strip()
+    raw = os.getenv("ISAAC_MCP_NAMESPACE", "").strip()
     if not raw:
         return None
     return {ns.strip() for ns in raw.split(",") if ns.strip()} or None
 
 
 def _builtins_enabled() -> bool:
-    return os.getenv("KIT_MCP_BUILTINS", "1") not in ("0", "false", "no")
+    return os.getenv("ISAAC_MCP_BUILTINS", "1") not in ("0", "false", "no")
 
 
 # ---- Policy hooks (populated by the host project; empty => pure passthrough) ----
@@ -107,7 +107,7 @@ def register_meta_category_hook(fn: Callable[[str], Optional[str]]) -> None:
 
 
 # ==================== Bridge connection ====================
-# The wire protocol lives in kit_mcp.client (the reference client): framing,
+# The wire protocol lives in isaac_mcp.client (the reference client): framing,
 # envelope decoding, health checks, and the reconnect-retry are its job. The
 # gateway holds one persistent BridgeClient.
 
@@ -117,8 +117,8 @@ _client: Optional[BridgeClient] = None
 def get_client() -> BridgeClient:
     global _client
     if _client is None:
-        # host/port unset -> the client resolves the endpoint ($OMNI_KIT_MCP_HOST /
-        # $OMNI_KIT_MCP_PORT, else portfile discovery) — one resolution path.
+        # host/port unset -> the client resolves the endpoint ($ISAAC_MCP_HOST /
+        # $ISAAC_MCP_PORT, else portfile discovery) — one resolution path.
         _client = BridgeClient(timeout=RESPONSE_TIMEOUT_S)
     return _client
 
@@ -304,8 +304,8 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
     if "fields" not in meta:
         raise RuntimeError(
             f"bridge served no field specs for {canonical!r} — the parameter "
-            "schema is interpreted bridge-side (omni_kit_mcp.schema); update "
-            "the omni.kit.mcp extension to match this gateway.")
+            "schema is interpreted bridge-side (isaac_mcp_bridge.schema); update "
+            "the isaac.mcp.bridge extension to match this gateway.")
     handler = _build_tool_function(name, canonical, description, meta["fields"])
 
     # Optional _meta category from policy hooks (failures are non-fatal).
@@ -335,7 +335,7 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             discover_and_register_tools(server)
         except Exception as e:
             logger.warning(f"Could not reach the Kit bridge on startup: {e}")
-            logger.warning("Start Kit with omni.kit.mcp enabled, then call refresh_tools.")
+            logger.warning("Start Kit with isaac.mcp.bridge enabled, then call refresh_tools.")
         yield {}
     finally:
         global _client
@@ -353,7 +353,7 @@ def _screen_port() -> int | None:
     """Bridge port for auto-targeting, before or after the client connects."""
     if _client is not None:
         return _client.port
-    raw = os.getenv("UR5E_DT_PORT") or os.getenv("OMNI_KIT_MCP_PORT")
+    raw = os.getenv("UR5E_DT_PORT") or os.getenv("ISAAC_MCP_PORT")
     try:
         return int(raw) if raw else None
     except ValueError:
@@ -382,7 +382,7 @@ def use_bridge(port: int) -> str:
     Use list_bridges to see the candidates. This replaces the ur5e_dt__* tools
     with the ones registered in that Kit process; screen tools are unaffected.
     The choice lasts until this MCP server restarts, then UR5E_DT_PORT (or
-    OMNI_KIT_MCP_PORT, or auto-discovery) decides again.
+    ISAAC_MCP_PORT, or auto-discovery) decides again.
     """
     global _client
     try:

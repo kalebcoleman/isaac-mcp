@@ -32,10 +32,10 @@ Added tools, alongside every `ur5e_dt__*` tool discovered from the running app:
 | `use_bridge` | Switch to another running Kit process by port |
 
 `list_bridges` (a bridge builtin) shows every running bridge on this box.
-Set `UR5E_DT_PORT` to pin the ur5e-dt twin bridge (`OMNI_KIT_MCP_PORT` is the
+Set `UR5E_DT_PORT` to pin the ur5e-dt twin bridge (`ISAAC_MCP_PORT` is the
 generic fallback); with several running and no pin, discovery refuses rather
 than guessing. The ur5e-dt extension runs its own bridge, so the launch script
-sets `OMNI_KIT_MCP_PORT=0` to disable the unused generic base bridge.
+sets `ISAAC_MCP_PORT=0` to disable the unused generic base bridge.
 
 For a clean Isaac Sim viewport render without desktop chrome, use the Kit
 extension's `ur5e_dt__start_recording` / `ur5e_dt__stop_recording`. A screen
@@ -57,14 +57,14 @@ and `rover.play_scene`), so co-loaded projects share the single socket.
 flowchart TB
     subgraph kit["Kit process (Isaac Sim · Isaac Lab · any Kit app)"]
         direction BT
-        BRIDGE["<b>omni.kit.mcp</b><br/>NDJSON TCP :9009 · owner/namespace registry<br/>main-thread dispatch<br/>builtins: run_python · list_tools · reload_tools · list_bridges · put_file · get_file · stat_file · status"]
+        BRIDGE["<b>isaac.mcp.bridge</b><br/>NDJSON TCP :9009 · owner/namespace registry<br/>main-thread dispatch<br/>builtins: run_python · list_tools · reload_tools · list_bridges · put_file · get_file · stat_file · status"]
         ARM["arm_tools/<br/>MCP_NAMESPACE = 'arm'"] -->|register| BRIDGE
         ROVER["rover_tools/<br/>MCP_NAMESPACE = 'rover'"] -->|register| BRIDGE
-        PANEL["omni.kit.mcp.panel<br/>registry-driven UI"] -->|"dispatch (click == agent call)"| BRIDGE
+        PANEL["isaac.mcp.panel<br/>registry-driven UI"] -->|"dispatch (click == agent call)"| BRIDGE
     end
     GW["isaac-mcp gateway<br/>operator view: all tools + run_python"] -->|MCP ⇄ NDJSON| BRIDGE
-    GWF["isaac-mcp gateway (filtered)<br/>KIT_MCP_NAMESPACE=arm · KIT_MCP_BUILTINS=0"] -->|MCP ⇄ NDJSON| BRIDGE
-    CLI["kit_mcp.client<br/>scripts · tests · doctors · CLI"] -->|NDJSON| BRIDGE
+    GWF["isaac-mcp gateway (filtered)<br/>ISAAC_MCP_NAMESPACE=arm · ISAAC_MCP_BUILTINS=0"] -->|MCP ⇄ NDJSON| BRIDGE
+    CLI["isaac_mcp.client<br/>scripts · tests · doctors · CLI"] -->|NDJSON| BRIDGE
 ```
 
 ## Setup (once per machine)
@@ -78,7 +78,7 @@ python3 scripts/install.py            # add --dry-run to preview
 
 This edits the Kit app's persistent `user.config.json` (the scriptable
 equivalent of the Extensions window's AUTOLOAD checkbox): adds `exts/` as a
-search path, auto-enables `omni.kit.mcp` + `omni.kit.mcp.panel`, and sets the
+search path, auto-enables `isaac.mcp.bridge` + `isaac.mcp.panel`, and sets the
 bridge port (default **9009**). Restart the app; the bridge binds with the
 built-in tools. `--remove` undoes it.
 
@@ -97,7 +97,7 @@ and add to `.mcp.json` (Claude Code, Cursor, etc.):
 ```
 
 No port needed — the gateway discovers a lone running bridge. Pin one with
-`"env": { "OMNI_KIT_MCP_PORT": "9009" }` when several Kit processes run.
+`"env": { "ISAAC_MCP_PORT": "9009" }` when several Kit processes run.
 
 That alone is fully usable: `run_python` executes arbitrary Python on Kit's
 main thread (persistent sessions supported; saved session vars auto-clear when
@@ -132,7 +132,7 @@ python3 scripts/install.py add-project --path ~/myproj/isaac --module myproj_too
 
 Next launch, the bridge advertises `robot_demo.spawn_robot`; the panel grows a `robot_demo`
 section; agents see it after `refresh_tools`. Per-launch override instead of
-persistence: `KIT_MCP_TOOL_PATHS=~/myproj/isaac KIT_MCP_TOOL_MODULES=myproj_tools`.
+persistence: `ISAAC_MCP_TOOL_PATHS=~/myproj/isaac ISAAC_MCP_TOOL_MODULES=myproj_tools`.
 
 > **One registration, three surfaces.** A registered tool isn't just an agent
 > verb: the control panel renders it as a clickable widget automatically, and
@@ -152,21 +152,21 @@ speaker. For scripts, tests, and health checks, use the **reference client**
 (stdlib-only, single-file, also copyable as-is):
 
 ```python
-from kit_mcp.client import call, BridgeClient, BridgeError
+from isaac_mcp.client import call, BridgeClient, BridgeError
 call("demo.ping", {"message": "hi"})                 # one-shot; endpoint auto-discovered
 with BridgeClient() as c:                            # persistent + reconnect
     c.call("run_python", {"code": "result = 1"})     # (pass host=/port= to pin)
 ```
 
 ```bash
-python3 -m kit_mcp.client <tool> ['{"json":"params"}'] [--port N]
-python3 -m kit_mcp.client --list-bridges          # what's running
+python3 -m isaac_mcp.client <tool> ['{"json":"params"}'] [--port N]
+python3 -m isaac_mcp.client --list-bridges          # what's running
 # exit codes: 0 success · 1 bridge answered with an error · 2 unreachable
 ```
 
 With exactly one bridge running you need no port: the client discovers it
 ([endpoint resolution](docs/protocol.md#endpoint-resolution)).
-`import kit_mcp.client` works without the `mcp` SDK installed — only the
+`import isaac_mcp.client` works without the `mcp` SDK installed — only the
 gateway needs it.
 
 ## What else it does
@@ -182,9 +182,9 @@ gateway needs it.
 ## Layout
 
 ```
-exts/omni.kit.mcp/          the bridge extension (protocol, bridge, builtins, autoload)
-exts/omni.kit.mcp.panel/    registry-driven control panel (optional)
-kit_mcp/                    the MCP front-end (FastMCP server, TCP client to the bridge)
+exts/isaac.mcp.bridge/          the bridge extension (protocol, bridge, builtins, autoload)
+exts/isaac.mcp.panel/    registry-driven control panel (optional)
+isaac_mcp/                    the MCP front-end (FastMCP server, TCP client to the bridge)
 scripts/install.py          permanent registration: base install + add-project
 examples/demo_tools/        the template tool package — copy to onboard a project
 tests/                      protocol / registry / autoload / live-socket tests (no Kit needed)

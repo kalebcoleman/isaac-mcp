@@ -1,4 +1,4 @@
-"""omni.kit.mcp — generic MCP socket bridge for Omniverse Kit.
+"""isaac.mcp.bridge — generic MCP socket bridge for Omniverse Kit.
 
 One bridge, one port, per Kit process. Providers are *owners*: each project
 registers an owner with a unique namespace and publishes tools under canonical
@@ -44,7 +44,7 @@ from .sessions import SessionStore
 from . import telemetry
 
 
-_CURRENT_REQUEST = contextvars.ContextVar("omni_kit_mcp_current_request", default=None)
+_CURRENT_REQUEST = contextvars.ContextVar("isaac_mcp_bridge_current_request", default=None)
 
 
 def request_caller_disconnected() -> bool:
@@ -66,7 +66,7 @@ except ImportError:  # outside Kit (tests / lint) — stay pure-stdlib
 # Owner id the bridge registers its own verbs under. Its namespace is None, so
 # built-in names stay bare (run_python, not x.run_python) — they are the
 # transport's own verbs, like rosbridge's op codes, not project tools.
-BUILTIN_OWNER_ID = "omni.kit.mcp"
+BUILTIN_OWNER_ID = "isaac.mcp.bridge"
 
 
 @dataclass(frozen=True)
@@ -268,7 +268,7 @@ class _Hold:
 
 #: Set to True on a handler FUNCTION that advances the simulator from inside its own call. The
 #: bridge then gives that request the main loop to itself (`McpBridge._submit`).
-EXCLUSIVE_ATTRIBUTE = "__omni_kit_mcp_exclusive__"
+EXCLUSIVE_ATTRIBUTE = "__isaac_mcp_bridge_exclusive__"
 
 #: THE ADMISSION CONTRACT THIS BRIDGE SPEAKS. A tool package declares the contract it was written
 #: against as a module-level `DOORWAY_ADMISSION = <int>`; a package may read this constant to learn
@@ -291,8 +291,8 @@ ADMISSION_CAPABILITY = "exclusive-v1"
 #: the server does own is a CAP on what may be stated, and how many requests may wait at all.
 DEFAULT_QUEUE_CAP_S = 900.0
 DEFAULT_QUEUE_LIMIT = 64          # QUEUED requests, running ones excluded; the 65th is refused
-QUEUE_CAP = knobs.Knob(env="OMNI_KIT_MCP_QUEUE_CAP_S", leaf="queueCapSeconds")
-QUEUE_LIMIT = knobs.Knob(env="OMNI_KIT_MCP_QUEUE_LIMIT", leaf="queueLimit")
+QUEUE_CAP = knobs.Knob(env="ISAAC_MCP_QUEUE_CAP_S", leaf="queueCapSeconds")
+QUEUE_LIMIT = knobs.Knob(env="ISAAC_MCP_QUEUE_LIMIT", leaf="queueLimit")
 
 #: A send that cannot make progress for this long means the caller is not reading. The socket is
 #: then closed: one silent client must not hold the thread that is answering it.
@@ -549,7 +549,7 @@ class McpBridge:
         with self._lock:
             self._owners[BUILTIN_OWNER_ID] = OwnerRegistration(
                 owner_id=BUILTIN_OWNER_ID, namespace=None,
-                display_name="omni.kit.mcp builtins")
+                display_name="isaac.mcp.bridge builtins")
             self._owner_tools[BUILTIN_OWNER_ID] = set()
             self._in_flight[BUILTIN_OWNER_ID] = 0
         for tool in bi.builtin_tools(self):
@@ -619,7 +619,7 @@ class McpBridge:
             try:
                 reason = hook(name, params)
             except Exception as error:                                        # noqa: BLE001
-                _log_error(f"[omni.kit.mcp] pre-dispatch hook failed on {name}: {error}")
+                _log_error(f"[isaac.mcp.bridge] pre-dispatch hook failed on {name}: {error}")
                 return (f"a policy hook failed while deciding whether {name!r} may run "
                         f"({type(error).__name__}: {error}), so this call is refused rather than "
                         f"allowed. A hook that could not decide has not decided")
@@ -668,7 +668,7 @@ class McpBridge:
         started = time.time()
         response = await self._dispatch_unobserved(name, params)
         if not self._telemetry.record(name, params or {}, started, response):
-            _log_warn(f"[omni.kit.mcp] authoring telemetry dropped a {name!r} event")
+            _log_warn(f"[isaac.mcp.bridge] authoring telemetry dropped a {name!r} event")
         return response
 
     async def _dispatch_unobserved(self, name: str,
@@ -802,7 +802,7 @@ class McpBridge:
             f"It is treated as exclusive from now on in this process; the mark belongs in its "
             f"tool package, and its absence there is a miss of that package's own derivation "
             f"test")
-        _log_error(f"[omni.kit.mcp] {notice}")
+        _log_error(f"[isaac.mcp.bridge] {notice}")
         self._start(stranded)
         return notice
 
@@ -827,7 +827,7 @@ class McpBridge:
         port numbers."""
         with self._lock:
             if self._running:
-                _log_info(f"[omni.kit.mcp] server already running on port {self._port}")
+                _log_info(f"[isaac.mcp.bridge] server already running on port {self._port}")
                 return
             self._running = True
         try:
@@ -841,12 +841,12 @@ class McpBridge:
                 self._started_at = time.time()
             self._socket.listen(socket.SOMAXCONN)
             self._server_thread = threading.Thread(
-                target=self._accept_loop, name="omni.kit.mcp-accept", daemon=True)
+                target=self._accept_loop, name="isaac.mcp.bridge-accept", daemon=True)
             self._server_thread.start()
             _write_portfile(host, port)
-            _log_info(f"[omni.kit.mcp] serving on {host}:{port}")
+            _log_info(f"[isaac.mcp.bridge] serving on {host}:{port}")
         except Exception as e:
-            _log_error(f"[omni.kit.mcp] failed to start server: {e}")
+            _log_error(f"[isaac.mcp.bridge] failed to start server: {e}")
             self.stop()
             raise
 
@@ -878,12 +878,12 @@ class McpBridge:
             self._connections.clear()
         with self._admit_lock:
             if self._hold is not None:
-                _log_warn(f"[omni.kit.mcp] hold by {self._hold.holder!r} released: the server "
+                _log_warn(f"[isaac.mcp.bridge] hold by {self._hold.holder!r} released: the server "
                           f"stopped")
             self._hold = None
         if self._port:
             _remove_portfile(self._port)
-        _log_info("[omni.kit.mcp] server stopped")
+        _log_info("[isaac.mcp.bridge] server stopped")
 
     def _accept_loop(self) -> None:
         self._socket.settimeout(1.0)
@@ -898,17 +898,17 @@ class McpBridge:
                 continue
             except Exception as e:
                 if self._running:
-                    _log_error(f"[omni.kit.mcp] accept error: {e}")
+                    _log_error(f"[isaac.mcp.bridge] accept error: {e}")
                 continue
             _bound_sends(sock)
             conn = _ClientConnection(
                 connection_id=uuid.uuid4().hex[:8], sock=sock, address=address)
             conn.thread = threading.Thread(
                 target=self._serve_client, args=(conn,),
-                name=f"omni.kit.mcp-client-{conn.connection_id}", daemon=True)
+                name=f"isaac.mcp.bridge-client-{conn.connection_id}", daemon=True)
             with self._lock:
                 self._connections[conn.connection_id] = conn
-            _log_info(f"[omni.kit.mcp] client {conn.connection_id} connected from {address}")
+            _log_info(f"[isaac.mcp.bridge] client {conn.connection_id} connected from {address}")
             conn.thread.start()
 
     def _serve_client(self, conn: _ClientConnection) -> None:
@@ -945,7 +945,7 @@ class McpBridge:
                 conn.sock.close()
             except Exception:
                 pass
-            _log_info(f"[omni.kit.mcp] client {conn.connection_id} disconnected")
+            _log_info(f"[isaac.mcp.bridge] client {conn.connection_id} disconnected")
 
     # ---------------------------------------------------------------- request admission
     #
@@ -1100,7 +1100,7 @@ class McpBridge:
                         else:
                             ahead = self._exclusive or next(iter(self._started.values()), None)
                             _log_info(
-                                f"[omni.kit.mcp] admission: #{request.seq} {name!r} "
+                                f"[isaac.mcp.bridge] admission: #{request.seq} {name!r} "
                                 f"({'exclusive' if request.exclusive else 'ordinary'}) waits at "
                                 f"position {len(self._queue)} behind "
                                 f"{ahead.name if ahead else 'the queue'!r}; may wait "
@@ -1118,7 +1118,7 @@ class McpBridge:
                 unanswered=owed.name))
             return
         if refusal is not None:
-            _log_warn(f"[omni.kit.mcp] {refusal['message']}")
+            _log_warn(f"[isaac.mcp.bridge] {refusal['message']}")
             if queued:
                 self._reply(request, refusal)      # it holds the connection's one slot: clear it
             else:
@@ -1151,14 +1151,14 @@ class McpBridge:
         bridge while a hold stands would be refused like any other in-process code — give it a
         token route before relying on it.
         Platform services in the control container carry the token from a container-private file
-        (`kit_mcp.client.HOLD_TOKEN_FILE_ENV`)."""
+        (`isaac_mcp.client.HOLD_TOKEN_FILE_ENV`)."""
         hold = self._hold
         if hold is None or name in HOLD_EXEMPT or self._carries(command, hold.token):
             return None
         hold.refused[name] = hold.refused.get(name, 0) + 1
         self._counts["refused_held"] += 1
         described = hold.describe(time.monotonic())
-        _log_warn(f"[omni.kit.mcp] {HELD}: {name!r} refused — the doorway is held by "
+        _log_warn(f"[isaac.mcp.bridge] {HELD}: {name!r} refused — the doorway is held by "
                   f"{hold.holder!r} ({hold.reason})")
         return protocol.error(
             f"{HELD}: the doorway is held by {hold.holder} ({hold.reason}) for "
@@ -1228,10 +1228,10 @@ class McpBridge:
                                                "released_by": "release"})
                     self._hold = None
         if name == HOLD_VERB and answer.get("status") == "success":
-            _log_warn(f"[omni.kit.mcp] HOLD placed by {holder!r} ({reason}); "
+            _log_warn(f"[isaac.mcp.bridge] HOLD placed by {holder!r} ({reason}); "
                       f"{len(drained)} waiting request(s) refused")
         elif answer.get("status") == "success":
-            _log_warn(f"[omni.kit.mcp] HOLD released by {standing.holder!r}: "
+            _log_warn(f"[isaac.mcp.bridge] HOLD released by {standing.holder!r}: "
                       f"{answer['result']['refused']} request(s) refused while held")
         for request in drained:
             self._reply(request, self._held_envelope(request.name, placed))
@@ -1256,7 +1256,7 @@ class McpBridge:
             self._hold = None
             described = hold.describe(time.monotonic())
             self._counts["holds_released_by_disconnect"] += 1
-        _log_warn(f"[omni.kit.mcp] HOLD by {hold.holder!r} released: {how} after "
+        _log_warn(f"[isaac.mcp.bridge] HOLD by {hold.holder!r} released: {how} after "
                   f"{described['held_s']:.1f} s; {described['refused']} request(s) refused "
                   f"while held ({described['refused_tools']})")
 
@@ -1287,7 +1287,7 @@ class McpBridge:
                 else:
                     overrun = False
             if overrun:
-                _log_warn(f"[omni.kit.mcp] client {conn.connection_id} sent more than "
+                _log_warn(f"[isaac.mcp.bridge] client {conn.connection_id} sent more than "
                           f"{MAX_DEFERRED} frames into an unanswered request; closing it")
                 conn.hang_up()
                 return
@@ -1300,7 +1300,7 @@ class McpBridge:
         except Exception as error:                                            # noqa: BLE001
             # A send that failed or timed out may have left half a frame on the wire, so the
             # connection is unusable either way: close it and let the read loop forget it.
-            _log_warn(f"[omni.kit.mcp] client {conn.connection_id} could not be answered "
+            _log_warn(f"[isaac.mcp.bridge] client {conn.connection_id} could not be answered "
                       f"({type(error).__name__}: {error}); closing it")
             conn.hang_up()
 
@@ -1341,7 +1341,7 @@ class McpBridge:
                 self._queue.popleft()
                 head.state = "dropped"
                 self._counts["dropped"] += 1
-                _log_info(f"[omni.kit.mcp] admission: #{head.seq} {head.name!r} dropped unstarted "
+                _log_info(f"[isaac.mcp.bridge] admission: #{head.seq} {head.name!r} dropped unstarted "
                           f"— its caller {head.conn.connection_id} is gone")
                 continue
             if not self._may_start_locked(head):
@@ -1375,7 +1375,7 @@ class McpBridge:
             except Exception as error:                                        # noqa: BLE001
                 coro.close()
                 self._counts["scheduler_failed"] += 1
-                _log_error(f"[omni.kit.mcp] admission: #{request.seq} {request.name!r} could not "
+                _log_error(f"[isaac.mcp.bridge] admission: #{request.seq} {request.name!r} could not "
                            f"be scheduled: {type(error).__name__}: {error}")
                 self._reply(request, protocol.error(
                     f"{SCHEDULER_FAILED}: {request.name!r} was admitted and the main-loop "
@@ -1410,7 +1410,7 @@ class McpBridge:
         except Exception as error:                                            # noqa: BLE001
             how = f"ended unreadably ({error!r})"
         self._counts["cancelled"] += 1
-        _log_warn(f"[omni.kit.mcp] admission: #{request.seq} {request.name!r} {how} before it "
+        _log_warn(f"[isaac.mcp.bridge] admission: #{request.seq} {request.name!r} {how} before it "
                   f"ran; answered {CANCELLED} and released")
         self._reply(request, self._cancelled(request, f"its scheduled task {how} before it ran"))
         self._start(self._release(request))
@@ -1435,7 +1435,7 @@ class McpBridge:
     def _ensure_watch_locked(self) -> None:
         if self._watch_thread is None or not self._watch_thread.is_alive():
             self._watch_thread = threading.Thread(
-                target=self._watch, name="omni.kit.mcp-admission-watch", daemon=True)
+                target=self._watch, name="isaac.mcp.bridge-admission-watch", daemon=True)
             self._watch_thread.start()
 
     def _watch(self) -> None:
@@ -1463,18 +1463,18 @@ class McpBridge:
                     self._watch_wake.wait(timeout=max(0.0, min(nearest, 1.0)))
                     continue
             for request, refusal in refusals:
-                _log_warn(f"[omni.kit.mcp] {refusal['message']}")
+                _log_warn(f"[isaac.mcp.bridge] {refusal['message']}")
                 # Its own thread: a caller that is not reading must not hold up the next
                 # deadline. The send itself is bounded by the socket's send timeout.
                 threading.Thread(target=self._reply, args=(request, refusal), daemon=True,
-                                 name=f"omni.kit.mcp-refusal-{request.seq}").start()
+                                 name=f"isaac.mcp.bridge-refusal-{request.seq}").start()
             for request in lost:
                 with self._admit_lock:
                     if request.released or request.entered:
                         continue
                     request.entered = True      # claimed: no later attempt may begin
                 self._counts["lost"] += 1
-                _log_error(f"[omni.kit.mcp] admission: #{request.seq} {request.name!r} was "
+                _log_error(f"[isaac.mcp.bridge] admission: #{request.seq} {request.name!r} was "
                            f"destroyed before it ran; answered {LOST} and released")
                 self._reply(request, protocol.error(
                     f"{LOST}: {request.name!r} was admitted and its task was destroyed before "
@@ -1576,7 +1576,7 @@ class McpBridge:
                 self._queue.remove(request)
                 request.state = "dropped"
                 self._counts["dropped"] += 1
-                _log_info(f"[omni.kit.mcp] admission: #{request.seq} {request.name!r} dropped "
+                _log_info(f"[isaac.mcp.bridge] admission: #{request.seq} {request.name!r} dropped "
                           f"unstarted — connection {conn.connection_id} closed after "
                           f"{time.monotonic() - request.arrived:.3f} s in the queue")
             return self._admit_locked()
@@ -1625,7 +1625,7 @@ class McpBridge:
                 response = await self._dispatch_admitted(
                     request.name, request.command.get("params") or {})
             except Exception as e:  # dispatch itself is defensive; this is belt+braces
-                _log_error(f"[omni.kit.mcp] dispatch crashed: {e}")
+                _log_error(f"[isaac.mcp.bridge] dispatch crashed: {e}")
                 response = protocol.error(str(e), traceback=traceback.format_exc())
             self._reply(request, response)
         except BaseException:
@@ -1650,7 +1650,7 @@ def _bound_sends(sock: socket.socket) -> None:
         micros = int((SEND_TIMEOUT_S - seconds) * 1_000_000)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDTIMEO, struct.pack("ll", seconds, micros))
     except (AttributeError, OSError, struct.error) as error:
-        _log_warn(f"[omni.kit.mcp] could not bound sends on a client socket: {error}")
+        _log_warn(f"[isaac.mcp.bridge] could not bound sends on a client socket: {error}")
 
 
 # ==================== Owner UI teardown ====================
@@ -1674,21 +1674,21 @@ def _destroy_ui_window(title: str) -> bool:
         window.destroy()
         return True
     except Exception as e:
-        _log_warn(f"[omni.kit.mcp] could not destroy window {title!r}: {e}")
+        _log_warn(f"[isaac.mcp.bridge] could not destroy window {title!r}: {e}")
         return False
 
 
 # ==================== Port discovery (runtime portfiles) ====================
 # The bridge advertises itself in a per-user runtime dir so clients that were
-# given no port can DISCOVER a running bridge (kit_mcp.client mirrors this
+# given no port can DISCOVER a running bridge (isaac_mcp.client mirrors this
 # derivation — a cross-process contract pinned by test, not by import).
 
 def _runtime_dir() -> str:
     base = os.getenv("XDG_RUNTIME_DIR")
     if base:
-        return os.path.join(base, "omni-kit-mcp")
+        return os.path.join(base, "isaac-mcp")
     return os.path.join("/tmp" if os.name != "nt" else os.getenv("TEMP", "/tmp"),
-                        f"omni-kit-mcp-{os.getuid() if hasattr(os, 'getuid') else 'u'}")
+                        f"isaac-mcp-{os.getuid() if hasattr(os, 'getuid') else 'u'}")
 
 
 def _portfile_path(port: int) -> str:
@@ -1696,10 +1696,10 @@ def _portfile_path(port: int) -> str:
 
 
 #: Where a failing call's frames are written, beside the portfiles this process already owns.
-#: `OMNI_KIT_MCP_LOG_DIR` lets a cell point it at that run's own state directory, so a run's
+#: `ISAAC_MCP_LOG_DIR` lets a cell point it at that run's own state directory, so a run's
 #: failures land with the rest of its evidence; unset, the doorway's runtime dir is used, because
 #: a traceback nobody can find is the condition this exists to end.
-LOG_DIR_ENV = "OMNI_KIT_MCP_LOG_DIR"
+LOG_DIR_ENV = "ISAAC_MCP_LOG_DIR"
 
 #: Params are a caller's payload — `run_python` puts an entire script in one — so the record keeps
 #: the SHAPE (names and sizes) rather than the contents, and only these keys by value. They are the
@@ -1741,10 +1741,10 @@ def _record_tool_failure(name: str, error: BaseException,
     if len(frames) > MAX_LOGGED_TRACEBACK:
         frames = frames[:MAX_LOGGED_TRACEBACK] + "\n… truncated"
     context = _call_context(params)
-    headline = (f"[omni.kit.mcp] {name} failed: {type(error).__name__}: {error}"
+    headline = (f"[isaac.mcp.bridge] {name} failed: {type(error).__name__}: {error}"
                 + (f" | {json.dumps(context, default=str, sort_keys=True)}" if context else ""))
     _log_error(headline)
-    _log_error(f"[omni.kit.mcp] {name} traceback:\n{frames}")
+    _log_error(f"[isaac.mcp.bridge] {name} traceback:\n{frames}")
     try:
         path = _failure_log_path()
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -1755,7 +1755,7 @@ def _record_tool_failure(name: str, error: BaseException,
                 "context": context, "traceback": frames,
             }, default=str, sort_keys=True) + "\n")
     except Exception as e:                                                    # noqa: BLE001
-        _log_warn(f"[omni.kit.mcp] could not write the failure log: {e}")
+        _log_warn(f"[isaac.mcp.bridge] could not write the failure log: {e}")
 
 
 def _app_identity() -> Dict[str, Any]:
@@ -1809,7 +1809,7 @@ def _write_portfile(host: str, port: int) -> None:
         import atexit
         atexit.register(_remove_portfile, port)
     except Exception as e:
-        _log_warn(f"[omni.kit.mcp] could not write portfile: {e}")
+        _log_warn(f"[isaac.mcp.bridge] could not write portfile: {e}")
 
 
 def _remove_portfile(port: int) -> None:
@@ -1875,7 +1875,7 @@ def get_mcp_bridge() -> McpBridge:
     """Return the bridge singleton.
 
     Raises if the bridge extension hasn't started yet — declare
-    ``"omni.kit.mcp" = {}`` in your extension's ``[dependencies]`` so it loads
+    ``"isaac.mcp.bridge" = {}`` in your extension's ``[dependencies]`` so it loads
     first. If it started and REFUSED TO BOOT, raises that refusal instead.
     """
     if _BRIDGE is None:
@@ -1883,7 +1883,7 @@ def get_mcp_bridge() -> McpBridge:
             # The extension DID start, and refused. Its own refusal, by its own name.
             raise _BOOT_REFUSAL
         raise RuntimeError(
-            "omni.kit.mcp bridge not initialized. Declare 'omni.kit.mcp' as a "
+            "isaac.mcp.bridge bridge not initialized. Declare 'isaac.mcp.bridge' as a "
             "dependency in your extension.toml so it starts first.")
     return _BRIDGE
 

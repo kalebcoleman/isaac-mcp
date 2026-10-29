@@ -1,4 +1,4 @@
-"""Wire protocol for the omni.kit.mcp bridge — NDJSON frames + response envelope.
+"""Wire protocol for the isaac.mcp.bridge bridge — NDJSON frames + response envelope.
 
 Framing (NDJSON): every message is exactly one JSON object serialized on a
 single line and terminated by ``\\n``. Message boundaries are therefore exact —

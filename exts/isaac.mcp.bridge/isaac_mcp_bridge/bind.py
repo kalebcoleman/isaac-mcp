@@ -69,10 +69,10 @@ def declared_bind_refusal(host: str, port: int, error: OSError) -> RuntimeError:
         else f"the bind failed with errno {error.errno} ({error.strerror or error})"
     )
     return RuntimeError(
-        f"omni.kit.mcp: cannot serve on the declared address {host}:{port} — {detail}. "
+        f"isaac.mcp.bridge: cannot serve on the declared address {host}:{port} — {detail}. "
         f"The bridge does NOT fall back to another port: the address was declared, a client "
         f"is going to dial exactly it, and a bridge that quietly moved would be a bridge "
         f"nobody can find — which is how a readiness check comes to report a timeout instead "
         f"of a cause. Fix the address or change what declared it "
-        f"(OMNI_KIT_MCP_BIND / OMNI_KIT_MCP_PORT, or the persisted autostart settings)."
+        f"(ISAAC_MCP_BIND / ISAAC_MCP_PORT, or the persisted autostart settings)."
     )

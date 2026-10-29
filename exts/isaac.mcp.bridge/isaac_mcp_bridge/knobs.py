@@ -4,7 +4,7 @@ A Knob is a configuration value with one identity: an env var (the per-launch
 override), carb settings keys (the persistent forms scripts/install.py
 writes), and one precedence rule — env > settings. Readers (extension.py,
 autoload.py) call the read methods; the writer (scripts/install.py) imports
-the key names. The gateway (kit_mcp) shares the env-var NAME as a documented
+the key names. The gateway (isaac_mcp) shares the env-var NAME as a documented
 cross-process contract, pinned by test rather than by import — env names are
 interface, not code.
 
@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 # The carb settings subtree all bridge knobs live under. install.py derives its
-# user.config.json path (persistent -> exts -> omni.kit.mcp) from this.
-SETTINGS_SUBTREE = "exts/omni.kit.mcp"
+# user.config.json path (persistent -> exts -> isaac.mcp.bridge) from this.
+SETTINGS_SUBTREE = "exts/isaac.mcp.bridge"
 
 
 @dataclass(frozen=True)
@@ -60,11 +60,11 @@ class Knob:
         return env if env is not None else self.read_settings()
 
 
-PORT = Knob(env="OMNI_KIT_MCP_PORT", leaf="autostartPort")
+PORT = Knob(env="ISAAC_MCP_PORT", leaf="autostartPort")
 # Bind address for the bridge socket. Default (unset) binds localhost — the
 # bridge serves run_python (remote code execution by design), so listening
 # beyond loopback is an explicit, recorded per-box decision (e.g. a tailnet
 # IP). Never default this to 0.0.0.0.
-BIND = Knob(env="OMNI_KIT_MCP_BIND", leaf="autostartHost")
-TOOL_MODULES = Knob(env="KIT_MCP_TOOL_MODULES", leaf="toolModules")
-TOOL_PATHS = Knob(env="KIT_MCP_TOOL_PATHS", leaf="toolPaths")
+BIND = Knob(env="ISAAC_MCP_BIND", leaf="autostartHost")
+TOOL_MODULES = Knob(env="ISAAC_MCP_TOOL_MODULES", leaf="toolModules")
+TOOL_PATHS = Knob(env="ISAAC_MCP_TOOL_PATHS", leaf="toolPaths")

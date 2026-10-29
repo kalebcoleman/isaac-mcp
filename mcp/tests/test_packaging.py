@@ -1,6 +1,6 @@
 """The doorway's own interpreter can run the doorway.
 
-mcp 2 removed `mcp.server.fastmcp`, which `kit_mcp.server` imports, so the dependency
+mcp 2 removed `mcp.server.fastmcp`, which `isaac_mcp.server` imports, so the dependency
 is bounded below 2; and the test extra must bring pytest, so the doorway's tests run
 under the doorway's own interpreter rather than one where the server tests skip.
 """
@@ -38,7 +38,7 @@ def _requirement(requirements, name):
 
 
 def test_server_imports_in_the_running_interpreter():
-    server = importlib.import_module("kit_mcp.server")
+    server = importlib.import_module("isaac_mcp.server")
     # The module under test is this checkout's, not an installed copy elsewhere.
     assert os.path.realpath(server.__file__).startswith(os.path.realpath(_REPO_ROOT) + os.sep)
     from mcp.server.fastmcp import FastMCP

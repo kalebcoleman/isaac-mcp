@@ -6,7 +6,7 @@ project namespaces appending below in the order they were registered, so a
 newly loaded project never inserts between existing sections. Each tool is a
 two-column card — label + Run button, then one row per parameter, widgets
 generated from the registry's bridge-served **field specs** (the schema
-vocabulary is interpreted once, in omni_kit_mcp.schema; the panel only renders
+vocabulary is interpreted once, in isaac_mcp_bridge.schema; the panel only renders
 kinds: enum -> ComboBox, boolean -> CheckBox, integer/number -> Int/FloatField,
 everything else -> StringField; array/object fields accept JSON text).
 
@@ -35,7 +35,7 @@ import omni.ext
 import omni.kit.app
 import omni.ui as ui
 
-from omni_kit_mcp import get_mcp_bridge
+from isaac_mcp_bridge import get_mcp_bridge
 
 WINDOW_TITLE = "MCP Tools"
 _RESULT_MAX_CHARS = 500
@@ -71,7 +71,7 @@ def _panel_style():
 class _ParamField:
     """One field-spec-driven parameter row + how to read a value out of it.
 
-    Consumes the registry's bridge-served field spec (omni_kit_mcp.schema) —
+    Consumes the registry's bridge-served field spec (isaac_mcp_bridge.schema) —
     it never interprets a raw parameter schema; it only renders ``kind``."""
 
     def __init__(self, spec: dict):
@@ -133,18 +133,18 @@ class _ParamField:
 
 class McpPanelExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
-        carb.log_info("[omni.kit.mcp.panel] startup")
+        carb.log_info("[isaac.mcp.panel] startup")
         self._window = ui.Window(WINDOW_TITLE, width=480, height=760)
         self._fields = {}   # canonical tool name -> [_ParamField]
         self._status = {}   # canonical tool name -> ui.Label
         self._answers = queue.SimpleQueue()   # (response, show) — see _drain_answers
         self._answers_sub = (omni.kit.app.get_app().get_update_event_stream()
                              .create_subscription_to_pop(
-                                 self._drain_answers, name="omni.kit.mcp.panel answers"))
+                                 self._drain_answers, name="isaac.mcp.panel answers"))
         self._rebuild()
 
     def on_shutdown(self):
-        carb.log_info("[omni.kit.mcp.panel] shutdown")
+        carb.log_info("[isaac.mcp.panel] shutdown")
         self._answers_sub = None
         if self._window:
             self._window.destroy()
@@ -186,7 +186,7 @@ class McpPanelExtension(omni.ext.IExt):
             sections, total = self._sections(bridge)
         except Exception as e:
             bridge, sections, total = None, [], 0
-            carb.log_warn(f"[omni.kit.mcp.panel] bridge unavailable: {e}")
+            carb.log_warn(f"[isaac.mcp.panel] bridge unavailable: {e}")
 
         with self._window.frame:
             with ui.VStack(spacing=6, style=_panel_style()):
@@ -199,7 +199,7 @@ class McpPanelExtension(omni.ext.IExt):
                         alignment=ui.Alignment.LEFT_CENTER,
                         style={"color": _COLOR_MUTED})
                 if bridge is None:
-                    ui.Label("Bridge not initialized — is omni.kit.mcp enabled?",
+                    ui.Label("Bridge not initialized — is isaac.mcp.bridge enabled?",
                              style={"color": _COLOR_ERR})
                     return
                 if not sections:

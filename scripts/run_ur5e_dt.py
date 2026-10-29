@@ -1,7 +1,7 @@
 """Start Isaac Sim with a visible window and keep it running until closed.
 
 Kit extension arguments are passed through by run.sh. The app stays up so
-the Kit MCP bridge can be driven from another terminal (kit_mcp.client).
+the Kit MCP bridge can be driven from another terminal (isaac_mcp.client).
 """
 import sys
 

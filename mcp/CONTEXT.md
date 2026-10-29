@@ -3,16 +3,16 @@
 Terms this repo uses precisely. Code, docs, and reviews use these words for
 these things and no others.
 
-- **Bridge** — the in-Kit NDJSON-over-TCP server (`omni.kit.mcp`). One per Kit
+- **Bridge** — the in-Kit NDJSON-over-TCP server (`isaac.mcp.bridge`). One per Kit
   process. Owns the tool registry and the main-thread dispatch. *Not itself an
   MCP server* — see Gateway.
-- **Gateway** — `kit_mcp.server`, the FastMCP front-end. The only component in
+- **Gateway** — `isaac_mcp.server`, the FastMCP front-end. The only component in
   the ecosystem that speaks the Model Context Protocol; everything else speaks
   the wire protocol.
 - **Wire protocol** — the bridge's own contract: NDJSON frames,
   `{"type","params"}` requests, `{"status","result"|"message"}` envelopes.
   Defined by this repo; hardcoding it *is* implementing it.
-- **Reference client** — `kit_mcp/client.py`: the one caller-side
+- **Reference client** — `isaac_mcp/client.py`: the one caller-side
   implementation of the wire protocol (framing, envelope decoding, health,
   retry). Stdlib-only and single-file by contract — copyable as-is. Every
   consumer imports it or copies it; nobody re-implements it.
@@ -28,16 +28,16 @@ these things and no others.
 - **Owner / namespace** — a registered provider and its public tool prefix;
   tools are canonical `<namespace>.<tool>`.
 - **Knob** — a configuration value with exactly one identity (env name,
-  settings keys, precedence rule), defined once in `omni_kit_mcp/knobs.py`.
+  settings keys, precedence rule), defined once in `isaac_mcp_bridge/knobs.py`.
   Readers call it; the writer (`scripts/install.py`) imports its names.
 - **Field spec** — a tool parameter pre-interpreted for rendering: `{name,
   kind, enum, required, default, has_default, description}`. The schema
-  vocabulary is interpreted exactly once, bridge-side (`omni_kit_mcp/
+  vocabulary is interpreted exactly once, bridge-side (`isaac_mcp_bridge/
   schema.py`); the registry serves field specs alongside raw parameters, and
   renderers (gateway signature builder, panel widgets) only switch on `kind` —
   they never read a raw parameter schema.
 - **Session store** — the owner of persistent `run_python` namespaces
-  (`omni_kit_mcp/sessions.py`): the persist policy (underscore names and
+  (`isaac_mcp_bridge/sessions.py`): the persist policy (underscore names and
   preloaded symbols never survive) and the staleness rule (the extension
   clears the store on every stage-open — saved vars hold in-process prim/
   handle references that a new stage kills).

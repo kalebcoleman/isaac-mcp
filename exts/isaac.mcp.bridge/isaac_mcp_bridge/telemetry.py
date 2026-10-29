@@ -14,7 +14,7 @@ import time
 
 
 SCHEMA = "pa.authoring-telemetry/1"
-SINK_ENV = "OMNI_KIT_MCP_AUTHORING_TELEMETRY"
+SINK_ENV = "ISAAC_MCP_AUTHORING_TELEMETRY"
 
 
 def configured():

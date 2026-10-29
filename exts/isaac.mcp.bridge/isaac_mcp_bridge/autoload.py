@@ -1,4 +1,4 @@
-"""Consumer-tool auto-loader for the omni.kit.mcp bridge.
+"""Consumer-tool auto-loader for the isaac.mcp.bridge bridge.
 
 The project contract: a tool project is a plain Python package — NOT a Kit
 extension — that declares its identity and, optionally, an entrypoint:
@@ -194,7 +194,7 @@ def _install_policy(bridge, mod, mod_name: str) -> None:
         return
     registrar = bridge.registrar_for(mod_name)
     hook(registrar)
-    _log("info", f"[omni.kit.mcp] {mod_name} installed a call policy")
+    _log("info", f"[isaac.mcp.bridge] {mod_name} installed a call policy")
 
 
 #: The boot refusal's name — what a log reader and a cell's bringup match on.
@@ -205,7 +205,7 @@ TOOL_MODULE_LOAD_REFUSED = "DOORWAY_TOOL_MODULE_LOAD_REFUSED"
 #: a pid is not an identity there: in a container Kit's pid is namespaced and repeats from one
 #: launch to the next inside the same allocation.
 BOOT_REFUSAL_PREFIX = "boot-refusal-"
-BOOT_REFUSAL_SCHEMA = "omni.kit.mcp.boot-refusal/1"
+BOOT_REFUSAL_SCHEMA = "isaac.mcp.bridge.boot-refusal/1"
 #: What Kit is asked to exit with. Not 1: a reader can tell this exit from any other failure.
 BOOT_REFUSAL_EXIT = 78
 
@@ -252,11 +252,11 @@ def _load_each(bridge, modules: Optional[List[str]],
     for mod_name in modules:
         try:
             results[mod_name] = _register_one(bridge, mod_name)
-            _log("info", f"[omni.kit.mcp] autoload: {mod_name} -> {results[mod_name]}")
+            _log("info", f"[isaac.mcp.bridge] autoload: {mod_name} -> {results[mod_name]}")
         except Exception as e:
             results[mod_name] = f"ERROR: {e}"
             failures[mod_name] = traceback.format_exc()
-            _log("error", f"[omni.kit.mcp] autoload: failed to load {mod_name}: "
+            _log("error", f"[isaac.mcp.bridge] autoload: failed to load {mod_name}: "
                           f"{type(e).__name__}: {e}\n{failures[mod_name]}")
     return list(modules), results, failures
 
@@ -310,7 +310,7 @@ def _post_quit(code: int) -> None:
     if callable(uncancellable):
         uncancellable(code)
         return
-    _log("warn", f"[omni.kit.mcp] BOOT_REFUSAL_QUIT_CANCELLABLE: this Kit has no "
+    _log("warn", f"[isaac.mcp.bridge] BOOT_REFUSAL_QUIT_CANCELLABLE: this Kit has no "
                  f"post_uncancellable_quit; asking with post_quit({code}), which another "
                  f"extension may cancel or re-post with a different exit code")
     app.post_quit(code)
@@ -350,17 +350,17 @@ def refuse_boot(refusal: ToolModuleLoadRefusal,
     """
     from .bridge import _hold_boot_refusal
     _hold_boot_refusal(refusal)
-    _log("error", f"[omni.kit.mcp] {refusal}")
+    _log("error", f"[isaac.mcp.bridge] {refusal}")
     path: Optional[str] = None
     try:
         path = _write_boot_refusal(refusal)
     except OSError as error:
-        _log("error", f"[omni.kit.mcp] BOOT_REFUSAL_RECORD_UNWRITTEN: the boot refusal could "
+        _log("error", f"[isaac.mcp.bridge] BOOT_REFUSAL_RECORD_UNWRITTEN: the boot refusal could "
                       f"not be recorded under {boot_refusal_dir()!r} ({error!r}); a bringup "
                       f"polling for the record will not see it. The refusal above stands and "
                       f"Kit is still asked to quit with exit {BOOT_REFUSAL_EXIT}")
     else:
-        _log("error", f"[omni.kit.mcp] boot refusal recorded at {path}; asking Kit to quit "
+        _log("error", f"[isaac.mcp.bridge] boot refusal recorded at {path}; asking Kit to quit "
                       f"with exit {BOOT_REFUSAL_EXIT}")
     quit_app(BOOT_REFUSAL_EXIT)
     return path
@@ -410,7 +410,7 @@ def reload_tool_module(bridge, module: str) -> Dict[str, Any]:
 
     owner_id = bridge.find_owner_by_module(module)
     if owner_id is None:
-        _log("warn", f"[omni.kit.mcp] reload_tools: {module} was not loaded; loading fresh")
+        _log("warn", f"[isaac.mcp.bridge] reload_tools: {module} was not loaded; loading fresh")
     else:
         bridge.unregister_owner(owner_id)
 

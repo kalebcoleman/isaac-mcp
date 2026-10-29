@@ -25,7 +25,7 @@ fast naming the stale asset instead of trusting a blind sync.
 
 Endpoint: on the box itself the client auto-discovers via the runtime
 portfile. From a REMOTE machine there is no local portfile — pass host/port
-(or set $OMNI_KIT_MCP_HOST/$OMNI_KIT_MCP_PORT), and remember the bridge binds
+(or set $ISAAC_MCP_HOST/$ISAAC_MCP_PORT), and remember the bridge binds
 localhost unless installed with ``--bind-host`` (see the repo README's
 "Remote access").
 
@@ -40,7 +40,7 @@ import hashlib
 import pathlib
 import sys
 
-from kit_mcp.client import BridgeClient, call
+from isaac_mcp.client import BridgeClient, call
 
 # ---- point these at your project -------------------------------------------
 HOST = "100.97.45.92"                      # the box's tailnet IP (or None on-box)

@@ -1,6 +1,6 @@
 """sessions.py — the run_python session store and its persist policy."""
 
-from omni_kit_mcp.sessions import PRELOADED, SessionStore
+from isaac_mcp_bridge.sessions import PRELOADED, SessionStore
 
 
 def _exec_globals(**user):

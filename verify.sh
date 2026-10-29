@@ -6,7 +6,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PORT="${UR5E_DT_PORT:-${OMNI_KIT_MCP_PORT:-8766}}"
+PORT="${UR5E_DT_PORT:-${ISAAC_MCP_PORT:-8766}}"
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   cat <<'EOF'

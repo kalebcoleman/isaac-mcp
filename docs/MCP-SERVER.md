@@ -2,7 +2,7 @@
 
 The project provides a single host-side Model Context Protocol (MCP) server that exposes both the live Omniverse Kit digital twin tools and desktop screen capture capabilities.
 
-The server package is located at `mcp/` (Python package `kit_mcp`). The primary CLI executable is `isaac-mcp`. There is one command name and no aliases.
+The server package is located at `mcp/` (Python package `isaac_mcp`). The primary CLI executable is `isaac-mcp`. There is one command name and no aliases.
 
 For the system layer breakdown, port mapping, and routing rules, see [docs/ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -18,7 +18,7 @@ Kit Process (Isaac Sim 6.2.0.0)
                           └── screenshot / screen_* / list_windows (host desktop capture)
 ```
 
-Inside Kit, `exts/ur5e-dt` runs its own bridge endpoint on port 8766. The launcher sets `OMNI_KIT_MCP_PORT=0` to disable the generic base bridge so that each Kit process exposes exactly one endpoint.
+Inside Kit, `exts/ur5e-dt` runs its own bridge endpoint on port 8766. The launcher sets `ISAAC_MCP_PORT=0` to disable the generic base bridge so that each Kit process exposes exactly one endpoint.
 
 ---
 
@@ -37,7 +37,7 @@ To install or reinstall only the host MCP tool manually:
 uv tool install --force --editable ./mcp
 ```
 
-Because it is installed in editable mode from `./mcp`, modifications to `mcp/kit_mcp/` take effect whenever the MCP server process restarts.
+Because it is installed in editable mode from `./mcp`, modifications to `mcp/isaac_mcp/` take effect whenever the MCP server process restarts.
 
 The installation also installs a static ffmpeg wrapper at `~/.local/bin/ffmpeg` pointing to the binary bundled with `imageio-ffmpeg`. This satisfies Isaac Sim's viewport video recorder without requiring a system package.
 

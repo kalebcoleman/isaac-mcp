@@ -75,9 +75,9 @@ fi
 
 export UR5E_DT_PORT="$PORT"
 
-# ur5e-dt runs its own bridge. Disable generic omni.kit.mcp base bridge so
+# ur5e-dt runs its own bridge. Disable generic isaac.mcp.bridge base bridge so
 # one Kit process exposes exactly one MCP endpoint (the twin's).
-export OMNI_KIT_MCP_PORT=0
+export ISAAC_MCP_PORT=0
 export OMNI_KIT_ACCEPT_EULA=YES
 export PYTHONDONTWRITEBYTECODE=1
 export PATH="$HOME/.local/bin:$PATH"
@@ -121,5 +121,5 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim
 EXT_ARGS=(--ext-folder "$ROOT/exts")
 
 exec "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
-  "${EXT_ARGS[@]}" --enable omni.kit.mcp --enable ur5e-dt \
+  "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt \
   --enable isaacsim.ros2.bridge "${EXTRA_ARGS[@]}"

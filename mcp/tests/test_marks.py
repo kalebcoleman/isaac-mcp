@@ -1,4 +1,4 @@
-"""`kit_mcp.marks` — which handlers advance the simulator, read from the syntax tree.
+"""`isaac_mcp.marks` — which handlers advance the simulator, read from the syntax tree.
 
 The reader is what a tool package's test holds its exclusive roster to, so it is tested here on
 SYNTHETIC sources: that it finds a pump through every way code reaches one (a call, a method, a
@@ -6,7 +6,7 @@ function passed as a value, a body shipped as text), that a pump merely NAMED in
 docstring or a message is not one, and that code it cannot read is reported OPAQUE and never
 classed ordinary by omission.
 """
-from kit_mcp import marks
+from isaac_mcp import marks
 
 
 # ---------------------------------------------------------------- the reader itself

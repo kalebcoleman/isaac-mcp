@@ -35,9 +35,9 @@ icon = "data/icon.png"
 # Use omni.ui to build simple UI
 [dependencies]
 "omni.kit.uiapp" = {}
-# Generic MCP socket bridge — loaded first so `from omni_kit_mcp import ...` works
+# Generic MCP socket bridge — loaded first so `from isaac_mcp_bridge import ...` works
 # and get_mcp_bridge() is available in on_startup. Lives in the omni-kit-mcp repo.
-"omni.kit.mcp" = {}
+"isaac.mcp.bridge" = {}
 
 # Main python module this extension provides, it will be publicly available as "import InverseKinematicControl".
 [[python.module]]

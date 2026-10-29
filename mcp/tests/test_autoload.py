@@ -7,8 +7,8 @@ import textwrap
 
 import pytest
 
-from omni_kit_mcp.autoload import load_tool_modules, reload_tool_module
-from omni_kit_mcp.bridge import McpBridge
+from isaac_mcp_bridge.autoload import load_tool_modules, reload_tool_module
+from isaac_mcp_bridge.bridge import McpBridge
 
 
 @pytest.fixture()

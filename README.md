@@ -13,8 +13,8 @@ added. See [`docs/VENDORING.md`](docs/VENDORING.md).
 | Path | What it is |
 |---|---|
 | `mcp/` | Host MCP server (`isaac-mcp`): stdio server, Kit bridge client, screen tools. Pure Python, no Isaac dependency. |
-| `exts/omni.kit.mcp/` | Kit extension: the socket bridge and tool registry inside Kit. |
-| `exts/omni.kit.mcp.panel/` | Kit extension: registry inspector UI. |
+| `exts/isaac.mcp.bridge/` | Kit extension: the socket bridge and tool registry inside Kit. |
+| `exts/isaac.mcp.panel/` | Kit extension: registry inspector UI. |
 | `exts/ur5e-dt/` | Tool pack: the UR5e digital-twin tools (22 `ur5e_dt.*`) and their assets. One pack among others to come. |
 | `npm/` | Optional `npx` launcher (runs the Python server through `uvx`). |
 | `scripts/`, `run.sh`, `verify.sh`, `install.sh` | Launch, check and install helpers (Ubuntu 22.04/24.04, Python 3.12). |

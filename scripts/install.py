@@ -8,7 +8,7 @@ env vars. Idempotent; backs the config up first; --remove undoes exactly what
 it added. Stdlib only.
 
   install (default)   register this repo's exts folder, auto-enable
-                      omni.kit.mcp + omni.kit.mcp.panel, set the autostart port
+                      isaac.mcp.bridge + isaac.mcp.panel, set the autostart port
   add-project         persistently register one tool package:
                         install.py add-project --path ~/myproj/isaac --module myproj_tools
   remove-project      unregister one tool package by module name
@@ -18,10 +18,10 @@ it added. Stdlib only.
 Settings written (all under /persistent in user.config.json):
   app/exts/userFolders            ext search paths (this repo's exts/, project dirs)
   app/exts/enabled                auto-enabled ext ids (exact versioned ids)
-  exts/omni.kit.mcp/autostartPort bridge bind port (read by the ext at startup)
-  exts/omni.kit.mcp/autostartHost bridge bind address (default localhost; see --bind-host)
-  exts/omni.kit.mcp/toolModules   tool packages to autoload (owner per module)
-  exts/omni.kit.mcp/toolPaths     sys.path additions so those modules import
+  exts/isaac.mcp.bridge/autostartPort bridge bind port (read by the ext at startup)
+  exts/isaac.mcp.bridge/autostartHost bridge bind address (default localhost; see --bind-host)
+  exts/isaac.mcp.bridge/toolModules   tool packages to autoload (owner per module)
+  exts/isaac.mcp.bridge/toolPaths     sys.path additions so those modules import
 
   python3 scripts/install.py                      # base install (dry-run: add --dry-run)
   python3 scripts/install.py add-project --path ~/myproj/isaac --module myproj_tools
@@ -39,7 +39,7 @@ import time
 HOME = os.path.expanduser("~")
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_FOLDER = os.path.join(REPO_ROOT, "exts")
-DEFAULT_EXTS = ["omni.kit.mcp", "omni.kit.mcp.panel"]
+DEFAULT_EXTS = ["isaac.mcp.bridge", "isaac.mcp.panel"]
 # Deliberately uncommon default port: not IANA-listed, not a famous dev default
 # (9000 php-fpm, 8080, 3000, 8888...), non-privileged. Override with --autostart-port.
 DEFAULT_AUTOSTART_PORT = 9009
@@ -47,8 +47,8 @@ DEFAULT_AUTOSTART_PORT = 9009
 # Knob identities (settings leaf names, subtree) come from the same table the
 # extension reads — writer and readers cannot drift. Requires the repo layout
 # around this script (it registers REPO_ROOT/exts anyway).
-sys.path.insert(0, os.path.join(REPO_ROOT, "exts", "omni.kit.mcp"))
-from omni_kit_mcp.knobs import BIND, PORT, SETTINGS_SUBTREE, TOOL_MODULES, TOOL_PATHS  # noqa: E402
+sys.path.insert(0, os.path.join(REPO_ROOT, "exts", "isaac.mcp.bridge"))
+from isaac_mcp_bridge.knobs import BIND, PORT, SETTINGS_SUBTREE, TOOL_MODULES, TOOL_PATHS  # noqa: E402
 
 MCP_SETTINGS_KEY = SETTINGS_SUBTREE.split("/", 1)[1]  # subtree under persistent/exts/
 
@@ -113,7 +113,7 @@ class Config:
     def set_list(self, key, values):
         self._app_exts[key] = _to_idx_dict(values)
 
-    # -- /persistent/exts/omni.kit.mcp/* --
+    # -- /persistent/exts/isaac.mcp.bridge/* --
     def mcp_settings(self):
         return self._exts_tree.setdefault(MCP_SETTINGS_KEY, {})
 
@@ -180,7 +180,7 @@ def cmd_install(cfg: Config, args):
             if fol not in user_folders:
                 user_folders.append(fol); cfg.changes.append(f"+ userFolders: {fol}")
         for e in exts:
-            # Exact versioned id (e.g. omni.kit.mcp-0.2.0) — a bare name makes
+            # Exact versioned id (e.g. isaac.mcp.bridge-0.2.0) — a bare name makes
             # Kit log "no longer available". Re-run after a bump self-corrects.
             ver = _ext_version(e, folders)
             ext_id = f"{e}-{ver}" if ver else e

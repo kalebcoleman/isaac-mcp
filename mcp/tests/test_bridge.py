@@ -13,8 +13,8 @@ import time
 
 import pytest
 
-from omni_kit_mcp.bridge import BUILTIN_OWNER_ID, McpBridge, ToolDefinition
-from omni_kit_mcp.protocol import ToolError
+from isaac_mcp_bridge.bridge import BUILTIN_OWNER_ID, McpBridge, ToolDefinition
+from isaac_mcp_bridge.protocol import ToolError
 
 
 def make_bridge(loop=None):
@@ -396,7 +396,7 @@ def test_start_sweeps_stale_portfiles(tmp_path, monkeypatch):
     import sys
 
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    rt = tmp_path / "omni-kit-mcp"
+    rt = tmp_path / "isaac-mcp"
     rt.mkdir()
     dead = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"],
                           capture_output=True, text=True)
@@ -427,12 +427,12 @@ def test_portfile_removed_at_exit_even_without_stop(tmp_path):
     import subprocess
     import sys
 
-    import omni_kit_mcp
+    import isaac_mcp_bridge
 
-    ext_dir = os.path.dirname(os.path.dirname(omni_kit_mcp.__file__))
+    ext_dir = os.path.dirname(os.path.dirname(isaac_mcp_bridge.__file__))
     code = (
         "import glob, os\n"
-        "from omni_kit_mcp.bridge import McpBridge, _runtime_dir\n"
+        "from isaac_mcp_bridge.bridge import McpBridge, _runtime_dir\n"
         "b = McpBridge(schedule_coroutine=lambda c: None)\n"
         "b.start(0, host='127.0.0.1')\n"
         "print(glob.glob(os.path.join(_runtime_dir(), '*.json'))[0])\n"

@@ -78,7 +78,7 @@ fi
 export ROS_DISTRO
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
-export OMNI_KIT_MCP_PORT=0        # twin owns the only endpoint
+export ISAAC_MCP_PORT=0        # twin owns the only endpoint
 export UR5E_DT_PORT="$PORT"
 export UR5E_DT_HEADLESS=1
 export PYTHONDONTWRITEBYTECODE=1
@@ -97,7 +97,7 @@ fi
 # ---- boot --------------------------------------------------------------------------
 echo "== boot"
 "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
-  "${EXT_ARGS[@]}" --enable omni.kit.mcp --enable ur5e-dt \
+  "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt \
   --enable isaacsim.ros2.bridge > "$LOG" 2>&1 &
 APP_PID=$!
 cleanup() {
@@ -128,7 +128,7 @@ echo "   bridge up"
 # ---- MCP plumbing ------------------------------------------------------------------
 MCP_DIR="$ROOT/mcp"
 [ -d "$MCP_DIR" ] || MCP_DIR="$ROOT/external/omni-kit-mcp"
-client() { ( cd "$MCP_DIR" && PYTHONPATH="$PWD" timeout 120 "$PY" -m kit_mcp.client "$@" ); }
+client() { ( cd "$MCP_DIR" && PYTHONPATH="$PWD" timeout 120 "$PY" -m isaac_mcp.client "$@" ); }
 
 echo "== tools"
 client list_tools 2>/dev/null > "$OUT/probe_62_tools.json"

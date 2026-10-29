@@ -1,4 +1,4 @@
-"""Reference client for the omni.kit.mcp bridge — stdlib-only, single-file.
+"""Reference client for the isaac.mcp.bridge bridge — stdlib-only, single-file.
 
 The one implementation of the caller side of the wire protocol (NDJSON over
 TCP; see docs/protocol.md): framing, envelope decoding, connection health, and
@@ -8,7 +8,7 @@ doctors, project scripts — either imports this module or copies this file
 
 Two lifetimes, one roundtrip:
 
-    from kit_mcp.client import call, BridgeClient, BridgeError
+    from isaac_mcp.client import call, BridgeClient, BridgeError
 
     call("demo.ping", {"message": "hi"}, port=9009)   # one-shot: fresh socket,
                                                       # fitted timeout, no shared
@@ -28,17 +28,17 @@ bridges).
 
 CLI (replaces printf|nc recipes):
 
-    python3 -m kit_mcp.client <tool> ['{"json":"params"}'] [--port N] [--host H] [--timeout S]
-    python3 -m kit_mcp.client --list-bridges     # bridges advertised on this box
+    python3 -m isaac_mcp.client <tool> ['{"json":"params"}'] [--port N] [--host H] [--timeout S]
+    python3 -m isaac_mcp.client --list-bridges     # bridges advertised on this box
 
 Endpoint resolution — host and port resolve together, from the same portfile
 when discovery is the source (a bridge bound to a tailnet IP advertises that
 IP; dialing loopback for its port would be wrong):
 
-    port: explicit --port/port= > $OMNI_KIT_MCP_PORT > auto-discovery via the
+    port: explicit --port/port= > $ISAAC_MCP_PORT > auto-discovery via the
           runtime portfiles when exactly one bridge is running (loud error
           when several are)
-    host: explicit --host/host= > $OMNI_KIT_MCP_HOST > the discovered
+    host: explicit --host/host= > $ISAAC_MCP_HOST > the discovered
           portfile's advertised host (only when the port came from discovery)
           > 127.0.0.1
 
@@ -53,16 +53,16 @@ import socket
 from typing import Any, Dict, Optional
 
 # The cross-process public names for the bridge endpoint. PORT_ENV is kept in
-# sync with the bridge-side knob table (omni_kit_mcp.knobs.PORT.env) by test,
+# sync with the bridge-side knob table (isaac_mcp_bridge.knobs.PORT.env) by test,
 # not by import — this file must stay dependency-free and copyable. HOST_ENV
 # is the caller-side dial override (which host to connect to; distinct from
-# the bridge-side bind knob OMNI_KIT_MCP_BIND).
-PORT_ENV = "OMNI_KIT_MCP_PORT"
+# the bridge-side bind knob ISAAC_MCP_BIND).
+PORT_ENV = "ISAAC_MCP_PORT"
 # ur5e-dt runs its own bridge on this port (the twin's MCP endpoint). It is
 # checked first so one variable means "the twin bridge" in launch scripts and
-# MCP client configs alike; OMNI_KIT_MCP_PORT stays the generic fallback.
+# MCP client configs alike; ISAAC_MCP_PORT stays the generic fallback.
 TWIN_PORT_ENV = "UR5E_DT_PORT"
-HOST_ENV = "OMNI_KIT_MCP_HOST"
+HOST_ENV = "ISAAC_MCP_HOST"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_TIMEOUT = 300.0
 
@@ -85,12 +85,12 @@ BUSY = "DOORWAY_BUSY"
 #: `HELD`. A process that is the holder's own work — the holder and every subprocess it starts —
 #: carries the token in this variable, and every frame this client sends from that process
 #: carries it at the frame's top level (`HOLD_FIELD`), never inside `params`.
-HOLD_TOKEN_ENV = "OMNI_KIT_MCP_HOLD_TOKEN"
+HOLD_TOKEN_ENV = "ISAAC_MCP_HOLD_TOKEN"
 #: A FILE holding the token, read on EVERY call, for a LONG-LIVED process started before any hold
 #: existed — a service whose environment was fixed at start-up and that the holder means to let
 #: through. The holder writes the file while it holds and removes it on release; absent, no token
 #: is sent, and that service is refused like any other caller under the hold.
-HOLD_TOKEN_FILE_ENV = "OMNI_KIT_MCP_HOLD_TOKEN_FILE"
+HOLD_TOKEN_FILE_ENV = "ISAAC_MCP_HOLD_TOKEN_FILE"
 HOLD_VERB = "doorway.hold"
 RELEASE_VERB = "doorway.release"
 HOLD_FIELD = "hold"
@@ -120,15 +120,15 @@ class BridgeError(Exception):
 
 # ---- port discovery (runtime portfiles) ----
 # Bridges advertise themselves as <pid>-<port>.json in a per-user runtime dir
-# (written by omni_kit_mcp.bridge — the derivation below mirrors it; the pair
+# (written by isaac_mcp_bridge.bridge — the derivation below mirrors it; the pair
 # is a cross-process contract pinned by test, not by import).
 
 def _runtime_dir() -> str:
     base = os.getenv("XDG_RUNTIME_DIR")
     if base:
-        return os.path.join(base, "omni-kit-mcp")
+        return os.path.join(base, "isaac-mcp")
     return os.path.join("/tmp" if os.name != "nt" else os.getenv("TEMP", "/tmp"),
-                        f"omni-kit-mcp-{os.getuid() if hasattr(os, 'getuid') else 'u'}")
+                        f"isaac-mcp-{os.getuid() if hasattr(os, 'getuid') else 'u'}")
 
 
 def _pid_alive(pid: int) -> bool:
@@ -169,9 +169,9 @@ def discover_bridges() -> list:
 def _resolve_endpoint(host, port) -> tuple:
     """(host, port), resolved together so a discovered pair stays a pair.
 
-    port: explicit > $UR5E_DT_PORT > $OMNI_KIT_MCP_PORT > discovery-if-unambiguous
+    port: explicit > $UR5E_DT_PORT > $ISAAC_MCP_PORT > discovery-if-unambiguous
           > loud error.
-    host: explicit > $OMNI_KIT_MCP_HOST > the SAME portfile's advertised host
+    host: explicit > $ISAAC_MCP_HOST > the SAME portfile's advertised host
     (only when the port itself came from discovery) > 127.0.0.1.
     """
     host = host or os.getenv(HOST_ENV)
@@ -447,8 +447,8 @@ def main(argv=None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(
-        prog="python3 -m kit_mcp.client",
-        description="Call one tool on the omni.kit.mcp bridge. "
+        prog="python3 -m isaac_mcp.client",
+        description="Call one tool on the isaac.mcp.bridge bridge. "
                     "Exit codes: 0 success, 1 bridge error, 2 unreachable/usage.")
     parser.add_argument("tool", nargs="?",
                         help="canonical tool name, e.g. list_tools or arm.play_scene")

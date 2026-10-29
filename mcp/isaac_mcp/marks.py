@@ -1,7 +1,7 @@
 """Which handlers of a tool package advance the simulator from inside their own call.
 
 WHY THIS EXISTS. The bridge gives a handler the main loop to itself when the handler carries the
-exclusive mark (`__omni_kit_mcp_exclusive__`), because a handler that calls `app.update()` under a
+exclusive mark (`__isaac_mcp_bridge_exclusive__`), because a handler that calls `app.update()` under a
 doorway task destroys every request started beside it. The mark is typed by the tool package, and
 a typed roster drifts: it carried two verbs that never pump and missed four that do. This module
 DERIVES the set from the package's syntax tree, so a package's test can hold its roster to it.
@@ -40,7 +40,7 @@ app.next_update_async()` is not one: a coroutine that yields does not re-enter t
 A static reading of a dynamic language has a residue — a call assembled from two string pieces is
 invisible here. The bridge's runtime witness (`DOORWAY_UNMARKED_PUMP`) exists for that residue.
 
-Stdlib only, importable anywhere, like the rest of `kit_mcp`.
+Stdlib only, importable anywhere, like the rest of `isaac_mcp`.
 """
 import ast
 import io

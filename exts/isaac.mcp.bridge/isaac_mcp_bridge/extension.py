@@ -1,11 +1,11 @@
-"""IExt lifecycle for omni.kit.mcp — the bridge owns the socket, always.
+"""IExt lifecycle for isaac.mcp.bridge — the bridge owns the socket, always.
 
 One bridge, one port, per Kit process. on_startup: build the singleton, arm
 the run_python session staleness guard (stage-open -> clear), load the
 configured tool packages (autoload.py) — every one, or the doorway refuses to
 boot (autoload.ToolModuleLoadRefusal) — bind the socket. Consumers never
 call start()/stop() — projects are plain tool packages registered persistently
-via ``scripts/install.py add-project`` (or per-launch via KIT_MCP_TOOL_* env).
+via ``scripts/install.py add-project`` (or per-launch via ISAAC_MCP_TOOL_* env).
 
 Port resolution follows knobs.PORT and the bind address knobs.BIND (env
 override, else persistent settings — see knobs.py, the single home of every
@@ -50,7 +50,7 @@ class McpBridgeExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
         # carb.log_*, not print(): Kit routes print() into its log sink under a
         # generic [py stdout] channel; carb.log_* stays greppable per-channel.
-        carb.log_info("[omni.kit.mcp] startup")
+        carb.log_info("[isaac.mcp.bridge] startup")
         bridge = _create_bridge()
         self._stage_sub = _guard_sessions_against_stage_open(bridge)
 
@@ -77,22 +77,22 @@ class McpBridgeExtension(omni.ext.IExt):
                 # find. The errno decides what the log says, because "the address does
                 # not exist" and "the port is taken" send a reader to different places.
                 refusal = declared_bind_refusal(bind_host, port, error)
-                carb.log_error(f"[omni.kit.mcp] {refusal}")
+                carb.log_error(f"[isaac.mcp.bridge] {refusal}")
                 raise refusal from error
             carb.log_info(
-                f"[omni.kit.mcp] bridge on port {bridge._port}; tool modules: {results or 'none'}")
+                f"[isaac.mcp.bridge] bridge on port {bridge._port}; tool modules: {results or 'none'}")
         elif results:
             raise RuntimeError(
-                "omni.kit.mcp: tool modules are configured but no port is set. "
-                "Set OMNI_KIT_MCP_PORT or the autostartPort setting "
+                "isaac.mcp.bridge: tool modules are configured but no port is set. "
+                "Set ISAAC_MCP_PORT or the autostartPort setting "
                 "(scripts/install.py writes it).")
         else:
             carb.log_warn(
-                "[omni.kit.mcp] no port configured — socket not started. "
-                "Run scripts/install.py or set OMNI_KIT_MCP_PORT.")
+                "[isaac.mcp.bridge] no port configured — socket not started. "
+                "Run scripts/install.py or set ISAAC_MCP_PORT.")
 
     def on_shutdown(self):
-        carb.log_info("[omni.kit.mcp] shutdown")
+        carb.log_info("[isaac.mcp.bridge] shutdown")
         self._stage_sub = None   # release the stage-event subscription
         _destroy_bridge()
 
@@ -111,9 +111,9 @@ def _guard_sessions_against_stage_open(bridge):
         opened = int(omni.usd.StageEventType.OPENED)
         return stream.create_subscription_to_pop_by_type(
             opened, lambda _e: bridge.clear_sessions(),
-            name="omni.kit.mcp sessions stage-open guard")
+            name="isaac.mcp.bridge sessions stage-open guard")
     except ImportError:
         carb.log_warn(
-            "[omni.kit.mcp] omni.usd unavailable — persistent run_python "
+            "[isaac.mcp.bridge] omni.usd unavailable — persistent run_python "
             "sessions will NOT auto-clear on stage open")
         return None

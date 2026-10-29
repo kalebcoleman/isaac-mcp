@@ -366,11 +366,11 @@ def _bridge_pid(port: int | None) -> int | None:
     dirs = []
     xdg = os.getenv("XDG_RUNTIME_DIR")
     if xdg:
-        dirs.append(os.path.join(xdg, "omni-kit-mcp"))
+        dirs.append(os.path.join(xdg, "isaac-mcp"))
     elif uid is not None:
-        dirs.append(f"/run/user/{uid}/omni-kit-mcp")
+        dirs.append(f"/run/user/{uid}/isaac-mcp")
     if uid is not None:
-        dirs.append(f"/tmp/omni-kit-mcp-{uid}")
+        dirs.append(f"/tmp/isaac-mcp-{uid}")
     suffix = f"-{int(port)}.json"
     for directory in dirs:
         try:

@@ -5,7 +5,7 @@ specs and never read raw parameter schemas; these tests pin the vocabulary
 they rely on.
 """
 
-from omni_kit_mcp.schema import field_spec, field_specs
+from isaac_mcp_bridge.schema import field_spec, field_specs
 
 
 def test_enum_wins_over_type():

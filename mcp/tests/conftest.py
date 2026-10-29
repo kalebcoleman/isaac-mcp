@@ -5,8 +5,8 @@ import sys
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # In the consolidated repo the Kit bridge lives beside mcp/, not under it.
-_EXT_ROOT = os.path.join(os.path.dirname(_REPO_ROOT), "exts", "omni.kit.mcp")
-for _p in (_REPO_ROOT, _EXT_ROOT):   # kit_mcp · omni_kit_mcp
+_EXT_ROOT = os.path.join(os.path.dirname(_REPO_ROOT), "exts", "isaac.mcp.bridge")
+for _p in (_REPO_ROOT, _EXT_ROOT):   # isaac_mcp · isaac_mcp_bridge
     if _p not in sys.path:
         sys.path.insert(0, _p)
 

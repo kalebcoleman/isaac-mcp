@@ -12,9 +12,9 @@ import os
 
 import pytest
 
-from omni_kit_mcp import bridge as bridge_module
-from omni_kit_mcp.bridge import McpBridge, ToolDefinition
-from omni_kit_mcp.protocol import ToolError
+from isaac_mcp_bridge import bridge as bridge_module
+from isaac_mcp_bridge.bridge import McpBridge, ToolDefinition
+from isaac_mcp_bridge.protocol import ToolError
 
 
 def make_bridge():

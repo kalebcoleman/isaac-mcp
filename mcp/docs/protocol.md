@@ -22,11 +22,11 @@ serialized on Kit's main thread (USD/PhysX are not thread-safe).
 ## Endpoint resolution
 
 You usually don't specify one. Each running bridge
-advertises itself in a per-user runtime dir (`$XDG_RUNTIME_DIR/omni-kit-mcp/`).
-A client resolves its port as: explicit `port=`/`--port` → `OMNI_KIT_MCP_PORT`
+advertises itself in a per-user runtime dir (`$XDG_RUNTIME_DIR/isaac-mcp/`).
+A client resolves its port as: explicit `port=`/`--port` → `ISAAC_MCP_PORT`
 → **auto-discovered when exactly one bridge is running** → a loud error listing
 candidates when several are (e.g. the app on 9009 *and* a Lab run on 9010 — then
-name one). The host rides along: explicit `host=`/`--host` → `OMNI_KIT_MCP_HOST`
+name one). The host rides along: explicit `host=`/`--host` → `ISAAC_MCP_HOST`
 → **the discovered portfile's advertised host** — so a bridge bound to a
 tailnet IP is dialed on that IP, not loopback. The single-process common case
 is zero-config; only genuinely ambiguous multi-process boxes ever need a port.
@@ -45,8 +45,8 @@ one queue:
   ordinary request starts when no exclusive request is running; an exclusive
   one starts when nothing is. Neither class jumps the other.
 - **Exclusive tools.** A handler function carrying
-  `__omni_kit_mcp_exclusive__ = True` gets the main loop to itself.
-  `run_python` always does. `kit_mcp.marks` derives, from a package's syntax
+  `__isaac_mcp_bridge_exclusive__ = True` gets the main loop to itself.
+  `run_python` always does. `isaac_mcp.marks` derives, from a package's syntax
   tree, which of its handlers must carry the mark; hold your roster to it in
   a test.
 - **Queue budget.** A request states `"queue_s"`: the longest it may wait to
@@ -90,7 +90,7 @@ answerable. The hold ends when its connection closes, whether by
 crashed holder never strands the doorway. In-process callers carry no token
 and are refused while a hold stands.
 
-The reference client wraps this as `kit_mcp.client.DoorwayHold`:
+The reference client wraps this as `isaac_mcp.client.DoorwayHold`:
 
 ```python
 with DoorwayHold("my-benchmark", "episode 3", port=9010) as hold:
@@ -99,7 +99,7 @@ with DoorwayHold("my-benchmark", "episode 3", port=9010) as hold:
 ```
 
 A process started before the hold, whose environment cannot change, can name a
-token file with `OMNI_KIT_MCP_HOLD_TOKEN_FILE`; the client reads it on every
+token file with `ISAAC_MCP_HOLD_TOKEN_FILE`; the client reads it on every
 call.
 
 ## Boot refusal and caller liveness
@@ -110,12 +110,12 @@ than letting the doorway come up without it: the bridge raises
 none of them, writes a `boot-refusal-<pid>-<ns>.json` record to the log
 directory for a launcher to read, and asks Kit to quit (exit code 78).
 
-A long-running tool can call `omni_kit_mcp.bridge.request_caller_disconnected()`
+A long-running tool can call `isaac_mcp_bridge.bridge.request_caller_disconnected()`
 to learn that its caller has gone and stop early.
 
 ## Call telemetry (optional)
 
-Set `OMNI_KIT_MCP_AUTHORING_TELEMETRY` to a file path and every completed tool
+Set `ISAAC_MCP_AUTHORING_TELEMETRY` to a file path and every completed tool
 call appends one fsynced JSON line: tool name, timing, ordinal, outcome and a
 digest of the arguments. Payloads are never written. Unset, telemetry costs
 nothing.

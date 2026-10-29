@@ -1,7 +1,7 @@
 # Isaac Lab 3.0 Tool Pack Design
 
 Design for an `isaaclab.*` tool pack for the `isaac-mcp` host server. Grounded in
-`mcp/kit_mcp/server.py`, `exts/omni.kit.mcp/omni_kit_mcp/bridge.py`,
+`mcp/isaac_mcp/server.py`, `exts/isaac.mcp.bridge/isaac_mcp_bridge/bridge.py`,
 `mcp/docs/isaac-lab.md`, `mcp/examples/isaaclab_bridge_launch.py`,
 `docs/ARCHITECTURE.md`, and the reference install at
 `learning6/` (Isaac Lab 3.0.0, Isaac Sim 6.2.0.0, Python 3.12).
@@ -190,7 +190,7 @@ in code; they are documentation/examples only.
   forwarded.
 - The bridge's `run_python` builtin (`bridge.py` builtins) is not exposed
   through this pack; if a Lab bridge is attached via `use_bridge`, that is a
-  separate, user-opt-in surface governed by `KIT_MCP_BUILTINS`.
+  separate, user-opt-in surface governed by `ISAAC_MCP_BUILTINS`.
 
 ## 11. Out of scope (this design)
 

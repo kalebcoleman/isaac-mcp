@@ -14,7 +14,7 @@ that raises degrades to a reported error rather than taking the dispatch down wi
 
 import pytest
 
-from kit_mcp import server
+from isaac_mcp import server
 
 
 @pytest.fixture(autouse=True)
