@@ -1,0 +1,244 @@
+import os
+import stat
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from isaac_mcp.isaaclab import jobs
+
+
+def make_fake_python(tmp_path: Path) -> Path:
+    p = tmp_path / "fake_python.py"
+    p.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, sys, time\n"
+        "mode = os.environ.get('FAKE_MODE', 'ok')\n"
+        "if mode == 'sleep':\n"
+        "    time.sleep(3600)\n"
+        "elif mode == 'fail':\n"
+        "    print('boom', file=sys.stderr)\n"
+        "    sys.exit(7)\n"
+        "else:\n"
+        "    print('line1')\n"
+        "    print('line2')\n"
+        "    sys.exit(0)\n"
+    )
+    p.chmod(p.stat().st_mode | stat.S_IEXEC)
+    return p
+
+
+@pytest.fixture(autouse=True)
+def isolated_jobs(tmp_path, monkeypatch):
+    jd = tmp_path / "jobs"
+    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(jd))
+    # reset module jobs_dir cache (none) and active map
+    jobs._active.clear()
+    yield
+    jobs._active.clear()
+
+
+def wait_for_status(job_id, target, timeout=10):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        st = jobs.runs_status(job_id)["state"]
+        if st == target or st in ("succeeded", "failed", "cancelled", "timeout"):
+            return st
+        time.sleep(0.1)
+    return jobs.runs_status(job_id)["state"]
+
+
+def test_launch_status_tail(tmp_path, monkeypatch):
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setenv("FAKE_MODE", "ok")
+    res = jobs.train(python=str(fake_py), root=str(root), task="Foo.Bar:1", num_envs=4)
+    assert set(res) == {"job_id", "log_dir", "command"}
+    jid = res["job_id"]
+    # wait for completion
+    st = wait_for_status(jid, "succeeded", timeout=10)
+    assert st == "succeeded"
+    status = jobs.runs_status(jid)
+    assert status["pid_alive"] is False
+    assert status["exit_code"] == 0
+    assert status["last_log_lines"] and "line1" in "\n".join(status["last_log_lines"])
+    tail = jobs.runs_tail(jid, stream="stdout", lines=10)
+    assert "line1" in "\n".join(tail["lines"])
+    assert "line2" in "\n".join(tail["lines"])
+    # runs_list
+    rl = jobs.runs_list(state="finished")
+    assert any(r["job_id"] == jid for r in rl["runs"])
+
+
+def test_fail_exit_code(tmp_path, monkeypatch):
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setenv("FAKE_MODE", "fail")
+    res = jobs.train(python=str(fake_py), root=str(root), task="T", num_envs=2)
+    jid = res["job_id"]
+    st = wait_for_status(jid, "failed", timeout=10)
+    assert st == "failed"
+    assert jobs.runs_status(jid)["exit_code"] == 7
+
+
+def test_cancel_kills_process_group(tmp_path, monkeypatch):
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setenv("FAKE_MODE", "sleep")
+    res = jobs.train(python=str(fake_py), root=str(root), task="SleepTask", num_envs=1)
+    jid = res["job_id"]
+    # ensure running
+    time.sleep(0.5)
+    assert jobs.runs_status(jid)["state"] == "running"
+    out = jobs.runs_cancel(jid, grace_s=1)
+    assert out["state"] == "cancelled"
+    time.sleep(0.5)
+    st = jobs.runs_status(jid)
+    assert st["state"] == "cancelled"
+    assert st["pid_alive"] is False
+
+
+def test_timeout(tmp_path, monkeypatch):
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setenv("FAKE_MODE", "sleep")
+    res = jobs.train(python=str(fake_py), root=str(root), task="TimeoutTask", num_envs=1, timeout_s=0.5)
+    jid = res["job_id"]
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        st = jobs.runs_status(jid)["state"]
+        if st == "timeout":
+            break
+        time.sleep(0.2)
+    assert jobs.runs_status(jid)["state"] == "timeout"
+
+
+def test_rehydration_host_restarted(tmp_path, monkeypatch):
+    # simulate a job dir with running status and dead pid
+    jd = jobs.jobs_dir()
+    jid = "20200101-000000-dead"
+    d = jd / jid
+    d.mkdir(parents=True, exist_ok=True)
+    data = {
+        "id": jid,
+        "job_id": jid,
+        "kind": "train",
+        "task": "T",
+        "command": ["x"],
+        "pid": 999999,  # unlikely alive
+        "started_at": time.time() - 10,
+        "finished_at": None,
+        "status": "running",
+        "exit_code": None,
+        "log_dir": str(d),
+        "run_dir": str(d),
+    }
+    (d / "job.json").write_text(__import__("json").dumps(data))
+    # runs_status reconciles
+    st = jobs.runs_status(jid)
+    assert st["state"] == "failed"
+    # check note
+    import json
+    raw = json.loads((d / "job.json").read_text())
+    assert raw.get("note") == "host restarted"
+
+
+def test_validation(tmp_path, monkeypatch):
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir()
+    # bad task
+    with pytest.raises(ValueError):
+        jobs.train(python=str(fake_py), root=str(root), task="bad task!")
+    # bad extra_args
+    with pytest.raises(ValueError):
+        jobs.train(python=str(fake_py), root=str(root), task="T", extra_args=["rm -rf /"])
+    with pytest.raises(ValueError):
+        jobs.train(python=str(fake_py), root=str(root), task="T", extra_args=["foo"])
+    # checkpoint missing
+    with pytest.raises(ValueError):
+        jobs.train(python=str(fake_py), root=str(root), task="T", checkpoint=str(tmp_path / "nope.pth"))
+    # checkpoint traversal outside roots
+    outside = tmp_path.parent / "outside.pth"
+    outside.write_text("x")
+    with pytest.raises(ValueError):
+        jobs.train(python=str(fake_py), root=str(root), task="T", checkpoint=str(outside))
+
+
+def test_eval_play(tmp_path, monkeypatch):
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir()
+    # create a checkpoint under root
+    ckpt = root / "model.pth"
+    ckpt.write_text("x")
+    monkeypatch.setenv("FAKE_MODE", "ok")
+    r1 = jobs.eval_(python=str(fake_py), root=str(root), task="T", checkpoint=str(ckpt), num_envs=2, rl_library="rl_games")
+    assert "job_id" in r1
+    r2 = jobs.play(python=str(fake_py), root=str(root), task="T", checkpoint=str(ckpt), num_envs=1, headless=True)
+    assert "job_id" in r2
+    # wait
+    for r in (r1, r2):
+        wait_for_status(r["job_id"], "succeeded", timeout=10)
+
+
+def test_runs_tail_lines_cap(tmp_path, monkeypatch):
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setenv("FAKE_MODE", "ok")
+    res = jobs.train(python=str(fake_py), root=str(root), task="T")
+    jid = res["job_id"]
+    wait_for_status(jid, "succeeded", timeout=10)
+    out = jobs.runs_tail(jid, stream="stdout", lines=10000)
+    assert len(out["lines"]) <= 1000
+
+
+def test_job_id_validation_rejects_traversal(tmp_path, monkeypatch):
+    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    (tmp_path / "jobs").mkdir()
+    for bad in ["../x", "..", "a/b", "", "20260101-000000-../../etc"]:
+        for fn in (jobs.runs_status, jobs.runs_cancel):
+            with pytest.raises(ValueError):
+                fn(bad)
+        with pytest.raises(ValueError):
+            jobs.runs_tail(bad)
+
+
+def test_rl_library_validation():
+    assert jobs._validate_library(None) is None
+    assert jobs._validate_library("rl_games") == "rl_games"
+    for bad in ["RL", "a b", "x;y", "--evil"]:
+        with pytest.raises(ValueError):
+            jobs._validate_library(bad)
+
+
+def test_job_alive_requires_matching_cmdline(tmp_path):
+    import os
+    assert jobs._job_alive({"pid": os.getpid(), "command": ["py", "definitely-not-this-process.py"]}) is False
+    assert jobs._job_alive({"pid": None, "command": []}) is False
+
+
+def test_extra_args_accept_hydra_overrides_but_not_shell_syntax():
+    ok = ["--seed=3", "agent.params.config.minibatch_size=1536", "+env.foo=1", "~agent.bar"]
+    assert jobs._validate_extra_args(ok) == ok
+    for bad in ["x;rm -rf /", "a=b c", "$(id)", "k=`id`", "--x=1;ls", "agent.a=1|cat", "-x", "a b"]:
+        with pytest.raises(ValueError):
+            jobs._validate_extra_args([bad])
+
+
+def test_checkpoint_discovered_from_training_log(tmp_path):
+    ck = tmp_path / "logs" / "exp" / "nn" / "last_x_ep_2.pth"
+    ck.parent.mkdir(parents=True)
+    ck.write_text("w")
+    log = tmp_path / "stdout.log"
+    log.write_text(f"noise\n=> saving checkpoint '{ck}'\nMAX EPOCHS NUM!\n")
+    assert jobs._checkpoint_from_log(log) == str(ck.resolve())
+    log.write_text("=> saving checkpoint '/does/not/exist.pth'\n")
+    assert jobs._checkpoint_from_log(log) is None

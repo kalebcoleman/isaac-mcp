@@ -16,6 +16,7 @@ added. See [`docs/VENDORING.md`](docs/VENDORING.md).
 | `exts/isaac.mcp.bridge/` | Kit extension: the socket bridge and tool registry inside Kit. |
 | `exts/isaac.mcp.panel/` | Kit extension: registry inspector UI. |
 | `exts/ur5e-dt/` | Tool pack: the UR5e digital-twin tools (22 `ur5e_dt.*`) and their assets. One pack among others to come. |
+| `mcp/isaac_mcp/isaaclab/` | Isaac Lab 3.0 tool pack: 12 host-side `isaaclab__*` tools (install info, task list, train/eval/play jobs, run status/tail/cancel, checkpoints, TensorBoard metrics). See [`docs/ISAACLAB-TOOLS.md`](docs/ISAACLAB-TOOLS.md). |
 | `npm/` | Optional `npx` launcher (runs the Python server through `uvx`). |
 | `scripts/`, `run.sh`, `verify.sh`, `install.sh` | Launch, check and install helpers (Ubuntu 22.04/24.04, Python 3.12). |
 

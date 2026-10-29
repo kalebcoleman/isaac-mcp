@@ -72,15 +72,15 @@ All inputs/outputs JSON. Durations in seconds.
 
 ### `isaaclab.train`
 - in: `{task: str, num_envs?: int=64, max_iterations?: int, seed?: int,
-  device?: str, headless?: bool=true, checkpoint?: path, extra_args?: [str]}`
+  device?: str, headless?: bool=true, checkpoint?: path, rl_library?: str, extra_args?: [str], timeout_s?: float}`
 - out: `{job_id, log_dir, command}` (returns immediately; job runs async)
 
 ### `isaaclab.eval`
-- in: `{task, checkpoint: path, num_envs?: int, episodes?: int, headless?: bool=true}`
+- in: `{task, checkpoint: path, num_envs?: int, headless?: bool=true, rl_library?: str, extra_args?: [str]}`
 - out: `{job_id, log_dir, command}`
 
 ### `isaaclab.play`
-- in: `{task, checkpoint: path, num_envs?: int=1, headless?: bool=false}`
+- in: `{task, checkpoint: path, num_envs?: int=1, headless?: bool=false, rl_library?: str}`
 - out: `{job_id, log_dir, command}` (interactive; usually stopped by user/cancel)
 
 ### `isaaclab.runs.list`
@@ -198,3 +198,19 @@ in code; they are documentation/examples only.
 - No multi-node/multi-GPU orchestration beyond `CUDA_VISIBLE_DEVICES`.
 - No dataset recording or motion-capture tools.
 - No changes to `ur5e-digital-twin`; this doc lives only in `isaac-mcp`.
+
+## 12. Implementation notes (verified 2026-10-29 on Isaac Lab 3.0.0 / Isaac Sim 6.2.0.0)
+
+Implemented in `mcp/isaac_mcp/isaaclab/` (`install.py`, `jobs.py`, `metrics.py`, wired by `tools.py`; tools are
+exposed as `isaaclab__<tool>`). A real 2-epoch `Isaac-Reach-UR10` rl_games run through `isaaclab__train` succeeded,
+and `runs_status` / `metrics_summary` read its checkpoint and TensorBoard scalars. Things the real run taught us:
+
+- Isaac Lab 3 has **no `--headless` flag**. Headless is the default; `headless=false` adds `--viz kit`.
+- The RL backend is chosen with `--rl_library` (else the task's registered default); `episodes` was dropped because
+  only the rlinf backend has `--num_episodes`.
+- `extra_args` accepts `--flags` **and Hydra overrides** (`agent.params.config.minibatch_size=1536`, `+key=v`, `~key`).
+  rl_games needs `minibatch_size` to divide `num_envs * 24`, so small `num_envs` runs need that override.
+- Runs live under `<isaaclab_root>/logs/...`, not the job dir; `runs_status` finds the newest checkpoint from the
+  training log ("saving checkpoint '...'") and reports the experiment dir as `run_dir`.
+- Job ids are validated (`YYYYMMDD-HHMMSS-<slug>`), and cancel only signals a pid whose command line still matches the job.
+- `envs_list` scans registrations statically; custom envs registered by user code (e.g. `ur5e_lab`) are not listed yet.

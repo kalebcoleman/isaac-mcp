@@ -46,6 +46,7 @@ from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
 
 from .client import BridgeClient, BridgeError
+from .isaaclab.tools import register_isaaclab_tools
 from .screen import register_screen_tools
 
 logging.basicConfig(level=logging.INFO,
@@ -361,6 +362,7 @@ def _screen_port() -> int | None:
 
 
 register_screen_tools(mcp, port_provider=_screen_port)
+register_isaaclab_tools(mcp)
 
 
 @mcp.tool()
