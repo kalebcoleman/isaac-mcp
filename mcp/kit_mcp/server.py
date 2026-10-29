@@ -421,13 +421,13 @@ def main(argv: list[str] | None = None) -> None:
     from importlib import metadata
 
     parser = argparse.ArgumentParser(
-        prog="twin-mcp",
+        prog="isaac-mcp",
         description="MCP server for the UR5e digital twin: Kit/Isaac Sim bridge tools plus desktop "
         "screen capture. Speaks MCP over stdio; configure it in your MCP client, do not run it by hand. "
         "Environment: UR5E_DT_PORT (bridge port, default 8766), DISPLAY (screen tools).",
     )
     try:
-        version = metadata.version("twin-mcp")
+        version = metadata.version("isaac-mcp")
     except metadata.PackageNotFoundError:
         version = "unknown"
     parser.add_argument("--version", action="version", version=f"%(prog)s {version}")

@@ -29,7 +29,7 @@ Same binary, same socket, different env:
 
 ```json
 "robot-demo-agent": {
-  "command": "kit-mcp",
+  "command": "isaac-mcp",
   "env": { "OMNI_KIT_MCP_PORT": "9009",
            "KIT_MCP_NAMESPACE": "robot_demo",
            "KIT_MCP_BUILTINS": "0" }

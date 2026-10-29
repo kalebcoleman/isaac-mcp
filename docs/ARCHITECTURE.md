@@ -11,7 +11,7 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 ```
 +-------------------------------------------------------------------------------+
 | Layer 1: Host MCP Server (mcp/)                                               |
-| Package: kit_mcp  |  CLI: twin-mcp (aliases: ur5e-mcp, kit-mcp)               |
+| Package: kit_mcp  |  CLI: isaac-mcp               |
 | - Runs in host Python environment (uv tool / isolated venv)                  |
 | - Speaks stdio MCP to AI agents (Claude Code, Claude Desktop, OpenCode)       |
 | - Provides desktop capture: screenshot, screen recording, window management  |
@@ -64,7 +64,7 @@ Consistency across extensions, packages, and CLI commands is strictly maintained
 | Kit Extension ID | Dotted / Hyphenated | Matches Omniverse extension identifier | `ur5e-dt`, `omni.kit.mcp`, `omni.kit.mcp.panel` |
 | Extension Folder | Exact Match | Directory under `exts/` matches Extension ID | `exts/ur5e-dt/`, `exts/omni.kit.mcp/` |
 | Python Package | Underscored | Standard valid Python import identifier | `ur5e_dt`, `omni_kit_mcp`, `kit_mcp` |
-| CLI / Server Name | Hyphenated | User-facing executable installed by `uv tool` | `twin-mcp` (aliases: `ur5e-mcp`, `kit-mcp`) |
+| CLI / Server Name | Hyphenated | User-facing executable installed by `uv tool` | `isaac-mcp` |
 
 ---
 
@@ -99,7 +99,7 @@ Communication between the host MCP server and the Kit bridge uses JSON lines ove
        │
        │ stdio JSON-RPC
        ▼
-[Host MCP Server: twin-mcp]
+[Host MCP Server: isaac-mcp]
        │
        │ TCP NDJSON (:8766)
        ▼

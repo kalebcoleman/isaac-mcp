@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Thin launcher: `npx twin-mcp` runs the Python MCP server via uvx (stdio passes straight through).
+// Thin launcher: `npx isaac-mcp` runs the Python MCP server via uvx (stdio passes straight through).
 // The server itself is the Python package in ../mcp; this file only finds uv and forwards arguments.
 //   TWIN_MCP_FROM   override the uvx source (default: the GitHub repo's mcp/ subdirectory;
-//                   set to "twin-mcp" once the package is published on PyPI)
+//                   set to "isaac-mcp" once the package is published on PyPI)
 const { spawn, spawnSync } = require("node:child_process");
 
 const DEFAULT_FROM =
@@ -12,12 +12,12 @@ const source = process.env.TWIN_MCP_FROM || DEFAULT_FROM;
 const probe = spawnSync("uvx", ["--version"], { stdio: "ignore" });
 if (probe.error || probe.status !== 0) {
   process.stderr.write(
-    "twin-mcp needs uv (provides uvx). Install it: https://docs.astral.sh/uv/getting-started/installation/\n"
+    "isaac-mcp needs uv (provides uvx). Install it: https://docs.astral.sh/uv/getting-started/installation/\n"
   );
   process.exit(127);
 }
 
-const child = spawn("uvx", ["--from", source, "twin-mcp", ...process.argv.slice(2)], {
+const child = spawn("uvx", ["--from", source, "isaac-mcp", ...process.argv.slice(2)], {
   stdio: "inherit",
 });
 for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => child.kill(sig));

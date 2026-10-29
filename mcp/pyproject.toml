@@ -1,5 +1,5 @@
 [project]
-name = "twin-mcp"
+name = "isaac-mcp"
 version = "0.2.0"
 description = "UR5e lab MCP server: Kit/Isaac Sim bridge plus desktop screen capture"
 readme = "README.md"
@@ -26,9 +26,7 @@ test = [
 # LLM-facing MCP server entry point (the TCP client to the Kit bridge).
 # The Kit-side socket server lives in exts/omni.kit.mcp/ and is loaded by Kit, not pip.
 [project.scripts]
-twin-mcp = "kit_mcp.server:main"
-ur5e-mcp = "kit_mcp.server:main"
-kit-mcp = "kit_mcp.server:main"
+isaac-mcp = "kit_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]

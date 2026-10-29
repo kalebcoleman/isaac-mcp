@@ -11,7 +11,7 @@ Two layers with different weights:
 
 The server import is lazy (PEP 562) so ``import kit_mcp`` / ``kit_mcp.client``
 work in environments without the SDK; touching a server attribute (or running
-the ``kit-mcp`` command) is what requires it.
+the ``isaac-mcp`` command) is what requires it.
 """
 
 # Both layers resolve lazily (PEP 562): the package itself imports for free,

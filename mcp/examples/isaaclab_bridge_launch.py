@@ -12,7 +12,7 @@
 #   3. Configuration is env-var only (no carb persistence): OMNI_KIT_MCP_PORT,
 #      KIT_MCP_TOOL_PATHS, KIT_MCP_TOOL_MODULES.
 #
-# Everything else — protocol, tool packages, canonical names, the kit-mcp
+# Everything else — protocol, tool packages, canonical names, the isaac-mcp
 # front-end — is identical to the Isaac Sim setup (see repo README).
 
 import argparse
@@ -27,7 +27,7 @@ os.environ.setdefault("OMNI_KIT_MCP_PORT", "9010")
 # os.environ.setdefault("KIT_MCP_TOOL_PATHS", os.path.expanduser("~/myproj/isaac"))
 # os.environ.setdefault("KIT_MCP_TOOL_MODULES", "myproj_tools")
 
-_OMNI_KIT_MCP_EXTS = os.path.expanduser("~/Documents/omni-kit-mcp/exts")
+_OMNI_KIT_MCP_EXTS = os.path.expanduser("~/Documents/omni-isaac-mcp/exts")
 
 from isaaclab.app import AppLauncher
 

@@ -28,7 +28,7 @@ portfiles, so the `list_bridges` builtin exists: ask any reachable bridge
 (typically the stable installed-app port) and it reports every bridge on its
 box.
 
-Front-end (`kit-mcp`) env: `OMNI_KIT_MCP_PORT` (optional — auto-discovered
+Front-end (`isaac-mcp`) env: `OMNI_KIT_MCP_PORT` (optional — auto-discovered
 when exactly one bridge runs; set it to pin a process), `OMNI_KIT_MCP_HOST`,
 `KIT_MCP_NAMESPACE` (comma allowlist), `KIT_MCP_BUILTINS` (`0` hides
 `run_python`/`reload_tools`), `KIT_MCP_NAME` / `KIT_MCP_INSTRUCTIONS`.

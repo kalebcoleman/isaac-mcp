@@ -31,7 +31,7 @@ This repository consolidates two previously submodule-managed codebases into a s
 - **Fork:** `https://github.com/kalebcoleman/ur5e-mcp`
 - **Pinned Commit:** `9d0366b` (*"feat(screen): default captures to the Isaac window for this port"*)
 - **Vendored Paths:**
-  - `mcp/` (host-side Python package `kit_mcp`, exposing CLI `twin-mcp`)
+  - `mcp/` (host-side Python package `kit_mcp`, exposing CLI `isaac-mcp`)
   - `exts/omni.kit.mcp/` (Kit bridge extension)
   - `exts/omni.kit.mcp.panel/` (Kit bridge GUI inspector panel)
 - **Local modifications:** None at the time of consolidation. Fork commit `9d0366b` vendored clean.

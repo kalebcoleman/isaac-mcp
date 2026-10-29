@@ -1,9 +1,9 @@
 {
-  "name": "twin-mcp",
+  "name": "isaac-mcp",
   "version": "0.2.0",
-  "description": "npx launcher for twin-mcp, the MCP server for the UR5e digital twin (Kit/Isaac Sim bridge plus desktop screen capture). Runs the Python package through uvx.",
-  "bin": { "twin-mcp": "bin/twin-mcp.js" },
-  "files": ["bin/twin-mcp.js", "README.md", "LICENSE"],
+  "description": "npx launcher for isaac-mcp, the MCP server for the UR5e digital twin (Kit/Isaac Sim bridge plus desktop screen capture). Runs the Python package through uvx.",
+  "bin": { "isaac-mcp": "bin/isaac-mcp.js" },
+  "files": ["bin/isaac-mcp.js", "README.md", "LICENSE"],
   "engines": { "node": ">=18" },
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/kalebcoleman/ur5e-digital-twin.git", "directory": "npm" },

@@ -4,7 +4,7 @@
 # In the consolidated tree, the host MCP package is located at mcp/ and exts/ holds
 # the Kit extensions (omni.kit.mcp and ur5e-dt).
 #
-# install.sh — idempotent one-time setup for ur5e-digital-twin.
+# install.sh — idempotent one-time setup for isaac-mcp.
 #
 # Usage:
 #   ./install.sh [options]
@@ -151,16 +151,11 @@ fi
 # Step 2: Install host MCP package (editable)
 MCP_DIR="$ROOT/mcp"
 if [ ! -d "$MCP_DIR" ]; then
-  # Graceful fallback if invoked pre-move
-  if [ -d "$ROOT/external/omni-kit-mcp" ]; then
-    MCP_DIR="$ROOT/external/omni-kit-mcp"
-  else
-    echo "FAIL: MCP host package directory not found at $MCP_DIR" >&2
-    exit 1
-  fi
+  echo "FAIL: MCP host package directory not found at $MCP_DIR" >&2
+  exit 1
 fi
 
-echo "== installing twin-mcp (editable) from $MCP_DIR"
+echo "== installing isaac-mcp (editable) from $MCP_DIR"
 uv tool install --force --editable "$MCP_DIR"
 
 # Step 3: Install ffmpeg shim at ~/.local/bin/ffmpeg
@@ -188,19 +183,14 @@ exec "$BIN" "$@"
 SH
 chmod +x "$BIN_DIR/ffmpeg"
 
-# Step 4: Verify CLI help runs (twin-mcp with ur5e-mcp and kit-mcp aliases)
+# Step 4: Verify CLI help runs
 echo "== verifying CLI"
-CLI_BIN=""
-if [ -x "$BIN_DIR/twin-mcp" ]; then
-  CLI_BIN="$BIN_DIR/twin-mcp"
-elif [ -x "$BIN_DIR/ur5e-mcp" ]; then
-  CLI_BIN="$BIN_DIR/ur5e-mcp"
-elif command -v twin-mcp >/dev/null 2>&1; then
-  CLI_BIN="$(command -v twin-mcp)"
-elif command -v ur5e-mcp >/dev/null 2>&1; then
-  CLI_BIN="$(command -v ur5e-mcp)"
+if [ -x "$BIN_DIR/isaac-mcp" ]; then
+  CLI_BIN="$BIN_DIR/isaac-mcp"
+elif command -v isaac-mcp >/dev/null 2>&1; then
+  CLI_BIN="$(command -v isaac-mcp)"
 else
-  echo "FAIL: neither twin-mcp nor ur5e-mcp found in $BIN_DIR or PATH" >&2
+  echo "FAIL: isaac-mcp not found in $BIN_DIR or PATH" >&2
   exit 1
 fi
 
@@ -210,10 +200,10 @@ echo "  verified $CLI_BIN --help runs"
 # Optional client configurations
 if [ "$DO_CLAUDE_CODE" = 1 ]; then
   if command -v claude >/dev/null 2>&1; then
-    echo "== configuring Claude Code (ur5e on port $PORT)"
-    claude mcp remove --scope user ur5e >/dev/null 2>&1 || true
+    echo "== configuring Claude Code (isaac on port $PORT)"
+    claude mcp remove --scope user isaac >/dev/null 2>&1 || true
     claude mcp remove --scope user twin >/dev/null 2>&1 || true
-    claude mcp add --scope user ur5e \
+    claude mcp add --scope user isaac \
       -e "DISPLAY=$DISPLAY_NAME" -e "UR5E_DT_PORT=$PORT" \
       -- "$CLI_BIN"
   else
@@ -222,7 +212,7 @@ if [ "$DO_CLAUDE_CODE" = 1 ]; then
 fi
 
 if [ "$DO_CLAUDE_DESKTOP" = 1 ]; then
-  echo "== configuring Claude Desktop (ur5e on port $PORT)"
+  echo "== configuring Claude Desktop (isaac on port $PORT)"
   PORT="$PORT" DISPLAY_NAME="$DISPLAY_NAME" CLI_PATH="$CLI_BIN" python3 - <<'PY'
 import json
 import os
@@ -240,7 +230,7 @@ if not os.path.exists(path):
 
 with open(path, encoding="utf-8") as f:
     config = json.load(f)
-config.setdefault("mcpServers", {})["ur5e"] = {
+config.setdefault("mcpServers", {})["isaac"] = {
     "command": cli_path,
     "args": [],
     "env": {"UR5E_DT_PORT": port, "DISPLAY": display},
@@ -263,9 +253,9 @@ if [ "$DO_PRINT_OPENCODE" = 1 ]; then
 
 OpenCode entry (~/.config/opencode/opencode.jsonc):
 
-  "ur5e": {
+  "isaac": {
     "type": "local",
-    "command": ["twin-mcp"],
+    "command": ["isaac-mcp"],
     "environment": { "UR5E_DT_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME" }
   }
 EOF

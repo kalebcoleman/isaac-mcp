@@ -1,8 +1,8 @@
-# twin-mcp
+# isaac-mcp
 
-Host-side Model Context Protocol (MCP) server for Omniverse Kit and the UR5e digital twin.
+Host-side Model Context Protocol (MCP) server for Isaac Sim, Isaac Lab and Omniverse Kit.
 It provides the Kit bridge gateway plus host-side desktop capture.
-The package provides CLI `twin-mcp` with `ur5e-mcp` and `kit-mcp` aliases.
+The package provides one CLI, `isaac-mcp`.
 
 Install it as an editable tool (shared by every MCP client):
 
@@ -11,8 +11,7 @@ Install it as an editable tool (shared by every MCP client):
 ./install.sh
 # Or install host package directly:
 uv tool install --force --editable ./mcp
-# provides: twin-mcp, the backward-compatible ur5e-mcp and kit-mcp aliases,
-# and the ~/.local/bin/ffmpeg shim used by the Kit viewport recorder
+# provides: isaac-mcp and the ~/.local/bin/ffmpeg shim used by the Kit viewport recorder
 ```
 
 Client configs: from the `ur5e-digital-twin` root run
@@ -63,8 +62,8 @@ flowchart TB
         ROVER["rover_tools/<br/>MCP_NAMESPACE = 'rover'"] -->|register| BRIDGE
         PANEL["omni.kit.mcp.panel<br/>registry-driven UI"] -->|"dispatch (click == agent call)"| BRIDGE
     end
-    GW["kit-mcp gateway<br/>operator view: all tools + run_python"] -->|MCP ⇄ NDJSON| BRIDGE
-    GWF["kit-mcp gateway (filtered)<br/>KIT_MCP_NAMESPACE=arm · KIT_MCP_BUILTINS=0"] -->|MCP ⇄ NDJSON| BRIDGE
+    GW["isaac-mcp gateway<br/>operator view: all tools + run_python"] -->|MCP ⇄ NDJSON| BRIDGE
+    GWF["isaac-mcp gateway (filtered)<br/>KIT_MCP_NAMESPACE=arm · KIT_MCP_BUILTINS=0"] -->|MCP ⇄ NDJSON| BRIDGE
     CLI["kit_mcp.client<br/>scripts · tests · doctors · CLI"] -->|NDJSON| BRIDGE
 ```
 
@@ -92,7 +91,7 @@ and add to `.mcp.json` (Claude Code, Cursor, etc.):
 ```json
 {
   "mcpServers": {
-    "kit": { "command": "kit-mcp" }
+    "kit": { "command": "isaac-mcp" }
   }
 }
 ```

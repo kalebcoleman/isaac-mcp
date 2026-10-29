@@ -1,8 +1,8 @@
-# Host MCP Server: `twin-mcp`
+# Host MCP Server: `isaac-mcp`
 
 The project provides a single host-side Model Context Protocol (MCP) server that exposes both the live Omniverse Kit digital twin tools and desktop screen capture capabilities.
 
-The server package is located at `mcp/` (Python package `kit_mcp`). The primary CLI executable is `twin-mcp`, with `ur5e-mcp` and `kit-mcp` provided as backward-compatible aliases.
+The server package is located at `mcp/` (Python package `kit_mcp`). The primary CLI executable is `isaac-mcp`. There is one command name and no aliases.
 
 For the system layer breakdown, port mapping, and routing rules, see [docs/ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -11,7 +11,7 @@ Kit Process (Isaac Sim 6.2.0.0)
   ur5e-dt extension ──owns──► twin bridge :8766
                                     │ NDJSON over TCP
                                     ▼
-                        twin-mcp (stdio MCP server)
+                        isaac-mcp (stdio MCP server)
                           ├── ur5e_dt__*        dynamic, from the twin bridge
                           ├── list_bridges      running Kit bridge instances
                           ├── use_bridge        switch target port at runtime
@@ -27,7 +27,7 @@ Inside Kit, `exts/ur5e-dt` runs its own bridge endpoint on port 8766. The launch
 The host MCP server is installed automatically when running `./install.sh` from the repository root:
 
 ```bash
-./install.sh                    # Installs twin-mcp editable via uv tool
+./install.sh                    # Installs isaac-mcp editable via uv tool
 ./install.sh --claude           # Also writes Claude Code and Claude Desktop configs
 ```
 
@@ -104,7 +104,7 @@ Configure Claude Code using the `claude mcp` CLI:
 claude mcp add --scope user ur5e \
   -e DISPLAY="${DISPLAY:-:0}" \
   -e UR5E_DT_PORT=8766 \
-  -- "$(command -v twin-mcp || echo "$HOME/.local/bin/twin-mcp")"
+  -- "$(command -v isaac-mcp || echo "$HOME/.local/bin/isaac-mcp")"
 ```
 
 ### Claude Desktop
@@ -115,7 +115,7 @@ Add the server to `~/.config/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "ur5e": {
-      "command": "twin-mcp",
+      "command": "isaac-mcp",
       "args": [],
       "env": {
         "UR5E_DT_PORT": "8766",
@@ -134,7 +134,7 @@ Add the server to `~/.config/opencode/opencode.jsonc`:
 ```jsonc
 "ur5e": {
   "type": "local",
-  "command": ["twin-mcp"],
+  "command": ["isaac-mcp"],
   "environment": {
     "UR5E_DT_PORT": "8766",
     "DISPLAY": ":1"
@@ -150,7 +150,7 @@ Verify the MCP server standalone without launching Isaac Sim:
 
 ```bash
 # Starts the server and immediately exits upon EOF; verifies binary and dependencies
-printf '' | twin-mcp
+printf '' | isaac-mcp
 ```
 
 Verify end-to-end communication with Isaac Sim running:
