@@ -56,13 +56,17 @@ logger = logging.getLogger("KitMCPServer")
 SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "ur5e")
 SERVER_INSTRUCTIONS = os.getenv(
     "ISAAC_MCP_INSTRUCTIONS",
-    "UR5e lab server. Isaac Sim tools are discovered from the running Kit "
-    "bridge; screenshot, list_windows, raise_window and the screen recording "
-    "tools capture this Linux desktop. screenshot() and "
-    "start_screen_recording() with no target pick the Isaac Sim window when it "
-    "is open, so they capture the sim alone even if it is covered. Use the "
-    "ur5e_dt__* tools for simulation state and the Kit start_recording tool for "
-    "clean viewport video.")
+    "Isaac Sim / Isaac Lab MCP server. Isaac Sim tools are discovered from the "
+    "running Kit bridge; screenshot, list_windows, raise_window and the screen "
+    "recording tools capture this Linux desktop. screenshot() and "
+    "start_screen_recording() with no target pick the Isaac Sim or Isaac Lab "
+    "window when one is open, so they capture the sim alone even if it is covered. "
+    "Use the ur5e_dt__* tools for twin state and the Kit start_recording tool for "
+    "clean viewport video. isaaclab__* tools run Isaac Lab training/eval/play jobs. "
+    "When a job or scene is running with a window (isaaclab__play, headless=false), "
+    "look at it yourself: take screenshots or a short screen recording to check the "
+    "result and decide the next step, without waiting to be asked. "
+    "isaaclab__runs_status reports the job's window_id for screenshot(window_id=...).")
 
 RESPONSE_TIMEOUT_S = 300.0
 

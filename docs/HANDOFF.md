@@ -27,12 +27,12 @@ Verified on the lab box (RTX PRO 6000 Blackwell, driver 595.99.02, Ubuntu 22.04)
 - TF graphs use `IsaacComputeTransformTree -> ROS2PublishTransformTree`; `/objects_poses_sim` and `/tf_cam` publish.
 - Isaac Lab tools: a real 2-epoch `Isaac-Reach-UR10` rl_games run through `isaaclab__train` succeeded; status, checkpoint
   discovery and TensorBoard metrics read it back.
-- Screen tools list the Isaac window and auto-target it (was picking a Firefox tab).
+- Screen tools list the Isaac Sim / Isaac Lab window and auto-target it (was picking a Firefox tab). A windowed `isaaclab__play` job was found by pid, screenshotted and recorded through the MCP tools (job status reports `window`).
 - Fresh-clone flow `./install.sh` -> `./run.sh --headless` -> `./verify.sh` passed (in the old repo layout; re-run once here).
 - Client configs (Claude Code/Desktop, OpenCode, Antigravity) were switched to server `isaac` -> `~/.local/bin/isaac-mcp`.
 
 NOT verified: anything on a GeForce/5080 box; Ubuntu 24.04; the `uvx`/npm install paths from a published package; the
-`play` tool with a window; multi-job GPU contention.
+multi-job GPU contention.
 
 ## 3. Setting up on the RTX 5080 machine
 
@@ -89,7 +89,7 @@ quick-start path). Do not use `scripts/probe_62.sh` for this (slow).
 
 **C. Publish to PyPI / npm** — only Kaleb can (accounts/tokens). Checklist in `docs/PUBLISHING.md`.
 
-**D. More tools** (not started): generic Isaac Sim tools not tied to the UR5e (stage/prim/physics/camera/recording) as a new
+**D. More tools** (not started; windowed play + screenshot/video loop is DONE, see `docs/ISAACLAB-TOOLS.md`): generic Isaac Sim tools not tied to the UR5e (stage/prim/physics/camera/recording) as a new
 tool pack; Isaac Lab `play` end-to-end with a window; a job-queue guard so two GPU jobs do not start together.
 
 **E. Cleanups.** `uv.lock` pins differ slightly from the old repo (`onnxruntime-gpu`); `scripts/install.py` (optional

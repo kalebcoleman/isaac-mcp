@@ -350,7 +350,9 @@ def _match_window(query: str | None, window_id: int | None) -> dict:
 
 # A capture or recording with no target picks this window, so the default is
 # the sim and not whatever happens to be on the desktop.
-AUTO_WINDOW = "Isaac Sim"
+# Kit apps title their window "Isaac Sim ..." and Isaac Lab runs title it "Isaac Lab 3.0.0".
+AUTO_WINDOWS = ("Isaac Sim", "Isaac Lab")
+AUTO_WINDOW = AUTO_WINDOWS[0]  # kept for importers of the old name
 
 
 def _bridge_pid(port: int | None) -> int | None:
@@ -400,12 +402,12 @@ def _auto_window(port: int | None = None) -> dict | None:
         windows = _visible_windows()
     except Exception:  # noqa: BLE001 - no display: fall back to the monitor
         return None
-    needle = AUTO_WINDOW.lower()
+    needles = tuple(n.lower() for n in AUTO_WINDOWS)
     matches = [
         w
         for w in windows
-        if w["title"].lower().startswith(needle)
-        or w.get("class", "").lower().startswith(needle)
+        if w["title"].lower().startswith(needles)
+        or w.get("class", "").lower().startswith(needles)
     ]
     if not matches:
         return None
@@ -416,6 +418,18 @@ def _auto_window(port: int | None = None) -> dict | None:
             matches = owned
     matches.sort(key=lambda w: w["width"] * w["height"], reverse=True)
     return matches[0]
+
+
+def window_for_pid(pid: int | None) -> dict | None:
+    """Largest visible window owned by `pid` (e.g. a windowed Isaac Lab job), else None. Never raises."""
+    if not pid:
+        return None
+    try:
+        owned = [w for w in _visible_windows() if w.get("pid") == int(pid)]
+    except Exception:  # noqa: BLE001 - no display
+        return None
+    owned.sort(key=lambda w: w["width"] * w["height"], reverse=True)
+    return owned[0] if owned else None
 
 
 def _window_pixels(win: dict, even: bool = False) -> tuple[int, int, bytes]:

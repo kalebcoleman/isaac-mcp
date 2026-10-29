@@ -528,6 +528,7 @@ def runs_status(job_id: str) -> dict[str, Any]:
         "last_log_lines": last_lines,
         "latest_checkpoint": ckpt,
         "run_dir": run_dir,
+        "pid": data.get("pid"),
     }
 
 

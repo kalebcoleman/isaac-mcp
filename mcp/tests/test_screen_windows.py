@@ -174,3 +174,23 @@ def test_window_pixels(monkeypatch):
     width, height, data = screen._window_pixels({"id": 7, "title": "t"})
     assert (width, height) == (4, 3)
     assert len(data) == 4 * 3 * 4
+
+def test_auto_target_matches_isaac_lab_windows(monkeypatch):
+    wins = [
+        {"id": 1, "title": "Mozilla Firefox - Isaac Sim docs", "class": "firefox", "pid": 10, "width": 1900, "height": 1000},
+        {"id": 2, "title": "Isaac Lab 3.0.0", "class": "Isaac Lab 3.0.0", "pid": 20, "width": 1440, "height": 900},
+    ]
+    monkeypatch.setattr(screen, "_visible_windows", lambda: wins)
+    assert screen._auto_window()["id"] == 2
+
+
+def test_window_for_pid(monkeypatch):
+    wins = [
+        {"id": 1, "title": "a", "class": "", "pid": 7, "width": 10, "height": 10},
+        {"id": 2, "title": "b", "class": "", "pid": 7, "width": 100, "height": 100},
+        {"id": 3, "title": "c", "class": "", "pid": 8, "width": 999, "height": 999},
+    ]
+    monkeypatch.setattr(screen, "_visible_windows", lambda: wins)
+    assert screen.window_for_pid(7)["id"] == 2
+    assert screen.window_for_pid(None) is None
+    assert screen.window_for_pid(99) is None

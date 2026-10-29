@@ -214,3 +214,16 @@ and `runs_status` / `metrics_summary` read its checkpoint and TensorBoard scalar
   training log ("saving checkpoint '...'") and reports the experiment dir as `run_dir`.
 - Job ids are validated (`YYYYMMDD-HHMMSS-<slug>`), and cancel only signals a pid whose command line still matches the job.
 - `envs_list` scans registrations statically; custom envs registered by user code (e.g. `ur5e_lab`) are not listed yet.
+
+### Windowed jobs and visual feedback (verified 2026-10-29)
+
+`isaaclab__play` (or train/eval with `headless=false`) opens an Isaac Lab window (`--viz kit`), titled "Isaac Lab 3.0.0".
+The host's screen tools find it (`AUTO_WINDOWS` in `mcp/isaac_mcp/screen.py` matches "Isaac Sim" and "Isaac Lab" titles),
+capture it even when other windows cover it, and can record video. `isaaclab__runs_status` adds a `window` entry
+(id, title, size) for a live windowed job so an agent can call `screenshot(window_id=...)` /
+`start_screen_recording(window_id=...)` on its own. The window shows a black viewport until the log line
+"Completed setting up the environment"; the launch response carries a hint saying so. A real run captured a 1440x900
+screenshot and a 40-frame video of four UR10 arms.
+
+Note: the stock `Isaac-Reach-UR10` task's window reads "Physics: Newton MJWarp". The twin's own `ur5e_lab` tasks configure
+PhysX directly (see `learning6/README.md`), so check the physics backend in the window before trusting results from stock tasks.

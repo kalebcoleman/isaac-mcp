@@ -31,11 +31,26 @@ def _guard(fn: Callable[[], Any]) -> str:
         return _dump({"error": str(exc)})
 
 
+_WINDOW_HINT = (
+    "A window opens within ~30 s but the scene is empty/black until loading finishes. Poll "
+    "isaaclab__runs_status(job_id) until it reports `window` AND last_log_lines contains "
+    "'Completed setting up the environment', wait ~5 s, then screenshot(window_id=...) or a short "
+    "start_screen_recording(window_id=...) to inspect the result, and isaaclab__runs_cancel when done."
+)
+
+
 def _launch(fn: Callable[..., Any], **kwargs: Any) -> str:
     inst = _install.locate_install()
     if not inst:
         return _dump(_NO_INSTALL)
-    return _guard(lambda: fn(python=inst["python"], root=inst["isaaclab_root"], **kwargs))
+
+    def run() -> dict:
+        out = fn(python=inst["python"], root=inst["isaaclab_root"], **kwargs)
+        if kwargs.get("headless") is False:
+            out["hint"] = _WINDOW_HINT
+        return out
+
+    return _guard(run)
 
 
 def register_isaaclab_tools(mcp: Any) -> None:
@@ -111,8 +126,20 @@ def register_isaaclab_tools(mcp: Any) -> None:
 
     @mcp.tool(name="isaaclab__runs_status")
     def isaaclab_runs_status(job_id: str) -> str:
-        """State, exit code, elapsed time, last log lines and newest checkpoint of a job."""
-        return _guard(lambda: _jobs.runs_status(job_id))
+        """State, exit code, elapsed time, last log lines and newest checkpoint of a job. For a windowed
+        job also `window` (id, title, size): pass its id to screenshot(window_id=...) or
+        start_screen_recording(window_id=...) to see the result."""
+        def status() -> dict:
+            st = _jobs.runs_status(job_id)
+            if st.get("pid_alive"):
+                from ..screen import window_for_pid
+
+                w = window_for_pid(st.get("pid"))
+                if w:
+                    st["window"] = {k: w[k] for k in ("id", "title", "width", "height")}
+            return st
+
+        return _guard(status)
 
     @mcp.tool(name="isaaclab__runs_tail")
     def isaaclab_runs_tail(job_id: str, stream: str = "stdout", lines: int = 100) -> str:
