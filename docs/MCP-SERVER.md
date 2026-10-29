@@ -101,7 +101,7 @@ The switch persists until the MCP server process restarts.
 Configure Claude Code using the `claude mcp` CLI:
 
 ```bash
-claude mcp add --scope user ur5e \
+claude mcp add --scope user isaac \
   -e DISPLAY="${DISPLAY:-:0}" \
   -e UR5E_DT_PORT=8766 \
   -- "$(command -v isaac-mcp || echo "$HOME/.local/bin/isaac-mcp")"
@@ -114,7 +114,7 @@ Add the server to `~/.config/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "ur5e": {
+    "isaac": {
       "command": "isaac-mcp",
       "args": [],
       "env": {
@@ -132,7 +132,7 @@ Add the server to `~/.config/Claude/claude_desktop_config.json`:
 Add the server to `~/.config/opencode/opencode.jsonc`:
 
 ```jsonc
-"ur5e": {
+"isaac": {
   "type": "local",
   "command": ["isaac-mcp"],
   "environment": {
