@@ -167,9 +167,15 @@ Resolution order (first valid wins):
 2. `ISAACLAB_ROOT` with `.venv/bin/python` (reference layout
    `learning6/`: python 3.12, `IsaacLab/` at `learning6/IsaacLab`).
 3. `which isaaclab.sh` / `ISAACLAB_PATH` env (upstream convention).
+
 4. Probe `python -c "import isaaclab, isaacsim; print(...)"` and read
    `isaaclab.__version__` (expect `3.0.0`) and `isaacsim` metadata
    (expect `6.2.0.0`).
+
+Custom task packages: `isaaclab__envs_list` imports `isaaclab_tasks` plus every module in
+`ISAACLAB_TASK_MODULES` (comma list, e.g. `ur5e_lab`), with `ISAACLAB_TASK_PATH` (os.pathsep list) added to
+`PYTHONPATH`, then reads `gymnasium.registry`. Failed imports are returned as `import_errors`. If the variable is unset,
+a `ur5e_lab` directory beside `ISAACLAB_ROOT` is still picked up.
 
 Validation: require Python 3.12 and `isaaclab` importable; refuse otherwise with
 the resolved path in the error. Reference paths are never hard-coded as defaults

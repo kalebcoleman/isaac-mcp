@@ -150,14 +150,18 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
 
     run_env = dict(os.environ)
     run_env["OMNI_KIT_ACCEPT_EULA"] = "YES"
+    e = _env(env)
     paths: list[str] = []
+    modules = [m.strip() for m in str(e.get("ISAACLAB_TASK_MODULES") or "").split(",") if m.strip()]
+    for extra in str(e.get("ISAACLAB_TASK_PATH") or "").split(os.pathsep):
+        if extra.strip():
+            paths.append(extra.strip())
     if root:
-        base = str(Path(root).parent)
-        paths.append(base)
-        paths.append(root)
-        ur5e = Path(root).parent / "ur5e_lab"
-        if ur5e.is_dir():
-            paths.append(str(ur5e))
+        base = Path(root).parent
+        paths.extend([str(base), str(root)])
+        # Back-compat: a sibling ur5e_lab package is picked up without configuration.
+        if not modules and (base / "ur5e_lab").is_dir():
+            modules = ["ur5e_lab"]
     existing_pp = run_env.get("PYTHONPATH")
     if existing_pp:
         paths.append(existing_pp)
@@ -165,15 +169,13 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
         run_env["PYTHONPATH"] = os.pathsep.join(paths)
 
     code = (
-        "import json\n"
-        "try:\n"
-        "    import isaaclab_tasks  # noqa: F401\n"
-        "except Exception:\n"
-        "    pass\n"
-        "try:\n"
-        "    import ur5e_lab  # noqa: F401\n"
-        "except Exception:\n"
-        "    pass\n"
+        "import importlib, json\n"
+        "errors = {}\n"
+        f"for _m in ['isaaclab_tasks'] + {modules!r}:\n"
+        "    try:\n"
+        "        importlib.import_module(_m)\n"
+        "    except Exception as _exc:\n"
+        "        errors[_m] = f'{type(_exc).__name__}: {_exc}'\n"
         "import gymnasium\n"
         "envs = []\n"
         "for _eid, _spec in getattr(gymnasium, 'registry', {}).items():\n"
@@ -182,7 +184,7 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
         "    except Exception:\n"
         "        _ep = None\n"
         "    envs.append({'id': str(_eid), 'entry_point': (str(_ep) if _ep is not None else None)})\n"
-        "print(json.dumps({'envs': envs}))\n"
+        "print(json.dumps({'envs': envs, 'import_errors': errors}))\n"
     )
     try:
         proc = subprocess.run(
@@ -208,5 +210,8 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
     envs = data.get("envs", [])
     if filter is not None:
         needle = str(filter).lower()
-        envs = [e for e in envs if needle in str(e.get("id", "")).lower()]
-    return {"envs": envs}
+        envs = [x for x in envs if needle in str(x.get("id", "")).lower()]
+    result: dict = {"envs": envs}
+    if data.get("import_errors"):
+        result["import_errors"] = data["import_errors"]
+    return result

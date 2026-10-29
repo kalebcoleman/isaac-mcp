@@ -74,11 +74,7 @@ are Hydra overrides (`agent.params.config.minibatch_size=1536`); rl_games needs 
 
 ## 5. Open work (priority order)
 
-**A. `envs_list` does not see custom tasks** (e.g. `UR5e-Cell-Reach-Direct-v0` from `learning6/ur5e_lab`). It scans
-`gym.register(` statically (`mcp/isaac_mcp/isaaclab/install.py`). Fix: add `ISAACLAB_TASK_MODULES` (comma list of modules,
-e.g. `ur5e_lab`) and, in the Isaac Lab interpreter, import them plus `isaaclab_tasks` and read `gymnasium.registry`
-(without starting Kit; check `isaaclab_rl/entrypoints/dispatch.py::_resolve_default_library` for how Lab does it). Passing a
-custom task id to `isaaclab__train` already works. Needs the section 4 env to test.
+**A. `envs_list` and custom tasks** — DONE 2026-10-29 on the 5080: it already read `gymnasium.registry`; it now imports `ISAACLAB_TASK_MODULES` (+ `ISAACLAB_TASK_PATH`) and reports `import_errors` (see `docs/ISAACLAB-TOOLS.md`). Verified: `UR5e-Cell-Reach-Direct-v0` and a throwaway module list.
 
 **B. `quick_start_with_workstation` hang flake.** *(2026-10-29, lab RTX PRO 6000: `scripts/catch_hang.sh 30` ran 30 boots + quick_starts with NO hang, 6-7 s each, so the flake is not a plain boot-then-call race; still worth one run on the 5080.)* Twice on 2026-10-29 the first call after boot never returned
 (app log ends with PhysX warnings; earlier a "Nested app.update() deferred asyncio work" warning); normally ~5 s; never

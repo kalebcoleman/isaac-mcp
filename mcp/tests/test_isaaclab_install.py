@@ -160,3 +160,24 @@ def test_envs_list_missing_install(monkeypatch, tmp_path):
     monkeypatch.delenv("ISAACLAB_ROOT", raising=False)
     res = install.envs_list()
     assert "error" in res
+
+
+def test_envs_list_task_modules_and_import_errors(tmp_path):
+    py, root, venv = _make_install(tmp_path)
+    env = {
+        "ISAACLAB_PYTHON": str(py),
+        "ISAACLAB_ROOT": str(root),
+        "ISAACLAB_TASK_MODULES": "my_tasks, nope",
+        "ISAACLAB_TASK_PATH": str(tmp_path / "pkgs"),
+    }
+    payload = {"envs": [{"id": "My-Task-v0", "entry_point": "x"}], "import_errors": {"nope": "ModuleNotFoundError: nope"}}
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = json.dumps(payload) + "\n"
+    fake.stderr = ""
+    with patch("isaac_mcp.isaaclab.install.subprocess.run", return_value=fake) as run:
+        res = install.envs_list(env=env)
+    assert res["import_errors"] == {"nope": "ModuleNotFoundError: nope"}
+    code = run.call_args.args[0][2]
+    assert "['isaaclab_tasks'] + ['my_tasks', 'nope']" in code
+    assert str(tmp_path / "pkgs") in run.call_args.kwargs["env"]["PYTHONPATH"]
