@@ -1,0 +1,67 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# PHYSICS OVERLAY for hex_red — CONVEX-PRIMITIVE COMPOUND collider: one native analytic UsdGeom.Cylinder
+# (shaft) + one convexHull Mesh (convex head). For parts that are a cylinder + a convex prism (e.g. FMB
+# hexes): exact (a hexagon's convex hull IS the hexagon; an analytic cylinder is exact) + dynamic-capable
+# + cheaper/more-stable than SDF. approximation="none" on the rigid body stops add_objects authoring a
+# stray SDF collider; each child carries its own collider API. Lengths in the geometry's metre frame.
+
+def Xform "Root" (
+    prepend references = @./hex_red.usda@
+)
+{
+    def Material "PLA" (
+        prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+    )
+    {
+        float physics:staticFriction = 0.4
+        float physics:dynamicFriction = 0.35
+        float physics:restitution = 0.15
+        uniform token physxMaterial:frictionCombineMode = "average"
+        uniform token physxMaterial:restitutionCombineMode = "average"
+    }
+
+    over "hex_red"
+    {
+        over "hex_red" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        )
+        {
+            uniform token physics:approximation = "none"
+            float physics:density = 1240
+            bool physics:rigidBodyEnabled = 1
+
+            def Scope "collisions"
+            {
+                def Cylinder "cyl_shaft" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
+                )
+                {
+                    uniform token axis = "Y"
+                    double radius = 0.005246
+                    double height = 0.030333
+                    bool physics:collisionEnabled = 1
+                    rel material:binding:physics = </Root/PLA>
+                    double3 xformOp:translate = (0.000000, -0.019833, 0.000000)
+                    uniform token[] xformOpOrder = ["xformOp:translate"]
+                }
+                def Mesh "hull_head" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI", "PhysxConvexHullCollisionAPI", "MaterialBindingAPI"]
+                )
+                {
+                    uniform token physics:approximation = "convexHull"
+                    bool physics:collisionEnabled = 1
+                    rel material:binding:physics = </Root/PLA>
+                    int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+                    int[] faceVertexIndices = [11, 5, 0, 11, 5, 6, 11, 1, 0, 11, 1, 10, 9, 11, 6, 9, 7, 6, 9, 7, 8, 9, 11, 10, 9, 2, 3, 9, 8, 3, 9, 1, 2, 9, 1, 10, 4, 1, 0, 4, 2, 3, 4, 5, 0, 4, 1, 2, 4, 7, 8, 4, 8, 3, 4, 7, 6, 4, 5, 6]
+                    point3f[] points = [(0.008083, -0.003500, 0.000015), (0.004055, -0.003500, -0.006992), (-0.004028, -0.003500, -0.007008), (-0.008083, -0.003500, -0.000015), (-0.004055, -0.003500, 0.006992), (0.004028, -0.003500, 0.007008), (0.004028, 0.035000, 0.007008), (-0.004055, 0.035000, 0.006992), (-0.008083, 0.035000, -0.000015), (-0.004028, 0.035000, -0.007008), (0.004055, 0.035000, -0.006992), (0.008083, 0.035000, 0.000015)]
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,55 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# PHYSICS OVERLAY for line_brown — BOX-COMPOUND collider (1 analytic axis-aligned box
+# primitives = UsdGeom.Cube size=2 + non-uniform scale => PxBoxGeometry). Boxes from
+# cad_to_usd.box_decompose. Rigid body + colliders on the INNER mesh prim (/Root/line_brown/line_brown)
+# so the ur5e-dt extension's inner-mesh pose ops move the body. physics:approximation="none"
+# prevents add_objects from adding a stray SDF collider on the mesh (the boxes are the collider).
+
+def Xform "Root" (
+    prepend references = @./line_brown.usda@
+)
+{
+    def Material "PLA" (
+        prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+    )
+    {
+        float physics:staticFriction = 0.4
+        float physics:dynamicFriction = 0.35
+        float physics:restitution = 0.15
+        uniform token physxMaterial:frictionCombineMode = "average"
+        uniform token physxMaterial:restitutionCombineMode = "average"
+    }
+
+    over "line_brown"
+    {
+        over "line_brown" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        )
+        {
+            uniform token physics:approximation = "none"
+            float physics:density = 1240
+            bool physics:rigidBodyEnabled = 1
+
+            def Scope "collisions"
+            {
+                def Cube "box_000" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    rel material:binding:physics = </Root/PLA>
+                    double3 xformOp:translate = (0.000000, 0.000000, 0.000000)
+                    float3 xformOp:scale = (0.012950, 0.070000, 0.012950)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+            }
+        }
+    }
+}

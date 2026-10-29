@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+dist/
+node_modules/
+# raw recordings stay local
+*.npz
+outputs/
+logs/
+# USD is ignored by default; the ur5e-dt tool pack's assets are the exception
+*.usd
+*.usda
+*.usdc
+*.usdz
+resources/*
+!exts/ur5e-dt/assets/**

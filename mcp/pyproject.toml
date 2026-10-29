@@ -1,0 +1,38 @@
+[project]
+name = "twin-mcp"
+version = "0.2.0"
+description = "UR5e lab MCP server: Kit/Isaac Sim bridge plus desktop screen capture"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    # Upper bound <2: mcp 2 renamed FastMCP to MCPServer and removed
+    # `mcp.server.fastmcp`, which kit_mcp/server.py imports.
+    "mcp[cli]>=1.0.0,<2",
+    # Host-side screen tools (kit_mcp/screen.py).
+    "mss>=10.0",
+    "pillow>=10.0",
+    "python-xlib>=0.33",
+    "imageio-ffmpeg>=0.5",
+]
+
+# The doorway's own test interpreter (`pip install -e '.[test]'`); the platform
+# verifier refuses an interpreter that cannot import pytest.
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+
+# LLM-facing MCP server entry point (the TCP client to the Kit bridge).
+# The Kit-side socket server lives in exts/omni.kit.mcp/ and is loaded by Kit, not pip.
+[project.scripts]
+twin-mcp = "kit_mcp.server:main"
+ur5e-mcp = "kit_mcp.server:main"
+kit-mcp = "kit_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kit_mcp"]

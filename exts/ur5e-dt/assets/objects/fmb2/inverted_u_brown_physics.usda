@@ -1,0 +1,41 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# PHYSICS OVERLAY for inverted_u_brown — SDF MESH collider (sdfResolution 256). Used for NON-rectilinear
+# parts (e.g. hex prisms) that a box decomposition cannot represent. Rigid body + SDF collision on
+# the INNER mesh prim /Root/inverted_u_brown/inverted_u_brown (the mesh itself is the collider).
+
+def Xform "Root" (
+    prepend references = @./inverted_u_brown.usda@
+)
+{
+    def Material "PLA" (
+        prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+    )
+    {
+        float physics:staticFriction = 0.4
+        float physics:dynamicFriction = 0.35
+        float physics:restitution = 0.15
+        uniform token physxMaterial:frictionCombineMode = "average"
+        uniform token physxMaterial:restitutionCombineMode = "average"
+    }
+
+    over "inverted_u_brown"
+    {
+        over "inverted_u_brown" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMassAPI", "MaterialBindingAPI"]
+        )
+        {
+            uniform token physics:approximation = "sdf"
+            bool physics:collisionEnabled = 1
+            bool physics:rigidBodyEnabled = 1
+            custom int physxSDFMeshCollision:sdfResolution = 256
+            float physics:density = 1240
+            rel material:binding:physics = </Root/PLA>
+        }
+    }
+}

@@ -1,0 +1,41 @@
+[project]
+name = "isaac-mcp"
+version = "0.2.0"
+description = "MCP tools for Isaac Sim 6.2 and Isaac Lab 3.0: Kit bridge, screen capture, and the UR5e digital-twin tool pack"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "isaacsim[all,extscache]==6.2.0.0",
+    "mcp[cli]>=1.0.0",
+    "numpy>=2",
+    "scipy",
+    "matplotlib",
+    # Same torch pin as learning6/ (cu130 build has Blackwell sm_120 kernels).
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+]
+
+[tool.uv]
+package = false
+index-strategy = "unsafe-best-match"
+prerelease = "allow"
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+# Subset of the overrides learning6/ needs to reconcile Isaac Sim 6.2's pins.
+override-dependencies = [
+    "numpy>=2",
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+    "packaging>=20,<27",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com"
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true

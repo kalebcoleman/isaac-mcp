@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!-- Standalone URDF for JUST the OnRobot Quick-Changer adapter (15 mm coupler).
+     Derived from ur_onrobot_rg2_ros/onrobot_rg2_description/urdf/onrobot_quick_changer.urdf.xacro.
+     link frame = the tool0/flange mounting face; the quick_changer mesh sits +15 mm up
+     (rpy = 90,180,0 like the source xacro), and the RG2 mounts at +15 mm off this frame.
+     Mesh is in meters (~71 mm disc, 16 mm thick). Mass 0.41 kg per the DT-faithful spec. -->
+<robot name="onrobot_quick_changer">
+  <link name="quick_changer_link">
+    <visual>
+      <origin xyz="0 0 0.015" rpy="1.5707963 3.1415927 0"/>
+      <geometry>
+        <mesh filename="meshes/quick_changer.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.015" rpy="1.5707963 3.1415927 0"/>
+      <geometry>
+        <mesh filename="meshes/quick_changer.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 0.008" rpy="0 0 0"/>
+      <mass value="0.41"/>
+      <!-- ~ solid disc r=0.0355 h=0.016: Izz=0.5mr^2=2.6e-4, Ixx=Iyy=(1/12)m(3r^2+h^2)=1.4e-4 -->
+      <inertia ixx="1.4e-4" ixy="0" ixz="0" iyy="1.4e-4" iyz="0" izz="2.6e-4"/>
+    </inertial>
+  </link>
+</robot>

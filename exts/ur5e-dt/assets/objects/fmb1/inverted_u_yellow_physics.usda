@@ -1,0 +1,86 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# BOX-COMPOUND collider overlay for inverted_u_yellow (step-2 collider-only test). References the step-1 split
+# geometry and swaps the SDF-on-mesh collider for 5 analytic Cube box primitives. NO physics
+# material (PhysX defaults, matching the working SDF run) — isolates the COLLIDER. approximation="none"
+# stops add_objects authoring a stray SDF collider on the mesh. Box coords are in the geometry's native
+# cm frame (inherit the mesh xformOp:scale=0.01 -> metres), so they align exactly.
+
+def Xform "Root" (
+    prepend references = @./inverted_u_yellow.usda@
+)
+{
+    over "inverted_u_yellow"
+    {
+        over "inverted_u_yellow" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+            uniform token physics:approximation = "none"
+            bool physics:rigidBodyEnabled = 1
+            def Scope "collisions"
+            {
+                def Cube "box_000" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (-3.535000, 1.925000, 0.000000)
+                    float3 xformOp:scale = (2.100000, 1.575000, 1.050000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_001" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (0.000000, -2.520000, 0.000000)
+                    float3 xformOp:scale = (2.135000, 0.980000, 1.050000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_002" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (-1.785000, -0.595000, 0.000000)
+                    float3 xformOp:scale = (0.350000, 0.945000, 1.050000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_003" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (1.785000, 0.980000, 0.000000)
+                    float3 xformOp:scale = (0.350000, 2.520000, 1.050000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_004" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (3.885000, 1.925000, 0.000000)
+                    float3 xformOp:scale = (1.750000, 1.575000, 1.050000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+            }
+        }
+    }
+}

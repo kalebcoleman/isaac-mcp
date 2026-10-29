@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- Standalone BARE RG2 gripper — NO quick-changer coupler, NO tool0. The articulation roots at
+     rg2_base_link (rg2_base_link -> rg2_hand_link -> [rg2_gripper_joint + 5 mimic joints] -> fingers).
+     The 15mm OnRobot Quick-Changer is a SEPARATE part (quick_changer.urdf.xacro) — the coupler is the
+     sole structural adapter, welded onto the arm flange, with this gripper welded onto its tool_mount.
+     This replaces rg2_husarion_native.urdf, which baked the coupler INTO the gripper (tool0 ->
+     quick_changer_link -> rg2_base = a phantom "internal adapter" that double-counted with the
+     external coupler). -->
+<robot name="onrobot_rg2" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find onrobot_rg2_sim_control)/urdf/onrobot_rg2.urdf.xacro" />
+  <!-- parent_link omitted => rg2_base_link is the root (bare gripper). -->
+  <xacro:onrobot_rg2 use_ros_control="False" />
+</robot>

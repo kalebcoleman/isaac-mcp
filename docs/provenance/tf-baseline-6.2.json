@@ -1,0 +1,98 @@
+{
+  "topics": {
+    "objects_poses_sim": {
+      "frames": {
+        "base1": {
+          "parent": "World",
+          "rotation_xyzw": [
+            -2.32e-07,
+            -2.16e-07,
+            0.000336337,
+            0.99999994
+          ],
+          "translation": [
+            0.000818186,
+            -0.399783462,
+            0.017500045
+          ]
+        },
+        "inverted_u_yellow": {
+          "parent": "World",
+          "rotation_xyzw": [
+            2.808e-06,
+            -1.21e-06,
+            -0.000482793,
+            0.999999881
+          ],
+          "translation": [
+            0.250055701,
+            -0.399908304,
+            0.010500086
+          ]
+        },
+        "line_green": {
+          "parent": "World",
+          "rotation_xyzw": [
+            1e-09,
+            4.75e-07,
+            3.3e-08,
+            1.0
+          ],
+          "translation": [
+            -0.249997675,
+            -0.399999917,
+            0.012950041
+          ]
+        },
+        "u_brown": {
+          "parent": "World",
+          "rotation_xyzw": [
+            -2.945e-06,
+            4.04e-07,
+            -0.001621942,
+            0.999998748
+          ],
+          "translation": [
+            0.499473512,
+            -0.400252223,
+            0.010501342
+          ]
+        },
+        "u_orange": {
+          "parent": "World",
+          "rotation_xyzw": [
+            -9.543e-06,
+            4.074e-06,
+            -0.002467847,
+            0.99999696
+          ],
+          "translation": [
+            -0.500522494,
+            -0.400347382,
+            0.010501484
+          ]
+        }
+      },
+      "msg_count": 676
+    },
+    "tf_cam": {
+      "frames": {
+        "Camera_OmniVision_OV9782_Color": {
+          "parent": "World",
+          "rotation_xyzw": [
+            0.707106829,
+            3.4e-08,
+            -3.3e-08,
+            0.707106709
+          ],
+          "translation": [
+            -0.760700166,
+            -0.302900225,
+            0.012800043
+          ]
+        }
+      },
+      "msg_count": 677
+    }
+  }
+}

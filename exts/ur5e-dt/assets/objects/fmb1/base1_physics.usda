@@ -1,0 +1,273 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# BOX-COMPOUND collider overlay for base1 (step-2 collider-only test). References the step-1 split
+# geometry and swaps the SDF-on-mesh collider for 22 analytic Cube box primitives. NO physics
+# material (PhysX defaults, matching the working SDF run) — isolates the COLLIDER. approximation="none"
+# stops add_objects authoring a stray SDF collider on the mesh. Box coords are in the geometry's native
+# cm frame (inherit the mesh xformOp:scale=0.01 -> metres), so they align exactly.
+
+def Xform "Root" (
+    prepend references = @./base1.usda@
+)
+{
+    over "base1"
+    {
+        over "base1" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+            uniform token physics:approximation = "none"
+            bool physics:rigidBodyEnabled = 1
+            def Scope "collisions"
+            {
+                def Cube "box_000" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (0.000000, 0.000000, -1.575000)
+                    float3 xformOp:scale = (8.050000, 8.050000, 0.175000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_001" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (0.000000, -7.000000, -0.175000)
+                    float3 xformOp:scale = (8.050000, 1.050000, 1.225000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_002" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (0.000000, -7.595000, 1.400000)
+                    float3 xformOp:scale = (8.050000, 0.455000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_003" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (-4.742500, -6.545000, 1.400000)
+                    float3 xformOp:scale = (3.307500, 0.595000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_004" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (-5.845000, -3.570000, 0.175000)
+                    float3 xformOp:scale = (2.205000, 2.380000, 1.575000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_005" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (-6.912500, 3.430000, 0.175000)
+                    float3 xformOp:scale = (1.137500, 4.620000, 1.575000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_006" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (1.137500, 2.380000, -0.175000)
+                    float3 xformOp:scale = (6.912500, 1.190000, 1.225000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_007" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (-3.605000, 2.380000, 1.400000)
+                    float3 xformOp:scale = (2.170000, 1.190000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_008" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (-4.707500, 5.810000, 0.175000)
+                    float3 xformOp:scale = (1.067500, 2.240000, 1.575000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_009" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (2.205000, -2.380000, -0.175000)
+                    float3 xformOp:scale = (5.845000, 1.190000, 1.225000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_010" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (-2.537500, -2.380000, 1.400000)
+                    float3 xformOp:scale = (1.102500, 1.190000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_011" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (2.205000, 7.000000, -0.175000)
+                    float3 xformOp:scale = (5.845000, 1.050000, 1.225000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_012" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (-2.537500, 7.000000, 1.400000)
+                    float3 xformOp:scale = (1.102500, 1.050000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_013" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (3.307500, 7.595000, 1.400000)
+                    float3 xformOp:scale = (4.742500, 0.455000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_014" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (0.000000, 0.000000, -0.175000)
+                    float3 xformOp:scale = (1.295000, 1.190000, 1.225000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_015" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (4.742500, -6.545000, 1.400000)
+                    float3 xformOp:scale = (3.307500, 0.595000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_016" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (4.742500, -2.380000, 1.400000)
+                    float3 xformOp:scale = (3.307500, 1.190000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_017" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (4.742500, 2.380000, 1.400000)
+                    float3 xformOp:scale = (3.307500, 1.190000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_018" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (4.742500, 6.545000, 1.400000)
+                    float3 xformOp:scale = (3.307500, 0.595000, 0.350000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_019" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (5.845000, -4.760000, 0.175000)
+                    float3 xformOp:scale = (2.205000, 1.190000, 1.575000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_020" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (5.845000, 4.760000, 0.175000)
+                    float3 xformOp:scale = (2.205000, 1.190000, 1.575000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_021" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (6.912500, 0.000000, 0.175000)
+                    float3 xformOp:scale = (1.137500, 1.190000, 1.575000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+            }
+        }
+    }
+}

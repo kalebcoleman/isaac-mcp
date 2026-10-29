@@ -1,0 +1,104 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary cameraSettings = {
+            dictionary Front = {
+                double3 position = (500, 0, 0)
+                double radius = 5
+            }
+            dictionary Perspective = {
+                double3 position = (0.2281680557739161, 0.228168055773918, 0.2281681696691007)
+                double3 target = (-3.9780384486487463e-8, -3.9780382515841595e-8, 7.956076875093032e-8)
+            }
+            dictionary Right = {
+                double3 position = (0, -500, 0)
+                double radius = 5
+            }
+            dictionary Top = {
+                double3 position = (0, 0, 500)
+                double radius = 5
+            }
+            string boundCamera = "/OmniverseKit_Persp"
+        }
+        dictionary omni_layer = {
+            string authoring_layer = "./line_green.usd"
+        }
+        dictionary renderSettings = {
+        }
+    }
+    defaultPrim = "Root"
+    doc = """Generated from Composed Stage of root layer /home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_line_brown/line_brown.usd
+
+
+Generated from Composed Stage of root layer /home/aaugus11/Documents/isaac-sim-mcp/exts/ur5e-dt/assets/objects/fmb1/line_green.usd
+"""
+    upAxis = "Z"
+)
+
+def Xform "Root"
+{
+    def Xform "line_green" (
+        apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        rel material:binding = </Root/line_green/Looks/Plastic> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        token ui:displayGroup = "Material Graphs"
+        token ui:displayName = "line_brown_scaled70"
+        int ui:order = 1024
+        float3 xformOp:rotateXYZ = (0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        double3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+
+        def Mesh "line_green" (
+            apiSchemas = ["PhysxRigidBodyAPI", "PhysxCollisionAPI", "PhysxConvexHullCollisionAPI", "MaterialBindingAPI", "PhysxSDFMeshCollisionAPI"]
+        )
+        {
+            float3[] extent = [(-1.295, -7, -1.295), (1.295, 7, 1.295)]
+            int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+            int[] faceVertexIndices = [0, 1, 5, 5, 1, 2, 5, 2, 4, 4, 2, 3, 6, 0, 8, 8, 0, 5, 8, 5, 7, 7, 5, 4, 9, 6, 11, 11, 6, 8, 11, 8, 10, 10, 8, 7, 1, 9, 2, 2, 9, 11, 2, 11, 3, 3, 11, 10, 1, 0, 9, 9, 0, 6, 3, 10, 4, 4, 10, 7]
+            rel material:binding = </Root/line_green/Looks/Plastic> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            rel material:binding:physics (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0)] (
+                interpolation = "faceVarying"
+            )
+            point3f[] points = [(1.295, 7, 1.295), (-1.295, 7, 1.295), (-1.295, 0, 1.295), (-1.295, -7, 1.295), (1.295, -7, 1.295), (1.295, 0, 1.295), (1.295, 7, -1.295), (1.295, -7, -1.295), (1.295, 0, -1.295), (-1.295, 7, -1.295), (-1.295, -7, -1.295), (-1.295, 0, -1.295)]
+            texCoord2f[] primvars:st = [(0, 0), (2.59, 0), (0, 7), (0, 7), (2.59, 0), (2.59, 7), (0, 7), (2.59, 7), (0, 14), (0, 14), (2.59, 7), (2.59, 14), (0, 0), (2.59, 0), (0, 7), (0, 7), (2.59, 0), (2.59, 7), (0, 7), (2.59, 7), (0, 14), (0, 14), (2.59, 7), (2.59, 14), (0, 0), (2.59, 0), (0, 7), (0, 7), (2.59, 0), (2.59, 7), (0, 7), (2.59, 7), (0, 14), (0, 14), (2.59, 7), (2.59, 14), (0, -0), (2.59, 0), (0, 7), (0, 7), (2.59, 0), (2.59, 7), (0, 7), (2.59, 7), (0, 14), (0, 14), (2.59, 7), (2.59, 14), (-1.295, -1.295), (1.295, -1.295), (-1.295, 1.295), (-1.295, 1.295), (1.295, -1.295), (1.295, 1.295), (-1.295, -1.295), (1.295, -1.295), (-1.295, 1.295), (-1.295, 1.295), (1.295, -1.295), (1.295, 1.295)] (
+                interpolation = "faceVarying"
+            )
+            uniform token subdivisionScheme = "none"
+            double3 xformOp:rotateZYX = (0, 0, 0)
+            double3 xformOp:scale = (0.01, 0.01, 0.01)
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZYX", "xformOp:scale"]
+        }
+
+        def Scope "Looks"
+        {
+            def Material "Plastic"
+            {
+                token outputs:mdl:displacement.connect = </Root/line_green/Looks/Plastic/Shader.outputs:out>
+                token outputs:mdl:surface.connect = </Root/line_green/Looks/Plastic/Shader.outputs:out>
+                token outputs:mdl:volume.connect = </Root/line_green/Looks/Plastic/Shader.outputs:out>
+
+                def Shader "Shader"
+                {
+                    uniform token info:implementationSource = "sourceAsset"
+                    uniform asset info:mdl:sourceAsset = @../materials/Plastic.mdl@
+                    uniform token info:mdl:sourceAsset:subIdentifier = "Plastic"
+                    color3f inputs:diffuse_color_constant = (0.01521, 0.05792, 0.01587)
+                    token outputs:out (
+                        renderType = "material"
+                    )
+                }
+            }
+        }
+    }
+}
+

@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- parent_link defaults to '' => STANDALONE: quick_changer_link is the root (its own part).
+       Pass a parent_link (+ xyz/rpy) to mount the coupler onto an arm flange.
+       thickness = the coupler height; tool_mount is the far (tool-side) mounting face frame that the
+       gripper's rg2_base_link welds to. -->
+  <xacro:macro name="onrobot_quick_changer"
+    params="parent_link:=''
+            xyz:='0 0 0' rpy:='0 0 0'
+            thickness:=0.015">
+
+    <xacro:unless value="${parent_link == ''}">
+      <joint name="parent_to_quick_changer_joint" type="fixed">
+        <parent link="${parent_link}" />
+        <child link="quick_changer_link" />
+        <origin xyz="${xyz}" rpy="${rpy}" />
+      </joint>
+    </xacro:unless>
+
+    <link name="quick_changer_link">
+      <collision>
+        <origin xyz="0.0 0.0 0.015" rpy="${pi/2} ${pi} 0.0" />
+        <geometry>
+          <mesh filename="package://onrobot_rg2_sim_control/meshes/quick_changer.stl" />
+        </geometry>
+      </collision>
+
+      <visual>
+        <origin xyz="0.0 0.0 0.015" rpy="${pi/2} ${pi} 0.0" />
+        <geometry>
+          <mesh filename="package://onrobot_rg2_sim_control/meshes/quick_changer.dae" />
+        </geometry>
+      </visual>
+    </link>
+
+    <!-- Tool-side mounting face: +thickness along the coupler axis. The gripper welds its
+         rg2_base_link here (the coupler is the sole structural 15mm adapter). -->
+    <joint name="quick_changer_to_tool_mount_joint" type="fixed">
+      <parent link="quick_changer_link" />
+      <child link="tool_mount" />
+      <origin xyz="0.0 0.0 ${thickness}" rpy="0.0 0.0 0.0" />
+    </joint>
+    <link name="tool_mount" />
+
+  </xacro:macro>
+</robot>

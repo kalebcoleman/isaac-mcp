@@ -1,0 +1,75 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "Root"
+{
+    def Xform "jenga_03" (
+        apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        float3 xformOp:rotateXYZ = (0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        double3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+
+        def Scope "Looks"
+        {
+            def Material "Plastic"
+            {
+                token outputs:mdl:surface.connect = </Root/jenga_03/Looks/Plastic/OmniPBR.outputs:out>
+                token outputs:surface.connect = </Root/jenga_03/Looks/Plastic/previewSurface.outputs:surface>
+
+                def Shader "OmniPBR"
+                {
+                    uniform token info:implementationSource = "sourceAsset"
+                    uniform asset info:mdl:sourceAsset = @OmniPBR.mdl@
+                    uniform token info:mdl:sourceAsset:subIdentifier = "OmniPBR"
+                    asset inputs:diffuse_texture = @./materials/oak/Poliigon_WoodVeneerOak_7760_BaseColor.jpg@
+                    asset inputs:normalmap_texture = @./materials/oak/Poliigon_WoodVeneerOak_7760_Normal.jpg@
+                    bool inputs:project_uvw = 1
+                    asset inputs:reflectionroughness_texture = @./materials/oak/Poliigon_WoodVeneerOak_7760_Roughness.jpg@
+                    float2 inputs:texture_scale = (30, 30)
+                    bool inputs:world_or_object = 0
+                    token outputs:out
+                }
+
+                def Shader "previewSurface"
+                {
+                    uniform token info:id = "UsdPreviewSurface"
+                    color3f inputs:diffuseColor = (0.487, 0.298, 0.188)
+                    float inputs:metallic = 0
+                    float inputs:roughness = 0.5
+                    token outputs:surface
+                }
+            }
+        }
+
+        def Mesh "jenga_03" (
+            apiSchemas = ["MaterialBindingAPI", "PhysicsRigidBodyAPI", "PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI"]
+        )
+        {
+            float3[] extent = [(-0.012, -0.036, -0.0069999998), (0.012, 0.036, 0.0069999998)]
+            int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+            int[] faceVertexIndices = [1, 3, 0, 4, 1, 0, 0, 3, 2, 2, 4, 0, 1, 7, 3, 5, 1, 4, 5, 7, 1, 3, 7, 2, 6, 4, 2, 2, 7, 6, 6, 5, 4, 7, 5, 6]
+            rel material:binding = </Root/jenga_03/Looks/Plastic>
+            uniform token physics:approximation = "sdf"
+            bool physics:collisionEnabled = 1
+            bool physics:rigidBodyEnabled = 1
+            custom int physxSDFMeshCollision:sdfResolution = 256
+            point3f[] points = [(-0.012, -0.036, -0.0069999998), (-0.012, -0.036, 0.0069999998), (-0.012, 0.036, -0.0069999998), (-0.012, 0.036, 0.0069999998), (0.012, -0.036, -0.0069999998), (0.012, -0.036, 0.0069999998), (0.012, 0.036, -0.0069999998), (0.012, 0.036, 0.0069999998)]
+            color3f[] primvars:displayColor = [(0.487, 0.298, 0.188)] (
+                interpolation = "constant"
+            )
+            uniform token subdivisionScheme = "none"
+            float3 xformOp:rotateZYX = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZYX", "xformOp:scale"]
+        }
+    }
+}
+

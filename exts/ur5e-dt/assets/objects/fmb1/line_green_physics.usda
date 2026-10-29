@@ -1,0 +1,42 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# BOX-COMPOUND collider overlay for line_green (step-2 collider-only test). References the step-1 split
+# geometry and swaps the SDF-on-mesh collider for 1 analytic Cube box primitives. NO physics
+# material (PhysX defaults, matching the working SDF run) — isolates the COLLIDER. approximation="none"
+# stops add_objects authoring a stray SDF collider on the mesh. Box coords are in the geometry's native
+# cm frame (inherit the mesh xformOp:scale=0.01 -> metres), so they align exactly.
+
+def Xform "Root" (
+    prepend references = @./line_green.usda@
+)
+{
+    over "line_green"
+    {
+        over "line_green" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+            uniform token physics:approximation = "none"
+            bool physics:rigidBodyEnabled = 1
+            def Scope "collisions"
+            {
+                def Cube "box_000" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    float physxCollision:restOffset = 0
+                    double3 xformOp:translate = (0.000000, 0.000000, 0.000000)
+                    float3 xformOp:scale = (1.295000, 7.000000, 1.295000)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+            }
+        }
+    }
+}

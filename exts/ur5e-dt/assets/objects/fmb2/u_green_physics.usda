@@ -1,0 +1,75 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# PHYSICS OVERLAY for u_green — BOX-COMPOUND collider (3 UsdGeom.Cube box primitives =
+# PxBoxGeometry). Rigid body + colliders on the INNER mesh prim /Root/u_green/u_green;
+# physics:approximation="none" stops add_objects authoring a stray SDF collider on the mesh.
+
+def Xform "Root" (
+    prepend references = @./u_green.usda@
+)
+{
+    def Material "PLA" (
+        prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+    )
+    {
+        float physics:staticFriction = 0.4
+        float physics:dynamicFriction = 0.35
+        float physics:restitution = 0.15
+        uniform token physxMaterial:frictionCombineMode = "average"
+        uniform token physxMaterial:restitutionCombineMode = "average"
+    }
+
+    over "u_green"
+    {
+        over "u_green" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        )
+        {
+            uniform token physics:approximation = "none"
+            float physics:density = 1240
+            bool physics:rigidBodyEnabled = 1
+
+            def Scope "collisions"
+            {
+                def Cube "box_000" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    rel material:binding:physics = </Root/PLA>
+                    double3 xformOp:translate = (-0.024500, -0.000500, 0.000000)
+                    float3 xformOp:scale = (0.010500, 0.035000, 0.010500)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_001" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    rel material:binding:physics = </Root/PLA>
+                    double3 xformOp:translate = (0.010500, 0.015250, 0.000000)
+                    float3 xformOp:scale = (0.024500, 0.019250, 0.010500)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+                def Cube "box_002" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
+                )
+                {
+                    double size = 2
+                    bool physics:collisionEnabled = 1
+                    rel material:binding:physics = </Root/PLA>
+                    double3 xformOp:translate = (0.024500, -0.019750, 0.000000)
+                    float3 xformOp:scale = (0.010500, 0.015750, 0.010500)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+            }
+        }
+    }
+}
