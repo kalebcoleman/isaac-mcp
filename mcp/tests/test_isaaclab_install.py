@@ -181,3 +181,26 @@ def test_envs_list_task_modules_and_import_errors(tmp_path):
     code = run.call_args.args[0][2]
     assert "['isaaclab_tasks'] + ['my_tasks', 'nope']" in code
     assert str(tmp_path / "pkgs") in run.call_args.kwargs["env"]["PYTHONPATH"]
+
+
+def test_envs_list_real_subprocess_survives_bad_modules(tmp_path):
+    """Run the generated probe for real (stub gymnasium/isaaclab_tasks, no Isaac Sim)."""
+    import sys
+
+    pkgs = tmp_path / "pkgs"
+    pkgs.mkdir()
+    (pkgs / "gymnasium.py").write_text(
+        "class _S:\n    entry_point = 'good:Env'\nregistry = {'Good-v0': _S()}\n"
+    )
+    (pkgs / "isaaclab_tasks.py").write_text("")
+    (pkgs / "good.py").write_text("")
+    (pkgs / "exits.py").write_text("raise SystemExit(3)\n")
+    (pkgs / "boom.py").write_text("raise RuntimeError('boom')\n")
+    env = {
+        "ISAACLAB_PYTHON": sys.executable,
+        "ISAACLAB_TASK_PATH": str(pkgs),
+        "ISAACLAB_TASK_MODULES": "boom, ,exits,good",
+    }
+    res = install.envs_list(env=env)
+    assert [e["id"] for e in res["envs"]] == ["Good-v0"]
+    assert res["import_errors"] == {"boom": "RuntimeError: boom", "exits": "SystemExit: 3"}
