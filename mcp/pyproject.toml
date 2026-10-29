@@ -22,6 +22,10 @@ dependencies = [
 test = [
     "pytest",
 ]
+# Isaac Lab tool pack: TensorBoard event-file readout (isaaclab__metrics_*, isaaclab__tensorboard_tail).
+isaaclab = [
+    "tensorboard>=2.14",
+]
 
 # LLM-facing MCP server entry point (the TCP client to the Kit bridge).
 # The Kit-side socket server lives in exts/isaac.mcp.bridge/ and is loaded by Kit, not pip.
