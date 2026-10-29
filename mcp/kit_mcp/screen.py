@@ -225,8 +225,65 @@ def _visible_windows() -> list[dict]:
     disp = _xdisplay()
     root = disp.screen().root
     out: list[dict] = []
+    processed: set = set()
+
+    # Collect candidate top-level windows from both _NET_CLIENT_LIST (the WM's
+    # list of managed clients) and a walk of the X tree. _NET_CLIENT_LIST alone
+    # can omit windows (e.g. reparented/unmanaged ones such as Isaac Sim), so
+    # we merge both sources and de-duplicate by window id.
+    candidates: list = []
+    seen_ids: set = set()
+
+    def _add_candidate(win) -> None:
+        try:
+            wid = getattr(win, "id", None)
+        except Exception:  # noqa: BLE001
+            wid = None
+        if wid is not None and wid in seen_ids:
+            return
+        # _NET_CLIENT_LIST stores window ids; resolve them to window objects.
+        if not hasattr(win, "get_attributes") and hasattr(disp, "create_resource_object"):
+            try:
+                wid_int = int(win)
+            except (TypeError, ValueError):
+                return
+            if wid_int in seen_ids:
+                return
+            try:
+                win = disp.create_resource_object("window", wid_int)
+            except Exception:  # noqa: BLE001
+                return
+            wid = getattr(win, "id", wid_int)
+            if wid in seen_ids:
+                return
+        if wid is not None:
+            seen_ids.add(wid)
+        candidates.append(win)
+
+    # 1. _NET_CLIENT_LIST
     try:
-        for win in root.query_tree().children:
+        prop = root.get_full_property(
+            disp.intern_atom("_NET_CLIENT_LIST"), X.AnyPropertyType
+        )
+    except Exception:  # noqa: BLE001
+        prop = None
+    if prop is not None and getattr(prop, "value", None):
+        try:
+            for item in prop.value:
+                _add_candidate(item)
+        except TypeError:
+            pass
+
+    # 2. Walk the X tree (fallback / supplement).
+    try:
+        tree = root.query_tree()
+        for child in getattr(tree, "children", []) or []:
+            _add_candidate(child)
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        for win in candidates:
             try:
                 attrs = win.get_attributes()
                 if attrs.map_state != X.IsViewable:
@@ -239,17 +296,22 @@ def _visible_windows() -> list[dict]:
                 # yields the negated position and silently crops from 0,0.
                 pos = root.translate_coords(win, 0, 0)
                 title = _window_title(win, disp).strip()
+                # Enumerate any viewable top-level window with a non-empty title.
+                if not title:
+                    continue
                 try:
                     wm_class = win.get_wm_class() or ()
                     cls = wm_class[1] if len(wm_class) > 1 else (wm_class[0] if wm_class else "")
                 except XError:
                     cls = ""
-                if not title and not cls:
+                wid = win.id
+                if wid in processed:
                     continue
+                processed.add(wid)
                 out.append(
                     {
-                        "id": win.id,
-                        "title": title or "(untitled)",
+                        "id": wid,
+                        "title": title,
                         "class": cls,
                         "pid": _window_pid(win, disp),
                         "x": pos.x,
@@ -288,7 +350,7 @@ def _match_window(query: str | None, window_id: int | None) -> dict:
 
 # A capture or recording with no target picks this window, so the default is
 # the sim and not whatever happens to be on the desktop.
-AUTO_WINDOW = "Isaac"
+AUTO_WINDOW = "Isaac Sim"
 
 
 def _bridge_pid(port: int | None) -> int | None:
@@ -342,7 +404,8 @@ def _auto_window(port: int | None = None) -> dict | None:
     matches = [
         w
         for w in windows
-        if needle in w["title"].lower() or needle in w["class"].lower()
+        if w["title"].lower().startswith(needle)
+        or w.get("class", "").lower().startswith(needle)
     ]
     if not matches:
         return None
