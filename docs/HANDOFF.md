@@ -1,0 +1,131 @@
+# Handoff — isaac-mcp (as of 2026-10-29)
+
+Read this first when picking the project up on another machine or in a new chat. Everything described here is
+committed to `main` of <https://github.com/kalebcoleman/isaac-mcp> (private). Plain facts; "verified" means it was run.
+
+## 1. What this is
+
+An MCP server for **Isaac Sim 6.2.0.0** and **Isaac Lab 3.0.0**, built on Aldrin Inbaraj's MIT repos
+`omni-kit-mcp` and `isaac-sim-mcp` (pinned 9d0366b / 27f6100, see `docs/VENDORING.md`) plus Kaleb's screen tool.
+Deliberately **separate from the `ur5e-digital-twin` research repo**. One name everywhere: **`isaac-mcp`** (no aliases;
+Kaleb does not want legacy `ur5e-mcp` / `kit-mcp` / `twin-mcp` names).
+
+| Layer | Path | Notes |
+|---|---|---|
+| Host MCP server (stdio) | `mcp/isaac_mcp/` | Python module `isaac_mcp`; screen tools, Kit bridge client, `isaaclab__*` tools |
+| Kit bridge extension | `exts/isaac.mcp.bridge/` (+ `isaac.mcp.panel/`) | runs inside Isaac Sim |
+| Tool pack: UR5e twin | `exts/ur5e-dt/` | 22 `ur5e_dt.*` tools (clients see `ur5e_dt__*`), 111 MB of assets |
+| Tool pack: Isaac Lab | `mcp/isaac_mcp/isaaclab/` | 12 host-side `isaaclab__*` tools, design in `docs/ISAACLAB-TOOLS.md` |
+| Launch/check | `install.sh`, `run.sh`, `verify.sh`, `scripts/` | |
+| npm launcher | `npm/` | `npx` -> `uvx`; unpublished |
+
+## 2. State: verified vs not
+
+Verified on the lab box (RTX PRO 6000 Blackwell, driver 595.99.02, Ubuntu 22.04):
+- 295 unit tests pass (`cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q`, ~90 s).
+- Isaac Sim 6.2 boots headless in ~7 s and windowed; bridge lists 29 tools (22 `ur5e_dt.*`); `quick_start_with_workstation` works.
+- TF graphs use `IsaacComputeTransformTree -> ROS2PublishTransformTree`; `/objects_poses_sim` and `/tf_cam` publish.
+- Isaac Lab tools: a real 2-epoch `Isaac-Reach-UR10` rl_games run through `isaaclab__train` succeeded; status, checkpoint
+  discovery and TensorBoard metrics read it back.
+- Screen tools list the Isaac window and auto-target it (was picking a Firefox tab).
+- Fresh-clone flow `./install.sh` -> `./run.sh --headless` -> `./verify.sh` passed (in the old repo layout; re-run once here).
+- Client configs (Claude Code/Desktop, OpenCode, Antigravity) were switched to server `isaac` -> `~/.local/bin/isaac-mcp`.
+
+NOT verified: anything on a GeForce/5080 box; Ubuntu 24.04; the `uvx`/npm install paths from a published package; the
+`play` tool with a window; multi-job GPU contention.
+
+## 3. Setting up on the RTX 5080 machine
+
+```bash
+gh auth login                                   # repo is private
+git clone https://github.com/kalebcoleman/isaac-mcp.git && cd isaac-mcp
+./install.sh --accept-eula                      # Isaac Sim 6.2 env (uv, ~20 GB, 10-20 min first time) + isaac-mcp CLI
+scripts/check_machine.sh                        # must say "Machine check passed"
+./install.sh --no-sim --claude                  # register server "isaac" in Claude Code + Desktop (restart Desktop)
+```
+- **Driver.** Isaac Sim **5.1** segfaulted in `librtx.scenedb.plugin.so` on driver 595.x; 580.x was fine for 5.1 on the
+  5080. **6.2 on a 5080 is untested.** `torch 2.11+cu130` needs a CUDA-13-capable driver (>= 580). If the renderer
+  crashes, try headless first (`./run.sh --headless`); a windowed crash is a driver issue, not an MCP bug.
+- **VRAM.** The 5080 has 16 GB: use small `num_envs` and run **one GPU job at a time** (a running Kit app plus a
+  training job will contend).
+- **EULA.** First `import isaacsim` blocks on NVIDIA's EULA prompt; `install.sh --accept-eula` / `OMNI_KIT_ACCEPT_EULA=YES`
+  handles it. Anything that imports isaacsim without that var set will hang on stdin.
+- **Display.** MCP screen tools need `DISPLAY` to match the desktop session (`echo $DISPLAY`; `:1` on the lab box). The
+  installer writes `DISPLAY` and `UR5E_DT_PORT=8766` into client configs; fix them if the home session differs.
+- **ROS/DDS.** The sim and every ROS client must source `config/ros_dds.env` (Cyclone, localhost-only). A mismatch
+  silently publishes into the void. `run.sh` does this; `scripts/tf_capture.py` follows the same file.
+- **Ports.** 8766 = twin bridge (default), 8799/8793 = probe/diagnostic scripts. `run.sh` refuses a busy port.
+
+## 4. Isaac Lab at home (needed for the Isaac Lab tools and for gap A below)
+
+The tools locate an install via `ISAACLAB_PYTHON` (+ optional `ISAACLAB_ROOT`), else
+`~/Desktop/ur5e-digital-twin/learning6/{.venv,IsaacLab}`. That environment is **not** in this repo (26 GB). To recreate:
+1. Get the twin repo's `consolidate-62` branch (it tracks the 13 `learning6/` files incl. `ur5e_lab/`; `master` does not,
+   and the local `migration/isaacsim6-isaaclab3` branch was never pushed).
+2. `cd learning6 && uv sync --locked` (Isaac Lab 3.0.0, Isaac Sim 6.2.0.0, torch 2.11 cu130, rl_games pinned in `pyproject.toml`).
+3. Clone NVIDIA Isaac Lab `v3.0.0` (commit `e3f7d9ff1f5d7f8280de3ece9000b7117f66bcf4`) to `learning6/IsaacLab` (git-ignored; the
+   tools run `IsaacLab/scripts/reinforcement_learning/train.py` and `play.py`).
+4. `export ISAACLAB_PYTHON=$PWD/.venv/bin/python ISAACLAB_ROOT=$PWD/IsaacLab`.
+
+Isaac Lab 3 facts the tools rely on (found by running, not documented elsewhere in this repo): no `--headless` flag
+(`--viz none` = headless, `--viz kit` = window); RL backend via `--rl_library` (rl_games, rsl_rl, skrl, ...); extra args
+are Hydra overrides (`agent.params.config.minibatch_size=1536`); rl_games needs `minibatch_size` to divide
+`num_envs * 24`; runs land in `<IsaacLab>/logs/<lib>/<experiment>/<timestamp>/`, checkpoints in `nn/`.
+
+## 5. Open work (priority order)
+
+**A. `envs_list` does not see custom tasks** (e.g. `UR5e-Cell-Reach-Direct-v0` from `learning6/ur5e_lab`). It scans
+`gym.register(` statically (`mcp/isaac_mcp/isaaclab/install.py`). Fix: add `ISAACLAB_TASK_MODULES` (comma list of modules,
+e.g. `ur5e_lab`) and, in the Isaac Lab interpreter, import them plus `isaaclab_tasks` and read `gymnasium.registry`
+(without starting Kit; check `isaaclab_rl/entrypoints/dispatch.py::_resolve_default_library` for how Lab does it). Passing a
+custom task id to `isaaclab__train` already works. Needs the section 4 env to test.
+
+**B. `quick_start_with_workstation` hang flake.** Twice on 2026-10-29 the first call after boot never returned
+(app log ends with PhysX warnings; earlier a "Nested app.update() deferred asyncio work" warning); normally ~5 s; never
+reproduced since; trees were byte-identical. Run `scripts/catch_hang.sh 30` on the 5080: it loops boot+quick_start and,
+on a hang, saves the log, a process snapshot, nvidia-smi and (if `py-spy` is installed) a stack dump to
+`/tmp/isaac-mcp-hang/hang-<n>/`. Lead: the spin-wait on `app.update()` inside the extension (see `exts/ur5e-dt/ur5e_dt/extension.py`,
+quick-start path). Do not use `scripts/probe_62.sh` for this (slow).
+
+**C. Publish to PyPI / npm** — only Kaleb can (accounts/tokens). Checklist in `docs/PUBLISHING.md`.
+
+**D. More tools** (not started): generic Isaac Sim tools not tied to the UR5e (stage/prim/physics/camera/recording) as a new
+tool pack; Isaac Lab `play` end-to-end with a window; a job-queue guard so two GPU jobs do not start together.
+
+**E. Cleanups.** `uv.lock` pins differ slightly from the old repo (`onnxruntime-gpu`); `scripts/install.py` (optional
+persistent registration) still defaults to port 9009 and its `--remove` also clears `add-project` entries; many scripts and
+the `ur5e-dt` extension still say `UR5E_DT_*` (intentional: that is the twin pack's namespace); `docs/` still has a few
+upstream-written pages (`mcp/docs/*`) that predate the rename and may mention old paths.
+
+## 6. Other repos and machine state
+
+- **`ur5e-digital-twin`** (Kaleb's research repo, `~/Desktop/ur5e-digital-twin`): back on `master` (two submodules, Isaac Sim 5.1,
+  which **crashes on the lab box's driver 595**). Local `master` is ahead 1 / behind 1 of `origin/master` (diverged; not resolved).
+  PR #1 (consolidation) was closed; branch `consolidate-62` is the archive of that work and contains the 6.2 probe, TF rewiring,
+  packaging and `learning6/`. Its `CLAUDE.md` still refers to MCP server `ur5e` and `scripts/launch_ur5e_dt.sh`; update it if that
+  repo should use `isaac-mcp`.
+- Old `external/` tree (pre-consolidation) is at `~/Desktop/../archive/external-pre-consolidation-20261029` on the lab box only.
+- Two stray T3 worktrees from agent runs: `~/.t3/worktrees/ur5e-digital-twin/t3-101d33d3` and `t3-53acd119` (safe to delete).
+- Transient job state lives in `~/.local/share/isaac-mcp/jobs/`; screenshots/videos in `~/Pictures/screen-mcp/`, `~/Videos/screen-mcp/`.
+
+## 7. Working preferences (from Kaleb)
+
+- One clean name, no compatibility aliases. MIT license for everything (upstream copyright kept).
+- Use OpenCode agents in parallel for bounded tasks: `opencode/beam-free` (free) by default, `runtimeMode: full-access`
+  (Kaleb dislikes approval prompts); `opencode-go/deepseek-v4.1-flash` (cheap, paid) is OK for harder tasks; the free DeepSeek
+  models hit a usage limit. Antigravity (`gemini-3.8-flash`) worked for drafting scripts/docs in a worktree. Always review agent
+  output: the free models' code needed real fixes (path traversal, wrong Isaac Lab flags) that only a real run exposed.
+- Prefer targeted checks over `scripts/probe_62.sh` (slow); avoid GPU jobs while agents run.
+- Do not create public repos, publish packages, or open PRs without being asked.
+
+## 8. Quick command reference
+
+```bash
+./run.sh [--headless] [--port N]               # Kit + bridge (default 8766)
+./verify.sh                                    # tool list + physics checks against a running twin
+scripts/check_machine.sh                       # OS, GPU, driver, python, isaacsim, ROS libs, CUDA kernel
+scripts/verify_tf.sh                           # records /tf_cam and /objects_poses_sim to /tmp/opencode/tf_after.json
+scripts/catch_hang.sh [N] [timeout]            # hunt the quick_start flake
+cd mcp && uv build                             # wheel + sdist
+git log --oneline                              # one commit per step; history starts at the seed commit 2353c0f
+```

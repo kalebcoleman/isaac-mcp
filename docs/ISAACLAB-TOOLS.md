@@ -205,7 +205,7 @@ Implemented in `mcp/isaac_mcp/isaaclab/` (`install.py`, `jobs.py`, `metrics.py`,
 exposed as `isaaclab__<tool>`). A real 2-epoch `Isaac-Reach-UR10` rl_games run through `isaaclab__train` succeeded,
 and `runs_status` / `metrics_summary` read its checkpoint and TensorBoard scalars. Things the real run taught us:
 
-- Isaac Lab 3 has **no `--headless` flag**. Headless is the default; `headless=false` adds `--viz kit`.
+- Isaac Lab 3 has **no `--headless` flag**. Headless jobs pass `--viz none`, windowed ones `--viz kit` (matches `learning6/README.md`).
 - The RL backend is chosen with `--rl_library` (else the task's registered default); `episodes` was dropped because
   only the rlinf backend has `--num_episodes`.
 - `extra_args` accepts `--flags` **and Hydra overrides** (`agent.params.config.minibatch_size=1536`, `+key=v`, `~key`).

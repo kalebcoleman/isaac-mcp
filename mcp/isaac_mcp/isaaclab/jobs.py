@@ -11,7 +11,7 @@ Chosen Isaac Lab entry scripts and flags (relative to the resolved
              --device (launcher), --headless (launcher), plus validated extra_args
   * eval:   scripts/reinforcement_learning/play.py  (Isaac Lab has no separate
             eval entrypoint; play.py with --checkpoint is the eval path)
-      flags: --task, --checkpoint, --num_envs, --rl_library, --viz kit for windowed runs (no --headless flag in Isaac Lab 3: it is the default; picks the RL backend with --rl_library, else the task default; no per-backend --num_episodes)
+      flags: --task, --checkpoint, --num_envs, --rl_library, --viz none|kit (no --headless flag in Isaac Lab 3; picks the RL backend with --rl_library, else the task default; no per-backend --num_episodes)
   * play:   scripts/reinforcement_learning/play.py
       flags: --task, --checkpoint, --num_envs, --headless (only when true)
 
@@ -398,8 +398,8 @@ def train(
         argv += ["--checkpoint", ckpt]
     if device is not None:
         argv += ["--device", str(device)]
-    if not headless:
-        argv += ["--viz", "kit"]  # Isaac Lab 3: headless is the default; a window needs a visualizer
+    # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
+    argv += ["--viz", "none" if headless else "kit"]
     argv += extras
     return _start_job(python, root, "train", task, argv, timeout_s=timeout_s, device=device)
 
@@ -426,8 +426,8 @@ def eval_(
         argv += ["--rl_library", lib]
     if num_envs is not None:
         argv += ["--num_envs", str(num_envs)]
-    if not headless:
-        argv += ["--viz", "kit"]  # Isaac Lab 3: headless is the default; a window needs a visualizer
+    # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
+    argv += ["--viz", "none" if headless else "kit"]
     argv += extras
     return _start_job(python, root, "eval", task, argv, timeout_s=timeout_s)
 
@@ -452,8 +452,8 @@ def play(
     argv: list[str] = ["--task", task, "--checkpoint", ckpt, "--num_envs", str(num_envs)]
     if lib:
         argv += ["--rl_library", lib]
-    if not headless:
-        argv += ["--viz", "kit"]  # Isaac Lab 3: headless is the default; a window needs a visualizer
+    # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
+    argv += ["--viz", "none" if headless else "kit"]
     argv += extras
     return _start_job(python, root, "play", task, argv, timeout_s=timeout_s)
 
