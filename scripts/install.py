@@ -168,7 +168,7 @@ def cmd_install(cfg: Config, args):
             for v in [x for x in enabled if x == e or x.startswith(e + "-")]:
                 enabled.remove(v); cfg.changes.append(f"- enabled: {v}")
         s = cfg.mcp_settings()
-        for key in (PORT.leaf, BIND.leaf, TOOL_MODULES.leaf, TOOL_PATHS.leaf):
+        for key in (PORT.leaf, BIND.leaf):
             if key in s:
                 del s[key]; cfg.changes.append(f"- /persistent/{SETTINGS_SUBTREE}/{key}")
         if not s:

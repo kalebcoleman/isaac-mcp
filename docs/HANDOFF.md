@@ -89,7 +89,7 @@ quick-start path). Do not use `scripts/probe_62.sh` for this (slow).
 tool pack; Isaac Lab `play` end-to-end with a window; a job-queue guard so two GPU jobs do not start together.
 
 **E. Cleanups.** `uv.lock` pins differ slightly from the old repo (`onnxruntime-gpu`); `scripts/install.py` (optional
-persistent registration) still defaults to port 9009 and its `--remove` also clears `add-project` entries; many scripts and
+persistent registration): `--remove` no longer clears `add-project` entries (fixed, verified on a temp config); its default port is still 9009, which is the documented "installer 9009, Lab 9010" convention in `mcp/` docs and tests, so changing it to 8766 needs a decision plus doc updates; many scripts and
 the `ur5e-dt` extension still say `UR5E_DT_*` (intentional: that is the twin pack's namespace); `docs/` still has a few
 upstream-written pages (`mcp/docs/*`) that predate the rename and may mention old paths.
 
