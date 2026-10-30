@@ -74,8 +74,26 @@ Isaac Lab tools on the 5080 (2-epoch jobs through the job layer, `rl_library=rl_
   little to report; not confirmed.
 - No process left behind; the GPU returned to idle (~650 MiB).
 
-NOT verified: a long Isaac Lab training run on the 5080 (only the 2-iteration smoke; ask first, 16 GB); the `uvx`/npm install paths from a
-published package; the multi-job GPU contention.
+### Long runs and job guards on the 5080 (2026-10-30, c12560e)
+
+Two ~15-minute rl_games runs through the job layer (`num_envs=1024`, `minibatch_size=12288`, headless; each relaunched once after a 90 s
+iteration-rate calibration to hit ~15 min). Reward scales differ between tasks, so the runs are not comparable.
+
+| Task | Iterations | Wall | Avg fps | Peak VRAM | Reward (`rewards/iter`) first -> last |
+|---|---|---|---|---|---|
+| `UR5e-Cell-Reach-Direct-v0` (own PhysX task) | 945 | 970 s | ~24.8k | 3.7 GB | -43.5 -> +358.6 (`Episode/dist_m` 0.39 -> 0.15, `success_rate` 0 -> 0.39, noisy; peak 0.77) |
+| `Isaac-Reach-UR10` (stock, Newton MJWarp) | 6282 | 873 s | ~182.6k | 1.0 GB | -4.0 -> +0.24 (success_rate 1.0 by mid-run, so ~half the run added nothing) |
+
+The 16 GB card is nowhere near full at 1024 envs for the custom task (3.7 GB peak), so larger `num_envs` is possible (batch = num_envs*24; keep
+`minibatch_size` a divisor). A windowed `isaaclab__play` of the custom task's checkpoint (4 envs) opened "Isaac Lab 3.0.0", finished loading,
+and showed the UR5e posed over the red target marker (one frame; motion not judged). No OOM or driver errors.
+
+Guard test (same day): the job-vs-job guard, the Kit-bridge guard and guard release after cancel all behave as documented. It exposed four bugs,
+fixed in c12560e: the watcher overwrote `cancelled` with `failed (-15)`; cancelling a finished job rewrote it; same-second job ids collided;
+duplicate `localhost`/`127.0.0.1` bridge entries. Remaining limits: two separate host processes can still race the guard; the Kit guard probes only
+the configured port (8766 by default) and advertised portfiles, not 8767.
+
+NOT verified: runs longer than ~15 min or above 1024 envs on the 5080; the `uvx`/npm install paths from a published package.
 
 ## 3. Setting up on the RTX 5080 machine
 
