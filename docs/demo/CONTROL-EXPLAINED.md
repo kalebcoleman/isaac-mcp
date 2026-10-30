@@ -367,6 +367,16 @@ So the two numbers that look the same are not:
 Each side is self-consistent as long as you never hand a number across the boundary without
 converting. Section 9 shows one place in this repo that does cross it.
 
+**A second way to get the same 100x surprise, found on 2026-10-30.** Writing a drive value
+into USD only reaches PhysX if the attribute actually *changes*; a write of the value it
+already holds notifies nobody. `load_ur5e()` wrote `100` into `physics:stiffness`, but the
+asset had been authored with ~10230 N·m/deg on the elbow and PhysX had already cached that
+at articulation creation, so the robot ran 100x stiffer than its own configuration while the
+USD attribute read 100. Measured with `ArticulationView.get_gains()`: 586148 N·m/rad, not
+5729.6. The extension now pushes the configured gains with
+`set_gains(kps=..., kds=...)` and verifies them (`exts/ur5e-dt/ur5e_dt/extension.py`,
+`_verify_drive_gains`). **Read back the solver's gains before you trust any step response.**
+
 ## 2.5 What the three command ports do
 
 `IsaacArticulationController` exposes three parallel arrays and one name list

@@ -1349,6 +1349,11 @@ rq = m.ExtractRotationQuat()
 info['base_pos'] = [float(t[0]), float(t[1]), float(t[2])]
 info['base_quat_xyzw'] = [float(rq.GetImaginary()[0]), float(rq.GetImaginary()[1]),
                           float(rq.GetImaginary()[2]), float(rq.GetReal())]
+# LulaKinematicsSolver.set_robot_base_pose() takes (w, x, y, z); the twin's base_link
+# is rotated 180 deg about z, so feeding it the xyzw array mirrored Lula's whole world
+# (x and z flipped) and the "solved" Cartesian move went the wrong way by 308 mm.
+info['base_quat_wxyz'] = [float(rq.GetReal()), float(rq.GetImaginary()[0]),
+                          float(rq.GetImaginary()[1]), float(rq.GetImaginary()[2])]
 info['base_prim'] = base_prim.GetPath().pathString
 
 drive = _ce_usd_drive(stage, joint)
@@ -1481,7 +1486,7 @@ if frame is None:
     raise RuntimeError('none of wrist_3_link/flange/tool0 is a Lula frame (have %s)' % frames[:12])
 
 solver.set_robot_base_pose(np.array(P['base_pos'], dtype=np.float64),
-                           np.array(P['base_quat_xyzw'], dtype=np.float64))
+                           np.array(P['base_quat_wxyz'], dtype=np.float64))
 tr = _ce_links(view)
 ee0 = tr[ee_index][0:3].astype(np.float64)
 goal = ee0 + np.array(P['offset'], dtype=np.float64)
@@ -1739,6 +1744,68 @@ def _edge_sim(samples: Samples, bounds: dict, joint_index: int, *, value: float,
 # =========================================================================== #
 # 7. the experiments
 # =========================================================================== #
+_PREPOSE_JOINT = "elbow_joint"
+
+_READ_Q_BODY = r'''
+view = _ce_view()
+result = {
+    'qpos': [float(v) for v in _ce_np(view.get_joint_positions()).reshape(-1)],
+    'dof_names': [str(n) for n in view.dof_names],
+}
+'''
+
+
+def prepose_clearance(ctx: Ctx) -> dict:
+    """Lift the tool off the benchtop before the joint-space experiments.
+
+    At the asset's home pose the RG2 fingertips sit ~27 mm above the Vention
+    top (measured 2026-10-30: /World/RG2_Gripper world bbox min z = 0.0273 m,
+    /World/Vention max z = 0.0000 m). A +0.3 rad elbow step then drives them
+    into the bench, and the recorded "steady state error" is the contact, not
+    the controller: the joint stalled at 0.050 rad of a 0.300 rad command with
+    the fingertips resting on the table, while the same step upward tracked.
+
+    The lift goes out over /joint_states like any other command, at a slew
+    rate slow enough for the drives to follow, and the measured pose afterwards
+    becomes the hold pose every later experiment starts from.
+    """
+    lift = float(ctx.args.pre_lift)
+    if lift == 0.0:
+        return {"applied": False, "reason": " --pre-lift 0"}
+
+    idx = ctx.dof_names.index(_PREPOSE_JOINT) if _PREPOSE_JOINT in ctx.dof_names else ctx.cmd_index
+    start = np.array(ctx.q_cmd_hold, dtype=np.float64)
+    target = start.copy()
+    target[idx] += lift
+    slew = 2.5
+    settle = 1.0
+
+    def program(t_rel: float) -> np.ndarray:
+        if t_rel <= 0.0:
+            return start
+        return start + min(1.0, t_rel / slew) * (target - start)
+
+    run_sampling(ctx, program, duration=slew + settle, preroll=0.5, rate_hz=ctx.args.publish_hz)
+
+    measured = ctx.twin.py(snippet(_READ_Q_BODY, {}), timeout=120.0)
+    q_now = np.asarray(measured.get("qpos"), dtype=np.float64).reshape(-1)
+    art_names = list(ctx.prep.get("dof_names") or ctx.dof_names)
+    before = np.array(ctx.q_hold, dtype=np.float64)
+    ctx.q_hold = q_now
+    ctx.q_cmd_hold = np.array([float(q_now[art_names.index(n)]) for n in ctx.dof_names])
+    adopted = float(ctx.q_cmd_hold[idx])
+    return {
+        "applied": True,
+        "joint": ctx.dof_names[idx],
+        "requested_rad": float(lift),
+        "command_rad": float(target[idx]),
+        "measured_rad": adopted,
+        "start_rad": float(before[art_names.index(ctx.dof_names[idx])]),
+        "slew_s": slew,
+        "settle_s": settle,
+    }
+
+
 def experiment_step(ctx: Ctx) -> dict:
     """Position step (+delta rad, then back) through /joint_states.
 
@@ -1793,6 +1860,20 @@ def experiment_step(ctx: Ctx) -> dict:
     write_csv(csv_path, ["t_sim_s", "t_wall_s", "position_rad", "reference_rad"], rows)
 
     drive = ctx.prep.get("drive_usd") or {}
+    physx = ctx.prep.get("drive_physx") or {}
+    # The figure is labelled with what the solver actually runs, not with the
+    # USD attribute: the two disagreed by 100x until the extension refresh fix.
+    kps = physx.get("kps")
+    kds = physx.get("kds")
+    if kps and kds:
+        stiffness = float(kps) / 57.29577951308232
+        damping = float(kds) / 57.29577951308232
+        drive_footer = (f"drive in solver: {float(kps):.1f} N*m/rad, {float(kds):.1f} N*m*s/rad "
+                        f"({stiffness:.1f}/{damping:.1f} per degree)")
+    else:
+        stiffness = float(drive.get("stiffness", float("nan")))
+        damping = float(drive.get("damping", float("nan")))
+        drive_footer = "drive in solver: unknown"
     png_path = ctx.png_path("step")
     try:
         plot_step(
@@ -1802,10 +1883,10 @@ def experiment_step(ctx: Ctx) -> dict:
             ref=ref,
             metrics=m,
             joint=ctx.joint,
-            stiffness=float(drive.get("stiffness", float("nan"))),
-            damping=float(drive.get("damping", float("nan"))),
+            stiffness=stiffness,
+            damping=damping,
             t_step=t_step - t_origin,
-            footer=ctx.footer(f"step {delta:+.3f} rad on {ctx.joint}"),
+            footer=ctx.footer(f"step {delta:+.3f} rad on {ctx.joint}; {drive_footer}"),
         )
         plot_note = "ok"
     except PlotUnavailable as exc:
@@ -2315,7 +2396,7 @@ def experiment_ik(ctx: Ctx) -> dict:
             _IK_BODY,
             {
                 "base_pos": prep.get("base_pos"),
-                "base_quat_xyzw": prep.get("base_quat_xyzw"),
+                "base_quat_wxyz": prep.get("base_quat_wxyz"),
                 "offset": offset,
                 "tol": float(ctx.args.ik_tolerance),
                 "ee_link": ctx.args.ee_link,
@@ -2541,6 +2622,13 @@ def parse_args(argv=None):
     parser.add_argument("--headless", action="store_true", help="only used with --launch: run Kit without a window")
     parser.add_argument("--launch", action="store_true", help="start ./run.sh on --port yourself and kill it at the end")
     parser.add_argument("--step-rad", type=float, default=0.3, help="step size in rad (negative = down)")
+    parser.add_argument(
+        "--pre-lift",
+        type=float,
+        default=-0.5,
+        help="lift the elbow by this many rad (through /joint_states) before step/track/ik so "
+        "the tool is clear of the benchtop; 0 disables the pre-positioning",
+    )
     parser.add_argument("--step-hold", type=float, default=2.5, help="seconds to hold after the step before returning")
     parser.add_argument("--step-tail", type=float, default=2.5, help="seconds to observe after the return step")
     parser.add_argument("--track-amp", type=float, default=0.25, help="sine amplitude in rad")
@@ -2718,9 +2806,30 @@ def main(argv=None) -> int:
         if args.step_rad > 0 and args.joint in ("elbow_joint", "shoulder_lift_joint"):
             print(
                 "note: a positive elbow/shoulder step moves the arm toward the tabletop "
-                "(scripts/checks/single_joint_motion.py:21); if the response flattens out, "
-                "re-run with --step-rad -0.3"
+                "(scripts/checks/single_joint_motion.py:21); --pre-lift keeps the tool clear "
+                "of the bench, and --step-rad -0.3 walks away from it instead"
             )
+
+        if any(name in ("step", "track", "ik") for name in args.experiments):
+            t0 = time.time()
+            try:
+                entry = prepose_clearance(ctx)
+            except Exception as exc:
+                entry = {"applied": False, "error": f"{type(exc).__name__}: {exc}",
+                         "traceback": traceback.format_exc()}
+                print(f"pre-pose FAILED - {entry['error'][:300]}")
+                exit_code = 1
+            entry["seconds"] = round(time.time() - t0, 2)
+            summary["prepose"] = entry
+            write_json(summary_path, summary)
+            if entry.get("applied"):
+                print(
+                    f"pre-pose: {entry['joint']} commanded {entry['command_rad']:+.3f} rad "
+                    f"(was {entry['start_rad']:+.3f}, measured {entry['measured_rad']:+.3f}); "
+                    f"the tool is off the benchtop from here on"
+                )
+            elif not entry.get("error"):
+                print("pre-pose: skipped")
 
         for name in args.experiments:
             print(f"\n=== {name} ===")

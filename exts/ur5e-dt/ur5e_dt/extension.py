@@ -2976,9 +2976,67 @@ class DigitalTwin(omni.ext.IExt):
             drive_api.GetMaxForceAttr().Set(self._ur5e_max_force)
             drive_api.GetStiffnessAttr().Set(self._ur5e_stiffness)
             drive_api.GetDampingAttr().Set(self._ur5e_damping)
+            # PhysX caches the drive values when the articulation is created and only
+            # refreshes on a *change* notice that arrives while it is listening. The
+            # asset is authored with ~100x stiffer drives (10230 N*m/deg on the elbow),
+            # and a same-value write notifies nobody, so the robot silently ran on the
+            # asset gains: measured 586148 N*m/rad instead of the 5729.6 that
+            # 100 N*m/deg means. Push the configured values straight into the solver.
+            drive_api.GetStiffnessAttr().Set(self._ur5e_stiffness + 0.5)
+            drive_api.GetDampingAttr().Set(self._ur5e_damping + 0.5)
+            drive_api.GetStiffnessAttr().Set(self._ur5e_stiffness)
+            drive_api.GetDampingAttr().Set(self._ur5e_damping)
             print(f"Set {joint_name}: maxForce={self._ur5e_max_force}, stiffness={self._ur5e_stiffness}, damping={self._ur5e_damping}")
 
+        # USD angular drive values are per degree; the PhysX-side API is per radian.
+        rad_per_deg = 57.29577951308232
+        n = len(joint_names)
+        try:
+            self._ur5e_view.set_gains(
+                kps=np.full((1, n), float(self._ur5e_stiffness) * rad_per_deg, dtype=np.float64),
+                kds=np.full((1, n), float(self._ur5e_damping) * rad_per_deg, dtype=np.float64),
+                joint_names=list(joint_names),
+            )
+        except Exception as exc:  # pragma: no cover - older view without set_gains
+            print(f"Warning: could not push the drive gains into PhysX ({type(exc).__name__}: {exc})")
+
+        self._verify_drive_gains(prim_path, joint_names)
         print("UR5e robot loaded successfully!")
+
+    def _verify_drive_gains(self, prim_path: str, joint_names: list) -> None:
+        """Read the gains PhysX is actually using and say so on the console.
+
+        The simulation, not the USD, decides how the joints behave, so a mismatch
+        between the configured drive and the solver's gains has to be visible:
+        the demo's step-response figures are labelled with these numbers.
+        """
+        expected_kps = float(self._ur5e_stiffness) * 57.29577951308232
+        expected_kds = float(self._ur5e_damping) * 57.29577951308232
+        try:
+            kps, kds = self._ur5e_view.get_gains()
+            import numpy as np
+            kps = np.asarray(kps).reshape(-1)
+            kds = np.asarray(kds).reshape(-1)
+        except Exception as exc:  # pragma: no cover - physics view may be absent
+            print(f"Warning: could not read the PhysX drive gains ({type(exc).__name__}: {exc})")
+            return
+        bad = [
+            (name, float(kps[i]), float(kds[i]))
+            for i, name in enumerate(joint_names)
+            if i < kps.size and (abs(float(kps[i]) - expected_kps) > 1.0 or abs(float(kds[i]) - expected_kds) > 0.1)
+        ]
+        if bad:
+            for name, kp, kd in bad:
+                print(
+                    f"Warning: {name} drive in PhysX is stiffness={kp:.3f}, damping={kd:.3f} "
+                    f"but the USD drive says {self._ur5e_stiffness}/{self._ur5e_damping} "
+                    f"(= {expected_kps:.3f}/{expected_kds:.3f} N*m/rad)"
+                )
+        else:
+            print(
+                f"Drive gains in PhysX match the USD drive: {expected_kps:.3f} N*m/rad, "
+                f"{expected_kds:.3f} N*m*s/rad on {len(joint_names)} arm joints"
+            )
 
         
     def _disable_robot_chain_gravity(self):
