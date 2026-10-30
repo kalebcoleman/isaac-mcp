@@ -824,8 +824,9 @@ class Runner:
                     "generated_at": stamp()})
         self.art(sid, self.dirs["data"] / "tools.json")
         self.metric(sid, tools_total=len(names), ur5e_dt_tools=ns.get("ur5e_dt", 0), namespaces=ns)
-        self.check(sid, "29 bridge tools", len(names) == 29, total=len(names))
-        self.check(sid, "22 ur5e_dt tools", ns.get("ur5e_dt", 0) == 22, ur5e_dt=ns.get("ur5e_dt", 0))
+        # 30 / 23 as of the setup_camera_tf_graph tool (was 29 / 22); accept "at least" so adding tools does not break the demo.
+        self.check(sid, "at least 30 bridge tools", len(names) >= 30, total=len(names))
+        self.check(sid, "at least 23 ur5e_dt tools", ns.get("ur5e_dt", 0) >= 23, ur5e_dt=ns.get("ur5e_dt", 0))
 
         t0 = time.monotonic()
         qs = bcall(self.args.port, "ur5e_dt.quick_start_with_workstation", timeout=900)
