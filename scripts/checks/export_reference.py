@@ -9,4 +9,4 @@ stage = omni.usd.get_context().get_stage()
 stage.GetRootLayer().Export(str(target))
 text = target.read_text().replace('file://' + str(root) + '/', '../')
 target.write_text(text)
-result = {'written': target.name, 'relative_asset_refs': text.count('../external/'), 'absolute_refs_left': text.count(str(root))}
+result = {'written': target.name, 'relative_asset_refs': text.count('../exts/'), 'absolute_refs_left': text.count(str(root))}

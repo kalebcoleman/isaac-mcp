@@ -39,6 +39,14 @@ Verified on the home box (RTX 5080 16 GB, driver 580.178.04, Ubuntu 24.04), 2026
   incl. `UR5e-Cell-Reach-Direct-v0`.
 - `./install.sh --no-sim --claude --isaaclab-python ... --isaaclab-root ...` registers `isaac` with the Lab env vars.
 
+Baseline of the UR5e twin and screen tools on the 5080 (2026-10-29, headless and windowed): `./verify.sh` passes (it used to exit 0
+even when checks errored; it now fails on any error and needs `checkpoints/ur5e-dt-workstation-person-view-portable.json`, which was
+missing from this repo and is now committed); `scripts/smoke_tools.py` calls every twin tool through the bridge client and passes
+20/20 in both modes; screen tools list windows, auto-target the Isaac Sim window, screenshot and record (window and monitor).
+Known: `randomize_single_object` cannot place anything with its fixed default strip (x -0.35..-0.31, 18 cm clear of all objects) and
+the tool exposes no ranges; the sim ignores SIGTERM (use `kill -9` on the pid from the bridge `status`); `add_objects` leaves the
+timeline playing.
+
 NOT verified: Isaac Lab training on the 5080 (no run started; ask first, 16 GB); the `uvx`/npm install paths from a
 published package; the multi-job GPU contention.
 
@@ -145,7 +153,8 @@ upstream-written pages (`mcp/docs/*`) that predate the rename and may mention ol
 
 ```bash
 ./run.sh [--headless] [--port N]               # Kit + bridge (default 8766)
-./verify.sh                                    # tool list + physics checks against a running twin
+./verify.sh                                    # tool list + physics checks against a running twin (non-zero exit on any failure)
+.venv/bin/python scripts/smoke_tools.py        # every twin tool through the bridge client, against a running sim
 scripts/check_machine.sh                       # OS, GPU, driver, python, isaacsim, ROS libs, CUDA kernel
 scripts/verify_tf.sh                           # records /tf_cam and /objects_poses_sim to /tmp/opencode/tf_after.json
 scripts/catch_hang.sh [N] [timeout]            # hunt the quick_start flake
