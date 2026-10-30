@@ -343,3 +343,16 @@ def test_two_rapid_launches_get_distinct_jobs_and_guard_holds(tmp_path, monkeypa
     assert b["job_id"] != a["job_id"]
     for jid in (a["job_id"], b["job_id"]):
         jobs.runs_cancel(jid, grace_s=2)
+
+
+def test_run_dir_from_log_reads_the_absolute_experiment_dir(tmp_path):
+    log = tmp_path / "stdout.log"
+    log.write_text(
+        "[INFO] Logging experiment in directory: /x/logs/rl_games/task\n"
+        "Exact experiment name requested from command line: /x/logs/rl_games/task/2026-10-30_09-57-11\n"
+        "Exact experiment name requested from command line: 2026-10-30_09-57-11\n"
+    )
+    assert jobs._run_dir_from_log(log) == "/x/logs/rl_games/task/2026-10-30_09-57-11"
+    log.write_text("no such line\n")
+    assert jobs._run_dir_from_log(log) is None
+    assert jobs._run_dir_from_log(tmp_path / "missing.log") is None

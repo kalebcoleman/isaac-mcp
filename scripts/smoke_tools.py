@@ -69,7 +69,7 @@ def main() -> int:
 
     names = client.call("list_tools", {})["tools"]
     twin = sorted(n for n in names if n.startswith("ur5e_dt."))
-    record("twin tools registered", len(twin) == 22, f"{len(twin)} ur5e_dt.* tools")
+    record("twin tools registered", len(twin) == 23, f"{len(twin)} ur5e_dt.* tools (23 incl. setup_camera_tf_graph)")
 
     r = tool("ur5e_dt.quick_start_with_workstation", timeout=120)
     record("quick_start_with_workstation", ok(r), r.get("message", ""))

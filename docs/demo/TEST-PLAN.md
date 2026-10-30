@@ -16,7 +16,7 @@ Scenarios (runner: `scripts/demo/run_demo.py`)
 |---|---|---|---|
 | S0 | Machine snapshot | `data/machine.json`: hostname, OS, kernel, GPU, driver, VRAM, Python, isaacsim/isaaclab/torch versions, git HEADs of isaac-mcp and the twin repo, uv version, DISPLAY | file written, versions are 6.2.0.0 / 3.0.0 |
 | S1 | Health check | `logs/check_machine.txt` | ends with "Machine check passed." |
-| S2 | Isaac Sim twin, windowed | boot time, tool list (`data/tools.json`: total, per-namespace counts), `shots/S2-01-workstation-loaded.png`, `shots/S2-02-objects-playing.png` | 29 bridge tools (22 `ur5e_dt.*`), quick_start status success, window screenshot shows the UR5e on the Vention workstation |
+| S2 | Isaac Sim twin, windowed | boot time, tool list (`data/tools.json`: total, per-namespace counts), `shots/S2-01-workstation-loaded.png`, `shots/S2-02-objects-playing.png` | 30 bridge tools (23 `ur5e_dt.*`), quick_start status success, window screenshot shows the UR5e on the Vention workstation |
 | S3 | ROS TF | `data/tf.json` from `scripts/tf_capture.py` (5 s) | `objects_poses_sim` has >= 5 frames and `tf_cam` >= 1 frame |
 | S4 | Motion video | `videos/S4-01-joint-sweep.mp4` (10 s clean viewport via `ur5e_dt.start_recording`/`stop_recording` while joints move) + 2 stills | video file > 50 KB, robot visibly in different poses between first and last frame (compare stills) |
 | S5 | Isaac Lab tools | `data/lab_install.json`, `data/lab_envs.json` (filter `ur5e` and `reach`) | isaaclab 3.0.0, isaacsim 6.2.0.0, `UR5e-Cell-Reach-Direct-v0` listed |

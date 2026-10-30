@@ -426,6 +426,10 @@ MCP_TOOL_REGISTRY = {
         "description": "Stop the simulation timeline in Isaac Sim.",
         "parameters": {}
     },
+    "setup_camera_tf_graph": {
+        "description": "Import the RealSense camera, attach it to the UR5e wrist and build its ROS 2 action graph (camera image, camera_info and the /tf_cam transform tree). Requires the UR5e to be loaded (e.g. after quick_start_with_workstation).",
+        "parameters": {}
+    },
     "assemble_objects": {
         "description": "Assemble objects into a specified configuration.",
         "parameters": {
@@ -486,7 +490,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "start_ros_driver": {
-        "description": "Bring the ROS2 robot driver up/down/status so robot-motion tools (ros-mcp-server move_home/move_to_grasp/...) have a driver to talk to. Two backends: backend='fake' (default) uses scripts/launch_ur_fake.sh — the apt ur_robot_driver with fake/mock hardware, no Docker and no ~/ros2_ws needed, ready in a few seconds (sim only); backend='ursim' uses scripts/sim_bringup.sh — URSim docker + ur_bringup, hands-free no PolyScope clicks, ~110s, and is the path that supports mode='real' (lab UR5e, not yet enabled). Both end at /joint_states live + scaled_joint_trajectory_controller accepting FollowJointTrajectory, on the same DDS island (domain 7, Cyclone, localhost-only). Use once at startup.",
+        "description": "Bring the ROS2 robot driver up/down/status so robot-motion tools (ros-mcp-server move_home/move_to_grasp/...) have a driver to talk to. Two backends: backend='fake' (default) uses scripts/launch_ur_fake.sh — the apt ur_robot_driver with fake/mock hardware, no Docker and no ~/ros2_ws needed, ready in a few seconds (sim only); backend='ursim' uses scripts/sim_bringup.sh — URSim docker + ur_bringup, hands-free no PolyScope clicks, ~110s, and is the path that supports mode='real' (lab UR5e, not yet enabled). Both end at /joint_states live + scaled_joint_trajectory_controller accepting FollowJointTrajectory, on the same DDS island (the ROS domain from config/ros_dds.env (default 0), Cyclone, localhost-only). Use once at startup.",
         "parameters": {
             "mode": {
                 "type": "string",
@@ -587,7 +591,6 @@ MCP_TOOL_REGISTRY = {
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.core.prims import Articulation as ArticulationView
 from isaacsim.storage.native import get_assets_root_path
-from isaacsim.robot_motion.motion_generation import LulaKinematicsSolver, ArticulationKinematicsSolver
 from isaacsim.core.utils.numpy.rotations import euler_angles_to_quats
 from isaacsim.core.prims import SingleArticulation as Articulation
 import omni.graph.core as og
@@ -703,9 +706,7 @@ class DigitalTwin(omni.ext.IExt):
         self._ur5e_damping = 10.0
 
         # RG2 gripper joint drive parameters
-        self._gripper_max_force = 1.2
-        self._gripper_stiffness = 0.1
-        self._gripper_damping = 0.05
+        # NOTE: the RG2 gripper drive gains are the module constants RG2_ACT_STIFFNESS / RG2_ACT_DAMPING / RG2_ACT_MAXFORCE (applied when the gripper is actuated).
 
         # Gripper physics material
         self._gripper_dynamic_friction = 0.6
@@ -2346,7 +2347,19 @@ class DigitalTwin(omni.ext.IExt):
 
         print("Reset lighting, ground, and background to defaults.")
 
+    async def _wait_for_stage(self, timeout_s: float = 60.0):
+        """The bridge port opens a few seconds before Kit has a USD stage; tools that touch the stage must wait."""
+        import time as _time
+
+        app = omni.kit.app.get_app()
+        deadline = _time.time() + timeout_s
+        while omni.usd.get_context().get_stage() is None and _time.time() < deadline:
+            await app.next_update_async()
+        if omni.usd.get_context().get_stage() is None:
+            raise RuntimeError("no USD stage available after %.0f s; is the Isaac Sim app fully started?" % timeout_s)
+
     async def load_scene(self):
+        await self._wait_for_stage()
         stage = omni.usd.get_context().get_stage()
 
         # Only initialize simulation context if physics scene doesn't exist yet
@@ -2944,7 +2957,7 @@ class DigitalTwin(omni.ext.IExt):
 
         self._articulation = Articulation(prim_path)
 
-        # Configure joint drives: set maxForce=150 and stiffness=300 for all joints
+        # Configure joint drives for all arm joints from self._ur5e_max_force / _stiffness / _damping (USD angular drive units: N*m/deg)
         joint_names = [
             "shoulder_pan_joint",
             "shoulder_lift_joint",
@@ -6152,6 +6165,26 @@ class DigitalTwin(omni.ext.IExt):
                 "message": f"Quick start failed: {str(e)}",
                 "traceback": traceback.format_exc()
             }
+
+    async def _cmd_setup_camera_tf_graph(self) -> Dict[str, Any]:
+        """MCP handler: same calls as the panel buttons Import RealSense Camera / Attach Camera / camera action graph."""
+        try:
+            await self._wait_for_stage()
+            stage = omni.usd.get_context().get_stage()
+            if not stage.GetPrimAtPath("/World/UR5e/wrist_3_link").IsValid():
+                return {"status": "error", "message": "UR5e not loaded: run quick_start_with_workstation first"}
+            if not stage.GetPrimAtPath("/World/rsd455").IsValid() and not stage.GetPrimAtPath("/World/UR5e/wrist_3_link/rsd455").IsValid():
+                self.import_realsense_camera()
+            self.attach_camera_to_ur5e()
+            self.setup_camera_action_graph()
+            return {
+                "status": "success",
+                "message": "Camera attached; publishing the camera topics and /tf_cam once the timeline plays.",
+                "graph": "/Graph/ActionGraph_Camera",
+            }
+        except Exception as e:
+            carb.log_error(f"Error in setup_camera_tf_graph: {e}")
+            return {"status": "error", "message": f"setup_camera_tf_graph failed: {str(e)}", "traceback": traceback.format_exc()}
 
     async def _cmd_load_workstation(self) -> Dict[str, Any]:
         """MCP handler: add the Vention workstation bench (visual, tabletop top at z=0)."""

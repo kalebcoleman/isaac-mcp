@@ -172,7 +172,7 @@ if [ ! -d "$MCP_DIR" ]; then
 fi
 
 echo "== installing isaac-mcp (editable) from $MCP_DIR"
-uv tool install --force --editable "$MCP_DIR"
+uv tool install --force --editable "${MCP_DIR}[isaaclab]"   # [isaaclab] adds tensorboard for the metrics tools
 
 # Step 3: Install ffmpeg shim at ~/.local/bin/ffmpeg
 BIN_DIR="${HOME}/.local/bin"

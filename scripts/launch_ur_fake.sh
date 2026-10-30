@@ -11,7 +11,7 @@
 # This is the LIGHTWEIGHT alternative to sim_bringup.sh, kept ALONGSIDE it (not a
 # replacement). Modeled on prismatic-manipulation/scripts/launch_ur.sh (a4500) but sources
 # THIS repo's config/ros_dds.env so the driver joins the same DDS island (Cyclone +
-# ROS_LOCALHOST_ONLY=1 + domain 7) as Isaac (launched via scripts/launch_sim.sh) and the
+# ROS_LOCALHOST_ONLY=1 + the ROS domain from config/ros_dds.env (default 0)) as Isaac (launched via scripts/launch_sim.sh) and the
 # ros-mcp-server consumer — see config/ros_dds.env for why that homogeneity is mandatory.
 #
 # Usage:
@@ -23,7 +23,7 @@
 set -eo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# ROS distro + the homogeneous sim DDS env (domain 7 / Cyclone / localhost-only).
+# ROS distro + the homogeneous sim DDS env (the ROS domain from config/ros_dds.env (default 0) / Cyclone / localhost-only).
 [ -f /opt/ros/humble/setup.bash ] && source /opt/ros/humble/setup.bash
 source "$REPO/config/ros_dds.env"
 # Optional overlay workspace (apt ur_robot_driver works without it; source if present).

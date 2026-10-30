@@ -32,7 +32,7 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 | Layer 3: UR5e Digital Twin Extension (exts/ur5e-dt/)                          |
 | Package: ur5e_dt  |  Extension ID: ur5e-dt                                    |
 | - Runs inside Omniverse Kit                                                   |
-| - Owns the twin bridge endpoint and registers ur5e_dt.* tools (22 tools)      |
+| - Owns the twin bridge endpoint and registers ur5e_dt.* tools (23 tools)      |
 | - Builds and manages the workstation scene (UR5e, RG2 gripper, QuickChanger)  |
 | - Provides motion control, joint drives, scene save/restore, camera setup     |
 | - Owns the OmniGraph pipelines for ROS 2 transforms and joint mirroring       |
@@ -113,7 +113,7 @@ Communication between the host MCP server and the Kit bridge uses JSON lines ove
 ### Namespace Mapping (`.` vs `__`)
 
 - Inside Kit, the twin registers tools under its canonical namespace with dots: `ur5e_dt.<tool_name>`.
-  Examples: `ur5e_dt.play_scene`, `ur5e_dt.quick_start_with_workstation`, `ur5e_dt.get_joint_positions`.
+  Examples: `ur5e_dt.play_scene`, `ur5e_dt.quick_start_with_workstation`, `ur5e_dt.setup_camera_tf_graph`.
 - Because dots (`.`) are not valid characters in MCP tool names per the Model Context Protocol specification, the host server (`isaac_mcp/server.py`) translates dots to double underscores (`__`).
 - Consequently, MCP clients see and invoke tools as: `ur5e_dt__<tool_name>` (e.g., `ur5e_dt__play_scene`).
 - Tools built into the bridge itself (such as `list_bridges`, `use_bridge`, `run_python`) and host desktop capture tools (`screenshot`, `start_screen_recording`, `stop_screen_recording`, `list_windows`) do not carry the `ur5e_dt__` prefix.

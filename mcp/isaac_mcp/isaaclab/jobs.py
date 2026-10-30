@@ -314,6 +314,18 @@ def _latest_checkpoint(run_dir: Any) -> str | None:
 
 
 _SAVED_CKPT_RE = re.compile(r"saving checkpoint '([^']+)'")
+_EXPERIMENT_DIR_RE = re.compile(r"Exact experiment name requested from command line:\s*(/\S+)")
+
+
+def _run_dir_from_log(log_path: Path) -> str | None:
+    """Isaac Lab prints the absolute experiment dir near the top of the log before any checkpoint exists."""
+    try:
+        with log_path.open("rb") as f:
+            head = f.read(131072).decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    m = _EXPERIMENT_DIR_RE.search(head)
+    return m.group(1) if m else None
 
 
 def _checkpoint_from_log(log_path: Path) -> str | None:
@@ -660,6 +672,10 @@ def runs_status(job_id: str) -> dict[str, Any]:
         last_lines = _tail_file(jd / "stdout.log", 20)
     run_dir = data.get("run_dir")
     ckpt = _latest_checkpoint(run_dir) or _checkpoint_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
+    if not ckpt:
+        logged = _run_dir_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
+        if logged and Path(logged).exists():
+            run_dir = logged
     if ckpt and not _latest_checkpoint(run_dir):
         # the experiment dir (parent of nn/ for rl_games) is the run dir tools like metrics_summary want
         p = Path(ckpt).parent
@@ -672,6 +688,7 @@ def runs_status(job_id: str) -> dict[str, Any]:
         "last_log_lines": last_lines,
         "latest_checkpoint": ckpt,
         "run_dir": run_dir,
+        "log_dir": data.get("log_dir", str(jd)),
         "pid": data.get("pid"),
     }
 
