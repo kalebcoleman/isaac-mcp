@@ -166,7 +166,7 @@ thread because the bridge hops it there (`mcp/docs/protocol.md`).
 
 ### 3.25 Citation expansion (exact installed files)
 
-`$SP = /home/kaleb/Desktop/isaac-mcp/.venv/lib/python3.12/site-packages`
+`$SP = <repo>/.venv/lib/python3.12/site-packages`
 `$UD = $SP/isaacsim/extscache/omni.usd-1.19.11+187cf21b.lx64.r.cp312/omni/usd`
 `$CP = $SP/isaacsim/extscache/omni.kit.capture.viewport-2.11.1+187cf21b/omni/kit/capture/viewport`
 `$EP = $SP/isaacsim/exts/isaacsim.core.experimental.prims/isaacsim/core/experimental/prims/impl`

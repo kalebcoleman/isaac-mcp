@@ -146,16 +146,20 @@ persistent registration): fixed 2026-10-29 (`--remove` keeps `add-project` entri
 the `ur5e-dt` extension still say `UR5E_DT_*` (intentional: that is the twin pack's namespace); `docs/` still has a few
 upstream-written pages (`mcp/docs/*`) that predate the rename and may mention old paths.
 
-## 6. Other repos and machine state
+## 6. Other repos and machine state (as of 2026-10-30)
 
-- **`ur5e-digital-twin`** (Kaleb's research repo, `~/Desktop/ur5e-digital-twin`): back on `master` (two submodules, Isaac Sim 5.1,
-  which **crashes on the lab box's driver 595**). Local `master` is ahead 1 / behind 1 of `origin/master` (diverged; not resolved).
-  PR #1 (consolidation) was closed; branch `consolidate-62` is the archive of that work and contains the 6.2 probe, TF rewiring,
-  packaging and `learning6/`. Its `CLAUDE.md` still refers to MCP server `ur5e` and `scripts/launch_ur5e_dt.sh`; update it if that
-  repo should use `isaac-mcp`.
-- Old `external/` tree (pre-consolidation) is at `~/archive/external-pre-consolidation-20261029` on the lab box only.
-- Two stray T3 worktrees from agent runs: `~/.t3/worktrees/ur5e-digital-twin/t3-101d33d3` and `t3-53acd119` (safe to delete).
-- Transient job state lives in `~/.local/share/isaac-mcp/jobs/`; screenshots/videos in `~/Pictures/screen-mcp/`, `~/Videos/screen-mcp/`.
+- **`ur5e-digital-twin`** (Kaleb's research repo, `~/Desktop/ur5e-digital-twin`, private): `master` is the 6.2 layout. It no longer has its own
+  MCP or old scripts; it consumes this repo as the submodule `external/isaac-mcp`, pinned at `55dcc40` (bump with
+  `git -C external/isaac-mcp checkout <sha>` + commit), and tracks `learning6/`. The history was rewritten on 2026-10-29 (a
+  `filter-branch` removed attribution trailers and the branches were force-pushed), so older commit hashes quoted in notes are stale.
+  PR #1 was closed; branch `consolidate-62` on GitHub is an archive of the consolidation work.
+- **Both machines** (ASU lab workstation and the home RTX 5080 PC) were checked on 2026-10-30: same commits, 379 tests pass, headless
+  and windowed boot work, Isaac Lab tools work (section 2). The ASU box had old-layout leftovers (old 5.1 `learning/`, the old
+  `external/*` copies, stray T3 worktrees); they were removed on 2026-10-30. The home PC never had them. The ASU box keeps
+  `~/archive/external-pre-consolidation-20261029` (124 MB, redundant: everything is in this repo) and
+  `~/archive/learning-5.1-leftovers-20261030` (1 MB of old logs/outputs); delete at will.
+- Transient state lives in `~/.local/share/isaac-mcp/jobs/` (job logs) and `~/Pictures/screen-mcp/`, `~/Videos/screen-mcp/`
+  (captures; the repo's own `captures/` folder is git-ignored).
 
 ## 7. Working preferences (from Kaleb)
 
