@@ -17,8 +17,9 @@ package is importable (it ships with the ``isaaclab`` extra); tests that need
 the package are skipped when it is missing.
 """
 
+import json
 import os
-import time
+import struct
 
 import pytest
 
@@ -65,12 +66,49 @@ def _event_files(directory):
     )
 
 
-def _run_with(*events):
-    """Create a run dir containing one event file per (tag, values) pair."""
-    run = events[0]
-    for _tag, _values in events:
-        _write_events(run, _tag, _values)
-    return run
+def _tfrecord_frames(raw):
+    """Yield (start, end) byte ranges of the TFRecord frames in ``raw``.
+
+    A frame is ``uint64 length | uint32 masked_crc | payload | uint32 crc``.
+    """
+    frames = []
+    offset = 0
+    while offset + 12 <= len(raw):
+        (length,) = struct.unpack("<Q", raw[offset : offset + 8])
+        end = offset + 12 + length + 4
+        if end > len(raw):
+            break
+        frames.append((offset, end))
+        offset = end
+    return frames
+
+
+def _frames_with_tag(raw, tag):
+    """Return the frame ranges that carry a scalar summary for ``tag``."""
+    from tensorboard.compat.proto import event_pb2
+
+    tagged = []
+    for start, end in _tfrecord_frames(raw):
+        event = event_pb2.Event()
+        event.ParseFromString(raw[start + 12 : end - 4])
+        if event.HasField("summary") and any(
+            value.tag == tag for value in event.summary.value
+        ):
+            tagged.append((start, end))
+    return tagged
+
+
+def _truncate_after_n_tagged_events(path, tag, n):
+    """Cut the event file right after its n-th event for ``tag``.
+
+    Returns the number of ``tag`` events that survive the cut.
+    """
+    raw = open(path, "rb").read()
+    tagged = _frames_with_tag(raw, tag)
+    assert len(tagged) >= n, "not enough events to truncate"
+    cut = tagged[n - 1][1]
+    open(path, "wb").write(raw[:cut])
+    return n
 
 
 # --------------------------------------------------------------------------
@@ -135,13 +173,20 @@ def test_tensorboard_tail_run_dir_none_requires_run_dir():
 # --------------------------------------------------------------------------
 
 
+def _isolate_roots(monkeypatch, allowed):
+    """Make ``allowed`` the only log root; the system temp dir is *not* allowed."""
+    monkeypatch.setenv("ISAACLAB_ALLOW_TMP", "0")
+    monkeypatch.setenv("ISAACLAB_LOGS_DIR", str(allowed))
+
+
 def test_run_dir_symlink_to_outside_root_is_refused(tmp_path, monkeypatch):
     """The *run dir* itself may not escape the allowed roots."""
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
     outside = tmp_path / "outside"
     outside.mkdir()
     _write_events(outside, "loss", [1.0])
-    allowed = tmp_path / "allowed"
-    allowed.mkdir()
+    _isolate_roots(monkeypatch, allowed)
     link = allowed / "link"
     link.symlink_to(outside)
     res = metrics.metrics_summary(run_dir=str(link))
@@ -149,31 +194,30 @@ def test_run_dir_symlink_to_outside_root_is_refused(tmp_path, monkeypatch):
     assert "outside allowed roots" in res["error"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: _find_event_files() does not check the resolved path of the event "
-        "files it returns, so a symlink inside an allowed run dir can point at "
-        "a TensorBoard file outside the allowed roots and its scalars are read "
-        "and returned. checkpoints_list() applies the equivalent _is_under_allowed() "
-        "check on the realpath of every file it reports; metrics_summary() and "
-        "tensorboard_tail() do not."
-    ),
-)
+def test_run_dir_outside_allowed_roots_is_refused(tmp_path, monkeypatch):
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    _write_events(outside, "loss", [1.0])
+    _isolate_roots(monkeypatch, allowed)
+    res = metrics.metrics_summary(run_dir=str(outside))
+    assert res.get("error") == "path outside allowed roots"
+    res = metrics.tensorboard_tail(run_dir=str(outside), tag="loss")
+    assert res.get("error") == "path outside allowed roots"
+
+
 def test_event_file_symlink_to_outside_root_is_ignored(tmp_path, monkeypatch):
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
     outside = tmp_path / "outside"
     outside.mkdir()
     _write_events(outside, "secret", [42.0])
-    allowed = tmp_path / "allowed"
-    allowed.mkdir()
     run = allowed / "run"
     run.mkdir()
     source = os.path.join(str(outside), _event_files(outside)[0])
     os.symlink(source, os.path.join(str(run), "events.out.tfevents.linked"))
-
-    # only the allowed dir is a log root; the temp dir is *not* allowed here
-    monkeypatch.setenv("ISAACLAB_ALLOW_TMP", "0")
-    monkeypatch.setenv("ISAACLAB_LOGS_DIR", str(allowed))
+    _isolate_roots(monkeypatch, allowed)
 
     res = metrics.metrics_summary(run_dir=str(run))
     assert "secret" not in res.get("scalars", {})
@@ -210,24 +254,46 @@ def test_zero_byte_event_file_is_ignored(tmp_path):
     assert res["scalars"] == {}
 
 
-def test_truncated_event_file_recovers_the_complete_prefix(tmp_path):
-    """A half-written event file must not lose the records that are intact."""
+def test_truncated_event_file_keeps_the_complete_events(tmp_path):
+    """A cut event file must not lose the records that are intact."""
     pytest.importorskip("tensorboard")
     run = tmp_path / "run"
     run.mkdir()
     _write_events(run, "loss", [1.0, 2.0, 3.0, 4.0, 5.0])
-    name = _event_files(run)[0]
-    path = os.path.join(str(run), name)
-    raw = open(path, "rb").read()
-    open(path, "wb").write(raw[: len(raw) // 2])
+    path = os.path.join(str(run), _event_files(run)[0])
+
+    survived = _truncate_after_n_tagged_events(path, "loss", 2)
+    assert survived == 2
 
     res = metrics.metrics_summary(run_dir=str(run))
-    if "loss" in res.get("scalars", {}):
-        # whatever survived has to be a prefix of the original series
-        tail = metrics.tensorboard_tail(run_dir=str(run), tag="loss")
-        values = [p["value"] for p in tail["points"]]
-        assert values == [1.0, 2.0, 3.0, 4.0, 5.0][: len(values)]
-        assert res["scalars"]["loss"]["count"] < 5
+    summary = res["scalars"]["loss"]
+    assert summary["count"] == 2
+    assert summary["last"] == 2.0
+    assert summary["min"] == 1.0
+    assert summary["max"] == 2.0
+
+    tail = metrics.tensorboard_tail(run_dir=str(run), tag="loss")
+    assert [point["value"] for point in tail["points"]] == [1.0, 2.0]
+
+
+def test_partially_written_final_event_is_dropped(tmp_path):
+    """A half-written trailing record is discarded, earlier ones survive."""
+    pytest.importorskip("tensorboard")
+    run = tmp_path / "run"
+    run.mkdir()
+    _write_events(run, "loss", [1.0, 2.0, 3.0, 4.0, 5.0])
+    path = os.path.join(str(run), _event_files(run)[0])
+
+    raw = open(path, "rb").read()
+    tagged = _frames_with_tag(raw, "loss")
+    # cut in the middle of the last tagged frame
+    start = tagged[-1][0]
+    open(path, "wb").write(raw[: start + 8])
+
+    res = metrics.metrics_summary(run_dir=str(run))
+    summary = res["scalars"]["loss"]
+    assert summary["count"] == len(tagged) - 1
+    assert summary["last"] == 4.0
 
 
 # --------------------------------------------------------------------------
@@ -283,32 +349,16 @@ def test_metrics_summary_unknown_tag_available_list_is_capped_at_50(tmp_path):
     assert len(res["available"]) == 50
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: metrics_summary() iterates over the caller's ``tags`` list "
-        "instead of de-duplicating it, so a repeated tag makes every scalar of "
-        "that tag be collected twice and the reported ``count`` is doubled "
-        "(6 instead of 3 for three recorded points)."
-    ),
-)
 def test_metrics_summary_duplicate_tags_do_not_double_count(tmp_path):
     run = tmp_path / "run"
     run.mkdir()
     _write_events(run, "loss", [1.0, 2.0, 3.0])
     once = metrics.metrics_summary(run_dir=str(run), tags=["loss"])
     twice = metrics.metrics_summary(run_dir=str(run), tags=["loss", "loss"])
-    assert twice["scalars"]["loss"]["count"] == once["scalars"]["loss"]["count"] == 3
+    assert once["scalars"]["loss"]["count"] == 3
+    assert twice["scalars"]["loss"]["count"] == 3
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: metrics_summary() treats ``tags`` as a generic iterable, so a "
-        "plain string is silently split into single characters and reported as "
-        "an unknown tag instead of selecting that one scalar."
-    ),
-)
 def test_metrics_summary_accepts_a_single_tag_given_as_a_string(tmp_path):
     run = tmp_path / "run"
     run.mkdir()
@@ -351,7 +401,7 @@ def test_tensorboard_tail_merges_points_from_several_event_files(tmp_path):
     _write_events(run, "loss", [1.0, 2.0])
     _write_events(run, "loss", [3.0, 4.0])
     res = metrics.tensorboard_tail(run_dir=str(run), tag="loss", last_n=50)
-    steps = [p["step"] for p in res["points"]]
+    steps = [point["step"] for point in res["points"]]
     assert steps == sorted(steps)
     assert len(res["points"]) == 4
 
@@ -409,7 +459,14 @@ def test_tensorboard_tail_last_n_larger_than_run_returns_every_point(tmp_path):
 def test_tensorboard_tail_last_n_keeps_the_highest_steps(tmp_path):
     run = _write_series(tmp_path / "run", "loss", [1.0, 2.0, 3.0, 4.0])
     res = metrics.tensorboard_tail(run_dir=str(run), tag="loss", last_n=2)
-    assert [p["value"] for p in res["points"]] == [3.0, 4.0]
+    assert [point["value"] for point in res["points"]] == [3.0, 4.0]
+
+
+@pytest.mark.parametrize("bad", [1.5, "5", True, [1]])
+def test_tensorboard_tail_rejects_a_non_integer_last_n(tmp_path, bad):
+    run = _write_series(tmp_path / "run", "loss", [1.0, 2.0])
+    res = metrics.tensorboard_tail(run_dir=str(run), tag="loss", last_n=bad)
+    assert res.get("error") == "last_n must be an integer or null"
 
 
 # --------------------------------------------------------------------------
@@ -435,8 +492,8 @@ def test_tensorboard_tail_sorts_points_by_step(tmp_path):
     run.mkdir()
     _write_events(run, "loss", [5.0, 1.0, 3.0], steps=[2, 0, 1])
     res = metrics.tensorboard_tail(run_dir=str(run), tag="loss")
-    assert [p["step"] for p in res["points"]] == [0, 1, 2]
-    assert [p["value"] for p in res["points"]] == [1.0, 3.0, 5.0]
+    assert [point["step"] for point in res["points"]] == [0, 1, 2]
+    assert [point["value"] for point in res["points"]] == [1.0, 3.0, 5.0]
 
 
 # --------------------------------------------------------------------------
@@ -444,15 +501,6 @@ def test_tensorboard_tail_sorts_points_by_step(tmp_path):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: metrics_summary() computes min/max with the builtin min()/max(), "
-        "which propagate NaN: a NaN recorded before the other points makes both "
-        "``min`` and ``max`` NaN, so the summary of the whole run is lost. "
-        "Non-finite values should be excluded from the aggregation."
-    ),
-)
 def test_metrics_summary_ignores_nan_for_min_and_max(tmp_path):
     run = tmp_path / "run"
     run.mkdir()
@@ -460,16 +508,44 @@ def test_metrics_summary_ignores_nan_for_min_and_max(tmp_path):
     summary = metrics.metrics_summary(run_dir=str(run))["scalars"]["loss"]
     assert summary["min"] == 1.0
     assert summary["max"] == 2.0
+    assert summary["count"] == 3
 
 
-def test_metrics_summary_keeps_infinite_values(tmp_path):
+def test_metrics_summary_reports_nan_as_a_json_string(tmp_path):
+    """Non-finite values become 'nan'/'inf'/'-inf' so the result is strict JSON."""
+    run = tmp_path / "run"
+    run.mkdir()
+    _write_events(run, "loss", [1.0, float("nan")])
+    res = metrics.metrics_summary(run_dir=str(run))
+    summary = res["scalars"]["loss"]
+    assert summary["last"] == "nan"
+    assert summary["min"] == 1.0
+    assert summary["max"] == 1.0
+    json.dumps(res, allow_nan=False)
+
+
+def test_metrics_summary_reports_infinite_values_as_json_strings(tmp_path):
     run = tmp_path / "run"
     run.mkdir()
     _write_events(run, "loss", [1.0, float("inf"), float("-inf")])
-    summary = metrics.metrics_summary(run_dir=str(run))["scalars"]["loss"]
-    assert summary["min"] == float("-inf")
-    assert summary["max"] == float("inf")
+    res = metrics.metrics_summary(run_dir=str(run))
+    summary = res["scalars"]["loss"]
+    assert summary["min"] == "-inf"
+    assert summary["max"] == "inf"
+    assert summary["last"] == "-inf"
     assert summary["count"] == 3
+    json.dumps(res, allow_nan=False)
+
+
+def test_metrics_summary_of_an_all_nan_run_is_nan(tmp_path):
+    run = tmp_path / "run"
+    run.mkdir()
+    _write_events(run, "loss", [float("nan"), float("nan")])
+    summary = metrics.metrics_summary(run_dir=str(run))["scalars"]["loss"]
+    assert summary["min"] == "nan"
+    assert summary["max"] == "nan"
+    assert summary["last"] == "nan"
+    assert summary["count"] == 2
 
 
 def test_tensorboard_tail_reports_nan_values_verbatim(tmp_path):
@@ -477,11 +553,9 @@ def test_tensorboard_tail_reports_nan_values_verbatim(tmp_path):
     run.mkdir()
     _write_events(run, "loss", [1.0, float("nan"), 3.0])
     res = metrics.tensorboard_tail(run_dir=str(run), tag="loss")
-    values = [p["value"] for p in res["points"]]
-    assert len(values) == 3
-    assert values[0] == 1.0
-    assert values[1] != values[1]  # NaN
-    assert values[2] == 3.0
+    values = [point["value"] for point in res["points"]]
+    assert values == [1.0, "nan", 3.0]
+    json.dumps(res, allow_nan=False)
 
 
 # --------------------------------------------------------------------------
@@ -521,13 +595,20 @@ def test_checkpoints_list_ignores_other_file_types(tmp_path):
     assert len(res["checkpoints"]) == 2
 
 
-def test_checkpoints_list_excludes_symlink_pointing_outside_allowed_roots(tmp_path):
+def test_checkpoints_list_excludes_symlink_pointing_outside_allowed_roots(
+    tmp_path, monkeypatch
+):
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    run = allowed / "run"
+    run.mkdir()
     outside = tmp_path / "outside"
     outside.mkdir()
     target = outside / "real.pt"
     target.write_bytes(b"x")
-    (tmp_path / "model_1.pt").symlink_to(target)
-    res = metrics.checkpoints_list(run_dir=str(tmp_path))
+    (run / "model_1.pt").symlink_to(target)
+    _isolate_roots(monkeypatch, allowed)
+    res = metrics.checkpoints_list(run_dir=str(run))
     assert res["checkpoints"] == []
 
 

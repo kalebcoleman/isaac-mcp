@@ -101,10 +101,14 @@ def _parse_step(name: str) -> Optional[int]:
 
 def _find_event_files(root: str) -> List[str]:
     out: List[str] = []
+    allowed = _allowed_roots()
     for dp, _dirnames, filenames in os.walk(root, followlinks=False):
         for fn in filenames:
             if fn.startswith("events.out.tfevents."):
-                out.append(os.path.join(dp, fn))
+                path = os.path.join(dp, fn)
+                # A symlinked event file must not leak data from outside the allowed roots.
+                if _is_under_allowed(os.path.realpath(path), allowed):
+                    out.append(path)
     return sorted(out)
 
 
