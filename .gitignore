@@ -17,3 +17,6 @@ resources/*
 
 # screenshots saved by sessions while testing; not part of the repo
 captures/
+
+# demo run output (raw); compressed media lives in docs/demo/media
+demo-out/
