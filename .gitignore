@@ -14,3 +14,6 @@ logs/
 *.usdz
 resources/*
 !exts/ur5e-dt/assets/**
+
+# screenshots saved by sessions while testing; not part of the repo
+captures/
