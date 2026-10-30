@@ -53,7 +53,7 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("KitMCPServer")
 
-SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "ur5e")
+SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "isaac")
 SERVER_INSTRUCTIONS = os.getenv(
     "ISAAC_MCP_INSTRUCTIONS",
     "Isaac Sim / Isaac Lab MCP server. Isaac Sim tools are discovered from the "
