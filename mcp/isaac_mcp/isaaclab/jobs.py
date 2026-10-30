@@ -31,6 +31,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from . import install as _install
+
+_LAUNCHER = Path(__file__).with_name("launcher.py")
 _TASK_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
 _JOB_ID_RE = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]+$")
 _LIB_RE = re.compile(r"^[a-z0-9_]+$")
@@ -418,6 +421,10 @@ def _start_job(
     script_rel = "train.py" if kind == "train" else "play.py"
     script_path = root_path / "scripts" / "reinforcement_learning" / script_rel
     full_cmd = [str(python), str(script_path)] + list(argv)
+    task_modules, task_paths = _install.resolve_task_modules(root_path)
+    if task_modules:
+        # Isaac Lab's stock scripts do not know project tasks: import them first (see launcher.py).
+        full_cmd = [str(python), str(_LAUNCHER), str(script_path)] + list(argv)
 
     job_id = _job_id(task)
     jd = jobs_dir() / job_id
@@ -429,6 +436,9 @@ def _start_job(
     stdout_f = open(stdout_path, "wb")
     stderr_f = open(stderr_path, "wb")
     env = _child_env(root_path, device)
+    if task_modules:
+        env["ISAACLAB_TASK_MODULES"] = ",".join(task_modules)
+        env["PYTHONPATH"] = os.pathsep.join(task_paths + [env["PYTHONPATH"]])
     proc = subprocess.Popen(
         full_cmd,
         stdout=stdout_f,

@@ -187,6 +187,15 @@ Custom task packages: `isaaclab__envs_list` imports `isaaclab_tasks` plus every 
 `PYTHONPATH`, then reads `gymnasium.registry`. Failed imports are returned as `import_errors`. If the variable is unset,
 a `ur5e_lab` directory beside `ISAACLAB_ROOT` is still picked up.
 
+`isaaclab__train`/`eval`/`play` use the same resolver (`install.resolve_task_modules`). Isaac Lab's stock
+`train.py`/`play.py` only know built-in tasks and tasks declared through an `isaaclab.tasks` entry point, so when
+task modules are configured (or `ur5e_lab` sits beside the Lab root) the job runs `launcher.py <script> <args>`,
+which imports the modules and then runs the stock script as `__main__`; a module that fails to import fails the job
+with its traceback in the log. With nothing configured the job command is unchanged. A custom task usually has no
+default RL backend, so pass `rl_library` (e.g. `rl_games`); built-in tasks resolve it themselves. Verified
+2026-10-29 on the 5080 from a fresh clone: `UR5e-Cell-Reach-Direct-v0`, 128 envs, 2 iterations, `rl_games`
+-> job `succeeded` in 14 s with a checkpoint found by `runs_status`.
+
 Validation: require Python 3.12 and `isaaclab` importable; refuse otherwise with
 the resolved path in the error. Reference paths are never hard-coded as defaults
 in code; they are documentation/examples only.

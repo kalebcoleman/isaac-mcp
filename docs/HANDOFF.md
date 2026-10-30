@@ -22,7 +22,7 @@ Kaleb does not want legacy `ur5e-mcp` / `kit-mcp` / `twin-mcp` names).
 ## 2. State: verified vs not
 
 Verified on the lab box (RTX PRO 6000 Blackwell, driver 595.99.02, Ubuntu 22.04):
-- 371 unit tests pass (`cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q`, ~90 s).
+- 379 unit tests pass (`cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q`, ~90 s).
 - Isaac Sim 6.2 boots headless in ~7 s and windowed; bridge lists 29 tools (22 `ur5e_dt.*`); `quick_start_with_workstation` works.
 - TF graphs use `IsaacComputeTransformTree -> ROS2PublishTransformTree`; `/objects_poses_sim` and `/tf_cam` publish.
 - Isaac Lab tools: a real 2-epoch `Isaac-Reach-UR10` rl_games run through `isaaclab__train` succeeded; status, checkpoint
@@ -47,7 +47,9 @@ Known: `randomize_single_object` cannot place anything with its fixed default st
 the tool exposes no ranges; the sim ignores SIGTERM (use `kill -9` on the pid from the bridge `status`); `add_objects` leaves the
 timeline playing.
 
-NOT verified: Isaac Lab training on the 5080 (no run started; ask first, 16 GB); the `uvx`/npm install paths from a
+Verified from a fresh clone in an isolated HOME (2026-10-29): `install.sh` (45 s with a warm uv cache) -> `check_machine.sh` -> `verify.sh` -> `smoke_tools.py`; Isaac Lab per section 4 (`uv sync --locked` + `v3.0.0` clone) lists 206 envs; a 2-iteration `UR5e-Cell-Reach-Direct-v0` job through `isaaclab__train` (needs `rl_library=rl_games`) succeeds. A cold machine's first `quick_start` takes 2+ minutes.
+
+NOT verified: a long Isaac Lab training run on the 5080 (only the 2-iteration smoke; ask first, 16 GB); the `uvx`/npm install paths from a
 published package; the multi-job GPU contention.
 
 ## 3. Setting up on the RTX 5080 machine

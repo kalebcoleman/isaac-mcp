@@ -141,6 +141,25 @@ def install_info(env: Any = None) -> dict:
     }
 
 
+def resolve_task_modules(root: Any, env: Any = None) -> tuple[list[str], list[str]]:
+    """Task packages to import before Isaac Lab looks up a task id, and the sys.path entries they need.
+
+    ``ISAACLAB_TASK_MODULES`` (comma list) and ``ISAACLAB_TASK_PATH`` (os.pathsep list) are the explicit
+    configuration. The parent of the Isaac Lab root and the root itself are always importable, and a sibling
+    ``ur5e_lab`` package is imported without configuration. Shared by ``envs_list`` and the train/eval/play jobs
+    so both see the same tasks.
+    """
+    e = _env(env)
+    modules = [m.strip() for m in str(e.get("ISAACLAB_TASK_MODULES") or "").split(",") if m.strip()]
+    paths = [p.strip() for p in str(e.get("ISAACLAB_TASK_PATH") or "").split(os.pathsep) if p.strip()]
+    if root:
+        base = Path(root).parent
+        paths.extend([str(base), str(root)])
+        if not modules and (base / "ur5e_lab").is_dir():
+            modules = ["ur5e_lab"]
+    return modules, paths
+
+
 def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
     loc = locate_install(env)
     if not loc:
@@ -150,18 +169,7 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
 
     run_env = dict(os.environ)
     run_env["OMNI_KIT_ACCEPT_EULA"] = "YES"
-    e = _env(env)
-    paths: list[str] = []
-    modules = [m.strip() for m in str(e.get("ISAACLAB_TASK_MODULES") or "").split(",") if m.strip()]
-    for extra in str(e.get("ISAACLAB_TASK_PATH") or "").split(os.pathsep):
-        if extra.strip():
-            paths.append(extra.strip())
-    if root:
-        base = Path(root).parent
-        paths.extend([str(base), str(root)])
-        # Back-compat: a sibling ur5e_lab package is picked up without configuration.
-        if not modules and (base / "ur5e_lab").is_dir():
-            modules = ["ur5e_lab"]
+    modules, paths = resolve_task_modules(root, env)
     existing_pp = run_env.get("PYTHONPATH")
     if existing_pp:
         paths.append(existing_pp)
