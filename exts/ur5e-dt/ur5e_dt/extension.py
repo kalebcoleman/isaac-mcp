@@ -700,7 +700,27 @@ class DigitalTwin(omni.ext.IExt):
         self._min_frame_rate = 60
         self._time_steps_per_second = 120
 
-        # UR5e joint drive parameters
+        # UR5e joint drive parameters (USD angular-drive units: N*m per degree,
+        # N*m*s per degree; PhysX works per radian, so these become 57.2958x larger
+        # in the solver -- see _verify_drive_gains below).
+        #
+        # 100/10 per degree was chosen on 2026-10-30 and is the shipped default:
+        #   tau = kd/kp = 0.10 s (first-order position loop), measured rise 0.216 s,
+        #   settle 0.524 s, no overshoot, zero steady-state error. Overdamped
+        #   (zeta ~4 at ~1 kg*m^2), so nothing rings near the 60 Hz sample rate, and
+        #   contact with the bench behaves like a 5.7 kN*m/rad spring rather than a
+        #   near-resonant one.
+        #
+        # Fidelity knob, kept documented because mirroring a real robot tightly may
+        # matter more than contact softness later: raise stiffness and keep damping
+        # so that tau = damping/stiffness lands at 0.02-0.05 s. Measured on the same
+        # rig (control experiments, gain sweep, 2026-10-30):
+        #   200/10 per deg (tau 50 ms): rise 0.120 s, settle 0.347 s, no overshoot
+        #   400/10 per deg (tau 25 ms): rise 0.100 s, settle 0.289 s, no overshoot
+        # Do not raise stiffness alone: it lowers zeta (the asset's ~10230/4 ran at
+        # zeta ~0.15, a ~120 Hz resonance sampled at 60 Hz), and contact forces grow
+        # with it. Re-run demo/scripts/control_experiments.py --experiments
+        # step,track,gains after changing these, and re-check the S0-S9 demo.
         self._ur5e_max_force = 200.0
         self._ur5e_stiffness = 100.0
         self._ur5e_damping = 10.0

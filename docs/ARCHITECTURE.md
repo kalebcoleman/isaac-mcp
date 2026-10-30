@@ -165,3 +165,47 @@ Frame naming rules in `IsaacComputeTransformTree` preserve existing ROS consumer
 - **Rationale:** USD native cameras look down the $-Z$ axis with $+Y$ up. ROS optical frames convention expects $+X$ forward, $+Y$ right, $+Z$ down (or $+Z$ forward for optical axes). NVIDIA corrected the camera transform evaluation in 6.2 to align with ROS standard conventions.
 - **Impact:** Transforms published on `/tf_cam` reflect this 180° X rotation compared to the old 5.1 output. Plain `UsdGeomXform` objects (such as those published on `/objects_poses_sim`) are unaffected.
 - **Instruction:** **Do not attempt to "fix" or revert this rotation.** The change reflects the official Isaac Sim ROS 2 node standard and represents the pipeline functioning correctly. Reference values are recorded in `docs/provenance/tf-baseline-6.2.json`.
+
+---
+
+## 7. Arm Drive Gains (the ur5e-dt fidelity knob)
+
+Every arm joint is a position-driven spring: `J*q'' + kd*q' + kp*q = kp*q_cmd`. The extension writes
+`kp = _ur5e_stiffness` and `kd = _ur5e_damping` (`exts/ur5e-dt/ur5e_dt/extension.py`, `load_ur5e()`), in
+**USD angular-drive units: N·m per degree and N·m·s per degree**. PhysX and the Python API work per radian,
+so the solver sees 57.2958x larger numbers; `_verify_drive_gains()` reads `get_gains()` back and prints a
+warning if the two ever disagree.
+
+Two traps, both hit on 2026-10-30:
+
+1. **A same-value write never reaches PhysX.** Writing `100` into an attribute that already holds `100`
+   notifies nobody, so the articulation kept the asset's authored ~10230/4 per degree and the arm ran ~100x
+   stiffer than configured, silently. The extension now applies the configured values with `set_gains()`
+   and verifies them.
+2. **Stiffness alone is not the knob.** What governs the response is `tau = kd/kp` (the position loop's time
+   constant) and `zeta = kd / (2*sqrt(kp*J))` (whether it rings). Raising stiffness without raising damping
+   lowers `zeta`: the asset gains ran at `zeta ~ 0.15`, a ~120 Hz resonance sampled at 60 Hz.
+
+**Shipped default: 100/10 per degree (`tau = 0.10 s`), chosen 2026-10-30.** Measured on the UR5e twin
+(elbow_joint, 0.3 rad step, 100 Hz `/joint_states`):
+
+| stiffness/damping (per deg) | tau | rise (10-90 %) | settle (2 %) | overshoot | steady-state error |
+|---|---|---|---|---|---|
+| 50/5 | 0.10 s | 0.213 s | 0.505 s | 0.0 % | 1.9e-6 rad |
+| 100/10 | 0.10 s | 0.216 s | 0.524 s | 0.0 % | 2.1e-6 rad |
+| 100/20 | 0.20 s | 0.438 s | 0.918 s | 0.0 % | 5.1e-6 rad |
+| 200/10 | 0.05 s | 0.120 s | 0.347 s | 0.0 % | 9.1e-7 rad |
+| 400/10 | 0.025 s | 0.100 s | 0.289 s | 0.0 % | 4.2e-7 rad |
+
+`tau` alone predicts the shape: the two pairs with `tau = 0.10 s` (50/5 and 100/10) settle within 4 % of
+each other. 100/10 is heavily overdamped, so nothing rings at the 60 Hz sample rate and bench contact behaves
+like a 5.7 kN·m/rad spring.
+
+**To trade contact softness for mirroring fidelity**, keep `tau = damping/stiffness` in 0.02-0.05 s:
+- 200/10 per degree (`tau` 50 ms) - settle 0.347 s, measured lag at 0.5 Hz ~34 deg (vs 41 deg at 100/10)
+- 400/10 per degree (`tau` 25 ms) - settle 0.289 s, measured lag at 0.5 Hz ~30 deg
+
+Both are measured, both stay overdamped. Costs: contact forces scale with stiffness (a bench touch is 2-4x
+harder), and the `max_force = 200 N·m` cap starts to matter for fast moves. Raise stiffness *with* the
+damping tail, never alone. After any change, re-run `demo/scripts/control_experiments.py --experiments
+step,track,gains` (in the `ur5e-digital-twin` workspace) and re-check the S0-S9 demo.
