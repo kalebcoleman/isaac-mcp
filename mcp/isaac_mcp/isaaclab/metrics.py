@@ -5,10 +5,18 @@ No FastMCP dependency: the host server wires these as tools later.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import tempfile
 from typing import Any, Dict, List, Optional
+
+
+def _jsonable(value):
+    """Non-finite floats become 'nan'/'inf'/'-inf' so the result is strict JSON (a diverged run stays visible)."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return "nan" if math.isnan(value) else ("inf" if value > 0 else "-inf")
+    return value
 
 
 def _normalize_roots(roots) -> List[str]:
@@ -188,7 +196,9 @@ def metrics_summary(run_dir, tags=None) -> Dict[str, Any]:
             continue
 
     if tags is not None:
-        tag_list = list(tags)
+        if isinstance(tags, str):
+            tags = [tags]
+        tag_list = list(dict.fromkeys(tags))
         unknown = [t for t in tag_list if t not in available_set]
         if unknown:
             return {"error": "unknown tag", "available": available[:50]}
@@ -212,10 +222,11 @@ def metrics_summary(run_dir, tags=None) -> Dict[str, Any]:
             continue
         evs_sorted = sorted(evs, key=lambda e: (e.step, e.wall_time))
         values = [e.value for e in evs_sorted]
+        comparable = [v for v in values if not math.isnan(v)]  # NaN would poison min()/max()
         scalars[t] = {
-            "last": values[-1],
-            "min": min(values),
-            "max": max(values),
+            "last": _jsonable(values[-1]),
+            "min": _jsonable(min(comparable)) if comparable else "nan",
+            "max": _jsonable(max(comparable)) if comparable else "nan",
             "step": evs_sorted[-1].step,
             "count": len(values),
         }
@@ -224,6 +235,8 @@ def metrics_summary(run_dir, tags=None) -> Dict[str, Any]:
 
 
 def tensorboard_tail(run_dir, tag, last_n=50) -> Dict[str, Any]:
+    if last_n is not None and (isinstance(last_n, bool) or not isinstance(last_n, int)):
+        return {"error": "last_n must be an integer or null"}
     real, err = _resolve_run_dir(run_dir)
     if err:
         return err
@@ -260,7 +273,7 @@ def tensorboard_tail(run_dir, tag, last_n=50) -> Dict[str, Any]:
                     points.append(
                         {
                             "step": se.step,
-                            "value": se.value,
+                            "value": _jsonable(se.value),
                             "wall_time": se.wall_time,
                         }
                     )
