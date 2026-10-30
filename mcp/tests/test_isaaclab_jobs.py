@@ -275,3 +275,71 @@ def test_status_reconciles_an_orphaned_job_after_host_restart():
     st = jobs.runs_status(jid)
     assert st["state"] == "failed"
     assert jobs._read_job(jobs.jobs_dir() / jid)["note"] == "host restarted"
+
+
+# ---- cancel / id / guard regressions found by the 5080 guard test (2026-10-30) ----
+
+def _launch_sleeping(tmp_path, monkeypatch, **kw):
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir(exist_ok=True)
+    monkeypatch.setenv("FAKE_MODE", "sleep")
+    monkeypatch.setattr(jobs, "_kit_bridge_guard", lambda: None)
+    return jobs.train(python=str(fake_py), root=str(root), task="T", **kw)
+
+
+def _disk_status(job_id):
+    import json
+
+    return json.loads((jobs.jobs_dir() / job_id / "job.json").read_text())["status"]
+
+
+@pytest.mark.parametrize("round_", range(4))
+def test_cancel_is_not_overwritten_by_the_watcher(tmp_path, monkeypatch, round_):
+    r = _launch_sleeping(tmp_path, monkeypatch)
+    time.sleep(0.3)
+    out = jobs.runs_cancel(r["job_id"], grace_s=2)
+    assert out == {"cancelled": True, "state": "cancelled"}
+    time.sleep(1.0)  # let the watcher observe the dead process
+    assert _disk_status(r["job_id"]) == "cancelled"
+    assert jobs.runs_status(r["job_id"])["state"] == "cancelled"
+
+
+def test_cancel_leaves_a_finished_job_alone(tmp_path, monkeypatch):
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setenv("FAKE_MODE", "ok")
+    monkeypatch.setattr(jobs, "_kit_bridge_guard", lambda: None)
+    r = jobs.train(python=str(fake_py), root=str(root), task="T")
+    assert wait_for_status(r["job_id"], "succeeded") == "succeeded"
+    time.sleep(0.3)
+    out = jobs.runs_cancel(r["job_id"], grace_s=1)
+    assert out["cancelled"] is False and out["state"] == "succeeded"
+    assert _disk_status(r["job_id"]) == "succeeded"
+    # cancelling again after a real cancel is also a no-op
+    r2 = _launch_sleeping(tmp_path, monkeypatch, allow_concurrent=True)
+    jobs.runs_cancel(r2["job_id"], grace_s=2)
+    again = jobs.runs_cancel(r2["job_id"], grace_s=1)
+    assert again["cancelled"] is False and again["state"] == "cancelled"
+
+
+def test_job_ids_are_unique_within_one_second(tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs.time, "strftime", lambda fmt, t=None: "20260101-000000")
+    a = jobs._job_id("task")
+    (jobs.jobs_dir() / a).mkdir(parents=True)
+    b = jobs._job_id("task")
+    (jobs.jobs_dir() / b).mkdir(parents=True)
+    c = jobs._job_id("task")
+    assert len({a, b, c}) == 3
+    assert all(jobs._JOB_ID_RE.match(x) for x in (a, b, c))
+
+
+def test_two_rapid_launches_get_distinct_jobs_and_guard_holds(tmp_path, monkeypatch):
+    a = _launch_sleeping(tmp_path, monkeypatch)
+    refused = _launch_sleeping(tmp_path, monkeypatch)  # no allow_concurrent: must be refused
+    assert "error" in refused and refused["running_job_id"] == a["job_id"]
+    b = _launch_sleeping(tmp_path, monkeypatch, allow_concurrent=True)
+    assert b["job_id"] != a["job_id"]
+    for jid in (a["job_id"], b["job_id"]):
+        jobs.runs_cancel(jid, grace_s=2)

@@ -311,3 +311,17 @@ def test_order_concurrency_guard_runs_before_kit_guard(tmp_path, monkeypatch):
         assert "kit_bridges" not in res
         assert "allow_concurrent" in res["hint"]
         assert "allow_concurrent_gpu" not in res["hint"]
+
+
+def test_loopback_aliases_are_listed_once(monkeypatch):
+    from isaac_mcp import client
+
+    monkeypatch.setattr(client, "discover_bridges", lambda *a, **k: [{"host": "127.0.0.1", "port": 8766}])
+    monkeypatch.setenv(client.TWIN_PORT_ENV, "8766")
+    monkeypatch.setenv(client.HOST_ENV, "localhost")
+    import socket
+
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: type("S", (), {"close": lambda self: None})())
+    monkeypatch.setattr(jobs, "_probe_kit_bridges", REAL_PROBE)
+    found = jobs._probe_kit_bridges()
+    assert [(b["port"]) for b in found] == [8766]

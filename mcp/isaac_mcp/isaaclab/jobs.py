@@ -43,6 +43,8 @@ _HYDRA_ARG_RE = re.compile(r"^(~[A-Za-z0-9_.@/-]+|[+]{0,2}[A-Za-z0-9_.@/-]+=[^\s
 _CHECKPOINT_EXTS = ("*.pth", "*.pt")
 
 _jobs_lock = threading.Lock()
+# Held from the guard check until the new job is registered, so two launches in this process cannot both pass the guard.
+_launch_lock = threading.RLock()
 _active: dict[str, subprocess.Popen] = {}
 
 
@@ -72,8 +74,14 @@ def _slug(value: str) -> str:
 
 
 def _job_id(task: str) -> str:
+    """Unique id: second-resolution timestamp + task slug, with -2, -3, ... if that directory already exists."""
     ts = time.strftime("%Y%m%d-%H%M%S", time.localtime())
-    return f"{ts}-{_slug(task)}"
+    base = f"{ts}-{_slug(task)}"
+    jid, n = base, 2
+    while (jobs_dir() / jid).exists():
+        jid = f"{base}-{n}"
+        n += 1
+    return jid
 
 
 def _validate_task(task: str) -> None:
@@ -243,20 +251,23 @@ def _probe_kit_bridges() -> list[dict[str, Any]]:
 
     from isaac_mcp import client
 
+    def key(h: str, p: int) -> tuple[str, int]:
+        return ("127.0.0.1" if h in ("localhost", "::1") else h, p)
+
     found: dict[tuple[str, int], dict[str, Any]] = {}
     for info in client.discover_bridges():
         host = info.get("host") or client.DEFAULT_HOST
-        found[(host, int(info["port"]))] = {"host": host, "port": int(info["port"])}
+        found.setdefault(key(host, int(info["port"])), {"host": host, "port": int(info["port"])})
     raw = os.getenv(client.TWIN_PORT_ENV) or os.getenv(client.PORT_ENV)
     try:
         port = int(raw) if raw else _DEFAULT_KIT_PORT
     except ValueError:
         port = 0
     host = os.getenv(client.HOST_ENV) or client.DEFAULT_HOST
-    if port > 0 and (host, port) not in found:
+    if port > 0 and key(host, port) not in found:
         try:
             socket.create_connection((host, port), timeout=_KIT_PROBE_TIMEOUT_S).close()
-            found[(host, port)] = {"host": host, "port": port}
+            found[key(host, port)] = {"host": host, "port": port}
         except OSError:
             pass
     return list(found.values())
@@ -389,11 +400,21 @@ def _watcher(job_dir: Path, job_id: str, proc: subprocess.Popen, timeout_s: floa
         exit_code = getattr(proc, "returncode", None)
         status = "failed"
     with _jobs_lock:
-        _update_job(job_dir, status=status, finished_at=_now(), exit_code=exit_code)
+        cur = _read_job(job_dir) or {}
+        if cur.get("status") == "cancelled":
+            # runs_cancel already recorded the outcome; do not turn it into "failed (-15)"
+            _update_job(job_dir, exit_code=exit_code)
+        else:
+            _update_job(job_dir, status=status, finished_at=_now(), exit_code=exit_code)
         _active.pop(job_id, None)
 
 
-def _start_job(
+def _start_job(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    with _launch_lock:
+        return _start_job_locked(*args, **kwargs)
+
+
+def _start_job_locked(
     python: str,
     root: Any,
     kind: str,
@@ -676,6 +697,11 @@ def runs_cancel(job_id: str, grace_s: int = 10) -> dict[str, Any]:
     data = _read_job(jd)
     if not data:
         raise ValueError(f"unknown job: {job_id}")
+    if data.get("status") != "running":
+        # already finished (succeeded/failed/cancelled/timeout): leave the record alone
+        return {"cancelled": False, "state": data.get("status"), "note": f"job already {data.get('status')}"}
+    with _jobs_lock:
+        _update_job(jd, status="cancelled", cancel_requested=True, finished_at=_now())
     pid = data.get("pid")
     cancelled = False
     if _job_alive(data):
@@ -701,8 +727,7 @@ def runs_cancel(job_id: str, grace_s: int = 10) -> dict[str, Any]:
                 proc.wait(timeout=5)
             except Exception:
                 pass
-    _update_job(jd, status="cancelled", finished_at=_now())
-    return {"cancelled": cancelled or True, "state": "cancelled"}
+    return {"cancelled": True, "state": "cancelled"}
 
 
 # expose for tests

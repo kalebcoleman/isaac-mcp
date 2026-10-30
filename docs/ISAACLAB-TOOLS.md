@@ -252,3 +252,14 @@ screenshot and a 40-frame video of four UR10 arms.
 
 Note: the stock `Isaac-Reach-UR10` task's window reads "Physics: Newton MJWarp". The twin's own `ur5e_lab` tasks configure
 PhysX directly (see `learning6/README.md`), so check the physics backend in the window before trusting results from stock tasks.
+
+### Job guard behaviour (verified on the RTX 5080, 2026-10-30)
+
+A second `train`/`eval`/`play` while one runs returns an error naming the running job (`allow_concurrent=true` overrides);
+a running Kit app (bridge on `$UR5E_DT_PORT`/8766 or an advertised portfile) blocks launches unless `allow_concurrent_gpu=true`;
+cancelled jobs release the guard. Fixes from that test: `runs_cancel` records `cancelled` before signalling and the watcher no longer
+overwrites it with `failed (-15)`; cancelling an already-finished job is a no-op (`{"cancelled": false, "state": ...}`);
+job ids get `-2`, `-3`, ... suffixes if two launches land in the same second; guard check and job registration are atomic within one
+host process (two separate host processes can still race). Kit-bridge refusals list each bridge once (`localhost` = `127.0.0.1`).
+The Kit guard only probes the configured port plus advertised portfiles, not 8767.
+
