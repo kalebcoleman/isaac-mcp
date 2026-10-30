@@ -20,6 +20,12 @@ added. Upstream `omni-kit-mcp` publishes no license file; see [`docs/VENDORING.m
 | `npm/` | Optional `npx` launcher (runs the Python server through `uvx`). |
 | `scripts/`, `run.sh`, `verify.sh`, `install.sh` | Launch, check and install helpers (Ubuntu 22.04/24.04, Python 3.12). |
 
+This repo is the source of truth for the **MCP server, the bridge, the tools and the `ur5e-dt`
+extension** — nothing else. The experiments that drive the twin (full-system demo, control
+experiments, MPC, resolved-rate, test plan, evidence log and published media) live in the workspace
+repo, `ur5e-digital-twin`, under `demo/`, and pin this repo as `external/isaac-mcp`. Change this repo
+when you add or change a tool (or its docs); change that one when you run or analyse an experiment.
+
 ## Quick start
 
 ```bash
