@@ -57,7 +57,7 @@ and `rover.play_scene`), so co-loaded projects share the single socket.
 flowchart TB
     subgraph kit["Kit process (Isaac Sim · Isaac Lab · any Kit app)"]
         direction BT
-        BRIDGE["<b>isaac.mcp.bridge</b><br/>NDJSON TCP :9009 · owner/namespace registry<br/>main-thread dispatch<br/>builtins: run_python · list_tools · reload_tools · list_bridges · put_file · get_file · stat_file · status"]
+        BRIDGE["<b>isaac.mcp.bridge</b><br/>NDJSON TCP :8766 · owner/namespace registry<br/>main-thread dispatch<br/>builtins: run_python · list_tools · reload_tools · list_bridges · put_file · get_file · stat_file · status"]
         ARM["arm_tools/<br/>MCP_NAMESPACE = 'arm'"] -->|register| BRIDGE
         ROVER["rover_tools/<br/>MCP_NAMESPACE = 'rover'"] -->|register| BRIDGE
         PANEL["isaac.mcp.panel<br/>registry-driven UI"] -->|"dispatch (click == agent call)"| BRIDGE
@@ -79,7 +79,7 @@ python3 scripts/install.py            # add --dry-run to preview
 This edits the Kit app's persistent `user.config.json` (the scriptable
 equivalent of the Extensions window's AUTOLOAD checkbox): adds `exts/` as a
 search path, auto-enables `isaac.mcp.bridge` + `isaac.mcp.panel`, and sets the
-bridge port (default **9009**). Restart the app; the bridge binds with the
+bridge port (default **8766**). Restart the app; the bridge binds with the
 built-in tools. `--remove` undoes it.
 
 Run it while the app is **down**; a running app overwrites the file on exit
@@ -97,7 +97,7 @@ and add to `.mcp.json` (Claude Code, Cursor, etc.):
 ```
 
 No port needed — the gateway discovers a lone running bridge. Pin one with
-`"env": { "ISAAC_MCP_PORT": "9009" }` when several Kit processes run.
+`"env": { "ISAAC_MCP_PORT": "8766" }` when several Kit processes run.
 
 That alone is fully usable: `run_python` executes arbitrary Python on Kit's
 main thread (persistent sessions supported; saved session vars auto-clear when

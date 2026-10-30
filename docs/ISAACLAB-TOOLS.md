@@ -16,7 +16,7 @@ be pumped by `env.step()`/`sim.step()` (`mcp/docs/isaac-lab.md`).
 Two candidate drivers:
 
 1. **Long-lived worker process** the host spawns and talks to (TCP bridge on
-   port 9010 per `isaaclab_bridge_launch.py` convention).
+   port 8767 per `isaaclab_bridge_launch.py` convention).
 2. **One-shot subprocess jobs** for train/eval/play, with log tailing.
 
 **Decision: (2) by default, with (1) only as an opt-in interactive mode.**
@@ -33,7 +33,7 @@ Justification:
   satisfied from the filesystem plus short-lived subprocesses that exit
   immediately; only `envs.list` needs Isaac Lab's Python.
 - The bridge-in-Lab template (`isaaclab_bridge_launch.py`) remains supported
-  for interactive use: a user can `use_bridge(9010)` to reach a running Lab app's
+  for interactive use: a user can `use_bridge(8767)` to reach a running Lab app's
   own tools. The `isaaclab.*` pack itself does not depend on that.
 
 ## 2. Where the tools live

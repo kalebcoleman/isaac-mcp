@@ -30,7 +30,7 @@ Same binary, same socket, different env:
 ```json
 "robot-demo-agent": {
   "command": "isaac-mcp",
-  "env": { "ISAAC_MCP_PORT": "9009",
+  "env": { "ISAAC_MCP_PORT": "8766",
            "ISAAC_MCP_NAMESPACE": "robot_demo",
            "ISAAC_MCP_BUILTINS": "0" }
 }

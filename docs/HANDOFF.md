@@ -31,8 +31,16 @@ Verified on the lab box (RTX PRO 6000 Blackwell, driver 595.99.02, Ubuntu 22.04)
 - Fresh-clone flow `./install.sh` -> `./run.sh --headless` -> `./verify.sh` passed (in the old repo layout; re-run once here).
 - Client configs (Claude Code/Desktop, OpenCode, Antigravity) were switched to server `isaac` -> `~/.local/bin/isaac-mcp`.
 
-NOT verified: anything on a GeForce/5080 box; Ubuntu 24.04; the `uvx`/npm install paths from a published package; the
-multi-job GPU contention.
+Verified on the home box (RTX 5080 16 GB, driver 580.178.04, Ubuntu 24.04), 2026-10-29:
+- `scripts/check_machine.sh` passes; Isaac Sim 6.2 boots headless in ~10 s and windowed (RTX Real-Time 2.0 renders the UR5e
+  cell, no renderer crash); `quick_start_with_workstation` ~3 s.
+- `scripts/catch_hang.sh 30`: no hang in 30 runs (3-5 s each), same as the lab box. The flake has not reproduced anywhere.
+- Isaac Lab 3.0.0 at `~/Desktop/ur5e-twin-62/learning6` (a `consolidate-62` checkout); `isaaclab__envs_list` lists 206 envs
+  incl. `UR5e-Cell-Reach-Direct-v0`.
+- `./install.sh --no-sim --claude --isaaclab-python ... --isaaclab-root ...` registers `isaac` with the Lab env vars.
+
+NOT verified: Isaac Lab training on the 5080 (no run started; ask first, 16 GB); the `uvx`/npm install paths from a
+published package; the multi-job GPU contention.
 
 ## 3. Setting up on the RTX 5080 machine
 
@@ -42,6 +50,8 @@ git clone https://github.com/kalebcoleman/isaac-mcp.git && cd isaac-mcp
 ./install.sh --accept-eula                      # Isaac Sim 6.2 env (uv, ~20 GB, 10-20 min first time) + isaac-mcp CLI
 scripts/check_machine.sh                        # must say "Machine check passed"
 ./install.sh --no-sim --claude                  # register server "isaac" in Claude Code + Desktop (restart Desktop)
+# add --isaaclab-python <venv>/bin/python --isaaclab-root <IsaacLab dir> (or export ISAACLAB_PYTHON/ROOT first) to also
+# write the Isaac Lab env vars into the client configs; without them the isaaclab__* tools only search the default path.
 ```
 - **Driver.** Isaac Sim **5.1** segfaulted in `librtx.scenedb.plugin.so` on driver 595.x; 580.x was fine for 5.1 on the
   5080. **6.2 on a 5080 is untested.** `torch 2.11+cu130` needs a CUDA-13-capable driver (>= 580). If the renderer
@@ -54,7 +64,9 @@ scripts/check_machine.sh                        # must say "Machine check passed
   installer writes `DISPLAY` and `UR5E_DT_PORT=8766` into client configs; fix them if the home session differs.
 - **ROS/DDS.** The sim and every ROS client must source `config/ros_dds.env` (Cyclone, localhost-only). A mismatch
   silently publishes into the void. `run.sh` does this; `scripts/tf_capture.py` follows the same file.
-- **Ports.** 8766 = twin bridge (default), 8799/8793 = probe/diagnostic scripts. `run.sh` refuses a busy port.
+- **Ports.** 8766 = twin bridge and `scripts/install.py` autostart default, 8767 = Isaac Lab bridge by convention
+  (`mcp/examples/isaaclab_bridge_launch.py`), 8799/8793 = probe/diagnostic scripts. `run.sh` refuses a busy port.
+  (Until 2026-10-29 the installer/Lab convention was 9009/9010; all docs, examples and `scripts/install.py` now use 8766/8767.)
 
 ## 4. Isaac Lab at home (needed for the Isaac Lab tools and for gap A below)
 
@@ -89,7 +101,7 @@ quick-start path). Do not use `scripts/probe_62.sh` for this (slow).
 tool pack; Isaac Lab `play` end-to-end with a window; a job-queue guard so two GPU jobs do not start together.
 
 **E. Cleanups.** `uv.lock` pins differ slightly from the old repo (`onnxruntime-gpu`); `scripts/install.py` (optional
-persistent registration): `--remove` no longer clears `add-project` entries (fixed, verified on a temp config); its default port is still 9009, which is the documented "installer 9009, Lab 9010" convention in `mcp/` docs and tests, so changing it to 8766 needs a decision plus doc updates; many scripts and
+persistent registration): fixed 2026-10-29 (`--remove` keeps `add-project` entries; default port now 8766); many scripts and
 the `ur5e-dt` extension still say `UR5E_DT_*` (intentional: that is the twin pack's namespace); `docs/` still has a few
 upstream-written pages (`mcp/docs/*`) that predate the rename and may mention old paths.
 

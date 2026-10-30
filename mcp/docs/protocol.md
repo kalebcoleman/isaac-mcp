@@ -25,7 +25,7 @@ You usually don't specify one. Each running bridge
 advertises itself in a per-user runtime dir (`$XDG_RUNTIME_DIR/isaac-mcp/`).
 A client resolves its port as: explicit `port=`/`--port` → `ISAAC_MCP_PORT`
 → **auto-discovered when exactly one bridge is running** → a loud error listing
-candidates when several are (e.g. the app on 9009 *and* a Lab run on 9010 — then
+candidates when several are (e.g. the app on 8766 *and* a Lab run on 8767 — then
 name one). The host rides along: explicit `host=`/`--host` → `ISAAC_MCP_HOST`
 → **the discovered portfile's advertised host** — so a bridge bound to a
 tailnet IP is dialed on that IP, not loopback. The single-process common case
@@ -93,7 +93,7 @@ and are refused while a hold stands.
 The reference client wraps this as `isaac_mcp.client.DoorwayHold`:
 
 ```python
-with DoorwayHold("my-benchmark", "episode 3", port=9010) as hold:
+with DoorwayHold("my-benchmark", "episode 3", port=8767) as hold:
     env = {**os.environ, HOLD_TOKEN_ENV: hold.token}   # let the work's own processes through
     ...
 ```

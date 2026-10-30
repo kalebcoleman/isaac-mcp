@@ -40,9 +40,8 @@ HOME = os.path.expanduser("~")
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_FOLDER = os.path.join(REPO_ROOT, "exts")
 DEFAULT_EXTS = ["isaac.mcp.bridge", "isaac.mcp.panel"]
-# Deliberately uncommon default port: not IANA-listed, not a famous dev default
-# (9000 php-fpm, 8080, 3000, 8888...), non-privileged. Override with --autostart-port.
-DEFAULT_AUTOSTART_PORT = 9009
+# Matches the twin bridge default 8766 set by run.sh/install.sh. Override with --autostart-port.
+DEFAULT_AUTOSTART_PORT = 8766
 
 # Knob identities (settings leaf names, subtree) come from the same table the
 # extension reads — writer and readers cannot drift. Requires the repo layout

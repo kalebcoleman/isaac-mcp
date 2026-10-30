@@ -21,8 +21,8 @@ import os
 # Bridge config must be in the environment BEFORE the app launches.
 # A Lab standalone run is its OWN Kit process — "one bridge, one port, per Kit
 # process" means each concurrently-running process needs its own port. The
-# installed Isaac Sim app typically holds 9009; Lab runs take 9010 by convention.
-os.environ.setdefault("ISAAC_MCP_PORT", "9010")
+# installed Isaac Sim app typically holds 8766; Lab runs take 8767 by convention.
+os.environ.setdefault("ISAAC_MCP_PORT", "8767")
 # Optional: autoload your project's tool package(s), same contract as Isaac Sim:
 # os.environ.setdefault("ISAAC_MCP_TOOL_PATHS", os.path.expanduser("~/myproj/isaac"))
 # os.environ.setdefault("ISAAC_MCP_TOOL_MODULES", "myproj_tools")

@@ -10,10 +10,10 @@ Two lifetimes, one roundtrip:
 
     from isaac_mcp.client import call, BridgeClient, BridgeError
 
-    call("demo.ping", {"message": "hi"}, port=9009)   # one-shot: fresh socket,
+    call("demo.ping", {"message": "hi"}, port=8766)   # one-shot: fresh socket,
                                                       # fitted timeout, no shared
                                                       # fate with other calls
-    with BridgeClient(port=9009) as c:                # persistent: one socket,
+    with BridgeClient(port=8766) as c:                # persistent: one socket,
         c.call("list_tools")                          # health-checked, reconnects
         c.call("run_python", {"code": "result = 1"})  # + retries ONCE on stale
                                                       #   connections (never on
@@ -373,7 +373,7 @@ class BridgeClient:
 class DoorwayHold:
     """Hold the doorway for one piece of work; every other caller is refused `DOORWAY_HELD`.
 
-        with DoorwayHold("evaluate-planner", "evaluating ticket 3", port=9010) as hold:
+        with DoorwayHold("evaluate-planner", "evaluating ticket 3", port=8767) as hold:
             env = {**os.environ, HOLD_TOKEN_ENV: hold.token}   # the work's own subprocesses
             ...
         hold.released   # the bridge's account: how long, and what it refused, by tool

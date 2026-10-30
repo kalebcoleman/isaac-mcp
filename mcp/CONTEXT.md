@@ -21,7 +21,7 @@ these things and no others.
   endpoint discover a lone bridge (and error on ambiguity); host and port
   resolve together from the same portfile, so a tailnet-bound bridge is dialed
   on its advertised host. Ports are per Kit *process*, so numbers are
-  convention (installer 9009, Lab 9010), never identity — discovery, not a
+  convention (installer 8766, Lab 8767), never identity — discovery, not a
   fixed map, is the resolution.
 - **Tool package** — a plain Python package with `MCP_NAMESPACE` and
   `register(registrar)`; the consumer contract.

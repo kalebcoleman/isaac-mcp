@@ -11,5 +11,5 @@ execute only while the app is pumped (`env.step()` / `sim.step()`) — a script
 blocked between steps stalls dispatch until the next pump; and configuration
 is env-var only. Note the port: "one bridge, one port, *per Kit process*" —
 a Lab standalone run is its own Kit process, so when it runs alongside the
-installed app (which holds 9009) it needs its own port (9010 by convention).
+installed app (which holds 8766) it needs its own port (8767 by convention).
 See `examples/isaaclab_bridge_launch.py` for the template.
