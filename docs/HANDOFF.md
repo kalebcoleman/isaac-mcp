@@ -22,7 +22,7 @@ Kaleb does not want legacy `ur5e-mcp` / `kit-mcp` / `twin-mcp` names).
 ## 2. State: verified vs not
 
 Verified on the lab box (RTX PRO 6000 Blackwell, driver 595.99.02, Ubuntu 22.04):
-- 362 unit tests pass (`cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q`, ~90 s).
+- 371 unit tests pass (`cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q`, ~90 s).
 - Isaac Sim 6.2 boots headless in ~7 s and windowed; bridge lists 29 tools (22 `ur5e_dt.*`); `quick_start_with_workstation` works.
 - TF graphs use `IsaacComputeTransformTree -> ROS2PublishTransformTree`; `/objects_poses_sim` and `/tf_cam` publish.
 - Isaac Lab tools: a real 2-epoch `Isaac-Reach-UR10` rl_games run through `isaaclab__train` succeeded; status, checkpoint
@@ -102,8 +102,8 @@ quick-start path). Do not use `scripts/probe_62.sh` for this (slow).
 **C. Publish to PyPI / npm** — only Kaleb can (accounts/tokens). Checklist in `docs/PUBLISHING.md`.
 
 **D. More tools.** Done 2026-10-29: windowed play + screenshot/video loop; a job guard so two Isaac Lab jobs do not start together
-(`allow_concurrent` on train/eval/play, see `docs/ISAACLAB-TOOLS.md` section 8). Still open: (1) refuse to start a training job while a
-Kit bridge (the sim) is running (documented in section 8 as design only; not implemented); (2) the generic Isaac Sim tool pack, whose
+(`allow_concurrent` on train/eval/play, see `docs/ISAACLAB-TOOLS.md` section 8); and (1) refusing to start a job while a Kit bridge
+(the sim) is running is now implemented too (2026-10-29, the Kit-bridge guard, `allow_concurrent_gpu`; still section 8). Still open: (2) the generic Isaac Sim tool pack, whose
 design draft is `docs/GENERIC-SIM-TOOLS.md` (24 `sim.*` tools; the APIs were grounded by grep only, verify on a live headless sim; biggest
 open issue: a sibling pack cannot reach the live socket because the twin builds its own `McpBridge()` and `run.sh` sets `ISAAC_MCP_PORT=0`).
 

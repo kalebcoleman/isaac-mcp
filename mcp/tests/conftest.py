@@ -27,3 +27,14 @@ def isolate_runtime_dir(tmp_path, monkeypatch):
     """Keep bridge portfiles out of the real XDG_RUNTIME_DIR during tests.
     Tests that need a specific dir override this via their own monkeypatch."""
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "xdg"))
+
+
+@pytest.fixture(autouse=True)
+def no_kit_bridge_for_job_tests(monkeypatch):
+    """Job tests must not depend on whether an Isaac Sim app happens to be running on this machine.
+    test_isaaclab_kit_guard.py restores the real probe (captured at import time) where it needs it."""
+    try:
+        from isaac_mcp.isaaclab import jobs
+    except ImportError:
+        return
+    monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])

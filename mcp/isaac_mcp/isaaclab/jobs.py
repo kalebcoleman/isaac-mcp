@@ -226,6 +226,54 @@ def _concurrency_guard() -> dict[str, Any] | None:
     }
 
 
+_DEFAULT_KIT_PORT = 8766
+_KIT_PROBE_TIMEOUT_S = 0.3
+
+
+def _probe_kit_bridges() -> list[dict[str, Any]]:
+    """Kit bridges (a running Isaac Sim app) reachable now: advertised portfiles plus the configured port.
+
+    The configured port is $UR5E_DT_PORT, else $ISAAC_MCP_PORT, else 8766; "0" or an unparsable value
+    means "no fixed port" and only advertised bridges count. Each hit is {"host", "port"}.
+    """
+    import socket
+
+    from isaac_mcp import client
+
+    found: dict[tuple[str, int], dict[str, Any]] = {}
+    for info in client.discover_bridges():
+        host = info.get("host") or client.DEFAULT_HOST
+        found[(host, int(info["port"]))] = {"host": host, "port": int(info["port"])}
+    raw = os.getenv(client.TWIN_PORT_ENV) or os.getenv(client.PORT_ENV)
+    try:
+        port = int(raw) if raw else _DEFAULT_KIT_PORT
+    except ValueError:
+        port = 0
+    host = os.getenv(client.HOST_ENV) or client.DEFAULT_HOST
+    if port > 0 and (host, port) not in found:
+        try:
+            socket.create_connection((host, port), timeout=_KIT_PROBE_TIMEOUT_S).close()
+            found[(host, port)] = {"host": host, "port": port}
+        except OSError:
+            pass
+    return list(found.values())
+
+
+def _kit_bridge_guard() -> dict[str, Any] | None:
+    """Refuse to start a job next to a running Kit app: on one 16 GB GPU the two contend and OOM."""
+    bridges = _probe_kit_bridges()
+    if not bridges:
+        return None
+    where = ", ".join(f"{b['host']}:{b['port']}" for b in bridges)
+    return {
+        "error": f"a Kit bridge (Isaac Sim app) is running at {where}; it shares the GPU with this job",
+        "kit_bridges": bridges,
+        "hint": (
+            "stop the Isaac Sim app first, or pass allow_concurrent_gpu=True to start anyway"
+        ),
+    }
+
+
 def _pid_alive(pid: int | None) -> bool:
     if not pid:
         return False
@@ -352,10 +400,15 @@ def _start_job(
     device: str | None = None,
     extra_validated: list[str] | None = None,
     allow_concurrent: bool = False,
+    allow_concurrent_gpu: bool = False,
 ) -> dict[str, Any]:
     _validate_task(task)
     if not allow_concurrent:
         blocked = _concurrency_guard()
+        if blocked is not None:
+            return blocked
+    if not allow_concurrent_gpu:
+        blocked = _kit_bridge_guard()
         if blocked is not None:
             return blocked
     if extra_validated is None:
@@ -432,6 +485,7 @@ def train(
     timeout_s: float | None = None,
     rl_library: str | None = None,
     allow_concurrent: bool = False,
+    allow_concurrent_gpu: bool = False,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -453,7 +507,7 @@ def train(
     argv += extras
     return _start_job(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
-        allow_concurrent=allow_concurrent,
+        allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
     )
 
 
@@ -468,6 +522,7 @@ def eval_(
     timeout_s: float | None = None,
     rl_library: str | None = None,
     allow_concurrent: bool = False,
+    allow_concurrent_gpu: bool = False,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -484,7 +539,7 @@ def eval_(
     argv += ["--viz", "none" if headless else "kit"]
     argv += extras
     return _start_job(python, root, "eval", task, argv, timeout_s=timeout_s,
-                      allow_concurrent=allow_concurrent)
+                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
 
 
 def play(
@@ -498,6 +553,7 @@ def play(
     timeout_s: float | None = None,
     rl_library: str | None = None,
     allow_concurrent: bool = False,
+    allow_concurrent_gpu: bool = False,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -512,7 +568,7 @@ def play(
     argv += ["--viz", "none" if headless else "kit"]
     argv += extras
     return _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
-                      allow_concurrent=allow_concurrent)
+                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
 
 
 def runs_list(state: str | None = None) -> dict[str, Any]:

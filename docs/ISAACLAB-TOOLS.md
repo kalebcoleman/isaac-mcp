@@ -154,11 +154,15 @@ one GPU they will contend and likely OOM. Rules:
   whose pid is alive; stale records of dead jobs do not block). The error names the
   running job id and pid. Pass `allow_concurrent=true` (default false) to start
   anyway.
-- **Not implemented yet (design only):** refusing to start when a Kit bridge is
-  reachable on the configured port (default 8766), with an
-  `allow_concurrent_gpu=true` override, using the `BridgeClient` from `server.py`.
-  Today nothing stops a training job from starting next to a running Kit app: stop
-  the app first on a 16 GB card.
+- **Implemented (2026-10-29):** the same tools also refuse to start while a Kit bridge (a
+  running Isaac Sim app) is reachable, either advertised via the runtime portfiles
+  (`client.discover_bridges`) or listening on the configured port (`$UR5E_DT_PORT`,
+  else `$ISAAC_MCP_PORT`, else 8766; `0` or a non-integer disables the fixed-port
+  probe). The refusal returns `{"error", "kit_bridges", "hint"}` with the host:port
+  of each bridge. Pass `allow_concurrent_gpu=true` (default false) to start anyway.
+  It is independent of `allow_concurrent` (which only covers other Isaac Lab jobs);
+  the job-vs-job guard runs first. The check is a TCP connect with a 0.3 s timeout,
+  no GPU access.
 - When allowed, the job sets `CUDA_VISIBLE_DEVICES` per the `device` argument
   (default: inherit; user can pin e.g. `1`).
 - `headless=true` is the default for train/eval to avoid a second RTX
