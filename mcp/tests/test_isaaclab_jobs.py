@@ -242,3 +242,36 @@ def test_checkpoint_discovered_from_training_log(tmp_path):
     assert jobs._checkpoint_from_log(log) == str(ck.resolve())
     log.write_text("=> saving checkpoint '/does/not/exist.pth'\n")
     assert jobs._checkpoint_from_log(log) is None
+
+
+def _write_running_job(job_id: str, pid: int) -> Path:
+    jd = jobs.jobs_dir() / job_id
+    jd.mkdir(parents=True)
+    jobs._write_job(jd, {"job_id": job_id, "status": "running", "pid": pid, "command": ["py", "train.py"],
+                         "started_at": time.time(), "exit_code": None})
+    return jd
+
+
+def _dead_pid() -> int:
+    import subprocess
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    return p.pid  # reaped: no such process
+
+
+def test_status_does_not_fail_a_job_its_watcher_still_owns():
+    """The process has exited but the watcher has not recorded the result yet: not 'failed / host restarted'."""
+    jid = "20261029-120000-owned"
+    _write_running_job(jid, _dead_pid())
+    jobs._active[jid] = object()  # the watcher still owns it
+    assert jobs.runs_status(jid)["state"] == "running"
+    assert jobs.runs_status(jid)["exit_code"] is None
+    assert any(r["job_id"] == jid and r["state"] == "running" for r in jobs.runs_list(state="running")["runs"])
+
+
+def test_status_reconciles_an_orphaned_job_after_host_restart():
+    jid = "20261029-120001-orphan"
+    _write_running_job(jid, _dead_pid())  # not in _active: a previous host's job
+    st = jobs.runs_status(jid)
+    assert st["state"] == "failed"
+    assert jobs._read_job(jobs.jobs_dir() / jid)["note"] == "host restarted"

@@ -182,6 +182,13 @@ def _job_alive(data: dict) -> bool:
     return marker is None or marker.encode() in argv
 
 
+def _orphaned(job_id: str, data: dict) -> bool:
+    """A 'running' record whose process is gone and that no watcher in this process still owns.
+    While the watcher owns a job it records the real exit code itself; marking it failed here first
+    would report a finished job as failed ("host restarted") with exit_code None."""
+    return data.get("status") == "running" and job_id not in _active and not _job_alive(data)
+
+
 def _pid_alive(pid: int | None) -> bool:
     if not pid:
         return False
@@ -467,7 +474,7 @@ def runs_list(state: str | None = None) -> dict[str, Any]:
         if not data:
             continue
         # reconcile dead pids
-        if data.get("status") == "running" and not _job_alive(data):
+        if _orphaned(jd.name, data):
             data["status"] = "failed"
             data["finished_at"] = data.get("finished_at") or _now()
             data["note"] = data.get("note") or "host restarted"
@@ -499,7 +506,7 @@ def runs_status(job_id: str) -> dict[str, Any]:
     data = _read_job(jd)
     if not data:
         raise ValueError(f"unknown job: {job_id}")
-    if data.get("status") == "running" and not _job_alive(data):
+    if _orphaned(job_id, data):
         data["status"] = "failed"
         data["finished_at"] = data.get("finished_at") or _now()
         data["note"] = data.get("note") or "host restarted"
