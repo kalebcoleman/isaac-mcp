@@ -49,6 +49,31 @@ timeline playing.
 
 Verified from a fresh clone in an isolated HOME (2026-10-29): `install.sh` (45 s with a warm uv cache) -> `check_machine.sh` -> `verify.sh` -> `smoke_tools.py`; Isaac Lab per section 4 (`uv sync --locked` + `v3.0.0` clone) lists 206 envs; a 2-iteration `UR5e-Cell-Reach-Direct-v0` job through `isaaclab__train` (needs `rl_library=rl_games`) succeeds. A cold machine's first `quick_start` takes 2+ minutes.
 
+### Dual-machine check (2026-10-30, lab RTX PRO 6000 vs home RTX 5080)
+
+Both machines had the same commits and passed the same checks (home side run remotely through T3 and reported by an agent; ASU side run directly).
+
+| | Lab (ASU) | Home |
+|---|---|---|
+| `isaac-mcp` main | `55dcc40`, clean | `55dcc40`, clean |
+| `ur5e-digital-twin` master | `183f6b0` -> bumped to `bb87ece` (submodule `external/isaac-mcp` 7ceb0d3 -> 55dcc40, pushed) | `183f6b0`, clean (pull to get `bb87ece`) |
+| GPU / driver / OS | RTX PRO 6000 Blackwell / 595.99.02 / Ubuntu 22.04 | RTX 5080 16 GB / 580.178.04 / Ubuntu 24.04 |
+| `check_machine.sh` | pass | pass |
+| unit tests | 379 passed (90 s) | 379 passed (87 s) |
+| headless boot | 29 tools, `quick_start` 5 s | 29 tools, `quick_start` 3 s |
+| windowed boot | ok | ok (window rendered, `quick_start` success) |
+
+Isaac Lab tools on the 5080 (2-epoch jobs through the job layer, `rl_library=rl_games`, `num_envs=128`, `minibatch_size=1536`):
+- `install_info`: isaaclab 3.0.0, isaacsim 6.2.0.0, no import errors. `envs_list(filter='reach')`: 14 tasks. `UR5e-Cell-Reach-Direct-v0`
+  is found with no env vars (a sibling `ur5e_lab` next to `IsaacLab` is auto-imported) and also with `ISAACLAB_TASK_MODULES=ur5e_lab`.
+- Stock `Isaac-Reach-UR10`: job succeeded in 48 s (25 s training, ~30.6k fps total); checkpoint, run dir and 6 TensorBoard scalar
+  tags read back correctly.
+- Custom `UR5e-Cell-Reach-Direct-v0`: job succeeded in 13 s (2 s training, ~3.4k fps), checkpoint found. `metrics_summary` returned
+  no scalars for this 2-epoch run although an event file exists. It is not a tool bug: on the lab box the same call reads scalars from a
+  real 50-epoch run of this task (`learning6/logs/rl_games/ur5e_cell_reach/2026-10-29_11-38-35`). Most likely the 2-epoch run wrote too
+  little to report; not confirmed.
+- No process left behind; the GPU returned to idle (~650 MiB).
+
 NOT verified: a long Isaac Lab training run on the 5080 (only the 2-iteration smoke; ask first, 16 GB); the `uvx`/npm install paths from a
 published package; the multi-job GPU contention.
 
@@ -64,7 +89,7 @@ scripts/check_machine.sh                        # must say "Machine check passed
 # write the Isaac Lab env vars into the client configs; without them the isaaclab__* tools only search the default path.
 ```
 - **Driver.** Isaac Sim **5.1** segfaulted in `librtx.scenedb.plugin.so` on driver 595.x; 580.x was fine for 5.1 on the
-  5080. **6.2 on a 5080 is untested.** `torch 2.11+cu130` needs a CUDA-13-capable driver (>= 580). If the renderer
+  5080. **Isaac Sim 6.2 on the 5080 (driver 580.178.04) is verified headless and windowed (2026-10-29/30).** `torch 2.11+cu130` needs a CUDA-13-capable driver (>= 580). If the renderer
   crashes, try headless first (`./run.sh --headless`); a windowed crash is a driver issue, not an MCP bug.
 - **VRAM.** The 5080 has 16 GB: use small `num_envs` and run **one GPU job at a time** (a running Kit app plus a
   training job will contend).
@@ -89,8 +114,7 @@ The tools locate an install via `ISAACLAB_PYTHON` (+ optional `ISAACLAB_ROOT`), 
    tools run `IsaacLab/scripts/reinforcement_learning/train.py` and `play.py`).
 4. `export ISAACLAB_PYTHON=$PWD/.venv/bin/python ISAACLAB_ROOT=$PWD/IsaacLab`.
 
-On the home 5080 box Isaac Lab already exists at `~/Desktop/ur5e-twin-62/learning6` (a `consolidate-62` checkout, 25 GB `.venv`),
-not at the tools' default path; the `isaac` server in the client configs carries `ISAACLAB_PYTHON`/`ISAACLAB_ROOT` for it
+On the home 5080 box Isaac Lab exists at `~/Desktop/ur5e-digital-twin/learning6` (the tools' default path; re-checked 2026-10-30, `~/Desktop/ur5e-twin-62` has no `learning6`; an older note here pointed at `ur5e-twin-62`); the `isaac` server in the client configs carries `ISAACLAB_PYTHON`/`ISAACLAB_ROOT` for it
 (`./install.sh --no-sim --claude --isaaclab-python ~/Desktop/ur5e-twin-62/learning6/.venv/bin/python --isaaclab-root ~/Desktop/ur5e-twin-62/learning6/IsaacLab`).
 
 Isaac Lab 3 facts the tools rely on (found by running, not documented elsewhere in this repo): no `--headless` flag
