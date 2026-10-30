@@ -16,8 +16,10 @@
 #   --claude-desktop  Configure Claude Desktop only
 #   --print-opencode  Print configuration snippet for OpenCode
 #   --port N          Twin bridge port for MCP client configuration (default: 8766)
+#   --isaaclab-python PATH  Isaac Lab venv python -> ISAACLAB_PYTHON in client configs ($ISAACLAB_PYTHON by default)
+#   --isaaclab-root PATH    Isaac Lab checkout -> ISAACLAB_ROOT in client configs ($ISAACLAB_ROOT by default)
 #   --accept-eula     Acknowledge the NVIDIA Omniverse EULA (sets OMNI_KIT_ACCEPT_EULA=YES)
-#   -h, --help        Show this help message and exit
+#   -h, --help       Show this help message and exit
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,6 +29,9 @@ NO_SIM=0
 DO_CLAUDE_CODE=0
 DO_CLAUDE_DESKTOP=0
 DO_PRINT_OPENCODE=0
+# Optional Isaac Lab install for the isaaclab__* tools (defaults to the same env vars the tools read).
+LAB_PYTHON="${ISAACLAB_PYTHON:-}"
+LAB_ROOT="${ISAACLAB_ROOT:-}"
 
 usage() {
   cat <<'EOF'
@@ -41,7 +46,10 @@ Options:
   --claude-desktop  Configure Claude Desktop only
   --print-opencode  Print configuration snippet for OpenCode
   --port N          Twin bridge port for MCP client configuration (default: 8766)
-  --accept-eula     Acknowledge NVIDIA Omniverse EULA (sets OMNI_KIT_ACCEPT_EULA=YES)
+  --isaaclab-python PATH  Isaac Lab venv python, written to client configs as ISAACLAB_PYTHON
+                          (default: $ISAACLAB_PYTHON if set)
+  --isaaclab-root PATH    Isaac Lab checkout, written as ISAACLAB_ROOT (default: $ISAACLAB_ROOT if set)
+  --accept-eula    Acknowledge NVIDIA Omniverse EULA (sets OMNI_KIT_ACCEPT_EULA=YES)
   -h, --help        Show this help message and exit
 EOF
 }
@@ -72,6 +80,16 @@ while [ "$#" -gt 0 ]; do
     --port)
       [ "$#" -ge 2 ] || { echo "--port needs a value" >&2; exit 2; }
       PORT="$2"
+      shift 2
+      ;;
+    --isaaclab-python)
+      [ "$#" -ge 2 ] || { echo "--isaaclab-python needs a value" >&2; exit 2; }
+      LAB_PYTHON="$2"
+      shift 2
+      ;;
+    --isaaclab-root)
+      [ "$#" -ge 2 ] || { echo "--isaaclab-root needs a value" >&2; exit 2; }
+      LAB_ROOT="$2"
       shift 2
       ;;
     --accept-eula)
@@ -203,8 +221,11 @@ if [ "$DO_CLAUDE_CODE" = 1 ]; then
     echo "== configuring Claude Code (isaac on port $PORT)"
     claude mcp remove --scope user isaac >/dev/null 2>&1 || true
     claude mcp remove --scope user twin >/dev/null 2>&1 || true
+    lab_env=()
+    [ -n "$LAB_PYTHON" ] && lab_env+=(-e "ISAACLAB_PYTHON=$LAB_PYTHON")
+    [ -n "$LAB_ROOT" ] && lab_env+=(-e "ISAACLAB_ROOT=$LAB_ROOT")
     claude mcp add --scope user isaac \
-      -e "DISPLAY=$DISPLAY_NAME" -e "UR5E_DT_PORT=$PORT" \
+      -e "DISPLAY=$DISPLAY_NAME" -e "UR5E_DT_PORT=$PORT" "${lab_env[@]}" \
       -- "$CLI_BIN"
   else
     echo "== claude CLI not found; skipped Claude Code configuration" >&2
@@ -213,7 +234,7 @@ fi
 
 if [ "$DO_CLAUDE_DESKTOP" = 1 ]; then
   echo "== configuring Claude Desktop (isaac on port $PORT)"
-  PORT="$PORT" DISPLAY_NAME="$DISPLAY_NAME" CLI_PATH="$CLI_BIN" python3 - <<'PY'
+  PORT="$PORT" DISPLAY_NAME="$DISPLAY_NAME" CLI_PATH="$CLI_BIN" LAB_PYTHON="$LAB_PYTHON" LAB_ROOT="$LAB_ROOT" python3 - <<'PY'
 import json
 import os
 import shutil
@@ -230,10 +251,15 @@ if not os.path.exists(path):
 
 with open(path, encoding="utf-8") as f:
     config = json.load(f)
+env = {"UR5E_DT_PORT": port, "DISPLAY": display}
+if os.environ.get("LAB_PYTHON"):
+    env["ISAACLAB_PYTHON"] = os.environ["LAB_PYTHON"]
+if os.environ.get("LAB_ROOT"):
+    env["ISAACLAB_ROOT"] = os.environ["LAB_ROOT"]
 config.setdefault("mcpServers", {})["isaac"] = {
     "command": cli_path,
     "args": [],
-    "env": {"UR5E_DT_PORT": port, "DISPLAY": display},
+    "env": env,
 }
 backup = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
 shutil.copy2(path, backup)
@@ -249,6 +275,9 @@ PY
 fi
 
 if [ "$DO_PRINT_OPENCODE" = 1 ]; then
+  lab_json=""
+  [ -n "$LAB_PYTHON" ] && lab_json+=", \"ISAACLAB_PYTHON\": \"$LAB_PYTHON\""
+  [ -n "$LAB_ROOT" ] && lab_json+=", \"ISAACLAB_ROOT\": \"$LAB_ROOT\""
   cat <<EOF
 
 OpenCode entry (~/.config/opencode/opencode.jsonc):
@@ -256,7 +285,7 @@ OpenCode entry (~/.config/opencode/opencode.jsonc):
   "isaac": {
     "type": "local",
     "command": ["isaac-mcp"],
-    "environment": { "UR5E_DT_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME" }
+    "environment": { "UR5E_DT_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME"$lab_json }
   }
 EOF
 fi
