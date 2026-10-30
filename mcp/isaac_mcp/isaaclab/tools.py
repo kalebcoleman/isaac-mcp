@@ -76,13 +76,17 @@ def register_isaaclab_tools(mcp: Any) -> None:
         rl_library: str | None = None,
         extra_args: list[str] | None = None,
         timeout_s: float | None = None,
+        allow_concurrent: bool = False,
     ) -> str:
-        """Start a training job and return its job_id immediately; follow it with isaaclab__runs_status/tail."""
+        """Start a training job and return its job_id immediately; follow it with isaaclab__runs_status/tail.
+
+        Set true to start even if another job is running; a 16 GB GPU normally fits one job.
+        """
         return _launch(
             _jobs.train,
             task=task, num_envs=num_envs, max_iterations=max_iterations, seed=seed, device=device,
             headless=headless, checkpoint=checkpoint, rl_library=rl_library, extra_args=extra_args,
-            timeout_s=timeout_s,
+            timeout_s=timeout_s, allow_concurrent=allow_concurrent,
         )
 
     @mcp.tool(name="isaaclab__eval")
@@ -94,12 +98,17 @@ def register_isaaclab_tools(mcp: Any) -> None:
         rl_library: str | None = None,
         extra_args: list[str] | None = None,
         timeout_s: float | None = None,
+        allow_concurrent: bool = False,
     ) -> str:
-        """Run a policy checkpoint (headless by default) as a job and return its job_id."""
+        """Run a policy checkpoint (headless by default) as a job and return its job_id.
+
+        Set true to start even if another job is running; a 16 GB GPU normally fits one job.
+        """
         return _launch(
             _jobs.eval_,
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
             rl_library=rl_library, extra_args=extra_args, timeout_s=timeout_s,
+            allow_concurrent=allow_concurrent,
         )
 
     @mcp.tool(name="isaaclab__play")
@@ -111,12 +120,17 @@ def register_isaaclab_tools(mcp: Any) -> None:
         rl_library: str | None = None,
         extra_args: list[str] | None = None,
         timeout_s: float | None = None,
+        allow_concurrent: bool = False,
     ) -> str:
-        """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel."""
+        """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel.
+
+        Set true to start even if another job is running; a 16 GB GPU normally fits one job.
+        """
         return _launch(
             _jobs.play,
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
             rl_library=rl_library, extra_args=extra_args, timeout_s=timeout_s,
+            allow_concurrent=allow_concurrent,
         )
 
     @mcp.tool(name="isaaclab__runs_list")

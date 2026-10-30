@@ -181,11 +181,11 @@ def test_eval_play(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_MODE", "ok")
     r1 = jobs.eval_(python=str(fake_py), root=str(root), task="T", checkpoint=str(ckpt), num_envs=2, rl_library="rl_games")
     assert "job_id" in r1
+    # one GPU job at a time: the concurrency guard refuses play while eval is still running
+    assert wait_for_status(r1["job_id"], "succeeded", timeout=10) == "succeeded"
     r2 = jobs.play(python=str(fake_py), root=str(root), task="T", checkpoint=str(ckpt), num_envs=1, headless=True)
     assert "job_id" in r2
-    # wait
-    for r in (r1, r2):
-        wait_for_status(r["job_id"], "succeeded", timeout=10)
+    assert wait_for_status(r2["job_id"], "succeeded", timeout=10) == "succeeded"
 
 
 def test_runs_tail_lines_cap(tmp_path, monkeypatch):

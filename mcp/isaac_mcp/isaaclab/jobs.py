@@ -189,6 +189,43 @@ def _orphaned(job_id: str, data: dict) -> bool:
     return data.get("status") == "running" and job_id not in _active and not _job_alive(data)
 
 
+def _running_job() -> dict[str, Any] | None:
+    """Another job still running. A job a watcher here owns is running until its process has exited
+    (its record is finalized a moment later); any other 'running' record counts only if its pid is
+    alive. A stale record (dead pid, no watcher) is not running and must not block a new launch."""
+    for jd in sorted(jobs_dir().iterdir()):
+        if not jd.is_dir():
+            continue
+        data = _read_job(jd)
+        if not data or data.get("status") != "running":
+            continue
+        proc = _active.get(jd.name)
+        if proc is not None:
+            if proc.poll() is None:
+                return data
+        elif _job_alive(data):
+            return data
+    return None
+
+
+def _concurrency_guard() -> dict[str, Any] | None:
+    """Refuse to start a second job: one 16 GB GPU, so two jobs contend and OOM."""
+    other = _running_job()
+    if other is None:
+        return None
+    jid = other.get("job_id") or other.get("id")
+    pid = other.get("pid")
+    return {
+        "error": f"another Isaac Lab job is already running: {jid} (pid {pid})",
+        "running_job_id": jid,
+        "running_pid": pid,
+        "hint": (
+            "wait for it to finish, cancel it with isaaclab__runs_cancel, "
+            "or pass allow_concurrent=True to start anyway"
+        ),
+    }
+
+
 def _pid_alive(pid: int | None) -> bool:
     if not pid:
         return False
@@ -314,8 +351,13 @@ def _start_job(
     timeout_s: float | None = None,
     device: str | None = None,
     extra_validated: list[str] | None = None,
+    allow_concurrent: bool = False,
 ) -> dict[str, Any]:
     _validate_task(task)
+    if not allow_concurrent:
+        blocked = _concurrency_guard()
+        if blocked is not None:
+            return blocked
     if extra_validated is None:
         extra_validated = []
     root_path = Path(root).resolve()
@@ -389,6 +431,7 @@ def train(
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
+    allow_concurrent: bool = False,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -408,7 +451,10 @@ def train(
     # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
     argv += ["--viz", "none" if headless else "kit"]
     argv += extras
-    return _start_job(python, root, "train", task, argv, timeout_s=timeout_s, device=device)
+    return _start_job(
+        python, root, "train", task, argv, timeout_s=timeout_s, device=device,
+        allow_concurrent=allow_concurrent,
+    )
 
 
 def eval_(
@@ -421,6 +467,7 @@ def eval_(
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
+    allow_concurrent: bool = False,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -436,7 +483,8 @@ def eval_(
     # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
     argv += ["--viz", "none" if headless else "kit"]
     argv += extras
-    return _start_job(python, root, "eval", task, argv, timeout_s=timeout_s)
+    return _start_job(python, root, "eval", task, argv, timeout_s=timeout_s,
+                      allow_concurrent=allow_concurrent)
 
 
 def play(
@@ -449,6 +497,7 @@ def play(
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
+    allow_concurrent: bool = False,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -462,7 +511,8 @@ def play(
     # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
     argv += ["--viz", "none" if headless else "kit"]
     argv += extras
-    return _start_job(python, root, "play", task, argv, timeout_s=timeout_s)
+    return _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
+                      allow_concurrent=allow_concurrent)
 
 
 def runs_list(state: str | None = None) -> dict[str, Any]:
