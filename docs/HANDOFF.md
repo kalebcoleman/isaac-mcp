@@ -5,7 +5,7 @@ committed to `main` of <https://github.com/kalebcoleman/isaac-mcp> (private). Pl
 
 ## 1. What this is
 
-An MCP server for **Isaac Sim 6.2.0.0** and **Isaac Lab 3.0.0**, built on Aldrin Inbaraj's MIT repos
+An MCP server for **Isaac Sim 6.2.0.0** and **Isaac Lab 3.0.0**, built on Aldrin Inbaraj's repos (`isaac-sim-mcp` is MIT; `omni-kit-mcp` has no upstream license file, see `docs/VENDORING.md`)
 `omni-kit-mcp` and `isaac-sim-mcp` (pinned 9d0366b / 27f6100, see `docs/VENDORING.md`) plus Kaleb's screen tool.
 Deliberately **separate from the `ur5e-digital-twin` research repo**. One name everywhere: **`isaac-mcp`** (no aliases;
 Kaleb does not want legacy `ur5e-mcp` / `kit-mcp` / `twin-mcp` names).

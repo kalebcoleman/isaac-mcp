@@ -1,12 +1,12 @@
 # isaac-mcp
 
-An MCP server that lets an LLM client drive **Isaac Sim 6.2** (and, as tools are added, **Isaac Lab 3.0**):
+An MCP server that lets an LLM client drive **Isaac Sim 6.2** and **Isaac Lab 3.0**:
 it talks to a running Kit app over a local bridge, and it can also see the desktop (screenshots and screen
 recordings). Not tied to any one project.
 
-Built on Aldrin Inbaraj's [`omni-isaac-mcp`](https://github.com/inbarajaldrin/omni-isaac-mcp) and
+Built on Aldrin Inbaraj's [`omni-kit-mcp`](https://github.com/inbarajaldrin/omni-kit-mcp) and
 [`isaac-sim-mcp`](https://github.com/inbarajaldrin/isaac-sim-mcp) (MIT), with a screen-capture tool pack
-added. See [`docs/VENDORING.md`](docs/VENDORING.md).
+added. Upstream `omni-kit-mcp` publishes no license file; see [`docs/VENDORING.md`](docs/VENDORING.md).
 
 ## Layout
 
@@ -24,11 +24,37 @@ added. See [`docs/VENDORING.md`](docs/VENDORING.md).
 
 ```bash
 ./install.sh --accept-eula        # uv env with Isaac Sim 6.2.0.0 + the isaac-mcp CLI
-./run.sh                          # Kit with the bridge on port 8766 (--headless for no window)
+scripts/check_machine.sh          # OS, GPU/driver, disk, network, display, port checks (must pass)
+./run.sh                          # Kit with the twin bridge on port 8766 (--headless for no window)
 ./verify.sh                       # tool list, scene build, physics checks
 ```
 
-Host server only (no Isaac Sim): `uv tool install "./mcp"`.
+Host server only (no Isaac Sim): `./install.sh --no-sim`, or `uv tool install "./mcp"`.
+
+### install.sh options
+
+`./install.sh [options]` is idempotent. Besides `--accept-eula` (acknowledge the NVIDIA Omniverse EULA, sets
+`OMNI_KIT_ACCEPT_EULA=YES`):
+
+- `--no-sim` — skip the ~20 GB Isaac Sim environment sync (host MCP server only)
+- `--claude`, `--claude-code`, `--claude-desktop` — register the server (name `isaac`) in the Claude Code / Desktop configs
+- `--print-opencode` — print an OpenCode config snippet
+- `--port N` — bridge port written into the client configs (default 8766)
+- `--isaaclab-python PATH`, `--isaaclab-root PATH` — Isaac Lab venv python and checkout; written into the client
+  configs as `ISAACLAB_PYTHON` / `ISAACLAB_ROOT` so the `isaaclab__*` tools find the install (default: the same env
+  vars, if already set)
+
+The `isaaclab__*` tools locate their Isaac Lab install via `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`; without them they
+only search the default paths (see [`docs/ISAACLAB-TOOLS.md`](docs/ISAACLAB-TOOLS.md)).
+
+### Notes
+
+- Ports: 8766 = twin bridge (`run.sh` default; `--port N` or `UR5E_DT_PORT` to change); 8767 = Isaac Lab bridge by
+  convention (`mcp/examples/isaaclab_bridge_launch.py`).
+- GPU: on a 16 GB card run one GPU job at a time and keep `num_envs` small; a running Kit app plus a training job
+  contend for VRAM.
+- `scripts/catch_hang.sh` loops boot + `quick_start_with_workstation` to hunt a rare first-call hang flake; on a
+  hang it saves evidence under `/tmp/isaac-mcp-hang/`.
 
 ## Status
 
