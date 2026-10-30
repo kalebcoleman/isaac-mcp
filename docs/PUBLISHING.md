@@ -5,7 +5,7 @@ Not published yet. Names `isaac-mcp` on PyPI and npm were both unclaimed on 2026
 `https://registry.npmjs.org/isaac-mcp`; 404 = free).
 
 ## Before publishing
-1. `cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q` (295 tests).
+1. `cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q` (362 tests).
 2. Decide the version in `mcp/pyproject.toml` and `npm/package.json` (keep them equal).
 3. Check `docs/VENDORING.md` and the LICENSE files: the package contains Aldrin Inbaraj's MIT code. The upstream
    `omni-kit-mcp` has no LICENSE file; consider asking `inbarajaldrin` to confirm before a public release.

@@ -149,10 +149,16 @@ All inputs/outputs JSON. Durations in seconds.
 
 Isaac Sim 6.2 (the `ur5e-dt` bridge) and Isaac Lab training both need CUDA. On
 one GPU they will contend and likely OOM. Rules:
-- `train`/`eval`/`play` refuse to start if a Kit bridge is reachable on the
-  configured port (default 8766) **unless** the caller passes
-  `allow_concurrent_gpu=true` (default false). The check uses the same
-  `BridgeClient` used by `server.py`.
+- **Implemented:** `train`/`eval`/`play` refuse to start while another Isaac Lab
+  job started by this tool pack is still running (a running process, or a record
+  whose pid is alive; stale records of dead jobs do not block). The error names the
+  running job id and pid. Pass `allow_concurrent=true` (default false) to start
+  anyway.
+- **Not implemented yet (design only):** refusing to start when a Kit bridge is
+  reachable on the configured port (default 8766), with an
+  `allow_concurrent_gpu=true` override, using the `BridgeClient` from `server.py`.
+  Today nothing stops a training job from starting next to a running Kit app: stop
+  the app first on a 16 GB card.
 - When allowed, the job sets `CUDA_VISIBLE_DEVICES` per the `device` argument
   (default: inherit; user can pin e.g. `1`).
 - `headless=true` is the default for train/eval to avoid a second RTX

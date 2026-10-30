@@ -22,7 +22,7 @@ Kaleb does not want legacy `ur5e-mcp` / `kit-mcp` / `twin-mcp` names).
 ## 2. State: verified vs not
 
 Verified on the lab box (RTX PRO 6000 Blackwell, driver 595.99.02, Ubuntu 22.04):
-- 295 unit tests pass (`cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q`, ~90 s).
+- 362 unit tests pass (`cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q`, ~90 s).
 - Isaac Sim 6.2 boots headless in ~7 s and windowed; bridge lists 29 tools (22 `ur5e_dt.*`); `quick_start_with_workstation` works.
 - TF graphs use `IsaacComputeTransformTree -> ROS2PublishTransformTree`; `/objects_poses_sim` and `/tf_cam` publish.
 - Isaac Lab tools: a real 2-epoch `Isaac-Reach-UR10` rl_games run through `isaaclab__train` succeeded; status, checkpoint
@@ -79,6 +79,10 @@ The tools locate an install via `ISAACLAB_PYTHON` (+ optional `ISAACLAB_ROOT`), 
    tools run `IsaacLab/scripts/reinforcement_learning/train.py` and `play.py`).
 4. `export ISAACLAB_PYTHON=$PWD/.venv/bin/python ISAACLAB_ROOT=$PWD/IsaacLab`.
 
+On the home 5080 box Isaac Lab already exists at `~/Desktop/ur5e-twin-62/learning6` (a `consolidate-62` checkout, 25 GB `.venv`),
+not at the tools' default path; the `isaac` server in the client configs carries `ISAACLAB_PYTHON`/`ISAACLAB_ROOT` for it
+(`./install.sh --no-sim --claude --isaaclab-python ~/Desktop/ur5e-twin-62/learning6/.venv/bin/python --isaaclab-root ~/Desktop/ur5e-twin-62/learning6/IsaacLab`).
+
 Isaac Lab 3 facts the tools rely on (found by running, not documented elsewhere in this repo): no `--headless` flag
 (`--viz none` = headless, `--viz kit` = window); RL backend via `--rl_library` (rl_games, rsl_rl, skrl, ...); extra args
 are Hydra overrides (`agent.params.config.minibatch_size=1536`); rl_games needs `minibatch_size` to divide
@@ -97,8 +101,11 @@ quick-start path). Do not use `scripts/probe_62.sh` for this (slow).
 
 **C. Publish to PyPI / npm** — only Kaleb can (accounts/tokens). Checklist in `docs/PUBLISHING.md`.
 
-**D. More tools** (not started; windowed play + screenshot/video loop is DONE, see `docs/ISAACLAB-TOOLS.md`): generic Isaac Sim tools not tied to the UR5e (stage/prim/physics/camera/recording) as a new
-tool pack; Isaac Lab `play` end-to-end with a window; a job-queue guard so two GPU jobs do not start together.
+**D. More tools.** Done 2026-10-29: windowed play + screenshot/video loop; a job guard so two Isaac Lab jobs do not start together
+(`allow_concurrent` on train/eval/play, see `docs/ISAACLAB-TOOLS.md` section 8). Still open: (1) refuse to start a training job while a
+Kit bridge (the sim) is running (documented in section 8 as design only; not implemented); (2) the generic Isaac Sim tool pack, whose
+design draft is `docs/GENERIC-SIM-TOOLS.md` (24 `sim.*` tools; the APIs were grounded by grep only, verify on a live headless sim; biggest
+open issue: a sibling pack cannot reach the live socket because the twin builds its own `McpBridge()` and `run.sh` sets `ISAAC_MCP_PORT=0`).
 
 **E. Cleanups.** `uv.lock` pins differ slightly from the old repo (`onnxruntime-gpu`); `scripts/install.py` (optional
 persistent registration): fixed 2026-10-29 (`--remove` keeps `add-project` entries; default port now 8766); many scripts and
@@ -123,6 +130,14 @@ upstream-written pages (`mcp/docs/*`) that predate the rename and may mention ol
   (Kaleb dislikes approval prompts); `opencode-go/deepseek-v4.1-flash` (cheap, paid) is OK for harder tasks; the free DeepSeek
   models hit a usage limit. Antigravity (`gemini-3.8-flash`) worked for drafting scripts/docs in a worktree. Always review agent
   output: the free models' code needed real fixes (path traversal, wrong Isaac Lab flags) that only a real run exposed.
+- Delegation notes (observed 2026-10-29, T3 Code): a child's runtime mode cannot exceed the thread's, so set the thread to
+  `full-access` before delegating at full access. `opencode/beam-free`, `opencode-go/minimax-m3.1-flash` and
+  `opencode-go/deepseek-v4.1-flash` produced usable diffs; `nvidia/deepseek-ai/deepseek-v4.1-flash` and `nvidia/z-ai/glm-5.3-flash`
+  work after a retry on interruption; `nvidia/minimaxai/minimax-m3.1-flash` failed with "Invalid request" on long tool-using tasks;
+  `nvidia/openai/gpt-oss-20b` returned a fabricated "none found" audit (never trust it for verification). Antigravity children
+  are sandboxed to the thread's own workspace (so run delegates from a thread whose project is this repo); its Claude models hit a
+  usage limit while `gemini-3.8-flash` still answered. Always review the diff and re-run the tests: agents added noisy edits, a
+  sleep-based workaround in place of a real fix, and one wrong default.
 - Prefer targeted checks over `scripts/probe_62.sh` (slow); avoid GPU jobs while agents run.
 - Do not create public repos, publish packages, or open PRs without being asked.
 
