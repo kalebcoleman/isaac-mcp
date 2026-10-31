@@ -22,6 +22,9 @@ The GitHub Actions workflow in [`.github/workflows/ci.yml`](../.github/workflows
 plus the documentation check and `npm pack --dry-run` on pushes and pull requests. It does not launch Isaac Sim, train a policy, or test real
 hardware. A workflow is only verified on GitHub after its run actually completes.
 
+The first completed run for commit `66e84b4` passed on 2026-10-30: 421 tests, documentation checks, wheel and sdist
+builds, and the npm package dry run. [View the run](https://github.com/kalebcoleman/isaac-mcp/actions/runs/41170715313).
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and

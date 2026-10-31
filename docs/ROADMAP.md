@@ -25,8 +25,8 @@ robots are intended additions. Preserve the current UR5e tools and their behavio
 
 ## Verification and limits
 
-The 2026-10-30 verifier update ran the complete host suite: 419 tests passed; two additional validation cases were
-added after collection and passed in a targeted run. An isolated host wheel installation and npm launcher fetch also worked. On the
+The 2026-10-30 GitHub Actions run for `66e84b4` passed 421 host tests, the documentation checks, Python package builds,
+and the npm package dry run. An isolated host wheel installation and npm launcher fetch also worked in the prior audit. On the
 home Ubuntu 24.04 / RTX 5080 machine, a headless Isaac Sim 6.2 run passed the UR5e smoke script's 20 checks and
 registered 23 twin tools; the Lab install probe found Isaac Lab 3.0 and the custom UR5e reach task. Earlier handoff
 records document lab-workstation, windowed and short training checks. See [HANDOFF.md](HANDOFF.md) for their dates and
@@ -49,8 +49,8 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 
 - [x] Make the UR5e verifier assert meaningful scene, physics, drive and motion invariants; keep informational checks
   such as regenerated checkpoint checksums clearly separate.
-- [x] Add a CPU-only CI workflow for host tests, package builds and documentation checks. The live-simulator checklist
-  is in [VERIFICATION.md](VERIFICATION.md); GitHub run results should be checked separately.
+- [x] Add a CPU-only CI workflow for host tests, package builds and documentation checks. The first run on `66e84b4`
+  passed. The live-simulator checklist is in [VERIFICATION.md](VERIFICATION.md).
 - [ ] Run and record the live-simulator baseline for changes to the bridge or twin, including the commit, machine and
   dependencies. Expand the checklist as hardware and platform coverage grows.
 - [ ] Improve the `randomize_single_object` placement configuration without breaking existing defaults; test feasible

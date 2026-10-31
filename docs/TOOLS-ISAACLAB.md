@@ -416,8 +416,8 @@ unless that port is configured or advertised.
 
 Verified (per [HANDOFF.md](HANDOFF.md) and [ROADMAP.md](ROADMAP.md)):
 
-- Host suite: 419 tests passed during the verifier update (2026-10-30); two additional validation cases
-  passed in a targeted run. An isolated host wheel install and npm launcher fetch also worked.
+- Host suite: 421 tests passed in GitHub Actions for `66e84b4` (2026-10-30). An isolated host wheel install and
+  npm launcher fetch also worked in the prior audit.
 - Isaac Lab 3.0.0 / Isaac Sim 6.2.0.0 on Ubuntu 24.04 (RTX 5080 16 GB) and Ubuntu 22.04
   (RTX PRO 6000 Blackwell): a real 2-epoch `Isaac-Reach-UR10` rl_games run through
   `isaaclab__train` succeeded; `runs_status`, checkpoint discovery and TensorBoard metrics
