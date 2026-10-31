@@ -94,6 +94,10 @@ head. With the recording pacing change in this PR, three windowed 10-fps recordi
 also recovered rendered frames, valid cameras, ROS camera images and falling-cube physics. These are local simulated
 checks, not a guarantee for all rendering rates or machines.
 
+For the frame-scheduling regression, a controlled 10-second, 31-Hz input to a 30-fps encoder produced 299 distinct
+frames out of 300 after the fix; the previous scheduling produced 155. This check decoded the MP4 and does not replace
+a live viewport test at that exact rendering rate.
+
 On 2026-10-31, a windowed Isaac Sim 6.2.0.0 session on Ubuntu 24.04.5 / RTX 5080 with driver 580.178.04 used the
 MCP twin driver tool to start the system ROS 2 Jazzy UR driver in mock-hardware mode in isolated domain 197. Both
 the joint-state broadcaster and scaled trajectory controller were active; a ROS `FollowJointTrajectory` request

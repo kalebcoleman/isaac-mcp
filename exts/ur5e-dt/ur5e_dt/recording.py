@@ -1,8 +1,10 @@
 """Pace viewport frames for a constant-rate, wall-clock recording."""
 
+import math
+
 
 class FramePacer:
-    """Sample at most once per frame interval and fill short rendering gaps.
+    """Sample at most once per scheduled interval and fill short rendering gaps.
 
     ffmpeg's raw-video input assigns timestamps from its declared FPS; it does
     not know when frames were actually captured. Keep the number sent in step
@@ -14,20 +16,38 @@ class FramePacer:
             raise ValueError("fps must be positive")
         self.fps = fps
         self.started = started
+        self.next_capture_index = 0
         self.next_capture = started
         self.pending = False
         self.frames = 0
         self.last_frame = None
 
     def request_capture(self, now):
-        if self.pending or now < self.next_capture:
+        tolerance = 2 * max(math.ulp(now), math.ulp(self.next_capture))
+        if self.pending or now + tolerance < self.next_capture:
             return False
         self.pending = True
-        self.next_capture = now + 1.0 / self.fps
+        # Keep deadlines anchored to the recording start. Advancing from the
+        # actual callback time accumulates scheduling delay and can halve the
+        # effective capture rate when redraws are just slower than a deadline.
+        index = max(self.next_capture_index + 1, self._elapsed_ticks(now) + 1)
+        deadline = self.started + index / self.fps
+        # Floating-point rounding can place an exact deadline at ``now``.
+        if deadline <= now:
+            index += 1
+            deadline = self.started + index / self.fps
+        self.next_capture_index = index
+        self.next_capture = deadline
         return True
 
+    def _elapsed_ticks(self, now):
+        # Subtracting large monotonic timestamps can put an exact deadline a
+        # few floating-point units below its intended tick.
+        tolerance = 2 * max(math.ulp(now), math.ulp(self.started)) * self.fps
+        return int(max(0.0, now - self.started) * self.fps + tolerance)
+
     def _count_due(self, now, *, first_frame):
-        target = int(max(0.0, now - self.started) * self.fps)
+        target = self._elapsed_ticks(now)
         if first_frame:
             target = max(1, target)
         due = max(0, target - self.frames)

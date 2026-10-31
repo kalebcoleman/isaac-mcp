@@ -4,6 +4,7 @@ import ast
 import asyncio
 import ctypes
 import importlib.util
+import math
 import os
 import sys
 import threading
@@ -36,6 +37,46 @@ def test_fast_viewport_produces_requested_wall_clock_duration(fps):
     pacer.finish(101.0, written.append)
     assert captures <= fps
     assert pacer.frames == len(written) == fps
+
+
+@pytest.mark.parametrize("render_fps", [30, 31, 59, 60, 61, 119, 120])
+@pytest.mark.parametrize("started", [100.0, 100000000.0])
+def test_render_rate_retains_distinct_frames(render_fps, started):
+    fps = 30
+    duration = 10
+    pacer = recording.FramePacer(fps, started=started)
+    written = []
+    for frame in range(render_fps * duration):
+        now = started + frame / render_fps
+        if pacer.request_capture(now):
+            pacer.add_frame(frame.to_bytes(4, "big"), now, written.append)
+            pacer.pending = False
+    pacer.finish(started + duration, written.append)
+    assert len(written) == fps * duration
+    assert len(set(written)) >= 290
+
+
+def test_delayed_capture_advances_past_current_time_without_a_burst():
+    pacer = recording.FramePacer(30, started=100.0)
+    assert pacer.request_capture(100.0)
+    assert not pacer.request_capture(102.0)  # First capture is still pending.
+    pacer.pending = False
+    assert pacer.request_capture(102.0)
+    pacer.pending = False
+    assert not pacer.request_capture(102.0)
+    assert not pacer.request_capture(102.01)
+    assert pacer.request_capture(102.04)
+
+
+def test_float_rounding_near_a_deadline_does_not_skip_a_frame_or_repeat_a_slot():
+    pacer = recording.FramePacer(30, started=100000000.0)
+    assert pacer.request_capture(100000000.0)
+    pacer.pending = False
+    deadline = pacer.next_capture
+    just_before = math.nextafter(deadline, -math.inf)
+    assert pacer.request_capture(just_before)
+    pacer.pending = False
+    assert not pacer.request_capture(deadline)
 
 
 def test_slow_viewport_repeats_latest_frame_to_keep_wall_clock_duration():
@@ -122,7 +163,8 @@ def test_auto_stop_targets_the_recording_that_created_it():
     owner._stop_realtime_recording.assert_called_once_with(token=token)
 
 
-def test_viewport_callbacks_are_paced_and_stop_finalizes(monkeypatch, tmp_path):
+@pytest.mark.parametrize("render_fps,output_fps,duration", [(120, 10, 1), (31, 30, 10)])
+def test_viewport_callbacks_are_paced_and_stop_finalizes(monkeypatch, tmp_path, render_fps, output_fps, duration):
     tree = ast.parse(SOURCE.read_text())
     names = {"_start_realtime_recording", "_rt_on_capture", "_stop_realtime_recording"}
     methods = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name in names]
@@ -170,14 +212,15 @@ def test_viewport_callbacks_are_paced_and_stop_finalizes(monkeypatch, tmp_path):
     for name in names:
         setattr(owner, name, MethodType(namespace[name], owner))
 
-    owner._start_realtime_recording(output_dir=str(tmp_path), fps=10)
-    for tick in range(120):
-        now[0] = tick / 120.0
+    owner._start_realtime_recording(output_dir=str(tmp_path), fps=output_fps)
+    for tick in range(render_fps * duration):
+        now[0] = tick / render_fps
+        ctypes.memmove(ctypes.addressof(raw), tick.to_bytes(4, "big"), 4)
         callbacks[0](None)
-    now[0] = 1.0
+    now[0] = float(duration)
     owner._stop_realtime_recording()
-    assert len(frames) == mgr.frame_count == 10
-    assert all(frame == b"rgba" for frame in frames)
+    assert len(frames) == mgr.frame_count == output_fps * duration
+    assert len(set(frames)) >= output_fps * duration - 10
     assert not mgr.recording and not mgr.stopping and mgr.error is None
     stdin.close.assert_called_once()
     proc.wait.assert_called_once_with(timeout=180)
