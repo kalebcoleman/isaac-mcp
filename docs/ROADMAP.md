@@ -29,9 +29,9 @@ robots are intended additions. Preserve the current UR5e tools and their behavio
 The 2026-10-30 GitHub Actions run for `66e84b4` passed 421 host tests, the documentation checks, Python package builds,
 and the npm package dry run. An isolated host wheel installation and npm launcher fetch also worked in the prior audit. On the
 home Ubuntu 24.04 / RTX 5080 machine, a headless Isaac Sim 6.2 run passed the UR5e smoke script's 20 checks and
-registered 23 twin tools; the Lab install probe found Isaac Lab 3.0 and the custom UR5e reach task. Earlier handoff
-records document lab-workstation, windowed and short training checks. See [HANDOFF.md](HANDOFF.md) for their dates and
-scope. The shared-bridge changes passed 481 local host tests and a new live UR5e baseline; no training was run.
+registered 23 twin tools; the Lab install probe found Isaac Lab 3.0 and the custom UR5e reach task. Earlier checks
+included windowed workflows and short training; see [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). The shared-bridge changes
+passed 481 local host tests and a new live UR5e baseline; no training was run.
 
 The UR5e verifier now checks explicit scene, gravity, joint-limit, drive and motion baselines, but a successful run is
 not proof of every physics invariant or real-robot fidelity. A live Sim 6.2 run and a deliberately incorrect drive value
@@ -56,7 +56,7 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
   dependencies. Expand the checklist as hardware and platform coverage grows.
 - [ ] Improve the `randomize_single_object` placement configuration without breaking existing defaults; test feasible
   and infeasible scenes.
-- [ ] Reconcile dated handoff and design notes as implementation evolves; treat the current tool references as the API
+- [ ] Reconcile design notes as implementation evolves; treat the current tool references as the API
   source of truth.
 
 ### 2. General Isaac Sim tools without breaking the twin
@@ -77,8 +77,8 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
   task-module registration, and test an installation outside the developer's default layout.
 - [ ] Record the task, seed, versions, command, configuration and artifact locations needed to reproduce a Lab job;
   check what the upstream framework already records before adding duplicate state.
-- [ ] Check downstream consumers, including the twin submodule pin and BrickSim integration, without overwriting their
-  local changes. Update them deliberately after the server changes are verified.
+- [ ] Check downstream consumers without overwriting their local changes. Update them deliberately after the server
+  changes are verified.
 - [ ] Review bridge trust boundaries and remote access before supporting shared or network-exposed deployments.
 
 ### 4. Release, when requested
@@ -96,7 +96,6 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 - [Architecture](ARCHITECTURE.md) and [MCP server setup](MCP-SERVER.md): processes, connection and client configuration.
 - [Isaac Lab design and implementation notes](ISAACLAB-TOOLS.md): history and job-guard details.
 - [Generic Sim tool draft](GENERIC-SIM-TOOLS.md): future design, not an implementation.
-- [Handoff](HANDOFF.md): machine-specific setup and dated verification history.
 - [Verification](VERIFICATION.md): automated and live checks, expected values, limits and the last live result.
 
 ## Repository entry points

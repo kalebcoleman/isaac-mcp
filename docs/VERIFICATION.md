@@ -141,4 +141,4 @@ for the implications and remaining gaps. This is one version and machine, not a 
 - For ROS transforms, use `scripts/verify_tf.sh` with the matching `config/ros_dds.env` profile.
 - Before a training run, obtain operator authorization and check GPU capacity. Use the
   [Isaac Lab guide](TOOLS-ISAACLAB.md) for status, metrics, and guard behavior.
-- See [HANDOFF.md](HANDOFF.md) for earlier dated lab and home results, and [ROADMAP.md](ROADMAP.md) for remaining work.
+- See [ROADMAP.md](ROADMAP.md) for remaining work.

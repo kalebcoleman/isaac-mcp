@@ -80,6 +80,5 @@ support is a goal, not yet a blanket compatibility claim.
 - [Server setup and agent workflow](docs/MCP-SERVER.md) and [architecture](docs/ARCHITECTURE.md).
 - [Isaac Lab implementation notes](docs/ISAACLAB-TOOLS.md) and [generic Sim tools design](docs/GENERIC-SIM-TOOLS.md)
   (the latter is a proposal, not an implemented pack).
-- [Handoff and dated verification](docs/HANDOFF.md), [vendoring](docs/VENDORING.md), and
-  [publishing checklist](docs/PUBLISHING.md).
+- [Vendoring](docs/VENDORING.md) and [publishing checklist](docs/PUBLISHING.md).
 - [Verification guide](docs/VERIFICATION.md) — host checks, live UR5e baseline and their limits.

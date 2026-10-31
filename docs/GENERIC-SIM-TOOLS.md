@@ -13,7 +13,7 @@ state, viewport capture and recording. It is a sibling of the UR5e pack: nothing
 in it may reference `/World/UR5e`, RG2 or any twin asset.
 
 Grounded in the installed Isaac Sim 6.2 tree (`$SP`, §3.25), `docs/ARCHITECTURE.md`,
-`docs/HANDOFF.md` §5.D, `mcp/docs/tool-authoring.md`, `mcp/docs/protocol.md`, and
+`mcp/docs/tool-authoring.md`, `mcp/docs/protocol.md`, and
 the UR5e pack's own registration code.
 
 ## 1. Goals and non-goals
@@ -143,7 +143,7 @@ thread because the bridge hops it there (`mcp/docs/protocol.md`).
 | 17 | `prim.duplicate` | `path`, `new_path`, `count=1` | `{paths}` | C13 `CopyPrimCommand` (`usd_commands.py:980`) | sync | target exists; copying an articulation root duplicates physics state (refused unless `type` is not an articulation/physics root); large subtree → size cap |
 | 18 | `prim.delete` | `paths:[..]`, `confirm=true` | `{deleted:[..], refused:[{path,reason}]}` | C13 `DeletePrimsCommand(paths, destructive=True)` (`usd_commands.py:1365`) which already skips the absolute root and ancestral prims; pre-checks C14 `editor.is_no_delete`, `check_ancestral` | sync | per-path refusals from §4; `confirm` missing → refuse whole call; deleting while playing → refuse; a path that resolves to a prim brought in by composition is skipped with `reason:"ancestral"` |
 | 19 | `physics.apply` | `path`, `kind="collider"\|"rigid_body"\|"mass"`, `params={mass,density,kinematic,approximation}` | `{path, applied:[schemas], mass}` | C10 `RigidBodyAPI.Apply`, `MassAPI.Apply/CreateMassAttr/CreateDensityAttr`, `CollisionAPI.Apply`, `MeshCollisionAPI.Apply`; C11 `PhysxRigidBodyAPI` for `kinematic`/damping | sync | schema already applied on the prim (idempotent, reported); an **ancestor** carries `RigidBodyAPI` → refuse (double body); `approximation="sdf"` on a non-mesh prim → error; new colliders are only picked up after a physics reset (deactivate/reactivate or stop/play) — the response says so |
-| 20 | `sim.play` | — | `{playing:true, time_s}` | C2 `timeline.play()` | sync (returns immediately) | the known first-play cook wedge (`docs/HANDOFF.md` §5.B) — we do **not** reproduce the twin's 900-frame warmup loop; the caller polls `sim.state` |
+| 20 | `sim.play` | — | `{playing:true, time_s}` | C2 `timeline.play()` | sync (returns immediately) | the known first-play cook wedge — we do **not** reproduce the twin's 900-frame warmup loop; the caller polls `sim.state` |
 | 21 | `sim.pause` | — | `{playing:false, time_s}` | C2 `timeline.pause()` | sync | pausing during an active capture freezes frames (allowed; `record_stop` reports the short count) |
 | 22 | `sim.stop` | — | `{playing:false, time_s}` | C2 `timeline.stop()` | sync | stop rewinds to the start timecode — report the new `time_s` so callers do not assume a resume |
 | 23 | `sim.step` | `frames=1`, `max_frames=600` | `{frames, time_s}` | C2 `get_current_time`, C15 `await next_update_async()` per frame; C6 `SimulationManager.step(steps=n)` only when the timeline is paused | **async** | timeline already playing → refuse (double-stepping); `frames > max_frames` → refuse; frame never arrives (UI thread starved) → timeout after `frames/10 + 10` s; `SimulationManager.step` bypasses rendering, so it is opt-in (`render=false` semantics) |
