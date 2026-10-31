@@ -208,5 +208,5 @@ Verify end-to-end communication with Isaac Sim running:
 ./verify.sh
 ```
 
-The verifier reports measured values but does not yet assert every intended scene and physics invariant. Review its
-output as well as the exit status; see the [roadmap](ROADMAP.md) for the remaining verification work.
+The verifier checks the bundled workstation's scene, gravity, joint limits, drive settings and an elbow motion. Review
+its output and exit status; [verification](VERIFICATION.md) describes the thresholds and remaining limits.

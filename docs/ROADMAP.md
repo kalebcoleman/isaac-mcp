@@ -25,16 +25,18 @@ robots are intended additions. Preserve the current UR5e tools and their behavio
 
 ## Verification and limits
 
-The latest audit on 2026-10-30 ran the host suite: 392 tests passed; four additional installer tests were added after
-that run began and passed separately. An isolated host wheel installation and npm launcher fetch also worked. On the
+The 2026-10-30 verifier update ran the complete host suite: 419 tests passed; two additional validation cases were
+added after collection and passed in a targeted run. An isolated host wheel installation and npm launcher fetch also worked. On the
 home Ubuntu 24.04 / RTX 5080 machine, a headless Isaac Sim 6.2 run passed the UR5e smoke script's 20 checks and
 registered 23 twin tools; the Lab install probe found Isaac Lab 3.0 and the custom UR5e reach task. Earlier handoff
 records document lab-workstation, windowed and short training checks. See [HANDOFF.md](HANDOFF.md) for their dates and
-scope. The latest audit did not run training.
+scope. The latest verifier update did not run training.
 
-The verifier reports several observed values without asserting all their intended ranges; a successful run is useful
-evidence but is not proof of every physics invariant. `randomize_single_object` can fail with its fixed narrow placement
-strip. The GPU guards are per host process and the Kit guard only checks configured and advertised endpoints.
+The UR5e verifier now checks explicit scene, gravity, joint-limit, drive and motion baselines, but a successful run is
+not proof of every physics invariant or real-robot fidelity. A live Sim 6.2 run and a deliberately incorrect drive value
+were checked on the 5080 on 2026-10-30; see [VERIFICATION.md](VERIFICATION.md). `randomize_single_object` can fail
+with its fixed narrow placement strip. The GPU guards are per host process and the Kit guard only checks configured
+and advertised endpoints.
 
 The full twin launcher and environment are pinned to Isaac Sim 6.2.0.0 / Python 3.12, and current end-to-end evidence is
 for the documented Ubuntu/NVIDIA systems. The host server is separate from the simulator, but other operating systems,
@@ -45,10 +47,12 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 
 ### 1. Reliable baseline and documentation
 
-- [ ] Make the UR5e verifier assert meaningful scene, physics, drive and motion invariants; keep informational checks
+- [x] Make the UR5e verifier assert meaningful scene, physics, drive and motion invariants; keep informational checks
   such as regenerated checkpoint checksums clearly separate.
-- [ ] Add automated host tests, package build and documentation checks in CI; maintain a live-simulator smoke checklist
-  for changes to the bridge or twin. Record what was run, the commit, machine and dependencies.
+- [x] Add a CPU-only CI workflow for host tests, package builds and documentation checks. The live-simulator checklist
+  is in [VERIFICATION.md](VERIFICATION.md); GitHub run results should be checked separately.
+- [ ] Run and record the live-simulator baseline for changes to the bridge or twin, including the commit, machine and
+  dependencies. Expand the checklist as hardware and platform coverage grows.
 - [ ] Improve the `randomize_single_object` placement configuration without breaking existing defaults; test feasible
   and infeasible scenes.
 - [ ] Reconcile dated handoff and design notes as implementation evolves; treat the current tool references as the API
@@ -91,6 +95,7 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 - [Isaac Lab design and implementation notes](ISAACLAB-TOOLS.md): history and job-guard details.
 - [Generic Sim tool draft](GENERIC-SIM-TOOLS.md): future design, not an implementation.
 - [Handoff](HANDOFF.md): machine-specific setup and dated verification history.
+- [Verification](VERIFICATION.md): automated and live checks, expected values, limits and the last live result.
 
 ## Repository entry points
 

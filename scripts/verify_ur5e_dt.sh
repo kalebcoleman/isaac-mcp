@@ -20,11 +20,18 @@ run_check() {
   # The client can also exit 0 when the bridge answers with an error.
   if [ "$status" -ne 0 ] || grep -qE '"error_type"|^Traceback|^\[Errno|"status": "error"' <<<"$out"; then
     FAILED+=("$1")
+  elif ! printf '%s\n' "$out" | "$PY" "$ROOT/scripts/validate_ur5e_check.py" "$1"; then
+    FAILED+=("$1")
   fi
 }
 # First call after a cold boot compiles shaders and caches assets: 2+ minutes on a fresh machine, ~3 s afterwards.
 run_quick_start() {
-  (cd "$BRIDGE" && PYTHONPATH=$PWD "$PY" -m isaac_mcp.client ur5e_dt.quick_start_with_workstation '{}' --timeout 300) || FAILED+=("quick_start")
+  local out status=0
+  out="$(cd "$BRIDGE" && PYTHONPATH=$PWD "$PY" -m isaac_mcp.client ur5e_dt.quick_start_with_workstation '{}' --timeout 300 2>&1)" || status=$?
+  echo "$out"
+  if [ "$status" -ne 0 ] || ! printf '%s\n' "$out" | "$PY" "$ROOT/scripts/validate_ur5e_check.py" quick_start; then
+    FAILED+=("quick_start")
+  fi
 }
 echo "== quick_start (1st)"; run_quick_start
 if [ "${REBUILD:-0}" = "1" ]; then  # opt-in stress test: rebuilding a loaded scene logs Kit viewport UI errors
