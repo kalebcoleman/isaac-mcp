@@ -24,8 +24,8 @@ hardware. A workflow is only verified on GitHub after its run actually completes
 
 The first completed run for commit `66e84b4` passed on 2026-10-30: 421 tests, documentation checks, wheel and sdist
 builds, and the npm package dry run. [View the run](https://github.com/kalebcoleman/isaac-mcp/actions/runs/41170715313).
-On the same date, the shared-bridge changes passed 481 local host tests, the documentation checks, the wheel and sdist
-builds, and the npm package dry run.
+On the same date, the shared-bridge implementation in commit `382d2cb` passed 481 local host tests, the documentation
+checks, the wheel and sdist builds, and the npm package dry run.
 
 ## Live UR5e baseline
 
@@ -68,7 +68,7 @@ disposable headless session. Changing `wrist_1_joint` damping from 10 to 4 cause
 and field named; the value was restored. The simulator also logged the previously observed nested `app.update()`
 warning; the broader rare-hang investigation remains open.
 
-In a separate 6.2 session with the shared-bridge changes under test, port 18766 served all 23 UR5e tools and a temporary
+In a separate 6.2 session with the shared-bridge implementation in `382d2cb` under test, port 18766 served all 23 UR5e tools and a temporary
 autoloaded `shared_probe.ping` pack together. The probe pack was reloaded; disabling and re-enabling the twin left the
 probe callable and restored all 23 twin tools. After that restart, `./verify.sh` passed and `scripts/smoke_tools.py`
 passed 20/20 checks. The latter still reported the known narrow-strip warning for `randomize_single_object`. The test
