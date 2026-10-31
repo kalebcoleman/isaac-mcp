@@ -37,8 +37,8 @@ Added tools, alongside every `ur5e_dt__*` tool discovered from the running app:
 `list_bridges` (a bridge builtin) shows every running bridge on this box.
 Set `UR5E_DT_PORT` to pin the ur5e-dt twin bridge (`ISAAC_MCP_PORT` is the
 generic fallback); with several running and no pin, discovery refuses rather
-than guessing. The ur5e-dt extension runs its own bridge, so the launch script
-sets `ISAAC_MCP_PORT=0` to disable the unused generic base bridge.
+than guessing. The ur5e-dt extension registers with the same bridge as other
+tool packs; the launch script sets the shared port to the selected twin port.
 
 For a clean Isaac Sim viewport render without desktop chrome, use the Kit
 extension's `ur5e_dt__start_recording` / `ur5e_dt__stop_recording`. A screen

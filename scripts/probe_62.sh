@@ -60,10 +60,12 @@ esac
 # ---- ext folder layout -------------------------------------------------------------
 if [ -d "$ROOT/exts/ur5e-dt" ]; then
   EXT_ARGS=(--ext-folder "$ROOT/exts")
+  SHARED_BRIDGE=1
   echo "layout: consolidated ($ROOT/exts)"
 elif [ -d "$ROOT/external/isaac-sim-mcp/exts/ur5e-dt" ]; then
   EXT_ARGS=(--ext-folder "$ROOT/external/omni-kit-mcp/exts"
             --ext-folder "$ROOT/external/isaac-sim-mcp/exts")
+  SHARED_BRIDGE=0
   echo "layout: pre-move (external/)"
 else
   echo "FAIL: cannot find ur5e-dt under exts/ or external/." >&2
@@ -78,7 +80,13 @@ fi
 export ROS_DISTRO
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
-export ISAAC_MCP_PORT=0        # twin owns the only endpoint
+if [ "$SHARED_BRIDGE" = 1 ]; then
+  export ISAAC_MCP_PORT="$PORT"  # shared endpoint, opened after the twin registers
+  export ISAAC_MCP_DEFER_START=1
+else
+  export ISAAC_MCP_PORT=0        # older layout: twin owns a separate bridge
+  unset ISAAC_MCP_DEFER_START
+fi
 export UR5E_DT_PORT="$PORT"
 export UR5E_DT_HEADLESS=1
 export PYTHONDONTWRITEBYTECODE=1

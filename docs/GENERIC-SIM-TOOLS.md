@@ -1,10 +1,10 @@
 # Generic Isaac Sim Tool Pack (`sim.*`) — Design
 
-> **Status: design draft, nothing implemented.** Written 2026-10-29 by an agent (DeepSeek V4.1 Flash) and spot-checked:
-> cited file paths exist and the bridge-attachment problem (§ riskiest assumption 1: the twin builds its own `McpBridge()`
-> and `run.sh` sets `ISAAC_MCP_PORT=0`) matches `exts/ur5e-dt/ur5e_dt/extension.py:767` / `run.sh:80`. APIs were grounded by
-> static grep of the installed tree only, never run on a live sim; verify each against a running headless sim before
-> building. Note: `next_update_async` is a real symbol (the §3.25 caveat that it is absent is too strong).
+> **Status: design draft, generic tools not implemented.** The original draft was written 2026-10-29 from static
+> inspection. The bridge attachment obstacle was addressed in the shared-bridge update: a temporary second pack and
+> the UR5e pack were exercised on one live 6.2 endpoint. The proposed generic APIs below still need live verification
+> and implementation; references to prior design decisions are not proof they work.
+
 
 Design for a second Kit-side tool pack exposing **robot-agnostic** Isaac Sim
 capabilities: stage inspection, prim authoring/deletion, physics control and
@@ -70,10 +70,8 @@ bridge must load first: `get_mcp_bridge()` is used at startup), then
 
 ### 2.2 Registry shape (identical to the twin)
 
-`exts/ur5e-dt/ur5e_dt/extension.py:768-776` builds
-`registrar = self._mcp.register_owner("ur5e-dt", "ur5e_dt", display_name=...)`
-and loops `MCP_TOOL_REGISTRY`, resolving each handler from a stable
-`_cmd_<name>` attribute. The sim pack does the same:
+The twin's [`bridge_binding.py`](../exts/ur5e-dt/ur5e_dt/bridge_binding.py) registers an owner and loops over
+`MCP_TOOL_REGISTRY`, resolving each handler from a stable `_cmd_<name>` attribute. The sim pack can do the same:
 
 ```python
 self._mcp = ...                       # see 2.3
@@ -85,36 +83,21 @@ for name, schema in MCP_TOOL_REGISTRY.items():
 ```
 
 Canonical names are `sim.stage.info`, `sim.prim.delete`, …;
-`mcp/isaac_mcp/server.py:151` rewrites dots to `__`, so clients see
-`sim__stage_info`, `sim__prim_delete`. `sim` does not collide with `ur5e_dt`
-(`register_owner` rejects duplicate namespaces and owner ids, `bridge.py:417-436`).
+`mcp/isaac_mcp/server.py` rewrites dots to `__`, so clients see
+`sim__stage__info`, `sim__prim__delete`. `sim` does not collide with `ur5e_dt`
+(`register_owner` rejects duplicate namespaces and owner ids).
 
-### 2.3 Which bridge instance — the one real integration problem
+### 2.3 Shared bridge attachment
 
-Facts, from the tree:
+The UR5e pack now registers on `get_mcp_bridge()`, the singleton provided by the bridge extension. The standard twin
+launcher sets the selected port on the bridge and defers opening the socket until the twin has registered. A future
+Sim pack can use the same singleton and register a distinct owner and namespace. Its extension must declare the
+`isaac.mcp.bridge` dependency and remove only its own registrations on shutdown; it must not stop the shared socket.
 
-- `get_mcp_bridge()` returns the process singleton created by the bridge
-  extension's `on_startup` (`bridge.py:1865-1889`).
-- The twin does **not** use that singleton: it constructs its own
-  `McpBridge()` (`exts/ur5e-dt/ur5e_dt/extension.py:767`) and `run.sh:80` sets
-  `ISAAC_MCP_PORT=0` so the singleton never binds a socket. One Kit process
-  therefore exposes exactly one endpoint on 8766, owned by the twin's private
-  instance.
-
-A sibling pack cannot join that instance today: there is no public accessor for
-it, and a second socket would break the one-endpoint-per-process rule
-(`docs/ARCHITECTURE.md` §3). The design therefore ships **two attachments**:
-
-| Mode | When | How |
-|---|---|---|
-| **A. Shared singleton** (target) | Kit launched so the bridge singleton owns the port (`ISAAC_MCP_PORT=8766`, twin elsewhere or not loaded) | `on_startup` calls `get_mcp_bridge()` and registers `sim`. |
-| **B. Lazy attach** | A launcher that owns the socket itself (today's twin launch) | The pack exposes `sim_tools.attach(bridge)`; the owner of the socket passes its `McpBridge` in. `on_startup` tries `get_mcp_bridge()` first; if that raises, it logs one line and waits for `attach()`. |
-
-Mode B needs a one-line call from whoever owns the socket, and that call is not
-in this pack. Phase 1 is therefore verified against mode A, with B's `attach()`
-entrypoint exercised from a test. Making the twin's bridge *the* singleton
-(`self._mcp = get_mcp_bridge()`, guarded by "already started?") is the clean
-long-term fix and belongs to the twin pack's owner.
+A temporary autoloaded test pack was verified alongside all 23 UR5e tools in a headless 6.2 session. The probe pack
+reloaded, and the twin could be disabled and re-enabled while the other pack remained reachable. This validates the
+connection mechanism only: the `sim.*` tools proposed below do not exist yet and their APIs have not been validated.
+See [architecture](ARCHITECTURE.md), [verification](VERIFICATION.md), and the live-test checklist there.
 
 ### 2.4 Admission, exclusivity, reload
 
@@ -224,10 +207,9 @@ thread because the bridge hops it there (`mcp/docs/protocol.md`).
   `MovePrimCommand`:3700, `ChangePropertyCommand`:4340.
 - **C14** `$UD/_impl/utils.py:984` (`check_ancestral`), `:1259`
   (`get_stage_next_free_path`); `$UD/editor/editor.py:56` (`is_no_delete`).
-- **C15** `omni.kit.app` is **not** in this install: none under
-  `$SP/isaacsim/exts` (empty), `.../extscache` or `.../kit/extscore` (three
-  entries, none of them the app). `next_update_async` is cited from repo sources:
-  `mcp/docs/tool-authoring.md` and `exts/ur5e-dt/ur5e_dt/extension.py:6110-6111`.
+- **C15** The original static scan did not find `omni.kit.app` stubs in the searched install paths. The runtime API
+  `next_update_async` is used in repository sources including `mcp/docs/tool-authoring.md`; missing stubs do not mean
+  the runtime module is absent. Verify its proposed use in each new handler against the target Kit version.
 - **C16–C18** `$SP/pxr/Sdf/__init__.pyi:2071` (`Sdf.Path.IsValidPathString`);
   `$SP/pxr/Gf/__init__.pyi:893/899/901` (`Matrix4d`/`ExtractRotationQuat`/
   `ExtractTranslation`); (phase 4) `$SP/isaacsim/extscache/omni.replicator.core-1.13.38+110.4.0.lx64.r.cp312/omni/replicator/core/scripts/create.py:1434`
@@ -357,7 +339,7 @@ Same pattern as `scripts/checks/scene_prims.py` through `scripts/bridge_exec.py`
 
 | Check | Asserts |
 |---|---|
-| `sim_stage_read.py` | `sim__stage_info`, `sim__stage_tree` (depth 2, `truncated`), `sim__prim_find` agree with in-process `stage.Traverse()` |
+| `sim_stage_read.py` | `sim__stage__info`, `sim__stage__tree` (depth 2, `truncated`), `sim__prim__find` agree with in-process `stage.Traverse()` |
 | `sim_prim_create_delete.py` | create `Xform`/`Cube`/`Sphere`/`Camera`, transform, duplicate, delete; `GetPrimAtPath` is `None`; `/World` and default prim refused |
 | `sim_physics_state.py` | after `play`, `sim__body_state` matches `get_world_poses()`; `sim__raycast` down from 1 m hits the ground within ±1 cm |
 | `sim_sim_control.py` | `play` → `time_s` rises → `pause` freezes → `step 10` advances ≈`10*dt` → `stop` rewinds |
@@ -379,7 +361,7 @@ outputs).** `stage.info`, `stage.tree`, `prim.get`, `prim.find`,
 `physics.scene_info`, `sim.state`, `body.state`, `articulation.state`,
 `raycast`, `camera.list`, `capture.screenshot`, plus `policy.py` and all §5.1
 tests. Exit criteria: `verify.sh` read section green headless and windowed,
-`sim__stage_info` agrees with `run_python` on the twin scene, no handler reported
+`sim__stage__info` agrees with `run_python` on the twin scene, no handler reported
 as a pump.
 
 **Phase 2 — authoring.** `prim.create`, `prim.set_transform`,
@@ -399,12 +381,9 @@ different render path, different failure modes.
 
 ## 7. Riskiest assumptions
 
-1. **A sibling pack can reach the socket the twin owns.** Today it cannot
-   (`extension.py:767` builds a private `McpBridge`; `run.sh:80` disables the
-   singleton). Phase 1 is verified in mode A, and `sim_tools.attach(bridge)` is
-   only exercised from a test. If the twin stays unchanged the pack is
-   unreachable in the default launch and the design is moot until that one line
-   changes.
+1. **The generic pack can register safely on the shared bridge.** A temporary test pack has shared the live socket
+   with the UR5e twin, including reload and twin disable/enable. The actual generic pack, its handlers, and their
+   lifecycle behavior have not yet been built or verified.
 2. **`isaacsim.core.experimental.prims` is the right state API for 6.2.** The
    twin uses the deprecation-tracked `isaacsim.core.prims`, and the experimental
    API returns `warp` arrays with backend-dependent initialization

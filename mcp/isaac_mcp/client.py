@@ -58,9 +58,9 @@ from typing import Any, Dict, Optional
 # is the caller-side dial override (which host to connect to; distinct from
 # the bridge-side bind knob ISAAC_MCP_BIND).
 PORT_ENV = "ISAAC_MCP_PORT"
-# ur5e-dt runs its own bridge on this port (the twin's MCP endpoint). It is
-# checked first so one variable means "the twin bridge" in launch scripts and
-# MCP client configs alike; ISAAC_MCP_PORT stays the generic fallback.
+# The twin registers on the shared bridge selected by this port. It is checked
+# first so one variable identifies the twin endpoint in launch scripts and MCP
+# client configs alike; ISAAC_MCP_PORT stays the generic fallback.
 TWIN_PORT_ENV = "UR5E_DT_PORT"
 HOST_ENV = "ISAAC_MCP_HOST"
 DEFAULT_HOST = "127.0.0.1"

@@ -36,7 +36,7 @@ import traceback
 import uuid
 import weakref
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from . import knobs, protocol, schema
 from .protocol import ToolError
@@ -128,7 +128,7 @@ class OwnerRegistrar:
         not just this owner's tools, because a gate that covered one project's names would be
         walked around by asking for another's.
         """
-        self._bridge.register_pre_dispatch_hook(fn)
+        self._bridge.register_pre_dispatch_hook(fn, owner_id=self.owner_id)
 
     def add(self, tool: ToolDefinition) -> str:
         """Register one tool under this owner; returns its canonical name."""
@@ -368,6 +368,8 @@ class McpBridge:
         self._owner_tools: Dict[str, Set[str]] = {}    # owner_id -> canonical names
         self._owner_windows: Dict[str, Set[str]] = {}  # owner_id -> omni.ui window titles
         self._in_flight: Dict[str, int] = {}           # owner_id -> live dispatch count
+        self._owner_drain_callbacks: Dict[str, List[Callable[[], None]]] = {}
+        self._owner_cleanup_active: Set[str] = set()
         # REQUEST ADMISSION (see `_submit`). A socket request is either started at once or kept
         # here until an EXCLUSIVE one — a handler that pumps the main loop from inside its own
         # task — has the loop to itself and has given it back.
@@ -395,7 +397,15 @@ class McpBridge:
         # Policy that may REFUSE a call, consulted before anything is resolved or run. The
         # mechanism is here because this is the single entrance every caller uses; WHAT to refuse
         # and WHY belong to the host project, exactly as the tool registry does.
-        self._pre_dispatch: List[Callable[[str, Dict[str, Any]], Optional[str]]] = []
+        self._pre_dispatch: List[Tuple[Optional[str], Callable[[str, Dict[str, Any]], Optional[str]]]] = []
+        # Reloads serialize without holding the registry lock across arbitrary
+        # module imports or project registration code.
+        self._reload_lock = threading.Lock()
+        self._policy_reloads: Set[str] = set()
+        # A failed reload of an owner that supplied a policy must not leave the
+        # rest of the shared bridge silently unprotected. The module name is
+        # cleared when it successfully reloads or policy is explicitly reset.
+        self._failed_policy_reloads: Set[str] = set()
 
         # Persistent run_python sessions — the store owns the persist policy
         # and the staleness contract (see sessions.py).
@@ -468,23 +478,46 @@ class McpBridge:
         _destroy_ui_window(title)
         return title
 
-    def unregister_owner(self, owner_id: str) -> None:
+    def unregister_owner(self, owner_id: str, *, require_idle: bool = False,
+                         on_drained: Optional[Callable[[], None]] = None) -> None:
         """Remove an owner. Tools leave resolution immediately; final cleanup
         defers until the owner's in-flight dispatches drain (see _dispatch).
         Declared windows are destroyed now — they belong to the module
         instance being retired, and letting them live would leave on-screen UI
         driving dead closures after a reload."""
+        callbacks = []
+        finalize_after_callbacks = False
         with self._lock:
             if owner_id not in self._owners:
+                callbacks = [on_drained] if on_drained else []
+                windows = set()
+            elif owner_id in self._owner_cleanup_active:
+                if require_idle or on_drained:
+                    raise RuntimeError(f"owner {owner_id!r} cleanup is already in progress")
                 return
-            for canonical in self._owner_tools.get(owner_id, set()):
-                self._tools.pop(canonical, None)
-            windows = self._owner_windows.pop(owner_id, set())
-            self._draining.add(owner_id)
-            if self._in_flight.get(owner_id, 0) == 0:
-                self._finalize_owner_locked(owner_id)
+            elif require_idle and self._in_flight.get(owner_id, 0):
+                raise RuntimeError(f"owner {owner_id!r} has in-flight calls; wait before reloading")
+            else:
+                if on_drained:
+                    self._owner_drain_callbacks.setdefault(owner_id, []).append(on_drained)
+                for canonical in self._owner_tools.get(owner_id, set()):
+                    self._tools.pop(canonical, None)
+                windows = self._owner_windows.pop(owner_id, set())
+                self._draining.add(owner_id)
+                if self._in_flight.get(owner_id, 0) == 0:
+                    callbacks, finalize_after_callbacks = self._prepare_owner_drain_locked(owner_id)
         for title in windows:   # UI teardown outside the registry lock
             _destroy_ui_window(title)
+        self._run_owner_drain_callbacks(owner_id, callbacks, finalize_after_callbacks)
+
+    def _prepare_owner_drain_locked(self, owner_id: str):
+        callbacks = self._owner_drain_callbacks.pop(owner_id, [])
+        if callbacks:
+            # Keep the owner and namespace reserved until cleanup completes.
+            self._owner_cleanup_active.add(owner_id)
+            return callbacks, True
+        self._finalize_owner_locked(owner_id)
+        return [], False
 
     def _finalize_owner_locked(self, owner_id: str) -> None:
         """Complete a drained owner's removal. Caller holds the lock."""
@@ -494,7 +527,22 @@ class McpBridge:
         self._owner_tools.pop(owner_id, None)
         self._owner_windows.pop(owner_id, None)
         self._in_flight.pop(owner_id, None)
+        self._pre_dispatch = [(owner, hook) for owner, hook in self._pre_dispatch if owner != owner_id]
         self._draining.discard(owner_id)
+
+    def _run_owner_drain_callbacks(self, owner_id: str, callbacks: List[Callable[[], None]],
+                                   finalize: bool) -> None:
+        try:
+            for callback in callbacks:
+                try:
+                    callback()
+                except Exception as error:  # cleanup failures must not replace a tool result
+                    _log_error(f"[isaac.mcp.bridge] cleanup for {owner_id!r} failed: {error}")
+        finally:
+            if finalize:
+                with self._lock:
+                    self._owner_cleanup_active.discard(owner_id)
+                    self._finalize_owner_locked(owner_id)
 
     def get_registered_tools(self, include_internal: bool = False) -> Dict[str, Dict[str, Any]]:
         """Discovery view: canonical name -> metadata. Canonical names only —
@@ -558,7 +606,7 @@ class McpBridge:
     # ==================== Dispatch ====================
 
     def register_pre_dispatch_hook(
-            self, fn: Callable[[str, Dict[str, Any]], Optional[str]]) -> None:
+            self, fn: Callable[[str, Dict[str, Any]], Optional[str]], *, owner_id: Optional[str] = None) -> None:
         """Install policy that may refuse a call. `fn(name, params)` returns a reason, or None.
 
         MECHANISM ONLY, the same rule the tool registry follows: this knows how to ask, and
@@ -566,7 +614,9 @@ class McpBridge:
         installs its hook when it registers its tools.
         """
         with self._lock:
-            self._pre_dispatch.append(fn)
+            if owner_id is not None and (owner_id not in self._owners or owner_id in self._draining):
+                raise ValueError(f"owner {owner_id!r} is not registered")
+            self._pre_dispatch.append((owner_id, fn))
 
     def registrar_for(self, owner_id: str) -> OwnerRegistrar:
         """The owner-bound facade for an owner already registered.
@@ -596,8 +646,9 @@ class McpBridge:
         nobody is maintaining any more, which is a different wrong answer, not a safer one.
         """
         with self._lock:
-            count = len(self._pre_dispatch)
+            count = len(self._pre_dispatch) + len(self._failed_policy_reloads)
             self._pre_dispatch.clear()
+            self._failed_policy_reloads.clear()
         return count
 
     def pre_dispatch_hooks(self) -> int:
@@ -614,7 +665,14 @@ class McpBridge:
         the gate itself applies to a state it cannot read.
         """
         with self._lock:
-            hooks = list(self._pre_dispatch)
+            recovery = {"reload_tools", "status", "list_bridges", "list_tools", "put_file", "get_file", "stat_file"}
+            if self._failed_policy_reloads and name not in recovery:
+                return ("policy module reload failed; refusing calls until it is reloaded successfully: "
+                        + ", ".join(sorted(self._failed_policy_reloads)))
+            if self._policy_reloads and name not in recovery:
+                return ("policy module reload in progress; refusing calls until it finishes: "
+                        + ", ".join(sorted(self._policy_reloads)))
+            hooks = [hook for _owner, hook in self._pre_dispatch]
         for hook in hooks:
             try:
                 reason = hook(name, params)
@@ -744,10 +802,13 @@ class McpBridge:
             return protocol.error(str(e), error_type=type(e).__name__,
                                   traceback=traceback.format_exc())
         finally:
+            callbacks = []
+            finalize_after_callbacks = False
             with self._lock:
                 self._in_flight[owner_id] = max(0, self._in_flight.get(owner_id, 1) - 1)
                 if owner_id in self._draining and self._in_flight[owner_id] == 0:
-                    self._finalize_owner_locked(owner_id)
+                    callbacks, finalize_after_callbacks = self._prepare_owner_drain_locked(owner_id)
+            self._run_owner_drain_callbacks(owner_id, callbacks, finalize_after_callbacks)
 
     # THE RUNTIME WITNESS. Which handlers pump is DECLARED by their packages and checked there by a
     # syntax-tree test, and a static reading of a dynamic language has a residue. So the bridge
@@ -817,6 +878,12 @@ class McpBridge:
         return self._schedule_coroutine(coro)
 
     # ==================== Socket server ====================
+
+    @property
+    def listening_port(self) -> Optional[int]:
+        """The bound port while serving, or None when the socket is down."""
+        with self._lock:
+            return self._port if self._running else None
 
     def start(self, port: int, host: str = "localhost") -> None:
         """Bind the socket and start accepting clients. Idempotent.

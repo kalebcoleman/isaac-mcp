@@ -19,16 +19,10 @@ from typing import Dict, Any
 from isaacsim.core.api.world import World
 from isaacsim.gui.components.element_wrappers import ScrollingWindow
 
-# Generic MCP socket bridge (isaac.mcp.bridge) — this extension is a CONSUMER: it
-# registers its tools on the shared bridge and starts it on a port, instead of
-# hand-rolling its own socket server. Declared as a dependency in extension.toml.
-from isaac_mcp_bridge import McpBridge, ToolDefinition
-
-# ur5e-dt keeps its established port 8766 (consumers connect here for the twin
-# tools). It runs its OWN bridge instance (not the shared isaac.mcp.bridge singleton),
-# so it coexists with the permanent base bridge, which lives on its own port (9099).
-# Env override: UR5E_DT_PORT, or the legacy ISAAC_SIM_PORT the consumer already sets.
-MCP_PORT = int(os.getenv("UR5E_DT_PORT") or os.getenv("ISAAC_SIM_PORT") or "8766")
+# The bridge extension owns the process-wide socket; the twin owns only its
+# namespace and tool registrations. The dependency is declared in extension.toml.
+from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
+from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 
 # MCP output directory configuration
 BASE_OUTPUT_DIR = os.getenv("MCP_CLIENT_OUTPUT_DIR", "").strip()
@@ -601,6 +595,7 @@ from scipy.spatial.transform import Rotation as R
 
 class LogRedirector:
     """Redirects stdout/stderr to both the original stream and a UI callback."""
+    _ur5e_log_redirector = True
     def __init__(self, original, callback, throttle_seconds=0.0):
         self._original = original
         self._callback = callback
@@ -637,7 +632,7 @@ class DigitalTwin(omni.ext.IExt):
     def on_startup(self, ext_id):
         print("[DigitalTwin] Digital Twin startup")
         global _EXT_INSTANCE
-        _EXT_INSTANCE = self
+        self._closing = False
 
         # Disable UJITSO multiprocess collision cooking for the WHOLE session (root-caused
         # 2026-06-21). UJITSO (on by default) cooks collision meshes in FORKED subprocesses;
@@ -685,6 +680,7 @@ class DigitalTwin(omni.ext.IExt):
 
         # MCP bridge handle (set in on_startup); socket + sessions live on the bridge.
         self._mcp = None
+        self._mcp_owner_registered = False
 
         # Add Objects UI state
         self._selected_assembly = "fmb1"
@@ -779,22 +775,34 @@ class DigitalTwin(omni.ext.IExt):
             with ui.VStack(spacing=5):
                 self.create_ui()
 
-        # Register this extension's tools on ITS OWN MCP bridge instance, then start
-        # it on ur5e-dt's dedicated port. A separate instance (not get_mcp_bridge())
-        # keeps ur5e-dt off the permanent base bridge's 8766 socket.
-        # Handlers are resolved from the stable `_cmd_<name>` convention.
-        # omni-kit-mcp now scopes tools per owner: register_owner() takes a namespace (tools appear as
-        # "ur5e_dt.<name>") and returns the registrar that adds them.
-        self._mcp = McpBridge()
-        registrar = self._mcp.register_owner("ur5e-dt", "ur5e_dt", display_name="UR5e Digital Twin")
-        for _name, _schema in MCP_TOOL_REGISTRY.items():
-            registrar.add(ToolDefinition(
-                name=_name,
-                description=_schema["description"],
-                parameters=_schema.get("parameters", {}),
-                handler=getattr(self, "_cmd_" + _name),
-            ))
-        self._mcp.start(MCP_PORT)
+        # The standard launcher defers opening the shared socket until all twin
+        # tools are registered. A direct Kit launch also works: attach joins an
+        # existing socket or starts the unbound singleton on the selected port.
+        self._attach_bridge()
+        _EXT_INSTANCE = self
+
+    def _attach_bridge(self):
+        try:
+            bridge = get_mcp_bridge()
+            twin_port = os.getenv("UR5E_DT_PORT") or os.getenv("ISAAC_SIM_PORT")
+            configured_port = bridge_knobs.PORT.read()
+            attach_twin_bridge(
+                bridge, MCP_TOOL_REGISTRY, self, ToolDefinition,
+                requested_port=int(twin_port) if twin_port is not None else None,
+                configured_port=int(configured_port) if configured_port is not None else None,
+                host=bridge_knobs.BIND.read() or "localhost",
+            )
+        except BaseException:
+            # Kit may not call on_shutdown after on_startup raises. Undo the UI,
+            # callbacks and deferred logger created before this attachment.
+            self._closing = True
+            try:
+                self._finish_shutdown()
+            except Exception as cleanup_error:
+                carb.log_error(f"[DigitalTwin] cleanup after bridge startup failure: {cleanup_error}")
+            raise
+        self._mcp = bridge
+        self._mcp_owner_registered = True
 
     def create_ui(self):
         with ui.VStack(spacing=5):
@@ -1102,7 +1110,10 @@ class DigitalTwin(omni.ext.IExt):
                 self._drain_log_buffer, name="ur5e_dt_log_drain")
         except Exception:
             self._log_drain_sub = None
-        self._setup_log_redirect()
+        # The extension can be enabled from run_python, which temporarily captures
+        # sys.stdout. Install the redirector on the next tick, after that capture
+        # restores its stream, so a reload cannot retain a retired instance.
+        self._run_on_main_thread(self._setup_log_redirect)
 
         # Re-subscribe physics callbacks if action graphs already exist (e.g. after hot-reload)
         self._resubscribe_physics_callbacks()
@@ -1158,15 +1169,20 @@ class DigitalTwin(omni.ext.IExt):
                 print(f"[ur5e-dt] World cleanup on stage event: {e}")
 
     def _setup_log_redirect(self):
-        # Unwrap any leftover redirector from a previous failed startup
-        if isinstance(sys.stdout, LogRedirector):
+        if self._closing:
+            return
+        # A prior extension module may have been reloaded, so class identity is
+        # not reliable. The marker also handles an inactive retired redirector.
+        while getattr(sys.stdout, "_ur5e_log_redirector", False):
             sys.stdout = sys.stdout._original
-        if isinstance(sys.stderr, LogRedirector):
+        while getattr(sys.stderr, "_ur5e_log_redirector", False):
             sys.stderr = sys.stderr._original
         self._orig_stdout = sys.stdout
         self._orig_stderr = sys.stderr
-        sys.stdout = LogRedirector(self._orig_stdout, self._append_ext_log)
-        sys.stderr = LogRedirector(self._orig_stderr, lambda t: self._append_ext_log(f"[ERROR] {t}"), throttle_seconds=2.0)
+        self._stdout_redirector = LogRedirector(self._orig_stdout, self._append_ext_log)
+        self._stderr_redirector = LogRedirector(self._orig_stderr, lambda t: self._append_ext_log(f"[ERROR] {t}"), throttle_seconds=2.0)
+        sys.stdout = self._stdout_redirector
+        sys.stderr = self._stderr_redirector
         logging = carb.logging.acquire_logging()
         self._carb_log_sub = logging.add_logger(self._on_carb_log)
 
@@ -1196,8 +1212,19 @@ class DigitalTwin(omni.ext.IExt):
         #     self._append_sys_log(f"[VERBOSE] [{source}] {msg}")
 
     def _teardown_log_redirect(self):
-        sys.stdout = self._orig_stdout
-        sys.stderr = self._orig_stderr
+        stdout = getattr(self, "_stdout_redirector", None)
+        stderr = getattr(self, "_stderr_redirector", None)
+        # run_python may be temporarily capturing stdout when the extension is
+        # disabled. Do not replace that capture; make a subsequently restored
+        # old redirector harmless instead.
+        if stdout is not None:
+            stdout._callback = lambda _text: None
+            if sys.stdout is stdout:
+                sys.stdout = self._orig_stdout
+        if stderr is not None:
+            stderr._callback = lambda _text: None
+            if sys.stderr is stderr:
+                sys.stderr = self._orig_stderr
         if hasattr(self, "_carb_log_sub") and self._carb_log_sub is not None:
             logging = carb.logging.acquire_logging()
             logging.remove_logger(self._carb_log_sub)
@@ -6452,12 +6479,25 @@ class DigitalTwin(omni.ext.IExt):
 
     def on_shutdown(self):
         """Clean shutdown"""
+        if self._closing:
+            return
+        self._closing = True
+        # Hide this owner's tools immediately, but leave its live state intact
+        # until any already-running handler has finished using it.
+        global _EXT_INSTANCE
+        if _EXT_INSTANCE is self:
+            _EXT_INSTANCE = None
+        if self._mcp is not None and self._mcp_owner_registered:
+            self._mcp_owner_registered = False
+            self._mcp.unregister_owner(MCP_OWNER_ID, on_drained=self._finish_shutdown)
+        else:
+            self._finish_shutdown()
+
+    def _finish_shutdown(self):
+        """Release twin-owned state only after its handlers have drained."""
+        self._mcp = None
         self._teardown_log_redirect()
         print("[DigitalTwin] Digital Twin shutdown")
-
-        # Stop MCP socket server (owned by the shared bridge)
-        if self._mcp is not None:
-            self._mcp.stop()
 
         # Stop physics-rate callbacks
         self._stop_force_publish()

@@ -13,6 +13,7 @@ robots are intended additions. Preserve the current UR5e tools and their behavio
 ## What exists
 
 - [x] Host MCP server, local Kit socket bridge, tool discovery, multi-bridge selection, and the in-Kit panel.
+- [x] Shared bridge ownership: the UR5e pack and other registered packs can share a Kit endpoint and unload independently.
 - [x] UR5e tool pack: 23 tools for the robot's workstation, objects, scene state, ROS graphs and viewport recording.
 - [x] Desktop capture: screen and window screenshots, recordings, window listing and targeting.
 - [x] Isaac Lab host pack: 12 tools for installation and task discovery, jobs, checkpoints and TensorBoard data.
@@ -30,7 +31,7 @@ and the npm package dry run. An isolated host wheel installation and npm launche
 home Ubuntu 24.04 / RTX 5080 machine, a headless Isaac Sim 6.2 run passed the UR5e smoke script's 20 checks and
 registered 23 twin tools; the Lab install probe found Isaac Lab 3.0 and the custom UR5e reach task. Earlier handoff
 records document lab-workstation, windowed and short training checks. See [HANDOFF.md](HANDOFF.md) for their dates and
-scope. The latest verifier update did not run training.
+scope. The shared-bridge changes passed 481 local host tests and a new live UR5e baseline; no training was run.
 
 The UR5e verifier now checks explicit scene, gravity, joint-limit, drive and motion baselines, but a successful run is
 not proof of every physics invariant or real-robot fidelity. A live Sim 6.2 run and a deliberately incorrect drive value
@@ -60,8 +61,8 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 
 ### 2. General Isaac Sim tools without breaking the twin
 
-- [ ] Resolve how a generic tool pack and the existing twin register on the same live bridge. The twin currently creates
-  its own bridge, while the standard launcher disables the generic bridge's socket.
+- [x] Register the twin and other packs on one shared bridge. A temporary pack coexisted with the twin in a live 6.2
+  session, including a pack reload and twin disable/enable; see [VERIFICATION.md](VERIFICATION.md).
 - [ ] Verify each proposed API against a live headless Isaac Sim before implementation; the
   [generic tools draft](GENERIC-SIM-TOOLS.md) is a design, not an installed tool pack.
 - [ ] Implement and test general scene inspection, authoring, physics and capture in small stages. Re-run the UR5e

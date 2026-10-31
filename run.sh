@@ -75,9 +75,10 @@ fi
 
 export UR5E_DT_PORT="$PORT"
 
-# ur5e-dt runs its own bridge. Disable generic isaac.mcp.bridge base bridge so
-# one Kit process exposes exactly one MCP endpoint (the twin's).
-export ISAAC_MCP_PORT=0
+# One shared bridge serves the twin and any other packs. Defer binding until
+# the twin has registered, preserving the launcher's socket-readiness contract.
+export ISAAC_MCP_PORT="$PORT"
+export ISAAC_MCP_DEFER_START=1
 export OMNI_KIT_ACCEPT_EULA=YES
 export PYTHONDONTWRITEBYTECODE=1
 export PATH="$HOME/.local/bin:$PATH"

@@ -41,7 +41,7 @@ cause, never a doorway that is missing a namespace. A windowed, hand-launched
 app quits with the same refusal.
 
 Hot reload: ``reload_tool_module`` (backing the ``reload_tools`` builtin)
-unregisters the module's owner (draining in-flight work), purges the module
+refuses an owner with in-flight calls, then unregisters it and purges the module
 tree from sys.modules — EXCEPT the submodule named ``_state``, the documented
 home for live handles that must survive a reload — re-imports, re-registers.
 """
@@ -399,7 +399,7 @@ def _purge_bytecode(module: str) -> None:
 def reload_tool_module(bridge, module: str) -> Dict[str, Any]:
     """Hot-reload one autoloaded tool package (backs the reload_tools builtin).
 
-    Unregister (draining), purge the module tree from sys.modules except
+    Refuse while a call is in flight, then unregister and purge the module tree from sys.modules except
     the ``_state`` submodule, re-import, re-register. Live handles parked in a
     state module survive; everything else picks up fresh code.
     """
@@ -408,28 +408,46 @@ def reload_tool_module(bridge, module: str) -> Dict[str, Any]:
     # sys.path, exactly as startup's load_tool_modules would have done.
     prepend_tool_paths()
 
-    owner_id = bridge.find_owner_by_module(module)
-    if owner_id is None:
-        _log("warn", f"[isaac.mcp.bridge] reload_tools: {module} was not loaded; loading fresh")
-    else:
-        bridge.unregister_owner(owner_id)
+    # Do not hold the registry lock across project imports or entrypoints: a
+    # pack may wait for another thread that needs the bridge. A temporary gate
+    # keeps an old policy from disappearing unnoticed during that interval.
+    if not bridge._reload_lock.acquire(blocking=False):
+        raise RuntimeError("another tool module reload is in progress; retry when it finishes")
+    had_policy = False
+    try:
+        with bridge._lock:
+            owner_id = bridge.find_owner_by_module(module)
+            had_policy = any(owner == owner_id for owner, _hook in bridge._pre_dispatch) if owner_id else False
+            if had_policy:
+                bridge._policy_reloads.add(module)
+        if owner_id is None:
+            _log("warn", f"[isaac.mcp.bridge] reload_tools: {module} was not loaded; loading fresh")
+        else:
+            # Refuse before changing the registry if a call is still in flight.
+            # A synchronous reload cannot wait for Kit's main loop to drain it.
+            bridge.unregister_owner(owner_id, require_idle=True)
 
-    prefix = module + "."
-    # Exact-segment match, not endswith: a tool module legitimately named e.g.
-    # ``read_state`` must NOT be exempted from the purge, or it survives reload
-    # bound to its OLD sibling imports (2026-07-15: a stale read_state kept a
-    # split-mode _common alive across an articulation-mode flip).
-    purged = [name for name in list(sys.modules)
-              if (name == module or name.startswith(prefix))
-              and name.rsplit(".", 1)[-1] != _STATE_MODULE]
-    for name in purged:
-        del sys.modules[name]
-
-    # Drop cached bytecode too: .pyc validation is (mtime, size), so an edit
-    # within the same second that keeps the size constant — routine in an
-    # agent's edit->reload cycle — would otherwise serve stale code.
-    importlib.invalidate_caches()
-    _purge_bytecode(module)
-
-    info = _register_one(bridge, module)
-    return {"module": module, "reloaded": purged, **info}
+        try:
+            prefix = module + "."
+            # Preserve only the exact _state submodule across reloads.
+            purged = [name for name in list(sys.modules)
+                      if (name == module or name.startswith(prefix))
+                      and name.rsplit(".", 1)[-1] != _STATE_MODULE]
+            for name in purged:
+                del sys.modules[name]
+            importlib.invalidate_caches()
+            _purge_bytecode(module)
+            info = _register_one(bridge, module)
+        except BaseException:
+            if had_policy:
+                with bridge._lock:
+                    bridge._failed_policy_reloads.add(module)
+            raise
+        with bridge._lock:
+            bridge._failed_policy_reloads.discard(module)
+        return {"module": module, "reloaded": purged, **info}
+    finally:
+        if had_policy:
+            with bridge._lock:
+                bridge._policy_reloads.discard(module)
+        bridge._reload_lock.release()

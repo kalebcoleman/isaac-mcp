@@ -18,7 +18,7 @@ bridge is unavailable.
 
 | MCP tool | Arguments | Use and effects |
 |---|---|---|
-| `refresh_tools` | none | Rediscover the selected bridge's registry after a bridge starts or a module changes. Adds or updates visible tools and removes tools no longer advertised. A failed or malformed discovery leaves the existing list intact. Client support for dynamically updated tools can vary. |
+| `refresh_tools` | none | Rediscover the selected bridge's registry after a bridge starts or a module changes. Adds or updates visible tools and removes tools no longer advertised. A failed or malformed discovery, or a collision between bridge tool names or with a host tool, leaves the existing list intact. Client support for dynamically updated tools can vary. |
 | `use_bridge` | `port` (integer, required) | Connect to a different bridge on that port, report its identity, and replace the previously discovered bridge tools. The choice lasts until the host server restarts. |
 
 For a bridge already connected, `status` verifies its PID, port, app version and other identity data; `list_bridges`
@@ -70,7 +70,7 @@ the selected bridge and the host's built-in filter.
 | `status` | none | Return bridge process identity, port, app version, headless state and registry information. |
 | `list_bridges` | none | List bridge instances advertised on the bridge machine. |
 | `run_python` | `code` (string, required); `session_id="default"`, `persistent=false` | Execute Python on Kit's main thread with `omni`, `carb` and common USD symbols preloaded. Assign `result` to return a value. Persistent sessions retain eligible variables for the same ID; a stage-open event clears session state when the subscription is available. Arbitrary code can change the scene or access files. |
-| `reload_tools` | `module` (string, required) | Reload an autoloaded tool package by module name, then call host `refresh_tools` to update the client-facing registry. |
+| `reload_tools` | `module` (string, required) | Reload an autoloaded tool package by module name, then call host `refresh_tools` to update the client-facing registry. If that pack has a call in flight, reload is refused until it finishes. |
 | `put_file` | `path`, `content_b64` (strings, required); `mkdirs=true` | Decode base64 and write or overwrite a file on the bridge machine; creates parents by default. |
 | `get_file` | `path` (string, required) | Read a file on the bridge machine and return base64 content. |
 | `stat_file` | `path` (string, required) | Report whether a bridge-machine file exists, with its size and SHA-256 when present. |

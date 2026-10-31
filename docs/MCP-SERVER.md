@@ -8,7 +8,7 @@ For the system layer breakdown, port mapping, and routing rules, see [docs/ARCHI
 
 ```
 Kit Process (Isaac Sim 6.2.0.0)
-  ur5e-dt extension ──owns──► twin bridge :8766
+  ur5e-dt extension ──registers──► shared bridge :8766 ◄── other tool packs
                                     │ NDJSON over TCP
                                     ▼
                         isaac-mcp (stdio MCP server)
@@ -18,7 +18,9 @@ Kit Process (Isaac Sim 6.2.0.0)
                           └── screenshot / screen_* / list_windows (host desktop capture)
 ```
 
-Inside Kit, `exts/ur5e-dt` runs its own bridge endpoint on port 8766. The launcher sets `ISAAC_MCP_PORT=0` to disable the generic base bridge so that each Kit process exposes exactly one endpoint.
+Inside Kit, `exts/ur5e-dt` registers on the `isaac.mcp.bridge` singleton alongside other packs. The launcher sets
+the shared port to 8766 by default and delays binding until the twin has registered its tools. Disabling the twin
+removes its tools without stopping the shared bridge; an in-flight call must drain before the twin can re-register.
 
 ---
 

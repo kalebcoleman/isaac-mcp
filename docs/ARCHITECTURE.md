@@ -32,7 +32,7 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 | Layer 3: UR5e Digital Twin Extension (exts/ur5e-dt/)                          |
 | Package: ur5e_dt  |  Extension ID: ur5e-dt                                    |
 | - Runs inside Omniverse Kit                                                   |
-| - Owns the twin bridge endpoint and registers ur5e_dt.* tools (23 tools)      |
+| - Registers ur5e_dt.* tools on the shared bridge (23 tools)                 |
 | - Builds and manages the workstation scene (UR5e, RG2 gripper, QuickChanger)  |
 | - Provides motion control, joint drives, scene save/restore, camera setup     |
 | - Owns the OmniGraph pipelines for ROS 2 transforms and joint mirroring       |
@@ -77,7 +77,7 @@ Consistency across extensions, packages, and CLI commands is strictly maintained
 | **`8766`** | `ur5e-dt` extension | Default primary twin bridge port. Used by `run.sh`, `verify.sh`, and MCP clients. |
 | **`8767`** | Optional secondary bridge | Convention for the Isaac Lab bridge example; can also be used for a second twin instance when explicitly configured. |
 | **`8799`** | Probe script | Dedicated port for `scripts/probe_62.sh` to run non-interfering diagnostic probes. |
-| *(none)* | `isaac.mcp.bridge` base bridge | Normally autostarts on a port advertised through a portfile, which clients discover. Twin launches set `ISAAC_MCP_PORT=0` to disable it so each Kit process exposes exactly one endpoint (the twin bridge). |
+| Selected port | `isaac.mcp.bridge` | One process-wide bridge serves the twin, built-ins and any other registered packs. The twin launcher sets `ISAAC_MCP_PORT` to its selected port and defers binding until the twin's tools have registered. |
 
 ### Endpoint Precedence Chain
 
@@ -89,6 +89,15 @@ When an MCP client or host utility connects to a running bridge, the target port
 4. **Portfile discovery:** Active portfiles under `$XDG_RUNTIME_DIR/isaac-mcp/`, or `/tmp/isaac-mcp-<uid>/` when
    `XDG_RUNTIME_DIR` is unset. If multiple instances are running without an explicit pin, discovery refuses to guess
    and lists available ports.
+
+`run.sh` sets the shared bridge port to the resolved twin port; it defaults to loopback. `ISAAC_MCP_BIND` can change
+the bridge bind address and requires an appropriate trust boundary. A direct Kit launch can join an already-running
+shared bridge, or start the unbound bridge on the configured twin/shared port (8766 by default). If an explicitly
+requested twin port conflicts with the shared bridge, registration fails rather than silently choosing another port.
+The twin unregisters its own namespace on shutdown; the bridge and other owners remain available. Existing in-flight
+twin calls drain before its state is cleaned up, so an immediate re-enable can be refused until they finish.
+`./run.sh --port 0` asks the OS for a free port, advertised in the bridge's portfile for client discovery. When a twin
+requesting port 0 rejoins an already-listening shared bridge, it adopts that bridge's port.
 
 ---
 

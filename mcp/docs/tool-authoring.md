@@ -45,13 +45,32 @@ prototyped; registered tools are what agents rely on.
 ## Hot reload
 
 Edit tool code, then (via any client): `reload_tools {"module": "myproj_tools"}`
-→ the owner drains in-flight work, the module tree re-imports (stale bytecode
-purged), tools re-register. Live handles that must survive (articulation
+→ if that owner's calls have finished, its module tree re-imports (stale bytecode
+purged) and its tools re-register. If a call is in flight, reload is refused before
+changing the owner; wait for the call to finish and retry. Live handles that must survive (articulation
 views, physics handles) belong in a submodule named exactly `_state` — that one
 module is preserved across reloads (the name is exact, not a suffix: a tool
 module merely ending in `_state`, e.g. `read_state`, reloads normally). Then
 `refresh_tools` on the MCP front-end picks
 up schema changes. No Kit restart.
+
+The bridge is shared by co-loaded packs. Give each owner a distinct owner ID and
+namespace, and unregister only your own owner on shutdown; the bridge extension
+owns the socket. `unregister_owner` removes tools from discovery immediately and
+holds the owner and namespace while in-flight handlers drain. A shutdown needing
+live state until those handlers finish can pass an `on_drained` cleanup callback;
+re-registration must wait for that callback to finish. The standard twin launcher
+uses the internal `ISAAC_MCP_DEFER_START` handshake to expose the socket only after
+its tools register; ordinary packs should not set that variable.
+
+An owner's `registrar.refuse_calls_with` policy applies to bridge dispatch across
+all namespaces while that owner is active, and is removed when that owner drains.
+Hooks registered directly on the bridge have a separate, global lifetime. While a
+policy-bearing module reloads, the bridge refuses ordinary calls until its new
+policy is installed. If the reload fails, that refusal remains until the module
+is repaired and reloaded. Diagnostic and file-repair built-ins remain
+available subject to other installed policies. This avoids serving calls during a
+missing policy; a full bridge restart is another recovery path.
 
 **Windows don't reload themselves.** An `omni.ui.Window` built by the previous
 module instance survives the reload with closures over the dead module's state

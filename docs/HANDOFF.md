@@ -160,8 +160,9 @@ quick-start path). Do not use `scripts/probe_62.sh` for this (slow).
 **D. More tools.** Done 2026-10-29: windowed play + screenshot/video loop; a job guard so two Isaac Lab jobs do not start together
 (`allow_concurrent` on train/eval/play, see `docs/ISAACLAB-TOOLS.md` section 8); and (1) refusing to start a job while a Kit bridge
 (the sim) is running is now implemented too (2026-10-29, the Kit-bridge guard, `allow_concurrent_gpu`; still section 8). Still open: (2) the generic Isaac Sim tool pack, whose
-design draft is `docs/GENERIC-SIM-TOOLS.md` (24 `sim.*` tools; the APIs were grounded by grep only, verify on a live headless sim; biggest
-open issue: a sibling pack cannot reach the live socket because the twin builds its own `McpBridge()` and `run.sh` sets `ISAAC_MCP_PORT=0`).
+design draft is `docs/GENERIC-SIM-TOOLS.md` (24 `sim.*` tools; the APIs were grounded by grep only, verify on a live headless sim).
+The original separate-socket obstacle was addressed on 2026-10-30: the twin and a temporary pack shared one live bridge.
+The generic pack itself remains unimplemented; see [ROADMAP.md](ROADMAP.md) and [VERIFICATION.md](VERIFICATION.md).
 
 **E. Cleanups.** `uv.lock` pins differ slightly from the old repo (`onnxruntime-gpu`); `scripts/install.py` (optional
 persistent registration): fixed 2026-10-29 (`--remove` keeps `add-project` entries; default port now 8766); many scripts and

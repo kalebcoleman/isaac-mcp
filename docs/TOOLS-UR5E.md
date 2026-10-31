@@ -1,7 +1,7 @@
 # UR5e Digital Twin MCP Tools (`ur5e_dt__*`)
 
 This document covers the 23 tools registered by `exts/ur5e-dt/ur5e_dt/extension.py`
-on the twin's own bridge. It is the implementation reference; it documents the
+on the shared Kit bridge. It is the implementation reference; it documents the
 present implementation, not the proposed generic sim tool pack
 ([GENERIC-SIM-TOOLS.md](GENERIC-SIM-TOOLS.md)).
 

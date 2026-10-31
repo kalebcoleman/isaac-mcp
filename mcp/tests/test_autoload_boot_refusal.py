@@ -350,3 +350,40 @@ def test_startup_with_a_healthy_set_binds_and_refuses_nothing(
     assert quits == []
     assert "fa.t" in bridge_module._BRIDGE.get_registered_tools()
     assert not log_dir.exists() or not os.listdir(log_dir)
+
+
+def test_deferred_start_loads_configured_packs_without_opening_socket(extension, tool_dir, monkeypatch):
+    from isaac_mcp_bridge import bridge as bridge_module, knobs
+    tool_dir("fine_a", GOOD.format(ns="fa"))
+    monkeypatch.setenv(knobs.TOOL_MODULES.env, "fine_a")
+    monkeypatch.setenv(knobs.PORT.env, "49999")
+    monkeypatch.setenv("ISAAC_MCP_DEFER_START", "1")
+    started = []
+    monkeypatch.setattr(bridge_module.McpBridge, "start", lambda self, *a, **k: started.append((a, k)))
+
+    extension.McpBridgeExtension().on_startup("isaac.mcp.bridge-test")
+
+    assert started == []
+    assert "fa.t" in bridge_module.get_mcp_bridge().get_registered_tools()
+
+
+def test_deferred_start_requires_a_configured_port(extension, monkeypatch):
+    from isaac_mcp_bridge import knobs
+    monkeypatch.delenv(knobs.PORT.env, raising=False)
+    monkeypatch.setattr(knobs.PORT.__class__, "read_settings", lambda self: None)
+    monkeypatch.setenv("ISAAC_MCP_DEFER_START", "1")
+    monkeypatch.setattr(extension, "has_autoload_request", lambda: False)
+    with pytest.raises(RuntimeError, match="deferred start requires"):
+        extension.McpBridgeExtension().on_startup("isaac.mcp.bridge-test")
+
+
+def test_deferred_start_accepts_an_explicit_ephemeral_port(extension, monkeypatch):
+    from isaac_mcp_bridge import bridge as bridge_module, knobs
+    monkeypatch.setenv(knobs.PORT.env, "0")
+    monkeypatch.setenv("ISAAC_MCP_DEFER_START", "1")
+    monkeypatch.setattr(extension, "has_autoload_request", lambda: False)
+    started = []
+    monkeypatch.setattr(bridge_module.McpBridge, "start", lambda self, *a, **k: started.append((a, k)))
+    extension.McpBridgeExtension().on_startup("isaac.mcp.bridge-test")
+    assert started == []
+    assert bridge_module.get_mcp_bridge().listening_port is None

@@ -24,6 +24,8 @@ hardware. A workflow is only verified on GitHub after its run actually completes
 
 The first completed run for commit `66e84b4` passed on 2026-10-30: 421 tests, documentation checks, wheel and sdist
 builds, and the npm package dry run. [View the run](https://github.com/kalebcoleman/isaac-mcp/actions/runs/41170715313).
+On the same date, the shared-bridge changes passed 481 local host tests, the documentation checks, the wheel and sdist
+builds, and the npm package dry run.
 
 ## Live UR5e baseline
 
@@ -61,10 +63,27 @@ If a check fails, inspect the named result and the simulator log before changing
 
 ## Last live check
 
-On 2026-10-30, the new verifier passed on Ubuntu 24.04 / RTX 5080 with Isaac Sim 6.2.0.0 in a disposable headless
-session. Changing `wrist_1_joint` damping from 10 to 4 in that session caused the validator to fail with the joint
-and field named; the value was restored and the session shut down. No training was run. The simulator also logged
-the previously observed nested `app.update()` warning; the broader rare-hang investigation remains open.
+On 2026-10-30, the verifier passed on Ubuntu 24.04 / RTX 5080, NVIDIA driver 580.178.04, and Isaac Sim 6.2.0.0 in a
+disposable headless session. Changing `wrist_1_joint` damping from 10 to 4 caused the validator to fail with the joint
+and field named; the value was restored. The simulator also logged the previously observed nested `app.update()`
+warning; the broader rare-hang investigation remains open.
+
+In a separate 6.2 session with the shared-bridge changes under test, port 18766 served all 23 UR5e tools and a temporary
+autoloaded `shared_probe.ping` pack together. The probe pack was reloaded; disabling and re-enabling the twin left the
+probe callable and restored all 23 twin tools. After that restart, `./verify.sh` passed and `scripts/smoke_tools.py`
+passed 20/20 checks. The latter still reported the known narrow-strip warning for `randomize_single_object`. The test
+exercised simulated scene behavior, not real hardware or every ROS, windowed, GPU, OS, or Sim-version combination. No
+training was run. The generic `sim.*` pack remains a design and was not part of this test.
+
+A separate direct Kit launch, without the `run.sh` deferral handshake, used `ISAAC_MCP_PORT=0` and
+`UR5E_DT_PORT=18766`. Its bridge status reported port 18766 and discovery returned all 23 twin tools. The ROS library
+environment was supplied for this check, but ROS topics and the broader twin smoke test were not exercised in that
+direct-launch session.
+
+With `./run.sh --headless --port 0`, a separate headless session bound an OS-assigned port and advertised it in the
+runtime portfile. All 23 twin tools were present before and after disabling and re-enabling the twin on that endpoint.
+A final shared-bridge session loaded and reloaded a temporary policy-bearing pack alongside the twin; the UR5e verifier
+and all 20 smoke checks then passed, with the same narrow-strip randomization warning noted above.
 
 ## Other checks
 

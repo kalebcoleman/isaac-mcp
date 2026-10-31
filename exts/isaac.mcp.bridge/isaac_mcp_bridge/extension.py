@@ -3,9 +3,11 @@
 One bridge, one port, per Kit process. on_startup: build the singleton, arm
 the run_python session staleness guard (stage-open -> clear), load the
 configured tool packages (autoload.py) — every one, or the doorway refuses to
-boot (autoload.ToolModuleLoadRefusal) — bind the socket. Consumers never
-call start()/stop() — projects are plain tool packages registered persistently
-via ``scripts/install.py add-project`` (or per-launch via ISAAC_MCP_TOOL_* env).
+boot (autoload.ToolModuleLoadRefusal) — and normally bind the socket. The twin
+launcher can defer that bind until the twin has registered its tools; the twin
+then starts the unbound singleton. The bridge extension owns socket shutdown.
+Projects can also be registered persistently via ``scripts/install.py
+add-project`` (or per launch via ISAAC_MCP_TOOL_* env).
 
 Port resolution follows knobs.PORT and the bind address knobs.BIND (env
 override, else persistent settings — see knobs.py, the single home of every
@@ -20,6 +22,8 @@ No port configured => the socket stays down (logged); tool modules requested
 with no port is a hard error, since registering tools nobody can reach is
 always a misconfig.
 """
+
+import os
 
 import carb
 import omni.ext
@@ -68,6 +72,18 @@ class McpBridgeExtension(omni.ext.IExt):
 
         port = _resolve_port()
         bind_host = knobs.BIND.read() or "localhost"
+        # The twin launcher can wait to expose the socket until its Kit extension
+        # has registered its tools. Autoloaded packs above still use this same
+        # bridge. The owner that requested deferral must start it after registration.
+        if os.getenv("ISAAC_MCP_DEFER_START") == "1":
+            # An explicit zero requests an OS-assigned port from the twin.
+            # An unset port is still a configuration error in deferred mode.
+            if not port and knobs.PORT.read_env() != "0":
+                self._stage_sub = None
+                _destroy_bridge()
+                raise RuntimeError("isaac.mcp.bridge: deferred start requires ISAAC_MCP_PORT or autostartPort")
+            carb.log_info(f"[isaac.mcp.bridge] socket start deferred on {bind_host}:{port}")
+            return
         if port:
             try:
                 bridge.start(port, host=bind_host)

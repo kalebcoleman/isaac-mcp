@@ -4,6 +4,8 @@ import asyncio
 import os
 import sys
 import textwrap
+import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -191,6 +193,94 @@ def test_a_package_with_no_policy_installs_none(bridge, tool_dir):
     load_tool_modules(bridge, ["nopol_pkg"])
     assert bridge.pre_dispatch_hooks() == 0
     assert asyncio.run(bridge.dispatch("nopol.do_a_thing", {}))["result"] == {"did": True}
+
+
+def test_failed_reload_of_a_policy_pack_refuses_calls_until_repaired(bridge, tool_dir):
+    source = '''
+        MCP_NAMESPACE = "policy"
+        DOORWAY_ADMISSION = 1
+        def register(registrar):
+            @registrar.tool("inspect", {})
+            def inspect():
+                return {"ok": True}
+        def install_policy(registrar):
+            registrar.refuse_calls_with(lambda name, params: None)
+    '''
+    pkg = tool_dir("reload_policy", source)
+    bridge.register_owner("other", "sim").tool("status", {}, name="status")(lambda: {"ok": True})
+    load_tool_modules(bridge, modules=["reload_policy"], paths=[])
+    assert dispatch(bridge, "sim.status")["result"] == {"ok": True}
+
+    (pkg / "__init__.py").write_text("raise RuntimeError('broken policy module')\n")
+    with pytest.raises(RuntimeError, match="broken policy module"):
+        reload_tool_module(bridge, "reload_policy")
+    refused = dispatch(bridge, "sim.status")
+    assert refused["refused"] is True
+    assert "policy module reload failed" in refused["message"]
+    # Administrative status and reload remain reachable for diagnosis and repair.
+    assert bridge._refused("reload_tools", {}) is None
+    assert bridge._refused("status", {}) is None
+
+    (pkg / "__init__.py").write_text(textwrap.dedent(source))
+    reload_tool_module(bridge, "reload_policy")
+    assert dispatch(bridge, "sim.status")["result"] == {"ok": True}
+    assert bridge.pre_dispatch_hooks() == 1
+
+
+def test_policy_reload_gates_dispatch_without_locking_project_threads(bridge, tool_dir, monkeypatch):
+    source = '''
+        MCP_NAMESPACE = "guarded"
+        DOORWAY_ADMISSION = 1
+        def register(registrar):
+            @registrar.tool("inspect", {})
+            def inspect(): return {"ok": True}
+        def install_policy(registrar):
+            registrar.refuse_calls_with(lambda name, params: None)
+    '''
+    pkg = tool_dir("threaded_policy", source)
+    load_tool_modules(bridge, modules=["threaded_policy"], paths=[])
+    helper = SimpleNamespace(bridge=bridge, entered=threading.Event(), release=threading.Event())
+    monkeypatch.setitem(sys.modules, "reload_test_helper", helper)
+    (pkg / "__init__.py").write_text(textwrap.dedent('''
+        import threading
+        import reload_test_helper as helper
+        MCP_NAMESPACE = "guarded"
+        DOORWAY_ADMISSION = 1
+        def register(registrar):
+            worker = threading.Thread(target=helper.bridge.get_owners, daemon=True)
+            worker.start()
+            worker.join(1)
+            if worker.is_alive(): raise RuntimeError("registry lock blocked a project thread")
+            helper.entered.set()
+            if not helper.release.wait(5): raise RuntimeError("test timed out")
+            @registrar.tool("inspect", {})
+            def inspect(): return {"ok": True}
+        def install_policy(registrar):
+            registrar.refuse_calls_with(lambda name, params: None)
+    '''))
+    errors = []
+
+    def reload():
+        try:
+            reload_tool_module(bridge, "threaded_policy")
+        except Exception as error:
+            errors.append(error)
+
+    worker = threading.Thread(target=reload, daemon=True)
+    worker.start()
+    try:
+        assert helper.entered.wait(3), f"reload did not enter registration: {errors}"
+        assert "reload in progress" in bridge._refused("other.run", {})
+        assert bridge._refused("status", {}) is None
+        with pytest.raises(RuntimeError, match="another tool module reload"):
+            reload_tool_module(bridge, "threaded_policy")
+    finally:
+        helper.release.set()
+        worker.join(5)
+    assert not worker.is_alive()
+    assert errors == []
+    assert bridge._refused("other.run", {}) is None
+    assert bridge.pre_dispatch_hooks() == 1
 
 
 def test_a_policy_that_cannot_install_FAILS_THE_LOAD(bridge, tool_dir):
