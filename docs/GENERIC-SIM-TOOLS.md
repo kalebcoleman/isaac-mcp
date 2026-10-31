@@ -2,8 +2,9 @@
 
 > **Status: design draft, generic tools not implemented.** The original draft was written 2026-10-29 from static
 > inspection. The bridge attachment obstacle was addressed in the shared-bridge update: a temporary second pack and
-> the UR5e pack were exercised on one live 6.2 endpoint. The proposed generic APIs below still need live verification
-> and implementation; references to prior design decisions are not proof they work.
+> the UR5e pack were exercised on one live 6.2 endpoint. The first stage/prim inspection APIs have now been checked
+> in a separate non-robot 6.2 scene; see [verification](VERIFICATION.md#generic-scene-api-validation). The tools and
+> the remaining proposed APIs still need implementation and validation.
 
 
 Design for a second Kit-side tool pack exposing **robot-agnostic** Isaac Sim
@@ -96,7 +97,8 @@ Sim pack can use the same singleton and register a distinct owner and namespace.
 
 A temporary autoloaded test pack was verified alongside all 23 UR5e tools in a headless 6.2 session. The probe pack
 reloaded, and the twin could be disabled and re-enabled while the other pack remained reachable. This validates the
-connection mechanism only: the `sim.*` tools proposed below do not exist yet and their APIs have not been validated.
+connection mechanism only: the `sim.*` tools proposed below do not exist yet. The first stage and prim inspection
+APIs have since been checked separately; this does not validate the remaining proposals.
 See [architecture](ARCHITECTURE.md), [verification](VERIFICATION.md), and the live-test checklist there.
 
 ### 2.4 Admission, exclusivity, reload
@@ -122,17 +124,17 @@ thread because the bridge hops it there (`mcp/docs/protocol.md`).
 
 | # | Tool (`sim.*`) | Parameters | Returns | API (key) | Thread | Main failure modes |
 |---|---|---|---|---|---|---|
-| 1 | `stage.info` | — | `{stage_url, state, default_prim, up_axis, meters_per_unit, prim_count, circuit_prim_count, playing, time_s}` | C1 `get_stage_url/get_stage_state`, C8 `GetDefaultPrim`, C7 `get_stage_units/get_stage_up_axis`, C2 `is_playing/get_current_time` | sync | no stage open (`get_stage()` → `None`); `prim_count` capped at 100k and flagged `truncated`; first call imports the `isaacsim.core.utils` (deprecated) module |
-| 2 | `stage.tree` | `root="/World"`, `depth=3`, `max_nodes=2000`, `types=null`, `include_inactive=false` | `{nodes:[{path,name,type,active,children}], node_count, truncated}` | C8 `GetPrimAtPath`, `Traverse`, `Usd.Prim.IsActive` | sync | root absent → error naming the path; truncation must be explicit (never silently short); deep stages cost time, bounded by `max_nodes` |
-| 3 | `prim.get` | `path`, `attributes=null\|[names]`, `max_attributes=64`, `include_bounds=true` | `{path,name,type,active,applied_schemas,world_pose{position,orientation},local_bounds{min,max},attributes:{name:{type,value}}}` | C8 `GetPrimAtPath`; C9 `Xformable.ComputeLocalToWorldTransform`, C17 `ExtractTranslation/ExtractRotationQuat`; C9 `BBoxCache.ComputeWorldBound` | sync | invalid/unrelative path (C16); prim inactive → empty; non-scalar attrs (arrays, assets, relationships) rendered as `{type, size}` rather than dumped; bbox on huge meshes is slow → `include_bounds=false` |
-| 4 | `prim.find` | `regex`, `type=null`, `max=500` | `{paths, count, truncated}` | C7 `find_matching_prim_paths(regex, prim_type)` (falls back to `Traverse` + regex when the util is unavailable) | sync | bad regex → `ValueError` surfaced as error; over-broad pattern truncated at `max`; C7 module is in `extsDeprecated/` |
+| 1 | `stage.info` | — | `{stage_url, state, default_prim, up_axis, meters_per_unit, prim_count, playing, time_s}` | C1 `get_stage_url/get_stage_state`, C8 `GetDefaultPrim`, C9 `UsdGeom.GetStageMetersPerUnit/GetStageUpAxis`, C2 `is_playing/get_current_time` | sync | no stage open needs a clear error; `prim_count` capped at 100k and flagged `truncated`; stage-wide counts include other app or extension content; an anonymous `anon:` URL is not a saved file |
+| 2 | `stage.tree` | `root="/World"`, `depth=3`, `max_nodes=2000`, `types=null`, `include_inactive=false` | `{nodes:[{path,name,type,active,children}], node_count, truncated}` | C8 `GetPrimAtPath`, `GetChildren` / `GetAllChildren`, `Usd.Prim.IsActive` | sync | root absent → error naming the path; inactive prims need the appropriate traversal; truncation and depth semantics must be explicit |
+| 3 | `prim.get` | `path`, `attributes=null\|[names]`, `max_attributes=64`, `include_bounds=true` | `{path,name,type,active,applied_schemas,world_pose{position,orientation},world_bounds{min,max},attributes:{name:{type,value}}}` | C8 `GetPrimAtPath`; C9 `Xformable.ComputeLocalToWorldTransform`, C17 `ExtractTranslation/ExtractRotationQuat`; C9 `BBoxCache.ComputeWorldBound` | sync | reject invalid or relative prim paths (C16); non-Xformable prims need a null pose; world, local and untransformed bounds differ; large attributes and bounds need caps |
+| 4 | `prim.find` | `regex`, `type=null`, `max=500` | `{paths, count, truncated}` | C8 `Traverse` plus Python `re.fullmatch` and `GetTypeName` | sync | invalid Python regex → clear error; results must be capped and flagged when truncated; the deprecated C7 helper does not implement the same general regex and USD-type contract |
 | 5 | `physics.scene_info` | — | `{scene_path, gravity_magnitude, gravity_direction, time_steps_per_second, physics_dt, playing}` | C10 `UsdPhysics.Scene.GetGravityMagnitudeAttr/GetGravityDirectionAttr`; C11 `PhysxSceneAPI.GetTimeStepsPerSecondAttr`; C6 `SimulationManager.get_physics_dt` | sync | no `UsdPhysics.Scene` prim → nulls, not an error; `PhysxSchema` only importable once the PhysX schema extension is loaded |
 | 6 | `sim.state` | — | `{playing, stopped, paused, time_s, physics_dt, time_codes_per_second}` | C2 `is_playing/is_stopped/get_current_time/get_time_codes_per_second`; C6 `SimulationManager.is_paused/get_physics_dt` | sync | non-app Kit without a timeline → error; `paused` is not reachable from `omni.timeline` alone (comes from `SimulationManager`) |
 | 7 | `body.state` | `paths=[..]`, `velocities=true` | `{bodies:[{path,position,orientation,linear_velocity,angular_velocity}]}` | C5 `RigidPrim.get_world_poses`, `get_velocities`, `get_masses` | sync read of physics buffers | path is not a rigid body; called before the first step (tensor view not initialized); `wp.array` must be converted with `.numpy()`; one invalid path invalidates the whole view → validate per path first |
 | 8 | `articulation.state` | `path`, `dofs=null` (names or indices) | `{path, num_dofs, dof_names, positions, velocities}` | C5 `Articulation.num_dofs/dof_names/get_dof_positions/get_dof_velocities` | sync read of physics buffers | prim is not an articulation root; before first step; unknown dof name → error listing valid names (capped) |
 | 9 | `raycast` | `origin[3]`, `direction[3]`, `max_distance=100`, `all=false` | `{hit:bool, hits:[{position,normal,distance,collision,rigid_body,face_index}]}` | C12 `get_physx_scene_query_interface().raycast_closest / raycast_all` (`ifaces.py:44`) | sync; needs an attached PhysX scene | called before the timeline ever played → no scene, empty result (return `hit:false` plus `scene_ready:false`); direction normalized in-handler; distance capped at 100 m; `all=true` capped at 32 hits |
-| 10 | `camera.list` | — | `{cameras:[{path,focal_length,clipping_range}], active_viewport_camera}` | C8 `Traverse`; C9 `UsdGeom.Camera` `GetFocalLengthAttr/GetClippingRangeAttr`; C3 `get_active_viewport_camera_string` | sync | headless: no viewport → `active_viewport_camera:null`; no cameras → empty list, not an error |
-| 11 | `capture.screenshot` | `filename`, `camera=null`, `width=1280`, `height=720`, `overwrite=false` | `{file, width, height, bytes}` | C3 `capture_viewport_to_file(get_active_viewport(), …)` fired, then await frames (C15); camera selection via C4 `CaptureOptions.camera` + `CaptureExtension` | **async** | headless: `CaptureExtension.start()` logs "no active viewport" and returns `False` (`extension.py:348-349`) → typed error, not a hang; camera capture mutates the active viewport's camera (C4 `_prepare_viewport`, `extension.py:616-618`) — restored in a `finally`; capture never completes → timeout, partial file deleted |
+| 10 | `camera.list` | — | `{cameras:[{path,focal_length,clipping_range}], active_viewport_camera}` | C8 `Traverse`; C9 `UsdGeom.Camera` `GetFocalLengthAttr/GetClippingRangeAttr`; C3 `get_active_viewport_camera_string` | sync | no viewport → `active_viewport_camera:null`; no cameras → empty list, not an error |
+| 11 | `capture.screenshot` | `filename`, `camera=null`, `width=1280`, `height=720`, `overwrite=false` | `{file, width, height, bytes}` | C3 `capture_viewport_to_file(get_active_viewport(), …)` fired, then await frames (C15); camera selection via C4 `CaptureOptions.camera` + `CaptureExtension` | **async** | if no viewport exists, return a typed error; camera capture can mutate the active camera (C4 `_prepare_viewport`, `extension.py:616-618`) — restore it in `finally`; capture never completes → timeout, partial file deleted; validate actual headless behavior |
 | 12 | `capture.record_start` | `filename`, `duration_s=5`, `fps=24`, `camera=null`, `width=1920`, `height=1080`, `overwrite=false` | `{recording:true, expected_frames, output_folder}` | C4 `CaptureOptions(file_type=".mp4")` (`OUTPUT_FILE_TYPES` = `.png/.tga/.exr/.mp4`, `capture_options.py:78`), `CaptureExtension.get_instance().start()` (`extension.py:317`) | **async** (start only) | a capture is already running (`get_instance()` is a singleton); `duration_s*fps` over cap (1800 frames); no active viewport; folder not writable; MP4 encoding is driven by the `mp4_encoding_*` options, so encoder failures surface only at `record_stop` |
 | 13 | `capture.record_stop` | `wait=true`, `cancel=false`, `timeout_s=120` | `{files, cancelled, elapsed_s}` | C4 `CaptureExtension.done` (`extension.py:309`), `cancel()` (`:369`), `get_outputs()` (`:1747`) | **async** (awaits frames while `not done`) | nothing running → error; cancel leaves partial frames on disk (report them); `get_outputs()` returns `[]` on encoder failure → report with the last logged `carb` error |
 | 14 | `prim.create` | `path`, `type`, `parent=null`, `transform={translate,orient,scale}`, `reference=null`, `attributes={}`, `on_conflict="error"` | `{path, type, created:true}` | C13 `CreatePrimWithDefaultXformCommand` (`usd_commands.py:825`, undoable) or C7 `create_prim`; conflict handling C14 `get_stage_next_free_path` (`utils.py:1259`); path check C16 | sync | invalid path or prim type; parent missing; `reference` outside the allow-list root; path occupied (`on_conflict="next_free"` appends a suffix); creating while the timeline plays is allowed but physics will not see the prim until a pause/play cycle |
@@ -145,7 +147,27 @@ thread because the bridge hops it there (`mcp/docs/protocol.md`).
 | 21 | `sim.pause` | — | `{playing:false, time_s}` | C2 `timeline.pause()` | sync | pausing during an active capture freezes frames (allowed; `record_stop` reports the short count) |
 | 22 | `sim.stop` | — | `{playing:false, time_s}` | C2 `timeline.stop()` | sync | stop rewinds to the start timecode — report the new `time_s` so callers do not assume a resume |
 | 23 | `sim.step` | `frames=1`, `max_frames=600` | `{frames, time_s}` | C2 `get_current_time`, C15 `await next_update_async()` per frame; C6 `SimulationManager.step(steps=n)` only when the timeline is paused | **async** | timeline already playing → refuse (double-stepping); `frames > max_frames` → refuse; frame never arrives (UI thread starved) → timeout after `frames/10 + 10` s; `SimulationManager.step` bypasses rendering, so it is opt-in (`render=false` semantics) |
-| 24 | `stage.save` | `filename=null` (save-as), `overwrite=false` | `{file, mode:"save"\|"save_as", bytes}` | C1 `save_stage()` (`_usd.pyi:813`) when the stage has a URL, else `save_as_stage(url)` (`:769`, synchronous, returns `bool`) | sync | stage never saved and no filename → error; path outside the allow-list; directory read-only; `save_as_stage` returns `False` with USD error text in the log → surface `success:false` plus the callback's `(ok, err, warnings)` |
+| 24 | `stage.save` | `filename=null` (save-as), `overwrite=false` | `{file, mode:"save"\|"save_as", bytes}` | C1 `save_stage()` for a saveable named stage, else `save_as_stage(url)` (`:769`, synchronous, returns `bool`) | sync | an anonymous stage can have a nonempty `anon:` URL but still needs save-as; missing filename, path policy, write permissions and `False` results need explicit errors |
+
+### 3.24 First live scene-inspection observations
+
+The non-robot scene check in [VERIFICATION.md](VERIFICATION.md#generic-scene-api-validation) exercised the underlying
+stage, tree, prim and search APIs on Isaac Sim 6.2, not the unimplemented `sim.*` tools. In that session:
+
+- `GetChildren` and `Traverse` excluded an inactive prim; `GetAllChildren` and `TraverseAll` included it. The session
+  also contained prims outside the fixture's `/World` subtree, so a stage-wide count is not just the authored fixture.
+- A translated cube had different world, local and untransformed bounds. `ComputeWorldBound` therefore supports the
+  proposed `world_bounds` field, not the former `local_bounds` label. A `Scope` was not Xformable.
+- `Sdf.Path.IsValidPathString` returned a bool-like `_IsValidPathStringResult` for invalid syntax; its representation
+  included `(False, reason)` and its truth value was false. A relative path had valid syntax. Normalize results across
+  USD bindings and check that a requested prim path is absolute as well.
+- The deprecated `find_matching_prim_paths` helper matched a simple wildcard and one alternation, but an anchored
+  pattern and invalid pattern both returned empty results, and a `Cube` type filter raised `ValueError`. Its documented
+  contract is narrower than general regex and USD type names. Python `re.fullmatch` plus `GetTypeName` matched the
+  fixture as expected; the eventual tool still needs bounded traversal and its own error and truncation tests.
+
+No-camera/no-stage behavior, deep trees, instance proxies, non-scalar attribute serialization and other Sim versions
+remain untested. These checks do not validate physics, capture, authoring or a shipped tool implementation.
 
 ### 3.25 Citation expansion (exact installed files)
 
@@ -156,8 +178,8 @@ thread because the bridge hops it there (`mcp/docs/protocol.md`).
 `$DU = $SP/isaacsim/extsDeprecated/isaacsim.core.utils/isaacsim/core/utils`
 
 - **C1** `$UD/_usd.pyi` — `get_context`:960, `get_stage_state`:658,
-  `get_stage_url`:668, `open_stage`:707, `save_as_stage`:769, `save_stage`:813
-  (`new_stage()` is absent, §3.26).
+  `get_stage_url`:668, `open_stage`:707, `save_as_stage`:769, `save_stage`:813.
+  The runtime also has `new_stage()`, despite its absence from this stub (§3.26).
 - **C2** `$SP/isaacsim/extscache/omni.timeline-1.1.2+187cf21b.lx64.r.cp312/omni/timeline/_timeline.pyi`
   — `play`:204, `pause`:200, `stop`:297, `is_playing`:179, `is_stopped`:193,
   `get_current_time`:73, `get_time_codes_per_second`:130 (no `is_paused`).
@@ -181,7 +203,7 @@ thread because the bridge hops it there (`mcp/docs/protocol.md`).
   `get_stage_up_axis`/`add_reference_to_stage`/`get_stage_units`);
   `prims.py:393/555/669/775` (`find_matching_prim_paths`/`is_prim_no_delete`/
   `create_prim`/`delete_prim`); `bounds.py:82/104`. Deprecated: a migration risk.
-- **C8** `$SP/pxr/Usd/__init__.pyi` — `Traverse`:1815, `IsActive`:1158,
+- **C8** `$SP/pxr/Usd/__init__.pyi` — `Traverse`:1815, `IsActive`:1114,
   `GetPrimAtPath`:1723, `GetDefaultPrim`:1691, `RemovePrim`:1777, `Save`:1781.
 - **C9** `$SP/pxr/UsdGeom/__init__.pyi` — `Xformable`:1812 (`AddOrientOp`:1814,
   `AddScaleOp`:1834, `AddTranslateOp`:1844, `GetOrderedXformOps`:1870,
@@ -215,15 +237,14 @@ thread because the bridge hops it there (`mcp/docs/protocol.md`).
   `ExtractTranslation`); (phase 4) `$SP/isaacsim/extscache/omni.replicator.core-1.13.38+110.4.0.lx64.r.cp312/omni/replicator/core/scripts/create.py:1434`
   (`render_product`).
 
-### 3.26 Things not found, and therefore not proposed
+### 3.26 APIs and behavior still to investigate
 
-`UsdContext.new_stage()` — called by the twin
-(`exts/ur5e-dt/ur5e_dt/extension.py:6106`) but absent from `_usd.pyi` (C1), so
-no stage-reset tool. No headless offscreen capture helper in
-`omni.kit.capture.viewport`: `start()` binds `get_active_viewport()` and refuses
-with "no active viewport" (`$CP/extension.py:348-349, 608-611`), so headless
-stills need Replicator (C18), phase 4. No `omni.usd` stage diff/transaction API —
-undo comes from `omni.kit.commands`, as the twin already does.
+`UsdContext.new_stage()` is present at runtime and created the disposable validation stage, even though the original
+stub search did not find it. A generic stage-reset tool is not yet proposed: it would need explicit destructive-action
+semantics and tests. `CaptureExtension.start()` requires an active viewport, but headless does not necessarily mean
+there is none: the twin's separate real-time viewport recording passed in a headless session. The proposed generic
+capture path and its no-viewport behavior still need direct checks. No `omni.usd` stage diff/transaction API was found
+in the original scan; undo is available through `omni.kit.commands` as used by the twin.
 
 ## 4. Safety rules
 
@@ -344,7 +365,7 @@ Same pattern as `scripts/checks/scene_prims.py` through `scripts/bridge_exec.py`
 | `sim_physics_state.py` | after `play`, `sim__body_state` matches `get_world_poses()`; `sim__raycast` down from 1 m hits the ground within ±1 cm |
 | `sim_sim_control.py` | `play` → `time_s` rises → `pause` freezes → `step 10` advances ≈`10*dt` → `stop` rewinds |
 | `sim_capture.py` | screenshot writes a non-empty PNG at the requested size; start/stop writes an `.mp4` of the expected frame count (`ffprobe` if present) |
-| `sim_negative.py` | headless: capture fails with "no active viewport" and leaves no file; deleting `/World` and a `../` filename are refused |
+| `sim_negative.py` | when there is no active viewport, capture returns a clear error and leaves no file; deleting `/World` and a `../` filename are refused |
 
 `verify.sh` gains a read-only section (phase-1 tools only) so a fresh clone can
 assert the pack loaded without touching the twin scene.
@@ -390,10 +411,6 @@ different render path, different failure modes.
    ("Backends: tensor" for dof reads). If the tensor backend is not initialized
    before the first step, `body.state`/`articulation.state` fail on a fresh
    stage — documented here, not yet observed.
-3. **Capture and recording are windowed-only.** Stated from
-   `CaptureExtension.start()` → `get_active_viewport()` → "no active viewport"
-   (`extension.py:348-349, 608-611`). If some headless configuration does
-   provide a viewport, phase 1 loses its biggest limitation and phase 4 is
-   unnecessary; the inverse — a windowed session still failing because the
-   capture singleton's UI is not built in this app — has not been checked
-   against a live run.
+3. **The proposed capture path works in the selected app configuration.** The twin's separate viewport-recording path
+   succeeded headlessly, so a blanket windowed-only assumption is false. The proposed `CaptureExtension` screenshot
+   and recording APIs, camera restoration, and genuinely absent-viewport cases still need their own live tests.

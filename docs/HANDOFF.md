@@ -200,7 +200,8 @@ upstream-written pages (`mcp/docs/*`) that predate the rename and may mention ol
   usage limit while `gemini-3.8-flash` still answered. Always review the diff and re-run the tests: agents added noisy edits, a
   sleep-based workaround in place of a real fix, and one wrong default.
 - Prefer targeted checks over `scripts/probe_62.sh` (slow); avoid GPU jobs while agents run.
-- Do not create public repos, publish packages, or open PRs without being asked.
+- Do not create public repos or publish packages without being asked. The owner requested branches and pull requests
+  for review on 2026-10-30; do not push directly to `main` unless explicitly requested.
 
 ## 8. Quick command reference
 
