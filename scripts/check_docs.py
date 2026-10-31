@@ -25,13 +25,7 @@ def tool_decorators(path):
     return result
 
 
-def expected_tools():
-    twin_file = ROOT / "exts/ur5e-dt/ur5e_dt/extension.py"
-    tree = ast.parse(twin_file.read_text())
-    registry = next(ast.literal_eval(node.value) for node in tree.body
-                    if isinstance(node, ast.Assign) and any(
-                        isinstance(target, ast.Name) and target.id == "MCP_TOOL_REGISTRY"
-                        for target in node.targets))
+def bridge_builtins():
     bridge = ast.parse((ROOT / "exts/isaac.mcp.bridge/isaac_mcp_bridge/builtins.py").read_text())
     builtins = set()
     for node in ast.walk(bridge):
@@ -43,6 +37,17 @@ def expected_tools():
             continue
         if isinstance(attrs.get("name"), ast.Constant):
             builtins.add(attrs["name"].value)
+    return builtins
+
+
+def expected_tools():
+    twin_file = ROOT / "exts/ur5e-dt/ur5e_dt/extension.py"
+    tree = ast.parse(twin_file.read_text())
+    registry = next(ast.literal_eval(node.value) for node in tree.body
+                    if isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Name) and target.id == "MCP_TOOL_REGISTRY"
+                        for target in node.targets))
+    builtins = bridge_builtins()
     host = (tool_decorators(ROOT / "mcp/isaac_mcp/screen.py")
             | tool_decorators(ROOT / "mcp/isaac_mcp/server.py") | builtins)
     return {
@@ -52,9 +57,56 @@ def expected_tools():
     }
 
 
+def tier_counts():
+    """Tool counts per tier, in the order AGENTS.md states them."""
+    expected = expected_tools()
+    builtins = bridge_builtins()
+    host_only = (tool_decorators(ROOT / "mcp/isaac_mcp/screen.py")
+                 | tool_decorators(ROOT / "mcp/isaac_mcp/server.py"))
+    return {"host": len(host_only), "isaaclab": len(expected["docs/TOOLS-ISAACLAB.md"]),
+            "builtins": len(builtins), "ur5e": len(expected["docs/TOOLS-UR5E.md"])}
+
+
+TIER_ROWS = {"host": "Host gateway", "isaaclab": "Isaac Lab", "builtins": "Bridge built-ins",
+             "ur5e": "UR5e twin"}
+
+
+def check_agent_guide(errors, text=None, counts=None):
+    """Compare every figure a reader sees in AGENTS.md with the counts derived from the code."""
+    if text is None:
+        text = (ROOT / "AGENTS.md").read_text()
+    actual = counts or tier_counts()
+    where = "AGENTS.md"
+    for tier, label in TIER_ROWS.items():
+        rows = [line for line in text.splitlines() if line.startswith("| " + label)]
+        cells = [c.strip() for c in rows[0].strip("|").split("|")] if len(rows) == 1 else []
+        match = re.match(r"(\d+)\b", cells[1]) if len(cells) > 1 else None
+        if not match:
+            errors.append(f"{where}: need exactly one '{label}' table row whose Tools cell starts "
+                          "with a count")
+        elif int(match.group(1)) != actual[tier]:
+            errors.append(f"{where}: {label} row says {match.group(1)} tools, the code has "
+                          f"{actual[tier]}")
+    expected = {
+        "exactly N tools (host + Isaac Lab subtotal)":
+            (r"exactly (\d+) tools", actual["host"] + actual["isaaclab"]),
+        "The other N tools (bridge subtotal)":
+            (r"The other (\d+) tools", actual["builtins"] + actual["ur5e"]),
+        "there are N tools in total":
+            (r"there are (\d+) tools in total", sum(actual.values())),
+    }
+    for description, (pattern, value) in expected.items():
+        found = re.findall(pattern, text)
+        if len(found) != 1:
+            errors.append(f"{where}: expected exactly one '{description}' statement, found "
+                          f"{len(found)}")
+        elif int(found[0]) != value:
+            errors.append(f"{where}: '{description}' says {found[0]}, the code has {value}")
+
+
 def main():
     errors = []
-    files = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md")),
+    files = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md")),
              *sorted((ROOT / "mcp/docs").glob("*.md"))]
     for path in files:
         text = path.read_text()
@@ -81,11 +133,12 @@ def main():
             stale = sorted(found - expected)
             if stale:
                 errors.append(f"{filename}: names not in registry: {', '.join(stale)}")
+    check_agent_guide(errors)
     for error in errors:
         print(f"FAIL: {error}")
     if errors:
         return 1
-    print(f"Documentation checks passed ({len(files)} files; links, JSON and registered tool names).")
+    print(f"Documentation checks passed ({len(files)} files; links, JSON, registered tool names and guide counts).")
     return 0
 
 

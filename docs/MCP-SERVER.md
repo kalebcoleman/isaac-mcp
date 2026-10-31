@@ -84,8 +84,12 @@ the simulator bridge is disconnected. They provide capture and window raising,
 not a general click or keyboard API.
 
 The host MCP server and the bridge inside Kit are separate processes. A working
-`list_windows` or Isaac Lab tool does not mean that the bridge is connected. If
-`refresh_tools` returns `Connection refused`, check for the intended Kit
+`list_windows` or Isaac Lab tool does not mean that the bridge is connected, and a
+client that lists only the host and Isaac Lab tools has not proved that no bridge
+exists: the client may have connected before Kit started (call `refresh_tools`),
+or `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may be hiding bridge tools
+(verify with the CLI below). Do not start another Kit instance while a reachable
+bridge exists. If `refresh_tools` returns `Connection refused`, check for the intended Kit
 process, its enabled bridge extension and listening port. The server cannot
 control a simulator that did not start a bridge. Once a bridge is available,
 call `refresh_tools`, then use `status` to verify its PID and port before
@@ -96,10 +100,15 @@ loaded a compatible bridge. The generic `isaac.mcp.bridge` was also tested in
 an Isaac Sim 5.1 process on 2026-10-30: after enabling it and setting
 `ISAAC_MCP_PORT`, `status` reported the expected 5.1 process and PID.
 
-If a client does not expose newly discovered tools after `refresh_tools`, use
-the installed host client's standard-library CLI against the verified port:
+The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after
+`refresh_tools` or `use_bridge` adds, updates or removes tools, so clients that honour it (Claude
+Code 2.1.314 does) show the change mid-session. If a client does not expose newly discovered tools
+after `refresh_tools`, reconnect it or use the installed host client's standard-library CLI against
+the verified bridge. List the advertised bridges first and use the host and port it reports; 8766
+below is only the twin's default port:
 
 ```bash
+python -m isaac_mcp.client --list-bridges
 python -m isaac_mcp.client status --port 8766
 python -m isaac_mcp.client run_python '{"code":"result = 1"}' --port 8766
 ```
