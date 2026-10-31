@@ -1,6 +1,6 @@
 # Project status and roadmap
 
-Last updated: 2026-10-30. This is the project-level overview; the tool references describe the current interfaces and
+Last updated: 2026-10-31. This is the project-level overview; the tool references describe the current interfaces and
 the design documents contain the background. A checked item means work exists, not that every machine or version has
 been tested.
 
@@ -54,6 +54,8 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
   dependencies. Expand the checklist as hardware and platform coverage grows.
 - [ ] Improve the `randomize_single_object` placement configuration without breaking existing defaults; test feasible
   and infeasible scenes.
+- [ ] Investigate the pre-existing `NoneType.GetCamera` viewport exception during stage reset without suppressing it.
+  The base/head reproduction and observed recovery are recorded in [VERIFICATION.md](VERIFICATION.md#windowed-viewport-reset-comparison).
 - [ ] Reconcile design notes as implementation evolves; treat the current tool references as the API
   source of truth.
 

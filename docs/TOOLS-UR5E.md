@@ -248,6 +248,8 @@ they do not provide mouse or keyboard control, and not every panel control has a
   | `fps` | integer | no | `30` | Output framerate; values `<= 0` become `30`. |
 - Purpose: start real-time viewport video recording via ffmpeg without blocking physics.
 - Side effects: spawns ffmpeg; non-blocking. Requires ffmpeg and a usable viewport.
+- Frames are paced to the requested output rate against elapsed time; short gaps repeat the latest frame. If capture
+  falls more than five seconds behind or no frame arrives, recording reports an error instead of claiming success.
 - Example: `{"file_name": "run.mp4", "fps": 30}`
 
 ### `ur5e_dt__stop_recording`
