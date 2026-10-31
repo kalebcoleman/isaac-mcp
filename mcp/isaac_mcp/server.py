@@ -170,28 +170,36 @@ def _drop_tool(server: FastMCP, name: str) -> None:
 def discover_and_register_tools(server: FastMCP) -> List[str]:
     """Query the bridge registry and register each visible tool.
 
-    New tools are added; tools whose bridge meta (description/parameters)
-    changed since their registration — e.g. after a bridge-side reload_tools —
-    are RE-registered so the served schema never goes stale. Returns the
-    canonical names added or updated."""
+    New tools are added, changed schemas are re-registered, and tools no longer
+    in the selected bridge view are removed. A failed or malformed discovery
+    does not turn an unknown registry into an empty one."""
     result = get_client().call("list_tools")
-    tools = result.get("tools", {})
+    if not isinstance(result, dict) or not isinstance(result.get("tools"), dict):
+        raise RuntimeError("bridge list_tools response has no tools dictionary")
+    tools = {name: meta for name, meta in result["tools"].items() if _visible(name, meta)}
+    for name, meta in tools.items():
+        if "fields" not in meta:
+            raise RuntimeError(f"bridge tool {name!r} has no field specs")
 
     changed = []
+    for mcp_name, canonical in list(_NAME_MAP.items()):
+        if canonical not in tools:
+            _drop_tool(server, mcp_name)
+            _NAME_MAP.pop(mcp_name, None)
+            _REGISTERED_META.pop(mcp_name, None)
+            changed.append(f"{canonical} (removed)")
     for canonical, meta in sorted(tools.items()):
-        if not _visible(canonical, meta):
-            continue
         name = _mcp_name(canonical)
         if name in _NAME_MAP:
-            if _REGISTERED_META.get(name) == meta:
+            if _NAME_MAP[name] == canonical and _REGISTERED_META.get(name) == meta:
                 continue
             _drop_tool(server, name)          # schema/description changed
             changed.append(f"{canonical} (updated)")
         else:
             changed.append(canonical)
+        register_dynamic_tool(server, name, canonical, meta)
         _NAME_MAP[name] = canonical
         _REGISTERED_META[name] = meta
-        register_dynamic_tool(server, name, canonical, meta)
     if changed:
         logger.info(f"Registered/updated {len(changed)} bridge tools: {changed}")
     return changed
@@ -377,7 +385,7 @@ def refresh_tools() -> str:
         added = discover_and_register_tools(mcp)
     except Exception as e:
         return f"Error: {e}"
-    return (f"Registered/updated {len(added)} tool(s): {added}" if added
+    return (f"Registered/updated/removed {len(added)} tool(s): {added}" if added
             else "No new or changed tools (registry unchanged).")
 
 

@@ -18,7 +18,7 @@ bridge is unavailable.
 
 | MCP tool | Arguments | Use and effects |
 |---|---|---|
-| `refresh_tools` | none | Rediscover the selected bridge's registry after a bridge starts or a module reloads. Client support for dynamically updated tools can vary. |
+| `refresh_tools` | none | Rediscover the selected bridge's registry after a bridge starts or a module changes. Adds or updates visible tools and removes tools no longer advertised. A failed or malformed discovery leaves the existing list intact. Client support for dynamically updated tools can vary. |
 | `use_bridge` | `port` (integer, required) | Connect to a different bridge on that port, report its identity, and replace the previously discovered bridge tools. The choice lasts until the host server restarts. |
 
 For a bridge already connected, `status` verifies its PID, port, app version and other identity data; `list_bridges`

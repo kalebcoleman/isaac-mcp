@@ -108,3 +108,64 @@ def test_curated_view_filter_holds_on_refresh(fresh_gateway, monkeypatch):
     served_names = set(server._tool_manager._tools)
     assert "run_python" not in served_names
     assert "demo__ping" not in served_names
+
+
+def test_refresh_removes_departed_owner_without_touching_other_tools(fresh_gateway, monkeypatch):
+    server = fresh_gateway
+    tools = {
+        "arm.move": _meta("arm", {}, "arm", "arm-owner"),
+        "sim.inspect": _meta("sim", {}, "sim", "sim-owner"),
+    }
+    _fake_registry(monkeypatch, tools)
+    gw.discover_and_register_tools(server)
+    del tools["sim.inspect"]
+
+    assert "sim.inspect (removed)" in gw.discover_and_register_tools(server)
+    assert _served(server, "arm__move") is not None
+    assert _served(server, "sim__inspect") is None
+    assert "sim__inspect" not in gw._NAME_MAP
+    assert "sim__inspect" not in gw._REGISTERED_META
+
+
+def test_refresh_removes_tools_that_no_longer_match_view_filter(fresh_gateway, monkeypatch):
+    server = fresh_gateway
+    tools = {"arm.move": _meta("arm", {}, "arm", "arm-owner"),
+             "sim.inspect": _meta("sim", {}, "sim", "sim-owner")}
+    _fake_registry(monkeypatch, tools)
+    gw.discover_and_register_tools(server)
+    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "arm")
+
+    assert "sim.inspect (removed)" in gw.discover_and_register_tools(server)
+    assert _served(server, "arm__move") is not None
+    assert _served(server, "sim__inspect") is None
+
+
+def test_failed_refresh_keeps_existing_registry(fresh_gateway, monkeypatch):
+    server = fresh_gateway
+    _fake_registry(monkeypatch, {"arm.move": _meta("arm", {}, "arm", "arm-owner")})
+    gw.discover_and_register_tools(server)
+
+    class Unreachable:
+        def call(self, *args, **kwargs):
+            raise OSError("bridge unavailable")
+
+    monkeypatch.setattr(gw, "get_client", lambda: Unreachable())
+    with pytest.raises(OSError, match="unavailable"):
+        gw.discover_and_register_tools(server)
+    assert _served(server, "arm__move") is not None
+
+
+@pytest.mark.parametrize("response", [{}, {"tools": None}, {"tools": {"sim.inspect": {"namespace": "sim"}}}])
+def test_malformed_refresh_keeps_existing_registry(fresh_gateway, monkeypatch, response):
+    server = fresh_gateway
+    _fake_registry(monkeypatch, {"arm.move": _meta("arm", {}, "arm", "arm-owner")})
+    gw.discover_and_register_tools(server)
+
+    class Invalid:
+        def call(self, *args, **kwargs):
+            return response
+
+    monkeypatch.setattr(gw, "get_client", lambda: Invalid())
+    with pytest.raises(RuntimeError):
+        gw.discover_and_register_tools(server)
+    assert _served(server, "arm__move") is not None
