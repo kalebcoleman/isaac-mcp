@@ -48,12 +48,15 @@ _launch_lock = threading.RLock()
 _active: dict[str, subprocess.Popen] = {}
 
 
-def jobs_dir() -> Path:
+def _jobs_path() -> Path:
     base = os.environ.get("ISAACLAB_JOBS_DIR")
     if base:
-        p = Path(base).expanduser()
-    else:
-        p = Path.home() / ".local" / "share" / "isaac-mcp" / "jobs"
+        return Path(base).expanduser()
+    return Path.home() / ".local" / "share" / "isaac-mcp" / "jobs"
+
+
+def jobs_dir() -> Path:
+    p = _jobs_path()
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -358,7 +361,10 @@ def _tail_file(path: Path, lines: int) -> list[str]:
 
 
 def _rehydrate() -> None:
-    for jd in jobs_dir().iterdir():
+    path = _jobs_path()
+    if not path.is_dir():
+        return
+    for jd in path.iterdir():
         if not jd.is_dir():
             continue
         data = _read_job(jd)

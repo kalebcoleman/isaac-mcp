@@ -12,9 +12,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-DEFAULT_LEARNING6 = Path.home() / "Desktop" / "ur5e-digital-twin" / "learning6"
-
-
 def _env(env: Any) -> Any:
     return os.environ if env is None else env
 
@@ -64,17 +61,6 @@ def locate_install(env: Any = None) -> dict | None:
             }
         return None
 
-    base = DEFAULT_LEARNING6
-    python = base / ".venv" / "bin" / "python"
-    root = base / "IsaacLab"
-    venv = base / ".venv"
-    if python.is_file() and root.is_dir():
-        return {
-            "python": str(python),
-            "isaaclab_root": str(root),
-            "venv": str(venv),
-        }
-
     try:
         root_val = e.get("ISAACLAB_ROOT") if hasattr(e, "get") else None
     except Exception:
@@ -92,7 +78,7 @@ def locate_install(env: Any = None) -> dict | None:
     return None
 
 
-_MISSING = {"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON"}
+_MISSING = {"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}
 
 
 def install_info(env: Any = None) -> dict:

@@ -181,8 +181,13 @@ The implementation in `mcp/isaac_mcp/isaaclab/install.py` checks, in order:
 
 1. `ISAACLAB_PYTHON`, with `ISAACLAB_ROOT` if provided; otherwise it tries a sibling `IsaacLab` directory.
    If the explicitly configured paths are invalid, discovery returns no install.
-2. The reference default `~/Desktop/ur5e-digital-twin/learning6/{.venv/bin/python,IsaacLab}`.
-3. `ISAACLAB_ROOT/.venv/bin/python`, when `ISAACLAB_ROOT` is set and the reference default was not found.
+2. `ISAACLAB_ROOT/.venv/bin/python`, when only `ISAACLAB_ROOT` is set.
+
+The former implicit project-specific install is no longer searched. Set `ISAACLAB_PYTHON`
+and, when needed, `ISAACLAB_ROOT`, or set `ISAACLAB_ROOT` for a checkout with its own `.venv`.
+The former implicit project-specific log root is also no longer searched or allowed by default;
+set `ISAACLAB_LOGS_DIR` to continue using it. Without that setting, checkpoint discovery searches
+the resolved install's `logs` directory and the jobs directory.
 
 The resolver checks paths; `isaaclab__install_info` probes package metadata. It does not automatically search
 `PATH`, `ISAACLAB_PATH`, or validate every supported combination. Set explicit paths for other layouts.

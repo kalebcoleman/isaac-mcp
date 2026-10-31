@@ -26,9 +26,10 @@ For design history and the original job-guard write-up, see [ISAACLAB-TOOLS.md](
 1. `ISAACLAB_PYTHON` (interpreter path), with `ISAACLAB_ROOT` if provided; otherwise a
    sibling `IsaacLab` directory is tried. If the explicitly configured paths are invalid,
    discovery returns no install (it does not fall back).
-2. The reference default `~/Desktop/ur5e-digital-twin/learning6/{.venv/bin/python,IsaacLab}`.
-3. `ISAACLAB_ROOT/.venv/bin/python`, when `ISAACLAB_ROOT` is set and the reference default
-   was not found.
+2. `ISAACLAB_ROOT/.venv/bin/python`, when only `ISAACLAB_ROOT` is set.
+
+The former implicit project-specific install is no longer searched. Set `ISAACLAB_PYTHON`
+and, when needed, `ISAACLAB_ROOT`, or set `ISAACLAB_ROOT` for a checkout with its own `.venv`.
 
 The resolver checks paths only; `isaaclab__install_info` then probes package metadata
 (`isaaclab`, `isaacsim`) in a short-lived subprocess. It does not search `PATH` or
@@ -67,13 +68,16 @@ return `{"error": "install the 'isaaclab' extra: pip install 'isaac-mcp[isaaclab
 `isaaclab__checkpoints_list`, `isaaclab__metrics_summary` and
 `isaaclab__tensorboard_tail` only operate under allowed roots:
 
-- `ISAACLAB_LOGS_DIR` (default `~/Desktop/ur5e-digital-twin/learning6/logs`);
-- `~/.local/share/isaac-mcp/jobs`;
+- `ISAACLAB_LOGS_DIR`, when set;
+- `ISAACLAB_JOBS_DIR` (or `~/.local/share/isaac-mcp/jobs`), and the default jobs directory;
 - `<isaaclab_root>/logs` and `<parent_of_isaaclab_root>/logs` (from the resolved install);
 - the temp directory only when `ISAACLAB_ALLOW_TMP=1` (test fixtures).
 
-`ISAACLAB_LOGS_DIR` overrides the primary default log root. Paths outside the allowed roots
-are rejected with `{"error": "path outside allowed roots"}`.
+Without `run_dir`, checkpoint discovery searches `ISAACLAB_LOGS_DIR` when set; otherwise it
+searches `<isaaclab_root>/logs` (if an install root is resolved) and the jobs directory.
+The former implicit project-specific log directory is no longer searched or allowed by default;
+set `ISAACLAB_LOGS_DIR` to continue using it. Paths outside the allowed roots are rejected with
+`{"error": "path outside allowed roots"}`.
 
 ### GPU resources and authorization
 
@@ -90,7 +94,7 @@ required or performed by this documentation.
 
 | Variable | Used by | Effect |
 |---|---|---|
-| `ISAACLAB_PYTHON` | install, jobs | Isaac Lab interpreter (required unless the default path exists) |
+| `ISAACLAB_PYTHON` | install, jobs | Isaac Lab interpreter (or use `ISAACLAB_ROOT` with a `.venv`) |
 | `ISAACLAB_ROOT` | install, jobs | Isaac Lab root (scripts live under `scripts/reinforcement_learning/`) |
 | `ISAACLAB_JOBS_DIR` | jobs | Job state directory (default `~/.local/share/isaac-mcp/jobs`) |
 | `ISAACLAB_LOGS_DIR` | metrics | Primary log root for checkpoints/metrics |
@@ -136,7 +140,7 @@ required or performed by this documentation.
 
 - Parameters: none.
 - Returns: `{python, isaaclab_version, isaacsim_version, isaaclab_root, venv}` on success;
-  `{"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON"}` (or a probe error)
+  `{"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}` (or a probe error)
   on failure.
 - Example call shape: `{"tool": "isaaclab__install_info", "arguments": {}}`
 
