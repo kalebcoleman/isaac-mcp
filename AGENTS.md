@@ -5,10 +5,10 @@ per-tool reference lives in `docs/`.
 
 ## What you can reach, by tier
 
-An MCP client only shows tools that exist right now. Most of this project's surface lives in
-a running Kit process, so what you see depends on whether a bridge is connected.
-
-<!-- tool-counts: host=9 isaaclab=12 builtins=7 ur5e=23 -->
+An MCP client only shows the tools it has been told about. Most of this project's surface
+lives in a running Kit process and reaches the client through the host server's bridge
+discovery, so what you see depends on whether that discovery has happened and on the
+configured filters.
 
 | Tier | Tools | Present when | Reference |
 |---|---|---|---|
@@ -17,26 +17,41 @@ a running Kit process, so what you see depends on whether a bridge is connected.
 | Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | a Kit bridge is reachable; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
 | UR5e twin (`ur5e_dt__*`) | 23 | the twin extension is loaded in that Kit and you have called `refresh_tools` | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-So a client that lists 21 tools has no live bridge: those are the host and Isaac Lab tiers.
-With everything up there are 51. Do not conclude that the other 30 do not exist; connect to
-them (below). `docs/GENERIC-SIM-TOOLS.md` describes a `sim.*` pack that is a design only and
-is not built, so do not look for those tools.
+If your client lists exactly 21 tools, only the host and Isaac Lab tiers are visible. That does
+not prove that no bridge exists. The possible causes are:
+
+- no Kit bridge is running;
+- the client connected before Kit started, so the bridge tools have not been discovered yet
+  (call `refresh_tools`);
+- a filter is hiding bridge tools from a reachable bridge (`ISAAC_MCP_NAMESPACE` or
+  `ISAAC_MCP_BUILTINS=0`).
+
+The other 30 tools (bridge built-ins and UR5e twin) exist only behind a bridge. With everything
+visible there are 51 tools in total. `docs/GENERIC-SIM-TOOLS.md` describes a `sim.*` pack that is
+a design only and is not built, so do not look for those tools.
 
 ## Getting the full surface
 
-1. Confirm a Kit process with the `isaac.mcp.bridge` extension is running (for the twin,
-   `./run.sh --headless` starts it on port 8766).
-2. Call `refresh_tools`, then `status` to confirm the PID and port are the instance you mean.
-   With several bridges, choose one with `use_bridge`.
-3. If the client does not show newly discovered tools, use the CLI against the verified port:
-   `python -m isaac_mcp.client list_tools --port 8766`.
+1. Call `refresh_tools` first. Do not start Kit yet: a reachable bridge may already exist.
+2. Verify with `status` (PID and port). `status` and `list_bridges` are themselves bridge
+   built-ins, so they are missing if `ISAAC_MCP_BUILTINS=0` or `ISAAC_MCP_NAMESPACE` hides them.
+   The CLI check works regardless: `python -m isaac_mcp.client status --port 8766`. With several
+   bridges, choose one with `use_bridge`.
+3. Only if no bridge is reachable, start Kit with the `isaac.mcp.bridge` extension (for the
+   twin, `./run.sh --headless` starts it on port 8766), then repeat steps 1 and 2.
+4. If the client still does not show newly discovered tools, use the CLI against the verified
+   port: `python -m isaac_mcp.client list_tools --port 8766`.
+
+Do not start another Kit instance while a reachable bridge exists, and confirm the PID and port
+before any scene-changing call.
 
 Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER.md).
 
 ## Handle with care
 
 - `run_python` executes Python inside Kit, and `put_file` / `get_file` / `stat_file` touch the
-  filesystem. Verify the target with `status` before scene-changing calls.
+  filesystem. Verify the target PID and port (`status`, or the CLI check above) before
+  scene-changing calls.
 - `isaaclab__train`, `eval` and `play` start GPU jobs; `isaaclab__runs_cancel` kills one.
 - Screen tools return window titles and pixels to the model, and save captures under
   `~/Pictures/screen-mcp` and `~/Videos/screen-mcp`.
@@ -46,5 +61,5 @@ Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER
 ## Changing tools
 
 Every registered tool must be documented in its `docs/TOOLS-*.md` page, and the counts above
-must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
+(each tier's Tools cell, the 21 and 30 subtotals and the 51 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
 CI along with the host test suite (`pytest -q` from `mcp/`, see `.github/workflows/ci.yml`).

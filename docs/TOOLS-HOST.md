@@ -26,6 +26,10 @@ lists advertised bridge instances. Example MCP calls: `use_bridge` with `{"port"
 `{}` and `refresh_tools` with `{}`. Switching targets changes the selected simulation; verify the result before
 issuing scene-changing commands.
 
+A client that lists only the host and Isaac Lab tools may simply not have run `refresh_tools` since Kit started, or
+`ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may be hiding bridge tools (including `status` and `list_bridges`), so
+call `refresh_tools` and verify with the CLI below before concluding that no bridge exists or starting another Kit.
+
 The bridge also has an internal `list_tools` discovery operation. It is intentionally hidden from the bridge's own
 advertised tool list, so it is not normally a dynamically registered MCP tool. Ask the MCP client to list tools, or
 use the bridge CLI from an environment with `isaac_mcp` installed:

@@ -84,8 +84,12 @@ the simulator bridge is disconnected. They provide capture and window raising,
 not a general click or keyboard API.
 
 The host MCP server and the bridge inside Kit are separate processes. A working
-`list_windows` or Isaac Lab tool does not mean that the bridge is connected. If
-`refresh_tools` returns `Connection refused`, check for the intended Kit
+`list_windows` or Isaac Lab tool does not mean that the bridge is connected, and a
+client that lists only the host and Isaac Lab tools has not proved that no bridge
+exists: the client may have connected before Kit started (call `refresh_tools`),
+or `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may be hiding bridge tools
+(verify with the CLI below). Do not start another Kit instance while a reachable
+bridge exists. If `refresh_tools` returns `Connection refused`, check for the intended Kit
 process, its enabled bridge extension and listening port. The server cannot
 control a simulator that did not start a bridge. Once a bridge is available,
 call `refresh_tools`, then use `status` to verify its PID and port before

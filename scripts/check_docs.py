@@ -67,19 +67,41 @@ def tier_counts():
             "builtins": len(builtins), "ur5e": len(expected["docs/TOOLS-UR5E.md"])}
 
 
-def check_agent_guide(errors):
-    text = (ROOT / "AGENTS.md").read_text()
-    match = re.search(r"<!-- tool-counts: ([^>]*?) -->", text)
-    if not match:
-        errors.append("AGENTS.md: missing '<!-- tool-counts: ... -->' marker")
-        return
-    stated = {key: int(value) for key, value in re.findall(r"(\w+)=(\d+)", match.group(1))}
-    actual = tier_counts()
-    if stated != actual:
-        errors.append(f"AGENTS.md: tool counts {stated} do not match the code {actual}")
-    total = sum(actual.values())
-    if f"there are {total}" not in text:
-        errors.append(f"AGENTS.md: total tool count text should say 'there are {total}'")
+TIER_ROWS = {"host": "Host gateway", "isaaclab": "Isaac Lab", "builtins": "Bridge built-ins",
+             "ur5e": "UR5e twin"}
+
+
+def check_agent_guide(errors, text=None, counts=None):
+    """Compare every figure a reader sees in AGENTS.md with the counts derived from the code."""
+    if text is None:
+        text = (ROOT / "AGENTS.md").read_text()
+    actual = counts or tier_counts()
+    where = "AGENTS.md"
+    for tier, label in TIER_ROWS.items():
+        rows = [line for line in text.splitlines() if line.startswith("| " + label)]
+        cells = [c.strip() for c in rows[0].strip("|").split("|")] if len(rows) == 1 else []
+        match = re.match(r"(\d+)\b", cells[1]) if len(cells) > 1 else None
+        if not match:
+            errors.append(f"{where}: need exactly one '{label}' table row whose Tools cell starts "
+                          "with a count")
+        elif int(match.group(1)) != actual[tier]:
+            errors.append(f"{where}: {label} row says {match.group(1)} tools, the code has "
+                          f"{actual[tier]}")
+    expected = {
+        "exactly N tools (host + Isaac Lab subtotal)":
+            (r"exactly (\d+) tools", actual["host"] + actual["isaaclab"]),
+        "The other N tools (bridge subtotal)":
+            (r"The other (\d+) tools", actual["builtins"] + actual["ur5e"]),
+        "there are N tools in total":
+            (r"there are (\d+) tools in total", sum(actual.values())),
+    }
+    for description, (pattern, value) in expected.items():
+        found = re.findall(pattern, text)
+        if len(found) != 1:
+            errors.append(f"{where}: expected exactly one '{description}' statement, found "
+                          f"{len(found)}")
+        elif int(found[0]) != value:
+            errors.append(f"{where}: '{description}' says {found[0]}, the code has {value}")
 
 
 def main():
@@ -116,7 +138,7 @@ def main():
         print(f"FAIL: {error}")
     if errors:
         return 1
-    print(f"Documentation checks passed ({len(files)} files; links, JSON and registered tool names).")
+    print(f"Documentation checks passed ({len(files)} files; links, JSON, registered tool names and guide counts).")
     return 0
 
 
