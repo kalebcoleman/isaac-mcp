@@ -73,6 +73,7 @@ support is a goal, not yet a blanket compatibility claim.
 
 ## Documentation
 
+- [Agent guide](AGENTS.md) — which tools exist in which tier, and how to reach all of them.
 - [UR5e tools](docs/TOOLS-UR5E.md) — all twin tools, arguments and example calls.
 - [Host and bridge tools](docs/TOOLS-HOST.md) — connection management, desktop capture and bridge built-ins.
 - [Isaac Lab tools](docs/TOOLS-ISAACLAB.md) — task discovery, job management, checkpoints and metrics.

@@ -57,7 +57,10 @@ SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "isaac")
 SERVER_INSTRUCTIONS = os.getenv(
     "ISAAC_MCP_INSTRUCTIONS",
     "Isaac Sim / Isaac Lab MCP server. Isaac Sim tools are discovered from the "
-    "running Kit bridge; screenshot, list_windows, raise_window and the screen "
+    "running Kit bridge. Until a bridge is reachable only the host (screen and "
+    "gateway) and isaaclab__* tools are listed; start Kit with the isaac.mcp.bridge "
+    "extension, then call refresh_tools to add the bridge built-ins and the "
+    "ur5e_dt__* tools. screenshot, list_windows, raise_window and the screen "
     "recording tools capture this Linux desktop. screenshot() and "
     "start_screen_recording() with no target pick the Isaac Sim or Isaac Lab "
     "window when one is open, so they capture the sim alone even if it is covered. "

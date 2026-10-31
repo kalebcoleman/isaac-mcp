@@ -25,13 +25,7 @@ def tool_decorators(path):
     return result
 
 
-def expected_tools():
-    twin_file = ROOT / "exts/ur5e-dt/ur5e_dt/extension.py"
-    tree = ast.parse(twin_file.read_text())
-    registry = next(ast.literal_eval(node.value) for node in tree.body
-                    if isinstance(node, ast.Assign) and any(
-                        isinstance(target, ast.Name) and target.id == "MCP_TOOL_REGISTRY"
-                        for target in node.targets))
+def bridge_builtins():
     bridge = ast.parse((ROOT / "exts/isaac.mcp.bridge/isaac_mcp_bridge/builtins.py").read_text())
     builtins = set()
     for node in ast.walk(bridge):
@@ -43,6 +37,17 @@ def expected_tools():
             continue
         if isinstance(attrs.get("name"), ast.Constant):
             builtins.add(attrs["name"].value)
+    return builtins
+
+
+def expected_tools():
+    twin_file = ROOT / "exts/ur5e-dt/ur5e_dt/extension.py"
+    tree = ast.parse(twin_file.read_text())
+    registry = next(ast.literal_eval(node.value) for node in tree.body
+                    if isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Name) and target.id == "MCP_TOOL_REGISTRY"
+                        for target in node.targets))
+    builtins = bridge_builtins()
     host = (tool_decorators(ROOT / "mcp/isaac_mcp/screen.py")
             | tool_decorators(ROOT / "mcp/isaac_mcp/server.py") | builtins)
     return {
@@ -52,9 +57,34 @@ def expected_tools():
     }
 
 
+def tier_counts():
+    """Tool counts per tier, in the order AGENTS.md states them."""
+    expected = expected_tools()
+    builtins = bridge_builtins()
+    host_only = (tool_decorators(ROOT / "mcp/isaac_mcp/screen.py")
+                 | tool_decorators(ROOT / "mcp/isaac_mcp/server.py"))
+    return {"host": len(host_only), "isaaclab": len(expected["docs/TOOLS-ISAACLAB.md"]),
+            "builtins": len(builtins), "ur5e": len(expected["docs/TOOLS-UR5E.md"])}
+
+
+def check_agent_guide(errors):
+    text = (ROOT / "AGENTS.md").read_text()
+    match = re.search(r"<!-- tool-counts: ([^>]*?) -->", text)
+    if not match:
+        errors.append("AGENTS.md: missing '<!-- tool-counts: ... -->' marker")
+        return
+    stated = {key: int(value) for key, value in re.findall(r"(\w+)=(\d+)", match.group(1))}
+    actual = tier_counts()
+    if stated != actual:
+        errors.append(f"AGENTS.md: tool counts {stated} do not match the code {actual}")
+    total = sum(actual.values())
+    if f"there are {total}" not in text:
+        errors.append(f"AGENTS.md: total tool count text should say 'there are {total}'")
+
+
 def main():
     errors = []
-    files = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md")),
+    files = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md")),
              *sorted((ROOT / "mcp/docs").glob("*.md"))]
     for path in files:
         text = path.read_text()
@@ -81,6 +111,7 @@ def main():
             stale = sorted(found - expected)
             if stale:
                 errors.append(f"{filename}: names not in registry: {', '.join(stale)}")
+    check_agent_guide(errors)
     for error in errors:
         print(f"FAIL: {error}")
     if errors:
