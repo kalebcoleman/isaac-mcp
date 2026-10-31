@@ -74,7 +74,7 @@ Consistency across extensions, packages, and CLI commands is strictly maintained
 
 | Port | Owner | Purpose |
 |---|---|---|
-| **`8766`** | `ur5e-dt` extension | Default primary twin bridge port. Used by `run.sh`, `verify.sh`, and MCP clients. |
+| **`8766`** | Shared bridge in a twin launch | Default primary twin bridge port. Used by `run.sh`, `verify.sh`, and MCP clients. |
 | **`8767`** | Optional secondary bridge | Convention for the Isaac Lab bridge example; can also be used for a second twin instance when explicitly configured. |
 | **`8799`** | Probe script | Dedicated port for `scripts/probe_62.sh` to run non-interfering diagnostic probes. |
 | Selected port | `isaac.mcp.bridge` | One process-wide bridge serves the twin, built-ins and any other registered packs. The twin launcher sets `ISAAC_MCP_PORT` to its selected port and defers binding until the twin's tools have registered. |
