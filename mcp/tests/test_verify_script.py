@@ -2,8 +2,11 @@
 
 import os
 from pathlib import Path
+import runpy
 import shutil
 import subprocess
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -51,3 +54,15 @@ def test_verifier_uses_selected_python_and_reports_failed_checks(tmp_path, faili
         assert "FAILED: joint_limits" in result.stdout
     else:
         assert "all checks passed" in result.stdout
+
+
+@pytest.mark.parametrize("client_status", [0, 2])
+def test_bridge_exec_propagates_client_status(tmp_path, monkeypatch, client_status):
+    script = Path(__file__).resolve().parents[2] / "scripts" / "bridge_exec.py"
+    check = tmp_path / "check.py"
+    check.write_text("result = 1")
+    monkeypatch.setattr(sys, "argv", [str(script), str(check)])
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=client_status))
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path(str(script), run_name="__main__")
+    assert exc.value.code == client_status

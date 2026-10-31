@@ -17,4 +17,4 @@ command = [sys.executable, '-m', 'isaac_mcp.client', 'run_python', json.dumps({'
 env = {**os.environ, 'PYTHONPATH': str(BRIDGE)}
 if 'UR5E_DT_PORT' not in env and 'ISAAC_MCP_PORT' not in env:
     env['UR5E_DT_PORT'] = '8766'
-subprocess.run(command, cwd=BRIDGE, env=env, check=False)
+raise SystemExit(subprocess.run(command, cwd=BRIDGE, env=env, check=False).returncode)
