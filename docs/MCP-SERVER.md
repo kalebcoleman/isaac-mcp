@@ -104,9 +104,11 @@ The host advertises `tools.listChanged` and sends `notifications/tools/list_chan
 `refresh_tools` or `use_bridge` adds, updates or removes tools, so clients that honour it (Claude
 Code 2.1.314 does) show the change mid-session. If a client does not expose newly discovered tools
 after `refresh_tools`, reconnect it or use the installed host client's standard-library CLI against
-the verified port:
+the verified bridge. List the advertised bridges first and use the host and port it reports; 8766
+below is only the twin's default port:
 
 ```bash
+python -m isaac_mcp.client --list-bridges
 python -m isaac_mcp.client status --port 8766
 python -m isaac_mcp.client run_python '{"code":"result = 1"}' --port 8766
 ```
