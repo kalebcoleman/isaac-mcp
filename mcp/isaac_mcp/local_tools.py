@@ -29,9 +29,13 @@ ENV_VAR = "ISAAC_MCP_LOCAL_TOOLS"
 
 GROUPS: dict[str, frozenset[str]] = {
     "isaaclab_read": frozenset({
-        "isaaclab__install_info", "isaaclab__envs_list", "isaaclab__runs_list",
-        "isaaclab__runs_status", "isaaclab__runs_tail", "isaaclab__checkpoints_list",
-        "isaaclab__metrics_summary", "isaaclab__tensorboard_tail",
+        "isaaclab__checkpoints_list", "isaaclab__metrics_summary", "isaaclab__tensorboard_tail",
+    }),
+    "isaaclab_probe": frozenset({
+        "isaaclab__install_info", "isaaclab__envs_list",
+    }),
+    "isaaclab_jobs": frozenset({
+        "isaaclab__runs_list", "isaaclab__runs_status", "isaaclab__runs_tail",
     }),
     "isaaclab_run": frozenset({
         "isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__runs_cancel",
@@ -100,8 +104,8 @@ def local_tool_groups(env: Optional[Mapping[str, str]] = None) -> frozenset[str]
 
 
 # ---- Annotations -------------------------------------------------------------------------
-# One preset per behaviour class. All local tools are closed-world: they act on this machine
-# (the desktop, the job directory, a local bridge), not on open-ended external systems.
+# One preset per behaviour class. Configured Python interpreters and task modules can run
+# arbitrary code, so their effects cannot be assumed closed-world or idempotent.
 
 # Reads state only. destructiveHint is meaningless when readOnlyHint is true, so it is unset.
 READ_ONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False)
@@ -111,9 +115,12 @@ ADDITIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotent
 # Changes state, but repeating the call with the same arguments has no further effect.
 IDEMPOTENT_WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
                                    openWorldHint=False)
-# Kills a process.
+# Kills a process or overwrites job metadata during orphan reconciliation.
 DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
                               openWorldHint=False)
+# Executes configured Python and, for task discovery, imports configured or sibling modules.
+PYTHON_PROBE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
+                               openWorldHint=True)
 
 
 class ScopedTools:

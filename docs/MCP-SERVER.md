@@ -206,9 +206,12 @@ clear about which of the settings below limit what.
 Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOLS-HOST.md)):
 
 - `ISAAC_MCP_LOCAL_TOOLS` selects groups of the **host's own 21 tools** (screen, Isaac Lab, gateway). `readonly`
-  keeps only the local tools that read state; `none` keeps none. The default is `all`. It does **not** touch tools
-  discovered from a Kit bridge, which are not annotated, so `readonly` is a read-only *local* profile, not a read-only
-  server: a client that can still see bridge tools can change the scene.
+  keeps only local tools annotated as read-only; `none` keeps none. The default is `all`. The Python probes and job
+  inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for groups and
+  migration. Importing the jobs module can still create a directory and reconcile orphaned jobs at server startup,
+  regardless of the groups. The setting does **not** affect tools discovered from a Kit bridge, which are not
+  annotated, so `readonly` is a read-only *local tool selection*, not a read-only server: a client that can still see
+  bridge tools can change the scene.
 - `ISAAC_MCP_NAMESPACE` limits the bridge tools to the named namespaces, and `ISAAC_MCP_BUILTINS=0` hides the bare
   bridge built-ins such as `run_python`. An empty `ISAAC_MCP_NAMESPACE` means no filter, not "no namespaces".
 - The three variables are independent and compose. With `ISAAC_MCP_LOCAL_TOOLS=readonly` alone, every bridge tool is

@@ -30,7 +30,8 @@ VAR = lt.ENV_VAR
 # Named in the task as the tools a read-only profile must not expose.
 MUTATING = {"isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__runs_cancel",
             "screenshot", "start_screen_recording", "stop_screen_recording", "raise_window",
-            "use_bridge", "refresh_tools"}
+            "use_bridge", "refresh_tools", "isaaclab__install_info", "isaaclab__envs_list",
+            "isaaclab__runs_list", "isaaclab__runs_status", "isaaclab__runs_tail"}
 
 
 @pytest.fixture(autouse=True)
@@ -170,12 +171,25 @@ def test_every_local_tool_is_annotated_and_read_only_matches_the_groups():
     for name, tool in tools.items():
         ann = tool.annotations
         assert ann is not None, f"{name} has no annotations"
-        assert ann.openWorldHint is False, name
+        assert ann.openWorldHint is (name in lt.GROUPS["isaaclab_probe"]), name
         if name in lt.READ_ONLY_TOOLS:
             assert ann.readOnlyHint is True and ann.idempotentHint is True, name
         else:
             assert ann.readOnlyHint is False, name
-            assert ann.destructiveHint is (name == "isaaclab__runs_cancel"), name
+            destructive = lt.GROUPS["isaaclab_probe"] | {
+                "isaaclab__runs_cancel", "isaaclab__runs_list", "isaaclab__runs_status"}
+            assert ann.destructiveHint is (name in destructive), name
+
+
+def test_previous_readonly_selection_can_be_restored_explicitly():
+    old_isaaclab_read = {
+        "isaaclab__install_info", "isaaclab__envs_list", "isaaclab__runs_list",
+        "isaaclab__runs_status", "isaaclab__runs_tail", "isaaclab__checkpoints_list",
+        "isaaclab__metrics_summary", "isaaclab__tensorboard_tail",
+    }
+    assert local_names(build("readonly,isaaclab_probe,isaaclab_jobs")) == (
+        old_isaaclab_read | lt.GROUPS["screen_read"])
+    assert local_names(build("isaaclab_read,isaaclab_probe,isaaclab_jobs")) == old_isaaclab_read
 
 
 def test_capture_tools_say_where_their_output_goes():

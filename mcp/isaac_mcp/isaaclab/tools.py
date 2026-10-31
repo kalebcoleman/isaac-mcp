@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Iterable
 
-from ..local_tools import ADDITIVE, DESTRUCTIVE, READ_ONLY, ScopedTools
+from ..local_tools import ADDITIVE, DESTRUCTIVE, IDEMPOTENT_WRITE, PYTHON_PROBE, READ_ONLY, ScopedTools
 from . import install as _install
 from . import jobs as _jobs
 from . import metrics as _metrics
@@ -58,14 +58,18 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
     """Register the Isaac Lab tools whose group is in ``groups`` (default: all of them)."""
     mcp = ScopedTools(server, groups)
 
-    @mcp.tool(name="isaaclab__install_info", annotations=READ_ONLY)
+    @mcp.tool(name="isaaclab__install_info", annotations=PYTHON_PROBE)
     def isaaclab_install_info() -> str:
-        """Report the Isaac Lab install the tools will use: interpreter, versions, root, venv."""
+        """Report the Isaac Lab install: interpreter, versions, root, venv.
+
+        Runs the configured Python interpreter, whose startup code may have side effects."""
         return _dump(_install.install_info())
 
-    @mcp.tool(name="isaaclab__envs_list", annotations=READ_ONLY)
+    @mcp.tool(name="isaaclab__envs_list", annotations=PYTHON_PROBE)
     def isaaclab_envs_list(filter: str | None = None) -> str:
-        """List registered Isaac Lab task ids (optionally filtered by substring)."""
+        """List registered Isaac Lab task ids (optionally filtered by substring).
+
+        Runs Python and imports task modules, which may have side effects."""
         return _dump(_install.envs_list(filter=filter))
 
     @mcp.tool(name="isaaclab__train", annotations=ADDITIVE)
@@ -143,16 +147,19 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
-    @mcp.tool(name="isaaclab__runs_list", annotations=READ_ONLY)
+    @mcp.tool(name="isaaclab__runs_list", annotations=DESTRUCTIVE)
     def isaaclab_runs_list(state: str | None = None) -> str:
-        """List jobs; state is 'running', 'finished' or omitted for all."""
+        """List jobs; state is 'running', 'finished' or omitted for all.
+
+        Reconciles orphaned jobs by updating their stored metadata."""
         return _guard(lambda: _jobs.runs_list(state=state))
 
-    @mcp.tool(name="isaaclab__runs_status", annotations=READ_ONLY)
+    @mcp.tool(name="isaaclab__runs_status", annotations=DESTRUCTIVE)
     def isaaclab_runs_status(job_id: str) -> str:
         """State, exit code, elapsed time, last log lines and newest checkpoint of a job. For a windowed
         job also `window` (id, title, size): pass its id to screenshot(window_id=...) or
-        start_screen_recording(window_id=...) to see the result."""
+        start_screen_recording(window_id=...) to see the result. Reconciles orphaned jobs by
+        updating their stored metadata."""
         def status() -> dict:
             st = _jobs.runs_status(job_id)
             if st.get("pid_alive"):
@@ -165,9 +172,9 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
 
         return _guard(status)
 
-    @mcp.tool(name="isaaclab__runs_tail", annotations=READ_ONLY)
+    @mcp.tool(name="isaaclab__runs_tail", annotations=IDEMPOTENT_WRITE)
     def isaaclab_runs_tail(job_id: str, stream: str = "stdout", lines: int = 100) -> str:
-        """Last lines of a job's stdout or stderr log."""
+        """Last lines of a job's stdout or stderr log. Creates the jobs directory if missing."""
         return _guard(lambda: _jobs.runs_tail(job_id, stream=stream, lines=lines))
 
     @mcp.tool(name="isaaclab__runs_cancel", annotations=DESTRUCTIVE)

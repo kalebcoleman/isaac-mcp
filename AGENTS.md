@@ -88,9 +88,10 @@ Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER
   `run_python` and `ur5e_dt__*` can still change the scene, so it is not a read-only server.
   The three variables compose; see [TOOLS-HOST.md](docs/TOOLS-HOST.md) and, for what a
   scene-safe profile needs, [MCP-SERVER.md](docs/MCP-SERVER.md#limiting-what-a-client-can-reach).
-- Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). Trust them
-  to tell `isaaclab__runs_list` from `isaaclab__runs_cancel`; `screenshot` is not read-only on
-  purpose (it writes files and returns desktop pixels). Bridge tools are not annotated.
+- Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). The job
+  inspection and Python probe tools can have side effects and are not in `readonly`;
+  `screenshot` writes files and returns desktop pixels. Annotations are hints, not enforcement.
+  Bridge tools are not annotated.
 
 ## Changing tools
 
