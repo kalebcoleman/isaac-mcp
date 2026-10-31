@@ -17,6 +17,10 @@ def _make_install(tmp_path):
     return py, root, venv
 
 
+def _mark_lab_installed(venv):
+    (venv / "lib/python3.12/site-packages/isaaclab-3.0.dist-info").mkdir(parents=True)
+
+
 def test_locate_install_env_var_precedence(tmp_path, monkeypatch):
     py, root, venv = _make_install(tmp_path)
     monkeypatch.delenv("ISAACLAB_PYTHON", raising=False)
@@ -30,7 +34,7 @@ def test_locate_install_env_var_precedence(tmp_path, monkeypatch):
 
 
 def test_locate_install_derives_root(tmp_path, monkeypatch):
-    base = tmp_path / "learning6"
+    base = tmp_path / "workspace"
     py = base / ".venv" / "bin" / "python"
     py.parent.mkdir(parents=True)
     py.write_text("")
@@ -43,13 +47,75 @@ def test_locate_install_derives_root(tmp_path, monkeypatch):
 
 
 def test_locate_install_missing(monkeypatch, tmp_path):
-    monkeypatch.setattr(install, "DEFAULT_LEARNING6", tmp_path / "nope")
     monkeypatch.delenv("ISAACLAB_PYTHON", raising=False)
     monkeypatch.delenv("ISAACLAB_ROOT", raising=False)
     assert install.locate_install() is None
     assert install.locate_install({}) is None
     env = {"ISAACLAB_PYTHON": str(tmp_path / "missing" / "python")}
     assert install.locate_install(env) is None
+
+
+def test_locate_install_from_root(tmp_path):
+    root = tmp_path / "IsaacLab"
+    python = root / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    assert install.locate_install({"ISAACLAB_ROOT": str(root)}) == {
+        "python": str(python), "isaaclab_root": str(root), "venv": str(root / ".venv")
+    }
+    # An invalid explicit interpreter must not silently fall back to the root's venv.
+    assert install.locate_install({"ISAACLAB_PYTHON": str(root / "missing"), "ISAACLAB_ROOT": str(root)}) is None
+
+
+def test_locate_install_from_activated_checkout_environment(tmp_path, monkeypatch):
+    root = tmp_path / "IsaacLab"
+    python = root / ".venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    _mark_lab_installed(root / ".venv")
+    train = root / "scripts/reinforcement_learning/train.py"
+    train.parent.mkdir(parents=True)
+    train.touch()
+    monkeypatch.chdir(tmp_path)
+    assert install.locate_install({"VIRTUAL_ENV": str(root / ".venv")}) == {
+        "python": str(python), "isaaclab_root": str(root), "venv": str(root / ".venv")}
+    assert install.locate_install({"ISAACLAB_ROOT": str(tmp_path / "missing"),
+                                   "VIRTUAL_ENV": str(root / ".venv")}) is None
+
+
+def test_explicit_checkout_can_use_active_environment_outside_it(tmp_path, monkeypatch):
+    python, root, venv = _make_install(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    assert install.locate_install({"ISAACLAB_ROOT": str(root), "VIRTUAL_ENV": str(venv)}) is None
+    _mark_lab_installed(venv)
+    result = install.locate_install({"ISAACLAB_ROOT": str(root), "VIRTUAL_ENV": str(venv)})
+    assert result == {"python": str(python), "isaaclab_root": str(root), "venv": str(venv)}
+
+
+def test_locate_install_from_current_checkout(tmp_path, monkeypatch):
+    root = tmp_path / "IsaacLab"
+    python = root / ".venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    _mark_lab_installed(root / ".venv")
+    train = root / "scripts/reinforcement_learning/train.py"
+    train.parent.mkdir(parents=True)
+    train.touch()
+    monkeypatch.chdir(root)
+    assert install.locate_install({})["python"] == str(python)
+    train.unlink()
+    assert install.locate_install({}) is None
+
+
+def test_activated_sibling_checkout_requires_training_script(tmp_path, monkeypatch):
+    py, root, venv = _make_install(tmp_path)
+    _mark_lab_installed(venv)
+    monkeypatch.chdir(tmp_path)
+    assert install.locate_install({"VIRTUAL_ENV": str(venv)}) is None
+    train = root / "scripts/reinforcement_learning/train.py"
+    train.parent.mkdir(parents=True)
+    train.touch()
+    assert install.locate_install({"VIRTUAL_ENV": str(venv)})["isaaclab_root"] == str(root)
 
 
 def test_install_info_success(monkeypatch, tmp_path):
@@ -72,12 +138,11 @@ def test_install_info_success(monkeypatch, tmp_path):
 
 
 def test_install_info_no_install(monkeypatch, tmp_path):
-    monkeypatch.setattr(install, "DEFAULT_LEARNING6", tmp_path / "nope")
     monkeypatch.delenv("ISAACLAB_PYTHON", raising=False)
     monkeypatch.delenv("ISAACLAB_ROOT", raising=False)
     res = install.install_info()
     assert "error" in res
-    assert res.get("hint") == "set ISAACLAB_PYTHON"
+    assert res == {"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}
 
 
 def test_install_info_timeout(monkeypatch, tmp_path):
@@ -155,11 +220,10 @@ def test_envs_list_malformed(monkeypatch, tmp_path):
 
 
 def test_envs_list_missing_install(monkeypatch, tmp_path):
-    monkeypatch.setattr(install, "DEFAULT_LEARNING6", tmp_path / "nope")
     monkeypatch.delenv("ISAACLAB_PYTHON", raising=False)
     monkeypatch.delenv("ISAACLAB_ROOT", raising=False)
     res = install.envs_list()
-    assert "error" in res
+    assert res == {"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}
 
 
 def test_envs_list_task_modules_and_import_errors(tmp_path):

@@ -27,10 +27,6 @@ fi
 # Pick interpreter: UR5E_DT_PYTHON or repo .venv
 if [ -n "${UR5E_DT_PYTHON:-}" ]; then
   PY="$UR5E_DT_PYTHON"
-elif [ -x "$ROOT/.venv/bin/python" ]; then
-  PY="$ROOT/.venv/bin/python"
-elif [ -x "$ROOT/learning6/.venv/bin/python" ]; then
-  PY="$ROOT/learning6/.venv/bin/python"
 else
   PY="$ROOT/.venv/bin/python"
 fi
@@ -50,15 +46,6 @@ if [ "$ISAAC_VER" != "6.2.0.0" ]; then
   exit 1
 fi
 echo "verified isaacsim version: $ISAAC_VER in $PY"
-
-# Warn if learning6/.venv disagrees
-L6_PY="$ROOT/learning6/.venv/bin/python"
-if [ -x "$L6_PY" ]; then
-  L6_VER="$("$L6_PY" -c 'import importlib.metadata as m; print(m.version("isaacsim"))' 2>/dev/null || true)"
-  if [ -n "$L6_VER" ] && [ "$L6_VER" != "6.2.0.0" ]; then
-    echo "WARNING: learning6/.venv has isaacsim version '$L6_VER', expected '6.2.0.0'" >&2
-  fi
-fi
 
 export UR5E_DT_PORT="$PORT"
 export UR5E_DT_PYTHON="$PY"

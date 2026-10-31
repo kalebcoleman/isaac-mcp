@@ -31,13 +31,23 @@ def _default_log_roots() -> List[str]:
     env = os.environ.get("ISAACLAB_LOGS_DIR")
     if env and env.strip():
         return [env.strip()]
-    return [os.path.expanduser("~/Desktop/ur5e-digital-twin/learning6/logs")]
+    from .install import locate_install
+    from .jobs import _jobs_path
+
+    roots = [str(_jobs_path())]
+    inst = locate_install()
+    if inst and inst.get("isaaclab_root"):
+        roots.insert(0, os.path.join(inst["isaaclab_root"], "logs"))
+    return roots
 
 
 def _allowed_roots(search_roots=None) -> List[str]:
     roots = []
     roots.extend(_normalize_roots(search_roots))
     roots.extend(_default_log_roots())
+    from .jobs import _jobs_path
+
+    roots.append(str(_jobs_path()))
     roots.append(os.path.expanduser("~/.local/share/isaac-mcp/jobs"))
     # Runs started by isaaclab__train land under <isaaclab_root>/logs.
     try:

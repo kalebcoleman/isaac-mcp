@@ -15,6 +15,9 @@ MCP server" is just this binary with a namespace filter, not a separate port:
     ISAAC_MCP_NAMESPACE   comma-separated namespace allowlist; unset => all.
     ISAAC_MCP_BUILTINS    "0" hides the bridge's bare builtins (run_python,
                         reload_tools) — the curated-agent view.
+    ISAAC_MCP_LOCAL_TOOLS comma-separated groups of the host's own tools (screen, Isaac
+                        Lab, gateway) to register; unset => all. See local_tools.py. It does not
+                        affect bridge tools, and composes with the two filters above.
     ISAAC_MCP_NAME / ISAAC_MCP_INSTRUCTIONS   cosmetic server identity.
 
 Canonical bridge names are ``<namespace>.<tool>``; MCP tool names cannot
@@ -36,18 +39,20 @@ Project-specific POLICY plugs in via three hook lists (it must not live here):
 deny-gate over a declared policy file. It, too, holds no policy.
 """
 
+import functools
 import json
 import logging
 import os
 import re
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.lowlevel.server import NotificationOptions
 
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
+from .local_tools import ALL_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups
 from .screen import register_screen_tools
 
 logging.basicConfig(level=logging.INFO,
@@ -120,22 +125,17 @@ def register_meta_category_hook(fn: Callable[[str], Optional[str]]) -> None:
 
 # ==================== Bridge connection ====================
 # The wire protocol lives in isaac_mcp.client (the reference client): framing,
-# envelope decoding, health checks, and the reconnect-retry are its job. The
-# gateway holds one persistent BridgeClient.
+# envelope decoding, health checks, and the reconnect-retry are its job. Each
+# server holds one persistent BridgeClient.
+#
+# What a server knows about "its" bridge (the connection, which MCP names came from which
+# bridge tools, and the meta they were registered with) lives in a _BridgeState, one per server
+# built by build_server(), so two servers in one process do not share discovery state or a
+# socket. The default instance (`mcp`) uses the module-level names below (_client, _NAME_MAP,
+# _REGISTERED_META, get_client), which is what tests and scripts that predate build_server()
+# read and patch. The policy hook lists above are process-level policy, not per-server.
 
 _client: Optional[BridgeClient] = None
-
-
-def get_client() -> BridgeClient:
-    global _client
-    if _client is None:
-        # host/port unset -> the client resolves the endpoint ($ISAAC_MCP_HOST /
-        # $ISAAC_MCP_PORT, else portfile discovery) — one resolution path.
-        _client = BridgeClient(timeout=RESPONSE_TIMEOUT_S)
-    return _client
-
-
-# ==================== Dynamic tool registration ====================
 
 # MCP-facing name -> canonical bridge name (dots are illegal in MCP tool names).
 _NAME_MAP: Dict[str, str] = {}
@@ -145,13 +145,78 @@ _NAME_MAP: Dict[str, str] = {}
 _REGISTERED_META: Dict[str, Dict[str, Any]] = {}
 
 
-def registered_tools() -> List[str]:
-    """The canonical bridge names currently registered, sorted.
+def get_client() -> BridgeClient:
+    """The default server's bridge client, connecting on first use."""
+    global _client
+    if _client is None:
+        # host/port unset -> the client resolves the endpoint ($ISAAC_MCP_HOST /
+        # $ISAAC_MCP_PORT, else portfile discovery) — one resolution path.
+        _client = BridgeClient(timeout=RESPONSE_TIMEOUT_S)
+    return _client
+
+
+class _BridgeState:
+    """One server's bridge connection and discovery bookkeeping."""
+
+    def __init__(self) -> None:
+        self.client: Optional[BridgeClient] = None
+        self.name_map: Dict[str, str] = {}
+        self.registered_meta: Dict[str, Dict[str, Any]] = {}
+
+    def get_client(self) -> BridgeClient:
+        if self.client is None:
+            self.client = BridgeClient(timeout=RESPONSE_TIMEOUT_S)
+        return self.client
+
+
+class _DefaultBridgeState(_BridgeState):
+    """The default server's state, backed by the module-level names so code and tests that
+    use (or monkeypatch) `_client`, `_NAME_MAP`, `_REGISTERED_META` and `get_client` see it."""
+
+    @property
+    def client(self) -> Optional[BridgeClient]:
+        return _client
+
+    @client.setter
+    def client(self, value: Optional[BridgeClient]) -> None:
+        global _client
+        _client = value
+
+    @property
+    def name_map(self) -> Dict[str, str]:
+        return _NAME_MAP
+
+    @property
+    def registered_meta(self) -> Dict[str, Dict[str, Any]]:
+        return _REGISTERED_META
+
+    def __init__(self) -> None:  # the base class would assign the properties above
+        pass
+
+    def get_client(self) -> BridgeClient:
+        return get_client()
+
+
+_DEFAULT_STATE = _DefaultBridgeState()
+_STATE_ATTR = "_isaac_bridge_state"
+
+
+def _state_for(server: Any) -> _BridgeState:
+    """The bridge state of a server built by build_server(); any other FastMCP (and the default
+    instance) uses the module-level one."""
+    return getattr(server, _STATE_ATTR, None) or _DEFAULT_STATE
+
+
+# ==================== Dynamic tool registration ====================
+
+
+def registered_tools(server: Any = None) -> List[str]:
+    """The canonical bridge names currently registered, sorted (default: the default server's).
 
     The roster a policy's matchers can be checked against: a gate naming a tool this does not
     list is gating nothing. Empty before discovery has run, which is itself worth knowing —
     checking a policy against a roster nobody has filled would clear every name in it."""
-    return sorted(_NAME_MAP.values())
+    return sorted(_state_for(server).name_map.values())
 
 
 def _mcp_name(canonical: str) -> str:
@@ -180,7 +245,8 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
     New tools are added, changed schemas are re-registered, and tools no longer
     in the selected bridge view are removed. A failed or malformed discovery
     does not turn an unknown registry into an empty one."""
-    result = get_client().call("list_tools")
+    state = _state_for(server)
+    result = state.get_client().call("list_tools")
     if not isinstance(result, dict) or not isinstance(result.get("tools"), dict):
         raise RuntimeError("bridge list_tools response has no tools dictionary")
     if any(not isinstance(name, str) or not isinstance(meta, dict)
@@ -194,7 +260,7 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
         name = _mcp_name(canonical)
         if name in names and names[name] != canonical:
             raise RuntimeError(f"bridge tools {names[name]!r} and {canonical!r} collide as {name!r}")
-        if name in server._tool_manager._tools and name not in _NAME_MAP:
+        if name in server._tool_manager._tools and name not in state.name_map:
             raise RuntimeError(f"bridge tool {canonical!r} collides with host tool {name!r}")
         names[name] = canonical
 
@@ -205,26 +271,26 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
     staged = {}
     for canonical, meta in sorted(tools.items()):
         name = _mcp_name(canonical)
-        if _NAME_MAP.get(name) == canonical and _REGISTERED_META.get(name) == meta:
+        if state.name_map.get(name) == canonical and state.registered_meta.get(name) == meta:
             continue
         try:
-            register_dynamic_tool(staging, name, canonical, meta)
+            register_dynamic_tool(staging, name, canonical, meta, state=state)
         except Exception as error:
             raise RuntimeError(f"invalid bridge tool {canonical!r}: {error}") from error
         staged[name] = (canonical, meta, staging._tool_manager._tools[name])
 
     changed = []
-    for mcp_name, canonical in list(_NAME_MAP.items()):
+    for mcp_name, canonical in list(state.name_map.items()):
         if canonical not in tools:
             _drop_tool(server, mcp_name)
-            _NAME_MAP.pop(mcp_name, None)
-            _REGISTERED_META.pop(mcp_name, None)
+            state.name_map.pop(mcp_name, None)
+            state.registered_meta.pop(mcp_name, None)
             changed.append(f"{canonical} (removed)")
     for name, (canonical, meta, tool) in staged.items():
-        changed.append(f"{canonical} (updated)" if name in _NAME_MAP else canonical)
+        changed.append(f"{canonical} (updated)" if name in state.name_map else canonical)
         server._tool_manager._tools[name] = tool
-        _NAME_MAP[name] = canonical
-        _REGISTERED_META[name] = meta
+        state.name_map[name] = canonical
+        state.registered_meta[name] = meta
     if changed:
         logger.info(f"Registered/updated {len(changed)} bridge tools: {changed}")
     return changed
@@ -235,7 +301,7 @@ _KIND_ANNOTATIONS = {"boolean": bool, "integer": int, "number": float,
 
 
 def _build_tool_function(name: str, canonical: str, description: str,
-                         fields: List[Dict[str, Any]]):
+                         fields: List[Dict[str, Any]], state: Optional[_BridgeState] = None):
     """Build a function with a real signature/annotations for FastMCP schemas.
 
     ``fields`` are the bridge-served field specs (the schema vocabulary is
@@ -269,7 +335,8 @@ def _build_tool_function(name: str, canonical: str, description: str,
         f"def {name}({params_str}) -> str:\n"
         f"    return _tool_impl({canonical!r}, locals())\n"
     )
-    local_ns = {"_tool_impl": _tool_implementation}
+    local_ns = {"_tool_impl": (_tool_implementation if state is None
+                               else functools.partial(_tool_implementation, state=state))}
     exec(func_code, local_ns)
     func = local_ns[name]
     func.__doc__ = description
@@ -277,21 +344,23 @@ def _build_tool_function(name: str, canonical: str, description: str,
     return func
 
 
-def _tool_implementation(canonical: str, params: Dict[str, Any]) -> str:
+def _tool_implementation(canonical: str, params: Dict[str, Any],
+                         state: Optional[_BridgeState] = None) -> str:
     """Shared implementation for all dynamic tools.
 
-    Every call crosses both policy hook lists, which is the point of putting them
-    here: this is where every path lands, raw-socket callers included. The result
-    a post-dispatch hook sees is the one the caller would have received, whatever
-    produced it."""
+    Every dynamically registered bridge tool called through this host crosses both
+    policy hook lists. Direct bridge socket callers bypass these host hooks. The
+    result a post-dispatch hook sees is the one the caller would have received,
+    whatever produced it."""
     # Drop unset optional params so bridge-side handler defaults apply — and so a
     # policy hook judges the call the bridge will actually receive rather than the
     # signature's placeholders.
     params = {k: v for k, v in params.items() if v is not None}
-    return _post_dispatch(canonical, params, _dispatch(canonical, params))
+    return _post_dispatch(canonical, params, _dispatch(canonical, params, state))
 
 
-def _dispatch(canonical: str, params: Dict[str, Any]) -> str:
+def _dispatch(canonical: str, params: Dict[str, Any],
+              state: Optional[_BridgeState] = None) -> str:
     """Run the pre-dispatch hooks and, if none refused, the bridge call."""
     # Each hook may mutate params in place and/or return a refusal string to BLOCK
     # the call. A buggy hook degrades to an error string rather than crashing the
@@ -308,7 +377,7 @@ def _dispatch(canonical: str, params: Dict[str, Any]) -> str:
             return blocked
 
     try:
-        result = get_client().call(canonical, params)
+        result = (state or _DEFAULT_STATE).get_client().call(canonical, params)
         return json.dumps(result, indent=2, default=repr)
     except BridgeError as e:
         detail = f"\n{json.dumps(e.details, default=repr)[:2000]}" if e.details else ""
@@ -337,14 +406,17 @@ def _post_dispatch(canonical: str, params: Dict[str, Any], result: str) -> str:
 
 
 def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
-                          meta: Dict[str, Any]) -> None:
+                          meta: Dict[str, Any], state: Optional[_BridgeState] = None) -> None:
     description = meta.get("description", f"Execute {canonical} on the Kit bridge")
     if "fields" not in meta:
         raise RuntimeError(
             f"bridge served no field specs for {canonical!r} — the parameter "
             "schema is interpreted bridge-side (isaac_mcp_bridge.schema); update "
             "the isaac.mcp.bridge extension to match this gateway.")
-    handler = _build_tool_function(name, canonical, description, meta["fields"])
+    if state is None:
+        state = _state_for(server)
+    handler = _build_tool_function(name, canonical, description, meta["fields"],
+                                   None if state is _DEFAULT_STATE else state)
 
     # Optional _meta category from policy hooks (failures are non-fatal).
     category = None
@@ -367,6 +439,7 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
+    state = _state_for(server)
     try:
         logger.info("KitMCP server starting up")
         try:
@@ -376,15 +449,11 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             logger.warning("Start Kit with isaac.mcp.bridge enabled, then call refresh_tools.")
         yield {}
     finally:
-        global _client
-        if _client:
+        if state.client:
             logger.info("Disconnecting from the Kit bridge")
-            _client.close()
-            _client = None
+            state.client.close()
+            state.client = None
         logger.info("KitMCP server shut down")
-
-
-mcp = FastMCP(SERVER_NAME, instructions=SERVER_INSTRUCTIONS, lifespan=server_lifespan)
 
 
 def _advertise_tools_list_changed(server: FastMCP) -> None:
@@ -406,9 +475,6 @@ def _advertise_tools_list_changed(server: FastMCP) -> None:
     server._mcp_server.create_initialization_options = create_initialization_options
 
 
-_advertise_tools_list_changed(mcp)
-
-
 async def _notify_tools_changed(ctx: Optional[Context]) -> None:
     """Tell the client its tool list changed. Never raises: a failed
     notification must not fail the tool that changed the registry.
@@ -425,10 +491,11 @@ async def _notify_tools_changed(ctx: Optional[Context]) -> None:
         logger.warning(f"Could not send tools/list_changed notification: {e}")
 
 
-def _screen_port() -> int | None:
+def _screen_port(state: Optional[_BridgeState] = None) -> int | None:
     """Bridge port for auto-targeting, before or after the client connects."""
-    if _client is not None:
-        return _client.port
+    client = (state or _DEFAULT_STATE).client
+    if client is not None:
+        return client.port
     raw = os.getenv("UR5E_DT_PORT") or os.getenv("ISAAC_MCP_PORT")
     try:
         return int(raw) if raw else None
@@ -436,16 +503,9 @@ def _screen_port() -> int | None:
         return None
 
 
-register_screen_tools(mcp, port_provider=_screen_port)
-register_isaaclab_tools(mcp)
-
-
-@mcp.tool()
-async def refresh_tools(ctx: Context = None) -> str:  # type: ignore[assignment]
-    """Re-discover the bridge registry and register any new tools (use after
-    the bridge's reload_tools, after enabling a project, or after Kit restarts)."""
+async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None) -> str:
     try:
-        added = discover_and_register_tools(mcp)
+        added = discover_and_register_tools(server)
     except Exception as e:
         return f"Error: {e}"
     if added:
@@ -454,35 +514,27 @@ async def refresh_tools(ctx: Context = None) -> str:  # type: ignore[assignment]
             else "No new or changed tools (registry unchanged).")
 
 
-@mcp.tool()
-async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[assignment]
-    """Switch this MCP server to another running Kit bridge on this machine.
-
-    Use list_bridges to see the candidates. This replaces the ur5e_dt__* tools
-    with the ones registered in that Kit process; screen tools are unaffected.
-    The choice lasts until this MCP server restarts, then UR5E_DT_PORT (or
-    ISAAC_MCP_PORT, or auto-discovery) decides again.
-    """
-    global _client
+async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None) -> str:
+    state = _state_for(server)
     try:
         new_client = BridgeClient(port=int(port))
         identity = new_client.call("status")
     except Exception as e:  # noqa: BLE001
         return f"Error: {e}"
-    old_client = _client
-    _client = new_client
-    had_tools = bool(_NAME_MAP)
-    for name in list(_NAME_MAP):
-        _drop_tool(mcp, name)
-    _NAME_MAP.clear()
-    _REGISTERED_META.clear()
+    old_client = state.client
+    state.client = new_client
+    had_tools = bool(state.name_map)
+    for name in list(state.name_map):
+        _drop_tool(server, name)
+    state.name_map.clear()
+    state.registered_meta.clear()
     if old_client is not None:
         try:
             old_client.close()
         except Exception:  # noqa: BLE001
             pass
     try:
-        added = discover_and_register_tools(mcp)
+        added = discover_and_register_tools(server)
     except Exception as e:  # noqa: BLE001
         if had_tools:  # the previous bridge's tools were dropped above
             await _notify_tools_changed(ctx)
@@ -497,6 +549,74 @@ async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[ass
         f"switched to bridge on port {port}\n{summary}\n"
         f"registered/updated {len(added)} tool(s)"
     )
+
+
+def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
+    """Register ``refresh_tools`` and ``use_bridge`` (the ``gateway`` group) on ``server``.
+
+    Bridge discovery itself runs from the server lifespan, so omitting these two tools does not
+    stop startup discovery; it only removes the client's way to re-run or redirect it."""
+    mcp = ScopedTools(server, groups)
+
+    @mcp.tool(annotations=IDEMPOTENT_WRITE)
+    async def refresh_tools(ctx: Context = None) -> str:  # type: ignore[assignment]
+        """Re-discover the bridge registry and register any new tools (use after
+        the bridge's reload_tools, after enabling a project, or after Kit restarts)."""
+        return await _refresh_tools(server, ctx)
+
+    @mcp.tool(annotations=IDEMPOTENT_WRITE)
+    async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[assignment]
+        """Switch this MCP server to another running Kit bridge on this machine.
+
+        To find the candidates, run `python -m isaac_mcp.client --list-bridges`. (`list_bridges`
+        exists only as a bridge built-in: it is an MCP tool only when built-ins are enabled and a
+        bridge is already reachable.) This replaces the ur5e_dt__* tools with the ones registered
+        in that Kit process; screen tools are unaffected. The choice lasts until this MCP server
+        restarts, then UR5E_DT_PORT (or ISAAC_MCP_PORT, or auto-discovery) decides again.
+        """
+        return await _use_bridge(server, port, ctx)
+
+
+_RESTRICTED_NOTE = (
+    " This server runs with a restricted set of its own local tools (ISAAC_MCP_LOCAL_TOOLS): rely "
+    "on the tools it lists, and ignore guidance above about local tools that are not listed. The "
+    "restriction does not apply to tools discovered from a Kit bridge.")
+
+
+def build_server(env: Optional[Mapping[str, str]] = None,
+                 state: Optional[_BridgeState] = None) -> FastMCP:
+    """Build a host server whose local tools are chosen by ``ISAAC_MCP_LOCAL_TOOLS`` in ``env``.
+
+    ``env`` defaults to ``os.environ``. The groups are parsed once, here; an unknown group
+    raises :class:`LocalToolsError` before anything is registered. The module-level ``mcp`` is
+    ``build_server()``, so importing ``isaac_mcp.server`` with the variable unset registers all
+    the local tools, as it always did.
+
+    Each server gets its own bridge connection and discovery state (``state``, fresh unless the
+    caller passes one), so servers built in one process neither share a socket nor skip tools
+    because another server already discovered them. Only the module-level default ``mcp`` is
+    wired to the module-level state. The policy hook lists are process-wide and shared."""
+    env = os.environ if env is None else env
+    groups = local_tool_groups(env)
+    instructions = SERVER_INSTRUCTIONS
+    if groups != ALL_GROUPS and "ISAAC_MCP_INSTRUCTIONS" not in env:
+        instructions += _RESTRICTED_NOTE
+    state = _BridgeState() if state is None else state
+    server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
+    setattr(server, _STATE_ATTR, state)
+    _advertise_tools_list_changed(server)
+    register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups)
+    register_isaaclab_tools(server, groups=groups)
+    _register_gateway_tools(server, groups)
+    return server
+
+
+mcp = build_server(state=_DEFAULT_STATE)
+
+# Direct-call entry points bound to the default server (scripts and tests call these as plain
+# coroutines; the registered tools above are thin wrappers over the same functions).
+refresh_tools = functools.partial(_refresh_tools, mcp)
+use_bridge = functools.partial(_use_bridge, mcp)
 
 
 def main(argv: list[str] | None = None) -> None:

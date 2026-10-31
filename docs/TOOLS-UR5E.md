@@ -19,6 +19,18 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 `ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
 [MCP-SERVER.md](MCP-SERVER.md).
 
+## Simulator window
+
+The standard `./run.sh` launch enables the `ur5e-dt` Kit extension, whose startup creates the **UR5e Digital Twin**
+window and registers the twin's bridge tools. The window therefore appears when that extension starts in a graphical
+session; invoking a twin MCP tool does not open it. `./run.sh --headless` runs without a visible simulator window,
+and starting the host MCP server alone does not start Isaac Sim. The twin window is separate from the optional
+`isaac.mcp.panel` registry inspector.
+
+Several panel actions, including Quick Start, loading the workstation or room, playing/stopping the scene and
+recording, have MCP tools in the reference below. Host screen tools can inspect and capture simulator windows, but
+they do not provide mouse or keyboard control, and not every panel control has an MCP equivalent.
+
 ## Parameter conventions
 
 - Parameter shapes come from `MCP_TOOL_REGISTRY` in `extension.py`; required/default
@@ -86,6 +98,8 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 - Parameters: none.
 - Async: yes.
 - Purpose: import the Intel RealSense camera, attach it to `UR5e/wrist_3_link`, and build its ROS 2 action graph (camera image, `camera_info`, and the `/tf_cam` transform tree).
+- Camera resolution defaults to 1280 × 720. Set `UR5E_DT_CAMERA_CONFIG` to a YAML file containing
+  `camera_width` and `camera_height` to override it; the former project-specific location is no longer read implicitly.
 - Preconditions: UR5e must be loaded (e.g. after `quick_start_with_workstation`); otherwise returns an error.
 - Side effects: creates `/World/rsd455` (if absent) and `/Graph/ActionGraph_Camera`.
 - Example: `{}`
@@ -189,6 +203,9 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 - Purpose: bring the ROS 2 robot driver up/down/status so motion tools (ros-mcp-server `move_home`, `move_to_grasp`, …) have a driver.
 - Side effects: spawns a host subprocess (`scripts/launch_ur_fake.sh` or `scripts/sim_bringup.sh`) with a sanitized environment; no USD changes. Subprocess cap 240 s for `up`, 60 s otherwise. Both backends end at `/joint_states` live and `scaled_joint_trajectory_controller` accepting `FollowJointTrajectory` on the configured ROS domain (default 0, Cyclone, localhost-only).
 - Real-hardware/ROS constraints: `backend="fake"` is simulation-only; `mode="real"` is not yet enabled in this codebase. Do not launch a real robot driver for a simulation-only task.
+- The fake backend discovers the standard ROS setup for Ubuntu 22.04/Humble or Ubuntu 24.04/Jazzy. On Jazzy, install `ros-jazzy-ur-robot-driver`, `ros-jazzy-ros2controlcli`, and `ros-jazzy-rmw-cyclonedds-cpp` through the system package manager. The launcher checks the driver's advertised mock-hardware argument and refuses to start if it cannot verify it; use `ROS_SETUP` for a nonstandard sourced ROS installation.
+- Fake-driver startup waits until both the joint-state broadcaster and scaled trajectory controller are active; controller queries are bounded when the manager is unavailable.
+- Fake-driver shutdown targets the verified mock process recorded by this launcher and its dedicated process group; it does not globally stop other UR drivers. If its PID file is missing or stale, inspect the host's processes instead of assuming an unrelated driver was stopped.
 - Example: `{"action": "status"}` / `{"mode": "sim", "action": "up", "backend": "fake"}`
 
 ### `ur5e_dt__sync_real_poses`
@@ -197,8 +214,7 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 - Parameters: none.
 - Purpose: subscribe to `/objects_poses_real` and update sim object poses to match real-world detected poses.
 - Side effects: creates a temporary rclpy node, waits up to 3 s for one `TFMessage`; mutates object poses. Requires an external publisher on `/objects_poses_real` (real detection pipeline).
-- If no message arrives, the underlying sync logs a timeout and returns; the wrapper can still report success. Verify
-  the publisher and the resulting poses rather than treating that success response as proof an update arrived.
+- Result: `updated` and `snapped` list object names. Returns an error when no message arrives or no scene objects match; it does not report a successful sync in those cases. Its temporary ROS context does not shut down the simulator's existing ROS context.
 - Real-hardware/ROS constraints: intended for real-world sync; not useful in a pure sim session without that publisher.
 - Example: `{}`
 
@@ -232,6 +248,8 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
   | `fps` | integer | no | `30` | Output framerate; values `<= 0` become `30`. |
 - Purpose: start real-time viewport video recording via ffmpeg without blocking physics.
 - Side effects: spawns ffmpeg; non-blocking. Requires ffmpeg and a usable viewport.
+- Frames are paced to the requested output rate against elapsed time; short gaps repeat the latest frame. If capture
+  falls more than five seconds behind or no frame arrives, recording reports an error instead of claiming success.
 - Example: `{"file_name": "run.mp4", "fps": 30}`
 
 ### `ur5e_dt__stop_recording`

@@ -21,7 +21,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 import mss
 from PIL import Image as PILImage
@@ -29,6 +29,8 @@ from Xlib import X, display as xdisplay
 from Xlib.error import XError
 
 from mcp.server.fastmcp import FastMCP, Image
+
+from .local_tools import ADDITIVE, IDEMPOTENT_WRITE, READ_ONLY, ScopedTools
 
 DISPLAY = os.environ.get("DISPLAY") or ":0"
 os.environ.setdefault("DISPLAY", DISPLAY)
@@ -508,10 +510,18 @@ def _stamp() -> str:
 
 
 def register_screen_tools(
-    mcp: FastMCP, port_provider: Callable[[], int | None] | None = None
+    server: FastMCP,
+    port_provider: Callable[[], int | None] | None = None,
+    groups: Iterable[str] | None = None,
 ) -> None:
-    SHOT_DIR.mkdir(parents=True, exist_ok=True)
-    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    """Register the screen tools whose group is in ``groups`` (default: all of them).
+
+    The capture directories are created only when ``screen_capture`` is enabled, so a profile
+    without it leaves the filesystem alone."""
+    mcp = ScopedTools(server, groups)
+    if mcp.enabled("screen_capture"):
+        SHOT_DIR.mkdir(parents=True, exist_ok=True)
+        VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
     def auto_target() -> dict | None:
         port = None
@@ -522,7 +532,7 @@ def register_screen_tools(
                 port = None
         return _auto_window(port)
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     def screen_info() -> str:
         """Report the X11 display, monitors, capture directories and recording state."""
         with mss.MSS() as sct:
@@ -570,9 +580,12 @@ def register_screen_tools(
             lines.append(f"last recording: {_last.get('path')} ({_last.get('duration_s')}s)")
         return "\n".join(lines)
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     def list_windows(filter: str | None = None) -> str:
-        """List visible top-level windows. `filter` matches title or WM class."""
+        """List visible top-level windows. `filter` matches title or WM class.
+
+        Privacy: window titles are returned to the model.
+        """
         windows = _visible_windows()
         if filter:
             needle = filter.lower()
@@ -592,7 +605,7 @@ def register_screen_tools(
             )
         return "\n".join(lines)
 
-    @mcp.tool()
+    @mcp.tool(annotations=IDEMPOTENT_WRITE)
     def raise_window(window: str | None = None, window_id: int | None = None) -> str:
         """Bring a window to the front before a screenshot or recording."""
         win = _match_window(window, window_id)
@@ -605,7 +618,7 @@ def register_screen_tools(
             disp.close()
         return f"raised: {win['title']} (id={win['id']})"
 
-    @mcp.tool()
+    @mcp.tool(annotations=ADDITIVE)
     def screenshot(
         monitor: int | None = None,
         window: str | None = None,
@@ -621,6 +634,8 @@ def register_screen_tools(
         A window capture reads that window's own pixels, so it works even when
         another window covers it. The PNG on disk is full resolution; the inline
         image is downscaled to max_width (default 1600).
+
+        Privacy: the image (and any text visible in it) is sent to the model and saved on this machine.
         """
         max_width = max(320, min(int(max_width), 3840))
         target = None
@@ -657,7 +672,7 @@ def register_screen_tools(
         inline.save(buf, "PNG", optimize=True)
         return [Image(data=buf.getvalue(), format="png"), caption]
 
-    @mcp.tool()
+    @mcp.tool(annotations=ADDITIVE)
     def start_screen_recording(
         monitor: int | None = None,
         window: str | None = None,
@@ -680,6 +695,9 @@ def register_screen_tools(
         window size, capped by max_width. fps is clamped to 1-30, max_seconds
         to 5-3600 (default 600). No audio. For a clean Isaac Sim viewport
         render without desktop chrome, use the Kit tool start_recording instead.
+
+        Privacy: the recording is saved on this machine; stop_screen_recording reports its path, and window
+        titles and pixels can reach the model through the other screen tools.
         """
         global _current
         fps = max(1, min(int(fps), 30))
@@ -785,9 +803,12 @@ def register_screen_tools(
             f"fps: {fps}, limit: {max_seconds}s. Call stop_screen_recording when done."
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ADDITIVE)
     def stop_screen_recording() -> str:
-        """Stop the active desktop recording and report the MP4 path, duration and size."""
+        """Stop the active desktop recording and report the MP4 path, duration and size.
+
+        Privacy: the MP4 stays on this machine; only its path, duration and size are returned.
+        """
         global _current, _last
         with _lock:
             rec = _current
@@ -801,7 +822,7 @@ def register_screen_tools(
         _last = result
         return "\n".join(f"{k}: {v}" for k, v in result.items())
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     def screen_recording_status() -> str:
         """Show whether a desktop recording is running and for how long."""
         with _lock:

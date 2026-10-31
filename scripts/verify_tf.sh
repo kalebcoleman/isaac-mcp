@@ -3,7 +3,7 @@
 # /objects_poses_sim and /tf_cam with scripts/tf_capture.py. Output: $OUT/tf_after.json
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PORT="${UR5E_DT_PORT:-8799}"; OUT="${PROBE_OUT:-/tmp/opencode}"; PY="${UR5E_DT_PYTHON:-$ROOT/.venv/bin/python}"
+PORT="${UR5E_DT_PORT:-8799}"; OUT="${PROBE_OUT:-${TMPDIR:-/tmp}/isaac-mcp-probe}"; PY="${UR5E_DT_PYTHON:-$ROOT/.venv/bin/python}"
 export OMNI_KIT_ACCEPT_EULA=YES ISAAC_MCP_PORT="$PORT" ISAAC_MCP_DEFER_START=1 UR5E_DT_PORT="$PORT" UR5E_DT_HEADLESS=1 PYTHONDONTWRITEBYTECODE=1
 export ROS_DISTRO="${ROS_DISTRO:-humble}" RMW_IMPLEMENTATION=rmw_cyclonedds_cpp PATH="$HOME/.local/bin:$PATH"
 # Canonical DDS settings (localhost-only + Cyclone profile) so the sim and tf_capture.py discover each other.

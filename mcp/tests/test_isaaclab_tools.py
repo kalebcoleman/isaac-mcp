@@ -23,6 +23,14 @@ def test_launch_without_install_returns_a_hint(monkeypatch):
     assert out["error"] == "no Isaac Lab install found" and "ISAACLAB_PYTHON" in out["hint"]
 
 
+def test_launch_without_checkout_returns_actionable_error(monkeypatch):
+    monkeypatch.setattr(tools._install, "locate_install", lambda env=None: {
+        "python": "/bin/true", "isaaclab_root": None})
+    out = json.loads(tools._launch(tools._jobs.train, task="Isaac-Reach-Franka-v0"))
+    assert out["error"] == "Isaac Lab checkout not found"
+    assert "ISAACLAB_ROOT" in out["hint"]
+
+
 def test_bad_arguments_come_back_as_errors_not_exceptions(monkeypatch):
     monkeypatch.setattr(
         tools._install, "locate_install", lambda env=None: {"python": "/bin/true", "isaaclab_root": "/tmp"}

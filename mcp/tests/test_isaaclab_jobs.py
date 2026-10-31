@@ -1,5 +1,6 @@
 import os
 import stat
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -48,6 +49,25 @@ def wait_for_status(job_id, target, timeout=10):
             return st
         time.sleep(0.1)
     return jobs.runs_status(job_id)["state"]
+
+
+def test_import_does_not_create_jobs_directory_but_launch_does(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("ISAACLAB_JOBS_DIR", raising=False)
+    directory = home / ".local" / "share" / "isaac-mcp" / "jobs"
+    subprocess.run([sys.executable, "-c", "import isaac_mcp.isaaclab.jobs"], check=True, env=os.environ.copy())
+    assert not directory.exists()
+
+    fake_py = make_fake_python(tmp_path)
+    root = tmp_path / "root"
+    root.mkdir()
+    result = jobs.train(python=str(fake_py), root=str(root), task="Test", allow_concurrent=True,
+                        allow_concurrent_gpu=True)
+    assert directory.is_dir()
+    assert (directory / result["job_id"] / "job.json").is_file()
+    assert wait_for_status(result["job_id"], "succeeded") == "succeeded"
 
 
 def test_launch_status_tail(tmp_path, monkeypatch):

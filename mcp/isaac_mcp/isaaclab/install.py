@@ -12,9 +12,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-DEFAULT_LEARNING6 = Path.home() / "Desktop" / "ur5e-digital-twin" / "learning6"
-
-
 def _env(env: Any) -> Any:
     return os.environ if env is None else env
 
@@ -25,10 +22,22 @@ def _derive_venv(python: Path) -> Path | None:
     return None
 
 
+def _has_isaaclab_metadata(venv: Path) -> bool:
+    """Recognize an installed Lab distribution without executing an arbitrary interpreter."""
+    for lib in ("lib", "lib64"):
+        for site in (venv / lib).glob("python*/site-packages"):
+            if any(site.glob("isaaclab-*.dist-info")) or (site / "isaaclab.egg-info").exists():
+                return True
+    return False
+
+
 def _derive_root(python: Path) -> Path | None:
     venv = _derive_venv(python)
     if venv is None:
         return None
+    # A standard Isaac Lab checkout commonly keeps its virtualenv in the root.
+    if (venv.parent / "scripts" / "reinforcement_learning" / "train.py").is_file():
+        return venv.parent
     candidate = venv.parent / "IsaacLab"
     if candidate.is_dir():
         return candidate
@@ -64,17 +73,6 @@ def locate_install(env: Any = None) -> dict | None:
             }
         return None
 
-    base = DEFAULT_LEARNING6
-    python = base / ".venv" / "bin" / "python"
-    root = base / "IsaacLab"
-    venv = base / ".venv"
-    if python.is_file() and root.is_dir():
-        return {
-            "python": str(python),
-            "isaaclab_root": str(root),
-            "venv": str(venv),
-        }
-
     try:
         root_val = e.get("ISAACLAB_ROOT") if hasattr(e, "get") else None
     except Exception:
@@ -88,11 +86,31 @@ def locate_install(env: Any = None) -> dict | None:
                 "isaaclab_root": str(base2),
                 "venv": str(base2 / ".venv"),
             }
+        active = e.get("VIRTUAL_ENV") if hasattr(e, "get") else None
+        if active and base2.is_dir():
+            venv2 = Path(str(active)).expanduser()
+            python2 = venv2 / "bin" / "python"
+            if python2.is_file() and _has_isaaclab_metadata(venv2):
+                return {"python": str(python2), "isaaclab_root": str(base2), "venv": str(venv2)}
+        # Do not silently replace an invalid explicit configuration.
+        return None
+
+    # Standard activated environments and checkout-local .venv installs can be
+    # discovered without scanning a user's home or guessing a personal path.
+    venv_val = e.get("VIRTUAL_ENV") if hasattr(e, "get") else None
+    candidates = [Path(str(venv_val)).expanduser()] if venv_val else []
+    candidates.append(Path.cwd() / ".venv")
+    for venv in candidates:
+        python = venv / "bin" / "python"
+        root = _derive_root(python)
+        if (python.is_file() and _has_isaaclab_metadata(venv) and root is not None and
+                (root / "scripts" / "reinforcement_learning" / "train.py").is_file()):
+            return {"python": str(python), "isaaclab_root": str(root), "venv": str(venv)}
 
     return None
 
 
-_MISSING = {"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON"}
+_MISSING = {"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}
 
 
 def install_info(env: Any = None) -> dict:
@@ -145,9 +163,8 @@ def resolve_task_modules(root: Any, env: Any = None) -> tuple[list[str], list[st
     """Task packages to import before Isaac Lab looks up a task id, and the sys.path entries they need.
 
     ``ISAACLAB_TASK_MODULES`` (comma list) and ``ISAACLAB_TASK_PATH`` (os.pathsep list) are the explicit
-    configuration. The parent of the Isaac Lab root and the root itself are always importable, and a sibling
-    ``ur5e_lab`` package is imported without configuration. Shared by ``envs_list`` and the train/eval/play jobs
-    so both see the same tasks.
+    configuration. The parent of the Isaac Lab root and the root itself are always importable. Shared by
+    ``envs_list`` and the train/eval/play jobs so both see the same tasks.
     """
     e = _env(env)
     modules = [m.strip() for m in str(e.get("ISAACLAB_TASK_MODULES") or "").split(",") if m.strip()]
@@ -155,8 +172,6 @@ def resolve_task_modules(root: Any, env: Any = None) -> tuple[list[str], list[st
     if root:
         base = Path(root).parent
         paths.extend([str(base), str(root)])
-        if not modules and (base / "ur5e_lab").is_dir():
-            modules = ["ur5e_lab"]
     return modules, paths
 
 

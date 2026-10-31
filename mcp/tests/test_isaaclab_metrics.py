@@ -73,6 +73,36 @@ def test_checkpoints_search_roots_default_env(tmp_path, monkeypatch):
     assert len(res["checkpoints"]) == 1
 
 
+def test_checkpoints_default_searches_install_logs_and_jobs(tmp_path, monkeypatch):
+    root = tmp_path / "IsaacLab"
+    python = root / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    logs = root / "logs"
+    logs.mkdir()
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    (logs / "model_1.pt").touch()
+    (jobs_dir / "model_2.pt").touch()
+    monkeypatch.delenv("ISAACLAB_LOGS_DIR", raising=False)
+    monkeypatch.delenv("ISAACLAB_PYTHON", raising=False)
+    monkeypatch.setenv("ISAACLAB_ROOT", str(root))
+    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(jobs_dir))
+    assert {os.path.basename(c["path"]) for c in metrics.checkpoints_list()["checkpoints"]} == {
+        "model_1.pt", "model_2.pt"
+    }
+    assert metrics._resolve_run_dir(str(jobs_dir))[1] is None
+
+
+def test_checkpoints_default_without_install_uses_jobs(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAACLAB_PYTHON", raising=False)
+    monkeypatch.delenv("ISAACLAB_ROOT", raising=False)
+    monkeypatch.delenv("ISAACLAB_LOGS_DIR", raising=False)
+    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path))
+    (tmp_path / "model.pt").touch()
+    assert len(metrics.checkpoints_list()["checkpoints"]) == 1
+
+
 def test_path_escape_refusal(tmp_path):
     # run_dir outside allowed roots
     res = metrics.metrics_summary(run_dir="/etc")

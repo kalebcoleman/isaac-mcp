@@ -13,10 +13,6 @@ EXTRA_ARGS=()
 # Resolve interpreter (defaults to .venv/bin/python, can be overridden by UR5E_DT_PYTHON)
 if [ -n "${UR5E_DT_PYTHON:-}" ]; then
   PY="$UR5E_DT_PYTHON"
-elif [ -x "$ROOT/.venv/bin/python" ]; then
-  PY="$ROOT/.venv/bin/python"
-elif [ -x "$ROOT/learning6/.venv/bin/python" ]; then
-  PY="$ROOT/learning6/.venv/bin/python"
 else
   PY="$ROOT/.venv/bin/python"
 fi

@@ -23,6 +23,7 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
+from .recording import FramePacer
 
 # MCP output directory configuration
 BASE_OUTPUT_DIR = os.getenv("MCP_CLIENT_OUTPUT_DIR", "").strip()
@@ -175,6 +176,11 @@ class _RecordingState:
         self.start_time = 0
         self.fps = 30
         self.last_print = 0
+        self.error = None
+        self.pacer = None
+        self.capture_token = None
+        self.recording_lock = threading.RLock()
+        self.stopping = False
         self.state_dir = "/tmp/isaacsim_recording"
         self.state_file = os.path.join(self.state_dir, "recorder_state.json")
 
@@ -188,6 +194,8 @@ class _RecordingState:
             os.remove(self.state_file)
 
     def is_recording(self):
+        if getattr(self, "stopping", False):
+            return True
         if self.recording and self.ffmpeg_proc is not None:
             return True
         # Check state file as fallback
@@ -504,7 +512,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "sync_real_poses": {
-        "description": "Subscribe to /objects_poses_real ROS2 topic and update sim object poses to match real-world detected poses.",
+        "description": "Wait up to 3 seconds for /objects_poses_real and update matching sim objects. Reports an error if no message or matching objects arrive, and lists updated and snapped objects.",
         "parameters": {}
     },
     "new_stage": {
@@ -715,8 +723,7 @@ class DigitalTwin(omni.ext.IExt):
         #   400/10 per deg (tau 25 ms): rise 0.100 s, settle 0.289 s, no overshoot
         # Do not raise stiffness alone: it lowers zeta (the asset's ~10230/4 ran at
         # zeta ~0.15, a ~120 Hz resonance sampled at 60 Hz), and contact forces grow
-        # with it. Re-run demo/scripts/control_experiments.py --experiments
-        # step,track,gains after changing these, and re-check the S0-S9 demo.
+        # with it. Re-run the drive-settings and single-joint-motion checks after changes.
         self._ur5e_max_force = 200.0
         self._ur5e_stiffness = 100.0
         self._ur5e_damping = 10.0
@@ -1801,20 +1808,20 @@ class DigitalTwin(omni.ext.IExt):
 
     def _start_rt_from_ui(self):
         """Start real-time recording from UI. Auto-stops after duration if set."""
-        if _recording_mgr.recording:
+        if _recording_mgr.is_recording():
             return
         file_name = self._get_recording_filename()
         camera_path = self._get_selected_camera_path()
         duration = self._rec_duration_field.model.as_float
         self._start_realtime_recording(file_name=file_name, camera_path=camera_path)
         if duration > 0:
-            asyncio.ensure_future(self._rt_auto_stop(duration))
+            asyncio.ensure_future(self._rt_auto_stop(duration, _recording_mgr.capture_token))
 
-    async def _rt_auto_stop(self, duration):
+    async def _rt_auto_stop(self, duration, token):
         """Auto-stop real-time recording after duration seconds."""
         await asyncio.sleep(duration)
         if _recording_mgr.recording:
-            self._stop_realtime_recording()
+            self._stop_realtime_recording(token=token)
 
     def _start_realtime_recording(self, output_dir=None, file_name="realtime_recording.mp4",
                                    fps=30, camera_path=None):
@@ -1835,7 +1842,7 @@ class DigitalTwin(omni.ext.IExt):
         w, h = viewport.get_texture_resolution()
 
         cmd = [
-            "ffmpeg", "-y",
+            "ffmpeg", "-y", "-loglevel", "error", "-nostats",
             "-f", "rawvideo",
             "-pix_fmt", "rgba",
             "-s", f"{w}x{h}",
@@ -1856,11 +1863,32 @@ class DigitalTwin(omni.ext.IExt):
         mgr.start_time = _time.time()
         mgr.fps = fps
         mgr.last_print = 0
+        mgr.error = None
+        mgr.pacer = FramePacer(fps, _time.monotonic())
+        mgr.recording_lock = threading.RLock()
+        mgr.stopping = False
+        token = object()
+        mgr.capture_token = token
 
         def on_frame_change(event):
-            if not mgr.recording or mgr.ffmpeg_proc is None:
-                return
-            vp_utils.capture_viewport_to_buffer(viewport, self._rt_on_capture)
+            with mgr.recording_lock:
+                if not mgr.recording or mgr.ffmpeg_proc is None or mgr.capture_token is not token:
+                    return
+                if not mgr.pacer.request_capture(_time.monotonic()):
+                    return
+            try:
+                vp_utils.capture_viewport_to_buffer(
+                    viewport,
+                    lambda buffer, size, width, height, fmt:
+                        self._rt_on_capture(buffer, size, width, height, fmt, token),
+                )
+            except Exception as e:
+                with mgr.recording_lock:
+                    if mgr.capture_token is not token:
+                        return
+                    mgr.pacer.pending = False
+                    mgr.error = f"could not capture viewport: {e}"
+                self._stop_realtime_recording(pad=False, token=token)
 
         mgr.frame_sub = viewport.subscribe_to_frame_change(on_frame_change)
         mgr.save_state()
@@ -1869,35 +1897,61 @@ class DigitalTwin(omni.ext.IExt):
         self._rt_stop_btn.enabled = True
         print(f"Real-time recording started: {w}x{h} @ {fps}fps → {output_path}")
 
-    def _rt_on_capture(self, buffer, buffer_size, width, height, fmt):
+    def _rt_on_capture(self, buffer, buffer_size, width, height, fmt, token):
         """Callback for each captured frame — write raw bytes to ffmpeg stdin."""
         import ctypes
         mgr = _recording_mgr
-        if not mgr.recording or mgr.ffmpeg_proc is None:
-            return
-        try:
-            ctypes.pythonapi.PyCapsule_GetPointer.restype = ctypes.c_void_p
-            ctypes.pythonapi.PyCapsule_GetPointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
-            ptr = ctypes.pythonapi.PyCapsule_GetPointer(buffer, None)
-            raw = (ctypes.c_ubyte * buffer_size).from_address(ptr)
-            mgr.ffmpeg_proc.stdin.write(bytes(raw))
-            mgr.frame_count += 1
-            import time as _time
-            elapsed = _time.time() - mgr.start_time
-            video_dur = mgr.frame_count / mgr.fps
-            self._rt_stop_btn.text = f"Stop ({video_dur:.1f}s, {mgr.frame_count}f)"
-            sec = int(elapsed)
-            if sec > mgr.last_print:
-                mgr.last_print = sec
-                print(f"[RT Record] {elapsed:.1f}s elapsed | {mgr.frame_count} frames | video: {video_dur:.1f}s")
-        except (BrokenPipeError, OSError):
-            self._stop_realtime_recording()
+        should_stop = False
+        with mgr.recording_lock:
+            if not mgr.recording or mgr.ffmpeg_proc is None or mgr.capture_token is not token:
+                return
+            try:
+                ctypes.pythonapi.PyCapsule_GetPointer.restype = ctypes.c_void_p
+                ctypes.pythonapi.PyCapsule_GetPointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+                ptr = ctypes.pythonapi.PyCapsule_GetPointer(buffer, None)
+                raw = (ctypes.c_ubyte * buffer_size).from_address(ptr)
+                import time as _time
+                mgr.pacer.add_frame(bytes(raw), _time.monotonic(), mgr.ffmpeg_proc.stdin.write)
+                mgr.frame_count = mgr.pacer.frames
+                elapsed = _time.time() - mgr.start_time
+                video_dur = mgr.frame_count / mgr.fps
+                self._rt_stop_btn.text = f"Stop ({video_dur:.1f}s, {mgr.frame_count}f)"
+                sec = int(elapsed)
+                if sec > mgr.last_print:
+                    mgr.last_print = sec
+                    print(f"[RT Record] {elapsed:.1f}s elapsed | {mgr.frame_count} frames | video: {video_dur:.1f}s")
+            except (BrokenPipeError, OSError, RuntimeError) as e:
+                mgr.error = f"recording failed: {e}"
+                should_stop = True
+            finally:
+                mgr.pacer.pending = False
+        if should_stop:
+            self._stop_realtime_recording(pad=False, token=token)
 
-    def _stop_realtime_recording(self):
+    def _stop_realtime_recording(self, pad=True, token=None):
         """Stop real-time recording and finalize the video."""
         mgr = _recording_mgr
-        if mgr.frame_sub is not None:
+        # A recording begun before a hot reload may predate the pacer and lock.
+        if not hasattr(mgr, "recording_lock"):
+            mgr.recording_lock = threading.RLock()
+        with mgr.recording_lock:
+            if token is not None and getattr(mgr, "capture_token", None) is not token:
+                return
+            if getattr(mgr, "stopping", False):
+                return
+            mgr.stopping = True
+            mgr.recording = False
+            frame_sub = mgr.frame_sub
             mgr.frame_sub = None
+            if pad and mgr.ffmpeg_proc is not None and getattr(mgr, "pacer", None) is not None:
+                import time as _time
+                try:
+                    mgr.pacer.finish(_time.monotonic(), mgr.ffmpeg_proc.stdin.write)
+                    mgr.frame_count = mgr.pacer.frames
+                except (BrokenPipeError, OSError, RuntimeError) as e:
+                    mgr.error = f"recording failed: {e}"
+        # Drop the subscription outside the lock: it may wait for an in-flight callback.
+        del frame_sub
         if mgr.ffmpeg_proc is not None:
             # Closing stdin gives ffmpeg EOF -> it flushes the encode buffer and writes
             # the moov atom. Large recordings need well over the old 10s to finalize, so a
@@ -1908,22 +1962,30 @@ class DigitalTwin(omni.ext.IExt):
             except Exception as e:
                 print(f"Warning closing ffmpeg stdin: {e}")
             try:
-                mgr.ffmpeg_proc.wait(timeout=180)  # generous: let ffmpeg write the moov
+                exit_code = mgr.ffmpeg_proc.wait(timeout=180)  # generous: let ffmpeg write the moov
+                if exit_code and not getattr(mgr, "error", None):
+                    detail = mgr.ffmpeg_proc.stderr.read().decode(errors="replace")[-1000:].strip()
+                    mgr.error = f"ffmpeg exited with status {exit_code}" + (f": {detail}" if detail else "")
             except Exception as e:
                 print(f"ffmpeg finalize exceeded wait ({e}); sending SIGINT to force trailer")
+                if not getattr(mgr, "error", None):
+                    mgr.error = f"ffmpeg did not finalize normally: {e}"
                 try:
                     mgr.ffmpeg_proc.send_signal(_signal.SIGINT)
                     mgr.ffmpeg_proc.wait(timeout=60)
                 except Exception as e2:
                     print(f"ffmpeg still not finalized after SIGINT: {e2}")
             mgr.ffmpeg_proc = None
-        mgr.recording = False
-        self._rt_record_btn.enabled = True
-        self._rt_stop_btn.enabled = False
-        self._rt_stop_btn.text = "Stop Recording"
-        video_dur = round(mgr.frame_count / mgr.fps, 1) if mgr.fps else 0
-        self._last_video_label.text = f"Saved: {mgr.output_path} ({video_dur}s, {mgr.frame_count} frames)"
-        mgr.clear_state()
+        try:
+            self._rt_record_btn.enabled = True
+            self._rt_stop_btn.enabled = False
+            self._rt_stop_btn.text = "Stop Recording"
+            video_dur = round(mgr.frame_count / mgr.fps, 1) if mgr.fps else 0
+            self._last_video_label.text = (f"Recording failed: {mgr.error}" if getattr(mgr, "error", None) else
+                                           f"Saved: {mgr.output_path} ({video_dur}s, {mgr.frame_count} frames)")
+            mgr.clear_state()
+        finally:
+            mgr.stopping = False
         print(f"Real-time recording stopped: {mgr.frame_count} frames → {mgr.output_path}")
 
     # --- MCP Recording Handlers ---
@@ -1947,10 +2009,11 @@ class DigitalTwin(omni.ext.IExt):
                 camera = None
             vid_dir = os.path.join(output_dir, "videos") if output_dir else VIDEOS_DIR
             self._start_realtime_recording(output_dir=vid_dir, file_name=file_name, fps=fps, camera_path=camera)
+            path = os.path.join(vid_dir, file_name)
             return {
                 "status": "success",
-                "message": f"Recording started → {vid_dir}/{file_name}",
-                "file_path": os.path.join(vid_dir, file_name),
+                "message": f"Recording started → {path}",
+                "file_path": path,
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -1962,13 +2025,16 @@ class DigitalTwin(omni.ext.IExt):
             print(f"[MCP stop_recording] mgr.recording={mgr.recording} ffmpeg={mgr.ffmpeg_proc is not None} "
                   f"state_file_exists={os.path.exists(mgr.state_file)} id(mgr)={id(mgr)}")
             if not mgr.is_recording():
-                return {"status": "error", "message": "No recording in progress."}
+                return {"status": "error", "message": getattr(mgr, "error", None) or "No recording in progress."}
             if mgr.ffmpeg_proc is None:
                 # State file says recording but process lost (e.g. after reload)
                 mgr.clear_state()
                 return {"status": "error", "message": "Recording process lost (extension reloaded?). State cleared."}
             path = mgr.output_path
             self._stop_realtime_recording()
+            if getattr(mgr, "error", None):
+                return {"status": "error", "message": mgr.error, "file_path": path,
+                        "frame_count": mgr.frame_count}
             return {
                 "status": "success",
                 "message": f"Recording stopped: {mgr.frame_count} frames",
@@ -1983,6 +2049,8 @@ class DigitalTwin(omni.ext.IExt):
         """MCP handler: get current recording status."""
         mgr = _recording_mgr
         if not mgr.is_recording():
+            if getattr(mgr, "error", None):
+                return {"status": "error", "message": mgr.error}
             return {"status": "success", "message": "Status: Not recording"}
         import time as _time
         elapsed = _time.time() - mgr.start_time if mgr.start_time else 0
@@ -3963,17 +4031,17 @@ class DigitalTwin(omni.ext.IExt):
             print(f"Error: Camera prim not found at {CAMERA_PRIM}. Attach camera to UR5e first.")
             return
 
-        # Load camera config from robot_config.yaml
-        config_path = os.path.expanduser(
-            "~/Desktop/ros2_ws/src/aruco_camera_localizer/config/robot_config.yaml"
-        )
-        if os.path.exists(config_path):
+        # An optional camera config can override the default resolution.
+        config_path = os.environ.get("UR5E_DT_CAMERA_CONFIG")
+        if config_path and os.path.exists(os.path.expanduser(config_path)):
+            config_path = os.path.expanduser(config_path)
             with open(config_path, 'r') as f:
-                cam_cfg = yaml.safe_load(f)
+                cam_cfg = yaml.safe_load(f) or {}
             print(f"Loaded camera config from {config_path}")
         else:
             cam_cfg = {}
-            print(f"Warning: {config_path} not found, using defaults")
+            if config_path:
+                print(f"Warning: {config_path} not found, using defaults")
 
         # Configuration from yaml (with fallbacks)
         IMAGE_WIDTH = cam_cfg.get("camera_width", 1280)
@@ -4812,11 +4880,19 @@ class DigitalTwin(omni.ext.IExt):
     def sync_real_poses(self):
         """Subscribe to /objects_poses_real and update sim object poses to match."""
         import rclpy
+        from rclpy.context import Context
+        from rclpy.executors import SingleThreadedExecutor
         from tf2_msgs.msg import TFMessage
 
-        rclpy.init(args=None)
-        node = rclpy.create_node("_sync_real_poses_tmp")
+        # Isaac's ROS bridge may already own the default context. Use an independent
+        # one so this short-lived subscriber neither initializes nor shuts down it.
+        context = Context()
+        rclpy.init(args=None, context=context)
+        node = None
+        executor = None
         try:
+            node = rclpy.create_node("_sync_real_poses_tmp", context=context)
+            executor = SingleThreadedExecutor(context=context)
             msg_received = [None]
 
             def _cb(msg):
@@ -4827,12 +4903,12 @@ class DigitalTwin(omni.ext.IExt):
             import time
             t0 = time.time()
             while msg_received[0] is None and (time.time() - t0) < 3.0:
-                rclpy.spin_once(node, timeout_sec=0.1)
+                rclpy.spin_once(node, executor=executor, timeout_sec=0.1)
             node.destroy_subscription(sub)
 
             if msg_received[0] is None:
                 print("[SyncRealPoses] No message received on /objects_poses_real within 3s")
-                return
+                return {"received": False, "updated": [], "snapped": []}
 
             # Load assembly data to snap objects near their assembled pose
             import math
@@ -4906,9 +4982,13 @@ class DigitalTwin(omni.ext.IExt):
             print(f"[SyncRealPoses] Updated {len(updated)} objects: {updated}")
             if snapped:
                 print(f"[SyncRealPoses] Snapped to assembly pose: {snapped}")
+            return {"received": True, "updated": updated, "snapped": snapped}
         finally:
-            node.destroy_node()
-            rclpy.shutdown()
+            if executor is not None:
+                executor.shutdown()
+            if node is not None:
+                node.destroy_node()
+            rclpy.shutdown(context=context)
 
     def add_aruco_markers(self, objects_path="/World/Objects"):
         """Add ArUco marker meshes to all objects that have matching aruco JSON files."""
@@ -6387,7 +6467,7 @@ class DigitalTwin(omni.ext.IExt):
         Two backends, both ending at the same controllers/topics (joint_state_broadcaster
         -> /joint_states, scaled_joint_trajectory_controller -> FollowJointTrajectory):
           backend='fake'  (default) -> scripts/launch_ur_fake.sh — apt ur_robot_driver with
-                          use_fake_hardware:=true. No Docker, no ~/ros2_ws. sim only.
+                          mock hardware. No Docker or ~/ros2_ws. sim only.
           backend='ursim'           -> scripts/sim_bringup.sh — URSim docker + ur_bringup.
                           Needs Docker + a ~/ros2_ws ur_bringup install. Supports mode='real'.
 
@@ -6430,7 +6510,7 @@ class DigitalTwin(omni.ext.IExt):
         # LD_LIBRARY_PATH, RMW_* — that conflicts with the system ROS2 the script
         # sources. Inheriting it makes `ros2 topic echo`/`ros2 launch` misbehave
         # (false "no /joint_states" → the script reaps a healthy driver). A clean
-        # slate lets the script's own `source /opt/ros/humble` (+ config/ros_dds.env
+        # slate lets the script's ROS setup (+ config/ros_dds.env
         # / ros2_ws) be authoritative. ROS_DOMAIN_ID must match every ROS client
         # (see CLAUDE.md); both scripts source config/ros_dds.env for the rest of
         # the DDS profile (Cyclone + localhost-only).
@@ -6440,6 +6520,10 @@ class DigitalTwin(omni.ext.IExt):
             "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "ROS_DOMAIN_ID": os.environ.get("ROS_DOMAIN_ID", "0"),
         }
+        if os.environ.get("ROS_DISTRO"):
+            env["ROS_DISTRO"] = os.environ["ROS_DISTRO"]
+        if os.environ.get("ROS_SETUP"):
+            env["ROS_SETUP"] = os.environ["ROS_SETUP"]
         timeout = 240 if action == "up" else 60
 
         try:
@@ -6470,8 +6554,12 @@ class DigitalTwin(omni.ext.IExt):
     def _cmd_sync_real_poses(self) -> Dict[str, Any]:
         """MCP handler for syncing real object poses to sim."""
         try:
-            self.sync_real_poses()
-            return {"status": "success", "message": "Synced real poses to sim"}
+            result = self.sync_real_poses()
+            if not result["received"]:
+                return {"status": "error", "message": "No pose message received on /objects_poses_real within 3 seconds.", **result}
+            if not result["updated"]:
+                return {"status": "error", "message": "Received a pose message, but no matching scene objects were updated.", **result}
+            return {"status": "success", "message": f"Synced {len(result['updated'])} object poses to sim", **result}
         except Exception as e:
             carb.log_error(f"Error in sync_real_poses: {e}")
             traceback.print_exc()

@@ -63,6 +63,48 @@ If a check fails, inspect the named result and the simulator log before changing
 
 ## Last live check
 
+### Windowed viewport reset comparison
+
+On 2026-10-31, the same windowed reset sequence was run three times each against base `d238989d` and PR head
+`0e3521c7` on Ubuntu 24.04.5, RTX 5080, NVIDIA driver 580.178.04 and Python 3.12.3. Both used Isaac Sim 6.2.0.0,
+Kit `110.4.0+feature.386251.187cf21b.gl`, `omni.kit.widget.viewport-110.0.1`,
+`omni.kit.viewport.utility-2.1.2` and `ur5e-dt-1.0.0`, with ROS 2 Jazzy in isolated domain 197.
+
+Each cycle started the UR5e/workstation scene, added FMB1 objects and their pose publisher, played and stopped the
+timeline, started and stopped a 10-fps viewport recording, loaded Simple Room, deleted the objects, called
+`ur5e_dt.new_stage`, and rebuilt the UR5e/workstation scene. Immediately before reset, the active camera was the
+valid `/World/person_view`, the `/workspace_camera_sim` publisher was active, recording was stopped and the timeline
+was stopped. The [original complete traceback](evidence/viewport-reset-2026-10-31.log) is preserved with its local
+installation prefix replaced by `<isaacsim>`.
+
+Both revisions logged the same `NoneType.GetCamera` exception once on each of the three resets, inside the viewport
+extension while the old stage was being destroyed. After every reset, the active camera was a valid
+`/OmniverseKit_Persp` and viewport frame-change events continued. After each rebuild, the active `/World/person_view`
+was valid, rendered viewport captures succeeded, a separate ROS subscriber received a 1280-pixel camera image, and a
+test cube dropped under gravity. After the third rebuild on each revision, selecting the workspace and person cameras
+produced distinct rendered images. This supports recovery for this sequence and machine; it is not proof that all
+stages, GPUs, recording states or Isaac versions recover. The exception is not suppressed, and its underlying cause
+remains [tracked in the roadmap](ROADMAP.md#1-reliable-baseline-and-documentation).
+
+The comparison also found that the existing real-time recorder sent every viewport redraw to ffmpeg: a roughly
+one-second recording at 10 fps produced an 11.8-second file on the base and an 8.8-second file on the original PR
+head. With the recording pacing change in this PR, three windowed 10-fps recordings each encoded to 1.0 second for
+1.06–1.17 seconds of measured time including bridge calls and finalization. A windowed 30-fps recording encoded to
+2.03 seconds for 2.09 seconds measured through the stop request. After this change, three more reset/rebuild cycles
+also recovered rendered frames, valid cameras, ROS camera images and falling-cube physics. These are local simulated
+checks, not a guarantee for all rendering rates or machines.
+
+For the frame-scheduling regression, a controlled 10-second, 31-Hz input to a 30-fps encoder produced 299 distinct
+frames out of 300 after the fix; the previous scheduling produced 155. This check decoded the MP4 and does not replace
+a live viewport test at that exact rendering rate.
+
+On 2026-10-31, a windowed Isaac Sim 6.2.0.0 session on Ubuntu 24.04.5 / RTX 5080 with driver 580.178.04 used the
+MCP twin driver tool to start the system ROS 2 Jazzy UR driver in mock-hardware mode in isolated domain 197. Both
+the joint-state broadcaster and scaled trajectory controller were active; a ROS `FollowJointTrajectory` request
+succeeded and changed the mock elbow joint state from 0.0 to 0.05 rad. The MCP tool stopped the driver and status
+returned `driver NOT running` and `controller_manager not reachable`. No physical robot was used. This verifies a
+mock ROS controller and joint states, not end-to-end tracking of a physical robot.
+
 On 2026-10-30, the verifier passed on Ubuntu 24.04 / RTX 5080, NVIDIA driver 580.178.04, and Isaac Sim 6.2.0.0 in a
 disposable headless session. Changing `wrist_1_joint` damping from 10 to 4 caused the validator to fail with the joint
 and field named; the value was restored. The simulator also logged the previously observed nested `app.update()`
@@ -141,4 +183,4 @@ for the implications and remaining gaps. This is one version and machine, not a 
 - For ROS transforms, use `scripts/verify_tf.sh` with the matching `config/ros_dds.env` profile.
 - Before a training run, obtain operator authorization and check GPU capacity. Use the
   [Isaac Lab guide](TOOLS-ISAACLAB.md) for status, metrics, and guard behavior.
-- See [HANDOFF.md](HANDOFF.md) for earlier dated lab and home results, and [ROADMAP.md](ROADMAP.md) for remaining work.
+- See [ROADMAP.md](ROADMAP.md) for remaining work.
