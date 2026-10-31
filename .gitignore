@@ -17,3 +17,9 @@ resources/*
 
 # screenshots saved by sessions while testing; not part of the repo
 captures/
+demo-out/
+docs/mcp-tool-exposure/
+.pytest_cache/
+*.egg-info/
+.env
+.mcp.json

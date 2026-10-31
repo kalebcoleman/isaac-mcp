@@ -9,7 +9,7 @@ dependencies = [
     "numpy>=2",
     "scipy",
     "matplotlib",
-    # Same torch pin as learning6/ (cu130 build has Blackwell sm_120 kernels).
+    # The cu130 build has Blackwell sm_120 kernels.
     "torch==2.11.0",
     "torchvision==0.26.0",
 ]
@@ -19,7 +19,7 @@ package = false
 index-strategy = "unsafe-best-match"
 prerelease = "allow"
 environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-# Subset of the overrides learning6/ needs to reconcile Isaac Sim 6.2's pins.
+# Overrides needed to reconcile Isaac Sim 6.2's pins.
 override-dependencies = [
     "numpy>=2",
     "torch==2.11.0",

@@ -86,6 +86,8 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 - Parameters: none.
 - Async: yes.
 - Purpose: import the Intel RealSense camera, attach it to `UR5e/wrist_3_link`, and build its ROS 2 action graph (camera image, `camera_info`, and the `/tf_cam` transform tree).
+- Camera resolution defaults to 1280 × 720. Set `UR5E_DT_CAMERA_CONFIG` to a YAML file containing
+  `camera_width` and `camera_height` to override it; the former project-specific location is no longer read implicitly.
 - Preconditions: UR5e must be loaded (e.g. after `quick_start_with_workstation`); otherwise returns an error.
 - Side effects: creates `/World/rsd455` (if absent) and `/Graph/ActionGraph_Camera`.
 - Example: `{}`

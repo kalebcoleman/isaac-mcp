@@ -5,14 +5,13 @@
 
 Design for an `isaaclab.*` tool pack for the `isaac-mcp` host server. Grounded in
 `mcp/isaac_mcp/server.py`, `exts/isaac.mcp.bridge/isaac_mcp_bridge/bridge.py`,
-`mcp/docs/isaac-lab.md`, `mcp/examples/isaaclab_bridge_launch.py`,
-`docs/ARCHITECTURE.md`, and the reference install at
-`learning6/` (Isaac Lab 3.0.0, Isaac Sim 6.2.0.0, Python 3.12).
+`mcp/docs/isaac-lab.md`, `mcp/examples/isaaclab_bridge_launch.py`, and `docs/ARCHITECTURE.md`.
+The reference environment used Isaac Lab 3.0.0, Isaac Sim 6.2.0.0 and Python 3.12.
 
 ## 1. Execution model decision
 
 Isaac Lab standalone scripts own the Kit app via `AppLauncher` and their own main
-loop (`learning6/IsaacLab/scripts/reinforcement_learning/train.py` calls
+loop (the Isaac Lab `scripts/reinforcement_learning/train.py` calls
 `run_train_cli`). The bridge doc notes they are a separate Kit process that must
 be pumped by `env.step()`/`sim.step()` (`mcp/docs/isaac-lab.md`).
 
@@ -131,7 +130,7 @@ All inputs/outputs JSON. Durations in seconds.
 
 - Log files: `runs.tail` + `runs.status.last_log_lines`.
 - TensorBoard: `metrics.summary` / `tensorboard.tail` read the `events.out.tfevents.*`
-  files with the `tensorboard` Python package (available in `learning6/.venv`).
+  files with the `tensorboard` Python package.
 - Checkpoints: `runs.status` globs `*.pth`/`*.pt` in `run_dir/nn` and reports the
   newest; `checkpoints.list` enumerates them. The training library's own
   `run.json` (see `logs/rl_games/.../run.json`) gives task/library metadata.
@@ -181,16 +180,22 @@ The implementation in `mcp/isaac_mcp/isaaclab/install.py` checks, in order:
 
 1. `ISAACLAB_PYTHON`, with `ISAACLAB_ROOT` if provided; otherwise it tries a sibling `IsaacLab` directory.
    If the explicitly configured paths are invalid, discovery returns no install.
-2. The reference default `~/Desktop/ur5e-digital-twin/learning6/{.venv/bin/python,IsaacLab}`.
-3. `ISAACLAB_ROOT/.venv/bin/python`, when `ISAACLAB_ROOT` is set and the reference default was not found.
+2. `ISAACLAB_ROOT/.venv/bin/python`, when only `ISAACLAB_ROOT` is set.
+
+The former implicit project-specific install is no longer searched. Set `ISAACLAB_PYTHON`
+and, when needed, `ISAACLAB_ROOT`, or set `ISAACLAB_ROOT` for a checkout with its own `.venv`.
+The former implicit project-specific log root is also no longer searched or allowed by default;
+set `ISAACLAB_LOGS_DIR` to continue using it. Without that setting, checkpoint discovery searches
+the resolved install's `logs` directory and the jobs directory.
 
 The resolver checks paths; `isaaclab__install_info` probes package metadata. It does not automatically search
 `PATH`, `ISAACLAB_PATH`, or validate every supported combination. Set explicit paths for other layouts.
 
 `isaaclab__envs_list` imports `isaaclab_tasks`, plus modules in the comma-separated `ISAACLAB_TASK_MODULES` with
 `ISAACLAB_TASK_PATH` added to the import path, then reads `gymnasium.registry`. Import failures appear in
-`import_errors`. When no modules are specified, a sibling `ur5e_lab` is picked up if present. Jobs use the same
-module resolver. The custom UR5e reach task was discovered and trained in the dated tests described below.
+`import_errors`. Custom task modules must be explicitly configured; sibling packages are no longer imported
+automatically. Jobs use the same module resolver. The custom reach task was discovered and trained in the dated
+tests described below.
 
 ## 10. Security and trust boundaries
 
@@ -207,7 +212,6 @@ module resolver. The custom UR5e reach task was discovered and trained in the da
 - This section describes the original design scope; the host pack was subsequently implemented and tested.
 - No multi-node/multi-GPU orchestration beyond `CUDA_VISIBLE_DEVICES`.
 - No dataset recording or motion-capture tools.
-- No changes to `ur5e-digital-twin`; this doc lives only in `isaac-mcp`.
 
 ## 12. Implementation notes (verified 2026-10-29 on Isaac Lab 3.0.0 / Isaac Sim 6.2.0.0)
 
@@ -215,7 +219,7 @@ Implemented in `mcp/isaac_mcp/isaaclab/` (`install.py`, `jobs.py`, `metrics.py`,
 exposed as `isaaclab__<tool>`). A real 2-epoch `Isaac-Reach-UR10` rl_games run through `isaaclab__train` succeeded,
 and `runs_status` / `metrics_summary` read its checkpoint and TensorBoard scalars. Things the real run taught us:
 
-- Isaac Lab 3 has **no `--headless` flag**. Headless jobs pass `--viz none`, windowed ones `--viz kit` (matches `learning6/README.md`).
+- Isaac Lab 3 has **no `--headless` flag**. Headless jobs pass `--viz none`, windowed ones `--viz kit`.
 - The RL backend is chosen with `--rl_library` (else the task's registered default); `episodes` was dropped because
   only the rlinf backend has `--num_episodes`.
 - `extra_args` accepts `--flags` **and Hydra overrides** (`agent.params.config.minibatch_size=1536`, `+key=v`, `~key`).
@@ -223,7 +227,7 @@ and `runs_status` / `metrics_summary` read its checkpoint and TensorBoard scalar
 - Runs live under `<isaaclab_root>/logs/...`, not the job dir; `runs_status` finds the newest checkpoint from the
   training log ("saving checkpoint '...'") and reports the experiment dir as `run_dir`.
 - Job ids are validated (`YYYYMMDD-HHMMSS-<slug>`), and cancel only signals a pid whose command line still matches the job.
-- `envs_list` imports configured task modules before reading the registry; custom registrations such as `ur5e_lab` can be listed.
+- `envs_list` imports configured task modules before reading the registry, so custom registrations can be listed.
 
 ### Windowed jobs and visual feedback (verified 2026-10-29)
 
@@ -235,8 +239,8 @@ capture it even when other windows cover it, and can record video. `isaaclab__ru
 "Completed setting up the environment"; the launch response carries a hint saying so. A real run captured a 1440x900
 screenshot and a 40-frame video of four UR10 arms.
 
-Note: the stock `Isaac-Reach-UR10` task's window reads "Physics: Newton MJWarp". The twin's own `ur5e_lab` tasks configure
-PhysX directly (see `learning6/README.md`), so check the physics backend in the window before trusting results from stock tasks.
+Note: the stock `Isaac-Reach-UR10` task's window reads "Physics: Newton MJWarp". Check the physics backend in the
+window before interpreting results from a task.
 
 ### Job guard behaviour (verified on the RTX 5080, 2026-10-30)
 

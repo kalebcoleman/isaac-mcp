@@ -1,9 +1,9 @@
 """Snapshot the TF topics the ur5e-dt Isaac Sim extension publishes, as JSON.
 
-There is no `ros2` CLI on this machine, so this talks rclpy directly out of Isaac
-Sim 6.2's bundled Humble install. Run it with the sim's own interpreter:
+This talks to rclpy directly from Isaac Sim 6.2's bundled Humble install, without
+requiring the `ros2` CLI. Run it with the sim's own interpreter:
 
-    learning6/.venv/bin/python scripts/tf_capture.py --out /tmp/tf-before.json
+    .venv/bin/python scripts/tf_capture.py --out /tmp/tf-before.json
 
 Then diff two captures to see exactly what a transform-tree change moved. Both
 topics come from `isaacsim.ros2.bridge.ROS2PublishTransformTree` nodes in
@@ -29,10 +29,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROS_CORE = Path('exts') / 'isaacsim.ros2.core' / 'humble'
-# config/ros_dds.env moves out of the submodule into the superproject; read either.
 DDS_ENV_FILES = (
     ROOT / 'config' / 'ros_dds.env',
-    ROOT / 'external' / 'isaac-sim-mcp' / 'config' / 'ros_dds.env',
 )
 DEFAULT_TOPICS = ('tf_cam', 'objects_poses_sim')
 # Set once we have re-execed, so a stubborn LD_LIBRARY_PATH cannot loop forever.
@@ -54,11 +52,11 @@ def ros_dirs():
         spec = importlib.util.find_spec('isaacsim')
     except (ImportError, ValueError) as exc:
         sys.exit(f'tf_capture: cannot find isaacsim in this interpreter ({exc}); '
-                 f'run with learning6/.venv/bin/python')
+                 'run with an Isaac Sim interpreter, such as .venv/bin/python')
     locations = list(getattr(spec, 'submodule_search_locations', None) or ())
     if not locations:
         sys.exit('tf_capture: isaacsim is not an installed package in this interpreter; '
-                 'run with learning6/.venv/bin/python')
+                 'run with an Isaac Sim interpreter, such as .venv/bin/python')
     base = Path(locations[0]) / ROS_CORE
     rclpy_dir, lib_dir = base / 'rclpy', base / 'lib'
     if not rclpy_dir.is_dir() or not lib_dir.is_dir():
