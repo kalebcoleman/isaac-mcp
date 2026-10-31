@@ -44,6 +44,9 @@ def _launch(fn: Callable[..., Any], **kwargs: Any) -> str:
     inst = _install.locate_install()
     if not inst:
         return _dump(_NO_INSTALL)
+    if not inst.get("isaaclab_root"):
+        return _dump({"error": "Isaac Lab checkout not found",
+                      "hint": "set ISAACLAB_ROOT to the Isaac Lab checkout containing scripts/reinforcement_learning"})
 
     def run() -> dict:
         out = fn(python=inst["python"], root=inst["isaaclab_root"], **kwargs)

@@ -6399,7 +6399,7 @@ class DigitalTwin(omni.ext.IExt):
         Two backends, both ending at the same controllers/topics (joint_state_broadcaster
         -> /joint_states, scaled_joint_trajectory_controller -> FollowJointTrajectory):
           backend='fake'  (default) -> scripts/launch_ur_fake.sh — apt ur_robot_driver with
-                          use_fake_hardware:=true. No Docker, no ~/ros2_ws. sim only.
+                          mock hardware. No Docker or ~/ros2_ws. sim only.
           backend='ursim'           -> scripts/sim_bringup.sh — URSim docker + ur_bringup.
                           Needs Docker + a ~/ros2_ws ur_bringup install. Supports mode='real'.
 
@@ -6442,7 +6442,7 @@ class DigitalTwin(omni.ext.IExt):
         # LD_LIBRARY_PATH, RMW_* — that conflicts with the system ROS2 the script
         # sources. Inheriting it makes `ros2 topic echo`/`ros2 launch` misbehave
         # (false "no /joint_states" → the script reaps a healthy driver). A clean
-        # slate lets the script's own `source /opt/ros/humble` (+ config/ros_dds.env
+        # slate lets the script's ROS setup (+ config/ros_dds.env
         # / ros2_ws) be authoritative. ROS_DOMAIN_ID must match every ROS client
         # (see CLAUDE.md); both scripts source config/ros_dds.env for the rest of
         # the DDS profile (Cyclone + localhost-only).
@@ -6452,6 +6452,10 @@ class DigitalTwin(omni.ext.IExt):
             "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "ROS_DOMAIN_ID": os.environ.get("ROS_DOMAIN_ID", "0"),
         }
+        if os.environ.get("ROS_DISTRO"):
+            env["ROS_DISTRO"] = os.environ["ROS_DISTRO"]
+        if os.environ.get("ROS_SETUP"):
+            env["ROS_SETUP"] = os.environ["ROS_SETUP"]
         timeout = 240 if action == "up" else 60
 
         try:

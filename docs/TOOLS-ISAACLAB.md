@@ -26,12 +26,17 @@ For design history and the original job-guard write-up, see [ISAACLAB-TOOLS.md](
 1. `ISAACLAB_PYTHON` (interpreter path), with `ISAACLAB_ROOT` if provided; otherwise a
    sibling `IsaacLab` directory is tried. If the explicitly configured paths are invalid,
    discovery returns no install (it does not fall back).
-2. `ISAACLAB_ROOT/.venv/bin/python`, when only `ISAACLAB_ROOT` is set.
+2. `ISAACLAB_ROOT/.venv/bin/python`, or the active `VIRTUAL_ENV` when the checkout has no `.venv`.
+3. An activated `VIRTUAL_ENV`, if it belongs to an Isaac Lab checkout or has a sibling
+   `IsaacLab` checkout with the reinforcement-learning scripts.
+4. The current directory's `.venv` when the current directory is an Isaac Lab checkout.
 
-The former implicit project-specific install is no longer searched. Set `ISAACLAB_PYTHON`
-and, when needed, `ISAACLAB_ROOT`, or set `ISAACLAB_ROOT` for a checkout with its own `.venv`.
+The resolver does not scan the home directory or assume a project-specific path. If no standard
+environment or current checkout is available, set `ISAACLAB_PYTHON` and, when needed,
+`ISAACLAB_ROOT`, or set `ISAACLAB_ROOT` for a checkout with its own `.venv`.
 
-The resolver checks paths only; `isaaclab__install_info` then probes package metadata
+Automatic environment discovery requires local Isaac Lab package metadata; it does not run an
+interpreter to decide whether to select one. `isaaclab__install_info` then probes package metadata
 (`isaaclab`, `isaacsim`) in a short-lived subprocess. It does not search `PATH` or
 `ISAACLAB_PATH`, and does not validate every supported combination. Set explicit paths for
 other layouts. `ISAACLAB_JOBS_DIR` overrides the job state directory (default

@@ -23,16 +23,44 @@
 set -eo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# ROS distro + the homogeneous sim DDS env (the ROS domain from config/ros_dds.env (default 0) / Cyclone / localhost-only).
-[ -f /opt/ros/humble/setup.bash ] && source /opt/ros/humble/setup.bash
+# Match the system ROS distribution to the simulator. Never guess the mock-hardware
+# argument for an unsupported distro: an unrecognized launch argument can otherwise
+# leave the driver in real-hardware mode.
+if [ -z "${ROS_DISTRO:-}" ]; then
+  case "$(. /etc/os-release 2>/dev/null; echo "${VERSION_CODENAME:-}")" in
+    jammy) ROS_DISTRO=humble ;;
+    noble) ROS_DISTRO=jazzy ;;
+    *) echo "ERROR: set ROS_DISTRO to humble or jazzy for the fake driver" >&2; exit 1 ;;
+  esac
+fi
+case "$ROS_DISTRO" in
+  humble) MOCK_ARG=use_fake_hardware ;;
+  jazzy) MOCK_ARG=use_mock_hardware ;;
+  *) echo "ERROR: fake driver does not support ROS_DISTRO=$ROS_DISTRO" >&2; exit 1 ;;
+esac
+ROS_SETUP="${ROS_SETUP:-/opt/ros/$ROS_DISTRO/setup.bash}"
+if [ ! -f "$ROS_SETUP" ]; then
+  echo "ERROR: ROS setup not found: $ROS_SETUP" >&2
+  exit 1
+fi
+source "$ROS_SETUP"
 source "$REPO/config/ros_dds.env"
 # Optional overlay workspace (apt ur_robot_driver works without it; source if present).
 [ -f "$HOME/ros2_ws/install/setup.bash" ] && source "$HOME/ros2_ws/install/setup.bash"
+if ! command -v ros2 >/dev/null 2>&1; then
+  echo "ERROR: ros2 is unavailable after sourcing $ROS_SETUP" >&2
+  exit 1
+fi
 
 UR_TYPE="${UR_TYPE:-ur5e}"
-LOG="/tmp/ur_fake_driver.log"
-PIDFILE="/tmp/ur_fake_driver.pid"
+LOG="${UR_FAKE_LOG:-/tmp/ur_fake_driver.log}"
+PIDFILE="${UR_FAKE_PIDFILE:-/tmp/ur_fake_driver.pid}"
 ACTION="${1:-up}"
+
+if [ "$ACTION" != "down" ] && ! ros2 pkg prefix ur_robot_driver >/dev/null 2>&1; then
+  echo "ERROR: ur_robot_driver is not installed in ROS $ROS_DISTRO. Install the matching ROS driver package and ros2controlcli." >&2
+  exit 1
+fi
 
 # Bracket-trick ([r]os2) so the match never hits the calling shell.
 _driver_running() { pgrep -f "[r]os2 launch ur_robot_driver" >/dev/null 2>&1; }
@@ -41,13 +69,21 @@ _controllers() { ros2 control list_controllers 2>/dev/null | sed 's/\x1b\[[0-9;]
 
 case "$ACTION" in
   up)
+    if ! launch_args="$(ros2 launch ur_robot_driver ur_control.launch.py --show-args 2>&1)"; then
+      echo "ERROR: could not inspect ur_robot_driver launch arguments: $launch_args" >&2
+      exit 1
+    fi
+    if ! grep -Eq "^[[:space:]]*'$MOCK_ARG'[[:space:]]*:" <<<"$launch_args"; then
+      echo "ERROR: driver does not advertise $MOCK_ARG; refusing to start without verified mock hardware" >&2
+      exit 1
+    fi
     if _driver_running; then
       echo "[ur-fake] already running (pid $(cat "$PIDFILE" 2>/dev/null)); run '$0 down' first" >&2
       exit 2
     fi
     echo "[ur-fake] launching $UR_TYPE fake hardware -> domain $ROS_DOMAIN_ID (Cyclone, localhost_only=$ROS_LOCALHOST_ONLY)"
     nohup ros2 launch ur_robot_driver ur_control.launch.py \
-        ur_type:="$UR_TYPE" use_fake_hardware:=true robot_ip:=0.0.0.0 launch_rviz:=false \
+        ur_type:="$UR_TYPE" "$MOCK_ARG:=true" robot_ip:=0.0.0.0 launch_rviz:=false \
         > "$LOG" 2>&1 &
     echo "$!" > "$PIDFILE"
     echo "[ur-fake] pid $(cat "$PIDFILE")  log $LOG"

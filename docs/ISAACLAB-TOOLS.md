@@ -180,9 +180,10 @@ The implementation in `mcp/isaac_mcp/isaaclab/install.py` checks, in order:
 
 1. `ISAACLAB_PYTHON`, with `ISAACLAB_ROOT` if provided; otherwise it tries a sibling `IsaacLab` directory.
    If the explicitly configured paths are invalid, discovery returns no install.
-2. `ISAACLAB_ROOT/.venv/bin/python`, when only `ISAACLAB_ROOT` is set.
+2. `ISAACLAB_ROOT/.venv/bin/python`, or the active `VIRTUAL_ENV` when the checkout has no `.venv`.
+3. An activated `VIRTUAL_ENV` belonging to a checkout, then a `.venv` in the current Isaac Lab checkout.
 
-The former implicit project-specific install is no longer searched. Set `ISAACLAB_PYTHON`
+No personal workspace path is searched. If automatic discovery finds nothing, set `ISAACLAB_PYTHON`
 and, when needed, `ISAACLAB_ROOT`, or set `ISAACLAB_ROOT` for a checkout with its own `.venv`.
 The former implicit project-specific log root is also no longer searched or allowed by default;
 set `ISAACLAB_LOGS_DIR` to continue using it. Without that setting, checkpoint discovery searches

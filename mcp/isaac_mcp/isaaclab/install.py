@@ -22,10 +22,22 @@ def _derive_venv(python: Path) -> Path | None:
     return None
 
 
+def _has_isaaclab_metadata(venv: Path) -> bool:
+    """Recognize an installed Lab distribution without executing an arbitrary interpreter."""
+    for lib in ("lib", "lib64"):
+        for site in (venv / lib).glob("python*/site-packages"):
+            if any(site.glob("isaaclab-*.dist-info")) or (site / "isaaclab.egg-info").exists():
+                return True
+    return False
+
+
 def _derive_root(python: Path) -> Path | None:
     venv = _derive_venv(python)
     if venv is None:
         return None
+    # A standard Isaac Lab checkout commonly keeps its virtualenv in the root.
+    if (venv.parent / "scripts" / "reinforcement_learning" / "train.py").is_file():
+        return venv.parent
     candidate = venv.parent / "IsaacLab"
     if candidate.is_dir():
         return candidate
@@ -74,6 +86,26 @@ def locate_install(env: Any = None) -> dict | None:
                 "isaaclab_root": str(base2),
                 "venv": str(base2 / ".venv"),
             }
+        active = e.get("VIRTUAL_ENV") if hasattr(e, "get") else None
+        if active and base2.is_dir():
+            venv2 = Path(str(active)).expanduser()
+            python2 = venv2 / "bin" / "python"
+            if python2.is_file() and _has_isaaclab_metadata(venv2):
+                return {"python": str(python2), "isaaclab_root": str(base2), "venv": str(venv2)}
+        # Do not silently replace an invalid explicit configuration.
+        return None
+
+    # Standard activated environments and checkout-local .venv installs can be
+    # discovered without scanning a user's home or guessing a personal path.
+    venv_val = e.get("VIRTUAL_ENV") if hasattr(e, "get") else None
+    candidates = [Path(str(venv_val)).expanduser()] if venv_val else []
+    candidates.append(Path.cwd() / ".venv")
+    for venv in candidates:
+        python = venv / "bin" / "python"
+        root = _derive_root(python)
+        if (python.is_file() and _has_isaaclab_metadata(venv) and root is not None and
+                (root / "scripts" / "reinforcement_learning" / "train.py").is_file()):
+            return {"python": str(python), "isaaclab_root": str(root), "venv": str(venv)}
 
     return None
 
