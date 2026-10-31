@@ -646,15 +646,35 @@ def test_a_request_cancelled_while_it_ran_is_answered_and_releases_admission(ser
     assert behind.frame()["status"] == "success" and until(lambda: idle(served.bridge))
 
 
-def test_an_exclusive_request_that_raises_still_gives_the_loop_back(served):
+def test_an_exclusive_request_that_raises_still_gives_the_loop_back(served, monkeypatch):
+    releasing, allow_release = threading.Event(), threading.Event()
+    release = served.bridge._release
+
+    def held_release(request):
+        if request.name == "t.breaks":
+            releasing.set()
+            allow_release.wait(10)
+        return release(request)
+
+    monkeypatch.setattr(served.bridge, "_release", held_release)
+
     @exclusive
     def breaks():
         raise RuntimeError("boom")
 
     served.add("breaks", breaks)
     served.add("plain", lambda: {"ok": 2})
-    assert served.wire().send("t.breaks").frame()["status"] == "error"
-    assert served.wire().send("t.plain").frame()["status"] == "success"
+    try:
+        assert served.wire().send("t.breaks").frame()["status"] == "error"
+        assert releasing.wait(5), "the error reply precedes admission release"
+        refusal = served.wire().send("t.plain").frame()
+        assert refusal["refusal"] == "DOORWAY_BUSY" and refusal["reason"] == "no_queue_budget"
+        assert refusal["running"][0]["tool"] == "t.breaks"
+    finally:
+        allow_release.set()
+
+    assert until(lambda: idle(served.bridge)), "a failed handler must release admission"
+    assert served.wire().send("t.plain").frame() == {"status": "success", "result": {"ok": 2}}
     assert until(lambda: idle(served.bridge))
 
 
