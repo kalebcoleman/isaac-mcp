@@ -68,12 +68,13 @@ disposable headless session. Changing `wrist_1_joint` damping from 10 to 4 cause
 and field named; the value was restored. The simulator also logged the previously observed nested `app.update()`
 warning; the broader rare-hang investigation remains open.
 
-In a separate 6.2 session with the shared-bridge implementation in `382d2cb` under test, port 18766 served all 23 UR5e tools and a temporary
-autoloaded `shared_probe.ping` pack together. The probe pack was reloaded; disabling and re-enabling the twin left the
-probe callable and restored all 23 twin tools. After that restart, `./verify.sh` passed and `scripts/smoke_tools.py`
-passed 20/20 checks. The latter still reported the known narrow-strip warning for `randomize_single_object`. The test
-exercised simulated scene behavior, not real hardware or every ROS, windowed, GPU, OS, or Sim-version combination. No
-training was run. The generic `sim.*` pack remains a design and was not part of this test.
+In a 6.2 session with the shared-bridge implementation in `382d2cb`, port 18766 served all 23 UR5e tools and two
+temporary autoloaded packs, one of them policy-bearing. Both packs reloaded and remained callable when the twin was
+disabled and re-enabled; all 23 twin tools returned. In a separate session, the policy-bearing pack was reloaded,
+`./verify.sh` passed, and `scripts/smoke_tools.py` passed 20/20 checks. The latter still reported the known narrow-strip
+warning for `randomize_single_object`. These checks exercised simulated scene behavior, not real hardware or every ROS,
+windowed, GPU, OS, or Sim-version combination. No training was run. The generic `sim.*` pack remains a design and was
+not part of these tests.
 
 A separate direct Kit launch, without the `run.sh` deferral handshake, used `ISAAC_MCP_PORT=0` and
 `UR5E_DT_PORT=18766`. Its bridge status reported port 18766 and discovery returned all 23 twin tools. The ROS library
@@ -82,8 +83,6 @@ direct-launch session.
 
 With `./run.sh --headless --port 0`, a separate headless session bound an OS-assigned port and advertised it in the
 runtime portfile. All 23 twin tools were present before and after disabling and re-enabling the twin on that endpoint.
-A final shared-bridge session loaded and reloaded a temporary policy-bearing pack alongside the twin; the UR5e verifier
-and all 20 smoke checks then passed, with the same narrow-strip randomization warning noted above.
 
 ## Other checks
 
