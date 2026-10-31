@@ -5,8 +5,9 @@ it talks to a running Kit app over a local bridge, and it can also see the deskt
 recordings). Not tied to any one project.
 
 Built on Aldrin Inbaraj's [`omni-kit-mcp`](https://github.com/inbarajaldrin/omni-kit-mcp) and
-[`isaac-sim-mcp`](https://github.com/inbarajaldrin/isaac-sim-mcp) (MIT), with a screen-capture tool pack
-added. Upstream `omni-kit-mcp` publishes no license file; see [`docs/VENDORING.md`](docs/VENDORING.md).
+[`isaac-sim-mcp`](https://github.com/inbarajaldrin/isaac-sim-mcp), with a screen-capture tool pack added.
+The latter is MIT-licensed; upstream `omni-kit-mcp` publishes no license file. See
+[`docs/VENDORING.md`](docs/VENDORING.md).
 
 ## Layout
 
@@ -66,4 +67,17 @@ For simulator connection, window inspection, and agent workflow, see
 
 ## Status
 
-Work in progress; goals in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Work in progress. The [project status and roadmap](docs/ROADMAP.md) records completed work, tested configurations,
+limitations and next steps. The current twin workflow is verified on Isaac Sim 6.2; broader version and platform
+support is a goal, not yet a blanket compatibility claim.
+
+## Documentation
+
+- [UR5e tools](docs/TOOLS-UR5E.md) — all twin tools, arguments and example calls.
+- [Host and bridge tools](docs/TOOLS-HOST.md) — connection management, desktop capture and bridge built-ins.
+- [Isaac Lab tools](docs/TOOLS-ISAACLAB.md) — task discovery, job management, checkpoints and metrics.
+- [Server setup and agent workflow](docs/MCP-SERVER.md) and [architecture](docs/ARCHITECTURE.md).
+- [Isaac Lab implementation notes](docs/ISAACLAB-TOOLS.md) and [generic Sim tools design](docs/GENERIC-SIM-TOOLS.md)
+  (the latter is a proposal, not an implemented pack).
+- [Handoff and dated verification](docs/HANDOFF.md), [vendoring](docs/VENDORING.md), and
+  [publishing checklist](docs/PUBLISHING.md).

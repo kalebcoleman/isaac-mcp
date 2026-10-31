@@ -75,7 +75,7 @@ Consistency across extensions, packages, and CLI commands is strictly maintained
 | Port | Owner | Purpose |
 |---|---|---|
 | **`8766`** | `ur5e-dt` extension | Default primary twin bridge port. Used by `run.sh`, `verify.sh`, and MCP clients. |
-| **`8767`** | `ur5e-dt` secondary | Optional secondary twin instance when running dual sessions. |
+| **`8767`** | Optional secondary bridge | Convention for the Isaac Lab bridge example; can also be used for a second twin instance when explicitly configured. |
 | **`8799`** | Probe script | Dedicated port for `scripts/probe_62.sh` to run non-interfering diagnostic probes. |
 | *(none)* | `isaac.mcp.bridge` base bridge | Normally autostarts on a port advertised through a portfile, which clients discover. Twin launches set `ISAAC_MCP_PORT=0` to disable it so each Kit process exposes exactly one endpoint (the twin bridge). |
 
@@ -86,7 +86,9 @@ When an MCP client or host utility connects to a running bridge, the target port
 1. **Explicit argument:** Parameter passed directly to a tool call (e.g., `use_bridge(8766)`) or CLI flag (`--port 8766`).
 2. **`UR5E_DT_PORT`:** Specific environment variable targeting the twin bridge.
 3. **`ISAAC_MCP_PORT`:** Generic environment variable fallback.
-4. **Portfile discovery:** Active portfiles published by running Kit instances in `~/.local/share/isaac.mcp.bridge/bridges/`. If multiple instances are running without an explicit pin, discovery refuses to guess and lists available ports.
+4. **Portfile discovery:** Active portfiles under `$XDG_RUNTIME_DIR/isaac-mcp/`, or `/tmp/isaac-mcp-<uid>/` when
+   `XDG_RUNTIME_DIR` is unset. If multiple instances are running without an explicit pin, discovery refuses to guess
+   and lists available ports.
 
 ---
 

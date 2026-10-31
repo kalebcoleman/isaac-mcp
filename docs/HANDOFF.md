@@ -1,7 +1,11 @@
 # Handoff — isaac-mcp (as of 2026-10-29)
 
-Read this first when picking the project up on another machine or in a new chat. Everything described here is
-committed to `main` of <https://github.com/kalebcoleman/isaac-mcp> (private). Plain facts; "verified" means it was run.
+> Historical machine notes and verification records follow. For current priorities, tool counts and the latest audit
+> baseline, start with [ROADMAP.md](ROADMAP.md) and the tool references linked there. Commit hashes and local paths
+> below describe the date of each entry and can become stale.
+
+These notes describe the state observed on the dates shown in <https://github.com/kalebcoleman/isaac-mcp> (private).
+"Verified" means the described check was run at that time; it is not a guarantee about later commits or other machines.
 
 ## 1. What this is
 

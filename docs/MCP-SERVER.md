@@ -39,20 +39,19 @@ uv tool install --force --editable ./mcp
 
 Because it is installed in editable mode from `./mcp`, modifications to `mcp/isaac_mcp/` take effect whenever the MCP server process restarts.
 
-The installation also installs a static ffmpeg wrapper at `~/.local/bin/ffmpeg` pointing to the binary bundled with `imageio-ffmpeg`. This satisfies Isaac Sim's viewport video recorder without requiring a system package.
+`install.sh` also creates an ffmpeg shim at `~/.local/bin/ffmpeg` for the twin's viewport recorder, unless an
+unrelated file or symlink already occupies that path. Direct `uv tool install` does not create the shim.
 
 ---
 
 ## 2. Available Tools
 
 ### Simulator Tools (`ur5e_dt__*`)
-When connected to an active Isaac Sim session running `exts/ur5e-dt`, the server dynamically registers the twin's tools. Note that Kit's canonical `ur5e_dt.<tool>` names are exposed to MCP clients as `ur5e_dt__<tool>`:
-- `ur5e_dt__quick_start_with_workstation`: Loads the UR5e robot, RG2 gripper, QuickChanger, and Vention table into the scene.
-- `ur5e_dt__play_scene` / `ur5e_dt__pause_scene` / `ur5e_dt__stop_scene`: Controls simulation timeline playback.
-- `ur5e_dt__get_joint_positions`: Reads current articulation joint angles.
-- `ur5e_dt__set_joint_positions`: Commands joint position targets.
-- `ur5e_dt__start_recording` / `ur5e_dt__stop_recording`: Captures a clean viewport render buffer directly to an MP4 file (bypasses window UI chrome).
-- `ur5e_dt__save_scene_state` / `ur5e_dt__restore_scene_state`: Checkpoint save and restore.
+When connected to an Isaac Sim session running `exts/ur5e-dt`, the host dynamically registers its tools. Kit's
+canonical `ur5e_dt.<tool>` names appear to MCP clients as `ur5e_dt__<tool>`. The pack includes scene setup,
+`play_scene`/`stop_scene`, object management, ROS graphs and viewport recording. See the complete
+[UR5e tool reference](TOOLS-UR5E.md) for actual names, parameters and side effects. Joint-position and pause tools
+are not registered by this pack.
 
 ### Bridge Management Built-ins
 - `list_bridges`: Lists all running Kit bridge instances (PID, port, and app name). *Note: This is a Kit bridge built-in that appears when connected to a bridge.*
@@ -69,6 +68,8 @@ When connected to an active Isaac Sim session running `exts/ur5e-dt`, the server
 - `screen_info`: Reports active display, attached monitors, capture directories, and recording state.
 
 Captures are written to `~/Pictures/screen-mcp/` and `~/Videos/screen-mcp/`. Screen recordings do not contain audio.
+See the [host and bridge reference](TOOLS-HOST.md) for the complete list and arguments. The separate
+[Isaac Lab reference](TOOLS-ISAACLAB.md) covers the 12 host-side Lab tools.
 
 ### Agent workflow
 
@@ -202,6 +203,10 @@ Verify end-to-end communication with Isaac Sim running:
 # Launch simulation
 ./run.sh --headless &
 
-# Run check suite over bridge
+# Wait for the app and bridge to finish starting, then run the check suite.
+# This builds/reopens a scene and moves a joint; use a disposable session.
 ./verify.sh
 ```
+
+The verifier reports measured values but does not yet assert every intended scene and physics invariant. Review its
+output as well as the exit status; see the [roadmap](ROADMAP.md) for the remaining verification work.

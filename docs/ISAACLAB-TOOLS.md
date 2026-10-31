@@ -1,4 +1,7 @@
-# Isaac Lab 3.0 Tool Pack Design
+# Isaac Lab 3.0 Tool Pack: Design and Implementation Notes
+
+> This document preserves design history and implementation notes. For the current names, arguments, setup and
+> examples, use the [Isaac Lab tool reference](TOOLS-ISAACLAB.md). Proposed names below are historical notation.
 
 Design for an `isaaclab.*` tool pack for the `isaac-mcp` host server. Grounded in
 `mcp/isaac_mcp/server.py`, `exts/isaac.mcp.bridge/isaac_mcp_bridge/bridge.py`,
@@ -58,7 +61,9 @@ configurable via `ISAACLAB_JOBS_DIR`). Each job writes:
 Job IDs are `YYYYMMDD-HHMMSS-<slug>`. The host holds an in-memory map of active
 `Popen` handles; on server restart, `jobs.list` rehydrates from `job.json`.
 
-## 4. Proposed tools
+## 4. Original proposed tools
+
+This section records the initial design; consult the current reference for the implemented signatures.
 
 All inputs/outputs JSON. Durations in seconds.
 
@@ -114,11 +119,11 @@ All inputs/outputs JSON. Durations in seconds.
 
 ## 5. Cheap queries vs long jobs
 
-- Cheap (no subprocess or short-lived): `install.info` (cached after first probe),
+- Cheap (no subprocess or short-lived): `install.info` (uses a short-lived interpreter probe),
   `runs.*`, `checkpoints.list`, `metrics.summary`, `tensorboard.tail`. These read
   files or job state only.
-- Long (subprocess): `train`, `eval`, `play`, `envs.list` (needs Lab Python import).
-  All return a `job_id` immediately and never block the MCP call beyond spawning.
+- Jobs: `train`, `eval`, `play` start subprocesses and return a `job_id` after spawning. `envs.list` runs a
+  short-lived interpreter probe and waits for the result; it does not return a job ID.
 
 `runs.tail` defaults to 100 lines and caps at 1000 to bound output.
 
@@ -172,54 +177,34 @@ one GPU they will contend and likely OOM. Rules:
 
 ## 9. Locating an Isaac Lab install
 
-Resolution order (first valid wins):
-1. `ISAACLAB_PYTHON` (absolute path to python) + `ISAACLAB_ROOT`.
-2. `ISAACLAB_ROOT` with `.venv/bin/python` (reference layout
-   `learning6/`: python 3.12, `IsaacLab/` at `learning6/IsaacLab`).
-3. `which isaaclab.sh` / `ISAACLAB_PATH` env (upstream convention).
+The implementation in `mcp/isaac_mcp/isaaclab/install.py` checks, in order:
 
-4. Probe `python -c "import isaaclab, isaacsim; print(...)"` and read
-   `isaaclab.__version__` (expect `3.0.0`) and `isaacsim` metadata
-   (expect `6.2.0.0`).
+1. `ISAACLAB_PYTHON`, with `ISAACLAB_ROOT` if provided; otherwise it tries a sibling `IsaacLab` directory.
+   If the explicitly configured paths are invalid, discovery returns no install.
+2. The reference default `~/Desktop/ur5e-digital-twin/learning6/{.venv/bin/python,IsaacLab}`.
+3. `ISAACLAB_ROOT/.venv/bin/python`, when `ISAACLAB_ROOT` is set and the reference default was not found.
 
-Custom task packages: `isaaclab__envs_list` imports `isaaclab_tasks` plus every module in
-`ISAACLAB_TASK_MODULES` (comma list, e.g. `ur5e_lab`), with `ISAACLAB_TASK_PATH` (os.pathsep list) added to
-`PYTHONPATH`, then reads `gymnasium.registry`. Failed imports are returned as `import_errors`. If the variable is unset,
-a `ur5e_lab` directory beside `ISAACLAB_ROOT` is still picked up.
+The resolver checks paths; `isaaclab__install_info` probes package metadata. It does not automatically search
+`PATH`, `ISAACLAB_PATH`, or validate every supported combination. Set explicit paths for other layouts.
 
-`isaaclab__train`/`eval`/`play` use the same resolver (`install.resolve_task_modules`). Isaac Lab's stock
-`train.py`/`play.py` only know built-in tasks and tasks declared through an `isaaclab.tasks` entry point, so when
-task modules are configured (or `ur5e_lab` sits beside the Lab root) the job runs `launcher.py <script> <args>`,
-which imports the modules and then runs the stock script as `__main__`; a module that fails to import fails the job
-with its traceback in the log. With nothing configured the job command is unchanged. A custom task usually has no
-default RL backend, so pass `rl_library` (e.g. `rl_games`); built-in tasks resolve it themselves. Verified
-2026-10-29 on the 5080 from a fresh clone: `UR5e-Cell-Reach-Direct-v0`, 128 envs, 2 iterations, `rl_games`
--> job `succeeded` in 14 s with a checkpoint found by `runs_status`.
+`isaaclab__envs_list` imports `isaaclab_tasks`, plus modules in the comma-separated `ISAACLAB_TASK_MODULES` with
+`ISAACLAB_TASK_PATH` added to the import path, then reads `gymnasium.registry`. Import failures appear in
+`import_errors`. When no modules are specified, a sibling `ur5e_lab` is picked up if present. Jobs use the same
+module resolver. The custom UR5e reach task was discovered and trained in the dated tests described below.
 
-Validation: require Python 3.12 and `isaaclab` importable; refuse otherwise with
-the resolved path in the error. Reference paths are never hard-coded as defaults
-in code; they are documentation/examples only.
+## 10. Security and trust boundaries
 
-## 10. Security
-
-- No arbitrary code execution by default: no `run_python`-equivalent into the
-  Isaac Lab process. Only allowlisted entrypoints (`train.py`, `play.py`,
-  `list_envs.py`, etc.) are invoked, with validated, typed arguments.
-- All paths are resolved and checked to lie under configured roots
-  (`ISAACLAB_ROOT`, job dir, checkpoint roots); `..` traversal and absolute
-  escapes are rejected.
-- Subprocesses are launched with `shell=False` and an explicit argv list;
-  `extra_args` is schema-validated against an allowlist of known flags.
-- Environment variables passed to jobs are an explicit allowlist (PATH,
-  CUDA_VISIBLE_DEVICES, PYTHONPATH for the Lab root); no host secrets are
-  forwarded.
-- The bridge's `run_python` builtin (`bridge.py` builtins) is not exposed
-  through this pack; if a Lab bridge is attached via `use_bridge`, that is a
-  separate, user-opt-in surface governed by `ISAAC_MCP_BUILTINS`.
+- Lab jobs invoke `train.py` or `play.py` with `shell=False` and a validated argument list. Checkpoint paths are
+  resolved against the allowed Lab and job roots; metrics have their own allowed roots.
+- `extra_args` accepts syntactically validated flags and Hydra overrides; it is not a semantic allowlist of safe flags.
+- The child process inherits a copy of the host environment. Do not assume credentials or other environment variables
+  are removed. Custom task modules execute Python when imported and must be trusted.
+- The separate Kit bridge offers `run_python` and file tools. Its trust boundary applies whenever those bridge tools
+  are exposed; Lab tools themselves do not provide a `run_python` equivalent.
 
 ## 11. Out of scope (this design)
 
-- No actual implementation, no Isaac Sim/GPU jobs run.
+- This section describes the original design scope; the host pack was subsequently implemented and tested.
 - No multi-node/multi-GPU orchestration beyond `CUDA_VISIBLE_DEVICES`.
 - No dataset recording or motion-capture tools.
 - No changes to `ur5e-digital-twin`; this doc lives only in `isaac-mcp`.
@@ -238,7 +223,7 @@ and `runs_status` / `metrics_summary` read its checkpoint and TensorBoard scalar
 - Runs live under `<isaaclab_root>/logs/...`, not the job dir; `runs_status` finds the newest checkpoint from the
   training log ("saving checkpoint '...'") and reports the experiment dir as `run_dir`.
 - Job ids are validated (`YYYYMMDD-HHMMSS-<slug>`), and cancel only signals a pid whose command line still matches the job.
-- `envs_list` scans registrations statically; custom envs registered by user code (e.g. `ur5e_lab`) are not listed yet.
+- `envs_list` imports configured task modules before reading the registry; custom registrations such as `ur5e_lab` can be listed.
 
 ### Windowed jobs and visual feedback (verified 2026-10-29)
 
@@ -261,5 +246,6 @@ cancelled jobs release the guard. Fixes from that test: `runs_cancel` records `c
 overwrites it with `failed (-15)`; cancelling an already-finished job is a no-op (`{"cancelled": false, "state": ...}`);
 job ids get `-2`, `-3`, ... suffixes if two launches land in the same second; guard check and job registration are atomic within one
 host process (two separate host processes can still race). Kit-bridge refusals list each bridge once (`localhost` = `127.0.0.1`).
-The Kit guard only probes the configured port plus advertised portfiles, not 8767.
+The Kit guard only probes the configured port plus advertised portfiles; it does not independently scan 8767 unless
+that port is configured or advertised.
 
