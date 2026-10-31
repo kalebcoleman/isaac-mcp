@@ -43,7 +43,11 @@ make sure one is up before relying on those tools. Host and Isaac Lab tools need
 3. Only if no bridge is reachable, and project rules permit it, start one with the
    `isaac.mcp.bridge` extension (for the twin, `./run.sh --headless` starts it on port 8766),
    then repeat steps 1 and 2.
-4. If the client does not show the newly registered tools, see the client note below.
+4. `refresh_tools` and `use_bridge` send `notifications/tools/list_changed` when they change the
+   tool list (the host advertises `tools.listChanged`), so a client that honours it shows the new
+   tools without a restart. If yours does not, restart the MCP connection or list the tools
+   directly: `python -m isaac_mcp.client list_tools --port 8766` (use the port you verified in
+   step 2).
 
 Do not start another Kit instance while a reachable bridge exists, and confirm the PID and port
 before any scene-changing call.
@@ -53,14 +57,6 @@ before any scene-changing call.
 (the Kit-bridge guard, see [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md)). Stop the bridge first,
 or knowingly pass `allow_concurrent_gpu=true`; the docs advise one GPU job at a time on a 16 GB
 card.
-
-<!-- client-note: delete this block if the host server starts advertising tools.listChanged -->
-**Client note (current behaviour).** The host server advertises `tools.listChanged=false` and
-never sends a list-changed notification, so after `refresh_tools` or `use_bridge` registers new
-tools, a client may not show them until its MCP connection restarts (seen with Claude Code
-2.1.314 against a test server). Restart the MCP connection, or list the tools directly:
-`python -m isaac_mcp.client list_tools --port 8766` (use the port you verified in step 2).
-<!-- /client-note -->
 
 Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER.md).
 

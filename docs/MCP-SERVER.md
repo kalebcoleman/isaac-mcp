@@ -100,8 +100,11 @@ loaded a compatible bridge. The generic `isaac.mcp.bridge` was also tested in
 an Isaac Sim 5.1 process on 2026-10-30: after enabling it and setting
 `ISAAC_MCP_PORT`, `status` reported the expected 5.1 process and PID.
 
-If a client does not expose newly discovered tools after `refresh_tools`, use
-the installed host client's standard-library CLI against the verified port:
+The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after
+`refresh_tools` or `use_bridge` adds, updates or removes tools, so clients that honour it (Claude
+Code 2.1.314 does) show the change mid-session. If a client does not expose newly discovered tools
+after `refresh_tools`, reconnect it or use the installed host client's standard-library CLI against
+the verified port:
 
 ```bash
 python -m isaac_mcp.client status --port 8766

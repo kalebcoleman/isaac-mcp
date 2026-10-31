@@ -43,7 +43,8 @@ import re
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.lowlevel.server import NotificationOptions
 
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
@@ -385,6 +386,44 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
 mcp = FastMCP(SERVER_NAME, instructions=SERVER_INSTRUCTIONS, lifespan=server_lifespan)
 
 
+def _advertise_tools_list_changed(server: FastMCP) -> None:
+    """Make the server advertise ``tools.listChanged = true``.
+
+    FastMCP.run_stdio_async calls ``create_initialization_options()`` with no
+    arguments, so the capability stays false unless we supply the option.
+    Clients such as Claude Code only act on ``notifications/tools/list_changed``
+    when the capability was advertised at initialize. The wrapper passes the
+    option by default but still honours an explicit ``notification_options``.
+    """
+    original = server._mcp_server.create_initialization_options
+
+    def create_initialization_options(*args: Any, **kwargs: Any) -> Any:
+        if not args and kwargs.get("notification_options") is None:
+            kwargs["notification_options"] = NotificationOptions(tools_changed=True)
+        return original(*args, **kwargs)
+
+    server._mcp_server.create_initialization_options = create_initialization_options
+
+
+_advertise_tools_list_changed(mcp)
+
+
+async def _notify_tools_changed(ctx: Optional[Context]) -> None:
+    """Tell the client its tool list changed. Never raises: a failed
+    notification must not fail the tool that changed the registry.
+
+    Tools take ``ctx: Context = None`` rather than ``Context | None``: mcp 1.12.4
+    only injects a parameter annotated exactly ``Context`` (a union is treated as
+    an ordinary argument and leaks into the advertised schema); 1.30 accepts both.
+    ``ctx`` is None when a tool is called directly rather than through a session."""
+    if ctx is None:
+        return
+    try:
+        await ctx.request_context.session.send_tool_list_changed()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Could not send tools/list_changed notification: {e}")
+
+
 def _screen_port() -> int | None:
     """Bridge port for auto-targeting, before or after the client connects."""
     if _client is not None:
@@ -401,19 +440,21 @@ register_isaaclab_tools(mcp)
 
 
 @mcp.tool()
-def refresh_tools() -> str:
+async def refresh_tools(ctx: Context = None) -> str:  # type: ignore[assignment]
     """Re-discover the bridge registry and register any new tools (use after
     the bridge's reload_tools, after enabling a project, or after Kit restarts)."""
     try:
         added = discover_and_register_tools(mcp)
     except Exception as e:
         return f"Error: {e}"
+    if added:
+        await _notify_tools_changed(ctx)
     return (f"Registered/updated/removed {len(added)} tool(s): {added}" if added
             else "No new or changed tools (registry unchanged).")
 
 
 @mcp.tool()
-def use_bridge(port: int) -> str:
+async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[assignment]
     """Switch this MCP server to another running Kit bridge on this machine.
 
     Use list_bridges to see the candidates. This replaces the ur5e_dt__* tools
@@ -429,6 +470,7 @@ def use_bridge(port: int) -> str:
         return f"Error: {e}"
     old_client = _client
     _client = new_client
+    had_tools = bool(_NAME_MAP)
     for name in list(_NAME_MAP):
         _drop_tool(mcp, name)
     _NAME_MAP.clear()
@@ -441,7 +483,11 @@ def use_bridge(port: int) -> str:
     try:
         added = discover_and_register_tools(mcp)
     except Exception as e:  # noqa: BLE001
+        if had_tools:  # the previous bridge's tools were dropped above
+            await _notify_tools_changed(ctx)
         return f"Connected to port {port} but tool discovery failed: {e}"
+    if had_tools or added:
+        await _notify_tools_changed(ctx)
     try:
         summary = json.dumps(identity, indent=2, sort_keys=True)
     except Exception:  # noqa: BLE001
