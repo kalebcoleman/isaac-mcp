@@ -411,6 +411,6 @@ different render path, different failure modes.
    ("Backends: tensor" for dof reads). If the tensor backend is not initialized
    before the first step, `body.state`/`articulation.state` fail on a fresh
    stage — documented here, not yet observed.
-3. **The proposed capture path works in the selected app configuration.** The twin's separate viewport-recording path
+3. **Does the proposed capture path work in the selected app configuration?** The twin's separate viewport-recording path
    succeeded headlessly, so a blanket windowed-only assumption is false. The proposed `CaptureExtension` screenshot
    and recording APIs, camera restoration, and genuinely absent-viewport cases still need their own live tests.

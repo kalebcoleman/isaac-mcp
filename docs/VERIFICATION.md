@@ -96,15 +96,34 @@ machine's normal graphics and GPU resources.
 From the repository root, use an interpreter with Isaac Sim installed and an accepted EULA:
 
 ```bash
-LOG=$(mktemp "${TMPDIR:-/tmp}/isaac-mcp-generic-scene.XXXXXX")
-OMNI_KIT_ACCEPT_EULA=YES /path/to/isaacsim-env/bin/python scripts/validate_generic_scene.py > "$LOG" 2>&1
-grep '^GENERIC_SCENE_VALIDATION=' "$LOG"
-printf 'Full log: %s\n' "$LOG"
+(
+  ISAACSIM_PYTHON="/path/to/isaacsim-env/bin/python"
+  validation_log=$(mktemp "${TMPDIR:-/tmp}/isaac-mcp-generic-scene.XXXXXX") || {
+    printf 'Could not create validation log.\n' >&2
+    exit 1
+  }
+  if OMNI_KIT_ACCEPT_EULA=YES "$ISAACSIM_PYTHON" scripts/validate_generic_scene.py > "$validation_log" 2>&1; then
+    validation_status=0
+  else
+    validation_status=$?
+  fi
+  if [ "$validation_status" -eq 0 ]; then
+    if ! grep '^GENERIC_SCENE_VALIDATION=' "$validation_log"; then
+      printf 'Validation success marker missing.\n' >&2
+      validation_status=1
+    fi
+  else
+    printf 'Validation process failed (exit %s).\n' "$validation_status" >&2
+  fi
+  printf 'Full log: %s\n' "$validation_log"
+  exit "$validation_status"
+)
 ```
 
-The script reports assertion failures with a nonzero exit status. Kit controls startup failures, so also require the
-marked JSON line to confirm success. It lists the checks, observed helper behavior, Isaac Sim distribution version,
-Python version and platform. The check validates selected building blocks
+The command preserves a nonzero simulator exit status and also fails if the marked JSON line is missing; it prints the
+log location in either case. The explicit `exit` stays inside the subshell. The script reports assertion failures with a
+nonzero exit status, while Kit controls startup failures. The JSON lists the checks, observed helper behavior, Isaac Sim
+distribution version, Python version and platform. The check validates selected building blocks
 for `stage.info`, `stage.tree`, `prim.get` and `prim.find`; it does not test those future tools, an MCP bridge, deep-tree
 limits, physics, capture, real hardware, or every stage and installation type. Isaac's deprecated `core.utils` helpers
 are optional observations; the USD checks run directly against the active Kit context.
