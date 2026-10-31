@@ -176,10 +176,35 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
     result = get_client().call("list_tools")
     if not isinstance(result, dict) or not isinstance(result.get("tools"), dict):
         raise RuntimeError("bridge list_tools response has no tools dictionary")
+    if any(not isinstance(name, str) or not isinstance(meta, dict)
+           for name, meta in result["tools"].items()):
+        raise RuntimeError("bridge list_tools contains an invalid tool entry")
     tools = {name: meta for name, meta in result["tools"].items() if _visible(name, meta)}
-    for name, meta in tools.items():
+    names = {}
+    for canonical, meta in tools.items():
         if "fields" not in meta:
-            raise RuntimeError(f"bridge tool {name!r} has no field specs")
+            raise RuntimeError(f"bridge tool {canonical!r} has no field specs")
+        name = _mcp_name(canonical)
+        if name in names and names[name] != canonical:
+            raise RuntimeError(f"bridge tools {names[name]!r} and {canonical!r} collide as {name!r}")
+        if name in server._tool_manager._tools and name not in _NAME_MAP:
+            raise RuntimeError(f"bridge tool {canonical!r} collides with host tool {name!r}")
+        names[name] = canonical
+
+    # Build every changed tool on a temporary FastMCP registry first. A broken
+    # field spec or signature must not remove an existing tool or leave the
+    # host with only the first part of the new registry.
+    staging = FastMCP("bridge discovery staging")
+    staged = {}
+    for canonical, meta in sorted(tools.items()):
+        name = _mcp_name(canonical)
+        if _NAME_MAP.get(name) == canonical and _REGISTERED_META.get(name) == meta:
+            continue
+        try:
+            register_dynamic_tool(staging, name, canonical, meta)
+        except Exception as error:
+            raise RuntimeError(f"invalid bridge tool {canonical!r}: {error}") from error
+        staged[name] = (canonical, meta, staging._tool_manager._tools[name])
 
     changed = []
     for mcp_name, canonical in list(_NAME_MAP.items()):
@@ -188,16 +213,9 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
             _NAME_MAP.pop(mcp_name, None)
             _REGISTERED_META.pop(mcp_name, None)
             changed.append(f"{canonical} (removed)")
-    for canonical, meta in sorted(tools.items()):
-        name = _mcp_name(canonical)
-        if name in _NAME_MAP:
-            if _NAME_MAP[name] == canonical and _REGISTERED_META.get(name) == meta:
-                continue
-            _drop_tool(server, name)          # schema/description changed
-            changed.append(f"{canonical} (updated)")
-        else:
-            changed.append(canonical)
-        register_dynamic_tool(server, name, canonical, meta)
+    for name, (canonical, meta, tool) in staged.items():
+        changed.append(f"{canonical} (updated)" if name in _NAME_MAP else canonical)
+        server._tool_manager._tools[name] = tool
         _NAME_MAP[name] = canonical
         _REGISTERED_META[name] = meta
     if changed:

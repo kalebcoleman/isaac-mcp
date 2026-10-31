@@ -268,11 +268,29 @@ def test_socket_second_frame_before_the_first_answer_is_refused_in_order():
     sent before the previous one is answered is refused by name — and AFTER that answer, so the
     two replies cannot be read the wrong way round."""
     with LiveBridge() as live:
+        release_first = asyncio.Event()
+        second_submitted = threading.Event()
+
+        async def echo(n=0):
+            if n == 1:
+                await release_first.wait()
+            return {"n": n}
+
         live.bridge.register_owner("A", "demo").add(
-            td("echo", lambda n=0: {"n": n}, params={"n": {"type": "integer"}}))
+            td("echo", echo, params={"n": {"type": "integer"}}))
+        original_submit = live.bridge._submit
+
+        def observe_submit(conn, command):
+            original_submit(conn, command)
+            if command.get("params", {}).get("n") == 2:
+                second_submitted.set()
+
+        live.bridge._submit = observe_submit
         with live.client() as c:
             c.sendall(b'{"type":"demo.echo","params":{"n":1}}\n'
                       b'{"type":"demo.echo","params":{"n":2}}\n')
+            assert second_submitted.wait(5), "second frame was not processed"
+            live.loop.call_soon_threadsafe(release_first.set)
             buf = b""
             while buf.count(b"\n") < 2:
                 buf += c.recv(65536)

@@ -155,7 +155,16 @@ def test_failed_refresh_keeps_existing_registry(fresh_gateway, monkeypatch):
     assert _served(server, "arm__move") is not None
 
 
-@pytest.mark.parametrize("response", [{}, {"tools": None}, {"tools": {"sim.inspect": {"namespace": "sim"}}}])
+@pytest.mark.parametrize("response", [
+    {},
+    {"tools": None},
+    {"tools": {"sim.inspect": {"namespace": "sim"}}},
+    {"tools": {"sim.inspect": None}},
+    {"tools": {
+        "sim.good": _meta("good", {}, "sim", "sim-owner"),
+        "sim.bad": {"namespace": "sim", "fields": [{"name": "x"}]},
+    }},
+])
 def test_malformed_refresh_keeps_existing_registry(fresh_gateway, monkeypatch, response):
     server = fresh_gateway
     _fake_registry(monkeypatch, {"arm.move": _meta("arm", {}, "arm", "arm-owner")})
@@ -169,3 +178,26 @@ def test_malformed_refresh_keeps_existing_registry(fresh_gateway, monkeypatch, r
     with pytest.raises(RuntimeError):
         gw.discover_and_register_tools(server)
     assert _served(server, "arm__move") is not None
+    assert _served(server, "sim__good") is None
+    assert gw._NAME_MAP == {"arm__move": "arm.move"}
+
+
+def test_bridge_tool_cannot_replace_a_static_host_tool(fresh_gateway, monkeypatch):
+    server = fresh_gateway
+    server.add_tool(lambda: "host", name="refresh_tools", description="host tool")
+    _fake_registry(monkeypatch, {"refresh_tools": _meta("bridge tool", {}, None, "B")})
+    with pytest.raises(RuntimeError, match="collid"):
+        gw.discover_and_register_tools(server)
+    assert _served(server, "refresh_tools").description == "host tool"
+    assert "refresh_tools" not in gw._NAME_MAP
+
+
+def test_two_bridge_names_cannot_map_to_the_same_mcp_name(fresh_gateway, monkeypatch):
+    server = fresh_gateway
+    _fake_registry(monkeypatch, {
+        "demo.a/b": _meta("first", {}, "demo", "A"),
+        "demo.a_b": _meta("second", {}, "demo", "A"),
+    })
+    with pytest.raises(RuntimeError, match="collid"):
+        gw.discover_and_register_tools(server)
+    assert not gw._NAME_MAP
