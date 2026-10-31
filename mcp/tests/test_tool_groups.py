@@ -171,12 +171,14 @@ def test_every_local_tool_is_annotated_and_read_only_matches_the_groups():
     for name, tool in tools.items():
         ann = tool.annotations
         assert ann is not None, f"{name} has no annotations"
-        assert ann.openWorldHint is (name in lt.GROUPS["isaaclab_probe"]), name
+        python_tools = lt.GROUPS["isaaclab_probe"] | {
+            "isaaclab__train", "isaaclab__eval", "isaaclab__play"}
+        assert ann.openWorldHint is (name in python_tools), name
         if name in lt.READ_ONLY_TOOLS:
             assert ann.readOnlyHint is True and ann.idempotentHint is True, name
         else:
             assert ann.readOnlyHint is False, name
-            destructive = lt.GROUPS["isaaclab_probe"] | {
+            destructive = python_tools | {
                 "isaaclab__runs_cancel", "isaaclab__runs_list", "isaaclab__runs_status"}
             assert ann.destructiveHint is (name in destructive), name
 

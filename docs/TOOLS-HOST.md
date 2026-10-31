@@ -69,16 +69,18 @@ and `none` (no local tools; a pure Kit gateway, since bridge tools are still dis
 `readonly,gateway`.
 
 - `isaaclab_probe` runs the configured Python interpreter; its startup code can have side effects. `envs_list` also
-  imports configured or sibling task modules, which can run arbitrary code. Both tools use conservative non-read-only,
+  imports configured task modules, which can run arbitrary code. Both tools use conservative non-read-only,
   destructive, non-idempotent and open-world hints.
+- `isaaclab__train`, `isaaclab__eval`, and `isaaclab__play` also run configured Python and task modules, so they carry
+  the same conservative hints; those processes may write files or contact external systems.
 - `isaaclab_jobs` can write: `runs_list` and `runs_status` replace stored metadata when reconciling orphaned jobs,
   and `runs_tail` can create the jobs directory. The first two have destructive hints; `runs_tail` has an additive hint.
 - Compatibility: `readonly` and `isaaclab_read` no longer include these five tools. To restore the previous local
   selection, add `isaaclab_probe,isaaclab_jobs` (for example, `readonly,isaaclab_probe,isaaclab_jobs`). The default
   `all` selection and the tools' behavior are unchanged.
 - The capture directories (`~/Pictures/screen-mcp`, `~/Videos/screen-mcp`) are created only when `screen_capture` is
-  enabled, so a profile without that group creates neither. Importing the Isaac Lab job module can still create its
-  jobs directory under `~/.local/share/isaac-mcp` and reconcile orphaned job records, whatever the groups. Thus even
+  enabled, so a profile without that group creates neither. Importing the Isaac Lab job module can still reconcile
+  orphaned job records in an existing jobs directory, whatever the groups. Thus even
   `readonly` does not make server startup free of filesystem writes.
 - `gateway` only controls the two tools. Bridge discovery at startup is part of the server lifespan and still runs when
   `gateway` is excluded; without the tools, a client cannot re-run or redirect it, so restart the MCP connection after

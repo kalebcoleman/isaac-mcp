@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Iterable
 
-from ..local_tools import ADDITIVE, DESTRUCTIVE, IDEMPOTENT_WRITE, PYTHON_PROBE, READ_ONLY, ScopedTools
+from ..local_tools import DESTRUCTIVE, IDEMPOTENT_WRITE, PYTHON_EXECUTION, READ_ONLY, ScopedTools
 from . import install as _install
 from . import jobs as _jobs
 from . import metrics as _metrics
@@ -58,21 +58,21 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
     """Register the Isaac Lab tools whose group is in ``groups`` (default: all of them)."""
     mcp = ScopedTools(server, groups)
 
-    @mcp.tool(name="isaaclab__install_info", annotations=PYTHON_PROBE)
+    @mcp.tool(name="isaaclab__install_info", annotations=PYTHON_EXECUTION)
     def isaaclab_install_info() -> str:
         """Report the Isaac Lab install: interpreter, versions, root, venv.
 
         Runs the configured Python interpreter, whose startup code may have side effects."""
         return _dump(_install.install_info())
 
-    @mcp.tool(name="isaaclab__envs_list", annotations=PYTHON_PROBE)
+    @mcp.tool(name="isaaclab__envs_list", annotations=PYTHON_EXECUTION)
     def isaaclab_envs_list(filter: str | None = None) -> str:
         """List registered Isaac Lab task ids (optionally filtered by substring).
 
         Runs Python and imports task modules, which may have side effects."""
         return _dump(_install.envs_list(filter=filter))
 
-    @mcp.tool(name="isaaclab__train", annotations=ADDITIVE)
+    @mcp.tool(name="isaaclab__train", annotations=PYTHON_EXECUTION)
     def isaaclab_train(
         task: str,
         num_envs: int = 64,
@@ -99,7 +99,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
-    @mcp.tool(name="isaaclab__eval", annotations=ADDITIVE)
+    @mcp.tool(name="isaaclab__eval", annotations=PYTHON_EXECUTION)
     def isaaclab_eval(
         task: str,
         checkpoint: str,
@@ -123,7 +123,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
-    @mcp.tool(name="isaaclab__play", annotations=ADDITIVE)
+    @mcp.tool(name="isaaclab__play", annotations=PYTHON_EXECUTION)
     def isaaclab_play(
         task: str,
         checkpoint: str,

@@ -109,7 +109,7 @@ def local_tool_groups(env: Optional[Mapping[str, str]] = None) -> frozenset[str]
 
 # Reads state only. destructiveHint is meaningless when readOnlyHint is true, so it is unset.
 READ_ONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False)
-# Changes something, but additively: starts a job, writes a capture file.
+# Changes something additively, such as writing a capture file.
 ADDITIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False,
                            openWorldHint=False)
 # Changes state, but repeating the call with the same arguments has no further effect.
@@ -118,9 +118,9 @@ IDEMPOTENT_WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, id
 # Kills a process or overwrites job metadata during orphan reconciliation.
 DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
                               openWorldHint=False)
-# Executes configured Python and, for task discovery, imports configured or sibling modules.
-PYTHON_PROBE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
-                               openWorldHint=True)
+# Executes configured Python and potentially imports user-configured task modules.
+PYTHON_EXECUTION = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
+                                   openWorldHint=True)
 
 
 class ScopedTools:

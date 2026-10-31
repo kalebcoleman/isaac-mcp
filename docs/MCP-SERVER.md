@@ -208,7 +208,7 @@ Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOL
 - `ISAAC_MCP_LOCAL_TOOLS` selects groups of the **host's own 21 tools** (screen, Isaac Lab, gateway). `readonly`
   keeps only local tools annotated as read-only; `none` keeps none. The default is `all`. The Python probes and job
   inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for groups and
-  migration. Importing the jobs module can still create a directory and reconcile orphaned jobs at server startup,
+  migration. Importing the jobs module can still reconcile orphaned jobs at server startup,
   regardless of the groups. The setting does **not** affect tools discovered from a Kit bridge, which are not
   annotated, so `readonly` is a read-only *local tool selection*, not a read-only server: a client that can still see
   bridge tools can change the scene.
