@@ -177,8 +177,12 @@ uv tool install --force --editable "${MCP_DIR}[isaaclab]"   # [isaaclab] adds te
 # Step 3: Install ffmpeg shim at ~/.local/bin/ffmpeg
 BIN_DIR="${HOME}/.local/bin"
 mkdir -p "$BIN_DIR"
-echo "== installing ffmpeg shim at $BIN_DIR/ffmpeg"
-cat > "$BIN_DIR/ffmpeg" <<'SH'
+FFMPEG_SHIM="$BIN_DIR/ffmpeg"
+if [ -L "$FFMPEG_SHIM" ] || { [ -e "$FFMPEG_SHIM" ] && ! grep -Fq '# ffmpeg shim: prefer the static build shipped with imageio-ffmpeg.' "$FFMPEG_SHIM" 2>/dev/null; }; then
+  echo "== preserving existing $FFMPEG_SHIM (not an isaac-mcp shim)" >&2
+else
+  echo "== installing ffmpeg shim at $FFMPEG_SHIM"
+  cat > "$FFMPEG_SHIM" <<'SH'
 #!/bin/bash
 # ffmpeg shim: prefer the static build shipped with imageio-ffmpeg.
 # The Isaac Sim ur5e-dt extension shells out to a bare `ffmpeg`; this keeps it
@@ -197,7 +201,8 @@ if [ -z "$BIN" ]; then
 fi
 exec "$BIN" "$@"
 SH
-chmod +x "$BIN_DIR/ffmpeg"
+  chmod +x "$FFMPEG_SHIM"
+fi
 
 # Step 4: Verify CLI help runs
 echo "== verifying CLI"

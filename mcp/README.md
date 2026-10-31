@@ -14,8 +14,8 @@ uv tool install --force --editable ./mcp
 ```
 
 Both commands install `isaac-mcp`. The installer also creates an `~/.local/bin/ffmpeg` shim for the Kit
-viewport recorder; a direct `uv tool install` does not create that shim. Omit `--no-sim` to install the
-repository's Isaac Sim environment as well.
+viewport recorder when that path does not already contain an unrelated file; a direct `uv tool install` does
+not create that shim. Omit `--no-sim` to install the repository's Isaac Sim environment as well.
 
 Client configs: from the `isaac-mcp` repository root run
 `./install.sh --claude` for Claude Code and Claude Desktop. Details:
