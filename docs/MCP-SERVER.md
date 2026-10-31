@@ -180,7 +180,7 @@ Add the server to `~/.config/Claude/claude_desktop_config.json`:
   }
 }
 ```
-*(Ensure `DISPLAY` matches your active session, e.g., `:1` on the lab workstation or `:0` on standard desktops).*
+*(Ensure `DISPLAY` matches the active session, for example `:0` or `:1`.)*
 
 ### OpenCode
 

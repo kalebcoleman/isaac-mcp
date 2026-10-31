@@ -418,7 +418,7 @@ unless that port is configured or advertised.
 
 ## Verified vs. version and platform limitations
 
-Verified (per [HANDOFF.md](HANDOFF.md) and [ROADMAP.md](ROADMAP.md)):
+Historical verification includes:
 
 - Host suite: 421 tests passed in GitHub Actions for `66e84b4` (2026-10-30). An isolated host wheel install and
   npm launcher fetch also worked in the prior audit.
