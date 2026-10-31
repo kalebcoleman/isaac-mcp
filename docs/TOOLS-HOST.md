@@ -32,9 +32,11 @@ call `refresh_tools` and verify with the CLI below before concluding that no bri
 
 The bridge also has an internal `list_tools` discovery operation. It is intentionally hidden from the bridge's own
 advertised tool list, so it is not normally a dynamically registered MCP tool. Ask the MCP client to list tools, or
-use the bridge CLI from an environment with `isaac_mcp` installed:
+use the bridge CLI from an environment with `isaac_mcp` installed. Discover the advertised bridges first and use the
+host and port from that listing; 8766 below is only the twin's default port:
 
 ```bash
+python -m isaac_mcp.client --list-bridges
 python -m isaac_mcp.client status --port 8766
 python -m isaac_mcp.client list_tools --port 8766
 python -m isaac_mcp.client ur5e_dt.play_scene '{}' --port 8766

@@ -36,13 +36,21 @@ Simulator and twin work (the bridge built-ins and `ur5e_dt__*`) needs a running 
 make sure one is up before relying on those tools. Host and Isaac Lab tools need no bridge.
 
 1. Call `refresh_tools` first. Do not start Kit yet: a reachable bridge may already exist.
-2. Verify with `status` (PID and port). `status` and `list_bridges` are themselves bridge
-   built-ins, so they are missing if `ISAAC_MCP_BUILTINS=0` or `ISAAC_MCP_NAMESPACE` hides them.
-   The CLI check works regardless: `python -m isaac_mcp.client status --port 8766`. With several
-   bridges, choose one with `use_bridge`.
-3. Only if no bridge is reachable, and project rules permit it, start one with the
-   `isaac.mcp.bridge` extension (for the twin, `./run.sh --headless` starts it on port 8766),
-   then repeat steps 1 and 2.
+2. Discover bridges, then verify the one you mean. Do not assume a port: advertised bridges can
+   use other ports or hosts. `python -m isaac_mcp.client --list-bridges` prints every live
+   advertised bridge as JSON (`pid`, `host`, `port`, `app`). It works even when `status` and
+   `list_bridges` are hidden (they are bridge built-ins, so `ISAAC_MCP_BUILTINS=0` or
+   `ISAAC_MCP_NAMESPACE` can remove them), and it exits 2 with `[]` when none is advertised.
+   Probe the bridge you chose with the values from that listing:
+   `python -m isaac_mcp.client status --host <host> --port <port>` (PID, port, app version).
+   Without `--port` the CLI discovers a lone bridge but refuses when several are running, and an
+   exported `UR5E_DT_PORT` or `ISAAC_MCP_PORT` overrides discovery. The host's `refresh_tools`
+   resolves the endpoint the same way, so with several bridges or a pinned port, select the
+   right one with `use_bridge` and the listed port.
+3. Only if `--list-bridges` shows none, and project rules permit it, start one with the
+   `isaac.mcp.bridge` extension (for the twin, `./run.sh --headless` starts it on port 8766 by
+   default; `UR5E_DT_PORT` or `--port` changes that), then repeat steps 1 and 2. A running Kit
+   process that is not in the listing has no bridge.
 4. If the client does not show the newly registered tools, see the client note below.
 
 Do not start another Kit instance while a reachable bridge exists, and confirm the PID and port
@@ -59,7 +67,8 @@ card.
 never sends a list-changed notification, so after `refresh_tools` or `use_bridge` registers new
 tools, a client may not show them until its MCP connection restarts (seen with Claude Code
 2.1.314 against a test server). Restart the MCP connection, or list the tools directly:
-`python -m isaac_mcp.client list_tools --port 8766` (use the port you verified in step 2).
+`python -m isaac_mcp.client list_tools --host <host> --port <port>` (the bridge you verified in
+step 2).
 <!-- /client-note -->
 
 Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER.md).

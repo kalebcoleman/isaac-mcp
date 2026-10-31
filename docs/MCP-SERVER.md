@@ -101,9 +101,12 @@ an Isaac Sim 5.1 process on 2026-10-30: after enabling it and setting
 `ISAAC_MCP_PORT`, `status` reported the expected 5.1 process and PID.
 
 If a client does not expose newly discovered tools after `refresh_tools`, use
-the installed host client's standard-library CLI against the verified port:
+the installed host client's standard-library CLI against the verified bridge. List the
+advertised bridges first and use the host and port it reports; 8766 below is only the twin's
+default port:
 
 ```bash
+python -m isaac_mcp.client --list-bridges
 python -m isaac_mcp.client status --port 8766
 python -m isaac_mcp.client run_python '{"code":"result = 1"}' --port 8766
 ```
