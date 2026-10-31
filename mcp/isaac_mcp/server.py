@@ -428,7 +428,7 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(
         prog="isaac-mcp",
-        description="MCP server for the UR5e digital twin: Kit/Isaac Sim bridge tools plus desktop "
+        description="MCP server for Isaac Sim and Isaac Lab: Kit bridge tools plus desktop "
         "screen capture. Speaks MCP over stdio; configure it in your MCP client, do not run it by hand. "
         "Environment: UR5E_DT_PORT (bridge port, default 8766), DISPLAY (screen tools).",
     )

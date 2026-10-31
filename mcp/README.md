@@ -8,13 +8,16 @@ Install it as an editable tool (shared by every MCP client):
 
 ```bash
 # From repository root:
-./install.sh
+./install.sh --no-sim
 # Or install host package directly:
 uv tool install --force --editable ./mcp
-# provides: isaac-mcp and the ~/.local/bin/ffmpeg shim used by the Kit viewport recorder
 ```
 
-Client configs: from the `ur5e-digital-twin` root run
+Both commands install `isaac-mcp`. The installer also creates an `~/.local/bin/ffmpeg` shim for the Kit
+viewport recorder; a direct `uv tool install` does not create that shim. Omit `--no-sim` to install the
+repository's Isaac Sim environment as well.
+
+Client configs: from the `isaac-mcp` repository root run
 `./install.sh --claude` for Claude Code and Claude Desktop. Details:
 [docs/MCP-SERVER.md](../docs/MCP-SERVER.md).
 

@@ -1,7 +1,7 @@
 [project]
 name = "isaac-mcp"
 version = "0.2.0"
-description = "UR5e lab MCP server: Kit/Isaac Sim bridge plus desktop screen capture"
+description = "MCP server for Isaac Sim and Isaac Lab with desktop screen capture"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
