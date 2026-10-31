@@ -504,7 +504,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "sync_real_poses": {
-        "description": "Subscribe to /objects_poses_real ROS2 topic and update sim object poses to match real-world detected poses.",
+        "description": "Wait up to 3 seconds for /objects_poses_real and update matching sim objects. Reports an error if no message or matching objects arrive, and lists updated and snapped objects.",
         "parameters": {}
     },
     "new_stage": {
@@ -1946,10 +1946,11 @@ class DigitalTwin(omni.ext.IExt):
                 camera = None
             vid_dir = os.path.join(output_dir, "videos") if output_dir else VIDEOS_DIR
             self._start_realtime_recording(output_dir=vid_dir, file_name=file_name, fps=fps, camera_path=camera)
+            path = os.path.join(vid_dir, file_name)
             return {
                 "status": "success",
-                "message": f"Recording started → {vid_dir}/{file_name}",
-                "file_path": os.path.join(vid_dir, file_name),
+                "message": f"Recording started → {path}",
+                "file_path": path,
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -4811,11 +4812,19 @@ class DigitalTwin(omni.ext.IExt):
     def sync_real_poses(self):
         """Subscribe to /objects_poses_real and update sim object poses to match."""
         import rclpy
+        from rclpy.context import Context
+        from rclpy.executors import SingleThreadedExecutor
         from tf2_msgs.msg import TFMessage
 
-        rclpy.init(args=None)
-        node = rclpy.create_node("_sync_real_poses_tmp")
+        # Isaac's ROS bridge may already own the default context. Use an independent
+        # one so this short-lived subscriber neither initializes nor shuts down it.
+        context = Context()
+        rclpy.init(args=None, context=context)
+        node = None
+        executor = None
         try:
+            node = rclpy.create_node("_sync_real_poses_tmp", context=context)
+            executor = SingleThreadedExecutor(context=context)
             msg_received = [None]
 
             def _cb(msg):
@@ -4826,12 +4835,12 @@ class DigitalTwin(omni.ext.IExt):
             import time
             t0 = time.time()
             while msg_received[0] is None and (time.time() - t0) < 3.0:
-                rclpy.spin_once(node, timeout_sec=0.1)
+                rclpy.spin_once(node, executor=executor, timeout_sec=0.1)
             node.destroy_subscription(sub)
 
             if msg_received[0] is None:
                 print("[SyncRealPoses] No message received on /objects_poses_real within 3s")
-                return
+                return {"received": False, "updated": [], "snapped": []}
 
             # Load assembly data to snap objects near their assembled pose
             import math
@@ -4905,9 +4914,13 @@ class DigitalTwin(omni.ext.IExt):
             print(f"[SyncRealPoses] Updated {len(updated)} objects: {updated}")
             if snapped:
                 print(f"[SyncRealPoses] Snapped to assembly pose: {snapped}")
+            return {"received": True, "updated": updated, "snapped": snapped}
         finally:
-            node.destroy_node()
-            rclpy.shutdown()
+            if executor is not None:
+                executor.shutdown()
+            if node is not None:
+                node.destroy_node()
+            rclpy.shutdown(context=context)
 
     def add_aruco_markers(self, objects_path="/World/Objects"):
         """Add ArUco marker meshes to all objects that have matching aruco JSON files."""
@@ -6469,8 +6482,12 @@ class DigitalTwin(omni.ext.IExt):
     def _cmd_sync_real_poses(self) -> Dict[str, Any]:
         """MCP handler for syncing real object poses to sim."""
         try:
-            self.sync_real_poses()
-            return {"status": "success", "message": "Synced real poses to sim"}
+            result = self.sync_real_poses()
+            if not result["received"]:
+                return {"status": "error", "message": "No pose message received on /objects_poses_real within 3 seconds.", **result}
+            if not result["updated"]:
+                return {"status": "error", "message": "Received a pose message, but no matching scene objects were updated.", **result}
+            return {"status": "success", "message": f"Synced {len(result['updated'])} object poses to sim", **result}
         except Exception as e:
             carb.log_error(f"Error in sync_real_poses: {e}")
             traceback.print_exc()

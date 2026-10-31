@@ -199,8 +199,7 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 - Parameters: none.
 - Purpose: subscribe to `/objects_poses_real` and update sim object poses to match real-world detected poses.
 - Side effects: creates a temporary rclpy node, waits up to 3 s for one `TFMessage`; mutates object poses. Requires an external publisher on `/objects_poses_real` (real detection pipeline).
-- If no message arrives, the underlying sync logs a timeout and returns; the wrapper can still report success. Verify
-  the publisher and the resulting poses rather than treating that success response as proof an update arrived.
+- Result: `updated` and `snapped` list object names. Returns an error when no message arrives or no scene objects match; it does not report a successful sync in those cases. Its temporary ROS context does not shut down the simulator's existing ROS context.
 - Real-hardware/ROS constraints: intended for real-world sync; not useful in a pure sim session without that publisher.
 - Example: `{}`
 
