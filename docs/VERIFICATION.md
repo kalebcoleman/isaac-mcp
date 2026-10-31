@@ -72,7 +72,8 @@ In a 6.2 session with the shared-bridge implementation in `382d2cb`, port 18766 
 temporary autoloaded packs, one of them policy-bearing. Both packs reloaded and remained callable when the twin was
 disabled and re-enabled; all 23 twin tools returned. In a separate session, the policy-bearing pack was reloaded,
 `./verify.sh` passed, and `scripts/smoke_tools.py` passed 20/20 checks. The latter still reported the known narrow-strip
-warning for `randomize_single_object`. These checks exercised simulated scene behavior, not real hardware or every ROS,
+warning for `randomize_single_object`; its headless run also produced an MP4 using the twin's real-time viewport
+recording path. These checks exercised simulated scene behavior, not real hardware or every ROS,
 windowed, GPU, OS, or Sim-version combination. No training was run. The generic `sim.*` pack remains a design and was
 not part of these tests.
 
@@ -83,6 +84,56 @@ direct-launch session.
 
 With `./run.sh --headless --port 0`, a separate headless session bound an OS-assigned port and advertised it in the
 runtime portfile. All 23 twin tools were present before and after disabling and re-enabling the twin on that endpoint.
+
+## Generic scene API validation
+
+The proposed generic `sim.*` tools are not implemented. This standalone check exercises selected underlying Kit/USD
+APIs in a **new headless process** with a synthetic scene containing Xforms, cubes, a sphere, a scope and an inactive
+prim. It creates a new stage in that process and closes the app afterwards; it does not connect to or alter an existing
+simulator session or train a policy. It does not explicitly enable the UR5e extension. Starting Isaac Sim uses the
+machine's normal graphics and GPU resources.
+
+From the repository root, use an interpreter with Isaac Sim installed and an accepted EULA:
+
+```bash
+(
+  ISAACSIM_PYTHON="/path/to/isaacsim-env/bin/python"
+  validation_log=$(mktemp "${TMPDIR:-/tmp}/isaac-mcp-generic-scene.XXXXXX") || {
+    printf 'Could not create validation log.\n' >&2
+    exit 1
+  }
+  if OMNI_KIT_ACCEPT_EULA=YES "$ISAACSIM_PYTHON" scripts/validate_generic_scene.py > "$validation_log" 2>&1; then
+    validation_status=0
+  else
+    validation_status=$?
+  fi
+  if [ "$validation_status" -eq 0 ]; then
+    if ! grep '^GENERIC_SCENE_VALIDATION=' "$validation_log"; then
+      printf 'Validation success marker missing.\n' >&2
+      validation_status=1
+    fi
+  else
+    printf 'Validation process failed (exit %s).\n' "$validation_status" >&2
+  fi
+  printf 'Full log: %s\n' "$validation_log"
+  exit "$validation_status"
+)
+```
+
+The command preserves a nonzero simulator exit status and also fails if the marked JSON line is missing; it prints the
+log location in either case. The explicit `exit` stays inside the subshell. The script reports assertion failures with a
+nonzero exit status, while Kit controls startup failures. The JSON lists the checks, observed helper behavior, Isaac Sim
+distribution version, Python version and platform. The check validates selected building blocks
+for `stage.info`, `stage.tree`, `prim.get` and `prim.find`; it does not test those future tools, an MCP bridge, deep-tree
+limits, physics, capture, real hardware, or every stage and installation type. Isaac's deprecated `core.utils` helpers
+are optional observations; the USD checks run directly against the active Kit context.
+
+On 2026-10-30, the check passed on a working branch based on `584aa31`, using Ubuntu 24.04.5, kernel 7.0.0-38,
+Python 3.12.3, Isaac Sim 6.2.0.0, an RTX 5080 and NVIDIA driver 580.178.04. The anonymous stage had a nonempty `anon:`
+URL. The helper rejected the USD `Cube` type filter; it returned no matches for an anchored expression and for an
+invalid expression, while a simple alternation matched. A separate run with an intentionally wrong default-prim
+expectation printed the assertion and exited with status 1. See [the design observations](GENERIC-SIM-TOOLS.md#324-first-live-scene-inspection-observations)
+for the implications and remaining gaps. This is one version and machine, not a portability claim.
 
 ## Other checks
 

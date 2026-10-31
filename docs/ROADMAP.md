@@ -63,7 +63,8 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 
 - [x] Register the twin and other packs on one shared bridge. A temporary pack coexisted with the twin in a live 6.2
   session, including a pack reload and twin disable/enable; see [VERIFICATION.md](VERIFICATION.md).
-- [ ] Verify each proposed API against a live headless Isaac Sim before implementation; the
+- [ ] Verify each proposed API against a live headless Isaac Sim before implementation. Selected stage/prim inspection
+  building blocks passed in a non-robot 6.2 scene; other APIs and versions remain open. The
   [generic tools draft](GENERIC-SIM-TOOLS.md) is a design, not an installed tool pack.
 - [ ] Implement and test general scene inspection, authoring, physics and capture in small stages. Re-run the UR5e
   baseline after changes and test at least one non-UR5e scene.
@@ -85,8 +86,8 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 - [ ] Resolve the upstream `omni-kit-mcp` permission/license question and review third-party assets and notices; see
   [VENDORING.md](VENDORING.md).
 - [ ] Decide the supported release scope, metadata and versions, and recheck package-name availability.
-- [ ] Test PyPI/npm installation paths and follow [PUBLISHING.md](PUBLISHING.md). Publishing, making the repository
-  public and opening a PR require the owner's instruction.
+- [ ] Test PyPI/npm installation paths and follow [PUBLISHING.md](PUBLISHING.md). Publishing and making the repository
+  public require the owner's instruction. Use branches and pull requests for code review.
 
 ## Documents
 
