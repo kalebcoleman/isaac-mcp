@@ -715,8 +715,7 @@ class DigitalTwin(omni.ext.IExt):
         #   400/10 per deg (tau 25 ms): rise 0.100 s, settle 0.289 s, no overshoot
         # Do not raise stiffness alone: it lowers zeta (the asset's ~10230/4 ran at
         # zeta ~0.15, a ~120 Hz resonance sampled at 60 Hz), and contact forces grow
-        # with it. Re-run demo/scripts/control_experiments.py --experiments
-        # step,track,gains after changing these, and re-check the S0-S9 demo.
+        # with it. Re-run the drive-settings and single-joint-motion checks after changes.
         self._ur5e_max_force = 200.0
         self._ur5e_stiffness = 100.0
         self._ur5e_damping = 10.0
@@ -3963,17 +3962,17 @@ class DigitalTwin(omni.ext.IExt):
             print(f"Error: Camera prim not found at {CAMERA_PRIM}. Attach camera to UR5e first.")
             return
 
-        # Load camera config from robot_config.yaml
-        config_path = os.path.expanduser(
-            "~/Desktop/ros2_ws/src/aruco_camera_localizer/config/robot_config.yaml"
-        )
-        if os.path.exists(config_path):
+        # An optional camera config can override the default resolution.
+        config_path = os.environ.get("UR5E_DT_CAMERA_CONFIG")
+        if config_path and os.path.exists(os.path.expanduser(config_path)):
+            config_path = os.path.expanduser(config_path)
             with open(config_path, 'r') as f:
-                cam_cfg = yaml.safe_load(f)
+                cam_cfg = yaml.safe_load(f) or {}
             print(f"Loaded camera config from {config_path}")
         else:
             cam_cfg = {}
-            print(f"Warning: {config_path} not found, using defaults")
+            if config_path:
+                print(f"Warning: {config_path} not found, using defaults")
 
         # Configuration from yaml (with fallbacks)
         IMAGE_WIDTH = cam_cfg.get("camera_width", 1280)

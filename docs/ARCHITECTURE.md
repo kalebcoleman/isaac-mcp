@@ -218,5 +218,4 @@ like a 5.7 kN·m/rad spring.
 
 Both are measured, both stay overdamped. Costs: contact forces scale with stiffness (a bench touch is 2-4x
 harder), and the `max_force = 200 N·m` cap starts to matter for fast moves. Raise stiffness *with* the
-damping tail, never alone. After any change, re-run `demo/scripts/control_experiments.py --experiments
-step,track,gains` (in the `ur5e-digital-twin` workspace) and re-check the S0-S9 demo.
+damping tail, never alone. After changes, re-check the motion and drive baselines in [VERIFICATION.md](VERIFICATION.md).

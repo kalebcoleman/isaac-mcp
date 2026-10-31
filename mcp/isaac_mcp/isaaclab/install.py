@@ -131,9 +131,8 @@ def resolve_task_modules(root: Any, env: Any = None) -> tuple[list[str], list[st
     """Task packages to import before Isaac Lab looks up a task id, and the sys.path entries they need.
 
     ``ISAACLAB_TASK_MODULES`` (comma list) and ``ISAACLAB_TASK_PATH`` (os.pathsep list) are the explicit
-    configuration. The parent of the Isaac Lab root and the root itself are always importable, and a sibling
-    ``ur5e_lab`` package is imported without configuration. Shared by ``envs_list`` and the train/eval/play jobs
-    so both see the same tasks.
+    configuration. The parent of the Isaac Lab root and the root itself are always importable. Shared by
+    ``envs_list`` and the train/eval/play jobs so both see the same tasks.
     """
     e = _env(env)
     modules = [m.strip() for m in str(e.get("ISAACLAB_TASK_MODULES") or "").split(",") if m.strip()]
@@ -141,8 +140,6 @@ def resolve_task_modules(root: Any, env: Any = None) -> tuple[list[str], list[st
     if root:
         base = Path(root).parent
         paths.extend([str(base), str(root)])
-        if not modules and (base / "ur5e_lab").is_dir():
-            modules = ["ur5e_lab"]
     return modules, paths
 
 

@@ -21,11 +21,8 @@ The latter is MIT-licensed; upstream `omni-kit-mcp` publishes no license file. S
 | `npm/` | Optional `npx` launcher (runs the Python server through `uvx`). |
 | `scripts/`, `run.sh`, `verify.sh`, `install.sh` | Launch, check and install helpers (Ubuntu 22.04/24.04, Python 3.12). |
 
-This repo is the source of truth for the **MCP server, the bridge, the tools and the `ur5e-dt`
-extension** — nothing else. The experiments that drive the twin (full-system demo, control
-experiments, MPC, resolved-rate, test plan, evidence log and published media) live in the workspace
-repo, `ur5e-digital-twin`, under `demo/`, and pin this repo as `external/isaac-mcp`. Change this repo
-when you add or change a tool (or its docs); change that one when you run or analyse an experiment.
+This standalone repository contains the **MCP server, bridge, tools and the `ur5e-dt` extension**.
+It can be used independently by projects that need Isaac Sim or Isaac Lab tools.
 
 ## Quick start
 
@@ -37,6 +34,9 @@ scripts/check_machine.sh          # OS, GPU/driver, disk, network, display, port
 ```
 
 Host server only (no Isaac Sim): `./install.sh --no-sim`, or `uv tool install "./mcp"`.
+
+The launcher, verifier and 6.2 probe use the repository's `.venv` or the interpreter set by
+`UR5E_DT_PYTHON`. They no longer search an implicit project-specific environment.
 
 ### install.sh options
 

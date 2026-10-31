@@ -40,12 +40,12 @@ def test_resolve_explicit_modules_and_paths(tmp_path):
     assert str(tmp_path / "lab") in paths and str(tmp_path / "lab" / "IsaacLab") in paths
 
 
-def test_resolve_picks_up_sibling_ur5e_lab_without_config(tmp_path):
+def test_resolve_requires_explicit_sibling_task_module(tmp_path):
     (tmp_path / "lab" / "ur5e_lab").mkdir(parents=True)
     modules, _ = install.resolve_task_modules(tmp_path / "lab" / "IsaacLab", {})
+    assert modules == []
+    modules, _ = install.resolve_task_modules(tmp_path / "lab" / "IsaacLab", {"ISAACLAB_TASK_MODULES": "ur5e_lab"})
     assert modules == ["ur5e_lab"]
-    modules, _ = install.resolve_task_modules(tmp_path / "lab" / "IsaacLab", {"ISAACLAB_TASK_MODULES": "mine"})
-    assert modules == ["mine"]
 
 
 def test_resolve_nothing_configured(tmp_path):

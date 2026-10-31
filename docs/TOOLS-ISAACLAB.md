@@ -52,9 +52,9 @@ changed, then call `isaaclab__install_info` and `isaaclab__envs_list` to check d
 
 `isaaclab__envs_list` imports `isaaclab_tasks`, plus the comma-separated modules in
 `ISAACLAB_TASK_MODULES` (with `ISAACLAB_TASK_PATH` added to `PYTHONPATH`), then reads
-`gymnasium.registry`. Import failures are returned in `import_errors`. When no modules are
-configured, a sibling `ur5e_lab` package is imported automatically if present. Jobs use
-the same resolver (`ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` are forwarded to the child).
+`gymnasium.registry`. Import failures are returned in `import_errors`. Custom task modules must
+be explicitly configured; sibling packages are no longer imported automatically. Jobs use the
+same resolver (`ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` are forwarded to the child).
 
 ### TensorBoard readout
 

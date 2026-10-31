@@ -1,11 +1,8 @@
 #!/bin/bash
-# Phase 0 / 2 / 3 probe: boot Isaac Sim headless, list the twin's MCP tools, build the
-# workstation scene, and run the check suite.
+# Boot Isaac Sim headless, list the twin's MCP tools, build the workstation scene,
+# and run the check suite.
 #
-# Run before the Phase 1 move (against external/*/exts), and again after it (against exts/).
-# Identical output apart from paths is the pass condition for Phase 2.
-#
-#   scripts/probe_62.sh                 # auto-detect the ext folder layout
+#   scripts/probe_62.sh                 # use the repository extensions
 #   scripts/probe_62.sh --no-checks     # boot + tool list + quick start only
 #   UR5E_DT_PYTHON=... scripts/probe_62.sh
 #
@@ -14,7 +11,7 @@ set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PORT="${UR5E_DT_PORT:-8799}"
-OUT="${PROBE_OUT:-/tmp/opencode}"
+OUT="${PROBE_OUT:-${TMPDIR:-/tmp}/isaac-mcp-probe}"
 LOG="$OUT/probe_62_app.log"
 RUN_CHECKS=1
 [ "${1:-}" = "--no-checks" ] && RUN_CHECKS=0
@@ -24,15 +21,12 @@ mkdir -p "$OUT"
 export OMNI_KIT_ACCEPT_EULA=YES
 
 # ---- interpreter -------------------------------------------------------------------
-# Must be Isaac Sim 6.x. 5.1 is unusable on this workstation: it crashes in
-# librtx.scenedb.plugin.so on driver 595 even headless (verified 2026-10-29).
+# This probe requires Isaac Sim 6.x.
 pick_py() {
-  for cand in "$ROOT/.venv/bin/python" "$ROOT/learning6/.venv/bin/python"; do
-    [ -x "$cand" ] || continue
-    v="$("$cand" -c 'import importlib.metadata as m;print(m.version("isaacsim"))' 2>/dev/null)" || continue
-    case "$v" in 6.*) printf '%s\n' "$cand"; return 0 ;; esac
-  done
-  return 1
+  cand="$ROOT/.venv/bin/python"
+  [ -x "$cand" ] || return 1
+  v="$("$cand" -c 'import importlib.metadata as m;print(m.version("isaacsim"))' 2>/dev/null)" || return 1
+  case "$v" in 6.*) printf '%s\n' "$cand"; return 0 ;; *) return 1 ;; esac
 }
 
 if [ -n "${UR5E_DT_PYTHON:-}" ]; then
@@ -40,7 +34,7 @@ if [ -n "${UR5E_DT_PYTHON:-}" ]; then
 else
   PY="$(pick_py)" || {
     echo "FAIL: no interpreter with Isaac Sim 6.x found." >&2
-    echo "      Tried $ROOT/.venv and $ROOT/learning6/.venv." >&2
+    echo "      Tried $ROOT/.venv." >&2
     echo "      Run: uv sync --python 3.12   (or set UR5E_DT_PYTHON)" >&2
     exit 1
   }
@@ -58,19 +52,11 @@ case "$ISAAC_VER" in
 esac
 
 # ---- ext folder layout -------------------------------------------------------------
-if [ -d "$ROOT/exts/ur5e-dt" ]; then
-  EXT_ARGS=(--ext-folder "$ROOT/exts")
-  SHARED_BRIDGE=1
-  echo "layout: consolidated ($ROOT/exts)"
-elif [ -d "$ROOT/external/isaac-sim-mcp/exts/ur5e-dt" ]; then
-  EXT_ARGS=(--ext-folder "$ROOT/external/omni-kit-mcp/exts"
-            --ext-folder "$ROOT/external/isaac-sim-mcp/exts")
-  SHARED_BRIDGE=0
-  echo "layout: pre-move (external/)"
-else
-  echo "FAIL: cannot find ur5e-dt under exts/ or external/." >&2
+if [ ! -d "$ROOT/exts/ur5e-dt" ]; then
+  echo "FAIL: cannot find ur5e-dt under exts/." >&2
   exit 1
 fi
+EXT_ARGS=(--ext-folder "$ROOT/exts")
 
 # ---- ROS / Kit env -----------------------------------------------------------------
 SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))')"
@@ -80,13 +66,8 @@ fi
 export ROS_DISTRO
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
-if [ "$SHARED_BRIDGE" = 1 ]; then
-  export ISAAC_MCP_PORT="$PORT"  # shared endpoint, opened after the twin registers
-  export ISAAC_MCP_DEFER_START=1
-else
-  export ISAAC_MCP_PORT=0        # older layout: twin owns a separate bridge
-  unset ISAAC_MCP_DEFER_START
-fi
+export ISAAC_MCP_PORT="$PORT"  # shared endpoint, opened after the twin registers
+export ISAAC_MCP_DEFER_START=1
 export UR5E_DT_PORT="$PORT"
 export UR5E_DT_HEADLESS=1
 export PYTHONDONTWRITEBYTECODE=1
@@ -135,12 +116,11 @@ echo "   bridge up"
 
 # ---- MCP plumbing ------------------------------------------------------------------
 MCP_DIR="$ROOT/mcp"
-[ -d "$MCP_DIR" ] || MCP_DIR="$ROOT/external/omni-kit-mcp"
 client() { ( cd "$MCP_DIR" && PYTHONPATH="$PWD" timeout 120 "$PY" -m isaac_mcp.client "$@" ); }
 
 echo "== tools"
 client list_tools 2>/dev/null > "$OUT/probe_62_tools.json"
-"$PY" - "$OUT/probe_62_tools.json" <<'PY'
+"$PY" - "$OUT/probe_62_tools.json" "$OUT/probe_62_toolnames.txt" <<'PY'
 import json, sys
 raw = open(sys.argv[1]).read()
 try:
@@ -154,7 +134,7 @@ print(f"   total={len(names)}  ur5e_dt.*={len(twin)}  generic={len(names)-len(tw
 print("   (the host server exposes these to MCP clients as ur5e_dt__<name>)")
 for n in names:
     print(f"     {n}")
-open("/tmp/opencode/probe_62_toolnames.txt", "w").write("\n".join(names) + "\n")
+open(sys.argv[2], "w").write("\n".join(names) + "\n")
 PY
 
 # ---- scene -------------------------------------------------------------------------
