@@ -70,6 +70,49 @@ When connected to an active Isaac Sim session running `exts/ur5e-dt`, the server
 
 Captures are written to `~/Pictures/screen-mcp/` and `~/Videos/screen-mcp/`. Screen recordings do not contain audio.
 
+### Agent workflow
+
+Use the available tools to inspect and operate the user's authorized simulator
+before asking the user to repeat terminal or UI steps. `list_windows` identifies
+the window and PID; `screenshot(window_id=...)` captures that window even when
+covered. Check the capture directory before writing if workspace rules restrict
+where files may be created. Screen tools are host-side and can work even when
+the simulator bridge is disconnected. They provide capture and window raising,
+not a general click or keyboard API.
+
+The host MCP server and the bridge inside Kit are separate processes. A working
+`list_windows` or Isaac Lab tool does not mean that the bridge is connected. If
+`refresh_tools` returns `Connection refused`, check for the intended Kit
+process, its enabled bridge extension and listening port. The server cannot
+control a simulator that did not start a bridge. Once a bridge is available,
+call `refresh_tools`, then use `status` to verify its PID and port before
+calling `run_python` or any scene-changing tool. When several instances run,
+select the intended port with `use_bridge`; never assume the visible window is
+the bridge target. A 6.2 host environment does not prove that a 5.1 process has
+loaded a compatible bridge. The generic `isaac.mcp.bridge` was also tested in
+an Isaac Sim 5.1 process on 2026-10-30: after enabling it and setting
+`ISAAC_MCP_PORT`, `status` reported the expected 5.1 process and PID.
+
+If a client does not expose newly discovered tools after `refresh_tools`, use
+the installed host client's standard-library CLI against the verified port:
+
+```bash
+python -m isaac_mcp.client status --port 8766
+python -m isaac_mcp.client run_python '{"code":"result = 1"}' --port 8766
+```
+
+Use the interpreter that has `isaac_mcp` installed. For a user-started Kit
+process without the bridge, do not assume the host server can attach it; load
+the extension in an authorized session or start a separate process when the
+user and project rules permit it.
+
+Prefer the connected simulator's own tools for playback, inspection and logs.
+Use a terminal or other explicitly available local controls when appropriate,
+and report actual tool limitations instead of repeatedly asking the user to
+perform actions the agent can perform. Respect project-specific rules about
+launching or restarting processes, output locations and preserving live scenes.
+Do not launch a real robot driver for a simulation-only task.
+
 ---
 
 ## 3. Multi-Session Configuration (Ports)

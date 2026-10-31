@@ -52,6 +52,8 @@ Host server only (no Isaac Sim): `./install.sh --no-sim`, or `uv tool install ".
 
 The `isaaclab__*` tools locate their Isaac Lab install via `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`; without them they
 only search the default paths (see [`docs/ISAACLAB-TOOLS.md`](docs/ISAACLAB-TOOLS.md)).
+For simulator connection, window inspection, and agent workflow, see
+[`docs/MCP-SERVER.md`](docs/MCP-SERVER.md#agent-workflow).
 
 ### Notes
 
