@@ -197,6 +197,65 @@ Add the server to `~/.config/opencode/opencode.jsonc`:
 }
 ```
 
+### Limiting what a client can reach
+
+Bridge tools such as `run_python` and the `ur5e_dt__*` scene operations reach the client as soon as a Kit bridge
+exists, whatever the host's local tools are set to. Decide per client how much of the server it should see, and be
+clear about which of the settings below limit what.
+
+Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOLS-HOST.md)):
+
+- `ISAAC_MCP_LOCAL_TOOLS` selects groups of the **host's own 21 tools** (screen, Isaac Lab, gateway). `readonly`
+  keeps only local tools annotated as read-only; `none` keeps none. The default is `all`. The Python probes and job
+  inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for groups and
+  migration. Importing the jobs module can still create a directory and reconcile orphaned jobs at server startup,
+  regardless of the groups. The setting does **not** affect tools discovered from a Kit bridge, which are not
+  annotated, so `readonly` is a read-only *local tool selection*, not a read-only server: a client that can still see
+  bridge tools can change the scene.
+- `ISAAC_MCP_NAMESPACE` limits the bridge tools to the named namespaces, and `ISAAC_MCP_BUILTINS=0` hides the bare
+  bridge built-ins such as `run_python`. An empty `ISAAC_MCP_NAMESPACE` means no filter, not "no namespaces".
+- The three variables are independent and compose. With `ISAAC_MCP_LOCAL_TOOLS=readonly` alone, every bridge tool is
+  still registered; with `ISAAC_MCP_BUILTINS=0` added, the namespaced ones (for example `ur5e_dt__*`) still are.
+
+**Hiding bridge tools.** There is no dedicated switch. To hide both built-ins and namespaced tools when the bridge
+advertises both, use `ISAAC_MCP_BUILTINS=0` together with an `ISAAC_MCP_NAMESPACE` naming a namespace the bridge does
+not advertise (the test suite covers this). If the bridge advertises no namespaced tools, disabling built-ins alone
+also hides all its tools. This hides tools from the client's list; it is not a safety boundary. It relies on the
+chosen name staying unused, `use_bridge` and `refresh_tools` (if the `gateway` group is on) re-run discovery under the
+same filter, and anything that reaches the bridge socket directly (the `isaac_mcp.client` CLI, another process) is not
+affected by a host's filters at all.
+
+**A profile that cannot change the scene** needs local tools that could change the scene restricted, and bridge calls
+independently restricted by enforcement that does not depend on the client or on which tools the host lists. The bridge
+policy mechanisms below require code, not just configuration:
+
+- `isaac_mcp/gate.py` is a deny-gate *mechanism*: it can read and validate a policy file (`load_hooks`) and decide a
+  call (`evaluate`). Nothing in the host or the bridge loads a policy file or calls it; there is no environment
+  variable or setting that turns it on, and this repository ships no policy.
+- On the host, `isaac_mcp.server.register_pre_dispatch_hook(fn)` runs `fn(name, params)` before each dynamically
+  registered bridge tool call through that host and can refuse it. It must be registered by Python in the host process;
+  the stock `isaac-mcp` command has no plugin loader, so that means your own launcher that imports
+  `isaac_mcp.server`, registers the hook (it may call `gate.evaluate`) and then calls `main()`. It covers only the
+  bridge tools called through that process: not the local tools, discovery and status calls made by the host itself,
+  or callers that dial the bridge directly.
+- On the bridge, a tool pack running in Kit can install policy with `registrar.refuse_calls_with(fn)` (see
+  [tool authoring](../mcp/docs/tool-authoring.md)). While installed, it applies at bridge dispatch across namespaces
+  and callers; it is removed when its owner drains. A rule that must hold regardless of the client needs a policy that
+  remains installed and covers every relevant call, including calls that could remove or bypass it. It, too, is code
+  in a Kit extension.
+
+Client side (these are client settings, not part of this server; check your client's documentation):
+
+- Register the server per project rather than globally if only some projects need it. In Claude Code that is the
+  project or local scope instead of `--scope user`.
+- In Claude Code, `--tools` restricts the built-in tools only. To start a process that must not see MCP tools at all,
+  pair it with `--strict-mcp-config --mcp-config <file>`, where the file lists only the servers that process may use
+  (an empty `{"mcpServers":{}}` for none).
+- Give subagents an explicit tool allowlist. A subagent without one can inherit the parent's MCP tools.
+- Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`), which clients can use for approval
+  prompts. Bridge tools do not. Annotations are hints, not an access control; the filters above decide what is
+  registered at all, and none of them replaces a policy enforced at the bridge.
+
 ---
 
 ## 5. Verification

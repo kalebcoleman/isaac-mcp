@@ -8,8 +8,9 @@ Design: docs/ISAACLAB-TOOLS.md.
 from __future__ import annotations
 
 import json
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
+from ..local_tools import ADDITIVE, DESTRUCTIVE, IDEMPOTENT_WRITE, PYTHON_PROBE, READ_ONLY, ScopedTools
 from . import install as _install
 from . import jobs as _jobs
 from . import metrics as _metrics
@@ -53,18 +54,25 @@ def _launch(fn: Callable[..., Any], **kwargs: Any) -> str:
     return _guard(run)
 
 
-def register_isaaclab_tools(mcp: Any) -> None:
-    @mcp.tool(name="isaaclab__install_info")
+def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) -> None:
+    """Register the Isaac Lab tools whose group is in ``groups`` (default: all of them)."""
+    mcp = ScopedTools(server, groups)
+
+    @mcp.tool(name="isaaclab__install_info", annotations=PYTHON_PROBE)
     def isaaclab_install_info() -> str:
-        """Report the Isaac Lab install the tools will use: interpreter, versions, root, venv."""
+        """Report the Isaac Lab install: interpreter, versions, root, venv.
+
+        Runs the configured Python interpreter, whose startup code may have side effects."""
         return _dump(_install.install_info())
 
-    @mcp.tool(name="isaaclab__envs_list")
+    @mcp.tool(name="isaaclab__envs_list", annotations=PYTHON_PROBE)
     def isaaclab_envs_list(filter: str | None = None) -> str:
-        """List registered Isaac Lab task ids (optionally filtered by substring)."""
+        """List registered Isaac Lab task ids (optionally filtered by substring).
+
+        Runs Python and imports task modules, which may have side effects."""
         return _dump(_install.envs_list(filter=filter))
 
-    @mcp.tool(name="isaaclab__train")
+    @mcp.tool(name="isaaclab__train", annotations=ADDITIVE)
     def isaaclab_train(
         task: str,
         num_envs: int = 64,
@@ -91,7 +99,7 @@ def register_isaaclab_tools(mcp: Any) -> None:
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
-    @mcp.tool(name="isaaclab__eval")
+    @mcp.tool(name="isaaclab__eval", annotations=ADDITIVE)
     def isaaclab_eval(
         task: str,
         checkpoint: str,
@@ -115,7 +123,7 @@ def register_isaaclab_tools(mcp: Any) -> None:
             allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
-    @mcp.tool(name="isaaclab__play")
+    @mcp.tool(name="isaaclab__play", annotations=ADDITIVE)
     def isaaclab_play(
         task: str,
         checkpoint: str,
@@ -139,16 +147,19 @@ def register_isaaclab_tools(mcp: Any) -> None:
             allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
-    @mcp.tool(name="isaaclab__runs_list")
+    @mcp.tool(name="isaaclab__runs_list", annotations=DESTRUCTIVE)
     def isaaclab_runs_list(state: str | None = None) -> str:
-        """List jobs; state is 'running', 'finished' or omitted for all."""
+        """List jobs; state is 'running', 'finished' or omitted for all.
+
+        Reconciles orphaned jobs by updating their stored metadata."""
         return _guard(lambda: _jobs.runs_list(state=state))
 
-    @mcp.tool(name="isaaclab__runs_status")
+    @mcp.tool(name="isaaclab__runs_status", annotations=DESTRUCTIVE)
     def isaaclab_runs_status(job_id: str) -> str:
         """State, exit code, elapsed time, last log lines and newest checkpoint of a job. For a windowed
         job also `window` (id, title, size): pass its id to screenshot(window_id=...) or
-        start_screen_recording(window_id=...) to see the result."""
+        start_screen_recording(window_id=...) to see the result. Reconciles orphaned jobs by
+        updating their stored metadata."""
         def status() -> dict:
             st = _jobs.runs_status(job_id)
             if st.get("pid_alive"):
@@ -161,27 +172,27 @@ def register_isaaclab_tools(mcp: Any) -> None:
 
         return _guard(status)
 
-    @mcp.tool(name="isaaclab__runs_tail")
+    @mcp.tool(name="isaaclab__runs_tail", annotations=IDEMPOTENT_WRITE)
     def isaaclab_runs_tail(job_id: str, stream: str = "stdout", lines: int = 100) -> str:
-        """Last lines of a job's stdout or stderr log."""
+        """Last lines of a job's stdout or stderr log. Creates the jobs directory if missing."""
         return _guard(lambda: _jobs.runs_tail(job_id, stream=stream, lines=lines))
 
-    @mcp.tool(name="isaaclab__runs_cancel")
+    @mcp.tool(name="isaaclab__runs_cancel", annotations=DESTRUCTIVE)
     def isaaclab_runs_cancel(job_id: str, grace_s: int = 10) -> str:
         """Stop a job: SIGTERM to its process group, SIGKILL after grace_s seconds."""
         return _guard(lambda: _jobs.runs_cancel(job_id, grace_s=grace_s))
 
-    @mcp.tool(name="isaaclab__checkpoints_list")
+    @mcp.tool(name="isaaclab__checkpoints_list", annotations=READ_ONLY)
     def isaaclab_checkpoints_list(run_dir: str | None = None, task: str | None = None) -> str:
         """List policy checkpoints (*.pt / *.pth), newest first, under a run dir or the configured logs."""
         return _guard(lambda: _metrics.checkpoints_list(run_dir=run_dir, task=task))
 
-    @mcp.tool(name="isaaclab__metrics_summary")
+    @mcp.tool(name="isaaclab__metrics_summary", annotations=READ_ONLY)
     def isaaclab_metrics_summary(run_dir: str, tags: list[str] | None = None) -> str:
         """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag)."""
         return _guard(lambda: _metrics.metrics_summary(run_dir, tags=tags))
 
-    @mcp.tool(name="isaaclab__tensorboard_tail")
+    @mcp.tool(name="isaaclab__tensorboard_tail", annotations=READ_ONLY)
     def isaaclab_tensorboard_tail(run_dir: str, tag: str, last_n: int = 50) -> str:
         """Last points of one TensorBoard scalar (training curve)."""
         return _guard(lambda: _metrics.tensorboard_tail(run_dir, tag, last_n=last_n))
