@@ -6,7 +6,7 @@
 const { spawn, spawnSync } = require("node:child_process");
 
 const DEFAULT_FROM =
-  "git+https://github.com/kalebcoleman/ur5e-digital-twin.git#subdirectory=mcp";
+  "git+https://github.com/kalebcoleman/isaac-mcp.git#subdirectory=mcp";
 const source = process.env.TWIN_MCP_FROM || DEFAULT_FROM;
 
 const probe = spawnSync("uvx", ["--version"], { stdio: "ignore" });

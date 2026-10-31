@@ -1,5 +1,7 @@
 # isaac-mcp (npm launcher)
 
+This launcher is not published yet. After publication:
+
 ```bash
 npx -y isaac-mcp --version
 ```
@@ -7,10 +9,10 @@ npx -y isaac-mcp --version
 MCP client config:
 
 ```json
-{ "mcpServers": { "ur5e": { "command": "npx", "args": ["-y", "isaac-mcp"],
+{ "mcpServers": { "isaac": { "command": "npx", "args": ["-y", "isaac-mcp"],
   "env": { "DISPLAY": ":1", "UR5E_DT_PORT": "8766" } } } }
 ```
 
 This package only launches the Python server through [uv](https://docs.astral.sh/uv/) (`uvx`). The server
-source is `mcp/` in <https://github.com/kalebcoleman/ur5e-digital-twin>. Set `TWIN_MCP_FROM=isaac-mcp` to use
-the PyPI release instead of the GitHub source.
+source is `mcp/` in the private repository <https://github.com/kalebcoleman/isaac-mcp>, so access requires
+GitHub authentication. Set `TWIN_MCP_FROM=isaac-mcp` to use the PyPI release once it is published.
