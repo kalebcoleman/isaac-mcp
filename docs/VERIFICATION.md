@@ -63,6 +63,13 @@ If a check fails, inspect the named result and the simulator log before changing
 
 ## Last live check
 
+On 2026-10-31, a windowed Isaac Sim 6.2.0.0 session on Ubuntu 24.04.5 / RTX 5080 with driver 580.178.04 used the
+MCP twin driver tool to start the system ROS 2 Jazzy UR driver in mock-hardware mode in isolated domain 197. Both
+the joint-state broadcaster and scaled trajectory controller were active; a ROS `FollowJointTrajectory` request
+succeeded and changed the mock elbow joint state from 0.0 to 0.05 rad. The MCP tool stopped the driver and status
+returned `driver NOT running` and `controller_manager not reachable`. No physical robot was used. This verifies a
+mock ROS controller and joint states, not end-to-end tracking of a physical robot.
+
 On 2026-10-30, the verifier passed on Ubuntu 24.04 / RTX 5080, NVIDIA driver 580.178.04, and Isaac Sim 6.2.0.0 in a
 disposable headless session. Changing `wrist_1_joint` damping from 10 to 4 caused the validator to fail with the joint
 and field named; the value was restored. The simulator also logged the previously observed nested `app.update()`

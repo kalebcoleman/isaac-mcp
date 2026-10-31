@@ -65,7 +65,22 @@ fi
 # Bracket-trick ([r]os2) so the match never hits the calling shell.
 _driver_running() { pgrep -f "[r]os2 launch ur_robot_driver" >/dev/null 2>&1; }
 
-_controllers() { ros2 control list_controllers 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'; }
+# A stale or replaced PID file must never be used to signal an unrelated process.
+_managed_driver_running() {
+  local pid="$1" cmdline
+  [[ "$pid" =~ ^[0-9]+$ ]] && [ -r "/proc/$pid/cmdline" ] || return 1
+  cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")" || return 1
+  [[ "$cmdline" == *"/ros2 launch ur_robot_driver "* ]] || return 1
+  [[ "$cmdline" == *" use_mock_hardware:=true "* || "$cmdline" == *" use_fake_hardware:=true "* ]]
+}
+
+# ros2 control waits indefinitely for a missing controller manager. Bound every
+# query so status works after shutdown and a failed startup can reach its timeout.
+_controllers() { timeout -k 2s 5s ros2 control list_controllers 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'; }
+_controller_in_state() {
+  local name="$1" state="$2" controllers="$3"
+  grep -Eq "^${name}([[:space:]].*)?[[:space:]]${state}[[:space:]]*$" <<<"$controllers"
+}
 
 case "$ACTION" in
   up)
@@ -78,43 +93,58 @@ case "$ACTION" in
       exit 1
     fi
     if _driver_running; then
-      echo "[ur-fake] already running (pid $(cat "$PIDFILE" 2>/dev/null)); run '$0 down' first" >&2
+      PID="$(cat "$PIDFILE" 2>/dev/null || true)"
+      if _managed_driver_running "$PID"; then
+        echo "[ur-fake] already running (pid $PID); run '$0 down' first" >&2
+      else
+        echo "[ur-fake] another UR driver is already running; stop it before starting fake hardware" >&2
+      fi
       exit 2
     fi
     echo "[ur-fake] launching $UR_TYPE fake hardware -> domain $ROS_DOMAIN_ID (Cyclone, localhost_only=$ROS_LOCALHOST_ONLY)"
-    nohup ros2 launch ur_robot_driver ur_control.launch.py \
+    # A dedicated process group lets down clean up this driver's children without
+    # touching another UR driver that happens to be running on the machine.
+    nohup setsid ros2 launch ur_robot_driver ur_control.launch.py \
         ur_type:="$UR_TYPE" "$MOCK_ARG:=true" robot_ip:=0.0.0.0 launch_rviz:=false \
         > "$LOG" 2>&1 &
     echo "$!" > "$PIDFILE"
     echo "[ur-fake] pid $(cat "$PIDFILE")  log $LOG"
 
-    # Ready = joint_state_broadcaster active (that's the node that publishes /joint_states).
-    # Event-based: poll the controller list (a real state signal), not a blind sleep.
-    echo "[ur-fake] waiting for joint_state_broadcaster ..."
+    # Both controllers must be active before claiming that motion is ready.
+    echo "[ur-fake] waiting for joint states and the trajectory controller ..."
+    switch_attempted=0
     for i in $(seq 1 30); do
       sleep 2
-      if _controllers | grep -q "joint_state_broadcaster.*active"; then
-        echo "[ur-fake] READY: joint_state_broadcaster active (after ${i}x2s)"
-        # Ensure the trajectory controller is active so FollowJointTrajectory works.
-        if _controllers | grep -q "scaled_joint_trajectory_controller.*inactive"; then
-          echo "[ur-fake] activating scaled_joint_trajectory_controller ..."
-          ros2 control switch_controllers --activate scaled_joint_trajectory_controller 2>/dev/null | tail -1 || true
+      if controllers="$(_controllers)"; then
+        if _controller_in_state joint_state_broadcaster active "$controllers" && \
+           _controller_in_state scaled_joint_trajectory_controller active "$controllers"; then
+          echo "[ur-fake] READY: joint state broadcaster and trajectory controller active (after $i checks)"
+          printf '%s\n' "$controllers" | sed 's/^/  ctrl: /'
+          exit 0
         fi
-        _controllers | sed 's/^/  ctrl: /'
-        exit 0
+        if [ "$switch_attempted" = 0 ] && \
+           _controller_in_state joint_state_broadcaster active "$controllers" && \
+           _controller_in_state scaled_joint_trajectory_controller inactive "$controllers"; then
+          switch_attempted=1
+          echo "[ur-fake] activating scaled_joint_trajectory_controller ..."
+          timeout -k 2s 10s ros2 control switch_controllers --activate scaled_joint_trajectory_controller 2>/dev/null | tail -1 || true
+        fi
       fi
       if [ -f "$PIDFILE" ] && ! kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
         echo "ERROR: ur_robot_driver exited; see $LOG" >&2; tail -20 "$LOG" | sed 's/^/  log: /'; exit 4
       fi
     done
-    echo "ERROR: joint_state_broadcaster not active within timeout; see $LOG" >&2
+    echo "ERROR: joint state broadcaster and trajectory controller not both active within timeout; see $LOG" >&2
     tail -20 "$LOG" 2>/dev/null | sed 's/^/  log: /'
     exit 4
     ;;
 
   status)
-    if _driver_running; then
-      echo "[ur-fake] driver RUNNING (pid $(cat "$PIDFILE" 2>/dev/null))"
+    PID="$(cat "$PIDFILE" 2>/dev/null || true)"
+    if _managed_driver_running "$PID"; then
+      echo "[ur-fake] driver RUNNING (pid $PID)"
+    elif _driver_running; then
+      echo "[ur-fake] another UR driver is running; it is not managed by this launcher"
     else
       echo "[ur-fake] driver NOT running"
     fi
@@ -126,20 +156,24 @@ case "$ACTION" in
 
   down)
     echo "[ur-fake] tearing down ..."
-    # SIGINT the launch process group first (ScaledJointTrajectoryController can hang in
-    # its destructor on a bare TERM), then escalate. Headless node, no X11 -> KILL is safe.
     if [ -f "$PIDFILE" ]; then
-      PID="$(cat "$PIDFILE")"
-      kill -INT "$PID" 2>/dev/null || true
-      for _ in $(seq 1 10); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done
-      kill -0 "$PID" 2>/dev/null && kill -TERM "$PID" 2>/dev/null || true
-      for _ in $(seq 1 5); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done
-      kill -0 "$PID" 2>/dev/null && kill -KILL "$PID" 2>/dev/null || true
+      PID="$(cat "$PIDFILE" 2>/dev/null || true)"
+      if _managed_driver_running "$PID"; then
+        # New launches have their own group. Older launches may share a group
+        # with the simulator, so signal only their verified launch PID.
+        PGID="$(ps -o pgid= -p "$PID" | tr -d '[:space:]')"
+        TARGET="$PID"
+        [ "$PGID" = "$PID" ] && TARGET="-$PID"
+        kill -INT -- "$TARGET" 2>/dev/null || true
+        for _ in $(seq 1 10); do kill -0 -- "$TARGET" 2>/dev/null || break; sleep 1; done
+        kill -0 -- "$TARGET" 2>/dev/null && kill -TERM -- "$TARGET" 2>/dev/null || true
+        for _ in $(seq 1 5); do kill -0 -- "$TARGET" 2>/dev/null || break; sleep 1; done
+        kill -0 -- "$TARGET" 2>/dev/null && kill -KILL -- "$TARGET" 2>/dev/null || true
+      else
+        echo "[ur-fake] no matching managed driver for pid '$PID'; leaving other processes alone"
+      fi
       rm -f "$PIDFILE"
     fi
-    # Reap any stragglers (ur_ros2_control_node, the launch, spawners).
-    pkill -INT -f "[r]os2 launch ur_robot_driver" 2>/dev/null || true
-    pkill -f "[u]r_ros2_control_node" 2>/dev/null || true
     echo "[ur-fake] down."
     ;;
 

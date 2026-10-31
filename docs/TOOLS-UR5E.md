@@ -19,6 +19,18 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 `ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
 [MCP-SERVER.md](MCP-SERVER.md).
 
+## Simulator window
+
+The standard `./run.sh` launch enables the `ur5e-dt` Kit extension, whose startup creates the **UR5e Digital Twin**
+window and registers the twin's bridge tools. The window therefore appears when that extension starts in a graphical
+session; invoking a twin MCP tool does not open it. `./run.sh --headless` runs without a visible simulator window,
+and starting the host MCP server alone does not start Isaac Sim. The twin window is separate from the optional
+`isaac.mcp.panel` registry inspector.
+
+Several panel actions, including Quick Start, loading the workstation or room, playing/stopping the scene and
+recording, have MCP tools in the reference below. Host screen tools can inspect and capture simulator windows, but
+they do not provide mouse or keyboard control, and not every panel control has an MCP equivalent.
+
 ## Parameter conventions
 
 - Parameter shapes come from `MCP_TOOL_REGISTRY` in `extension.py`; required/default
@@ -192,6 +204,8 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 - Side effects: spawns a host subprocess (`scripts/launch_ur_fake.sh` or `scripts/sim_bringup.sh`) with a sanitized environment; no USD changes. Subprocess cap 240 s for `up`, 60 s otherwise. Both backends end at `/joint_states` live and `scaled_joint_trajectory_controller` accepting `FollowJointTrajectory` on the configured ROS domain (default 0, Cyclone, localhost-only).
 - Real-hardware/ROS constraints: `backend="fake"` is simulation-only; `mode="real"` is not yet enabled in this codebase. Do not launch a real robot driver for a simulation-only task.
 - The fake backend discovers the standard ROS setup for Ubuntu 22.04/Humble or Ubuntu 24.04/Jazzy. On Jazzy, install `ros-jazzy-ur-robot-driver`, `ros-jazzy-ros2controlcli`, and `ros-jazzy-rmw-cyclonedds-cpp` through the system package manager. The launcher checks the driver's advertised mock-hardware argument and refuses to start if it cannot verify it; use `ROS_SETUP` for a nonstandard sourced ROS installation.
+- Fake-driver startup waits until both the joint-state broadcaster and scaled trajectory controller are active; controller queries are bounded when the manager is unavailable.
+- Fake-driver shutdown targets the verified mock process recorded by this launcher and its dedicated process group; it does not globally stop other UR drivers. If its PID file is missing or stale, inspect the host's processes instead of assuming an unrelated driver was stopped.
 - Example: `{"action": "status"}` / `{"mode": "sim", "action": "up", "backend": "fake"}`
 
 ### `ur5e_dt__sync_real_poses`

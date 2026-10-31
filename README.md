@@ -34,6 +34,8 @@ scripts/check_machine.sh          # OS, GPU/driver, disk, network, display, port
 ```
 
 Host server only (no Isaac Sim): `./install.sh --no-sim`, or `uv tool install "./mcp"`.
+For Linux prerequisites, Python imports, Isaac Lab, and optional ROS driver installation, see
+[`docs/LINUX-SETUP.md`](docs/LINUX-SETUP.md).
 
 The launcher, verifier and 6.2 probe use the repository's `.venv` or the interpreter set by
 `UR5E_DT_PYTHON`. They no longer search an implicit project-specific environment.
@@ -75,6 +77,7 @@ support is a goal, not yet a blanket compatibility claim.
 ## Documentation
 
 - [Agent guide](AGENTS.md) — which tools exist in which tier, and how to reach all of them.
+- [Linux setup](docs/LINUX-SETUP.md) — OS, driver, Python, Isaac Lab and optional ROS requirements.
 - [UR5e tools](docs/TOOLS-UR5E.md) — all twin tools, arguments and example calls.
 - [Host and bridge tools](docs/TOOLS-HOST.md) — connection management, desktop capture and bridge built-ins.
 - [Isaac Lab tools](docs/TOOLS-ISAACLAB.md) — task discovery, job management, checkpoints and metrics.
