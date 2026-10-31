@@ -7,7 +7,7 @@ been tested.
 ## Goal
 
 Give an agent one `isaac-mcp` server to inspect and operate an authorized Isaac Sim scene, use Isaac Lab, and see the
-result, while keeping research repeatable. The UR5e cell is the first supported robot; general scene tools and other
+result, while keeping workflows repeatable. The UR5e cell is the first supported robot; general scene tools and other
 robots are intended additions. Preserve the current UR5e tools and their behavior when generalizing the bridge.
 
 ## What exists
@@ -19,8 +19,6 @@ robots are intended additions. Preserve the current UR5e tools and their behavio
 - [x] Isaac Lab host pack: 12 tools for installation and task discovery, jobs, checkpoints and TensorBoard data.
 - [x] Job guards for another Lab job and a reachable Kit bridge; explicit override flags are available.
 - [x] Installer, client configuration helpers, host wheel/sdist and an unpublished npm launcher.
-- [x] UR5e experiments and their evidence moved to the separate `ur5e-digital-twin` workspace; this repo owns the
-  server, bridge and tool packs. See the [README](../README.md) for repository boundaries.
 - [x] The October 2026 audit fixed verifier interpreter and exit-status handling, corrected the npm source, clarified
   host installation, and stopped the installer from overwriting an unrelated ffmpeg executable.
 
