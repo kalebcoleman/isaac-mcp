@@ -6,7 +6,7 @@ set -u
 # Discovery is unreliable across Isaac versions; the twin bridge port is fixed.
 export UR5E_DT_PORT="${UR5E_DT_PORT:-${ISAAC_MCP_PORT:-8766}}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PY="$ROOT/.venv/bin/python"
+PY="${UR5E_DT_PYTHON:-$ROOT/.venv/bin/python}"
 BRIDGE="$ROOT/mcp"
 export_reference_if_missing() {
   [ -f "$ROOT/checkpoints/$(python3 -c "import json;print(json.load(open('$ROOT/checkpoints/ur5e-dt-workstation-person-view-portable.json'))['checkpoint'])")" ] || run_check export_reference
@@ -14,10 +14,13 @@ export_reference_if_missing() {
 FAILED=()
 run_check() {
   echo "== $1"
-  local out; out="$("$PY" "$ROOT/scripts/bridge_exec.py" "$ROOT/scripts/checks/$1.py" 2>&1)"
+  local out status=0
+  out="$("$PY" "$ROOT/scripts/bridge_exec.py" "$ROOT/scripts/checks/$1.py" 2>&1)" || status=$?
   echo "$out"
-  # bridge_exec.py exits 0 even when the bridge answers with an error, so read the answer.
-  if grep -qE '"error_type"|^Traceback|^\[Errno|"status": "error"' <<<"$out"; then FAILED+=("$1"); fi
+  # The client can also exit 0 when the bridge answers with an error.
+  if [ "$status" -ne 0 ] || grep -qE '"error_type"|^Traceback|^\[Errno|"status": "error"' <<<"$out"; then
+    FAILED+=("$1")
+  fi
 }
 # First call after a cold boot compiles shaders and caches assets: 2+ minutes on a fresh machine, ~3 s afterwards.
 run_quick_start() {
