@@ -15,6 +15,9 @@ MCP server" is just this binary with a namespace filter, not a separate port:
     ISAAC_MCP_NAMESPACE   comma-separated namespace allowlist; unset => all.
     ISAAC_MCP_BUILTINS    "0" hides the bridge's bare builtins (run_python,
                         reload_tools) — the curated-agent view.
+    ISAAC_MCP_LOCAL_TOOLS comma-separated groups of the host's own tools (screen, Isaac
+                        Lab, gateway) to register; unset => all. See local_tools.py. It does not
+                        affect bridge tools, and composes with the two filters above.
     ISAAC_MCP_NAME / ISAAC_MCP_INSTRUCTIONS   cosmetic server identity.
 
 Canonical bridge names are ``<namespace>.<tool>``; MCP tool names cannot
@@ -36,18 +39,20 @@ Project-specific POLICY plugs in via three hook lists (it must not live here):
 deny-gate over a declared policy file. It, too, holds no policy.
 """
 
+import functools
 import json
 import logging
 import os
 import re
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.lowlevel.server import NotificationOptions
 
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
+from .local_tools import ALL_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups
 from .screen import register_screen_tools
 
 logging.basicConfig(level=logging.INFO,
@@ -384,9 +389,6 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         logger.info("KitMCP server shut down")
 
 
-mcp = FastMCP(SERVER_NAME, instructions=SERVER_INSTRUCTIONS, lifespan=server_lifespan)
-
-
 def _advertise_tools_list_changed(server: FastMCP) -> None:
     """Make the server advertise ``tools.listChanged = true``.
 
@@ -404,9 +406,6 @@ def _advertise_tools_list_changed(server: FastMCP) -> None:
         return original(*args, **kwargs)
 
     server._mcp_server.create_initialization_options = create_initialization_options
-
-
-_advertise_tools_list_changed(mcp)
 
 
 async def _notify_tools_changed(ctx: Optional[Context]) -> None:
@@ -436,16 +435,9 @@ def _screen_port() -> int | None:
         return None
 
 
-register_screen_tools(mcp, port_provider=_screen_port)
-register_isaaclab_tools(mcp)
-
-
-@mcp.tool()
-async def refresh_tools(ctx: Context = None) -> str:  # type: ignore[assignment]
-    """Re-discover the bridge registry and register any new tools (use after
-    the bridge's reload_tools, after enabling a project, or after Kit restarts)."""
+async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None) -> str:
     try:
-        added = discover_and_register_tools(mcp)
+        added = discover_and_register_tools(server)
     except Exception as e:
         return f"Error: {e}"
     if added:
@@ -454,15 +446,7 @@ async def refresh_tools(ctx: Context = None) -> str:  # type: ignore[assignment]
             else "No new or changed tools (registry unchanged).")
 
 
-@mcp.tool()
-async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[assignment]
-    """Switch this MCP server to another running Kit bridge on this machine.
-
-    Use list_bridges to see the candidates. This replaces the ur5e_dt__* tools
-    with the ones registered in that Kit process; screen tools are unaffected.
-    The choice lasts until this MCP server restarts, then UR5E_DT_PORT (or
-    ISAAC_MCP_PORT, or auto-discovery) decides again.
-    """
+async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None) -> str:
     global _client
     try:
         new_client = BridgeClient(port=int(port))
@@ -473,7 +457,7 @@ async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[ass
     _client = new_client
     had_tools = bool(_NAME_MAP)
     for name in list(_NAME_MAP):
-        _drop_tool(mcp, name)
+        _drop_tool(server, name)
     _NAME_MAP.clear()
     _REGISTERED_META.clear()
     if old_client is not None:
@@ -482,7 +466,7 @@ async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[ass
         except Exception:  # noqa: BLE001
             pass
     try:
-        added = discover_and_register_tools(mcp)
+        added = discover_and_register_tools(server)
     except Exception as e:  # noqa: BLE001
         if had_tools:  # the previous bridge's tools were dropped above
             await _notify_tools_changed(ctx)
@@ -497,6 +481,65 @@ async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[ass
         f"switched to bridge on port {port}\n{summary}\n"
         f"registered/updated {len(added)} tool(s)"
     )
+
+
+def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
+    """Register ``refresh_tools`` and ``use_bridge`` (the ``gateway`` group) on ``server``.
+
+    Bridge discovery itself runs from the server lifespan, so omitting these two tools does not
+    stop startup discovery; it only removes the client's way to re-run or redirect it."""
+    mcp = ScopedTools(server, groups)
+
+    @mcp.tool(annotations=IDEMPOTENT_WRITE)
+    async def refresh_tools(ctx: Context = None) -> str:  # type: ignore[assignment]
+        """Re-discover the bridge registry and register any new tools (use after
+        the bridge's reload_tools, after enabling a project, or after Kit restarts)."""
+        return await _refresh_tools(server, ctx)
+
+    @mcp.tool(annotations=IDEMPOTENT_WRITE)
+    async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[assignment]
+        """Switch this MCP server to another running Kit bridge on this machine.
+
+        To find the candidates, run `python -m isaac_mcp.client --list-bridges`. (`list_bridges`
+        exists only as a bridge built-in: it is an MCP tool only when built-ins are enabled and a
+        bridge is already reachable.) This replaces the ur5e_dt__* tools with the ones registered
+        in that Kit process; screen tools are unaffected. The choice lasts until this MCP server
+        restarts, then UR5E_DT_PORT (or ISAAC_MCP_PORT, or auto-discovery) decides again.
+        """
+        return await _use_bridge(server, port, ctx)
+
+
+_RESTRICTED_NOTE = (
+    " This server runs with a restricted local tool set (ISAAC_MCP_LOCAL_TOOLS): rely on the tools "
+    "it lists, and ignore guidance above about local tools that are not listed.")
+
+
+def build_server(env: Optional[Mapping[str, str]] = None) -> FastMCP:
+    """Build a host server whose local tools are chosen by ``ISAAC_MCP_LOCAL_TOOLS`` in ``env``.
+
+    ``env`` defaults to ``os.environ``. The groups are parsed once, here; an unknown group
+    raises :class:`LocalToolsError` before anything is registered. The module-level ``mcp`` is
+    ``build_server()``, so importing ``isaac_mcp.server`` with the variable unset registers all
+    the local tools, as it always did."""
+    env = os.environ if env is None else env
+    groups = local_tool_groups(env)
+    instructions = SERVER_INSTRUCTIONS
+    if groups != ALL_GROUPS and "ISAAC_MCP_INSTRUCTIONS" not in env:
+        instructions += _RESTRICTED_NOTE
+    server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
+    _advertise_tools_list_changed(server)
+    register_screen_tools(server, port_provider=_screen_port, groups=groups)
+    register_isaaclab_tools(server, groups=groups)
+    _register_gateway_tools(server, groups)
+    return server
+
+
+mcp = build_server()
+
+# Direct-call entry points bound to the default server (scripts and tests call these as plain
+# coroutines; the registered tools above are thin wrappers over the same functions).
+refresh_tools = functools.partial(_refresh_tools, mcp)
+use_bridge = functools.partial(_use_bridge, mcp)
 
 
 def main(argv: list[str] | None = None) -> None:

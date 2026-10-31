@@ -197,6 +197,31 @@ Add the server to `~/.config/opencode/opencode.jsonc`:
 }
 ```
 
+### Limiting what a client can reach
+
+Bridge tools such as `run_python` reach the client as soon as a Kit bridge exists, so decide per client how much of
+the server it should see.
+
+Server side (set in the client's `env` for this server, see [TOOLS-HOST.md](TOOLS-HOST.md)):
+
+- `ISAAC_MCP_LOCAL_TOOLS` selects groups of the host's own tools (screen, Isaac Lab, gateway). `readonly` leaves only
+  the read-only tools; `none` leaves none. The default is `all`.
+- `ISAAC_MCP_NAMESPACE` limits the bridge tools to some namespaces, and `ISAAC_MCP_BUILTINS=0` hides the bridge
+  built-ins such as `run_python`.
+- The three variables are independent and compose. A curated read-only profile is, for example,
+  `ISAAC_MCP_LOCAL_TOOLS=readonly` with `ISAAC_MCP_BUILTINS=0`.
+
+Client side (these are client settings, not part of this server; check your client's documentation):
+
+- Register the server per project rather than globally if only some projects need it. In Claude Code that is the
+  project or local scope instead of `--scope user`.
+- In Claude Code, `--tools` restricts the built-in tools only. To start a process that must not see MCP tools at all,
+  pair it with `--strict-mcp-config --mcp-config <file>`, where the file lists only the servers that process may use
+  (an empty `{"mcpServers":{}}` for none).
+- Give subagents an explicit tool allowlist. A subagent without one can inherit the parent's MCP tools.
+- Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`), which clients can use for approval
+  prompts. They are hints, not an access control; the filters above decide what is registered at all.
+
 ---
 
 ## 5. Verification

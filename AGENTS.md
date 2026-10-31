@@ -12,8 +12,8 @@ configured filters.
 
 | Tier | Tools | Present when | Reference |
 |---|---|---|---|
-| Host gateway and desktop | 9 (`refresh_tools`, `use_bridge`, and 7 screen tools) | always, even with Kit down | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
-| Isaac Lab (`isaaclab__*`) | 12 | always, no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
+| Host gateway and desktop | 9 (`refresh_tools`, `use_bridge`, and 7 screen tools) | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), even with Kit down | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
+| Isaac Lab (`isaaclab__*`) | 12 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | a Kit bridge is reachable; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
 | UR5e twin (`ur5e_dt__*`) | 23 | the twin extension is loaded in that Kit and you have called `refresh_tools` | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
@@ -24,7 +24,11 @@ not prove that no bridge exists. The possible causes are:
 - the client connected before Kit started, so the bridge tools have not been discovered yet
   (call `refresh_tools`);
 - a filter is hiding bridge tools from a reachable bridge (`ISAAC_MCP_NAMESPACE` or
-  `ISAAC_MCP_BUILTINS=0`).
+  `ISAAC_MCP_BUILTINS=0`);
+- `ISAAC_MCP_LOCAL_TOOLS` is restricting the local tools (the default, `all`, registers all 21),
+  so the listed host and Isaac Lab tools are only a subset. If its `gateway` group is excluded,
+  `refresh_tools` and `use_bridge` are not listed: bridge tools are then discovered only when
+  the server starts, so restart the MCP connection after starting Kit.
 
 The other 30 tools (bridge built-ins and UR5e twin) exist only behind a bridge. With everything
 visible there are 51 tools in total. `docs/GENERIC-SIM-TOOLS.md` describes a `sim.*` pack that is
@@ -77,8 +81,14 @@ Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER
   unless `allow_concurrent_gpu=true`; `isaaclab__runs_cancel` kills one.
 - Screen tools return window titles and pixels to the model, and save captures under
   `~/Pictures/screen-mcp` and `~/Videos/screen-mcp`.
-- To expose less to a client, use `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS=0`. They filter
-  bridge tools only; the host and Isaac Lab tiers are always registered.
+- To expose less to a client, use `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS=0` (they filter
+  bridge tools only) and `ISAAC_MCP_LOCAL_TOOLS` (it selects groups of the host and Isaac Lab
+  tools; by default all are registered). `ISAAC_MCP_LOCAL_TOOLS=readonly` leaves only the
+  read-only local tools and no job, capture, window or gateway tools. The three variables
+  compose; see [TOOLS-HOST.md](docs/TOOLS-HOST.md).
+- Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). Trust them
+  to tell `isaaclab__runs_list` from `isaaclab__runs_cancel`; `screenshot` is not read-only on
+  purpose (it writes files and returns desktop pixels). Bridge tools are not annotated.
 
 ## Changing tools
 

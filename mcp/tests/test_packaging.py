@@ -52,7 +52,9 @@ def test_mcp_requirement_excludes_the_fastmcp_rename():
     # mcp 2 renamed FastMCP to MCPServer; every 2.x must be outside the specifier.
     assert not mcp.specifier.contains(Version("2.0.0"), prereleases=True)
     assert not mcp.specifier.contains(Version("2.1.1"))
-    assert mcp.specifier.contains(Version("1.0.0"))
+    # The floor is the lowest version the suite was run on; tool annotations need >= 1.7.
+    assert mcp.specifier.contains(Version("1.12.4"))
+    assert not mcp.specifier.contains(Version("1.6.0"))
 
 
 def test_test_extra_carries_pytest():

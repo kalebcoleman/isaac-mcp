@@ -22,7 +22,8 @@ bridge is unavailable.
 | `use_bridge` | `port` (integer, required) | Connect to a different bridge on that port, report its identity, and replace the previously discovered bridge tools. The choice lasts until the host server restarts. Sends `notifications/tools/list_changed` after replacing the tools. |
 
 For a bridge already connected, `status` verifies its PID, port, app version and other identity data; `list_bridges`
-lists advertised bridge instances. Example MCP calls: `use_bridge` with `{"port":8766}`, followed by `status` with
+lists advertised bridge instances (they are bridge built-ins, so they appear as MCP tools only when built-ins are
+enabled and a bridge is reachable; `python -m isaac_mcp.client --list-bridges` works either way). Example MCP calls: `use_bridge` with `{"port":8766}`, followed by `status` with
 `{}` and `refresh_tools` with `{}`. Switching targets changes the selected simulation; verify the result before
 issuing scene-changing commands.
 
@@ -44,6 +45,38 @@ python -m isaac_mcp.client ur5e_dt.play_scene '{}' --port 8766
 
 The CLI uses canonical bridge names with dots; the MCP server exposes namespaced tools using double underscores,
 such as `ur5e_dt__play_scene`.
+
+## Choosing which local tools a server exposes
+
+The 21 local tools (the nine host gateway and desktop tools and the twelve `isaaclab__*` tools) are all registered by
+default. `ISAAC_MCP_LOCAL_TOOLS` selects groups of them for one server process, read once at startup. It is a
+comma-separated list of group names and aliases; unset or empty means `all`. An unknown name stops the server at
+startup with a message listing the valid names; it never registers nothing silently.
+
+| Group | Tools |
+|---|---|
+| `isaaclab_read` | `isaaclab__install_info`, `isaaclab__envs_list`, `isaaclab__runs_list`, `isaaclab__runs_status`, `isaaclab__runs_tail`, `isaaclab__checkpoints_list`, `isaaclab__metrics_summary`, `isaaclab__tensorboard_tail` |
+| `isaaclab_run` | `isaaclab__train`, `isaaclab__eval`, `isaaclab__play`, `isaaclab__runs_cancel` |
+| `screen_read` | `screen_info`, `list_windows`, `screen_recording_status` |
+| `screen_capture` | `screenshot`, `start_screen_recording`, `stop_screen_recording` |
+| `screen_control` | `raise_window` |
+| `gateway` | `refresh_tools`, `use_bridge` |
+
+Aliases: `all` (every group; the default), `readonly` (`isaaclab_read,screen_read`) and `none` (no local tools; a pure
+Kit gateway, since bridge tools are still discovered). Groups and aliases can be mixed, for example
+`readonly,gateway`.
+
+- The capture directories (`~/Pictures/screen-mcp`, `~/Videos/screen-mcp`) are created only when `screen_capture` is
+  enabled, so registering a read-only profile writes nothing there.
+- `gateway` only controls the two tools. Bridge discovery at startup is part of the server lifespan and still runs when
+  `gateway` is excluded; without the tools, a client cannot re-run or redirect it, so restart the MCP connection after
+  starting Kit.
+- `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only the tools discovered from the bridge.
+  `ISAAC_MCP_LOCAL_TOOLS` filters only the local tools. All three apply together.
+- Every local tool carries MCP annotations. `readOnlyHint` is true for exactly the `isaaclab_read` and `screen_read`
+  groups. The capture tools are not read-only because they write files and return desktop pixels, and
+  `isaaclab__runs_cancel` is the only tool marked destructive. Annotations are hints to the client, not enforcement.
+  Bridge tools registered dynamically are not annotated.
 
 ## Desktop and window tools
 
