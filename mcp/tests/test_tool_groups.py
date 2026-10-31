@@ -134,6 +134,7 @@ def test_restricted_servers_say_so_in_their_instructions():
     assert build().instructions == gw.SERVER_INSTRUCTIONS
     assert "ISAAC_MCP_LOCAL_TOOLS" in build("readonly").instructions
     assert build("readonly").instructions.startswith(gw.SERVER_INSTRUCTIONS)
+    assert "bridge" in build("readonly").instructions.lower()     # says the limit is local-only
 
 
 def test_register_functions_default_to_all_groups_on_a_plain_server():
@@ -301,3 +302,37 @@ def test_gateway_tools_of_a_built_server_act_on_that_server(bridge):
     assert not result.isError and "demo__more" in names
     assert "demo__more" not in local_names(gw.mcp)       # the default server was not touched
 
+# ---- what ISAAC_MCP_LOCAL_TOOLS does and does not restrict -------------------------------
+# These pin the claims the docs make: `readonly` limits the host's own tools and nothing that
+# comes from the bridge. For this bridge, which has both built-ins and namespaced tools,
+# hiding all of them needs the built-ins switch and an unadvertised namespace.
+
+BRIDGE_TOOLS = {"demo__ping", "other__pong", "run_python"}
+
+
+def test_readonly_does_not_restrict_bridge_tools(bridge):
+    assert BRIDGE_TOOLS <= set(_listed(build("readonly")))
+
+
+def test_no_bridge_tools_need_builtins_off_and_a_namespace_nothing_serves(bridge, monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
+    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "no-such-namespace")
+    assert set(_listed(build("readonly"))) == set(lt.READ_ONLY_TOOLS)
+
+
+@pytest.mark.parametrize("namespace", ["", " ", ",", None])
+def test_an_empty_namespace_filter_means_no_filter(bridge, monkeypatch, namespace):
+    monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
+    if namespace is None:
+        monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
+    else:
+        monkeypatch.setenv("ISAAC_MCP_NAMESPACE", namespace)
+    assert {"demo__ping", "other__pong"} <= set(_listed(build("readonly")))
+
+
+def test_either_bridge_filter_alone_leaves_bridge_tools(bridge, monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
+    assert {"demo__ping", "other__pong"} <= set(_listed(build("readonly")))
+    monkeypatch.delenv("ISAAC_MCP_BUILTINS")
+    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "no-such-namespace")
+    assert "run_python" in set(_listed(build("readonly")))

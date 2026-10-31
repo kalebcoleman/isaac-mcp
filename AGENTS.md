@@ -83,9 +83,11 @@ Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER
   `~/Pictures/screen-mcp` and `~/Videos/screen-mcp`.
 - To expose less to a client, use `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS=0` (they filter
   bridge tools only) and `ISAAC_MCP_LOCAL_TOOLS` (it selects groups of the host and Isaac Lab
-  tools; by default all are registered). `ISAAC_MCP_LOCAL_TOOLS=readonly` leaves only the
-  read-only local tools and no job, capture, window or gateway tools. The three variables
-  compose; see [TOOLS-HOST.md](docs/TOOLS-HOST.md).
+  tools only; by default all are registered). `ISAAC_MCP_LOCAL_TOOLS=readonly` leaves only the
+  local tools that read state, but it does not touch bridge tools: with a bridge connected,
+  `run_python` and `ur5e_dt__*` can still change the scene, so it is not a read-only server.
+  The three variables compose; see [TOOLS-HOST.md](docs/TOOLS-HOST.md) and, for what a
+  scene-safe profile needs, [MCP-SERVER.md](docs/MCP-SERVER.md#limiting-what-a-client-can-reach).
 - Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). Trust them
   to tell `isaaclab__runs_list` from `isaaclab__runs_cancel`; `screenshot` is not read-only on
   purpose (it writes files and returns desktop pixels). Bridge tools are not annotated.

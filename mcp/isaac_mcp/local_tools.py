@@ -7,8 +7,12 @@ which *groups* of those local tools a process registers; the default is all of t
     ISAAC_MCP_LOCAL_TOOLS   comma-separated groups (see GROUPS) and aliases (see ALIASES).
                             Unset or empty => "all". An unknown name is a startup error.
 
-``ISAAC_MCP_NAMESPACE`` and ``ISAAC_MCP_BUILTINS`` filter the tools discovered from the bridge
-and compose with this variable; they never affect the local tools.
+This limits only the host's own local tools. It does NOT limit the tools discovered from a Kit
+bridge (``run_python``, ``ur5e_dt__*``, ...), which are not annotated and can change the scene, so
+``readonly`` is a read-only *local* profile, not a read-only server. ``ISAAC_MCP_NAMESPACE`` and
+``ISAAC_MCP_BUILTINS`` filter the bridge tools and compose with this variable; they never affect
+the local tools. Restricting the bridge's tools so they cannot change the scene takes a pre-dispatch
+policy (see docs/MCP-SERVER.md, "Limiting what a client can reach"), which is code today.
 
 This module is the single place that says which tool belongs to which group, so a tool that is
 registered without being listed here (or without annotations) fails loudly at registration

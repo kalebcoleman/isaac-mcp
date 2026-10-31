@@ -62,20 +62,25 @@ startup with a message listing the valid names; it never registers nothing silen
 | `screen_control` | `raise_window` |
 | `gateway` | `refresh_tools`, `use_bridge` |
 
-Aliases: `all` (every group; the default), `readonly` (`isaaclab_read,screen_read`) and `none` (no local tools; a pure
-Kit gateway, since bridge tools are still discovered). Groups and aliases can be mixed, for example
+Aliases: `all` (every group; the default), `readonly` (`isaaclab_read,screen_read`: the local tools annotated as read-only)
+and `none` (no local tools; a pure Kit gateway, since bridge tools are still discovered). Groups and aliases can be mixed, for example
 `readonly,gateway`.
 
 - The capture directories (`~/Pictures/screen-mcp`, `~/Videos/screen-mcp`) are created only when `screen_capture` is
-  enabled, so registering a read-only profile writes nothing there.
+  enabled, so a profile without that group creates neither. (Importing the Isaac Lab job module still creates its own
+  jobs directory under `~/.local/share/isaac-mcp`, whatever the groups.)
 - `gateway` only controls the two tools. Bridge discovery at startup is part of the server lifespan and still runs when
   `gateway` is excluded; without the tools, a client cannot re-run or redirect it, so restart the MCP connection after
   starting Kit.
 - `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only the tools discovered from the bridge.
-  `ISAAC_MCP_LOCAL_TOOLS` filters only the local tools. All three apply together.
+  `ISAAC_MCP_LOCAL_TOOLS` filters only the host's own 21 tools. All three apply together.
+- `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
+  server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
+  [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.
 - Every local tool carries MCP annotations. `readOnlyHint` is true for exactly the `isaaclab_read` and `screen_read`
   groups. The capture tools are not read-only because they write files and return desktop pixels, and
-  `isaaclab__runs_cancel` is the only tool marked destructive. Annotations are hints to the client, not enforcement.
+  `isaaclab__runs_cancel` is the only tool marked destructive. `isaaclab__runs_list` and `isaaclab__runs_status` can
+  also update their own job metadata when reconciling an orphaned job. Annotations are hints, not enforcement.
   Bridge tools registered dynamically are not annotated.
 
 ## Desktop and window tools
