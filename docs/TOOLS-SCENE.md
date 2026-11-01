@@ -155,8 +155,11 @@ changing an authored USD transform moved an active simulated body. Angular runti
 drive targets use radians; USD authored joint diagnostics and angular drive gains use degrees.
 
 RTX cameras use UsdGeom, an owned Replicator render product and an on-demand renderer
-CPU readback. They attach no RGB annotator: that redundant branch triggered paused ROS
-RGB writer cycle warnings in a controlled 6.2 headless test. The earlier experimental
+CPU readback. They attach no RGB annotator. Removing that redundant branch passed an initial
+6.2 headless coexistence control, but later fresh camera-only and LiDAR-only controls still
+reproduced paused native ROS RGB writer cycle warnings. That issue remains unresolved;
+successful image/scan output does not establish that the rejected native connections are harmless.
+The earlier experimental
 CameraSensor path crashed in native CUDA; asking it for a CPU result at retrieval was
 insufficient. Cameras do not require `isaacsim.sensors.experimental.rtx`.
 LiDAR uses the installed `IsaacSensorCreateRtxLidar` command and Cartesian CPU annotator,
