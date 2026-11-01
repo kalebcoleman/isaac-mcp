@@ -1,8 +1,8 @@
 # Build plan: finishing the generic Isaac Sim tools after PR #11
 
-**Status: plan, not built.** Decisions D1–D3 were made by the owner on 2026-10-31 and adjusted on
-2026-11-01 after PR #11 was reviewed (see §2). The rest of this document has not been reviewed by
-the owner yet. Written for an implementing agent.
+**Status: plan, not built.** Decisions D1–D4 were made by the owner on 2026-10-31 and 2026-11-01
+(see §2). Work starts after PR #11 is merged, when the owner asks for it in the thread that owns
+PR #12.
 
 ## 1. Where things stand
 
@@ -32,7 +32,7 @@ general Action Graph editing, 3D generation) stay with PR #10's plan and are **o
 | Logs and diagnostics | `sim.logs.tail` (bounded tail of Kit's log file, warnings and errors) | level/channel/text filters, a cursor, "since now" summaries → **M2** |
 | Playback and stepping | `sim.timeline.control` (play/pause/stop), `sim.simulation.step` (1–120 exact paused steps with observed prims and joints), `sim.body.state` | raycast and contact queries → **M3** |
 | Robot state and joint control | `sim.joints.inspect`, `sim.joints.state`, `sim.joints.command` (position targets in DOF order), `sim.joints.drive` (authored, stopped timeline) | name-based and velocity targets, limit clamping, runtime gains, move-until-settled with tracking error, teleport → **M4** |
-| Prim editing | `sim.prim.create` (Cube, Sphere, Xform, PhysicsScene), `set_transform`, `clone`, `delete`, `sim.stage.clear_owned`, lights, materials, `sim.physics.configure` (all limited to prims the pack created, in the session layer) | more primitive types, typed attributes, physics schemas on imported assets, posing imported wrappers → **M5** (scope needs an owner decision, §2 D4) |
+| Prim editing | `sim.prim.create` (Cube, Sphere, Xform, PhysicsScene), `set_transform`, `clone`, `delete`, `sim.stage.clear_owned`, lights, materials, `sim.physics.configure` (all limited to prims the pack created, in the session layer) | moving, physics and typed attributes on **any** prim, with revert; more primitive types → **M5** (D4) |
 | Assets, robots and environments | `assets.roots`, `assets.scan`, `assets.search` (filenames in launch-approved roots), `assets.info`, `assets.import_usd`, `assets.import_urdf` (trusted projects, snapshots) | NVIDIA cloud library and robot catalogue, bundled samples, MJCF import → **M6** |
 | Viewport capture | `sim.camera.create` / `sim.camera.capture` (RTX camera to PNG), `sim.viewport.frame`; desktop `screenshot` on the host | Kit viewport screenshot and MP4 recording from the pack, then the final demo → **M7** |
 
@@ -40,16 +40,16 @@ general Action Graph editing, 3D generation) stay with PR #10's plan and are **o
 
 | # | Decision | Consequence |
 |---|---|---|
-| D1 | **Namespaces `sim` and `assets`, as shipped by PR #11.** This replaces the `isaacsim` namespace chosen on 2026-10-31, which was picked before PR #11's tools existed. | New tools join `exts/sim-tools` and `scene_contracts.py`; no second pack, no renames. MCP names stay `sim__<group>__<verb>` and `assets__<verb>`; the host's session tools `sim__launch/list/status/stop` remain distinct names. If the owner still wants `isaacsim`, renaming all of PR #11's 37 tools is a separate, breaking change and is not part of this plan. |
+| D1 | **Namespaces `sim` and `assets`, as shipped by PR #11** (owner, 2026-11-01). | New tools join `exts/sim-tools` and `scene_contracts.py`; no second pack, no renames. MCP names are `sim__<group>__<verb>` and `assets__<verb>`; the host's session tools `sim__launch/list/status/stop` remain distinct names. |
 | D2 | **Assets in trusted-operator mode, including the NVIDIA cloud library.** | Unchanged from 2026-10-31. M6 adds two sources next to PR #11's launch-approved project roots: Isaac Sim's bundled samples and the NVIDIA asset root (`get_assets_root_path()`, the S3 library, needs outbound HTTPS). Neither is a sandbox. The cloud source is configured like PR #11's other asset settings: a switch in `ISAAC_MCP_ASSET_CONFIG`, or `ISAAC_MCP_CLOUD_ASSETS=0` if the config file is not the right place, turns it off. |
-| D3 | **One pull request per milestone.** | Stack them: M0 branches from PR #11's final head **with PR #12 (`docs/agent-skill-ecosystem`) merged in**, unless both are already on `main`; each later milestone branches from the previous one. Rebase and retarget as #10, #11 and #12 merge. Never push to `main` or merge; the owner merges. |
-| D4 | **Open: how far may edits reach beyond pack-created prims?** | PR #11 deliberately edits only prims it created, in the session layer. M5's recommendation is to extend editing to wrappers created by `assets.import_*` (pose, physics schemas, typed attributes on the wrapper only) and keep foreign prims read-only. The implementer must ask the owner before starting M5 if this is still open. |
+| D3 | **One pull request per milestone.** | Once PR #11 is on `main`, rebase PR #12 onto `main` (§5 M0 lists the expected conflicts). M0 branches from PR #12's branch until #12 merges, then from `main`; each later milestone branches from the previous one and is retargeted as earlier ones merge. Never push to `main` or merge; the owner merges. |
+| D4 | **Tools may move and add physics to any prim** (owner, 2026-11-01), not only prims the pack created. | M5 extends editing to every prim on the stage. Safety moves from "whose prim" to "how it is edited": session-layer edits only, before/after values, `sim.prim.revert`, and refusals where an edit would break physics or USD (articulation links, nested rigid bodies, instance proxies, edits while playing). |
 
-## 3. Preconditions and rules for the implementing agent
+## 3. Preconditions and working rules
 
-**Do not start until PR #11's own work has stopped**: its thread is idle and its PR head is pushed
-(it was `bed3082` on GitHub with a later local commit `1135ec4` still unpushed when this was written).
-Never edit PR #11's branch or worktree (the worktree its own thread uses).
+**Start only after PR #11 is merged into `main`** (it was still a draft, with work in progress in
+its own thread, when this was written). Never edit PR #11's branch or worktree
+(the worktree its own thread uses).
 
 1. Read [AGENTS.md](../../AGENTS.md), the [agent skill](../../.agents/skills/isaac-mcp/SKILL.md),
    [tool-authoring.md](../../mcp/docs/tool-authoring.md), [protocol.md](../../mcp/docs/protocol.md),
@@ -83,8 +83,8 @@ Never edit PR #11's branch or worktree (the worktree its own thread uses).
    evidence must record the result per build and backend.
 9. If something here turns out wrong against PR #11's final code or a live test, record what you
    observed, adapt, and update this plan in the same PR.
-10. Stop and ask the owner only for: D4 if still open, credentials, another machine, deleting
-    anything you did not create, or a change to an existing public tool contract.
+10. Stop and ask the owner only for: credentials, another machine, deleting anything you did not
+    create, or a change to an existing public tool contract.
 
 ## 4. Proof: what every milestone must deliver
 
@@ -127,10 +127,9 @@ Tool names below are proposals in PR #11's naming style; parameters are in addit
 
 ### M0: Baseline on PR #11's final head
 
-No new tools. Create the branch from PR #11's final head and merge `docs/agent-skill-ecosystem`
-(PR #12) into it, unless both are on `main` already. PR #12 brings the agent skill, ECOSYSTEM.md,
-`scripts/ecosystem_capabilities.py` and this plan, none of which PR #11 has. A test merge on
-2026-11-01 conflicted only in two status lines, `docs/GENERIC-SIM-TOOLS.md` and
+No new tools. After PR #11 merges, rebase PR #12 (`docs/agent-skill-ecosystem`) onto `main`; it
+brings the agent skill, ECOSYSTEM.md, `scripts/ecosystem_capabilities.py` and this plan, none of
+which PR #11 has. A test merge of the two branches on 2026-11-01 conflicted only in two status lines, `docs/GENERIC-SIM-TOOLS.md` and
 `docs/plans/README.md`: keep both sides' content. `AGENTS.md`, `README.md`, `scripts/check_docs.py`
 and `mcp/tests/test_check_docs.py` merged automatically, but rerun `check_docs.py` and the tests
 because tool counts change. Then run PR #11's full live suites on every supported build with
@@ -211,22 +210,32 @@ each: `move` three joints about 0.5 rad and back (settled, error ≤ 0.01 rad), 
 and read back, an out-of-limit target refused and then clamped. Video: both robots moving (about
 20 s). Screenshots: start and end poses.
 
-### M5: Editing imported assets (after D4)
+### M5: Editing any prim in the scene (D4)
 
-With the owner's answer to D4, extend editing to wrappers created by `assets.import_*`:
+PR #11 edits only prims the pack created. D4 extends moving, physics and attributes to **any** prim
+on the stage: imported assets, prims from the user's own USD files, and the twin's prims in a
+disposable session. Every edit is written to the session layer (source files and the stage's root
+layer stay untouched), returns the values before and after, and can be undone with
+`sim.prim.revert`.
 
 | Tool | Notes |
 |---|---|
 | `sim.prim.create` (extended) | add `Cylinder`, `Capsule`, `Cone`, `Plane` to the existing kinds |
-| `sim.prim.set_transform` (extended) | also accept import wrappers, still refusing articulation links and animated stacks |
-| `sim.prim.set_attribute` | typed, read back old and new; only on pack-owned prims and import wrappers; refuses engine-owned attributes (`points`, `extent`, `xformOpOrder`, `physics:*`, design §4.3) |
-| `sim.physics.apply` | collider, rigid body or mass on a pack-owned prim or import wrapper; refuses when an ancestor is already a rigid body |
+| `sim.prim.set_transform` (extended) | any Xformable prim, local or world frame; refuses articulation links other than the root (moving a link breaks its joints), time-sampled (animated) transforms, instance proxies (name the instance root instead), and bodies while physics is playing |
+| `sim.prim.set_attribute` | any prim; typed, reads back old and new; refuses engine-owned attributes (`points`, `extent`, `xformOpOrder`, `physics:*`, design §4.3) and instance proxies |
+| `sim.physics.apply` | collider (with approximation), rigid body, kinematic flag, mass or density on any prim; refuses a rigid body under an existing rigid-body ancestor, and changes while playing |
+| `sim.prim.revert` | removes the session-layer opinions this pack authored on one prim (or its subtree), restoring the composed values from the source files; reports what was removed |
 
 Keep `sim.stage.clear_owned`'s behaviour; do not add a full-stage reset unless the owner asks.
+Track which prims the pack edited, so `revert` touches only the pack's own session-layer opinions.
 
-**Prove:** import a visual-only USD object, give it a collider and rigid body with
-`sim.physics.apply`, pose it above a table and step until it rests. Show the refusals (foreign prim,
-`xformOpOrder`, nested rigid body). Video: the object falling and resting (about 15 s).
+**Prove** on prims the pack did not create: open a USD file with a table and a visual-only object
+(no physics), move the table, give the object a collider and rigid body, pose it above the table
+and step until it rests on it. Do the same to an imported robot's root (move the whole robot) and
+show that moving one of its links is refused. Show the other refusals (`xformOpOrder`, nested rigid
+body, instance proxy, edit while playing). `revert` the object and table, and confirm with
+`sim.prim.get` that the original values are back and with SHA-256 that the source USD files are
+unchanged. Video: the object falling and resting (about 15 s).
 
 ### M6: NVIDIA cloud library, bundled samples and MJCF (D2)
 
