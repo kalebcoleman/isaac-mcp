@@ -1,21 +1,47 @@
 # Plan: project USD assets and generic scene tools, end to end
 
-**Status: proposal, not implemented.** Research checked 2026-11-01 UTC against `main` at
-`d8954ad374ae2fed4d8c2a45af0d7e96f655566f`. This document plans the two requested features:
-bringing project USD files into Isaac Sim and operating a generic scene through MCP. The planning PR does
-not implement or test those features. Its citations are research, not claims that the other projects were run.
+**Status: first implementation slice in [PR #11](https://github.com/kalebcoleman/isaac-mcp/pull/11);
+remaining end-to-end gates are follow-up work.** On **2026-11-01**, the owner chose to merge
+planning PR #10, then PR #11 as a first slice. Neither this plan nor a green CPU check claims
+that all acceptance gates below have passed. PR #11 implements approved trusted project roots,
+bounded discovery and verified multifile snapshots, USD/URDF import, generic scene/physics/
+robot/sensor tools, and offline discovery: six `assets__*` and 31 `sim__*` tools. Its
+[tool reference](../TOOLS-SCENE.md), [comparison](../FORK-COMPARISON.md) and
+[evidence](../evidence/project-scene/README.md) describe measured behavior and limitations.
+Those implementation documents arrive with PR #11; this planning branch alone does not ship tools.
 
-The intended delivery is **one implementation PR**, developed in reviewable commits using the milestones below.
-Keep that PR open until the complete applicable acceptance checklist, real-use demonstration and evidence are
-available. If a capability cannot be made safe or tested, leave it explicitly disabled and the corresponding
-end-to-end claim incomplete; do not label a discovery-only implementation as the finished feature. The user may
-choose to split the implementation for review, but a partial merge does not satisfy this plan's finish line.
+**Delivery decision:** PR #11 can be reviewed and merged as this first slice once its stated
+review fixes and first-slice validation are complete. Full hostile-USD isolation, authenticated
+remote upload and presets/manifests remain explicit follow-up work, with the affected paths
+unavailable until implemented and verified. The original full end-to-end acceptance criteria
+remain the goal for that later work, not a requirement to keep PR #11 open indefinitely.
+No unverified capability becomes supported because the first slice merges.
 
-This is the execution plan for [asset presets and project-folder discovery](ASSET-PRESETS.md) and the
-[generic Sim tools design](../GENERIC-SIM-TOOLS.md). Those documents contain useful details and historical
-observations; recheck their version-specific assumptions against the merged code. The trusted-project profile
-below is a proposed, explicit addition to the older asset plan, whose untrusted-import restrictions remain in
-force. Its independently mergeable PR sequence is replaced here by one feature PR with internal milestones.
+Merge order is **#10 into `main`, then rebase and retarget #11 to `main`, then review #11**.
+While #11 targets `docs/asset-scene-e2e-plan`, merging it would update that planning branch,
+not `main`. The implementation agent must not merge either PR without an explicit request.
+
+This is the execution plan for [asset presets and project-folder discovery](ASSET-PRESETS.md)
+and the [generic Sim tools design](../GENERIC-SIM-TOOLS.md). Earlier proposal language below
+specifies the eventual contract; it is not a shipped-feature inventory. The trusted-project
+profile is an explicit addition to the older asset plan. Untrusted-import restrictions remain
+in force, and trust must never be silently promoted.
+
+## Explicit follow-up work after the first slice
+
+- **Isolated untrusted loading:** enforce and test the whole parser/load/use lifetime, OS/GPU
+  process boundary, filesystem/network/resolver/plugin/script policy and protected endpoint.
+  Namespace filters, dependency scans and managed launches do not supply this boundary.
+- **Authenticated remote upload:** implement consent, authenticated per-user/session transport,
+  quotas, immutable verified publication, expiry/cleanup and distinct-host no-shared-mount tests.
+- **Presets/manifests:** implement versioned, licensed catalog entries and preset-based loading.
+  Approved-root filename discovery in #11 does not implement these contracts.
+- **Remaining parity and usability work:** the owner assigns non-security improvements—bounds,
+  log cursors, raycasts, joints by name, editing any prim, NVIDIA cloud and bundled assets/MJCF,
+  and viewport recording—to [PR #12's follow-up plan](https://github.com/kalebcoleman/isaac-mcp/blob/docs/agent-skill-ecosystem/docs/plans/SIM-TOOLS-FOLLOWUP.md).
+  Keep the `sim`/`assets` namespaces. That separate plan does not replace this plan's isolation,
+  upload or preset gates. Version/backend/native failures and untested combinations remain
+  tracked in PR #11's compatibility/evidence records; a safe refusal is not a working capability.
 
 ## The user-visible outcome
 
@@ -56,9 +82,8 @@ not claim that every 6.x version, renderer, operating system or asset is support
   generic scene tools proposed here. Managed launch isolates output/ports/settings, but it is **not a sandbox**.
 - `ur5e_dt__*` remains available with existing behavior; its workstation and object tools are specific workflows.
   Do not modify `exts/ur5e-dt/assets/**`, remove its tools, or require its panel for generic workflows.
-- The shared Kit bridge can host separate tool owners. The planned `assets` and `sim` packs do not yet exist.
-  The host's packaged catalog currently covers UR5e; extend discovery deliberately instead of claiming new tools
-  appear offline automatically. `ISAAC_MCP_LOCAL_TOOLS` filters local tools, while `ISAAC_MCP_NAMESPACE` and
+- The shared Kit bridge hosts separate tool owners. PR #11 adds the `assets` and `sim` packs
+  and their packaged offline catalogs alongside UR5e; they are not present in the planning branch alone. `ISAAC_MCP_LOCAL_TOOLS` filters local tools, while `ISAAC_MCP_NAMESPACE` and
   `ISAAC_MCP_BUILTINS` affect the host's bridge view. Hiding a tool or setting an annotation is not access control.
 - The raw bridge has powerful file and Python built-ins and is not an authenticated remote file service. Do not
   use unrestricted `run_python` or `put_file` as the advertised generic feature or assume a filtered host view
@@ -128,8 +153,13 @@ policy. Verify the actual network and process boundary; do not equate `sim__laun
 
 ## Proposed tool contracts
 
-Names are proposals to finalize against the existing bridge naming rules: dots in canonical names become `__` in
-MCP. Keep the existing `sim__launch` group distinct from generic names such as `sim__stage__info`.
+This table retains the eventual proposed contracts. **Not implemented in #11:** `assets__list`,
+preset-based `assets__load`, and `assets__upload_begin`, `assets__upload_chunk`,
+`assets__upload_finish`. What shipped in the first slice is `assets__roots`, `assets__scan`,
+`assets__search`, `assets__info`, `assets__import_usd`, `assets__import_urdf`, and 31 `sim__*`
+tools. Use the implementation reference for actual schemas, not this proposal table.
+Dots in canonical names become `__` in MCP. Keep managed `sim__launch` distinct from generic
+names such as `sim__stage__info`.
 
 | Area | Proposed capabilities and minimum behavior |
 |---|---|
@@ -171,7 +201,7 @@ any code or asset. The separate upstream permission issue in [VENDORING.md](../V
 | NVIDIA [asset validation](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/robot_setup/asset_validation.html) and [Isaac Lab USD utilities](https://isaac-sim.github.io/IsaacLab/main/source/api/lab/isaaclab.sim.utils.html) | Compare existing validation rules and stage/prim utility APIs before implementing duplicate checks; report which rules actually ran. | Asset validation reports authoring/readiness issues; it does not prove hostile content safe. Isaac Lab APIs are not automatically available in every Sim-only installation. |
 | NVIDIA [Isaac Sim MCP documentation](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/development_tools/isaac_sim_mcp.html) | Its documentation search may help find current extension APIs and examples. | NVIDIA describes a semantic-search reference server; do not mistake its documentation search for a verified live scene-control implementation. |
 
-## Implementation milestones inside the feature PR
+## Implementation milestones across the first slice and follow-ups
 
 1. **Baseline and contracts.** Pin the implementation base, inventory the installed Sim/Kit/SDK versions and live
    bridge, confirm resource headroom and existing processes, and record the baseline tests. Recheck versioned API
@@ -198,8 +228,9 @@ any code or asset. The separate upstream permission issue in [VENDORING.md](../V
    evidence from the feature PR. Preserve the existing UR5e and desktop workflows and clearly list limitations.
 
 Milestones can be developed and reviewed as commits. A milestone is not marked passed just because a stub, mocked
-test or screenshot exists: it must meet its own tool-contract and evidence checks. The feature PR must call out any
-scope change and remain unmerged if the promised end-to-end path is not complete.
+test or screenshot exists: it must meet its own tool-contract and evidence checks. The owner-approved first
+slice may merge with explicit unmet gates above; later PRs must supply the missing implementation and evidence.
+Do not mark the complete end-to-end goal finished when only the first slice is merged.
 
 ## Verification: tests, screenshots, then actual use
 
@@ -280,7 +311,7 @@ session and stage identity, input hashes/licenses, tool-call transcript, expecte
 screenshot locations/hashes, warnings, cleanup and reviewer reproduction steps. Separate automated/mock results,
 real simulator results and the independent agent task. Do not store secrets or personal files in the repository.
 
-## Definition of done
+## Full end-to-end finish line (follow-ups included)
 
 - A user-approved local project with a normal multifile USD is discoverable, importable and inspectable through an
   actual MCP agent, and an agent can place an object and show a real screenshot without raw Python.
@@ -291,6 +322,6 @@ real simulator results and the independent agent task. Do not store secrets or p
 - The remote no-shared-mount workflow is authenticated and actually tested, and `.usdz` handling passes its archive
   gates; otherwise the affected path remains disabled and this end-to-end goal is recorded as incomplete.
   Unsupported dependency types and versions are explicit.
-- CI and the real headless/windowed checks pass with linked evidence and screenshots, the independent agent
+- For the full end-to-end claim, CI and the real headless/windowed checks pass with linked evidence and screenshots, the independent agent
   demonstration passes, and the tool/setup/compatibility docs describe the final behavior. A green CPU-only CI
   result or a screenshot by itself is insufficient.
