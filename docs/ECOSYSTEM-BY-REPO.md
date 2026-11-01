@@ -269,7 +269,7 @@ Read at [`949c488`](https://github.com/omni-mcp/isaac-sim-mcp/tree/949c4886be6e9
 
 ### [whats2000/isaacsim-mcp-server](https://github.com/whats2000/isaacsim-mcp-server)
 
-Fork of `omni-mcp/isaac-sim-mcp`. 
+Fork of `omni-mcp/isaac-sim-mcp`.
 Fork of omni-mcp grown to 43 tools in 9 categories, 107+ robots from the asset library, step-and-observe debugging, hot reload, multi-instance ports. Isaac Sim 5.1-6.0.1, PyPI.
 
 Read at [`bfcd211`](https://github.com/whats2000/isaacsim-mcp-server/tree/bfcd2111a9a98657ea87ba3be8564ea19c1a89e6) (2026-10-28).
@@ -756,7 +756,7 @@ Read at [`f5bd89e`](https://github.com/inbarajaldrin/omni-kit-mcp/tree/f5bd89ed6
 
 ### [inbarajaldrin/isaac-sim-mcp](https://github.com/inbarajaldrin/isaac-sim-mcp)
 
-Fork of `omni-mcp/isaac-sim-mcp`. 
+Fork of `omni-mcp/isaac-sim-mcp`.
 Upstream of this repository's UR5e twin pack (fork of omni-mcp/isaac-sim-mcp). Tools are declared in a registry dict and served by omni-kit-mcp.
 
 Read at [`27f6100`](https://github.com/inbarajaldrin/isaac-sim-mcp/tree/27f610056017d7bffc2ff56fac6d219702b781a0) (2026-07-02).

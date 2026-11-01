@@ -452,7 +452,7 @@ def render_repos(rows, date):
             out.append(f"### [{repo}](https://github.com/{repo})\n")
             meta = row["meta"]
             if meta.get("fork") and meta.get("parent"):
-                out.append(f"Fork of `{meta['parent']}`. ")
+                out.append(f"Fork of `{meta['parent']}`.")
             out.append(row["summary"] + "\n")
             if not sha:
                 out.append("The repository had no commits when this page was generated.\n")
