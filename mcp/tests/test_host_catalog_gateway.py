@@ -219,6 +219,19 @@ def test_the_default_server_lists_them_too():
     assert set(PROXIES) <= set(gw.mcp._tool_manager._tools)
 
 
+def test_offline_tools_defaults_to_the_default_server_and_tracks_its_live_bridge(monkeypatch):
+    default = build()
+    other = build()
+    monkeypatch.setattr(gw, "mcp", default)
+    assert gw.offline_tools() == gw.offline_tools(None) == sorted(PROXIES.values())
+    with LiveBridge() as live:
+        attach_twin(live)
+        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        gw.discover_and_register_tools(default)
+        assert gw.offline_tools() == []
+        assert gw.offline_tools(other) == sorted(PROXIES.values())
+
+
 def test_a_client_that_never_refreshes_still_sees_them_after_a_failed_startup_discovery():
     # Opening a session runs the lifespan, whose discovery fails (no bridge): the proxies remain.
     (listed,) = run(build(), tools)

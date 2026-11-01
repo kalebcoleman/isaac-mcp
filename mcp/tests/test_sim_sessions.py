@@ -72,6 +72,8 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_HOLD_TOKEN", "foreign")
     monkeypatch.setenv("ISAAC_MCP_BIND", "0.0.0.0")
     monkeypatch.setenv("UR5E_DT_SHOW_PANEL", "1")
+    monkeypatch.setenv("ISAAC_MCP_SIM_SESSION_ID", "foreign")
+    monkeypatch.setenv("ISAAC_MCP_SIM_SESSION_DIR", "/foreign/session")
     result = sim._launch(setup, 18766, 197, True, False)
     assert result["state"] == "starting" and result["pid"] == 510
     saved = json.loads((Path(result["log"]).parent / "session.json").read_text())
@@ -80,6 +82,8 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     child = captured["env"]
     assert child["ROS_DOMAIN_ID"] == "197" and child["ISAAC_MCP_PORT"] == "18766"
     assert child["ISAAC_MCP_BIND"] == "127.0.0.1" and child["MCP_CLIENT_OUTPUT_DIR"] == result["output_dir"]
+    assert child["ISAAC_MCP_SIM_SESSION_ID"] == result["id"]
+    assert child["ISAAC_MCP_SIM_SESSION_DIR"] == str(Path(result["log"]).parent)
     assert child["UR5E_DT_PYTHON"] == "/configured/sim-python"
     assert "PYTHONPATH" not in child and "ISAAC_MCP_HOLD_TOKEN" not in child
     assert "UR5E_DT_SHOW_PANEL" not in child

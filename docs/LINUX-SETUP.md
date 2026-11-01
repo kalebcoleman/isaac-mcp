@@ -78,9 +78,13 @@ and `ROS_DISTRO` override that for a nonstandard installation. The same ROS doma
 sets Cyclone DDS; source it in a separate external ROS terminal after the ROS setup, rather than mixing an
 incompatible ROS Python environment into the simulator's environment.
 
-The fake-driver launcher uses the Linux `setsid`, `ps`, and `timeout` commands. It records its mock process in
-`/tmp/ur_fake_driver.pid`; shutdown checks that process before signaling it and does not globally stop unrelated UR
-drivers. Its log is `/tmp/ur_fake_driver.log`.
+The fake-driver launcher uses the Linux `setsid`, `ps`, and `timeout` commands. An unmanaged `./run.sh` session
+records its mock process in `/tmp/ur_fake_driver.pid` and logs to `/tmp/ur_fake_driver.log`. A `sim__launch`
+managed session instead keeps its own driver PID file and log in that session's directory; shutdown verifies both
+the mock command and the session marker before signaling the driver. Startup still refuses to start when another UR
+driver is detected, even in a different ROS domain. Stop the fake driver before `sim__stop`: the driver's separate
+process group is not automatically stopped with the simulator.
 
 `backend="ursim"` is a different, optional workflow requiring Docker and the ROS workspace described in
-[the UR5e tool reference](TOOLS-UR5E.md#ur5e_dt__start_ros_driver).
+[the UR5e tool reference](TOOLS-UR5E.md#ur5e_dt__start_ros_driver). Its container and process controls are global,
+so it is not available through a managed `sim__launch` session.

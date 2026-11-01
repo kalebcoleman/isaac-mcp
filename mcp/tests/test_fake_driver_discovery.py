@@ -1,14 +1,80 @@
 """The fake-driver launcher must discover ROS and never silently use real hardware."""
 
+import ast
 import os
 import signal
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, Dict
 
 import pytest
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/launch_ur_fake.sh"
+SOURCE = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.py"
+
+
+def driver_handler():
+    """Load the real bridge handler without importing Kit."""
+    tree = ast.parse(SOURCE.read_text())
+    method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                  and n.name == "_cmd_start_ros_driver")
+    module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
+    namespace = {"__file__": str(SOURCE), "Dict": Dict, "Any": Any}
+    exec(compile(module, str(SOURCE), "exec"), namespace)
+    return namespace["_cmd_start_ros_driver"]
+
+
+def test_managed_bridge_passes_only_its_driver_paths_and_session_marker(tmp_path, monkeypatch):
+    session_id = "a" * 32
+    monkeypatch.setenv("ISAAC_MCP_SIM_SESSION_ID", session_id)
+    monkeypatch.setenv("ISAAC_MCP_SIM_SESSION_DIR", str(tmp_path))
+    monkeypatch.setenv("ROS_DOMAIN_ID", "197")
+    monkeypatch.setenv("PYTHONPATH", "/foreign/python")
+    monkeypatch.setenv("UR_FAKE_PIDFILE", "/foreign/driver.pid")
+    captured = {}
+
+    def run(cmd, **kwargs):
+        captured.update(cmd=cmd, **kwargs)
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert driver_handler()(None, action="status")["status"] == "success"
+    env = captured["env"]
+    assert env["ROS_DOMAIN_ID"] == "197" and env["ISAAC_MCP_SIM_SESSION_ID"] == session_id
+    assert env["UR_FAKE_PIDFILE"] == str(tmp_path / "ur_fake_driver.pid")
+    assert env["UR_FAKE_LOG"] == str(tmp_path / "ur_fake_driver.log")
+    assert "PYTHONPATH" not in env
+
+
+@pytest.mark.parametrize("action", ["up", "down", "status"])
+def test_managed_bridge_rejects_shared_ursim_and_incomplete_session(monkeypatch, action):
+    monkeypatch.setenv("ISAAC_MCP_SIM_SESSION_ID", "b" * 32)
+    monkeypatch.setenv("ISAAC_MCP_SIM_SESSION_DIR", "/session")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: pytest.fail("must not start a subprocess"))
+    handler = driver_handler()
+    result = handler(None, action=action, backend="ursim")
+    assert result["status"] == "error" and "shared host resources" in result["message"]
+    monkeypatch.delenv("ISAAC_MCP_SIM_SESSION_DIR")
+    result = handler(None, action="down", backend="fake")
+    assert result["status"] == "error" and "incomplete" in result["message"]
+
+
+def test_unmanaged_bridge_preserves_legacy_fake_driver_defaults(monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_SIM_SESSION_ID", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_SIM_SESSION_DIR", raising=False)
+    monkeypatch.setenv("UR_FAKE_PIDFILE", "/foreign/driver.pid")
+    captured = {}
+
+    def run(cmd, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert driver_handler()(None, action="status")["status"] == "success"
+    assert "UR_FAKE_PIDFILE" not in captured["env"]
+    assert "ISAAC_MCP_SIM_SESSION_ID" not in captured["env"]
 
 
 @pytest.fixture
@@ -50,6 +116,8 @@ exit 1
                ROS_SETUP=str(setup), UR_FAKE_LOG=str(tmp_path / "driver.log"),
                UR_FAKE_PIDFILE=str(tmp_path / "driver.pid"), ARG_LOG=str(tmp_path / "args"),
                ROS_DOMAIN_ID="197")
+    env.pop("ISAAC_MCP_SIM_SESSION_ID", None)
+    env.pop("ISAAC_MCP_SIM_SESSION_DIR", None)
     return tmp_path, env
 
 
@@ -170,3 +238,47 @@ def test_down_stops_only_its_own_mock_driver(fake_ros):
         except ProcessLookupError:
             pass
         other.wait(timeout=5)
+
+
+def test_other_managed_and_unmanaged_sessions_cannot_stop_a_managed_driver(fake_ros):
+    root, env = fake_ros
+    session_a = dict(env, ROS_DISTRO="jazzy", ADVERTISED_ARG="use_mock_hardware",
+                     KEEP_LAUNCH_RUNNING="1", ISAAC_MCP_SIM_SESSION_ID="a" * 32,
+                     UR_FAKE_PIDFILE=str(root / "a.pid"), UR_FAKE_LOG=str(root / "a.log"))
+    session_b = dict(session_a, ISAAC_MCP_SIM_SESSION_ID="b" * 32, ROS_DOMAIN_ID="198",
+                     UR_FAKE_PIDFILE=str(root / "b.pid"), UR_FAKE_LOG=str(root / "b.log"))
+    unmanaged = dict(env, ROS_DISTRO="jazzy", UR_FAKE_PIDFILE=str(root / "unmanaged.pid"))
+    managed_pid = None
+    try:
+        up = subprocess.run(["bash", str(SCRIPT), "up"], env=session_a, text=True,
+                            capture_output=True, timeout=15)
+        assert up.returncode == 0, up.stdout + up.stderr
+        managed_pid = int((root / "a.pid").read_text())
+
+        # Session B has no driver: down must not consult A's record.
+        down = subprocess.run(["bash", str(SCRIPT), "down"], env=session_b, text=True,
+                              capture_output=True, timeout=5)
+        assert down.returncode == 0 and Path(f"/proc/{managed_pid}/cmdline").read_bytes()
+
+        # Even an incorrect or stale record naming A cannot pass B's ownership check.
+        for foreign_env, path in ((session_b, root / "b.pid"), (unmanaged, root / "unmanaged.pid")):
+            path.write_text(str(managed_pid))
+            down = subprocess.run(["bash", str(SCRIPT), "down"], env=foreign_env, text=True,
+                                  capture_output=True, timeout=5)
+            assert down.returncode == 0, down.stdout + down.stderr
+            assert "no matching managed driver" in down.stdout
+            assert Path(f"/proc/{managed_pid}/cmdline").read_bytes()
+
+        down = subprocess.run(["bash", str(SCRIPT), "down"], env=session_a, text=True,
+                              capture_output=True, timeout=25)
+        assert down.returncode == 0, down.stdout + down.stderr
+        status = Path(f"/proc/{managed_pid}/stat")
+        assert not status.exists() or status.read_text().split()[2] == "Z"
+    finally:
+        if managed_pid is not None:
+            try:
+                process_env = Path(f"/proc/{managed_pid}/environ").read_bytes()
+                if b"ISAAC_MCP_SIM_SESSION_ID=" + b"a" * 32 + b"\0" in process_env:
+                    os.killpg(managed_pid, signal.SIGKILL)
+            except (FileNotFoundError, ProcessLookupError):
+                pass

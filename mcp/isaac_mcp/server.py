@@ -234,11 +234,11 @@ def registered_tools(server: Any = None) -> List[str]:
 
 
 def offline_tools(server: Any = None) -> List[str]:
-    """The canonical names currently served as offline catalog proxies, sorted.
+    """The canonical offline catalog proxy names, sorted (default: the default server's).
 
     These are listed and callable (and cross the same policy hooks) but the selected bridge does
     not serve them; ``registered_tools`` does not include them."""
-    offline = _offline_for(server)
+    offline = _offline_for(mcp if server is None else server)
     return sorted(offline.names.values()) if offline is not None else []
 
 

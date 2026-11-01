@@ -227,6 +227,11 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 - The fake backend discovers the standard ROS setup for Ubuntu 22.04/Humble or Ubuntu 24.04/Jazzy. On Jazzy, install `ros-jazzy-ur-robot-driver`, `ros-jazzy-ros2controlcli`, and `ros-jazzy-rmw-cyclonedds-cpp` through the system package manager. The launcher checks the driver's advertised mock-hardware argument and refuses to start if it cannot verify it; use `ROS_SETUP` for a nonstandard sourced ROS installation.
 - Fake-driver startup waits until both the joint-state broadcaster and scaled trajectory controller are active; controller queries are bounded when the manager is unavailable.
 - Fake-driver shutdown targets the verified mock process recorded by this launcher and its dedicated process group; it does not globally stop other UR drivers. If its PID file is missing or stale, inspect the host's processes instead of assuming an unrelated driver was stopped.
+- Managed `sim__launch` sessions use separate fake-driver records and logs, with an ownership marker checked before
+  shutdown. The launcher still refuses startup if any UR driver is detected on the host, even in another ROS domain.
+  Stop the fake driver before stopping its simulator; `sim__stop` does not stop the driver's separate process group.
+- `backend="ursim"` is unavailable in managed sessions because its process and container operations are global.
+  It remains available to unmanaged sessions with the prerequisites above.
 - Example: `{"action": "status"}` / `{"mode": "sim", "action": "up", "backend": "fake"}`
 
 ### `ur5e_dt__sync_real_poses`

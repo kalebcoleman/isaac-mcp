@@ -257,7 +257,9 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
             child_env.pop(key, None)
         child_env.update({"UR5E_DT_PORT": str(port), "ISAAC_MCP_PORT": str(port),
                           "ISAAC_MCP_BIND": "127.0.0.1", "ROS_DOMAIN_ID": str(ros_domain),
-                          "MCP_CLIENT_OUTPUT_DIR": str(output)})
+                          "MCP_CLIENT_OUTPUT_DIR": str(output),
+                          "ISAAC_MCP_SIM_SESSION_ID": session_id,
+                          "ISAAC_MCP_SIM_SESSION_DIR": str(directory)})
         if env.get("UR5E_DT_PYTHON"):
             child_env["UR5E_DT_PYTHON"] = env["UR5E_DT_PYTHON"]
         user_config = directory / "user.config.json"
@@ -356,6 +358,8 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
         ROS domains 0–231 are allowed with the bundled Cyclone DDS profile.
         UR5e tools are enabled either way; set show_ur5e_panel=true to show their panel
         in a graphical session. Resource checks are snapshots, not reservations.
+        Fake-driver records are session-scoped; stop the driver before stopping the session.
+        The URSim driver backend is unavailable because its resources are host-wide.
         Launching runs configured local code.
         """
         return _launch(settings, port, ros_domain, headless, allow_shared_domain, show_ur5e_panel)

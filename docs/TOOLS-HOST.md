@@ -187,6 +187,10 @@ Example calls: `sim__launch` with `{"port":18766,"ros_domain":42}`, then `sim__s
 verify its PID before operating the scene. If necessary, identify its graphical client with `list_windows` by PID.
 Managed launches accept ROS domains 0–231. With the bundled Cyclone DDS profile's participant-index range, domain
 232 would make discovery probe beyond UDP port 65535.
+Each session has its own fake-driver PID file and log. Stop that driver before stopping the session; `sim__stop`
+does not stop its separate process group. The fake launcher still prevents startup alongside another detected UR
+driver. The shared-resource URSim backend is unavailable in managed sessions. These protections apply to newly
+launched sessions; restart a session started with an older version so it receives the session identity.
 `starting` means Kit reports it is still initializing. `readiness_unknown` means the bridge answered but cannot
 report Kit readiness (for example, an older bridge); verify the application before using scene tools. An unavailable
 bridge reports `starting_or_unresponsive`.

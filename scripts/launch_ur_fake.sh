@@ -67,11 +67,20 @@ _driver_running() { pgrep -f "[r]os2 launch ur_robot_driver" >/dev/null 2>&1; }
 
 # A stale or replaced PID file must never be used to signal an unrelated process.
 _managed_driver_running() {
-  local pid="$1" cmdline
+  local pid="$1" cmdline process_env
   [[ "$pid" =~ ^[0-9]+$ ]] && [ -r "/proc/$pid/cmdline" ] || return 1
   cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")" || return 1
   [[ "$cmdline" == *"/ros2 launch ur_robot_driver "* ]] || return 1
-  [[ "$cmdline" == *" use_mock_hardware:=true "* || "$cmdline" == *" use_fake_hardware:=true "* ]]
+  [[ "$cmdline" == *" use_mock_hardware:=true "* || "$cmdline" == *" use_fake_hardware:=true "* ]] || return 1
+  # A copied or stale PID file must not let one managed session stop another.
+  # The launcher passes its unique session ID to the actual ros2 process.
+  process_env="$(tr '\0' '\n' < "/proc/$pid/environ")" || return 1
+  if [ -n "${ISAAC_MCP_SIM_SESSION_ID:-}" ]; then
+    grep -Fxq -- "ISAAC_MCP_SIM_SESSION_ID=$ISAAC_MCP_SIM_SESSION_ID" <<<"$process_env"
+  else
+    # The legacy, unmanaged PID file must not claim a managed session's driver.
+    ! grep -q '^ISAAC_MCP_SIM_SESSION_ID=' <<<"$process_env"
+  fi
 }
 
 # ros2 control waits indefinitely for a missing controller manager. Bound every

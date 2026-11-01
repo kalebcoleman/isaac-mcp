@@ -109,3 +109,15 @@ enabled by default and makes only the panel optional.
   tests did not connect physical hardware, and do not establish behavior for other Kit versions.
 - A separate headless 6.2 session returned recording status and completed Quick Start through the
   catalog-listed tools, then was stopped through `sim__stop`.
+
+## Fake-driver ownership follow-up
+
+- Two disposable headless Isaac Sim 6.2 sessions were launched through `sim__launch` on ports 18974 and 18975,
+  with ROS 2 Jazzy domains 211 and 212. The first session started the actual `ur_robot_driver` with mock hardware;
+  its joint-state broadcaster and scaled trajectory controller reported active.
+- The second session's fake-driver start was refused while the first driver was running. Its `down` call did not
+  stop the first driver, both with no local PID record and with its record deliberately set to the first driver's
+  PID. Its URSim `down` request was also refused. The first session's status still reported a running driver,
+  active controller and a `/joint_states` message; its own `down` stopped the driver.
+- Both temporary simulator sessions were stopped through `sim__stop`. This exercised a simulated driver on one
+  Ubuntu 24.04.5 / RTX 5080 machine; it did not test concurrent fake drivers, URSim or physical hardware.
