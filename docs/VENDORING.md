@@ -63,3 +63,23 @@ All components now live directly in this repository:
 - Git submodules (`.gitmodules` and `.git/modules/external`) have been eliminated entirely.
 - Clones are self-contained and require no recursive submodule flags or external git network operations.
 - Edits to host tools (`mcp/`) or Kit extensions (`exts/`) are tracked in the root repository history.
+
+## Project scene implementation references
+
+The new `sim-tools` pack and project broker are independently authored; no code was copied from
+whats2000/isaacsim-mcp-server (`bfcd2111a9a98657ea87ba3be8564ea19c1a89e6`, MIT),
+omni-mcp/isaac-sim-mcp (`949c4886be6e9091ceac8be4272207471b2d3d80`, MIT), or
+dcc-mcp/dcc-mcp-openusd (`84595bde4f2dc87ab953688ff5a3123bcec9e88c`, MIT).
+Their public sources and licenses were inspected as references. The comparison includes source-derived
+signatures and descriptions from whats2000; its notice is retained in `docs/provenance/whats2000-LICENSE`. Work-r-labs/robots
+(`ab6aa489855256de07ba46c7b45887fdbc42b607`, root MIT) was evaluated, but individual asset
+provenance was not sufficiently established for the candidate and it was not imported or redistributed.
+This does not resolve the separate omni-kit-mcp permission question above.
+
+The live non-UR5e fixture was Agilebot GBT-C5A at
+[`33281110dd75017fcb821ef4a7316960c0702e18`](https://github.com/sh-agilebot/agilebot_isaac_usd_assets/tree/33281110dd75017fcb821ef4a7316960c0702e18/gbt-c5a).
+Its BSD-3-Clause license and repository THIRD_PARTY_LICENSES identify the robot as original
+Agilebot work and state that former third-party gripper/camera integrations were removed.
+Only the selected robot folder was imported. Robot files are not bundled; screenshots are attributed
+in the evidence. The license notice is retained in `docs/provenance/agilebot-LICENSE`.
+The generated multifile regression fixture is original CC0 data, not third-party robot geometry.

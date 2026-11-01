@@ -85,6 +85,8 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     assert child["ISAAC_MCP_SIM_SESSION_ID"] == result["id"]
     assert child["ISAAC_MCP_SIM_SESSION_DIR"] == str(Path(result["log"]).parent)
     assert child["UR5E_DT_PYTHON"] == "/configured/sim-python"
+    assert child["ISAAC_MCP_PHYSICS_BACKEND"] == "physx"
+    assert result["physics_backend"] == "physx"
     assert "PYTHONPATH" not in child and "ISAAC_MCP_HOLD_TOKEN" not in child
     assert "UR5E_DT_SHOW_PANEL" not in child
     assert "--headless" in captured["args"] and captured["start_new_session"] is True
@@ -93,19 +95,32 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
 
 
 @pytest.mark.parametrize("show_panel", [False, True])
-def test_launch_selects_twin_panel(setup, monkeypatch, show_panel):
+@pytest.mark.parametrize("motion_bvh", [False, True])
+@pytest.mark.parametrize("backend", ["physx", "newton"])
+def test_launch_selects_twin_panel_and_sensor_renderer(setup, monkeypatch, show_panel, motion_bvh, backend):
     captured = {}
 
     def popen(args, **kwargs):
         captured["args"] = args
+        captured["env"] = kwargs["env"]
         return SimpleNamespace(pid=510, wait=lambda: 0)
 
     monkeypatch.setattr(sim.subprocess, "Popen", popen)
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
     monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
-    result = sim._launch(setup, 18766, 197, False, False, show_panel)
+    result = sim._launch(setup, 18766, 197, False, False, show_panel, motion_bvh, backend)
     assert ("--ur5e-panel" in captured["args"]) is show_panel
     assert result["show_ur5e_panel_on_start"] is show_panel
+    assert ("--motion-bvh" in captured["args"]) is motion_bvh
+    assert result["enable_motion_bvh"] is motion_bvh
+    assert result["physics_backend"] == backend
+    assert captured["env"]["ISAAC_MCP_PHYSICS_BACKEND"] == backend
+
+
+def test_unknown_backend_refuses_before_process_or_session_creation(setup):
+    with pytest.raises(ValueError, match="physics_backend"):
+        sim._launch(setup, 18766, 197, False, False, physics_backend="automatic")
+    assert not Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"]).exists()
 
 
 def test_relative_sessions_directory_is_shared_with_simulator(setup, monkeypatch, tmp_path):

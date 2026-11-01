@@ -1,0 +1,11 @@
+[package]
+version = "0.1.0"
+title = "Generic MCP scene tools"
+description = "Explicitly targeted scene tools and trusted project snapshot imports"
+category = "Simulation"
+[dependencies]
+"isaac.mcp.bridge" = {}
+"omni.usd" = {}
+"omni.timeline" = {}
+[[python.module]]
+name = "sim_tools"

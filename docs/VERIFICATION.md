@@ -135,7 +135,7 @@ runtime portfile. All 23 twin tools were present before and after disabling and 
 
 ## Generic scene API validation
 
-The proposed generic `sim.*` tools are not implemented. This standalone check exercises selected underlying Kit/USD
+For the current MCP implementation and its separate live results, see [project scene evidence](evidence/project-scene/README.md). The historical standalone check below exercises selected underlying Kit/USD
 APIs in a **new headless process** with a synthetic scene containing Xforms, cubes, a sphere, a scope and an inactive
 prim. It creates a new stage in that process and closes the app afterwards; it does not connect to or alter an existing
 simulator session or train a policy. It does not explicitly enable the UR5e extension. Starting Isaac Sim uses the

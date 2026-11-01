@@ -54,6 +54,7 @@ class Recording:
     window: dict | None = None
     out_width: int | None = None
     out_height: int | None = None
+    full_screen: bool = False
     thread: threading.Thread | None = None
     frames: int = 0
     max_seconds: int = 600
@@ -64,6 +65,15 @@ class Recording:
 _lock = threading.Lock()
 _current: Recording | None = None
 _last: dict | None = None
+
+
+def _scaled_recording_size(width: int, height: int, max_width: int) -> tuple[int, int]:
+    """Choose explicit even encoder dimensions, preserving the capture aspect."""
+    out_width = min(width, max_width)
+    out_width -= out_width % 2
+    # Round height to the nearest multiple of two, as ffmpeg's scale=-2 does.
+    out_height = max(2, 2 * ((height * out_width + width) // (2 * width)))
+    return out_width, out_height
 
 
 def _ffmpeg() -> str:
@@ -158,7 +168,7 @@ def _finish(rec: Recording) -> dict:
             else "monitor"
         ),
         "output": (
-            f"{rec.out_width}x{rec.out_height} (full screen)"
+            f"{rec.out_width}x{rec.out_height} ({'full screen' if rec.full_screen else 'scaled capture'})"
             if rec.out_width and rec.out_height
             else "native capture size"
         ),
@@ -767,7 +777,8 @@ def register_screen_tools(
                     f"pad={out_width}:{out_height}:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p"
                 )
             else:
-                vf = f"scale='min({max_width},iw)':-2,format=yuv420p"
+                out_width, out_height = _scaled_recording_size(width, height, max_width)
+                vf = f"scale={out_width}:{out_height},format=yuv420p"
             cmd = [
                 _ffmpeg(),
                 "-hide_banner",
@@ -813,6 +824,7 @@ def register_screen_tools(
                 window=target,
                 out_width=out_width,
                 out_height=out_height,
+                full_screen=full_screen,
                 max_seconds=max_seconds,
             )
             rec.thread = threading.Thread(target=_record_loop, args=(rec,), daemon=True)
@@ -826,7 +838,7 @@ def register_screen_tools(
         output = (
             f"{out_width}x{out_height} full screen"
             if full_screen
-            else f"native, max width {max_width}"
+            else f"{out_width}x{out_height}, max width {max_width}"
         )
         return (
             f"recording to {path}\n"

@@ -35,13 +35,17 @@ _spec = importlib.util.spec_from_file_location("gen_host_catalog", ROOT / "scrip
 generator = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(generator)
 
-PROXIES = {gw._mcp_name(canonical): canonical for canonical in host_catalog.catalog_tool_names()}
+PROXIES = {gw._mcp_name(canonical): canonical for canonical in host_catalog.catalog_tool_names() if canonical.startswith("ur5e_dt.")}
 PLAY = "ur5e_dt__play_scene"
 
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch, tmp_path):
     """No ambient bridge, filter or policy; capture dirs in tmp; and no way to spawn a process."""
+    # This regression module exercises the existing UR5e-only bridge/catalog surface.
+    # The full multi-catalog surface is covered in test_scene_gateway.py.
+    full_catalog = host_catalog.load_catalog()
+    monkeypatch.setattr(host_catalog, "load_catalog", lambda: __import__("copy").deepcopy({k:v for k,v in full_catalog.items() if k.startswith("ur5e_dt.")}))
     for var in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_PORT", "UR5E_DT_PORT",
                 "ISAAC_MCP_HOST", lt.ENV_VAR):
         monkeypatch.delenv(var, raising=False)
@@ -286,7 +290,7 @@ def test_refused_retry_does_not_claim_the_first_attempt_never_ran(monkeypatch):
     client = gw.BridgeClient(port=8766)
     attempts = []
 
-    def connect():
+    def connect(timeout=None):
         attempts.append("connect")
         if len(attempts) > 1:
             raise ConnectionRefusedError("bridge stopped after the first request")
@@ -788,4 +792,4 @@ def test_the_wheel_config_ships_the_whole_package_directory():
         assert not {"exclude", "only-include", "only-packages"} & set(target)
     from importlib import resources
     packaged = resources.files("isaac_mcp").joinpath(host_catalog.CATALOG_DIR)
-    assert [entry.name for entry in packaged.iterdir() if entry.name.endswith(".json")] == ["ur5e_dt.json"]
+    assert sorted(entry.name for entry in packaged.iterdir() if entry.name.endswith(".json")) == ["assets.json", "sim.json", "ur5e_dt.json"]

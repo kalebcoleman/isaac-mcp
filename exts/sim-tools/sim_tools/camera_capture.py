@@ -1,0 +1,261 @@
+"""Fresh camera pixels from a completed, owned Hydra render product.
+
+Replicator's paused RGB pointer can lag behind its Hydra frame counter. Request
+a renderer-managed CPU transfer during the matching drawable event instead.
+Only public Kit APIs are used. No CUDA pointer access or orchestrator stepping.
+"""
+
+import asyncio
+import time
+
+from isaac_mcp.project_assets import refuse
+
+
+class RenderFrames:
+    """Frame numbers copied only while their owned drawable event is alive."""
+
+    def __init__(self, texture):
+        self.texture = texture
+        self.before = None
+        self.after = None
+        self.frames = 0
+
+    def observe(self, event):
+        handle = event["result_handle"]
+        if not handle:
+            return False
+        frame = (self.texture.get_frame_info(handle) or {}).get("frame_number")
+        if frame is None or frame == self.after:
+            return False
+        if self.before is None:
+            self.before = self.after = frame
+            return False
+        self.after = frame
+        self.frames += 1
+        return True
+
+    def observation(self):
+        return dict(
+            frame_number_before=self.before,
+            frame_number_after=self.after,
+            frame_baseline="first completed render observed after this request",
+            completed_frames_observed=self.frames,
+        )
+
+
+async def wait_for_frames(texture, validate, timeout=5):
+    """LiDAR render warm-up; this does not establish a new accumulated scan."""
+    try:
+        import omni.hydratexture as ht
+        import omni.kit.app
+        from carb.eventdispatcher import get_eventdispatcher
+
+        state = RenderFrames(texture)
+        error = None
+        active = True
+
+        def drawable(event):
+            nonlocal error
+            if active and error is None:
+                try:
+                    state.observe(event)
+                except Exception as exc:
+                    error = exc
+
+        subscription = get_eventdispatcher().observe_event(
+            observer_name="IsaacMCP.SensorRenderWait",
+            event_name=ht.GLOBAL_EVENT_DRAWABLE_CHANGED,
+            on_event=drawable,
+            filter=texture.get_event_key(),
+        )
+    except (ImportError, AttributeError) as exc:
+        refuse("SENSOR_API_UNAVAILABLE", "Render completion events unavailable: " + str(exc))
+
+    async def wait():
+        # Yield for post-render annotator dispatch even when the event already
+        # arrived. Never drive rendering, Play, or a nested application update.
+        while True:
+            await omni.kit.app.get_app().next_update_async()
+            validate()
+            if error is not None:
+                raise error
+            if state.frames:
+                return state.observation()
+
+    try:
+        return await asyncio.wait_for(wait(), timeout)
+    except asyncio.TimeoutError:
+        refuse(
+            "RENDER_TIMEOUT",
+            "Render warm-up did not complete within five seconds. Check rendering is enabled; no completed scan is implied by this wait.",
+        )
+    finally:
+        active = False
+        state.texture = None
+        subscription.reset()
+
+
+class Readback(RenderFrames):
+    """One bounded native request; late callbacks cannot publish stale data."""
+
+    def __init__(self, texture, resolution, renderer, convert, loop):
+        super().__init__(texture)
+        self.resolution = resolution
+        self.renderer = renderer
+        self.convert = convert
+        self.loop = loop
+        self.future = loop.create_future()
+        # A new texture has no render result yet. get_frame_info(0) throws
+        # getFrameData on released headless Kit builds instead of returning
+        # an empty dict. Only dereference the result_handle supplied by a
+        # drawable event, while that event is alive (the public API contract).
+        self.queued = False
+        self.finished = False
+        self.active = True
+
+    def _complete(self, data=None, error=None):
+        if self.active and not self.future.done():
+            if error is not None:
+                self.future.set_exception(error)
+            else:
+                self.future.set_result(data)
+
+    def pixels(self, buffer, size, width, height, fmt):
+        # Native capture can complete after a timeout/stage change. Its buffer
+        # is owned by Kit and valid only in this callback; never retain it.
+        try:
+            if not self.active:
+                return
+            if (
+                (height, width) != self.resolution
+                or not 64 <= height <= 1024
+                or not 64 <= width <= 1024
+                or size != width * height * 4
+                or str(fmt) != "TextureFormat.RGBA8_UNORM"
+            ):
+                refuse(
+                    "SENSOR_FORMAT",
+                    "Renderer must deliver bounded RGBA8 CPU pixels at the configured resolution.",
+                )
+            import numpy as np
+
+            # Kit's public converter copies the CPU capsule while it is valid.
+            values = self.convert(buffer, size, width, height, fmt)
+            if len(values) != size:
+                refuse("SENSOR_FORMAT", "Renderer CPU transfer length is inconsistent.")
+            data = np.asarray(values, dtype=np.uint8).reshape(height, width, 4)
+            self.loop.call_soon_threadsafe(self._complete, data)
+        except Exception as e:
+            self.loop.call_soon_threadsafe(self._complete, None, e)
+        finally:
+            self.finished = True
+
+    def drawable(self, event):
+        if not self.active or self.queued:
+            return
+        try:
+            if not self.observe(event):
+                return
+            # Drain frames already in flight when the request arrived. Unlike
+            # the old wait, the fourth completion schedules a NEW CPU transfer.
+            if self.frames < 4:
+                return
+            aovs = self.texture.get_aov_info(
+                event["result_handle"], aov_name="LdrColor", include_texture=True
+            )
+            if not aovs:
+                return
+            resource = aovs[0].get("texture", {}).get("rp_resource")
+            if resource is None:
+                return
+            self.renderer.capture_next_frame_rp_resource_callback(self.pixels, resource)
+            self.queued = True
+            self.texture = None
+        except Exception as e:
+            self.loop.call_soon_threadsafe(self._complete, None, e)
+
+    def close(self):
+        self.active = False
+        self.texture = None
+        if not self.queued:
+            self.finished = True
+        if not self.future.done():
+            self.future.cancel()
+        elif not self.future.cancelled():
+            # A simultaneous target change may supersede a native error.
+            self.future.exception()
+
+
+async def capture(sensor, validate, timeout=5):
+    """Await ordinary updates and a CPU callback, restoring all subscriptions."""
+    validate()
+    pending = sensor.get("readback_pending")
+    if pending is not None and not pending.finished:
+        refuse(
+            "RENDER_BUSY",
+            "A timed-out CPU transfer is still pending. Wait or recreate this owned camera; another native request was not queued.",
+        )
+    try:
+        import omni.hydratexture as ht
+        import omni.kit.app
+        import omni.kit.renderer_capture as rc
+        from carb.eventdispatcher import get_eventdispatcher
+
+        texture = sensor["product"].hydra_texture
+        renderer = rc.acquire_renderer_capture_interface()
+        for obj, methods in (
+            (texture, ("get_frame_info", "get_aov_info", "get_event_key")),
+            (renderer, ("capture_next_frame_rp_resource_callback",)),
+            (rc, ("convert_raw_bytes_to_list",)),
+        ):
+            if any(not callable(getattr(obj, name, None)) for name in methods):
+                refuse(
+                    "SENSOR_API_UNAVAILABLE",
+                    "Enable the installed Hydra texture and renderer capture extensions; fresh bounded CPU readback is unavailable.",
+                )
+        state = Readback(
+            texture,
+            sensor["resolution"],
+            renderer,
+            rc.convert_raw_bytes_to_list,
+            asyncio.get_running_loop(),
+        )
+        sensor["readback_pending"] = state
+        subscription = get_eventdispatcher().observe_event(
+            observer_name="IsaacMCP.CameraCapture",
+            event_name=ht.GLOBAL_EVENT_DRAWABLE_CHANGED,
+            on_event=state.drawable,
+            filter=texture.get_event_key(),
+        )
+    except (ImportError, AttributeError) as e:
+        refuse(
+            "SENSOR_API_UNAVAILABLE",
+            "Fresh renderer CPU capture unavailable: " + str(e),
+        )
+    begin = time.monotonic()
+
+    async def wait():
+        while not state.future.done():
+            await omni.kit.app.get_app().next_update_async()
+            validate()
+        return await state.future
+
+    try:
+        data = await asyncio.wait_for(wait(), timeout)
+        validate()
+        return data, dict(
+            waited=True,
+            render_product=sensor["product_path"],
+            **state.observation(),
+            cpu_transfer_completed=True,
+            wait_seconds=time.monotonic() - begin,
+            meaning="CPU pixels transferred from this product after the requested render completions; not an atomic physics/sensor snapshot",
+        )
+    except asyncio.TimeoutError:
+        refuse(
+            "RENDER_TIMEOUT",
+            "Camera render/CPU transfer did not complete within five seconds. Check rendering is enabled. No cached pixels were returned; wait_for_render=false explicitly permits stale data.",
+        )
+    finally:
+        state.close()
+        subscription.reset()
