@@ -154,21 +154,85 @@ def reset_export_handles(layer, entries):
     return sorted(str(p) for p in paths)
 
 
+def retained_textures(manager_type):
+    """Read the inspected 6.x Replicator cache layout without pruning or allocating.
+
+    This is a private, feature-detected adapter. Do not use MultiTexture.get or
+    its _hydra_textures property: both prune the cache. Keep strong references
+    only for this synchronous validation, with no app update or await.
+    """
+    manager = vars(manager_type).get("_hydra_textures")
+    cache = vars(manager).get("_MultiTexture__hydra_textures")
+    if type(cache) is not dict or len(cache) > 64:
+        raise ValueError("unsupported Replicator texture-cache layout or context bound")
+    textures = []
+    snapshots = []
+    count = 0
+    for key, wrappers in tuple(cache.items()):
+        if type(wrappers) is not list:
+            raise ValueError("unsupported Replicator texture-cache entries")
+        count += len(wrappers)
+        if count > 256:
+            raise ValueError("Replicator texture inspection exceeds 256 entries")
+        members = tuple(wrappers)
+        bindings = []
+        for wrapper in members:
+            fields = vars(wrapper)
+            if "hydra_texture" not in fields:
+                raise ValueError("unsupported Replicator texture wrapper")
+            texture = fields["hydra_texture"]
+            bindings.append(texture)
+            if texture is not None:
+                textures.append(texture)
+        snapshots.append((key, wrappers, members, tuple(bindings)))
+
+    def verify():
+        if (vars(manager_type).get("_hydra_textures") is not manager
+                or vars(manager).get("_MultiTexture__hydra_textures") is not cache
+                or len(cache) != len(snapshots)):
+            raise ValueError("Replicator texture cache changed during inspection")
+        for key, wrappers, members, bindings in snapshots:
+            if (cache.get(key) is not wrappers or len(wrappers) != len(members)
+                    or any(current is not previous for current, previous in zip(wrappers, members))
+                    or any(vars(wrapper).get("hydra_texture") is not texture
+                           for wrapper, texture in zip(members, bindings))):
+                raise ValueError("Replicator texture binding changed during inspection")
+
+    return textures, verify
+
+
 def validate_native_binding(entry):
-    """Read public factory bindings; never touch Replicator's pruning cache getter."""
+    """Check an already-retained texture; never turn a USD integer into a pointer.
+
+    get_hydra_texture_from_handle(viewportHandle) crashed in the installed 6.2
+    native binding. Its integer contract is not established by the API stub.
+    The caller's explicit export policy authorizes omission, not this adapter.
+    """
     try:
-        import omni.hydratexture
+        import omni.replicator.core as rep
         import omni.usd
 
-        factory = omni.hydratexture.acquire_hydra_texture_factory_interface()
-        texture = factory.get_hydra_texture_from_handle(entry["handle"])
-        if texture is None:
-            raise ValueError("no live texture for this handle")
+        usd_context = omni.usd.get_context()
+        stage, stage_id = usd_context.get_stage(), usd_context.get_stage_id()
+        if stage is None:
+            raise ValueError("no current stage")
+        context = usd_context.get_name()
+        textures, verify = retained_textures(rep.vp_manager.ViewportManager)
+        matches = [texture for texture in textures
+                   if texture.get_usd_context_name() == context
+                   and str(texture.get_render_product_path()) == entry["product"]]
+        if len(matches) != 1:
+            raise ValueError("expected exactly one retained texture for this context/product")
+        texture = matches[0]
         actual = (texture.get_usd_context_name(), str(texture.get_render_product_path()),
                   str(texture.get_camera_path()), texture.get_width(), texture.get_height())
-        expected = (omni.usd.get_context().get_name(), entry["product"],
+        expected = (context, entry["product"],
                     entry["camera"], entry["width"], entry["height"])
         if actual != expected:
             raise ValueError(f"native binding differs: {actual!r}")
+        verify()
+        if (usd_context.get_stage() != stage or usd_context.get_stage_id() != stage_id
+                or usd_context.get_name() != context):
+            raise ValueError("USD stage/context changed during inspection")
     except Exception as error:
         unsupported("Cannot verify current native camera binding: " + str(error)[:600], entry["path"])
