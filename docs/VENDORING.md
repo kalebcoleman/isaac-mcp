@@ -46,7 +46,9 @@ This repository consolidates two previously submodule-managed codebases into a s
   sensor and material files, the Vention bench and the Poliigon oak textures must stay out of a
   public repository; the Husarion gripper files (Apache-2.0) and the FMB objects (CC BY 4.0) may
   ship with notices. Per-group evidence, sizes and the fetch-on-demand plan are in
-  [`provenance/ASSETS.md`](provenance/ASSETS.md).
+  [`provenance/ASSETS.md`](provenance/ASSETS.md). The extension resolves them through
+  `exts/ur5e-dt/ur5e_dt/asset_cache.py` and `exts/ur5e-dt/assets-manifest.json`;
+  `scripts/fetch_ur5e_assets.py` populates the operator cache.
 
 ---
 

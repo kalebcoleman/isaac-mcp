@@ -25,6 +25,7 @@ from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_kno
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
 from .tf_compat import use_legacy_transform_publisher
+from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_uri
 
 
 def _use_legacy_tf_publisher(og):
@@ -378,19 +379,18 @@ if '_viewport_pub' not in globals():
 
 
 def _local_asset(relpath):
-    """Resolve a local asset path under exts/ur5e-dt/assets/ as a file:// URI."""
-    full = os.path.join(_assets_dir, relpath)
-    if not os.path.exists(full):
-        raise FileNotFoundError(f"Asset not found: {full}")
-    return "file://" + os.path.abspath(full)
+    """Resolve an asset to a file:// or https:// URI.
+
+    Bundled assets win, then the operator cache, then the pinned NVIDIA asset
+    root for entries the manifest allows.  See ``asset_cache`` and
+    ``docs/provenance/ASSETS.md``.
+    """
+    return resolve_uri(relpath)
 
 
 def _local_asset_dir(relpath):
     """Resolve a local asset directory path (no file:// prefix, for os.listdir)."""
-    full = os.path.join(_assets_dir, relpath)
-    if not os.path.isdir(full):
-        raise FileNotFoundError(f"Asset directory not found: {full}")
-    return full
+    return str(resolve_dir(relpath))
 
 
 # Assembly definitions: each entry pairs a local objects folder with its assembly JSON
@@ -564,7 +564,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "load_workstation": {
-        "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the bundled vention.usd at /World/Vention and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
+        "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
         "parameters": {}
     },
     "quick_start_with_workstation": {
@@ -2564,10 +2564,51 @@ class DigitalTwin(omni.ext.IExt):
 
         print("Scene loaded successfully.")
 
+    def _build_placeholder_workstation(self, stage, parent_path):
+        """Build a simple bench when the licensed Vention export is not installed.
+
+        The real bench is visual context only. This placeholder keeps the same
+        top-at-z=0 contract and ``/World/Vention`` path so the rest of the scene
+        and the ROS pose parity are unchanged.
+        """
+        from pxr import Gf, UsdGeom
+
+        bench_path = parent_path + "/Bench"
+        UsdGeom.Xform.Define(stage, bench_path)
+
+        def box(name, size, center):
+            cube = UsdGeom.Cube.Define(stage, f"{bench_path}/{name}")
+            cube.GetSizeAttr().Set(1.0)
+            xform = UsdGeom.Xformable(cube)
+            xform.ClearXformOpOrder()
+            xform.AddTranslateOp().Set(Gf.Vec3d(*center))
+            xform.AddScaleOp().Set(Gf.Vec3f(*size))
+
+        box("Top", (1.4, 0.9, 0.04), (0.0, 0.0, -0.02))
+        box("Shelf", (1.3, 0.8, 0.02), (0.0, 0.0, -0.55))
+        for index, (x, y) in enumerate(
+            ((-0.62, -0.38), (0.62, -0.38), (-0.62, 0.38), (0.62, 0.38))
+        ):
+            box(f"Leg{index}", (0.06, 0.06, 0.86), (x, y, -0.47))
+
+        parent = stage.GetPrimAtPath(parent_path)
+        xform = UsdGeom.Xform(parent)
+        xform.ClearXformOpOrder()
+        xform.AddTranslateOp().Set(
+            Gf.Vec3d(WORKSTATION_XY[0], WORKSTATION_XY[1], 0.0)
+        )
+
+        ground = stage.GetPrimAtPath("/World/defaultGroundPlane")
+        if ground and ground.IsValid():
+            UsdGeom.Imageable(ground).MakeInvisible()
+            print("Default ground plane visual hidden (z=0 collision retained).")
+        print(f"Placeholder workstation built at {parent_path} (top at z=0).")
+
     async def load_workstation(self):
         """Load the Vention workstation bench under the robot (additive, visual-only).
 
-        References the bundled vention.usd at /World/Vention and places it so the
+        References the operator-supplied or cached vention.usd at /World/Vention
+        (or builds a placeholder bench) and places it so the
         tabletop TOP surface is exactly at z=0 — coincident with the work plane where
         the robot base (ROBOT_BASE_Z=0.0) and objects already sit. The robot is NOT
         moved and ROBOT_BASE_Z is NOT changed, so ROS pose parity is untouched. The
@@ -2596,7 +2637,17 @@ class DigitalTwin(omni.ext.IExt):
         #  wrapper sidesteps that gotcha entirely — all our transform lives on the parent.)
         UsdGeom.Xform.Define(stage, parent_path)
 
-        asset_path = _local_asset(WORKSTATION_USD)
+        try:
+            asset_path = _local_asset(WORKSTATION_USD)
+        except AssetMissing:
+            self._build_placeholder_workstation(stage, parent_path)
+            print(
+                "Vention workstation asset not installed; using a placeholder bench. "
+                f"Place a licensed vention.usd under {cache_dir() / 'workstation'} "
+                "to use the real model."
+            )
+            return
+
         add_reference_to_stage(usd_path=asset_path, prim_path=bench_path)
 
         # Wait for the referenced bench prim to compose.
@@ -3073,6 +3124,19 @@ class DigitalTwin(omni.ext.IExt):
             time.sleep(0.1)
         else:
             raise RuntimeError(f"Failed to load prim at {prim_path}")
+
+        # NVIDIA's published UR5e asset has no tool0 frame; the twin's ROS-facing
+        # copy did. Recreate it so downstream tools and TF consumers see the same
+        # flange contract whether the robot came from the cache or the asset root.
+        tool0_path = f"{prim_path}/wrist_3_link/flange/tool0"
+        if not stage.GetPrimAtPath(tool0_path).IsValid():
+            tool0 = UsdGeom.Xform.Define(stage, tool0_path)
+            tool0.ClearXformOpOrder()
+            tool0.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0))
+            tool0.AddOrientOp(UsdGeom.XformOp.PrecisionDouble).Set(
+                Gf.Quatd(0.5, 0.5, 0.5, 0.5)
+            )
+            print(f"Added tool0 frame at {tool0_path}")
 
         # 4. Apply translation and orientation
         xform = UsdGeom.Xform(prim)

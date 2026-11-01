@@ -14,6 +14,13 @@ logs/
 *.usdz
 resources/*
 !exts/ur5e-dt/assets/**
+# Third-party assets that must not be committed (see docs/provenance/ASSETS.md).
+# Put operator copies in $UR5E_DT_ASSET_CACHE, not here.
+exts/ur5e-dt/assets/robot/
+exts/ur5e-dt/assets/sensors/
+exts/ur5e-dt/assets/workstation/
+exts/ur5e-dt/assets/gripper/RG2.usd
+exts/ur5e-dt/assets/objects/fmb4/materials/oak/
 
 # screenshots saved by sessions while testing; not part of the repo
 captures/

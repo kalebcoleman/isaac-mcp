@@ -298,8 +298,8 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 - Bridge: `ur5e_dt.load_workstation`
 - Parameters: none.
 - Async: yes.
-- Purpose: load the Vention workstation bench as visual context under the robot (tabletop top at z=0). Additive; cleared by `new_stage`.
-- Side effects: references `workstation/vention.usd` at `/World/Vention`; hides the default ground-plane visual (collider retained). Visual-only, no colliders; does not move the robot.
+- Purpose: load the Vention workstation bench as visual context under the robot (tabletop top at z=0). Additive; cleared by `new_stage`. Uses an operator-supplied or cached `workstation/vention.usd`; builds a simple placeholder bench when it is not installed.
+- Side effects: references the bench at `/World/Vention`; hides the default ground-plane visual (collider retained). Visual-only, no colliders; does not move the robot.
 - Example: `{}`
 
 ### `ur5e_dt__quick_start_with_workstation`

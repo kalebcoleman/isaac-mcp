@@ -26,6 +26,9 @@ jobs:
       - name: Check documentation
         run: python3 scripts/check_docs.py
 
+      - name: Check bundled asset licences
+        run: python3 scripts/check_assets.py
+
       - name: Check packaged UR5e catalog
         run: python3 scripts/gen_host_catalog.py --check
 
