@@ -19,20 +19,22 @@ This skill covers how to drive the tools safely. For Isaac Lab and Isaac Sim dom
 1. **Ask before GPU work.** `isaaclab__train`, `isaaclab__eval`, `isaaclab__play` and `sim__launch`
    start long-running GPU processes. Start one only when the user asked for it, and run one GPU job
    at a time on a single card (16 GB fits a small `num_envs`, not a large sweep).
-2. **Never start a second Kit when a bridge is reachable.** Discover first (step 2 below).
+2. **Discover before launching Kit.** Reuse the intended reachable bridge. Start an additional
+   isolated session only when the user requested one and its resource checks pass.
 3. **Verify the target before changing a scene.** Confirm the bridge's PID and port with `status`
    before `run_python`, file writes or any `ur5e_dt__*`, `sim__*` or `assets__*` call that changes
    the stage.
 4. **Look, don't ask.** When a window is open (play, a GUI Sim), take a `screenshot` or a short
    recording yourself and decide the next step from it.
 5. **Report tool results as they are.** Generic scene tools set MCP `isError` and return a `code`
-   such as `STALE_TARGET`; legacy tools use `{"error": ..., "hint": ...}`. Quote the error and
+   such as `STALE_TARGET`; legacy tools may return `{"status": "error", "message": ...}`
+   or `{"error": ..., "hint": ...}`. Quote the error and
    follow the hint before retrying.
 
 ## First calls in a session
 
-1. `refresh_tools`, which rediscovers bridge tools. A client that connected before Kit started
-   lists only host and Isaac Lab tools until this runs.
+1. `refresh_tools`, which rediscovers bridge tools. Generic scene and UR5e catalog tools are
+   listed even with Kit offline; execution still requires the selected bridge and extension.
 2. Find bridges. Use `list_bridges` if it is listed. Otherwise run the CLI in a shell
    (`python -m isaac_mcp.client --list-bridges`), which works even when bridge built-ins are hidden
    by `ISAAC_MCP_BUILTINS=0` or `ISAAC_MCP_NAMESPACE`. It exits 2 with `[]` when none is advertised.
@@ -47,8 +49,10 @@ This skill covers how to drive the tools safely. For Isaac Lab and Isaac Sim dom
    boundary.
 
 If a tool you expect is missing, it is usually filtered rather than broken:
-`ISAAC_MCP_LOCAL_TOOLS` selects host groups (`window_*` needs `screen_input`, `sim__*` needs
-`sim_launch`), and `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS` filter bridge tools.
+`ISAAC_MCP_LOCAL_TOOLS` selects host groups (`window_*` needs `screen_input`; managed
+`sim__launch`, `sim__list`, `sim__status` and `sim__stop` need `sim_launch`). The generic
+`sim__*` / `assets__*` pack is separate. `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS` filter
+bridge tools.
 
 ## Isaac Lab: train, watch, evaluate
 
