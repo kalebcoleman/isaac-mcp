@@ -24,6 +24,7 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
 from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_uri
 from .object_pose import read_local_pose, set_local_pose
+from .robot_visuals import prepare_robot_visuals
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
 from .tf_compat import use_legacy_transform_publisher
@@ -3125,6 +3126,11 @@ class DigitalTwin(omni.ext.IExt):
             time.sleep(0.1)
         else:
             raise RuntimeError(f"Failed to load prim at {prim_path}")
+
+        # Resolve the renderer's instance transform issue before physics starts.
+        expanded_visuals = prepare_robot_visuals(stage, prim_path)
+        if expanded_visuals:
+            print(f"Expanded {len(expanded_visuals)} UR5e visual instances for runtime rendering.")
 
         # NVIDIA's published UR5e asset has no tool0 frame; the twin's ROS-facing
         # copy did. Recreate it so downstream tools and TF consumers see the same
