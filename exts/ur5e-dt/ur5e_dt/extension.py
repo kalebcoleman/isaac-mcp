@@ -22,10 +22,10 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # The bridge extension owns the process-wide socket; the twin owns only its
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
+from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_uri
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
 from .tf_compat import use_legacy_transform_publisher
-from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_uri
 
 
 def _use_legacy_tf_publisher(og):
