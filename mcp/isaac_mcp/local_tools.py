@@ -2,7 +2,7 @@
 
 The host registers its own tools (the screen tools, the Isaac Lab pack and the two gateway
 tools) in addition to whatever it discovers from a Kit bridge. ``ISAAC_MCP_LOCAL_TOOLS`` picks
-which *groups* of those local tools a process registers; the default is all of them.
+which *groups* of those local tools a process registers. Desktop input and simulator launch are opt-in.
 
     ISAAC_MCP_LOCAL_TOOLS   comma-separated groups (see GROUPS) and aliases (see ALIASES).
                             Unset or empty => "all". An unknown name is a startup error.
@@ -43,6 +43,10 @@ GROUPS: dict[str, frozenset[str]] = {
     "screen_read": frozenset({"screen_info", "list_windows", "screen_recording_status"}),
     "screen_capture": frozenset({"screenshot", "start_screen_recording", "stop_screen_recording"}),
     "screen_control": frozenset({"raise_window"}),
+    "screen_input": frozenset({
+        "window_click", "window_drag", "window_scroll", "window_type", "window_key",
+    }),
+    "sim_launch": frozenset({"sim__launch", "sim__list", "sim__status", "sim__stop"}),
     "gateway": frozenset({"refresh_tools", "use_bridge"}),
 }
 
@@ -50,13 +54,16 @@ GROUPS: dict[str, frozenset[str]] = {
 READ_ONLY_GROUPS: frozenset[str] = frozenset({"isaaclab_read", "screen_read"})
 
 ALIASES: dict[str, tuple[str, ...]] = {
-    "all": tuple(GROUPS),
+    # Desktop input and process launch must be explicitly selected.
+    "all": tuple(group for group in GROUPS if group not in {"screen_input", "sim_launch"}),
     "readonly": tuple(sorted(READ_ONLY_GROUPS)),
     "none": (),
 }
 
 ALL_GROUPS: frozenset[str] = frozenset(GROUPS)
 ALL_TOOLS: frozenset[str] = frozenset().union(*GROUPS.values())
+DEFAULT_GROUPS: frozenset[str] = frozenset(ALIASES["all"])
+DEFAULT_TOOLS: frozenset[str] = frozenset().union(*(GROUPS[g] for g in DEFAULT_GROUPS))
 READ_ONLY_TOOLS: frozenset[str] = frozenset().union(*(GROUPS[g] for g in READ_ONLY_GROUPS))
 
 _TOOL_GROUP = {tool: group for group, tools in GROUPS.items() for tool in tools}
@@ -121,6 +128,9 @@ DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempote
 # Executes configured Python and potentially imports user-configured task modules.
 PYTHON_EXECUTION = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
                                    openWorldHint=True)
+# Desktop input can trigger arbitrary actions in the selected app, including external effects.
+DESKTOP_INPUT = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
+                                openWorldHint=True)
 
 
 class ScopedTools:
@@ -133,7 +143,7 @@ class ScopedTools:
 
     def __init__(self, server: Any, groups: Optional[Iterable[str]] = None):
         self._server = server
-        self.groups = ALL_GROUPS if groups is None else frozenset(groups)
+        self.groups = DEFAULT_GROUPS if groups is None else frozenset(groups)
         unknown = self.groups - ALL_GROUPS
         if unknown:
             raise LocalToolsError(f"unknown local tool groups: {sorted(unknown)}")

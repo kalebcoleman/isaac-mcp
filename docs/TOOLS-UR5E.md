@@ -21,15 +21,36 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 
 ## Simulator window
 
-The standard `./run.sh` launch enables the `ur5e-dt` Kit extension, whose startup creates the **UR5e Digital Twin**
-window and registers the twin's bridge tools. The window therefore appears when that extension starts in a graphical
-session; invoking a twin MCP tool does not open it. `./run.sh --headless` runs without a visible simulator window,
-and starting the host MCP server alone does not start Isaac Sim. The twin window is separate from the optional
-`isaac.mcp.panel` registry inspector.
+Plain `./run.sh` starts Isaac Sim, the bridge and the twin extension, but hides the **UR5e Digital Twin**
+panel by default. The 23 tools work with the panel hidden. Pass `--ur5e-panel` (or use the dedicated
+`scripts/launch_ur5e_dt.sh`) to show the panel; in a graphical session it docks alongside Console when
+available and can be moved like other Kit tabs. `./run.sh --headless` has no visible simulator window.
+The twin panel is separate from the optional `isaac.mcp.panel` registry inspector.
+
+Managed `sim__launch` sessions also start the twin tools with the panel hidden. Pass
+`"show_ur5e_panel":true` to show it in a graphical launch. Neither launching the extension nor showing its
+panel loads a robot scene; use Quick Start or a twin tool for that. The host MCP server lists these tools even
+when no simulator is running, but executing them requires a selected bridge that serves the extension.
+
+In a simulator started without the extension, use Kit's Extensions window to enable `ur5e-dt`, or, if the
+`run_python` bridge built-in is available, call it on the intended bridge with:
+
+```python
+manager = omni.kit.app.get_app().get_extension_manager()
+manager.set_extension_enabled_immediate("ur5e-dt", True)
+result = {"enabled": manager.is_extension_enabled("ur5e-dt")}
+```
+
+Call `refresh_tools` afterward to obtain the live bridge's metadata. Disabling the extension unregisters the live
+tools, but their catalog entries remain visible and report that the extension is unavailable when called. Stop active
+recordings and other twin work before disabling it. If built-ins are filtered, `run_python` is unavailable; use the
+Extensions window or start a managed session instead. Namespace filters can also hide the twin tools.
 
 Several panel actions, including Quick Start, loading the workstation or room, playing/stopping the scene and
-recording, have MCP tools in the reference below. Host screen tools can inspect and capture simulator windows, but
-they do not provide mouse or keyboard control, and not every panel control has an MCP equivalent.
+recording, have MCP tools in the reference below. The buttons and tools are interfaces to extension operations;
+they are not a one-to-one list. Host screen tools can inspect and capture simulator windows, but
+optional X11 mouse and keyboard tools can be enabled separately as described in
+[host tools](TOOLS-HOST.md#optional-desktop-input). Not every panel control has a dedicated MCP equivalent.
 
 ## Parameter conventions
 
@@ -206,6 +227,11 @@ they do not provide mouse or keyboard control, and not every panel control has a
 - The fake backend discovers the standard ROS setup for Ubuntu 22.04/Humble or Ubuntu 24.04/Jazzy. On Jazzy, install `ros-jazzy-ur-robot-driver`, `ros-jazzy-ros2controlcli`, and `ros-jazzy-rmw-cyclonedds-cpp` through the system package manager. The launcher checks the driver's advertised mock-hardware argument and refuses to start if it cannot verify it; use `ROS_SETUP` for a nonstandard sourced ROS installation.
 - Fake-driver startup waits until both the joint-state broadcaster and scaled trajectory controller are active; controller queries are bounded when the manager is unavailable.
 - Fake-driver shutdown targets the verified mock process recorded by this launcher and its dedicated process group; it does not globally stop other UR drivers. If its PID file is missing or stale, inspect the host's processes instead of assuming an unrelated driver was stopped.
+- Managed `sim__launch` sessions use separate fake-driver records and logs, with an ownership marker checked before
+  shutdown. The launcher still refuses startup if any UR driver is detected on the host, even in another ROS domain.
+  Stop the fake driver before stopping its simulator; `sim__stop` does not stop the driver's separate process group.
+- `backend="ursim"` is unavailable in managed sessions because its process and container operations are global.
+  It remains available to unmanaged sessions with the prerequisites above.
 - Example: `{"action": "status"}` / `{"mode": "sim", "action": "up", "backend": "fake"}`
 
 ### `ur5e_dt__sync_real_poses`

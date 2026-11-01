@@ -23,11 +23,13 @@ LABELS = check_docs.TIER_ROWS
 # The three subtotal statements in the guide and the figure the code implies for each.
 PHRASES = {
     "host_isaaclab": (r"exactly \d+ tools", "exactly {} tools",
-                      lambda c: c["host"] + c["isaaclab"]),
+                      lambda c: c["host"] + c["isaaclab"] + c["ur5e"]),
     "bridge": (r"The other \d+ tools", "The other {} tools",
-               lambda c: c["builtins"] + c["ur5e"]),
+               lambda c: c["builtins"]),
     "total": (r"there are \d+ tools in total", "there are {} tools in total",
-              lambda c: sum(c.values())),
+              lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e"))),
+    "optional": (r"groups add \d+ more", "groups add {} more",
+                 lambda c: c["desktop_input"] + c["sim_sessions"]),
 }
 
 
@@ -82,11 +84,11 @@ def test_stale_subtotal_or_total_fails(key):
 
 
 def test_new_tool_not_reflected_in_guide_fails():
-    """Code gained a tool, guide untouched: the row, the bridge subtotal and the total are stale."""
+    """Code gained a tool, guide untouched: the row, catalog subtotal and total are stale."""
     errors = errors_for(GUIDE, counts=bumped())
     assert len(errors) == 3
     assert any("UR5e twin row" in e for e in errors)
-    assert any("The other N tools" in e for e in errors)
+    assert any("exactly N tools" in e for e in errors)
     assert any("there are N tools in total" in e for e in errors)
 
 
@@ -97,14 +99,14 @@ def test_only_total_updated_after_adding_a_tool_fails():
     errors = errors_for(text, counts=counts)
     assert len(errors) == 2
     assert any("UR5e twin row" in e for e in errors)
-    assert any("The other N tools" in e for e in errors)
+    assert any("exactly N tools" in e for e in errors)
 
 
 def test_only_table_row_updated_after_adding_a_tool_fails():
     counts = bumped()
     errors = errors_for(set_row(GUIDE, "ur5e", counts["ur5e"]), counts=counts)
     assert len(errors) == 2
-    assert any("The other N tools" in e for e in errors)
+    assert any("exactly N tools" in e for e in errors)
     assert any("there are N tools in total" in e for e in errors)
 
 

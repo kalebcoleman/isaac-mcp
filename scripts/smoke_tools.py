@@ -3,12 +3,14 @@
 Start the app first (./run.sh --headless), then:
 
     .venv/bin/python scripts/smoke_tools.py
+    .venv/bin/python scripts/smoke_tools.py --sim-version 6.1
 
-It leaves the stage as it found it (adds then deletes /World/Objects, restores moved poses). Tools that need
+This changes and rebuilds the stage; run it only against a disposable simulator session. Tools that need
 real hardware or ROS peers (sync_real_poses, start_ros_driver up) are not exercised; start_ros_driver is
 only asked for its status. Recording needs ffmpeg and a viewport, so it is reported but does not fail the run
 when the app is headless.
 """
+import argparse
 import json
 import os
 import sys
@@ -62,9 +64,14 @@ def ok(res) -> bool:
     return isinstance(res, dict) and res.get("status") == "success"
 
 
-def main() -> int:
+def matches_version(actual: str, expected: str) -> bool:
+    """Match complete version components, so 6.1 does not accept 6.10."""
+    return bool(expected) and isinstance(actual, str) and (actual == expected or actual.startswith(expected + "."))
+
+
+def main(sim_version: str = "6.2") -> int:
     st = client.call("status", {})
-    record("status", st.get("port") == PORT and st.get("app_version", "").startswith("6.2"),
+    record("status", st.get("port") == PORT and matches_version(st.get("app_version"), sim_version),
            f"app {st.get('app')} {st.get('app_version')} headless={st.get('headless')} tools={st.get('tools')}")
 
     names = client.call("list_tools", {})["tools"]
@@ -153,4 +160,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sim-version", default="6.2", help="expected app version prefix (default: 6.2)")
+    sys.exit(main(parser.parse_args().sim_version))

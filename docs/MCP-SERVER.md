@@ -12,7 +12,7 @@ Kit Process (Isaac Sim 6.2.0.0)
                                     │ NDJSON over TCP
                                     ▼
                         isaac-mcp (stdio MCP server)
-                          ├── ur5e_dt__*        dynamic, from the twin bridge
+                          ├── ur5e_dt__*        catalog-listed; execute through the twin bridge
                           ├── list_bridges      running Kit bridge instances
                           ├── use_bridge        switch target port at runtime
                           └── screenshot / screen_* / list_windows (host desktop capture)
@@ -20,7 +20,8 @@ Kit Process (Isaac Sim 6.2.0.0)
 
 Inside Kit, `exts/ur5e-dt` registers on the `isaac.mcp.bridge` singleton alongside other packs. The launcher sets
 the shared port to 8766 by default and delays binding until the twin has registered its tools. Disabling the twin
-removes its tools without stopping the shared bridge; an in-flight call must drain before the twin can re-register.
+removes its live handlers without stopping the shared bridge; the host keeps their catalog entries visible, and an
+in-flight call must drain before the twin can re-register.
 
 ---
 
@@ -49,7 +50,8 @@ unrelated file or symlink already occupies that path. Direct `uv tool install` d
 ## 2. Available Tools
 
 ### Simulator Tools (`ur5e_dt__*`)
-When connected to an Isaac Sim session running `exts/ur5e-dt`, the host dynamically registers its tools. Kit's
+The host lists a packaged catalog of UR5e tools even before a simulator is running. Calls require an Isaac Sim
+session running `exts/ur5e-dt`; when connected, the bridge's live metadata takes precedence. Kit's
 canonical `ur5e_dt.<tool>` names appear to MCP clients as `ur5e_dt__<tool>`. The pack includes scene setup,
 `play_scene`/`stop_scene`, object management, ROS graphs and viewport recording. See the complete
 [UR5e tool reference](TOOLS-UR5E.md) for actual names, parameters and side effects. Joint-position and pause tools
@@ -80,16 +82,18 @@ before asking the user to repeat terminal or UI steps. `list_windows` identifies
 the window and PID; `screenshot(window_id=...)` captures that window even when
 covered. Check the capture directory before writing if workspace rules restrict
 where files may be created. Screen tools are host-side and can work even when
-the simulator bridge is disconnected. They provide capture and window raising,
-not a general click or keyboard API.
+the simulator bridge is disconnected. Optional X11 mouse and keyboard controls can be enabled
+explicitly with `ISAAC_MCP_LOCAL_TOOLS=all,screen_input`; see the targeting rules and shared-desktop
+limitations in [host tools](TOOLS-HOST.md#optional-desktop-input).
 
 The host MCP server and the bridge inside Kit are separate processes. A working
 `list_windows` or Isaac Lab tool does not mean that the bridge is connected, and a
-client that lists only the host and Isaac Lab tools has not proved that no bridge
-exists: the client may have connected before Kit started (call `refresh_tools`),
+client that lists the UR5e tools has not proved that a bridge exists: these are catalog-listed. The client may
+have connected before Kit started (call `refresh_tools`),
 or `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may be hiding bridge tools
-(verify with the CLI below). Do not start another Kit instance while a reachable
-bridge exists. If `refresh_tools` returns `Connection refused`, check for the intended Kit
+(verify with the CLI below). Reuse the intended bridge when it meets the task; start another Kit
+only when explicitly needed and after the [parallel-launch checks](TOOLS-HOST.md#optional-simulator-sessions).
+If `refresh_tools` returns `Connection refused`, check for the intended Kit
 process, its enabled bridge extension and listening port. The server cannot
 control a simulator that did not start a bridge. Once a bridge is available,
 call `refresh_tools`, then use `status` to verify its PID and port before
@@ -205,7 +209,8 @@ clear about which of the settings below limit what.
 
 Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOLS-HOST.md)):
 
-- `ISAAC_MCP_LOCAL_TOOLS` selects groups of the **host's own 21 tools** (screen, Isaac Lab, gateway). `readonly`
+- `ISAAC_MCP_LOCAL_TOOLS` selects groups of the host's own tools (21 standard screen, Isaac Lab, gateway tools, plus
+  five opt-in desktop input and four opt-in simulator-session tools). `readonly`
   keeps only local tools annotated as read-only; `none` keeps none. The default is `all`. The Python probes and job
   inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for groups and
   migration. Importing the jobs module can still reconcile orphaned jobs at server startup,
@@ -217,13 +222,13 @@ Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOL
 - The three variables are independent and compose. With `ISAAC_MCP_LOCAL_TOOLS=readonly` alone, every bridge tool is
   still registered; with `ISAAC_MCP_BUILTINS=0` added, the namespaced ones (for example `ur5e_dt__*`) still are.
 
-**Hiding bridge tools.** There is no dedicated switch. To hide both built-ins and namespaced tools when the bridge
-advertises both, use `ISAAC_MCP_BUILTINS=0` together with an `ISAAC_MCP_NAMESPACE` naming a namespace the bridge does
-not advertise (the test suite covers this). If the bridge advertises no namespaced tools, disabling built-ins alone
-also hides all its tools. This hides tools from the client's list; it is not a safety boundary. It relies on the
-chosen name staying unused, `use_bridge` and `refresh_tools` (if the `gateway` group is on) re-run discovery under the
-same filter, and anything that reaches the bridge socket directly (the `isaac_mcp.client` CLI, another process) is not
-affected by a host's filters at all.
+**Hiding bridge tools.** There is no dedicated switch. To hide both built-ins and namespaced tools, use
+`ISAAC_MCP_BUILTINS=0` together with an `ISAAC_MCP_NAMESPACE` naming a namespace that neither the bridge nor the
+packaged catalog advertises (the test suite covers this). Disabling built-ins alone does not hide the catalog-listed
+UR5e tools. This hides tools from the client's list; it is not a safety boundary. It relies on the chosen name staying
+unused, `use_bridge` and `refresh_tools` (if the `gateway` group is on) re-run discovery under the same filter, and
+anything that reaches the bridge socket directly (the `isaac_mcp.client` CLI, another process) is not affected by a
+host's filters at all.
 
 **A profile that cannot change the scene** needs local tools that could change the scene restricted, and bridge calls
 independently restricted by enforcement that does not depend on the client or on which tools the host lists. The bridge

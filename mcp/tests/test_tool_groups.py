@@ -18,7 +18,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 import isaac_mcp.screen as screen
 import isaac_mcp.server as gw
-from isaac_mcp import local_tools as lt
+from isaac_mcp import host_catalog, local_tools as lt
 from isaac_mcp_bridge.schema import field_specs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +27,9 @@ check_docs = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(check_docs)
 
 VAR = lt.ENV_VAR
+# Every built server also lists the packaged catalog's offline proxies, whatever the local groups
+# say (tests/test_host_catalog_gateway.py covers them); these tests are about the local tools.
+OFFLINE = {gw._mcp_name(canonical) for canonical in host_catalog.catalog_tool_names()}
 # Named in the task as the tools a read-only profile must not expose.
 MUTATING = {"isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__runs_cancel",
             "screenshot", "start_screen_recording", "stop_screen_recording", "raise_window",
@@ -48,18 +51,19 @@ def build(value=None):
 
 
 def local_names(server):
-    return set(server._tool_manager._tools)
+    return set(server._tool_manager._tools) - OFFLINE
 
 
 def tools_of(server):
-    return {t.name: t for t in asyncio.run(server.list_tools())}
+    return {t.name: t for t in asyncio.run(server.list_tools()) if t.name not in OFFLINE}
 
 
 # ---- parsing ---------------------------------------------------------------------------
 
 def test_unset_empty_and_blank_mean_all():
     for raw in (None, "", "   ", ",", "all", " ALL "):
-        assert lt.parse_local_tools(raw) == lt.ALL_GROUPS
+        assert lt.parse_local_tools(raw) == lt.DEFAULT_GROUPS
+        assert not {"screen_input", "sim_launch"} & lt.parse_local_tools(raw)
 
 
 def test_aliases_and_groups_combine():
@@ -96,17 +100,18 @@ def test_unknown_group_stops_server_construction_before_registering():
 
 # ---- registration ----------------------------------------------------------------------
 
-def test_default_registers_every_local_tool():
+def test_default_registers_standard_tools_without_desktop_input():
     names = local_names(build())
-    assert names == set(lt.ALL_TOOLS)
+    assert names == set(lt.DEFAULT_TOOLS)
     assert local_names(build("all")) == names
+    assert local_names(build("all,screen_input,sim_launch")) == set(lt.ALL_TOOLS)
     # The module-level default instance is the same configuration.
     assert local_names(gw.mcp) == names
 
 
 def test_groups_cover_exactly_the_decorated_tools_in_the_source():
     decorated = set()
-    for rel in ("screen.py", "server.py", "isaaclab/tools.py"):
+    for rel in ("screen.py", "desktop_input.py", "sim_sessions.py", "server.py", "isaaclab/tools.py"):
         decorated |= check_docs.tool_decorators(ROOT / "mcp" / "isaac_mcp" / rel)
     assert decorated == set(lt.ALL_TOOLS)
 
@@ -138,13 +143,17 @@ def test_restricted_servers_say_so_in_their_instructions():
     assert "bridge" in build("readonly").instructions.lower()     # says the limit is local-only
 
 
-def test_register_functions_default_to_all_groups_on_a_plain_server():
+def test_register_functions_default_to_standard_groups_on_a_plain_server():
     plain = FastMCP("plain")
     screen.register_screen_tools(plain)
+    from isaac_mcp.desktop_input import register_desktop_input_tools
+    register_desktop_input_tools(plain)
+    from isaac_mcp.sim_sessions import register_sim_session_tools
+    register_sim_session_tools(plain)
     from isaac_mcp.isaaclab.tools import register_isaaclab_tools
     register_isaaclab_tools(plain)
     assert set(plain._tool_manager._tools) == (
-        lt.ALL_TOOLS - lt.GROUPS["gateway"])
+        lt.DEFAULT_TOOLS - lt.GROUPS["gateway"])
 
 
 # ---- guards against a future tool escaping the scheme ----------------------------------
@@ -166,12 +175,12 @@ def test_an_unannotated_tool_cannot_register():
 
 
 def test_every_local_tool_is_annotated_and_read_only_matches_the_groups():
-    tools = tools_of(build())
+    tools = tools_of(build("all,screen_input,sim_launch"))
     assert set(tools) == set(lt.ALL_TOOLS)
     for name, tool in tools.items():
         ann = tool.annotations
         assert ann is not None, f"{name} has no annotations"
-        python_tools = lt.GROUPS["isaaclab_probe"] | {
+        python_tools = lt.GROUPS["isaaclab_probe"] | lt.GROUPS["screen_input"] | lt.GROUPS["sim_launch"] | {
             "isaaclab__train", "isaaclab__eval", "isaaclab__play"}
         assert ann.openWorldHint is (name in python_tools), name
         if name in lt.READ_ONLY_TOOLS:
@@ -267,7 +276,8 @@ def _listed(server):
     async def go():
         async with create_connected_server_and_client_session(server._mcp_server) as client:
             await client.initialize()
-            return {t.name: t for t in (await client.list_tools()).tools}
+            return {t.name: t for t in (await client.list_tools()).tools
+                    if t.name not in OFFLINE}
     return asyncio.run(go())
 
 
@@ -292,7 +302,7 @@ def test_namespace_and_builtins_filters_compose_with_local_tools(bridge, monkeyp
 def test_bridge_filters_never_remove_local_tools(bridge, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "nothing-matches")
     monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
-    assert set(_listed(build())) == set(lt.ALL_TOOLS)
+    assert set(_listed(build())) == set(lt.DEFAULT_TOOLS)
 
 
 def test_list_changed_is_advertised_by_a_restricted_server_too(bridge):

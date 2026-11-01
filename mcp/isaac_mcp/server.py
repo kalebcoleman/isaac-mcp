@@ -20,6 +20,13 @@ MCP server" is just this binary with a namespace filter, not a separate port:
                         affect bridge tools, and composes with the two filters above.
     ISAAC_MCP_NAME / ISAAC_MCP_INSTRUCTIONS   cosmetic server identity.
 
+Tools of known extensions (the UR5e twin) are listed from a packaged catalog snapshot
+(``isaac_mcp.host_catalog``) the moment a server is built, whether or not a bridge is running:
+each is a callable *offline proxy* that dials the selected bridge when called and answers with an
+actionable error if there is none or it lacks the extension. A live bridge's own ``list_tools``
+metadata replaces the proxy (it is authoritative); a tool the bridge does not serve reverts to
+its proxy. The namespace filter applies to proxies too. Nothing here ever starts a simulator.
+
 Canonical bridge names are ``<namespace>.<tool>``; MCP tool names cannot
 contain dots, so they are exposed as ``<namespace>__<tool>`` and mapped back
 on dispatch.
@@ -50,9 +57,12 @@ from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.lowlevel.server import NotificationOptions
 
+from . import host_catalog
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
-from .local_tools import ALL_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups
+from .local_tools import DEFAULT_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups
+from .desktop_input import register_desktop_input_tools
+from .sim_sessions import register_sim_session_tools
 from .screen import register_screen_tools
 
 logging.basicConfig(level=logging.INFO,
@@ -63,12 +73,15 @@ SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "isaac")
 SERVER_INSTRUCTIONS = os.getenv(
     "ISAAC_MCP_INSTRUCTIONS",
     "Isaac Sim / Isaac Lab MCP server. Isaac Sim tools are discovered from the "
-    "running Kit bridge. If only the host (screen and gateway) and isaaclab__* tools "
-    "are listed, call refresh_tools first: the client may have connected before Kit "
-    "started, or ISAAC_MCP_NAMESPACE / ISAAC_MCP_BUILTINS=0 may be hiding bridge "
-    "tools. Find advertised bridges with the isaac_mcp.client CLI (--list-bridges) and "
+    "running Kit bridge. The ur5e_dt__* twin tools are listed by default from a packaged "
+    "catalog, but work only when the selected bridge's Kit loaded the twin extension; "
+    "otherwise they return an error that says what to do. If the bridge built-ins "
+    "(run_python, status, ...) are not listed, call refresh_tools first: the client may "
+    "have connected before Kit started, or ISAAC_MCP_BUILTINS=0 may hide them. "
+    "ISAAC_MCP_NAMESPACE may hide catalog and other namespaced tools. "
+    "Find advertised bridges with the isaac_mcp.client CLI (--list-bridges) and "
     "confirm the chosen bridge's PID and port (status) before scene-changing calls, "
-    "and start Kit with the isaac.mcp.bridge extension only when none is advertised. "
+    "and start an additional Kit only when explicitly requested and resource checks permit. "
     "screenshot, list_windows, raise_window and the screen "
     "recording tools capture this Linux desktop. screenshot() and "
     "start_screen_recording() with no target pick the Isaac Sim or Isaac Lab "
@@ -214,9 +227,19 @@ def registered_tools(server: Any = None) -> List[str]:
     """The canonical bridge names currently registered, sorted (default: the default server's).
 
     The roster a policy's matchers can be checked against: a gate naming a tool this does not
-    list is gating nothing. Empty before discovery has run, which is itself worth knowing —
+    list is gating nothing. It is the live bridge's tools only (see ``offline_tools``
+    for the catalog proxies). Empty before discovery has run, which is itself worth knowing —
     checking a policy against a roster nobody has filled would clear every name in it."""
     return sorted(_state_for(server).name_map.values())
+
+
+def offline_tools(server: Any = None) -> List[str]:
+    """The canonical offline catalog proxy names, sorted (default: the default server's).
+
+    These are listed and callable (and cross the same policy hooks) but the selected bridge does
+    not serve them; ``registered_tools`` does not include them."""
+    offline = _offline_for(mcp if server is None else server)
+    return sorted(offline.names.values()) if offline is not None else []
 
 
 def _mcp_name(canonical: str) -> str:
@@ -246,6 +269,8 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
     in the selected bridge view are removed. A failed or malformed discovery
     does not turn an unknown registry into an empty one."""
     state = _state_for(server)
+    offline = _offline_for(server)
+    offline_names = offline.names if offline is not None else {}
     result = state.get_client().call("list_tools")
     if not isinstance(result, dict) or not isinstance(result.get("tools"), dict):
         raise RuntimeError("bridge list_tools response has no tools dictionary")
@@ -260,7 +285,8 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
         name = _mcp_name(canonical)
         if name in names and names[name] != canonical:
             raise RuntimeError(f"bridge tools {names[name]!r} and {canonical!r} collide as {name!r}")
-        if name in server._tool_manager._tools and name not in state.name_map:
+        if (name in server._tool_manager._tools and name not in state.name_map
+                and offline_names.get(name) != canonical):   # a live tool may replace its own proxy
             raise RuntimeError(f"bridge tool {canonical!r} collides with host tool {name!r}")
         names[name] = canonical
 
@@ -280,20 +306,162 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
         staged[name] = (canonical, meta, staging._tool_manager._tools[name])
 
     changed = []
+    departed = {}
     for mcp_name, canonical in list(state.name_map.items()):
         if canonical not in tools:
+            previous_tool = server._tool_manager._tools.get(mcp_name)
             _drop_tool(server, mcp_name)
             state.name_map.pop(mcp_name, None)
             state.registered_meta.pop(mcp_name, None)
-            changed.append(f"{canonical} (removed)")
+            departed[canonical] = previous_tool
     for name, (canonical, meta, tool) in staged.items():
-        changed.append(f"{canonical} (updated)" if name in state.name_map else canonical)
+        if name in offline_names:
+            # A live copy replaces the proxy. Notify only if its client-visible
+            # schema, description or other advertised metadata differs.
+            if _tool_surface(server._tool_manager._tools.get(name)) != _tool_surface(tool):
+                changed.append(f"{canonical} (updated)")
+        else:
+            changed.append(f"{canonical} (updated)" if name in state.name_map else canonical)
         server._tool_manager._tools[name] = tool
         state.name_map[name] = canonical
         state.registered_meta[name] = meta
+    # A catalog tool this bridge does not (or no longer) serve stays listed as an offline proxy.
+    offline_changes = _sync_offline(server, state)
+    # A departed live tool may have been replaced by its catalog proxy. Its
+    # visible change is handled below, so do not count the replacement twice.
+    changed.extend(change for canonical, change in offline_changes.items() if canonical not in departed)
+    for canonical, previous_tool in departed.items():
+        reverted = offline.catalog.get(canonical) if offline is not None else None
+        if reverted is not None and canonical in offline_names.values():
+            if _tool_surface(previous_tool) != _tool_surface(server._tool_manager._tools.get(_mcp_name(canonical))):
+                changed.append(f"{canonical} (offline)")
+        else:
+            changed.append(f"{canonical} (removed)")
     if changed:
         logger.info(f"Registered/updated {len(changed)} bridge tools: {changed}")
     return changed
+
+
+# ==================== Offline catalog proxies ====================
+#
+# A server built by build_server() lists every catalogued tool (host_catalog) as a proxy registered
+# straight on the server, never through ScopedTools: ISAAC_MCP_LOCAL_TOOLS selects the host's own
+# tools and has no say over bridge tools, offline or not. The bookkeeping lives on the server object
+# (not in _BridgeState) because the default state is shared with bare FastMCP instances used by
+# scripts and tests, which must not grow proxies. Servers without it behave exactly as before.
+
+_OFFLINE_ATTR = "_isaac_offline"
+
+
+class _OfflineTools:
+    """One server's catalog and which of its tools are currently served as offline proxies."""
+
+    def __init__(self, catalog: Dict[str, Dict[str, Any]]) -> None:
+        self.catalog = catalog                    # canonical -> catalog meta (unfiltered)
+        self.names: Dict[str, str] = {}           # MCP name -> canonical, while a proxy
+        self.categories: Dict[str, Optional[str]] = {}   # MCP name -> _meta category it carries
+
+
+def _offline_for(server: Any) -> Optional[_OfflineTools]:
+    return getattr(server, _OFFLINE_ATTR, None)
+
+
+def _tool_surface(tool: Any) -> Any:
+    """Client-visible fields, excluding the handler and bridge routing state."""
+    if tool is None:
+        return None
+    return (tool.description, tool.parameters, getattr(tool, "title", None), getattr(tool, "meta", None),
+            getattr(tool, "annotations", None), getattr(tool, "icons", None))
+
+
+def _sync_offline(server: Any, state: _BridgeState) -> Dict[str, str]:
+    """Make the server's offline proxies match the catalog, the filters and the live tools.
+
+    Every catalog tool that passes the view filters and is not currently served by the selected
+    bridge has a proxy; a tool the bridge now serves, or a filter now hides, loses it. The filters
+    are re-read from the process environment each time, as live discovery does. Returns changes
+    by canonical name; an unchanged replacement by a live tool is not a visible change."""
+    changed: Dict[str, str] = {}
+    offline = _offline_for(server)
+    if offline is None:
+        return changed
+    wanted = {_mcp_name(canonical): (canonical, meta)
+              for canonical, meta in offline.catalog.items() if _visible(canonical, meta)}
+    for name in list(offline.names):
+        if name in state.name_map:                # the live copy took over this name
+            offline.names.pop(name)
+            offline.categories.pop(name, None)
+        elif name not in wanted:                  # hidden since it was installed
+            _drop_tool(server, name)
+            canonical = offline.names.pop(name)
+            offline.categories.pop(name, None)
+            changed[canonical] = f"{canonical} (removed)"
+    for name, (canonical, meta) in wanted.items():
+        if name in state.name_map:
+            continue                              # served live (authoritative)
+        category = _meta_category(canonical)
+        if offline.names.get(name) == canonical and offline.categories.get(name) == category:
+            continue
+        if name in server._tool_manager._tools and name not in offline.names:
+            raise RuntimeError(f"offline catalog tool {canonical!r} collides with host tool {name!r}")
+        was_proxy = name in offline.names
+        _drop_tool(server, name)                  # FastMCP keeps the first tool of a name
+        register_dynamic_tool(server, name, canonical, meta, state=state, category=category)
+        offline.names[name] = canonical
+        offline.categories[name] = category
+        changed[canonical] = f"{canonical} (updated)" if was_proxy else canonical
+    return changed
+
+
+def _offline_note(server: Any) -> str:
+    """One line for refresh/use_bridge results: which listed tools the bridge does not serve."""
+    offline = _offline_for(server)
+    if offline is None or not offline.names:
+        return ""
+    spaces: Dict[str, int] = {}
+    for canonical in offline.names.values():
+        space = canonical.split(".", 1)[0]
+        spaces[space] = spaces.get(space, 0) + 1
+    counts = ", ".join(f"{space}: {count}" for space, count in sorted(spaces.items()))
+    return ("\nNote: " + counts + " tool(s) are listed from the packaged catalog but have not "
+            "been confirmed on the selected bridge. Select a bridge that loaded the extension "
+            "(use_bridge) or start one yourself, then call refresh_tools.")
+
+
+_BRIDGE_HELP = (
+    "To use it: find a bridge that loaded the ur5e-dt extension with "
+    "`python -m isaac_mcp.client --list-bridges` and select it with use_bridge(port), or start "
+    "Kit yourself (`./run.sh --headless`, or sim__launch when simulator launch is enabled) "
+    "and call refresh_tools. This server never starts a simulator "
+    "on its own.")
+
+
+def _needs_bridge_guidance(error: BaseException) -> bool:
+    """Match endpoint failures that benefit from connection guidance.
+
+    A retry can fail this way after an earlier request was sent, so the outcome
+    must still be reported as unknown rather than asserting the tool did not run.
+    """
+    if isinstance(error, ConnectionRefusedError):
+        return True
+    return isinstance(error, RuntimeError) and str(error).startswith(
+        ("no bridge found", "multiple bridges running"))
+
+
+def _catalog_error(canonical: str, error: BaseException, state: Optional[_BridgeState]) -> str:
+    """The actionable message for a catalogued tool whose call could not reach a serving bridge."""
+    if isinstance(error, BridgeError):
+        try:
+            port = (state or _DEFAULT_STATE).get_client().port
+            where = f"the selected bridge (port {port})"
+        except Exception:  # noqa: BLE001
+            where = "the selected bridge"
+        return (f"Error: {canonical} is not available and was not run: {where} is running but did "
+                f"not register it, so its Kit has not loaded the extension that provides it, or "
+                f"runs an older one. {_BRIDGE_HELP}")
+    return (f"Error: {canonical} is not available: no Isaac Sim bridge could be reached ({error}). "
+            "If the connection failed after dispatch, the tool may have run; check the "
+            f"simulator state before retrying. {_BRIDGE_HELP}")
 
 
 _KIND_ANNOTATIONS = {"boolean": bool, "integer": int, "number": float,
@@ -380,11 +548,19 @@ def _dispatch(canonical: str, params: Dict[str, Any],
         result = (state or _DEFAULT_STATE).get_client().call(canonical, params)
         return json.dumps(result, indent=2, default=repr)
     except BridgeError as e:
+        if (str(e).startswith("unknown tool") and "known_tools" in e.details
+                and host_catalog.is_catalog_tool(canonical)):
+            logger.error(f"Bridge does not serve catalogued tool {canonical}: {e}")
+            return _catalog_error(canonical, e, state)
         detail = f"\n{json.dumps(e.details, default=repr)[:2000]}" if e.details else ""
         logger.error(f"Bridge error in {canonical}: {e}")
         return f"Error: {e}{detail}"
     except (OSError, TimeoutError, RuntimeError) as e:
         logger.error(f"Error in {canonical}: {e}")
+        # A retry can fail to connect after an earlier attempt reached Kit, so
+        # connection guidance must not claim the tool was never executed.
+        if _needs_bridge_guidance(e) and host_catalog.is_catalog_tool(canonical):
+            return _catalog_error(canonical, e, state)
         return f"Error: {e}"
 
 
@@ -405,8 +581,25 @@ def _post_dispatch(canonical: str, params: Dict[str, Any], result: str) -> str:
     return result
 
 
+_UNSET = object()
+
+
+def _meta_category(canonical: str) -> Optional[str]:
+    """The _meta category the first policy hook assigns to a tool (failures are non-fatal)."""
+    for hook in _META_CATEGORY_HOOKS:
+        try:
+            category = hook(canonical)
+        except Exception as e:
+            logger.error(f"Meta-category hook failed for {canonical}: {e}")
+            category = None
+        if category is not None:
+            return category
+    return None
+
+
 def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
-                          meta: Dict[str, Any], state: Optional[_BridgeState] = None) -> None:
+                          meta: Dict[str, Any], state: Optional[_BridgeState] = None,
+                          category: Any = _UNSET) -> None:
     description = meta.get("description", f"Execute {canonical} on the Kit bridge")
     if "fields" not in meta:
         raise RuntimeError(
@@ -419,15 +612,8 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
                                    None if state is _DEFAULT_STATE else state)
 
     # Optional _meta category from policy hooks (failures are non-fatal).
-    category = None
-    for hook in _META_CATEGORY_HOOKS:
-        try:
-            category = hook(canonical)
-        except Exception as e:
-            logger.error(f"Meta-category hook failed for {canonical}: {e}")
-            category = None
-        if category is not None:
-            break
+    if category is _UNSET:
+        category = _meta_category(canonical)
 
     if category is not None:
         server.tool(meta={"category": category})(handler)
@@ -442,6 +628,10 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     state = _state_for(server)
     try:
         logger.info("KitMCP server starting up")
+        try:
+            _sync_offline(server, state)   # policy hooks are registered by now
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Could not refresh the offline catalog tools: {e}")
         try:
             discover_and_register_tools(server)
         except Exception as e:
@@ -479,9 +669,9 @@ async def _notify_tools_changed(ctx: Optional[Context]) -> None:
     """Tell the client its tool list changed. Never raises: a failed
     notification must not fail the tool that changed the registry.
 
-    Tools take ``ctx: Context = None`` rather than ``Context | None``: mcp 1.12.4
-    only injects a parameter annotated exactly ``Context`` (a union is treated as
-    an ordinary argument and leaks into the advertised schema); 1.30 accepts both.
+    Tools take ``ctx: Context = None`` rather than ``Context | None`` because older SDK
+    releases only inject a parameter annotated exactly ``Context`` (a union can be
+    treated as an ordinary argument and leak into the advertised schema).
     ``ctx`` is None when a tool is called directly rather than through a session."""
     if ctx is None:
         return
@@ -489,6 +679,15 @@ async def _notify_tools_changed(ctx: Optional[Context]) -> None:
         await ctx.request_context.session.send_tool_list_changed()
     except Exception as e:  # noqa: BLE001
         logger.warning(f"Could not send tools/list_changed notification: {e}")
+
+
+def _tool_list_surface(server: FastMCP) -> Dict[str, Any]:
+    """The client-visible registry, excluding handlers and bridge routing state."""
+    return {name: _tool_surface(tool) for name, tool in server._tool_manager._tools.items()}
+
+
+def _changed_tool_names(before: Dict[str, Any], after: Dict[str, Any]) -> List[str]:
+    return sorted(name for name in before.keys() | after.keys() if before.get(name) != after.get(name))
 
 
 def _screen_port(state: Optional[_BridgeState] = None) -> int | None:
@@ -510,8 +709,8 @@ async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None) -> str:
         return f"Error: {e}"
     if added:
         await _notify_tools_changed(ctx)
-    return (f"Registered/updated/removed {len(added)} tool(s): {added}" if added
-            else "No new or changed tools (registry unchanged).")
+    return ((f"Registered/updated/removed {len(added)} tool(s): {added}" if added
+             else "No new or changed tools (registry unchanged).") + _offline_note(server))
 
 
 async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None) -> str:
@@ -521,25 +720,30 @@ async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None)
         identity = new_client.call("status")
     except Exception as e:  # noqa: BLE001
         return f"Error: {e}"
+    before = _tool_list_surface(server)
     old_client = state.client
     state.client = new_client
-    had_tools = bool(state.name_map)
     for name in list(state.name_map):
         _drop_tool(server, name)
     state.name_map.clear()
     state.registered_meta.clear()
+    # The old bridge's catalog tools stay listed, as offline proxies, whatever the new one serves.
+    _sync_offline(server, state)
     if old_client is not None:
         try:
             old_client.close()
         except Exception:  # noqa: BLE001
             pass
     try:
-        added = discover_and_register_tools(server)
+        discover_and_register_tools(server)
     except Exception as e:  # noqa: BLE001
-        if had_tools:  # the previous bridge's tools were dropped above
+        changed = _changed_tool_names(before, _tool_list_surface(server))
+        if changed:
             await _notify_tools_changed(ctx)
-        return f"Connected to port {port} but tool discovery failed: {e}"
-    if had_tools or added:
+        return (f"Connected to port {port} but tool discovery failed: {e}"
+                + (f"\nChanged {len(changed)} tool(s): {changed}" if changed else "") + _offline_note(server))
+    changed = _changed_tool_names(before, _tool_list_surface(server))
+    if changed:
         await _notify_tools_changed(ctx)
     try:
         summary = json.dumps(identity, indent=2, sort_keys=True)
@@ -547,7 +751,8 @@ async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None)
         summary = str(identity)
     return (
         f"switched to bridge on port {port}\n{summary}\n"
-        f"registered/updated {len(added)} tool(s)"
+        f"registered/updated/removed {len(changed)} tool(s)"
+        + (f": {changed}" if changed else "") + _offline_note(server)
     )
 
 
@@ -570,8 +775,9 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
 
         To find the candidates, run `python -m isaac_mcp.client --list-bridges`. (`list_bridges`
         exists only as a bridge built-in: it is an MCP tool only when built-ins are enabled and a
-        bridge is already reachable.) This replaces the ur5e_dt__* tools with the ones registered
-        in that Kit process; screen tools are unaffected. The choice lasts until this MCP server
+        bridge is already reachable.) This replaces the bridge tools with the ones registered in
+        that Kit process (the ur5e_dt__* tools stay listed even if it lacks the twin, but then
+        return an error when called); screen tools are unaffected. The choice lasts until this MCP server
         restarts, then UR5E_DT_PORT (or ISAAC_MCP_PORT, or auto-discovery) decides again.
         """
         return await _use_bridge(server, port, ctx)
@@ -580,7 +786,8 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
 _RESTRICTED_NOTE = (
     " This server runs with a restricted set of its own local tools (ISAAC_MCP_LOCAL_TOOLS): rely "
     "on the tools it lists, and ignore guidance above about local tools that are not listed. The "
-    "restriction does not apply to tools discovered from a Kit bridge.")
+    "restriction does not apply to bridge tools: those discovered from a Kit bridge, or listed from "
+    "the packaged catalog.")
 
 
 def build_server(env: Optional[Mapping[str, str]] = None,
@@ -589,8 +796,8 @@ def build_server(env: Optional[Mapping[str, str]] = None,
 
     ``env`` defaults to ``os.environ``. The groups are parsed once, here; an unknown group
     raises :class:`LocalToolsError` before anything is registered. The module-level ``mcp`` is
-    ``build_server()``, so importing ``isaac_mcp.server`` with the variable unset registers all
-    the local tools, as it always did.
+    ``build_server()``, so importing ``isaac_mcp.server`` with the variable unset registers the
+    standard local tools. Desktop input requires the explicitly selected ``screen_input`` group.
 
     Each server gets its own bridge connection and discovery state (``state``, fresh unless the
     caller passes one), so servers built in one process neither share a socket nor skip tools
@@ -599,15 +806,27 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     env = os.environ if env is None else env
     groups = local_tool_groups(env)
     instructions = SERVER_INSTRUCTIONS
-    if groups != ALL_GROUPS and "ISAAC_MCP_INSTRUCTIONS" not in env:
+    if not DEFAULT_GROUPS <= groups and "ISAAC_MCP_INSTRUCTIONS" not in env:
         instructions += _RESTRICTED_NOTE
+    if "screen_input" in groups and "ISAAC_MCP_INSTRUCTIONS" not in env:
+        instructions += (" Desktop input is enabled on a shared X11 desktop. List the target "
+                         "window and inspect a fresh screenshot before acting; use its window ID, "
+                         "PID and original pixel size. Input can trigger arbitrary app actions.")
+    if "sim_launch" in groups and "ISAAC_MCP_INSTRUCTIONS" not in env:
+        instructions += (" Managed simulator launch is enabled. Use separate bridge ports and ROS "
+                         "domains, confirm readiness and PID with sim__status, and treat resource "
+                         "checks as snapshots rather than reservations.")
     state = _BridgeState() if state is None else state
     server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
     setattr(server, _STATE_ATTR, state)
     _advertise_tools_list_changed(server)
     register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups)
+    register_desktop_input_tools(server, groups=groups)
+    register_sim_session_tools(server, groups=groups, env=env)
     register_isaaclab_tools(server, groups=groups)
     _register_gateway_tools(server, groups)
+    setattr(server, _OFFLINE_ATTR, _OfflineTools(host_catalog.load_catalog()))
+    _sync_offline(server, state)
     return server
 
 

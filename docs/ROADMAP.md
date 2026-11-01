@@ -71,8 +71,15 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 
 ### 3. Reproducibility and portability
 
-- [ ] Define a supported-version and platform matrix separately for the host, bridge, twin, desktop capture and Lab
-  tools; test clean installs on each selected target before documenting them as supported.
+- [ ] Expand the [compatibility matrix](COMPATIBILITY.md) for the host, bridge, twin, desktop capture and Lab tools;
+  test clean installs and representative workflows on each selected target before documenting them as supported.
+- [x] Align the locked 6.2 NumPy version with the Isaac Sim kernel metadata and repeat the headless simulator and
+  ROS transform checks in a dependency-consistent environment; see the [compatibility evidence](evidence/compatibility-2026-10-31.md).
+- [ ] Repeat representative Isaac Lab jobs with installations using the updated 6.2 dependency lock.
+- [ ] Investigate asyncio task re-entry and destroyed pending tasks observed during the 6.0 and 6.1 scene checks;
+  repeat viewport and scene tests after a fix. See the [compatibility evidence](evidence/compatibility-2026-10-31.md).
+- [ ] Reproduce and address the 6.0.0.1 panel becoming undocked after an extension reload observed during the
+  compatibility checks; a fresh launch docked it normally.
 - [ ] Make Isaac Lab discovery and setup work cleanly with user-provided installations; document required paths and
   task-module registration, and test an installation outside the developer's default layout.
 - [ ] Record the task, seed, versions, command, configuration and artifact locations needed to reproduce a Lab job;
@@ -100,13 +107,13 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 
 ## Repository entry points
 
-Run these from the repository root unless noted. The default simulator launcher creates a UR5e session, so use a
-separate port and avoid disturbing a user's existing scene when testing.
+Run these from the repository root unless noted. The default simulator launcher starts the twin tools with their
+panel hidden; opt in to the tab when needed. Use a separate port and avoid disturbing a user's existing scene when testing.
 
 | Entry point | Purpose |
 |---|---|
 | `./install.sh --no-sim` | Install the host server; `--accept-eula` without `--no-sim` also installs the pinned Sim environment. Client-registration options are in the [README](../README.md). |
-| `./run.sh --headless --port 8766` | Launch the UR5e Kit application and bridge; omit `--headless` for its window. `UR5E_DT_PYTHON` selects an existing compatible Python environment. |
+| `./run.sh --headless --port 8766` | Launch the UR5e tools and bridge; omit `--headless` for a graphical simulator, and add `--ur5e-panel` to show the twin tab. `UR5E_DT_PYTHON` selects an existing compatible Python environment. |
 | `./verify.sh` | Inspect a running UR5e scene and exercise a joint; it builds/reopens scene content. Set `UR5E_DT_PORT` to its bridge and `UR5E_DT_PYTHON` when not using the repo `.venv`. See the verification limits above. |
 | `.venv/bin/python scripts/smoke_tools.py` | Exercise the twin's bridge tools against a running sim. This changes and rebuilds the stage, so use a disposable session. |
 | `scripts/check_machine.sh` | Check the local OS, GPU, dependencies and environment for the pinned setup. |

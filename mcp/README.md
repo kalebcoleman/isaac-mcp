@@ -3,6 +3,8 @@
 Host-side Model Context Protocol (MCP) server for Isaac Sim, Isaac Lab and Omniverse Kit.
 It provides the Kit bridge gateway plus host-side desktop capture.
 The package provides one CLI, `isaac-mcp`.
+Opt-in groups also provide X11 desktop input and managed simulator sessions; see
+[host tools](../docs/TOOLS-HOST.md#optional-desktop-input) for configuration and limitations.
 
 Install it as an editable tool (shared by every MCP client):
 
@@ -21,7 +23,10 @@ Client configs: from the `isaac-mcp` repository root run
 `./install.sh --claude` for Claude Code and Claude Desktop. Details:
 [docs/MCP-SERVER.md](../docs/MCP-SERVER.md).
 
-Added tools, alongside every `ur5e_dt__*` tool discovered from the running app:
+The 23 `ur5e_dt__*` tools are listed from a packaged catalog even before a simulator is running.
+They execute through a bridge that has the twin extension loaded; when no suitable bridge is available,
+they return an error with connection guidance. The supplied `run.sh` enables the tools while hiding their
+panel by default; use `--ur5e-panel` to show it. Other available tools include:
 
 | Tool | Purpose |
 |---|---|

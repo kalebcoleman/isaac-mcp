@@ -1,0 +1,419 @@
+{
+  "version": 1,
+  "namespace": "ur5e_dt",
+  "tools": {
+    "ur5e_dt.play_scene": {
+      "description": "Start/resume the simulation timeline in Isaac Sim.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.stop_scene": {
+      "description": "Stop the simulation timeline in Isaac Sim.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.setup_camera_tf_graph": {
+      "description": "Import the RealSense camera, attach it to the UR5e wrist and build its ROS 2 action graph (camera image, camera_info and the /tf_cam transform tree). Requires the UR5e to be loaded (e.g. after quick_start_with_workstation).",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.assemble_objects": {
+      "description": "Assemble objects into a specified configuration.",
+      "parameters": {
+        "assembly": {
+          "type": "string",
+          "enum": [
+            "fmb1",
+            "fmb2",
+            "fmb3"
+          ],
+          "description": "Which assembly configuration to use"
+        }
+      },
+      "fields": [
+        {
+          "name": "assembly",
+          "kind": "enum",
+          "enum": [
+            "fmb1",
+            "fmb2",
+            "fmb3"
+          ],
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Which assembly configuration to use"
+        }
+      ],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.randomize_object_poses": {
+      "description": "Randomize the positions of non-base objects in /World/Objects.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.randomize_single_object": {
+      "description": "Randomize the position of a single named object in a clear workspace area, keeping all other objects fixed.",
+      "parameters": {
+        "object_name": {
+          "type": "string",
+          "description": "Name of the object to randomize (e.g. 'inverted_u_yellow')"
+        }
+      },
+      "fields": [
+        {
+          "name": "object_name",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Name of the object to randomize (e.g. 'inverted_u_yellow')"
+        }
+      ],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.save_scene_state": {
+      "description": "Save current scene object poses to a JSON file.\n\nReturns:\n    result: \"success\" or \"failure\"\n    file_path: path to the saved JSON file\n    error: failure reason (only on failure)",
+      "parameters": {
+        "json_file_path": {
+          "type": "string",
+          "description": "Path to save file. If omitted, a timestamped filename is used."
+        }
+      },
+      "fields": [
+        {
+          "name": "json_file_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Path to save file. If omitted, a timestamped filename is used."
+        }
+      ],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.restore_scene_state": {
+      "description": "Restore scene object poses from a previously saved JSON file.\n\nReturns:\n    result: \"success\" or \"failure\"\n    error: failure reason (only on failure)",
+      "parameters": {
+        "json_file_path": {
+          "type": "string",
+          "description": "Path to restore from. If omitted, the most recent save is used."
+        }
+      },
+      "fields": [
+        {
+          "name": "json_file_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Path to restore from. If omitted, the most recent save is used."
+        }
+      ],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.add_objects": {
+      "description": "Add objects to the scene from a predefined assembly folder.",
+      "parameters": {
+        "assembly": {
+          "type": "string",
+          "enum": [
+            "fmb1",
+            "fmb2",
+            "fmb3"
+          ],
+          "description": "Which assembly folder to load objects from"
+        }
+      },
+      "fields": [
+        {
+          "name": "assembly",
+          "kind": "enum",
+          "enum": [
+            "fmb1",
+            "fmb2",
+            "fmb3"
+          ],
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Which assembly folder to load objects from"
+        }
+      ],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.delete_objects": {
+      "description": "Delete all objects from /World/Objects and the associated pose publisher graph.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.setup_pose_publisher": {
+      "description": "Create an action graph to publish object poses to ROS2 topic 'objects_poses_sim'.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.start_ros_driver": {
+      "description": "Bring the ROS2 robot driver up/down/status so robot-motion tools (ros-mcp-server move_home/move_to_grasp/...) have a driver to talk to. Two backends: backend='fake' (default) uses scripts/launch_ur_fake.sh — the apt ur_robot_driver with fake/mock hardware, no Docker and no ~/ros2_ws needed, ready in a few seconds (sim only); backend='ursim' uses scripts/sim_bringup.sh — URSim docker + ur_bringup, hands-free no PolyScope clicks, ~110s, and is the path that supports mode='real' (lab UR5e, not yet enabled). Both end at /joint_states live + scaled_joint_trajectory_controller accepting FollowJointTrajectory, on the same DDS island (the ROS domain from config/ros_dds.env (default 0), Cyclone, localhost-only). Managed sim__launch sessions support only the fake backend; URSim uses shared host resources. The fake launcher refuses startup when another UR driver is detected. Stop the fake driver before stopping its simulator. Use once at startup.",
+      "parameters": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "sim",
+            "real"
+          ],
+          "description": "'sim' (default) or 'real' (lab UR5e — not yet enabled; requires backend='ursim')."
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "up",
+            "down",
+            "status"
+          ],
+          "description": "'up' (default) brings the driver up, 'down' tears it down, 'status' reports state."
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "fake",
+            "ursim"
+          ],
+          "description": "'fake' (default) = apt ur_robot_driver fake hardware via launch_ur_fake.sh (lightweight, sim only); 'ursim' = URSim docker via sim_bringup.sh (needs Docker + ~/ros2_ws; required for mode='real'; unavailable in managed sessions)."
+        }
+      },
+      "fields": [
+        {
+          "name": "mode",
+          "kind": "enum",
+          "enum": [
+            "sim",
+            "real"
+          ],
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "'sim' (default) or 'real' (lab UR5e — not yet enabled; requires backend='ursim')."
+        },
+        {
+          "name": "action",
+          "kind": "enum",
+          "enum": [
+            "up",
+            "down",
+            "status"
+          ],
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "'up' (default) brings the driver up, 'down' tears it down, 'status' reports state."
+        },
+        {
+          "name": "backend",
+          "kind": "enum",
+          "enum": [
+            "fake",
+            "ursim"
+          ],
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "'fake' (default) = apt ur_robot_driver fake hardware via launch_ur_fake.sh (lightweight, sim only); 'ursim' = URSim docker via sim_bringup.sh (needs Docker + ~/ros2_ws; required for mode='real'; unavailable in managed sessions)."
+        }
+      ],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.sync_real_poses": {
+      "description": "Wait up to 3 seconds for /objects_poses_real and update matching sim objects. Reports an error if no message or matching objects arrive, and lists updated and snapped objects.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.new_stage": {
+      "description": "Clear the entire USD stage and free accumulated memory. Use this when Isaac Sim's process memory has grown large after many scene loads/resets. This tears down all USD prims, Hydra render state, and PhysX allocations. The scene will be empty afterwards — use quick_start to rebuild it.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.quick_start": {
+      "description": "One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Use after new_stage to rebuild the scene from scratch.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.start_recording": {
+      "description": "Start real-time viewport video recording using ffmpeg. Records frames from the viewport render buffer without blocking physics. Returns immediately — call stop_recording to finalize the video.",
+      "parameters": {
+        "file_name": {
+          "type": "string",
+          "description": "Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'realtime_recording.mp4'."
+        },
+        "camera": {
+          "type": "string",
+          "description": "Camera prim path to record from (e.g. '/World/workspace_camera_sim'). If omitted, uses the active viewport camera."
+        },
+        "fps": {
+          "type": "integer",
+          "description": "Frames per second for the output video. Defaults to 30."
+        }
+      },
+      "fields": [
+        {
+          "name": "file_name",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'realtime_recording.mp4'."
+        },
+        {
+          "name": "camera",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Camera prim path to record from (e.g. '/World/workspace_camera_sim'). If omitted, uses the active viewport camera."
+        },
+        {
+          "name": "fps",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Frames per second for the output video. Defaults to 30."
+        }
+      ],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.stop_recording": {
+      "description": "Stop the current real-time viewport recording and finalize the MP4 video file. Returns the output file path and frame count.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.get_recording_status": {
+      "description": "Check if viewport video recording is currently active. Returns status, frame count, elapsed time, output path, and FPS.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.load_workstation": {
+      "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the bundled vention.usd at /World/Vention and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.quick_start_with_workstation": {
+      "description": "Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.load_simple_room": {
+      "description": "Load Isaac's standard Simple Room environment (floor, walls, window, lamp) as a backdrop. Additive (cleared by new_stage): references the standard Isaac Simple_Room asset onto /World/SimpleRoom at z=-0.11 so it matches the source scene under the robot-base-at-0 convention (the Vention bench feet land on the room floor). Hides the default ground plane visual while keeping its z=0 collider, so object/robot physics are unchanged. Does not move the robot. Best used together with load_workstation.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.quick_start_with_workstation_and_simple_room": {
+      "description": "Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
+    "ur5e_dt.set_object_pose": {
+      "description": "Teleport a scene object under /World/Objects to an EXACT world pose. Use to set up controlled scenes — e.g. placing two parts close together to exercise neighbour-aware grasp gating. Applies via the same xformOp path randomize uses, so it persists under physics (object stays put on play). Mirror it with setup_pose_publisher so /objects_poses_sim reflects the new pose.",
+      "parameters": {
+        "object_name": {
+          "type": "string",
+          "description": "Object name under /World/Objects (e.g. 'u_brown')."
+        },
+        "position": {
+          "type": "array",
+          "description": "[x, y, z] world position in METERS."
+        },
+        "orientation": {
+          "type": "array",
+          "description": "Optional [w, x, y, z] quaternion. If given, overrides yaw_deg."
+        },
+        "yaw_deg": {
+          "type": "number",
+          "description": "Optional yaw rotation about world z in degrees (used when orientation is omitted). Default 0 (identity)."
+        }
+      },
+      "fields": [
+        {
+          "name": "object_name",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Object name under /World/Objects (e.g. 'u_brown')."
+        },
+        {
+          "name": "position",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "[x, y, z] world position in METERS."
+        },
+        {
+          "name": "orientation",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional [w, x, y, z] quaternion. If given, overrides yaw_deg."
+        },
+        {
+          "name": "yaw_deg",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional yaw rotation about world z in degrees (used when orientation is omitted). Default 0 (identity)."
+        }
+      ],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    }
+  }
+}

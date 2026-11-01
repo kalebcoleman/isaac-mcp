@@ -6,11 +6,12 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
-    # Floor 1.12.4: the lowest version the test suite has been run on (the locked version).
-    # Tool annotations (ToolAnnotations, FastMCP.tool(annotations=)) need mcp>=1.7.
+    # 1.22 is the lowest version tested with current Pydantic 2 releases.
     # Upper bound <2: mcp 2 renamed FastMCP to MCPServer and removed
     # `mcp.server.fastmcp`, which isaac_mcp/server.py imports.
-    "mcp[cli]>=1.12.4,<2",
+    "mcp[cli]>=1.22,<2",
+    # Older supported MCP releases do not constrain HTTPX 1.x, whose API breaks them.
+    "httpx>=0.27.1,<1",
     # Host-side screen tools (isaac_mcp/screen.py).
     "mss>=10.0",
     "pillow>=10.0",

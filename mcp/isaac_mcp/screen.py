@@ -27,6 +27,7 @@ import mss
 from PIL import Image as PILImage
 from Xlib import X, display as xdisplay
 from Xlib.error import XError
+from Xlib.protocol import event as xevent
 
 from mcp.server.fastmcp import FastMCP, Image
 
@@ -235,6 +236,7 @@ def _visible_windows() -> list[dict]:
     # we merge both sources and de-duplicate by window id.
     candidates: list = []
     seen_ids: set = set()
+    client_ids: set[int] = set()
 
     def _add_candidate(win) -> None:
         try:
@@ -272,6 +274,10 @@ def _visible_windows() -> list[dict]:
     if prop is not None and getattr(prop, "value", None):
         try:
             for item in prop.value:
+                try:
+                    client_ids.add(int(getattr(item, "id", item)))
+                except (TypeError, ValueError):
+                    pass
                 _add_candidate(item)
         except TypeError:
             pass
@@ -313,6 +319,7 @@ def _visible_windows() -> list[dict]:
                 out.append(
                     {
                         "id": wid,
+                        "is_client": wid in client_ids,
                         "title": title,
                         "class": cls,
                         "pid": _window_pid(win, disp),
@@ -330,7 +337,7 @@ def _visible_windows() -> list[dict]:
     return out
 
 
-def _match_window(query: str | None, window_id: int | None) -> dict:
+def _match_window(query: str | None, window_id: int | None, require_unique: bool = False) -> dict:
     windows = _visible_windows()
     if window_id is not None:
         for win in windows:
@@ -346,7 +353,11 @@ def _match_window(query: str | None, window_id: int | None) -> dict:
     if not matches:
         titles = ", ".join(f"{w['title']!r}" for w in windows[:12])
         raise ValueError(f"no window matching {query!r}; visible: {titles}")
-    matches.sort(key=lambda w: w["width"] * w["height"], reverse=True)
+    if require_unique:
+        owners = {("pid", w["pid"]) if w.get("pid") else ("id", w["id"]) for w in matches}
+        if len(owners) > 1:
+            raise ValueError("window title matches multiple processes; list windows and pass window_id")
+    matches.sort(key=lambda w: (w.get("is_client", False), w["width"] * w["height"]), reverse=True)
     return matches[0]
 
 
@@ -398,7 +409,7 @@ def _auto_window(port: int | None = None) -> dict | None:
     """The visible Isaac Sim window to capture by default.
 
     Prefers the window owned by the Kit process serving `port` (the bridge we
-    are configured to use), then the largest Isaac window, then None.
+    are configured to use), prefers managed client windows over frames, then the largest match.
     """
     try:
         windows = _visible_windows()
@@ -418,19 +429,19 @@ def _auto_window(port: int | None = None) -> dict | None:
         owned = [w for w in matches if w.get("pid") == pid]
         if owned:
             matches = owned
-    matches.sort(key=lambda w: w["width"] * w["height"], reverse=True)
+    matches.sort(key=lambda w: (w.get("is_client", False), w["width"] * w["height"]), reverse=True)
     return matches[0]
 
 
 def window_for_pid(pid: int | None) -> dict | None:
-    """Largest visible window owned by `pid` (e.g. a windowed Isaac Lab job), else None. Never raises."""
+    """Visible client window owned by `pid` (e.g. a Lab job), else None. Never raises."""
     if not pid:
         return None
     try:
         owned = [w for w in _visible_windows() if w.get("pid") == int(pid)]
     except Exception:  # noqa: BLE001 - no display
         return None
-    owned.sort(key=lambda w: w["width"] * w["height"], reverse=True)
+    owned.sort(key=lambda w: (w.get("is_client", False), w["width"] * w["height"]), reverse=True)
     return owned[0] if owned else None
 
 
@@ -601,22 +612,43 @@ def register_screen_tools(
             lines.append(
                 f"  id={w['id']}  pid={w.get('pid') or '?'}  "
                 f"{w['width']}x{w['height']}+{w['x']}+{w['y']}  "
-                f"[{w['class']}] {w['title']}"
+                f"{'client ' if w.get('is_client') else ''}[{w['class']}] {w['title']}"
             )
         return "\n".join(lines)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
-    def raise_window(window: str | None = None, window_id: int | None = None) -> str:
-        """Bring a window to the front before a screenshot or recording."""
-        win = _match_window(window, window_id)
-        disp = _xdisplay()
-        try:
-            obj = disp.create_resource_object("window", win["id"])
-            obj.configure(stack_mode=X.Above)
-            disp.sync()
-        finally:
-            disp.close()
-        return f"raised: {win['title']} (id={win['id']})"
+    def raise_window(window: str | None = None, window_id: int | None = None,
+                     expected_pid: int | None = None) -> str:
+        """Activate a window and give it focus; expected_pid rejects an unexpected owner."""
+        # Share the input lock so activation cannot steal focus mid-action from another
+        # cooperating server. Import lazily because desktop_input uses screen helpers.
+        from .desktop_input import _action_lock
+
+        with _action_lock():
+            win = _match_window(window, window_id, True)
+            if expected_pid is not None and win.get("pid") != expected_pid:
+                raise ValueError("target window PID is missing or changed; list windows again")
+            disp = _xdisplay()
+            try:
+                obj = disp.create_resource_object("window", win["id"])
+                if expected_pid is not None and _window_pid(obj, disp) != expected_pid:
+                    raise ValueError("target window PID is missing or changed; list windows again")
+                root = disp.screen().root
+                active = disp.intern_atom("_NET_ACTIVE_WINDOW")
+                message = xevent.ClientMessage(
+                    window=obj, client_type=active, data=(32, [2, X.CurrentTime, 0, 0, 0]))
+                root.send_event(message, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+                disp.sync()
+                deadline = time.monotonic() + 0.5
+                while time.monotonic() < deadline:
+                    prop = root.get_full_property(active, X.AnyPropertyType)
+                    if prop is not None and len(prop.value) and int(prop.value[0]) == win["id"]:
+                        return f"activated: {win['title']} (id={win['id']})"
+                    time.sleep(0.02)
+                raise RuntimeError("window manager did not activate the window; select the client "
+                                   "window ID (not its frame) or activate it manually")
+            finally:
+                disp.close()
 
     @mcp.tool(annotations=ADDITIVE)
     def screenshot(

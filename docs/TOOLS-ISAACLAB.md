@@ -423,6 +423,8 @@ unless that port is configured or advertised.
 
 ## Verified vs. version and platform limitations
 
+See the [compatibility matrix](COMPATIBILITY.md) for simulator and Isaac Lab version pairings and the scope of each test.
+
 Historical verification includes:
 
 - Host suite: 421 tests passed in GitHub Actions for `66e84b4` (2026-10-30). An isolated host wheel install and

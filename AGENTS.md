@@ -13,25 +13,29 @@ configured filters.
 | Tier | Tools | Present when | Reference |
 |---|---|---|---|
 | Host gateway and desktop | 9 (`refresh_tools`, `use_bridge`, and 7 screen tools) | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), even with Kit down | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
+| Desktop input (optional) | 5 (`window_*`) | only when `screen_input` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-desktop-input) |
+| Simulator sessions (optional) | 4 (`sim__*`) | only when `sim_launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
 | Isaac Lab (`isaaclab__*`) | 12 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | a Kit bridge is reachable; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
-| UR5e twin (`ur5e_dt__*`) | 23 | the twin extension is loaded in that Kit and you have called `refresh_tools` | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
+| UR5e twin (`ur5e_dt__*`) | 23 | listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-If your client lists exactly 21 tools, only the host and Isaac Lab tiers are visible. That does
-not prove that no bridge exists. The possible causes are:
+With default groups and no namespace filter, a client that lists exactly 44 tools can see the
+host, Isaac Lab and UR5e catalog tiers, but not the bridge built-ins. That does not prove that no
+bridge exists. The possible causes are:
 
 - no Kit bridge is running;
 - the client connected before Kit started, so the bridge tools have not been discovered yet
   (call `refresh_tools`);
 - a filter is hiding bridge tools from a reachable bridge (`ISAAC_MCP_NAMESPACE` or
   `ISAAC_MCP_BUILTINS=0`);
-- `ISAAC_MCP_LOCAL_TOOLS` is restricting the local tools (the default, `all`, registers all 21),
-  so the listed host and Isaac Lab tools are only a subset. If its `gateway` group is excluded,
+- `ISAAC_MCP_LOCAL_TOOLS` is restricting the local tools (the default, `all`, registers 21 local tools),
+  so the listed host and Isaac Lab tools may be a subset. If its `gateway` group is excluded,
   `refresh_tools` and `use_bridge` are not listed: bridge tools are then discovered only when
   the server starts, so restart the MCP connection after starting Kit.
 
-The other 30 tools (bridge built-ins and UR5e twin) exist only behind a bridge. With everything
-visible there are 51 tools in total. `docs/GENERIC-SIM-TOOLS.md` describes a `sim.*` pack that is
+The other 7 tools (bridge built-ins) require discovery from a reachable bridge. With the standard
+groups and bridge built-ins visible there are 51 tools in total. The optional desktop input and
+simulator session groups add 9 more. `docs/GENERIC-SIM-TOOLS.md` describes a `sim.*` pack that is
 a design only and is not built, so do not look for those tools.
 
 ## Getting the full surface
@@ -51,18 +55,21 @@ make sure one is up before relying on those tools. Host and Isaac Lab tools need
    exported `UR5E_DT_PORT` or `ISAAC_MCP_PORT` overrides discovery. The host's `refresh_tools`
    resolves the endpoint the same way, so with several bridges or a pinned port, select the
    right one with `use_bridge` and the listed port.
-3. Only if `--list-bridges` shows none, and project rules permit it, start one with the
-   `isaac.mcp.bridge` extension (for the twin, `./run.sh --headless` starts it on port 8766 by
-   default; `UR5E_DT_PORT` or `--port` changes that), then repeat steps 1 and 2. A running Kit
-   process that is not in the listing has no bridge.
+3. If none is advertised, start one with the `isaac.mcp.bridge` extension (the supplied
+   `./run.sh --headless` starts the bridge and twin tools on port 8766 by default), then repeat steps 1 and 2. A running Kit
+   process that is not in the listing has no bridge. To start an additional isolated instance,
+   use the opt-in `sim__launch` workflow and its resource/identity checks; don't assume that an
+   advertised bridge belongs to the new process. Managed and plain launches enable the twin tools
+   while hiding its panel by default. Pass `show_ur5e_panel=true` or `--ur5e-panel` to show it.
 4. `refresh_tools` and `use_bridge` send `notifications/tools/list_changed` when they change the
    tool list (the host advertises `tools.listChanged`), so a client that honours it shows the new
    tools without a restart. If yours does not, restart the MCP connection or list the tools
    directly: `python -m isaac_mcp.client list_tools --host <host> --port <port>` (the bridge you
    verified in step 2).
 
-Do not start another Kit instance while a reachable bridge exists, and confirm the PID and port
-before any scene-changing call.
+Parallel instances are supported when explicitly requested and resource checks pass. Use distinct
+ports, ROS domains and output directories, and confirm the selected PID and port before every
+scene-changing workflow. Resource checks are snapshots; they cannot guarantee an instance will fit.
 
 **Isaac Lab training is the exception to "keep a bridge up".** `isaaclab__train`, `eval` and
 `play` refuse to start while a Kit bridge app is running, because it shares the GPU with the job
@@ -81,9 +88,15 @@ Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER
   unless `allow_concurrent_gpu=true`; `isaaclab__runs_cancel` kills one.
 - Screen tools return window titles and pixels to the model, and save captures under
   `~/Pictures/screen-mcp` and `~/Videos/screen-mcp`.
+- Desktop input is off unless `screen_input` is explicitly selected. It operates a shared X11
+  desktop and can trigger arbitrary application actions. Inspect the actual window, its PID and
+  screenshot first; its target checks are not an operating-system security boundary.
+- `sim_launch` is off by default. Its launch guard counts known bridge, managed Sim and configured
+  Lab job processes and checks headroom, but cannot detect every untracked workload. Never stop an
+  unrelated process to make room, and use separate desktops or coordinate input between agents.
 - To expose less to a client, use `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS=0` (they filter
   bridge tools only) and `ISAAC_MCP_LOCAL_TOOLS` (it selects groups of the host and Isaac Lab
-  tools only; by default all are registered). `ISAAC_MCP_LOCAL_TOOLS=readonly` leaves only the
+  tools only; the standard groups are registered by default). `ISAAC_MCP_LOCAL_TOOLS=readonly` leaves only the
   local tools that read state, but it does not touch bridge tools: with a bridge connected,
   `run_python` and `ur5e_dt__*` can still change the scene, so it is not a read-only server.
   The three variables compose; see [TOOLS-HOST.md](docs/TOOLS-HOST.md) and, for what a
@@ -96,5 +109,7 @@ Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER
 ## Changing tools
 
 Every registered tool must be documented in its `docs/TOOLS-*.md` page, and the counts above
-(each tier's Tools cell, the 21 and 30 subtotals and the 51 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
+(each tier's Tools cell, the 44 and 7 subtotals and the 51 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
 CI along with the host test suite (`pytest -q` from `mcp/`, see `.github/workflows/ci.yml`).
+After changing the twin tool registry, run `python3 scripts/gen_host_catalog.py --write` and commit the
+updated snapshot; `--check` and the host tests detect drift.

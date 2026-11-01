@@ -17,7 +17,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 import isaac_mcp.screen as screen
 import isaac_mcp.server as gw
-from isaac_mcp import local_tools as lt
+from isaac_mcp import host_catalog, local_tools as lt
 from isaac_mcp_bridge.schema import field_specs
 
 
@@ -69,12 +69,17 @@ def world(monkeypatch, tmp_path):
     return type("World", (), {"registries": registries, "clients": made})
 
 
+# The catalog's offline proxies are listed by every built server; these tests are about the
+# bridge tools two servers discover (tests/test_host_catalog_gateway.py covers the proxies).
+OFFLINE = {gw._mcp_name(canonical) for canonical in host_catalog.catalog_tool_names()}
+
+
 def build(groups="gateway"):
     return gw.build_server({lt.ENV_VAR: groups})
 
 
 def bridge_names(server):
-    return {t.name for t in asyncio.run(server.list_tools())} - set(lt.ALL_TOOLS)
+    return {t.name for t in asyncio.run(server.list_tools())} - set(lt.ALL_TOOLS) - OFFLINE
 
 
 def session(server, notifications=None):
@@ -86,7 +91,7 @@ def session(server, notifications=None):
 
 
 async def listed(client):
-    return {t.name for t in (await client.list_tools()).tools} - set(lt.ALL_TOOLS)
+    return {t.name for t in (await client.list_tools()).tools} - set(lt.ALL_TOOLS) - OFFLINE
 
 
 def test_each_server_has_its_own_state_and_the_default_uses_the_module_state():

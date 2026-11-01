@@ -24,6 +24,18 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
+from .tf_compat import use_legacy_transform_publisher
+
+
+def _use_legacy_tf_publisher(og):
+    from importlib.metadata import PackageNotFoundError, version
+
+    node_version = og.GraphRegistry().get_node_type_version("isaacsim.core.nodes.IsaacComputeTransformTree")
+    try:
+        sim_version = version("isaacsim")
+    except PackageNotFoundError:
+        sim_version = None
+    return use_legacy_transform_publisher(node_version, sim_version)
 
 # MCP output directory configuration
 BASE_OUTPUT_DIR = os.getenv("MCP_CLIENT_OUTPUT_DIR", "").strip()
@@ -181,7 +193,10 @@ class _RecordingState:
         self.capture_token = None
         self.recording_lock = threading.RLock()
         self.stopping = False
-        self.state_dir = "/tmp/isaacsim_recording"
+        # Each Kit process must own its recorder state. A shared state file
+        # makes separate simulator instances mistake each other's recording for theirs.
+        self.state_dir = (os.path.join(BASE_OUTPUT_DIR, ".recorder-state", str(os.getpid())) if BASE_OUTPUT_DIR
+                          else f"/tmp/isaacsim_recording-{os.getpid()}")
         self.state_file = os.path.join(self.state_dir, "recorder_state.json")
 
     def save_state(self):
@@ -492,7 +507,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "start_ros_driver": {
-        "description": "Bring the ROS2 robot driver up/down/status so robot-motion tools (ros-mcp-server move_home/move_to_grasp/...) have a driver to talk to. Two backends: backend='fake' (default) uses scripts/launch_ur_fake.sh — the apt ur_robot_driver with fake/mock hardware, no Docker and no ~/ros2_ws needed, ready in a few seconds (sim only); backend='ursim' uses scripts/sim_bringup.sh — URSim docker + ur_bringup, hands-free no PolyScope clicks, ~110s, and is the path that supports mode='real' (lab UR5e, not yet enabled). Both end at /joint_states live + scaled_joint_trajectory_controller accepting FollowJointTrajectory, on the same DDS island (the ROS domain from config/ros_dds.env (default 0), Cyclone, localhost-only). Use once at startup.",
+        "description": "Bring the ROS2 robot driver up/down/status so robot-motion tools (ros-mcp-server move_home/move_to_grasp/...) have a driver to talk to. Two backends: backend='fake' (default) uses scripts/launch_ur_fake.sh — the apt ur_robot_driver with fake/mock hardware, no Docker and no ~/ros2_ws needed, ready in a few seconds (sim only); backend='ursim' uses scripts/sim_bringup.sh — URSim docker + ur_bringup, hands-free no PolyScope clicks, ~110s, and is the path that supports mode='real' (lab UR5e, not yet enabled). Both end at /joint_states live + scaled_joint_trajectory_controller accepting FollowJointTrajectory, on the same DDS island (the ROS domain from config/ros_dds.env (default 0), Cyclone, localhost-only). Managed sim__launch sessions support only the fake backend; URSim uses shared host resources. The fake launcher refuses startup when another UR driver is detected. Stop the fake driver before stopping its simulator. Use once at startup.",
         "parameters": {
             "mode": {
                 "type": "string",
@@ -507,7 +522,7 @@ MCP_TOOL_REGISTRY = {
             "backend": {
                 "type": "string",
                 "enum": ["fake", "ursim"],
-                "description": "'fake' (default) = apt ur_robot_driver fake hardware via launch_ur_fake.sh (lightweight, sim only); 'ursim' = URSim docker via sim_bringup.sh (needs Docker + ~/ros2_ws; required for mode='real')."
+                "description": "'fake' (default) = apt ur_robot_driver fake hardware via launch_ur_fake.sh (lightweight, sim only); 'ursim' = URSim docker via sim_bringup.sh (needs Docker + ~/ros2_ws; required for mode='real'; unavailable in managed sessions)."
             }
         }
     },
@@ -776,8 +791,11 @@ class DigitalTwin(omni.ext.IExt):
         # Isaac Sim handles ROS2 initialization automatically through its bridge
         print("ROS2 bridge will be initialized by Isaac Sim when needed")
 
-        # Create the window UI
-        self._window = ScrollingWindow(title="UR5e Digital Twin", width=300, height=800)
+        # The tool handlers also use some widget models, so build the panel but
+        # keep it hidden unless explicitly requested for this simulator session.
+        show_panel = os.getenv("UR5E_DT_SHOW_PANEL") == "1" and os.getenv("UR5E_DT_HEADLESS") != "1"
+        self._window = ScrollingWindow(title="UR5e Digital Twin", width=300, height=800,
+                                       visible=show_panel)
         with self._window.frame:
             with ui.VStack(spacing=5):
                 self.create_ui()
@@ -787,6 +805,15 @@ class DigitalTwin(omni.ext.IExt):
         # existing socket or starts the unbound singleton on the selected port.
         self._attach_bridge()
         _EXT_INSTANCE = self
+
+        # Console can be created after this extension during startup. Deferred
+        # docking seats the twin beside it once available instead of floating
+        # over the viewport; a missing Console leaves the panel usable.
+        if show_panel:
+            try:
+                self._window.deferred_dock_in("Console", ui.DockPolicy.CURRENT_WINDOW_IS_ACTIVE)
+            except Exception as exc:
+                carb.log_warn(f"[DigitalTwin] could not dock the twin panel: {exc}")
 
     def _attach_bridge(self):
         try:
@@ -4061,6 +4088,17 @@ class DigitalTwin(omni.ext.IExt):
         print(f"ROS2 Topic: {ROS2_TOPIC}")
 
         keys = og.Controller.Keys
+        legacy_tf = _use_legacy_tf_publisher(og)
+        tf_nodes = [] if legacy_tf else [("TFCompute", "isaacsim.core.nodes.IsaacComputeTransformTree")]
+        tf_target = "TFPublish" if legacy_tf else "TFCompute"
+        tf_connections = [("OnPlaybackTick.outputs:tick", "TFPublish.inputs:execIn")] if legacy_tf else [
+            ("OnPlaybackTick.outputs:tick", "TFCompute.inputs:execIn"),
+            ("TFCompute.outputs:execOut", "TFPublish.inputs:execIn"),
+            ("TFCompute.outputs:parentFrames", "TFPublish.inputs:parentFrames"),
+            ("TFCompute.outputs:childFrames", "TFPublish.inputs:childFrames"),
+            ("TFCompute.outputs:translations", "TFPublish.inputs:translations"),
+            ("TFCompute.outputs:orientations", "TFPublish.inputs:orientations"),
+        ]
 
         (graph, nodes, _, _) = og.Controller.edit(
             {"graph_path": graph_path, "evaluator_name": "execution"},
@@ -4073,9 +4111,8 @@ class DigitalTwin(omni.ext.IExt):
                     ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
                     ("CameraInfoPublish", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
                     ("RGBPublish", "isaacsim.ros2.bridge.ROS2CameraHelper"),
-                    ("TFCompute", "isaacsim.core.nodes.IsaacComputeTransformTree"),
                     ("TFPublish", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
-                ],
+                ] + tf_nodes,
                 keys.SET_VALUES: [
                     ("RenderProduct.inputs:cameraPrim", CAMERA_PRIM),
                     ("RenderProduct.inputs:width", IMAGE_WIDTH),
@@ -4088,8 +4125,8 @@ class DigitalTwin(omni.ext.IExt):
                     ("RGBPublish.inputs:frameId", "camera_link"),
                     ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
                     ("TFPublish.inputs:topicName", "tf_cam"),
-                    ("TFCompute.inputs:targetPrims", CAMERA_PRIM),
-                    ("TFCompute.inputs:parentPrim", "/World"),
+                    (f"{tf_target}.inputs:targetPrims", CAMERA_PRIM),
+                    (f"{tf_target}.inputs:parentPrim", "/World"),
                     ("ReadSimTime.inputs:resetOnStop", False),
                 ],
                 keys.CONNECT: [
@@ -4097,22 +4134,13 @@ class DigitalTwin(omni.ext.IExt):
                     ("RunOnce.outputs:step", "RenderProduct.inputs:execIn"),
                     ("RenderProduct.outputs:execOut", "CameraInfoPublish.inputs:execIn"),
                     ("RenderProduct.outputs:execOut", "RGBPublish.inputs:execIn"),
-                    # Isaac Sim 6.x: ROS2PublishTransformTree no longer resolves targetPrims itself
-                    # (its legacy pose-tree path publishes nothing); IsaacComputeTransformTree
-                    # computes the tree and feeds the four data ports below.
-                    ("OnPlaybackTick.outputs:tick", "TFCompute.inputs:execIn"),
-                    ("TFCompute.outputs:execOut", "TFPublish.inputs:execIn"),
-                    ("TFCompute.outputs:parentFrames", "TFPublish.inputs:parentFrames"),
-                    ("TFCompute.outputs:childFrames", "TFPublish.inputs:childFrames"),
-                    ("TFCompute.outputs:translations", "TFPublish.inputs:translations"),
-                    ("TFCompute.outputs:orientations", "TFPublish.inputs:orientations"),
                     ("RenderProduct.outputs:renderProductPath", "CameraInfoPublish.inputs:renderProductPath"),
                     ("RenderProduct.outputs:renderProductPath", "RGBPublish.inputs:renderProductPath"),
                     ("Context.outputs:context", "CameraInfoPublish.inputs:context"),
                     ("Context.outputs:context", "RGBPublish.inputs:context"),
                     ("Context.outputs:context", "TFPublish.inputs:context"),
                     ("ReadSimTime.outputs:simulationTime", "TFPublish.inputs:timeStamp"),
-                ],
+                ] + tf_connections,
             }
         )
 
@@ -5645,6 +5673,16 @@ class DigitalTwin(omni.ext.IExt):
 
             # Create the action graph using OmniGraph API
             keys = og.Controller.Keys
+            legacy_tf = _use_legacy_tf_publisher(og)
+            tf_nodes = [] if legacy_tf else [("compute_transform_tree", "isaacsim.core.nodes.IsaacComputeTransformTree")]
+            tf_connections = [("on_playback_tick.outputs:tick", "ros2_publish_transform_tree.inputs:execIn")] if legacy_tf else [
+                ("on_playback_tick.outputs:tick", "compute_transform_tree.inputs:execIn"),
+                ("compute_transform_tree.outputs:execOut", "ros2_publish_transform_tree.inputs:execIn"),
+                ("compute_transform_tree.outputs:parentFrames", "ros2_publish_transform_tree.inputs:parentFrames"),
+                ("compute_transform_tree.outputs:childFrames", "ros2_publish_transform_tree.inputs:childFrames"),
+                ("compute_transform_tree.outputs:translations", "ros2_publish_transform_tree.inputs:translations"),
+                ("compute_transform_tree.outputs:orientations", "ros2_publish_transform_tree.inputs:orientations"),
+            ]
             
             (graph, nodes, _, _) = og.Controller.edit(
                 {
@@ -5656,19 +5694,12 @@ class DigitalTwin(omni.ext.IExt):
                         ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
                         ("ros2_context", "isaacsim.ros2.bridge.ROS2Context"),
                         ("isaac_read_simulation_time", "isaacsim.core.nodes.IsaacReadSimulationTime"),
-                        ("compute_transform_tree", "isaacsim.core.nodes.IsaacComputeTransformTree"),
                         ("ros2_publish_transform_tree", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
-                    ],
+                    ] + tf_nodes,
                     keys.CONNECT: [
-                        ("on_playback_tick.outputs:tick", "compute_transform_tree.inputs:execIn"),
-                        ("compute_transform_tree.outputs:execOut", "ros2_publish_transform_tree.inputs:execIn"),
-                        ("compute_transform_tree.outputs:parentFrames", "ros2_publish_transform_tree.inputs:parentFrames"),
-                        ("compute_transform_tree.outputs:childFrames", "ros2_publish_transform_tree.inputs:childFrames"),
-                        ("compute_transform_tree.outputs:translations", "ros2_publish_transform_tree.inputs:translations"),
-                        ("compute_transform_tree.outputs:orientations", "ros2_publish_transform_tree.inputs:orientations"),
                         ("ros2_context.outputs:context", "ros2_publish_transform_tree.inputs:context"),
                         ("isaac_read_simulation_time.outputs:simulationTime", "ros2_publish_transform_tree.inputs:timeStamp"),
-                    ],
+                    ] + tf_connections,
                     keys.SET_VALUES: [
                         ("ros2_publish_transform_tree.inputs:topicName", topic_name),
                         ("isaac_read_simulation_time.inputs:resetOnStop", False),
@@ -5679,8 +5710,9 @@ class DigitalTwin(omni.ext.IExt):
             # Get the stage to set relationships
             stage = omni.usd.get_context().get_stage()
             
-            # parentPrim / targetPrims now live on the compute node (Isaac Sim 6.x)
-            ros2_node_path = f"{graph_path}/compute_transform_tree"
+            # 6.0.0.0 resolves targets in the publisher; newer releases use the compute node.
+            node_name = "ros2_publish_transform_tree" if legacy_tf else "compute_transform_tree"
+            ros2_node_path = f"{graph_path}/{node_name}"
             ros2_prim = stage.GetPrimAtPath(ros2_node_path)
             
             if ros2_prim.IsValid():
@@ -6488,6 +6520,14 @@ class DigitalTwin(omni.ext.IExt):
         if backend not in ("fake", "ursim"):
             return {"status": "error", "message": f"invalid backend '{backend}' (expected fake|ursim)"}
 
+        session_id = os.environ.get("ISAAC_MCP_SIM_SESSION_ID")
+        session_dir = os.environ.get("ISAAC_MCP_SIM_SESSION_DIR")
+        if bool(session_id) != bool(session_dir):
+            return {"status": "error", "message": "managed session driver configuration is incomplete"}
+        if session_id and backend == "ursim":
+            return {"status": "error", "message": "backend='ursim' uses shared host resources and is not "
+                    "available in managed simulator sessions; use the fake backend or an unmanaged session"}
+
         # extension.py -> ur5e_dt -> ur5e-dt -> exts -> <repo root>
         repo_root = Path(__file__).resolve().parents[3]
 
@@ -6524,6 +6564,12 @@ class DigitalTwin(omni.ext.IExt):
             env["ROS_DISTRO"] = os.environ["ROS_DISTRO"]
         if os.environ.get("ROS_SETUP"):
             env["ROS_SETUP"] = os.environ["ROS_SETUP"]
+        if session_id:
+            # The normal simulator environment is intentionally not inherited, but the fake
+            # driver's record, log and ownership marker must follow this managed instance.
+            env["ISAAC_MCP_SIM_SESSION_ID"] = session_id
+            env["UR_FAKE_PIDFILE"] = str(Path(session_dir) / "ur_fake_driver.pid")
+            env["UR_FAKE_LOG"] = str(Path(session_dir) / "ur_fake_driver.log")
         timeout = 240 if action == "up" else 60
 
         try:

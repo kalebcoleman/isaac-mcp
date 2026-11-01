@@ -506,6 +506,9 @@ def test_a_queued_request_whose_caller_disconnected_NEVER_RUNS(served):
     served.wire().send("t.pumps")
     assert entered.wait(5)
     gone = served.wire().send("t.record", queue_s=30)
+    # Different TCP connections may be accepted in either order. Confirm the
+    # abandoned request reached the head before sending the surviving one.
+    assert until(lambda: served.bridge.admission()["waiting"] == ["t.record"])
     stays = served.wire().send("t.plain", queue_s=30)
     assert until(lambda: served.bridge.admission()["waiting"] == ["t.record", "t.plain"])
     gone.close()

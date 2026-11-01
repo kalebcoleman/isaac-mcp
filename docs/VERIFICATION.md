@@ -57,6 +57,12 @@ machines and is **informational**, not a required match. The checks do not prove
 ROS topic, or visual result. `scripts/smoke_tools.py` exercises additional twin tools and also rebuilds the stage;
 review its output for warnings and its documented exclusions.
 
+To check a different installed release, run `scripts/smoke_tools.py --sim-version 6.1` with a host Python that can
+import the MCP package and `UR5E_DT_PORT` pointing at the selected disposable session. The option changes only the
+expected app-version prefix; it does not establish compatibility or change the simulator installation. Check the
+package version separately: the app's reported version may omit a fourth version segment. See
+[compatibility](COMPATIBILITY.md) for the results obtained so far.
+
 The validator is [`scripts/validate_ur5e_check.py`](../scripts/validate_ur5e_check.py). It rejects missing,
 malformed, non-finite or out-of-range observations, and `verify.sh` exits nonzero if a check or its response fails.
 If a check fails, inspect the named result and the simulator log before changing limits.
@@ -124,7 +130,7 @@ A separate direct Kit launch, without the `run.sh` deferral handshake, used `ISA
 environment was supplied for this check, but ROS topics and the broader twin smoke test were not exercised in that
 direct-launch session.
 
-With `./run.sh --headless --port 0`, a separate headless session bound an OS-assigned port and advertised it in the
+With `./run.sh --headless --port 0` (when the launcher enabled the twin by default), a separate headless session bound an OS-assigned port and advertised it in the
 runtime portfile. All 23 twin tools were present before and after disabling and re-enabling the twin on that endpoint.
 
 ## Generic scene API validation

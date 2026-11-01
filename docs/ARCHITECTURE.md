@@ -53,6 +53,10 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 - **`exts/ur5e-dt`** encapsulates the robot model, physics parameters, workstation USD assets (111 MB), and manipulation logic.
 - **`exts/isaac.mcp.panel`** is vendored alongside the bridge to provide an in-editor GUI inspector for registered tools.
 
+The host also packages a snapshot of the twin's tool schemas. It lists those tools before Kit starts; calls still
+require a bridge serving the extension. Live bridge metadata replaces the snapshot after discovery. The supplied
+launcher enables the twin extension with its panel hidden unless `--ur5e-panel` is requested.
+
 ---
 
 ## 2. Naming Rules

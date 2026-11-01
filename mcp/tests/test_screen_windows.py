@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock
 
+import pytest
 from Xlib import X
 
 import isaac_mcp.screen as screen
@@ -194,3 +195,58 @@ def test_window_for_pid(monkeypatch):
     assert screen.window_for_pid(7)["id"] == 2
     assert screen.window_for_pid(None) is None
     assert screen.window_for_pid(99) is None
+
+
+def test_prefer_managed_client_over_larger_window_frame(monkeypatch):
+    wins = [
+        {"id": 1, "title": "Isaac Sim", "class": "frame", "pid": 7,
+         "width": 1200, "height": 900, "is_client": False},
+        {"id": 2, "title": "Isaac Sim", "class": "Isaac Sim", "pid": 7,
+         "width": 1100, "height": 800, "is_client": True},
+    ]
+    monkeypatch.setattr(screen, "_visible_windows", lambda: wins)
+    monkeypatch.setattr(screen, "_bridge_pid", lambda port: 7)
+    assert screen._match_window("Isaac Sim", None)["id"] == 2
+    assert screen._auto_window(8766)["id"] == 2
+    assert screen.window_for_pid(7)["id"] == 2
+    assert screen._match_window(None, 1)["id"] == 1  # explicit ID is never substituted
+
+
+def test_raising_by_title_rejects_windows_owned_by_different_processes(monkeypatch):
+    wins = [
+        {"id": 1, "title": "Isaac Sim", "class": "Isaac Sim", "pid": 7,
+         "width": 1000, "height": 800, "is_client": True},
+        {"id": 2, "title": "Isaac Sim", "class": "Isaac Sim", "pid": 8,
+         "width": 1000, "height": 800, "is_client": True},
+    ]
+    monkeypatch.setattr(screen, "_visible_windows", lambda: wins)
+    with pytest.raises(ValueError, match="multiple processes"):
+        screen._match_window("Isaac Sim", None, True)
+    assert screen._match_window(None, 2, True)["pid"] == 8
+
+
+def test_raise_window_requests_and_verifies_window_manager_activation(monkeypatch):
+    from mcp.server.fastmcp import FastMCP
+
+    disp = MagicMock()
+    root = disp.screen.return_value.root
+    root.get_full_property.return_value.value = [7]
+    monkeypatch.setattr(screen, "_xdisplay", lambda: disp)
+    monkeypatch.setattr(screen, "_match_window", lambda *_: {"id": 7, "title": "Sim"})
+    monkeypatch.setattr(screen.xevent, "ClientMessage", lambda **kwargs: kwargs)
+    server = FastMCP("screen-test")
+    screen.register_screen_tools(server, groups={"screen_control"})
+    result = server._tool_manager._tools["raise_window"].fn(window_id=7)
+    assert result == "activated: Sim (id=7)"
+    root.send_event.assert_called_once()
+    disp.close.assert_called_once()
+
+
+def test_raise_window_refuses_an_unexpected_pid(monkeypatch):
+    from mcp.server.fastmcp import FastMCP
+
+    monkeypatch.setattr(screen, "_match_window", lambda *_: {"id": 7, "title": "Sim", "pid": 22})
+    server = FastMCP("screen-test")
+    screen.register_screen_tools(server, groups={"screen_control"})
+    with pytest.raises(ValueError, match="PID"):
+        server._tool_manager._tools["raise_window"].fn(window_id=7, expected_pid=23)
