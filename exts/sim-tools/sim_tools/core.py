@@ -635,7 +635,53 @@ def strip_runtime_render_state(layer):
         "omni.syntheticdata.SdRenderVarPtr",
         "omni.graph.nodes.GpuInteropRenderProductEntry",
         "isaacsim.sensors.rtx.IsaacCreateRTXLidarScanBuffer",
+        "omni.graph.action.RationalTimeSyncGate",
+        "omni.replicator.nv.ReadRpFabricTime",
+        "omni.syntheticdata.SdNoOp",
+        "isaacsim.core.nodes.IsaacSimulationGate",
+        "isaacsim.core.nodes.IsaacReadSimulationTimeAnnotator",
+        "isaacsim.core.nodes.IsaacConvertRGBAToRGB",
     }
+    # Camera helpers regenerate these session-only writers on playback. A
+    # flattened export includes their process handles, unlike a normal USD
+    # root-layer save. Only omit recognized writers backed by a preserved
+    # helper with the same topic and frame; an arbitrary ROS node is not safe
+    # to discard. NVIDIA documents the helper-generated SDGPipeline as runtime
+    # state, not part of the asset.
+    ros_writers = {
+        "isaacsim.ros2.bridge.ROS2PublishImage":
+            "isaacsim.ros2.bridge.ROS2CameraHelper",
+        "isaacsim.ros2.bridge.ROS2PublishCameraInfo":
+            "isaacsim.ros2.bridge.ROS2CameraInfoHelper",
+    }
+    helpers = {}
+    for prim in output.Traverse():
+        node_type = prim.GetAttribute("node:type").Get()
+        if node_type in ros_writers.values() and not str(prim.GetPath()).startswith("/Render/"):
+            key = (node_type, prim.GetAttribute("inputs:topicName").Get(),
+                   prim.GetAttribute("inputs:frameId").Get())
+            helpers.setdefault(key, []).append(prim)
+
+    def regenerable_writer(prim):
+        node_type = prim.GetAttribute("node:type").Get()
+        helper_type = ros_writers.get(node_type)
+        writer_id = prim.GetAttribute("inputs:writerId").Get()
+        key = (helper_type, prim.GetAttribute("inputs:topicName").Get(),
+               prim.GetAttribute("inputs:frameId").Get())
+        if not helper_type or not isinstance(writer_id, str) or not re.fullmatch(
+            r"NodeWriter_[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", writer_id
+        ):
+            return False
+        for helper in helpers.get(key, []):
+            # A standalone helper without its authored render-product source
+            # cannot rebuild the writer after reopening.
+            for source in helper.GetAttribute("inputs:renderProductPath").GetConnections():
+                producer = output.GetPrimAtPath(source.GetPrimPath())
+                if (producer and producer.GetAttribute("node:type").Get()
+                        == "isaacsim.core.nodes.IsaacCreateRenderProduct"
+                        and source.name == "outputs:renderProductPath"):
+                    return True
+        return False
     omitted = []
     for prim in output.Traverse():
         name = str(prim.GetPath())
@@ -680,7 +726,8 @@ def strip_runtime_render_state(layer):
                     continue
                 if (
                     child.GetTypeName() != "OmniGraphNode"
-                    or child.GetAttribute("node:type").Get() not in known_nodes
+                    or (child.GetAttribute("node:type").Get() not in known_nodes
+                        and not regenerable_writer(child))
                 ):
                     refuse(
                         "SAVE_UNSUPPORTED",
@@ -706,6 +753,13 @@ def strip_runtime_render_state(layer):
                 refuse(
                     "SAVE_UNSUPPORTED",
                     "Preserved content connects to process-bound render state; saved copy not published. Live stage preserved.",
+                )
+        for relationship in prim.GetRelationships():
+            if any(target.HasPrefix(path) for target in relationship.GetTargets()
+                   for path in omitted_paths):
+                refuse(
+                    "SAVE_UNSUPPORTED",
+                    "Preserved relationship targets process-bound render state; saved copy not published. Live stage preserved.",
                 )
     # Remove deepest paths first. Never edit the live stage or its layers.
     for name in sorted(omitted, key=len, reverse=True):

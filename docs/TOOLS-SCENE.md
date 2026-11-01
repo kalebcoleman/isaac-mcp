@@ -244,10 +244,13 @@ process's permissions. Retain verified staging snapshots while referenced/saved 
 
 Saved copies omit recognized process-bound Replicator `/Orchestrator` graphs, SyntheticData
 pipelines and pack-owned render products; their
-native graph/CPU handles cannot be reopened as USD. Camera and LiDAR definitions, materials
-and user Action Graphs remain. The result lists `omitted_runtime_render_paths`. Unknown content
+native graph/CPU handles cannot be reopened as USD. Recognized ROS camera writers are omitted
+only when a preserved camera helper with the same topic/frame and an authored render-product
+source can regenerate them. Camera and LiDAR definitions, materials and user Action Graphs
+remain. The result lists `omitted_runtime_render_paths`. Unknown content
 inside a native pipeline or `/Orchestrator`, or a preserved controller connected to omitted
-runtime state, returns `SAVE_UNSUPPORTED` before publication; the live stage is unchanged.
+runtime state (including relationship targets), returns `SAVE_UNSUPPORTED` before publication;
+the live stage is unchanged.
 Create fresh sensors after reopening; a saved scene is not a running sensor or physics checkpoint.
 
 The earlier 6.0.0.0 reopened-camera `NOT_READY` failure was traced to a serialized

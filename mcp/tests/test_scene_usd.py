@@ -416,3 +416,72 @@ def test_save_refuses_unrecognized_orchestrator_content(scene, content):
         scene.save(st, "unrecognized.usda")
     assert st.Flatten().ExportToString() == before
     assert not (scene.output / "unrecognized.usda").exists()
+
+
+def camera_pipeline(stage, kind="Image"):
+    from pxr import Sdf
+
+    def node(path, node_type):
+        prim = stage.DefinePrim(path, "OmniGraphNode")
+        prim.CreateAttribute("node:type", Sdf.ValueTypeNames.Token).Set(node_type)
+        return prim
+
+    stage.DefinePrim("/Graph/Camera", "OmniGraph")
+    producer = node("/Graph/Camera/RenderProduct", "isaacsim.core.nodes.IsaacCreateRenderProduct")
+    helper = node("/Graph/Camera/Helper", "isaacsim.ros2.bridge.ROS2Camera" +
+                  ("InfoHelper" if kind == "CameraInfo" else "Helper"))
+    helper.CreateAttribute("inputs:renderProductPath", Sdf.ValueTypeNames.String).SetConnections(
+        [producer.GetPath().AppendProperty("outputs:renderProductPath")]
+    )
+    stage.DefinePrim("/Render/PostProcess/SDGPipeline", "OmniGraph")
+    writer = node("/Render/PostProcess/SDGPipeline/Writer",
+                  "isaacsim.ros2.bridge.ROS2Publish" + kind)
+    writer.CreateAttribute("inputs:writerId", Sdf.ValueTypeNames.String).Set(
+        "NodeWriter_12345678-1234-1234-1234-123456789abc"
+    )
+    for prim in (helper, writer):
+        prim.CreateAttribute("inputs:topicName", Sdf.ValueTypeNames.String).Set("rgb")
+        prim.CreateAttribute("inputs:frameId", Sdf.ValueTypeNames.String).Set("camera_link")
+    node("/Render/PostProcess/SDGPipeline/Time",
+         "isaacsim.core.nodes.IsaacReadSimulationTimeAnnotator")
+    node("/Render/PostProcess/SDGPipeline/Sync", "omni.graph.action.RationalTimeSyncGate")
+    return helper, writer
+
+
+@pytest.mark.parametrize("kind", ["Image", "CameraInfo"])
+def test_save_regenerable_ros_camera_pipeline_preserves_authored_helper(scene, kind):
+    stage = scene.stage()
+    helper, _ = camera_pipeline(stage, kind)
+    before = stage.Flatten().ExportToString()
+    result = scene.save(stage, "ros-camera.usda")
+    reopened = Usd.Stage.Open(result["file"])
+    assert reopened.GetPrimAtPath(helper.GetPath())
+    assert reopened.GetPrimAtPath(helper.GetPath()).GetAttribute(
+        "inputs:renderProductPath"
+    ).GetConnections() == helper.GetAttribute("inputs:renderProductPath").GetConnections()
+    assert not reopened.GetPrimAtPath("/Render/PostProcess/SDGPipeline")
+    assert stage.Flatten().ExportToString() == before
+
+
+@pytest.mark.parametrize("damage", ["helper", "connection", "frame", "writer_id", "relationship"])
+def test_save_ros_pipeline_refuses_nonregenerable_or_user_dependency(scene, damage):
+    stage = scene.stage()
+    helper, writer = camera_pipeline(stage)
+    if damage == "helper":
+        stage.RemovePrim(helper.GetPath())
+    elif damage == "connection":
+        helper.GetAttribute("inputs:renderProductPath").ClearConnections()
+    elif damage == "frame":
+        writer.GetAttribute("inputs:frameId").Set("a_different_camera")
+    elif damage == "writer_id":
+        writer.GetAttribute("inputs:writerId").Set("hand-authored")
+    else:
+        stage.GetPrimAtPath("/World").CreateRelationship("nativeInput").SetTargets(
+            [writer.GetPath()]
+        )
+    before = stage.Flatten().ExportToString()
+    with pytest.raises(AssetError) as exc:
+        scene.save(stage, "unsafe-ros.usda")
+    assert exc.value.code == "SAVE_UNSUPPORTED"
+    assert not (scene.output / "unsafe-ros.usda").exists()
+    assert stage.Flatten().ExportToString() == before
