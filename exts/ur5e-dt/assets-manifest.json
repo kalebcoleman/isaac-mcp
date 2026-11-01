@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "description": "Assets used by the UR5e twin. Only entries under 'bundled' are redistributed with the repository; 'fetch' entries are downloaded from NVIDIA's public asset root into UR5E_DT_ASSET_CACHE, and 'manual' entries must be supplied by the operator. See docs/provenance/ASSETS.md.",
+  "asset_root": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1",
+  "cache_env": "UR5E_DT_ASSET_CACHE",
+  "remote": {
+    "robot/ur5e.usd": "Isaac/Robots/UniversalRobots/ur5e/ur5e.usd",
+    "sensors/rsd455.usd": "Isaac/Sensors/Intel/RealSense/rsd455.usd"
+  },
+  "fetch": [
+    {
+      "id": "nvidia-ur5e",
+      "licence": "NVIDIA Isaac Sim Additional Software and Materials License",
+      "redistributable": false,
+      "files": [
+        {
+          "target": "robot/ur5e.usd",
+          "source": "Isaac/Robots/UniversalRobots/ur5e/ur5e.usd",
+          "sha256": "d7a290e94f3de151fdf660007f6a53448cbda8cf558d83fd04a91c00eda5bbc7",
+          "size": 4830
+        },
+        {
+          "target": "robot/configuration/ur5e_base.usd",
+          "source": "Isaac/Robots/UniversalRobots/ur5e/configuration/ur5e_base.usd",
+          "sha256": "12347912499e3ead2c0fa1ba782dee8b87fa9255397baeba94d99480b01e3ea8",
+          "size": 6422847
+        },
+        {
+          "target": "robot/configuration/ur5e_physics.usd",
+          "source": "Isaac/Robots/UniversalRobots/ur5e/configuration/ur5e_physics.usd",
+          "sha256": "4d1a1045809d2d2abd9f0dc88922a7bbcfc84b731f96baf986d0959546fd054b",
+          "size": 6197
+        },
+        {
+          "target": "robot/configuration/ur5e_robot_schema.usd",
+          "source": "Isaac/Robots/UniversalRobots/ur5e/configuration/ur5e_robot_schema.usd",
+          "sha256": "1bee266ccaa15fc78bfca1ecd5aa740e1823ad8731000746124d93920287c226",
+          "size": 2268
+        },
+        {
+          "target": "robot/configuration/ur5e_sensor.usd",
+          "source": "Isaac/Robots/UniversalRobots/ur5e/configuration/ur5e_sensor.usd",
+          "sha256": "3d589a64b5a80d8fe923fd29ca1cba8c9c37468e026ef7f39f37913797c78dfe",
+          "size": 602
+        }
+      ]
+    },
+    {
+      "id": "nvidia-realsense",
+      "licence": "NVIDIA Isaac Sim Additional Software and Materials License",
+      "redistributable": false,
+      "files": [
+        {
+          "target": "sensors/rsd455.usd",
+          "source": "Isaac/Sensors/Intel/RealSense/rsd455.usd",
+          "sha256": "0546588c4c33e54975ddb1ef5bb9924c75948e1f6da81e249ca844874f2ca0e1",
+          "size": 4463997,
+          "cache_path": "Isaac/Sensors/Intel/RealSense/rsd455.usd"
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Anodized.mdl",
+          "sha256": "5469bfef01fbd8c4b1784ed90884a29d93eb68ce6f27a8ae61803411ea3fb713",
+          "size": 1586,
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Anodized.mdl"
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Cast.mdl",
+          "sha256": "78c3edb2398c7a48618ebe011a9a9d09802e56e1af041ea7797b115f934bce53",
+          "size": 2006,
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Cast.mdl"
+        },
+        {
+          "source": "Isaac/Materials/Base/Plastics/Plastic_ABS.mdl",
+          "sha256": "996caa235e62010e15fcf8c820ffdf502a3c276fc416d3f95298e325adf44616",
+          "size": 1522,
+          "target": "Isaac/Materials/Base/Plastics/Plastic_ABS.mdl"
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_BaseColor.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_BaseColor.png",
+          "sha256": "d1d042502d7d94bca13cee10c63ab5b3801fb0a46e26d79169e13f5b9c7b5a31",
+          "size": 16903
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_ORM.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_ORM.png",
+          "sha256": "768f2dbb4f702a9624b912b431efd1a6a8e0ff3e93744cf54f3866ef8f7986e9",
+          "size": 637843
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_Normal.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_Normal.png",
+          "sha256": "6dc1cb1b23a9abd766188a85ccbad1a2639d0a9a334f284e359c6c5d4438608e",
+          "size": 3321558
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_BaseColor.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_BaseColor.png",
+          "sha256": "03ab7494d37e1f6551a26894628c5fe03a65b4d85a09ed11337e184852a580b3",
+          "size": 1154931
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_ORM.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_ORM.png",
+          "sha256": "571eba5a99da444b681609a722a29914490c6dae45d230dac471a45875211a4c",
+          "size": 4198310
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_N.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_N.png",
+          "sha256": "812c0161ea14abc581cb35c47b33dc6005c089f8e82dca6cb4dd4832deb0556c",
+          "size": 6557833
+        }
+      ],
+      "note": "Keep the sensor at its source-relative cache path so its three relative MDL references resolve. The nine pinned material/texture dependencies are fetched and verified with the USD. OmniPBR and OmniGlass are provided by Kit. No NVIDIA file is redistributed or rewritten."
+    }
+  ],
+  "manual": [
+    {
+      "target": "workstation/vention.usd",
+      "licence": "Vention Terms of Use",
+      "redistributable": false,
+      "reason": "The Vention MachineBuilder export has no public download and may not be redistributed.",
+      "hint": "Export your own Vention assembly and place it at <cache>/workstation/vention.usd (with any collected materials beside it), or set UR5E_DT_ASSET_CACHE to a folder containing it. The twin builds a simple placeholder bench when it is absent."
+    }
+  ],
+  "bundled": [
+    {
+      "path": "adapter_ref",
+      "licence": "Apache-2.0",
+      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros",
+      "notice": "THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "path": "gripper/husarion_rg2",
+      "licence": "Apache-2.0",
+      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros",
+      "notice": "THIRD-PARTY-NOTICES.md",
+      "note": "USD conversion; the old husarion_rg2_fixed.usd rollback is not shipped."
+    },
+    {
+      "path": "gripper/QuickChanger.usd",
+      "licence": "Apache-2.0",
+      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros",
+      "notice": "THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "path": "gripper/configuration",
+      "licence": "Apache-2.0",
+      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros",
+      "notice": "THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "path": "objects/fmb1",
+      "licence": "CC-BY-4.0",
+      "origin": "https://functional-manipulation-benchmark.github.io/",
+      "notice": "THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "path": "objects/fmb2",
+      "licence": "CC-BY-4.0",
+      "origin": "https://functional-manipulation-benchmark.github.io/",
+      "notice": "THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "path": "objects/fmb3",
+      "licence": "CC-BY-4.0",
+      "origin": "https://functional-manipulation-benchmark.github.io/",
+      "notice": "THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "path": "objects/fmb4",
+      "licence": "repository",
+      "origin": "twin authoring",
+      "notice": "THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "path": "objects/aruco",
+      "licence": "generated",
+      "origin": "OpenCV ArUco dictionaries",
+      "notice": "THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "path": "objects/materials/Plastic.mdl",
+      "licence": "repository",
+      "origin": "twin authoring"
+    }
+  ]
+}

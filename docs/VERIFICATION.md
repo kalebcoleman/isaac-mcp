@@ -42,7 +42,7 @@ export UR5E_DT_PORT=18766
 "$UR5E_DT_PYTHON" scripts/smoke_tools.py
 ```
 
-`verify.sh` checks the bundled workstation baseline: UR5e, RG2, QuickChanger and Vention scene prims; observed
+`verify.sh` checks the workstation baseline: UR5e, RG2, QuickChanger and Vention scene prims; observed
 robot-chain rigid bodies with gravity disabled; the six expected joint limits; and USD drive stiffness 100,
 damping 10 and max force 200 (the project's default drive values). It commands the elbow by -0.1 rad and requires
 the achieved displacement and return error to be within 0.02 rad, with finite observed joint positions. Joint limits

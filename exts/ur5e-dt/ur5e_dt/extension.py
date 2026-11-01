@@ -22,6 +22,9 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # The bridge extension owns the process-wide socket; the twin owns only its
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
+from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_uri
+from .object_pose import read_local_pose, set_local_pose
+from .robot_visuals import prepare_robot_visuals
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
 from .tf_compat import use_legacy_transform_publisher
@@ -379,19 +382,18 @@ if '_viewport_pub' not in globals():
 
 
 def _local_asset(relpath):
-    """Resolve a local asset path under exts/ur5e-dt/assets/ as a file:// URI."""
-    full = os.path.join(_assets_dir, relpath)
-    if not os.path.exists(full):
-        raise FileNotFoundError(f"Asset not found: {full}")
-    return "file://" + os.path.abspath(full)
+    """Resolve an asset to a file:// or https:// URI.
+
+    Bundled assets win, then the operator cache, then the pinned NVIDIA asset
+    root for entries the manifest allows.  See ``asset_cache`` and
+    ``docs/provenance/ASSETS.md``.
+    """
+    return resolve_uri(relpath)
 
 
 def _local_asset_dir(relpath):
     """Resolve a local asset directory path (no file:// prefix, for os.listdir)."""
-    full = os.path.join(_assets_dir, relpath)
-    if not os.path.isdir(full):
-        raise FileNotFoundError(f"Asset directory not found: {full}")
-    return full
+    return str(resolve_dir(relpath))
 
 
 # Assembly definitions: each entry pairs a local objects folder with its assembly JSON
@@ -453,8 +455,8 @@ MCP_TOOL_REGISTRY = {
         "parameters": {
             "assembly": {
                 "type": "string",
-                "enum": ["fmb1", "fmb2", "fmb3"],
-                "description": "Which assembly configuration to use"
+                "enum": ["fmb1", "fmb2", "fmb3", "fmb4", "jenga", "fmb_jenga"],
+                "description": "Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
             }
         }
     },
@@ -494,8 +496,8 @@ MCP_TOOL_REGISTRY = {
         "parameters": {
             "assembly": {
                 "type": "string",
-                "enum": ["fmb1", "fmb2", "fmb3"],
-                "description": "Which assembly folder to load objects from"
+                "enum": ["fmb1", "fmb2", "fmb3", "fmb4", "jenga", "fmb_jenga"],
+                "description": "Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
             }
         }
     },
@@ -565,7 +567,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "load_workstation": {
-        "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the bundled vention.usd at /World/Vention and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
+        "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
         "parameters": {}
     },
     "quick_start_with_workstation": {
@@ -2562,6 +2564,46 @@ class DigitalTwin(omni.ext.IExt):
 
         print("Scene loaded successfully.")
 
+    def _build_placeholder_workstation(self, stage, parent_path):
+        """Build a simple bench when the licensed Vention export is not installed.
+
+        The real bench is visual context only. This placeholder keeps the same
+        top-at-z=0 contract and ``/World/Vention`` path so the rest of the scene
+        and the ROS pose parity are unchanged.
+        """
+        from pxr import Gf, UsdGeom
+
+        bench_path = parent_path + "/Bench"
+        UsdGeom.Xform.Define(stage, bench_path)
+
+        def box(name, size, center):
+            cube = UsdGeom.Cube.Define(stage, f"{bench_path}/{name}")
+            cube.GetSizeAttr().Set(1.0)
+            xform = UsdGeom.Xformable(cube)
+            xform.ClearXformOpOrder()
+            xform.AddTranslateOp().Set(Gf.Vec3d(*center))
+            xform.AddScaleOp().Set(Gf.Vec3f(*size))
+
+        box("Top", (1.4, 0.9, 0.04), (0.0, 0.0, -0.02))
+        box("Shelf", (1.3, 0.8, 0.02), (0.0, 0.0, -0.55))
+        for index, (x, y) in enumerate(
+            ((-0.62, -0.38), (0.62, -0.38), (-0.62, 0.38), (0.62, 0.38))
+        ):
+            box(f"Leg{index}", (0.06, 0.06, 0.86), (x, y, -0.47))
+
+        parent = stage.GetPrimAtPath(parent_path)
+        xform = UsdGeom.Xform(parent)
+        xform.ClearXformOpOrder()
+        xform.AddTranslateOp().Set(
+            Gf.Vec3d(WORKSTATION_XY[0], WORKSTATION_XY[1], 0.0)
+        )
+
+        ground = stage.GetPrimAtPath("/World/defaultGroundPlane")
+        if ground and ground.IsValid():
+            UsdGeom.Imageable(ground).MakeInvisible()
+            print("Default ground plane visual hidden (z=0 collision retained).")
+        print(f"Placeholder workstation built at {parent_path} (top at z=0).")
+
     async def load_workstation(self):
         # Large-reference composition must complete outside active physics;
         # otherwise older Motion BVH renderers can fault on the following Stop.
@@ -2573,7 +2615,8 @@ class DigitalTwin(omni.ext.IExt):
     async def _load_workstation(self):
         """Load the Vention workstation bench under the robot (additive, visual-only).
 
-        References the bundled vention.usd at /World/Vention and places it so the
+        References the operator-supplied or cached vention.usd at /World/Vention
+        (or builds a placeholder bench) and places it so the
         tabletop TOP surface is exactly at z=0 — coincident with the work plane where
         the robot base (ROBOT_BASE_Z=0.0) and objects already sit. The robot is NOT
         moved and ROBOT_BASE_Z is NOT changed, so ROS pose parity is untouched. The
@@ -2602,7 +2645,17 @@ class DigitalTwin(omni.ext.IExt):
         #  wrapper sidesteps that gotcha entirely — all our transform lives on the parent.)
         UsdGeom.Xform.Define(stage, parent_path)
 
-        asset_path = _local_asset(WORKSTATION_USD)
+        try:
+            asset_path = _local_asset(WORKSTATION_USD)
+        except AssetMissing:
+            self._build_placeholder_workstation(stage, parent_path)
+            print(
+                "Vention workstation asset not installed; using a placeholder bench. "
+                f"Place a licensed vention.usd under {cache_dir() / 'workstation'} "
+                "to use the real model."
+            )
+            return
+
         add_reference_to_stage(usd_path=asset_path, prim_path=bench_path)
 
         # Wait for the referenced bench prim to compose.
@@ -3078,6 +3131,24 @@ class DigitalTwin(omni.ext.IExt):
             time.sleep(0.1)
         else:
             raise RuntimeError(f"Failed to load prim at {prim_path}")
+
+        # Resolve the renderer's instance transform issue before physics starts.
+        expanded_visuals = prepare_robot_visuals(stage, prim_path)
+        if expanded_visuals:
+            print(f"Expanded {len(expanded_visuals)} UR5e visual instances for runtime rendering.")
+
+        # NVIDIA's published UR5e asset has no tool0 frame; the twin's ROS-facing
+        # copy did. Recreate it so downstream tools and TF consumers see the same
+        # flange contract whether the robot came from the cache or the asset root.
+        tool0_path = f"{prim_path}/wrist_3_link/flange/tool0"
+        if not stage.GetPrimAtPath(tool0_path).IsValid():
+            tool0 = UsdGeom.Xform.Define(stage, tool0_path)
+            tool0.ClearXformOpOrder()
+            tool0.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0))
+            tool0.AddOrientOp(UsdGeom.XformOp.PrecisionDouble).Set(
+                Gf.Quatd(0.5, 0.5, 0.5, 0.5)
+            )
+            print(f"Added tool0 frame at {tool0_path}")
 
         # 4. Apply translation and orientation
         xform = UsdGeom.Xform(prim)
@@ -4087,6 +4158,18 @@ class DigitalTwin(omni.ext.IExt):
             print(f"ActionGraph already exists at {graph_path}, skipping creation.")
             return
 
+        # Native camera TF publishers already convert USD camera axes to ROS
+        # optical axes. Override only the ROS name so it matches the existing
+        # image/CameraInfo frame without adding a second rotation. Both native
+        # TF adapters honor isaac:nameOverride. Keep the sensor asset untouched.
+        from pxr import Sdf
+        stage.GetPrimAtPath(CAMERA_PRIM).CreateAttribute(
+            "isaac:nameOverride", Sdf.ValueTypeNames.String
+        ).Set("camera_link")
+
+        # Camera annotators and TF use the same monotonic simulation clock,
+        # including after Stop/Play. Mixing reset-on-stop images with a
+        # non-resetting TF clock leaves messages hundreds of seconds apart.
         print(f"Creating ActionGraph: {graph_path}")
         print(f"Camera: {CAMERA_PRIM}")
         print(f"Resolution: {IMAGE_WIDTH}x{IMAGE_HEIGHT}")
@@ -4124,11 +4207,11 @@ class DigitalTwin(omni.ext.IExt):
                     ("RenderProduct.inputs:height", IMAGE_HEIGHT),
                     ("CameraInfoPublish.inputs:topicName", "camera_info"),
                     ("CameraInfoPublish.inputs:frameId", "camera_link"),
-                    ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", True),
+                    ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", False),
                     ("RGBPublish.inputs:topicName", ROS2_TOPIC),
                     ("RGBPublish.inputs:type", "rgb"),
                     ("RGBPublish.inputs:frameId", "camera_link"),
-                    ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
+                    ("RGBPublish.inputs:resetSimulationTimeOnStop", False),
                     ("TFPublish.inputs:topicName", "tf_cam"),
                     (f"{tf_target}.inputs:targetPrims", CAMERA_PRIM),
                     (f"{tf_target}.inputs:parentPrim", "/World"),
@@ -4421,11 +4504,11 @@ class DigitalTwin(omni.ext.IExt):
                         ("RenderProduct.inputs:height", height),
                         ("CameraInfoPublish.inputs:topicName", "camera_info"),
                         ("CameraInfoPublish.inputs:frameId", "camera_link"),
-                        ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", True),
+                        ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", False),
                         ("RGBPublish.inputs:topicName", topic),
                         ("RGBPublish.inputs:type", "rgb"),
                         ("RGBPublish.inputs:frameId", "camera_link"),
-                        ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
+                        ("RGBPublish.inputs:resetSimulationTimeOnStop", False),
                     ],
                     keys.CONNECT: [
                         ("OnPlaybackTick.outputs:tick", "RunOnce.inputs:execIn"),
@@ -4570,26 +4653,8 @@ class DigitalTwin(omni.ext.IExt):
         raise RuntimeError("Could not place all objects without violating min_sep; reduce density.")
 
     def _set_obj_prim_pose(self, prim_path, position, quat_wxyz):
-        import omni.kit.commands
-        # Handle both Gf.Vec3d and tuple/list positions
-        if isinstance(position, Gf.Vec3d):
-            pos_value = position
-        else:
-            pos_value = Gf.Vec3d(*position)
-        
-        # Set orientation first, then translate (matches assemble_objects order)
-        omni.kit.commands.execute(
-            "ChangeProperty",
-            prop_path=f"{prim_path}.xformOp:orient",
-            value=Gf.Quatf(*quat_wxyz),
-            prev=None,
-        )
-        omni.kit.commands.execute(
-            "ChangeProperty",
-            prop_path=f"{prim_path}.xformOp:translate",
-            value=pos_value,
-            prev=None,
-        )
+        stage = omni.usd.get_context().get_stage()
+        set_local_pose(stage.GetPrimAtPath(prim_path), position, quat_wxyz)
 
     def assemble_objects(self, folder_path="/World/Objects"):
         """Assemble objects based on JSON assembly data, positioned relative to the current board pose."""
@@ -4643,20 +4708,8 @@ class DigitalTwin(omni.ext.IExt):
                 base_world_pos[2] + position['z']
             )
 
-            # Use quaternion directly from assembly data (w, x, y, z for Gf.Quatf)
-            q = rotation['quaternion']
-            orient_quat = Gf.Quatf(float(q['w']), float(q['x']), float(q['y']), float(q['z']))
-
-            # Set orientation first, then translate into position
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{prim_path}.xformOp:orient",
-                value=orient_quat,
-                prev=None)
-
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{prim_path}.xformOp:translate",
-                value=assembly_pos,
-                prev=None)
+            q = rotation["quaternion"]
+            self._set_obj_prim_pose(prim_path, assembly_pos, [q[k] for k in "wxyz"])
 
             assembled += 1
 
@@ -4695,16 +4748,7 @@ class DigitalTwin(omni.ext.IExt):
 
             pos = Gf.Vec3d(x_position, self._y_offset, self._z_offset)
 
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{child_path}.xformOp:translate",
-                value=pos,
-                prev=None)
-
-            # Reset orientation to identity quaternion (same op type as randomize uses)
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{child_path}.xformOp:orient",
-                value=Gf.Quatf(1, 0, 0, 0),
-                prev=None)
+            self._set_obj_prim_pose(child_path, pos, [1, 0, 0, 0])
 
             count += 1
 
@@ -5213,28 +5257,11 @@ class DigitalTwin(omni.ext.IExt):
         return poses
 
     def _restore_object_poses(self, poses, folder_path="/World/Objects"):
-        """Write back a snapshot produced by _save_all_object_poses.
-
-        Uses two-step ChangeProperty (orient first, then translate) consistent
-        with assemble_objects.
-        """
+        """Restore active local TRS poses produced by _save_all_object_poses."""
         for name, pose_data in poses.items():
             body_path = self._get_prim_path(name, folder_path)
-            stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(body_path)
-            if not prim or not prim.IsValid():
-                continue
-            quat = pose_data.get("quaternion", {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0})
-            pos = pose_data.get("position", {"x": 0.0, "y": 0.0, "z": 0.0})
-            omni.kit.commands.execute("ChangeProperty",
-                                     prop_path=f"{body_path}.xformOp:orient",
-                                     value=Gf.Quatf(float(quat["w"]), float(quat["x"]),
-                                                    float(quat["y"]), float(quat["z"])),
-                                     prev=None)
-            omni.kit.commands.execute("ChangeProperty",
-                                     prop_path=f"{body_path}.xformOp:translate",
-                                     value=Gf.Vec3d(pos["x"], pos["y"], pos["z"]),
-                                     prev=None)
+            if not self._write_prim_pose(body_path, pose_data):
+                raise RuntimeError(f"Failed to restore {body_path}; earlier objects may be restored")
 
     def hide_object(self, object_name, folder_path="/World/Objects"):
         """Hide an object: save its reference path + pose, then delete the prim.
@@ -5847,91 +5874,24 @@ class DigitalTwin(omni.ext.IExt):
             self._output_dir = os.path.abspath(output_dir)
 
     def _read_prim_pose(self, prim_path: str) -> Dict[str, Any]:
-        """Helper method to read pose (position, quaternion, scale) from a prim."""
+        """Read the composed local TRS pose, including Euler-rotation assets."""
         try:
-            from pxr import UsdGeom, Gf
-
             stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(prim_path)
-
-            if not prim.IsValid():
-                return None
-
-            translate_attr = prim.GetAttribute("xformOp:translate")
-            orient_attr = prim.GetAttribute("xformOp:orient")
-            scale_attr = prim.GetAttribute("xformOp:scale")
-
-            position = {"x": 0.0, "y": 0.0, "z": 0.0}
-            quaternion = {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}  # Identity quaternion
-            scale = {"x": 1.0, "y": 1.0, "z": 1.0}
-
-            if translate_attr.IsValid():
-                translate_value = translate_attr.Get()
-                if translate_value:
-                    position = {
-                        "x": float(translate_value[0]),
-                        "y": float(translate_value[1]),
-                        "z": float(translate_value[2])
-                    }
-
-            if orient_attr.IsValid():
-                orient_value = orient_attr.Get()
-                if orient_value:
-                    quaternion = {
-                        "w": float(orient_value.GetReal()),
-                        "x": float(orient_value.GetImaginary()[0]),
-                        "y": float(orient_value.GetImaginary()[1]),
-                        "z": float(orient_value.GetImaginary()[2])
-                    }
-
-            if scale_attr.IsValid():
-                scale_value = scale_attr.Get()
-                if scale_value:
-                    scale = {
-                        "x": float(scale_value[0]),
-                        "y": float(scale_value[1]),
-                        "z": float(scale_value[2])
-                    }
-
-            return {
-                "position": position,
-                "quaternion": quaternion,
-                "scale": scale
-            }
+            return read_local_pose(stage.GetPrimAtPath(prim_path))
         except Exception as e:
             carb.log_error(f"Error reading pose for {prim_path}: {e}")
             return None
 
     def _write_prim_pose(self, prim_path: str, pose_data: Dict[str, Any]) -> bool:
-        """Helper method to write pose (position, quaternion, scale) to a prim."""
+        """Restore an active local TRS pose without changing referenced source files."""
         try:
-            from pxr import Gf
-
             pos = pose_data.get("position", {"x": 0.0, "y": 0.0, "z": 0.0})
             quat = pose_data.get("quaternion", {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0})
             scale = pose_data.get("scale", {"x": 1.0, "y": 1.0, "z": 1.0})
-
             stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(prim_path)
-            if not prim.IsValid():
-                carb.log_error(f"Prim not found: {prim_path}")
-                return False
-
-            # Set attributes directly instead of using ChangeProperty command
-            # This avoids stale property reference issues in async context
-            translate_attr = prim.GetAttribute("xformOp:translate")
-            if translate_attr:
-                translate_attr.Set(Gf.Vec3d(pos["x"], pos["y"], pos["z"]))
-
-            orient_attr = prim.GetAttribute("xformOp:orient")
-            if orient_attr:
-                quat_gf = Gf.Quatf(quat["w"], quat["x"], quat["y"], quat["z"])
-                orient_attr.Set(quat_gf)
-
-            scale_attr = prim.GetAttribute("xformOp:scale")
-            if scale_attr:
-                scale_attr.Set(Gf.Vec3d(scale["x"], scale["y"], scale["z"]))
-
+            set_local_pose(stage.GetPrimAtPath(prim_path),
+                           [pos[k] for k in "xyz"], [quat[k] for k in "wxyz"],
+                           [scale[k] for k in "xyz"])
             return True
         except Exception as e:
             carb.log_error(f"Error writing pose for {prim_path}: {e}")
@@ -6182,7 +6142,7 @@ class DigitalTwin(omni.ext.IExt):
         """MCP handler for adding objects to the scene.
 
         Args:
-            assembly: Which assembly to load (fmb1, fmb2, fmb3)
+            assembly: Which assembly to load (fmb1 through fmb4; jenga/fmb_jenga alias fmb4)
 
         Returns:
             Dictionary with execution result.

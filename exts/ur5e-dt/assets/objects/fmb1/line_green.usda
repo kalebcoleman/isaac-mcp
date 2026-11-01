@@ -27,11 +27,8 @@
         }
     }
     defaultPrim = "Root"
-    doc = """Generated from Composed Stage of root layer /home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_line_brown/line_brown.usd
-
-
-Generated from Composed Stage of root layer /home/aaugus11/Documents/isaac-sim-mcp/exts/ur5e-dt/assets/objects/fmb1/line_green.usd
-"""
+    doc = """Converted from the FMB object CAD for the UR5e twin; materials and physics authored here.
+FMB is CC BY 4.0: see THIRD-PARTY-NOTICES.md."""
     upAxis = "Z"
 )
 

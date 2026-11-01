@@ -123,6 +123,12 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
   `camera_width` and `camera_height` to override it; the former project-specific location is no longer read implicitly.
 - Preconditions: UR5e must be loaded (e.g. after `quick_start_with_workstation`); otherwise returns an error.
 - Side effects: creates `/World/rsd455` (if absent) and `/Graph/ActionGraph_Camera`.
+- RGB and CameraInfo use the `camera_link` optical frame. The native TF publisher converts
+  USD camera axes to ROS optical axes; the camera's `isaac:nameOverride` makes its `/tf_cam`
+  child frame match those image headers. Subscribe/remap `/tf_cam` when using TF consumers.
+- Image, CameraInfo and TF timestamps use monotonic simulation time across Stop/Play.
+  The ROS camera helpers regenerate their native session render pipeline on playback;
+  saved output retains the authored Action Graph and camera definition.
 - Example: `{}`
 
 ### `ur5e_dt__assemble_objects`
@@ -132,7 +138,7 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`. |
+  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`, `fmb4`, `jenga`, `fmb_jenga`; the last two alias `fmb4` (six Jenga blocks). |
 - Purpose: assemble objects into a configuration from an assembly JSON, positioning components relative to the current board pose.
 - Side effects: mutates object poses in `/World/Objects`; requires objects already added.
 - Example: `{"assembly": "fmb1"}`
@@ -190,7 +196,7 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`. |
+  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`, `fmb4`, `jenga`, `fmb_jenga`; the last two alias `fmb4` (six Jenga blocks). |
 - Purpose: add objects to the scene from a predefined assembly folder.
 - Side effects: loads USD references, rebuilds PhysX views (stops then plays the timeline), waits for collider cooking (up to ~30 s). Returns `folder_path`.
 - Example: `{"assembly": "fmb1"}`
@@ -303,8 +309,8 @@ stays in that state; a replacement stage or concurrent Stop is never resumed.
 - Bridge: `ur5e_dt.load_workstation`
 - Parameters: none.
 - Async: yes.
-- Purpose: load the Vention workstation bench as visual context under the robot (tabletop top at z=0). Additive; cleared by `new_stage`.
-- Side effects: references `workstation/vention.usd` at `/World/Vention`; hides the default ground-plane visual (collider retained). Visual-only, no colliders; does not move the robot.
+- Purpose: load the Vention workstation bench as visual context under the robot (tabletop top at z=0). Additive; cleared by `new_stage`. Uses an operator-supplied or cached `workstation/vention.usd`; builds a simple placeholder bench when it is not installed.
+- Side effects: references the bench at `/World/Vention`; hides the default ground-plane visual (collider retained). Visual-only, no colliders; does not move the robot.
 - Example: `{}`
 
 ### `ur5e_dt__quick_start_with_workstation`

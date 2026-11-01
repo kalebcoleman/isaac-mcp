@@ -214,7 +214,7 @@ def test_every_tool_is_listed_with_no_bridge_and_matches_the_registry_schema():
                 assert enum_of(properties[f["name"]]) == f["enum"], (name, f["name"])
     assert listed[PLAY].inputSchema.get("properties", {}) == {}
     assert enum_of(listed["ur5e_dt__assemble_objects"].inputSchema["properties"]["assembly"]) == [
-        "fmb1", "fmb2", "fmb3"]
+        "fmb1", "fmb2", "fmb3", "fmb4", "jenga", "fmb_jenga"]
     assert gw.offline_tools(server) == sorted(PROXIES.values())
     assert live_twin_tools(server) == []              # the roster of live bridge tools stays empty
 
@@ -793,3 +793,26 @@ def test_the_wheel_config_ships_the_whole_package_directory():
     from importlib import resources
     packaged = resources.files("isaac_mcp").joinpath(host_catalog.CATALOG_DIR)
     assert sorted(entry.name for entry in packaged.iterdir() if entry.name.endswith(".json")) == ["assets.json", "sim.json", "ur5e_dt.json"]
+
+
+
+@pytest.mark.parametrize("name", ["add_objects", "assemble_objects"])
+@pytest.mark.parametrize("assembly", ["fmb4", "jenga", "fmb_jenga"])
+def test_jenga_is_accepted_by_real_mcp_schema_and_forwarded(monkeypatch, name, assembly):
+    """Regression: the handler supported Jenga while Pydantic rejected it."""
+    with LiveBridge() as live:
+        attach_twin(live)
+        server = build({"ISAAC_MCP_PORT": str(live.port)})
+
+        async def exercise(client):
+            listed = await tools(client)
+            schema = listed["ur5e_dt__" + name].inputSchema["properties"]["assembly"]
+            assert assembly in enum_of(schema)
+            response = await client.call_tool("ur5e_dt__" + name, {"assembly": assembly})
+            assert not response.isError, response
+            data = json.loads(response.content[0].text)
+            assert data == {"handler": name, "args": {"assembly": assembly}}
+            refused = await client.call_tool("ur5e_dt__" + name, {"assembly": "unknown-assembly"})
+            assert refused.isError
+
+        run(server, exercise)

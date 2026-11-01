@@ -159,21 +159,26 @@ Add:
 
 The twin runs inside Isaac Sim, whose licence already lets the operator use NVIDIA's asset library,
 online or from a local mirror. The twin only needs to reference or fetch those files, not ship them.
-Two options, in order:
+`exts/ur5e-dt/ur5e_dt/asset_cache.py` resolves an asset in this order:
 
-1. **Resolve from the Isaac asset root.** `load_ur5e` and `load_sensor` use
-   `get_assets_root_path()` (already used for Simple Room) and reference
-   `Isaac/Robots/UniversalRobots/ur5e/ur5e.usd` and
-   `Isaac/Sensors/Intel/RealSense/rsd455.usd`. No download and no bundled copy. Create the
-   `tool0` Xform at load time because NVIDIA's file does not have it.
-2. **Populate a local cache for offline runs.** A small `scripts/fetch_ur5e_assets.py` copies the
-   same relative paths from the asset root (HTTPS or `omni.client`) into
-   `$UR5E_DT_ASSET_CACHE` (default `~/.cache/ur5e-dt/assets`) and verifies SHA-256. The extension
-   resolves bundled assets first, then the cache, then the asset root.
+1. **Bundled** — `exts/ur5e-dt/assets/<path>`, for the redistributable files.
+2. **Operator cache** — `$UR5E_DT_ASSET_CACHE` (default `~/.cache/ur5e-dt/assets`), populated by
+   `scripts/fetch_ur5e_assets.py`.
+3. **Pinned NVIDIA asset root** — the HTTPS S3 URL recorded in
+   `exts/ur5e-dt/assets-manifest.json` for `robot/ur5e.usd` and `sensors/rsd455.usd`. Isaac Sim's
+   asset resolver accepts the URL directly, so a run with network needs no download step.
 
-The workstation has no public source. `load_workstation` should accept a user-supplied
-`vention.usd` in the cache or an approved project folder, and otherwise report that the bench is
-not installed. The bench is visual context only; the robot and object tools do not depend on it.
+The manifest pins the Isaac 5.1 generation because the twin was authored against those files; the
+old bundle was the 5.0 generation and already ran on the supported 6.x releases. The fetcher
+verifies the recorded SHA-256 and byte size, so a cached copy is reproducible. The resolver also
+checks a cached file against the manifest before use; a mismatch raises `AssetCorrupt` with the
+`--force` command. Set `UR5E_DT_OFFLINE=1` for an air-gapped run: a missing cache entry then fails
+with `AssetMissing` and the fetch command instead of returning an unreachable URL. `load_ur5e`
+creates the missing `tool0` Xform at load time.
+
+The workstation has no public source. `load_workstation` accepts a user-supplied `vention.usd` in
+the cache and otherwise builds a simple placeholder bench with the same top-at-z=0 contract. The
+bench is visual context only; the robot and object tools do not depend on it.
 
 Poliigon cannot be fetched automatically because it needs an account. Replacing the oak material
 removes the dependency entirely.
@@ -186,3 +191,20 @@ removes the dependency entirely.
   screenshots and logs, or the vendored Python code.
 - If the fresh public repository is created with `git filter-repo`, run this audit again on the
   cleaned tree: deleting files in a new commit leaves them in history.
+
+
+### RealSense dependency layout correction
+
+Live offline-cache validation found that the published D455 USD uses three relative MDL
+references, not HTTPS references. Placing it directly at `sensors/rsd455.usd` broke those
+paths. The logical twin name stays `sensors/rsd455.usd`; the manifest now stores the fetched
+file at `<cache>/Isaac/Sensors/Intel/RealSense/rsd455.usd`, preserving the upstream hierarchy.
+Three MDLs and six textures are pinned by SHA-256 and size and checked as one fetch group.
+Kit supplies the imported `OmniPBR` and `OmniGlass` modules. The fetcher does not rewrite or
+redistribute the NVIDIA files. Existing operator drop-ins remain untouched.
+
+After updating, rerun `python3 scripts/fetch_ur5e_assets.py`; old flat-cache sensor files are
+left in place and unused. `--check` reports the missing canonical path and dependencies until
+the new layout is fetched. A missing or modified dependency refuses cached sensor loading
+with the fetch/repair command, including in offline mode. These checks protect this pinned
+trusted asset set; they are not a general USD sandbox or a dependency parser for arbitrary MDL.
