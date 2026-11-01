@@ -172,9 +172,8 @@ updated snapshot; `--check` and the host tests detect drift.
 
 Evidence must use neutral `<repo>`, `<worktree>`, `<home>` and `<sim-install>` placeholders.
 `check_docs.py` also scans tracked bytes and nested gzip/tar/zip members for private home and
-worktree paths; it fails closed on unreadable/oversized archives. Six byte-pinned legacy UR5e
-assets contain third-party provenance paths and are exempt only while unchanged, because these
-assets must not be edited. New files, changed assets and evidence have no such exemption.
+worktree paths; it fails closed on unreadable/oversized archives. All tracked files, including
+assets and evidence, are scanned without legacy hash exemptions.
 Review screenshot pixels separately; the byte scanner cannot recognize text inside images.
 Keep large redacted transcripts and reproduction bundles in the draft evidence release, with
 URL and SHA-256 in the evidence index. Keep only compact summaries and a few images <=400 KB in Git.

@@ -7,7 +7,6 @@ Image pixels still require visual review; this only checks bytes and metadata.
 from __future__ import annotations
 
 import gzip
-import hashlib
 import io
 from pathlib import Path
 import re
@@ -17,17 +16,6 @@ import zipfile
 
 HOME_PATH = re.compile(rb"/home/[A-Za-z0-9_.-]+(?:/|(?=[\s\"'<>]))")
 WORKTREE_PATH = b".t3" + b"/worktrees"
-# Immutable upstream assets contain older THIRD-PARTY provenance paths. The user
-# explicitly forbids editing these assets. Only these exact bytes are grandfathered;
-# no changed/new file or evidence record can use this exception.
-VENDORED_BASELINE = {
-    "exts/ur5e-dt/assets/gripper/husarion_rg2/husarion_rg2_fixed.usd": "6c87ba6d4390efbc5b51319fe657cae225b8d73b0e4165b18b0ac16547bf207c",
-    "exts/ur5e-dt/assets/objects/fmb1/base1.usda": "d442a255181b538bbc7918f78e234a796eea9c31058aec9752467192e15c3c1b",
-    "exts/ur5e-dt/assets/objects/fmb1/inverted_u_yellow.usda": "f9bbfbcc322d2f027905c283302ecdaa31319b566272811ac4f5ed14f594acae",
-    "exts/ur5e-dt/assets/objects/fmb1/line_green.usda": "a91d9601b4d627a0ea9589ffc79ae1befcbc2508f6072e82946111706391b9e7",
-    "exts/ur5e-dt/assets/objects/fmb1/u_brown.usda": "6eb22ab2bbae62e3ea40eba3f1aee7724666b72f59b7c0c7855fe96d576359cf",
-    "exts/ur5e-dt/assets/objects/fmb1/u_orange.usda": "8e3efcd036a43c202a8f0a2f39c1825cdbe44fa6a4225629b075e6854b600d83",
-}
 
 MAX_BYTES = 256 * 1024 * 1024
 MAX_MEMBERS = 10000
@@ -136,8 +124,7 @@ def check_tracked(root: Path):
                 errors.append(f"{relative}: file exceeds privacy scan limit")
             else:
                 data = path.read_bytes()
-                if hashlib.sha256(data).hexdigest() != VENDORED_BASELINE.get(relative):
-                    errors.extend(inspect_bytes(relative, data))
+                errors.extend(inspect_bytes(relative, data))
     return errors
 
 
