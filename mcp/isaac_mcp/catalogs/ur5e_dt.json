@@ -31,9 +31,12 @@
           "enum": [
             "fmb1",
             "fmb2",
-            "fmb3"
+            "fmb3",
+            "fmb4",
+            "jenga",
+            "fmb_jenga"
           ],
-          "description": "Which assembly configuration to use"
+          "description": "Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
         }
       },
       "fields": [
@@ -43,12 +46,15 @@
           "enum": [
             "fmb1",
             "fmb2",
-            "fmb3"
+            "fmb3",
+            "fmb4",
+            "jenga",
+            "fmb_jenga"
           ],
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Which assembly configuration to use"
+          "description": "Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
         }
       ],
       "namespace": "ur5e_dt",
@@ -135,9 +141,12 @@
           "enum": [
             "fmb1",
             "fmb2",
-            "fmb3"
+            "fmb3",
+            "fmb4",
+            "jenga",
+            "fmb_jenga"
           ],
-          "description": "Which assembly folder to load objects from"
+          "description": "Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
         }
       },
       "fields": [
@@ -147,12 +156,15 @@
           "enum": [
             "fmb1",
             "fmb2",
-            "fmb3"
+            "fmb3",
+            "fmb4",
+            "jenga",
+            "fmb_jenga"
           ],
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Which assembly folder to load objects from"
+          "description": "Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
         }
       ],
       "namespace": "ur5e_dt",

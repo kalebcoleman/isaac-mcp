@@ -454,8 +454,8 @@ MCP_TOOL_REGISTRY = {
         "parameters": {
             "assembly": {
                 "type": "string",
-                "enum": ["fmb1", "fmb2", "fmb3"],
-                "description": "Which assembly configuration to use"
+                "enum": ["fmb1", "fmb2", "fmb3", "fmb4", "jenga", "fmb_jenga"],
+                "description": "Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
             }
         }
     },
@@ -495,8 +495,8 @@ MCP_TOOL_REGISTRY = {
         "parameters": {
             "assembly": {
                 "type": "string",
-                "enum": ["fmb1", "fmb2", "fmb3"],
-                "description": "Which assembly folder to load objects from"
+                "enum": ["fmb1", "fmb2", "fmb3", "fmb4", "jenga", "fmb_jenga"],
+                "description": "Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
             }
         }
     },
@@ -6125,7 +6125,7 @@ class DigitalTwin(omni.ext.IExt):
         """MCP handler for adding objects to the scene.
 
         Args:
-            assembly: Which assembly to load (fmb1, fmb2, fmb3)
+            assembly: Which assembly to load (fmb1 through fmb4; jenga/fmb_jenga alias fmb4)
 
         Returns:
             Dictionary with execution result.

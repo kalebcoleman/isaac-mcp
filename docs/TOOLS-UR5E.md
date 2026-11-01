@@ -132,7 +132,7 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`. |
+  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`, `fmb4`, `jenga`, `fmb_jenga`; the last two alias `fmb4` (six Jenga blocks). |
 - Purpose: assemble objects into a configuration from an assembly JSON, positioning components relative to the current board pose.
 - Side effects: mutates object poses in `/World/Objects`; requires objects already added.
 - Example: `{"assembly": "fmb1"}`
@@ -190,7 +190,7 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`. |
+  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`, `fmb4`, `jenga`, `fmb_jenga`; the last two alias `fmb4` (six Jenga blocks). |
 - Purpose: add objects to the scene from a predefined assembly folder.
 - Side effects: loads USD references, rebuilds PhysX views (stops then plays the timeline), waits for collider cooking (up to ~30 s). Returns `folder_path`.
 - Example: `{"assembly": "fmb1"}`
