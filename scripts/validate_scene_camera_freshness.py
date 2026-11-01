@@ -55,6 +55,13 @@ async def validate(port, output, cycles=3):
             )
             await invoke("sim__prim__create", **target, path=prefix, kind="Xform")
             await invoke(
+                "sim__light__create",
+                **target,
+                path=prefix + "/Light",
+                kind="DomeLight",
+                intensity=1000,
+            )
+            await invoke(
                 "sim__prim__create",
                 **target,
                 path=prefix + "/Floor",
