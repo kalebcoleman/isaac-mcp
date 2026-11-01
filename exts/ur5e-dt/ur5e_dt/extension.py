@@ -791,6 +791,15 @@ class DigitalTwin(omni.ext.IExt):
         self._attach_bridge()
         _EXT_INSTANCE = self
 
+        # Console can be created after this extension during startup. Deferred
+        # docking seats the twin beside it once available instead of floating
+        # over the viewport; a missing Console leaves the panel usable.
+        if os.getenv("UR5E_DT_HEADLESS") != "1":
+            try:
+                self._window.deferred_dock_in("Console", ui.DockPolicy.CURRENT_WINDOW_IS_ACTIVE)
+            except Exception as exc:
+                carb.log_warn(f"[DigitalTwin] could not dock the twin panel: {exc}")
+
     def _attach_bridge(self):
         try:
             bridge = get_mcp_bridge()

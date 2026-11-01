@@ -29,8 +29,9 @@ It can be used independently by projects that need Isaac Sim or Isaac Lab tools.
 ```bash
 ./install.sh --accept-eula        # uv env with Isaac Sim 6.2.0.0 + the isaac-mcp CLI
 scripts/check_machine.sh          # OS, GPU/driver, disk, network, display, port checks (must pass)
-./run.sh                          # Kit with the twin bridge on port 8766 (--headless for no window)
-./verify.sh                       # tool list, scene build, physics checks
+./run.sh                          # Generic Kit and MCP bridge on port 8766 (--headless for no window)
+# Or run ./run.sh --ur5e-dt      # Enable the UR5e panel and its tool pack
+./verify.sh                       # In another terminal, check a running UR5e session
 ```
 
 Host server only (no Isaac Sim): `./install.sh --no-sim`, or `uv tool install "./mcp"`.
@@ -63,7 +64,7 @@ per MCP server; see [host tools](docs/TOOLS-HOST.md#optional-desktop-input) for 
 
 ### Notes
 
-- Ports: 8766 = twin bridge (`run.sh` default; `--port N` or `UR5E_DT_PORT` to change); 8767 = Isaac Lab bridge by
+- Ports: 8766 = shared bridge (`run.sh` default; `--port N` or `UR5E_DT_PORT` to change); 8767 = Isaac Lab bridge by
   convention (`mcp/examples/isaaclab_bridge_launch.py`).
 - GPU: for training on a 16 GB card, begin with one GPU job and keep `num_envs` small; a running Kit app plus a training job
   contend for VRAM.

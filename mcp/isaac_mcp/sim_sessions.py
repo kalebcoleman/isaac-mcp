@@ -51,7 +51,10 @@ def _config_int(env: Mapping[str, str], name: str, default: int) -> int:
 
 def _sessions_dir(env: Mapping[str, str]) -> Path:
     value = env.get("ISAAC_MCP_SIM_SESSIONS_DIR")
-    return Path(value).expanduser() if value else Path.home() / ".local/share/isaac-mcp/sim-sessions"
+    path = Path(value).expanduser() if value else Path.home() / ".local/share/isaac-mcp/sim-sessions"
+    # The launcher runs in the simulator checkout, which may differ from the
+    # server's working directory. Persist and pass the same paths to both.
+    return path.resolve()
 
 
 @contextmanager
@@ -201,7 +204,7 @@ def _check_port(port: int) -> None:
 
 
 def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
-            allow_shared_domain: bool) -> dict:
+            allow_shared_domain: bool, ur5e_dt: bool = False) -> dict:
     if not 1024 <= port <= 65535:
         raise ValueError("port must be between 1024 and 65535")
     if not 0 <= ros_domain <= 232:
@@ -257,6 +260,7 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
             child_env["UR5E_DT_PYTHON"] = env["UR5E_DT_PYTHON"]
         user_config = directory / "user.config.json"
         args = ([str(launcher), "--port", str(port)] + (["--headless"] if headless else [])
+                + (["--ur5e-dt"] if ur5e_dt else [])
                 + ["--", f"--/app/userConfigPath={user_config}"])
         with log.open("wb") as stream:
             proc = subprocess.Popen(args, cwd=str(root), env=child_env, stdin=subprocess.DEVNULL,
@@ -273,7 +277,8 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
                 proc.wait(timeout=5)
             raise RuntimeError(f"could not record simulator process identity; stopped PID {proc.pid}; see {log}")
         record = {"id": session_id, "pid": proc.pid, "start_ticks": identity[1], "boot_id": boot_id, "port": port,
-                  "ros_domain": ros_domain, "headless": headless, "started_at": time.time(),
+                  "ros_domain": ros_domain, "headless": headless, "ur5e_dt_on_start": ur5e_dt,
+                  "started_at": time.time(),
                   "log": str(log), "output_dir": str(output), "user_config": str(user_config),
                   "initial_resources": resources}
         try:
@@ -336,13 +341,14 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
 
     @mcp.tool(name="sim__launch", annotations=PYTHON_EXECUTION)
     def sim_launch(port: int, ros_domain: int, headless: bool = False,
-                   allow_shared_domain: bool = False) -> dict:
+                   allow_shared_domain: bool = False, ur5e_dt: bool = False) -> dict:
         """Launch a managed Isaac Sim instance using a distinct local port and ROS domain.
 
         Checks a configurable instance limit, port, known ROS domains and current free resources.
-        Resource checks are snapshots, not reservations. Launching runs configured local code.
+        Set ur5e_dt=true to start the UR5e extension and its tools. Resource checks are
+        snapshots, not reservations. Launching runs configured local code.
         """
-        return _launch(settings, port, ros_domain, headless, allow_shared_domain)
+        return _launch(settings, port, ros_domain, headless, allow_shared_domain, ur5e_dt)
 
     @mcp.tool(name="sim__list", annotations=PYTHON_EXECUTION)
     def sim_list() -> dict:

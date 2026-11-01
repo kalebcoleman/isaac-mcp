@@ -19,6 +19,7 @@ def test_launcher_sets_shared_port_and_waits_for_twin_registration(tmp_path, por
     fake_python.write_text(
         '#!/bin/bash\n'
         'if [[ "$1" == "-c" ]]; then echo /tmp/mock-isaacsim; exit 0; fi\n'
+        'printf "args=%s\\n" "$*"\n'
         'printf "%s %s %s\\n" "$UR5E_DT_PORT" "$ISAAC_MCP_PORT" "$ISAAC_MCP_DEFER_START"\n'
     )
     fake_python.chmod(0o755)
@@ -33,7 +34,7 @@ def test_launcher_sets_shared_port_and_waits_for_twin_registration(tmp_path, por
         env.pop(name, None)
     if port_source == "ephemeral":
         port = 0
-    args = ["bash", str(launcher), "--headless"]
+    args = ["bash", str(launcher), "--ur5e-dt", "--headless"]
     if port_source == "environment":
         env["UR5E_DT_PORT"] = str(port)
     elif port_source == "argument":
@@ -43,4 +44,43 @@ def test_launcher_sets_shared_port_and_waits_for_twin_registration(tmp_path, por
         args += ["--port", "0"]
     result = subprocess.run(args, env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "--enable ur5e-dt" in result.stdout.strip().splitlines()[-2]
     assert result.stdout.strip().splitlines()[-1] == f"{port} {port} 1"
+
+
+def test_generic_launcher_starts_bridge_without_twin_or_deferred_binding(tmp_path):
+    root = tmp_path / "checkout"
+    root.mkdir()
+    repo = Path(__file__).resolve().parents[2]
+    launcher = root / "run.sh"
+    launcher.write_bytes((repo / "run.sh").read_bytes())
+    fake_python = tmp_path / "python"
+    fake_python.write_text(
+        '#!/bin/bash\n'
+        'if [[ "$1" == "-c" ]]; then echo /tmp/mock-isaacsim; exit 0; fi\n'
+        'printf "defer=%s\\n" "$ISAAC_MCP_DEFER_START"\n'
+        'printf "arg=%s\\n" "$@"\n'
+    )
+    fake_python.chmod(0o755)
+    env = os.environ | {"UR5E_DT_PYTHON": str(fake_python), "ISAAC_MCP_DEFER_START": "1"}
+    result = subprocess.run(["bash", str(launcher), "--port", "0"],
+                            env=env, text=True, capture_output=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = result.stdout.strip().splitlines()
+    assert "defer=0" in lines
+    assert "arg=isaac.mcp.bridge" in lines
+    assert "arg=ur5e-dt" not in lines
+
+
+def test_dedicated_twin_launcher_requests_extension(tmp_path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    repo = Path(__file__).resolve().parents[2]
+    shim = scripts / "launch_ur5e_dt.sh"
+    shim.write_bytes((repo / "scripts/launch_ur5e_dt.sh").read_bytes())
+    launcher = tmp_path / "run.sh"
+    launcher.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    launcher.chmod(0o755)
+    result = subprocess.run(["bash", str(shim), "--headless"], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["--ur5e-dt", "--headless"]

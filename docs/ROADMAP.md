@@ -100,13 +100,13 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 
 ## Repository entry points
 
-Run these from the repository root unless noted. The default simulator launcher creates a UR5e session, so use a
-separate port and avoid disturbing a user's existing scene when testing.
+Run these from the repository root unless noted. The default simulator launcher starts a generic bridge; opt in to
+the UR5e extension when needed. Use a separate port and avoid disturbing a user's existing scene when testing.
 
 | Entry point | Purpose |
 |---|---|
 | `./install.sh --no-sim` | Install the host server; `--accept-eula` without `--no-sim` also installs the pinned Sim environment. Client-registration options are in the [README](../README.md). |
-| `./run.sh --headless --port 8766` | Launch the UR5e Kit application and bridge; omit `--headless` for its window. `UR5E_DT_PYTHON` selects an existing compatible Python environment. |
+| `./run.sh --ur5e-dt --headless --port 8766` | Launch the UR5e Kit application and bridge; omit `--headless` for its window. `UR5E_DT_PYTHON` selects an existing compatible Python environment. |
 | `./verify.sh` | Inspect a running UR5e scene and exercise a joint; it builds/reopens scene content. Set `UR5E_DT_PORT` to its bridge and `UR5E_DT_PYTHON` when not using the repo `.venv`. See the verification limits above. |
 | `.venv/bin/python scripts/smoke_tools.py` | Exercise the twin's bridge tools against a running sim. This changes and rebuilds the stage, so use a disposable session. |
 | `scripts/check_machine.sh` | Check the local OS, GPU, dependencies and environment for the pinned setup. |

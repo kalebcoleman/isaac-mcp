@@ -61,3 +61,24 @@ shared desktop, and its target checks cannot protect against every other X clien
 or simultaneous human action. Headroom checks do not reserve resources. Native Wayland,
 multi-GPU launch selection, real hardware, high-sensor workloads and broad parallel-training
 capacity were not validated by these tests.
+
+## Optional twin and docked panel follow-up
+
+- A fresh graphical `sim__launch` without `ur5e_dt` reached a responsive 6.2 bridge. Its extension
+  manager had no twin panel and the MCP client saw no `ur5e_dt__*` tools. The configured sessions
+  directory was relative to the MCP server's working directory; the returned log, output and
+  Kit user-configuration paths were absolute and under that directory.
+- In that same process, enabling `ur5e-dt` through Kit's extension manager and calling
+  `refresh_tools` exposed 23 twin tools. `ur5e_dt__get_recording_status` returned success. A
+  screenshot showed the twin as a tab beside Console, and the Kit workspace reported the same
+  dock ID for both windows. Disabling the extension and refreshing removed all 23 tools.
+- A second fresh graphical launch with `ur5e_dt=true` reached a responsive bridge with all
+  23 twin tools already registered. Its panel also shared Console's dock ID. Kit reported its
+  user configuration path under the same resolved session directory; a six-second, 30-frame
+  recording was written under that session's output directory and decoded successfully with
+  `imageio-ffmpeg` (the separate `ffprobe` executable was not installed). Both temporary processes
+  were stopped through `sim__stop`.
+- Separate headless 6.2 sessions reached responsive bridges with zero and 23 twin tools for
+  `ur5e_dt=false` and `true`, respectively. The enabled session returned recording status.
+  Both were stopped through `sim__stop`. These checks did not build a robot scene or exercise
+  other Kit versions.

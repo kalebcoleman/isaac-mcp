@@ -55,10 +55,11 @@ make sure one is up before relying on those tools. Host and Isaac Lab tools need
    resolves the endpoint the same way, so with several bridges or a pinned port, select the
    right one with `use_bridge` and the listed port.
 3. If none is advertised, start one with the `isaac.mcp.bridge` extension (for the twin,
-   `./run.sh --headless` starts port 8766 by default), then repeat steps 1 and 2. A running Kit
+   `./run.sh --ur5e-dt --headless` starts port 8766 by default), then repeat steps 1 and 2. A running Kit
    process that is not in the listing has no bridge. To start an additional isolated instance,
    use the opt-in `sim__launch` workflow and its resource/identity checks; don't assume that an
-   advertised bridge belongs to the new process.
+   advertised bridge belongs to the new process. Managed launches omit the twin by default; pass
+   `ur5e_dt=true` when it is needed. Plain `./run.sh` also starts without the twin.
 4. `refresh_tools` and `use_bridge` send `notifications/tools/list_changed` when they change the
    tool list (the host advertises `tools.listChanged`), so a client that honours it shows the new
    tools without a restart. If yours does not, restart the MCP connection or list the tools

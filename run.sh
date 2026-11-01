@@ -1,5 +1,5 @@
 #!/bin/bash
-# run.sh — primary entry point to launch Isaac Sim 6.2 with the UR5e digital twin.
+# run.sh — primary entry point to launch Isaac Sim 6.2 with the MCP bridge.
 #
 # Replaces the old 5.1 launcher (scripts/launch_ur5e_dt.sh is now a shim to this file).
 set -euo pipefail
@@ -7,6 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${UR5E_DT_PORT:-${ISAAC_SIM_PORT:-8766}}"
 HEADLESS=0
+UR5E_DT=0
 SHOW_HELP=0
 EXTRA_ARGS=()
 
@@ -22,6 +23,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --headless)
       HEADLESS=1
+      shift
+      ;;
+    --ur5e-dt)
+      UR5E_DT=1
       shift
       ;;
     --port)
@@ -49,7 +54,7 @@ if [ "$SHOW_HELP" = 1 ]; then
   cat <<EOF
 Usage: ./run.sh [options] [-- <extra kit args>]
 
-Launch Isaac Sim 6.2 with Kit MCP bridge and ur5e-dt extension.
+Launch Isaac Sim 6.2 with the Kit MCP bridge; optionally enable the UR5e extension.
 
 Configuration:
   Port:        $PORT (override with UR5E_DT_PORT or --port)
@@ -57,24 +62,29 @@ Configuration:
 
 Options:
   --headless     Run without visible window (sets UR5E_DT_HEADLESS=1)
-  --port N       Twin bridge port (default: 8766)
+  --ur5e-dt      Enable the UR5e panel and its tools
+  --port N       Bridge port (default: 8766)
   -h, --help     Show this help message and exit
 EOF
   exit 0
 fi
 
-# Refuse to start on a busy twin port
+# Refuse to start on a busy bridge port
 if (exec 3<>/dev/tcp/127.0.0.1/"$PORT") 2>/dev/null; then
-  echo "twin port $PORT is already in use; stop the running ur5e-dt app first, or set UR5E_DT_PORT to a free port" >&2
+  echo "bridge port $PORT is already in use; choose a free port with --port or UR5E_DT_PORT" >&2
   exit 1
 fi
 
 export UR5E_DT_PORT="$PORT"
 
-# One shared bridge serves the twin and any other packs. Defer binding until
-# the twin has registered, preserving the launcher's socket-readiness contract.
+# One shared bridge serves all packs. When the twin is requested, defer binding
+# until it has registered, preserving the launcher's socket-readiness contract.
 export ISAAC_MCP_PORT="$PORT"
-export ISAAC_MCP_DEFER_START=1
+if [ "$UR5E_DT" = 1 ]; then
+  export ISAAC_MCP_DEFER_START=1
+else
+  export ISAAC_MCP_DEFER_START=0
+fi
 export OMNI_KIT_ACCEPT_EULA=YES
 export PYTHONDONTWRITEBYTECODE=1
 export PATH="$HOME/.local/bin:$PATH"
@@ -116,7 +126,11 @@ SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))')
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
 
 EXT_ARGS=(--ext-folder "$ROOT/exts")
+TWIN_ARGS=()
+if [ "$UR5E_DT" = 1 ]; then
+  TWIN_ARGS=(--enable ur5e-dt)
+fi
 
 exec "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
-  "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt \
+  "${EXT_ARGS[@]}" --enable isaac.mcp.bridge "${TWIN_ARGS[@]}" \
   --enable isaacsim.ros2.bridge "${EXTRA_ARGS[@]}"

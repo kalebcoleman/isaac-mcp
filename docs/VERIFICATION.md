@@ -36,7 +36,7 @@ set the path for your machine or omit `UR5E_DT_PYTHON` to use this repo's `.venv
 ```bash
 export UR5E_DT_PYTHON=/path/to/isaacsim-env/bin/python
 export UR5E_DT_PORT=18766
-./run.sh --headless --port "$UR5E_DT_PORT"
+./run.sh --ur5e-dt --headless --port "$UR5E_DT_PORT"
 # In another terminal after the app is ready, with the same environment:
 ./verify.sh
 "$UR5E_DT_PYTHON" scripts/smoke_tools.py
@@ -124,7 +124,7 @@ A separate direct Kit launch, without the `run.sh` deferral handshake, used `ISA
 environment was supplied for this check, but ROS topics and the broader twin smoke test were not exercised in that
 direct-launch session.
 
-With `./run.sh --headless --port 0`, a separate headless session bound an OS-assigned port and advertised it in the
+With `./run.sh --headless --port 0` (when the launcher enabled the twin by default), a separate headless session bound an OS-assigned port and advertised it in the
 runtime portfile. All 23 twin tools were present before and after disabling and re-enabling the twin on that endpoint.
 
 ## Generic scene API validation

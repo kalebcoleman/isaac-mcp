@@ -10,7 +10,7 @@ client; these objects are not standalone shell commands or complete MCP protocol
 
 ## Connect and discover
 
-Start a compatible Kit application with its bridge enabled. For the supplied twin, `./run.sh --headless` starts the
+Start a compatible Kit application with its bridge enabled. For the supplied twin, `./run.sh --ur5e-dt --headless` starts the
 bridge on port 8766 by default. The host chooses an explicit port first, then `UR5E_DT_PORT`, then
 `ISAAC_MCP_PORT`; otherwise it discovers an unambiguous advertised bridge. Discovery can fail if there are no live
 bridges or several candidates. The host and the Kit app are separate processes: screen tools can work while the
@@ -176,7 +176,7 @@ creates files, and can affect the GPU and network. All four tools have conservat
 
 | MCP tool | Arguments | Use |
 |---|---|---|
-| `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false` | Start a new process with a local bridge, chosen ROS domain and separate output/log and persistent Kit settings. Returns a session ID and PID before the bridge is ready. |
+| `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false`, `ur5e_dt=false` | Start a new process with a local bridge, chosen ROS domain and separate output/log and persistent Kit settings. Set `ur5e_dt=true` to load the twin panel and its 23 tools. Returns a session ID and PID before the bridge is ready. |
 | `sim__list` | none | List managed sessions, including those started by an earlier server process. |
 | `sim__status` | `session_id` | Check the original PID's identity, bridge PID/readiness and current memory snapshot. |
 | `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. |
@@ -184,6 +184,9 @@ creates files, and can affect the GPU and network. All four tools have conservat
 Example calls: `sim__launch` with `{"port":18766,"ros_domain":42}`, then `sim__status` with
 `{"session_id":"<id returned by launch>"}`. Wait until `state` is `running`, select that port with `use_bridge`, and
 verify its PID before operating the scene. If necessary, identify its graphical client with `list_windows` by PID.
+To start the twin at launch, add `"ur5e_dt":true`; without it, the managed simulator starts without the twin.
+The `ur5e_dt_on_start` field records the launch choice, not the extension's current state if it changes later.
+The extension can also be enabled in an already running simulator; see [UR5e tools](TOOLS-UR5E.md#simulator-window).
 Use different ROS domains for isolated simulations; `allow_shared_domain=true` is an explicit exception when they
 intentionally need to communicate. Other ROS nodes must use the matching domain to communicate with a simulator.
 
@@ -193,7 +196,7 @@ At server startup the operator may set these environment variables:
 |---|---|---|
 | `ISAAC_MCP_SIM_ROOT` | repository root when available | Repository containing the executable `run.sh`. Set it explicitly if the host is installed outside a checkout. |
 | `UR5E_DT_PYTHON` | `<root>/.venv/bin/python` | Optional configured Isaac Sim interpreter used by `run.sh`. |
-| `ISAAC_MCP_SIM_SESSIONS_DIR` | `~/.local/share/isaac-mcp/sim-sessions` | Managed session metadata, logs and separate output directories. |
+| `ISAAC_MCP_SIM_SESSIONS_DIR` | `~/.local/share/isaac-mcp/sim-sessions` | Managed session metadata, logs and separate output directories. A relative path is resolved against the server's working directory. |
 | `ISAAC_MCP_SIM_MAX_INSTANCES` | `2` | Maximum known bridge, managed Sim and configured Lab-job processes. `0` disables this count limit. |
 | `ISAAC_MCP_SIM_MIN_FREE_VRAM_MIB` | `8192` | Minimum free GPU memory at launch. |
 | `ISAAC_MCP_SIM_MIN_FREE_RAM_MIB` | `4096` | Minimum available system RAM at launch. |

@@ -135,10 +135,10 @@ By default, the twin bridge binds to port **8766**. When running multiple concur
 
 ```bash
 # Terminal 1: Primary session
-UR5E_DT_PORT=8766 ./run.sh
+UR5E_DT_PORT=8766 ./run.sh --ur5e-dt
 
 # Terminal 2: Secondary session
-UR5E_DT_PORT=8767 ./run.sh --port 8767
+UR5E_DT_PORT=8767 ./run.sh --ur5e-dt --port 8767
 ```
 
 An MCP client connected to port 8766 can switch to the second session at runtime:
@@ -274,7 +274,7 @@ Verify end-to-end communication with Isaac Sim running:
 
 ```bash
 # Launch simulation
-./run.sh --headless &
+./run.sh --ur5e-dt --headless &
 
 # Wait for the app and bridge to finish starting, then run the check suite.
 # This builds/reopens a scene and moves a joint; use a disposable session.

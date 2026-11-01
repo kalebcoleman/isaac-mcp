@@ -1,6 +1,6 @@
 """Call the twin's bridge tools against a live sim and check the answers. Exit code 0 = all passed.
 
-Start the app first (./run.sh --headless), then:
+Start the app first (./run.sh --ur5e-dt --headless), then:
 
     .venv/bin/python scripts/smoke_tools.py
 

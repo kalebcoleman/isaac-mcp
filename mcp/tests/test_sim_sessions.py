@@ -80,7 +80,47 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     assert child["UR5E_DT_PYTHON"] == "/configured/sim-python"
     assert "PYTHONPATH" not in child and "ISAAC_MCP_HOLD_TOKEN" not in child
     assert "--headless" in captured["args"] and captured["start_new_session"] is True
+    assert "--ur5e-dt" not in captured["args"] and result["ur5e_dt_on_start"] is False
     assert captured["args"][-1] == f"--/app/userConfigPath={result['user_config']}"
+
+
+@pytest.mark.parametrize("ur5e_dt", [False, True])
+def test_launch_selects_twin_extension(setup, monkeypatch, ur5e_dt):
+    captured = {}
+
+    def popen(args, **kwargs):
+        captured["args"] = args
+        return SimpleNamespace(pid=510, wait=lambda: 0)
+
+    monkeypatch.setattr(sim.subprocess, "Popen", popen)
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
+    monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
+    result = sim._launch(setup, 18766, 197, False, False, ur5e_dt)
+    assert ("--ur5e-dt" in captured["args"]) is ur5e_dt
+    assert result["ur5e_dt_on_start"] is ur5e_dt
+
+
+def test_relative_sessions_directory_is_shared_with_simulator(setup, monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    setup["ISAAC_MCP_SIM_SESSIONS_DIR"] = "relative/sessions"
+    captured = {}
+
+    def popen(args, **kwargs):
+        captured.update(args=args, **kwargs)
+        return SimpleNamespace(pid=510, wait=lambda: 0)
+
+    monkeypatch.setattr(sim.subprocess, "Popen", popen)
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
+    monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
+    result = sim._launch(setup, 18766, 197, False, False)
+    session_dir = tmp_path / "relative" / "sessions" / result["id"]
+    assert Path(result["log"]) == session_dir / "sim.log"
+    assert Path(result["output_dir"]) == session_dir / "output"
+    assert Path(result["user_config"]) == session_dir / "user.config.json"
+    assert (session_dir / "session.json").is_file()
+    assert captured["env"]["MCP_CLIENT_OUTPUT_DIR"] == str(session_dir / "output")
+    assert captured["args"][-1] == f"--/app/userConfigPath={session_dir / 'user.config.json'}"
+    assert captured["cwd"] != str(tmp_path)
 
 
 def test_explicit_server_settings_do_not_inherit_an_unselected_sim_interpreter(setup, monkeypatch):
