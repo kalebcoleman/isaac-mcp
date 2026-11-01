@@ -4,7 +4,7 @@ isaac-mcp already offers in that area. Used by scripts/ecosystem_catalog.py.
 Classification is rule-based: a repository-wide or per-tool override first, then the first
 name pattern in AREA_RULES that matches. Every rule is listed here so a misfiled tool can be
 fixed by editing one line. Verdicts (status, plan, priority) are written by hand from the
-tool references in docs/ and the sim.* design in docs/GENERIC-SIM-TOOLS.md.
+tool references in docs/ and the follow-up plan docs/plans/SIM-TOOLS-FOLLOWUP.md.
 """
 
 import re
@@ -14,10 +14,13 @@ import re
 UPSTREAM = {"inbarajaldrin/omni-kit-mcp", "inbarajaldrin/isaac-sim-mcp"}
 
 # key: (title, software, isaac-mcp today, status label, plan, priority, why)
+# "isaac-mcp today" counts the sim__*/assets__* pack from PR #11 (exts/sim-tools). "Plan" names a
+# milestone in docs/plans/SIM-TOOLS-FOLLOWUP.md.
 AREAS = {
     "connect": (
         "Connection, status and capabilities", "Isaac Sim / Kit",
-        "`refresh_tools`, `use_bridge`, `status`, `list_bridges`, the `--list-bridges` CLI.",
+        "`refresh_tools`, `use_bridge`, `status`, `list_bridges`, the `--list-bridges` CLI; "
+        "`sim__stage__info` for session and stage identity.",
         "Have", "—", "Done",
         "Every server has a ping; isaac-mcp's bridge discovery and PID/port check go further."),
     "lifecycle": (
@@ -27,7 +30,8 @@ AREAS = {
         "dex-isaac-mcp's `sim_reload` (restart with a different robot) is the only idea not covered."),
     "code": (
         "Python, Kit commands and extensions", "Isaac Sim / Kit",
-        "`run_python` (persistent sessions), `reload_tools`.",
+        "`run_python` (persistent sessions), `reload_tools`; opt-in ScriptNode controllers "
+        "(`sim__controller__create` / `update`).",
         "Have", "—", "Low",
         "Missing extras: run a script file by path, toggle Kit extensions (`manage_extensions`), "
         "a script audit log. All are a few lines on top of `run_python` and `put_file`."),
@@ -39,106 +43,105 @@ AREAS = {
         "for large outputs over a remote link."),
     "stage": (
         "Stage files, layers and variants", "USD",
-        "`ur5e_dt__new_stage`, `ur5e_dt__save_scene_state` / `restore_scene_state` (twin "
-        "poses only); anything else through `run_python`.",
-        "Partial", "`stage.save` (phase 3)", "Medium",
-        "Open, save-as, sublayers, references, variant selection and flatten/export are common "
-        "and easy to get subtly wrong by hand (anonymous stages, edit targets)."),
+        "`sim__stage__save` (flattened export), `sim__stage__clear_owned`; twin "
+        "`ur5e_dt__new_stage` and pose save/restore.",
+        "Partial", "—", "Medium",
+        "Open, sublayers, references and variant selection are common and easy to get subtly "
+        "wrong by hand (anonymous stages, edit targets)."),
     "inspect": (
         "Scene inspection and measurement", "USD",
-        "`run_python` only.",
-        "run_python only", "`stage.info`, `stage.tree`, `prim.get`, `prim.find` (phase 1)",
-        "High",
-        "Present in most scene-editing servers and the first thing an agent needs. Bounds, "
-        "distance and mesh statistics (`get_prim_bounds`, `measure_distance`, `get_mesh_stats`) "
-        "are not yet in the design."),
+        "`sim__stage__info`, `sim__stage__tree`, `sim__prim__get`, `sim__prim__find`, "
+        "`sim__physics__inspect`.",
+        "Have", "bounds, distances, camera list (M1)", "Medium",
+        "World bounds, distances and mesh statistics (`get_prim_bounds`, `measure_distance`, "
+        "`get_mesh_stats`) are the remaining gap."),
     "edit": (
         "Create, edit and arrange prims", "USD",
-        "`run_python`; the twin's `ur5e_dt__add_objects`, `delete_objects`, `set_object_pose` "
-        "for its own objects.",
-        "run_python only",
-        "`prim.create`, `set_transform`, `set_attribute`, `duplicate`, `delete` (phase 2)",
-        "High",
-        "Typed attribute setting with read-back (Tim0320) and dry-run previews are worth "
-        "copying; layout helpers (grid, scatter, align) are optional."),
+        "`sim__prim__create`, `set_transform`, `clone`, `delete` on prims the pack created, in "
+        "the session layer.",
+        "Partial", "any prim, typed attributes, revert (M5)", "High",
+        "Moving and adding physics to any prim (imports and the user's own USD) is planned; "
+        "layout helpers (grid, scatter, align) are optional."),
     "assets": (
         "Assets, robots and environments", "Isaac Sim / USD",
-        "Twin loaders only (`ur5e_dt__quick_start*`, `load_workstation`, `load_simple_room`).",
-        "Partial", "not in the design", "High",
-        "A generic `load_usd` / `import_urdf` / robot library is what makes the server "
-        "robot-agnostic. whats2000's robot library and serionist's `create_robot` are good "
-        "references."),
+        "`assets__roots`, `scan`, `search`, `info`, `import_usd`, `import_urdf` for trusted "
+        "project folders; twin loaders; UR5e assets fetched on demand.",
+        "Partial", "NVIDIA cloud library, bundled samples, MJCF (M6)", "High",
+        "A browsable robot library and MJCF import are what remain. whats2000's curated library "
+        "and serionist's `create_robot` are good references."),
     "look": (
         "Materials, lights and rendering", "USD / RTX",
-        "`run_python` only.",
-        "run_python only", "not in the design", "Low",
+        "`sim__light__create` / `modify`, `sim__material__create` / `apply`.",
+        "Have", "—", "Low",
         "Useful for demos and synthetic data, not for control or training."),
     "physics": (
-        "Physics setup and queries", "PhysX",
-        "`run_python` only.",
-        "run_python only", "`physics.scene_info`, `physics.apply`, `raycast` (phases 1-2)",
-        "Medium",
-        "Physics scene, rigid body, collider and joint creation recur everywhere; `apply_force` "
-        "and overlap tests are not in the design."),
+        "Physics setup and queries", "PhysX / Newton",
+        "`sim__physics__configure`, `sim__physics__inspect`, `sim__body__state`; rigid and "
+        "collision flags on `sim__prim__create`.",
+        "Partial", "raycast, contacts (M3); physics on any prim (M5)", "Medium",
+        "Scene queries (raycast, overlap, contacts) and `apply_force` are the remaining gap."),
     "simctl": (
         "Simulation playback and stepping", "Isaac Sim / Kit",
-        "`ur5e_dt__play_scene`, `ur5e_dt__stop_scene` (twin only).",
-        "Partial", "`sim.state`, `play`, `pause`, `stop`, `step` (phases 1, 3)", "High",
+        "`sim__timeline__control` (play, pause, stop), `sim__simulation__step` (exact paused "
+        "steps with observed prims and joints).",
+        "Have", "—", "Done",
         "Exact N-step stepping with a state read is how most servers make experiments "
-        "reproducible."),
+        "reproducible; PR #11 measures elapsed physics time on every step."),
     "joints": (
         "Robot state and joint control", "Isaac Sim",
-        "None. The twin pack registers no joint tools; motion goes through a ROS driver.",
-        "Missing", "`articulation.state` (read only, phase 1)", "High",
-        "The largest gap: most Isaac Sim servers can read joints and set targets or drive gains "
-        "on any articulation. GenRobo/isaac-sim-mcp has the clearest named-joint API."),
+        "`sim__joints__inspect`, `state`, `command` (position targets in DOF order), `drive` "
+        "(authored gains, stopped timeline).",
+        "Partial", "names, velocities, clamping, runtime gains, move-until-settled (M4)", "High",
+        "Name-based targets and a settle-and-measure move are what agents steer with. "
+        "GenRobo/isaac-sim-mcp has the clearest named-joint API."),
     "tuning": (
         "Robot tuning experiments", "Isaac Sim",
         "None.",
-        "Missing", "not in the design", "Medium",
+        "Missing", "tracking error in `sim.joints.move` (M4)", "Medium",
         "dex-isaac-mcp only: range tests, tracking error, parameter sweeps that restore the "
         "original value. Cheap to add once joint control exists, and gives agents numbers."),
     "motion": (
         "Grippers, IK, trajectories and skills", "Isaac Sim",
         "None in Kit; `ur5e_dt__start_ros_driver` for ROS-based motion.",
-        "Missing", "not in the design", "Medium",
+        "Missing", "—", "Medium",
         "Tim0320/IsaacSim-MCP has bounded Lula IK, trajectory jobs, grippers and mobile bases; "
         "worth studying if agents should move robots without ROS."),
     "sensors": (
         "Cameras and sensors", "Isaac Sim",
-        "`run_python`; `ur5e_dt__setup_camera_tf_graph` for the twin camera.",
-        "run_python only", "`camera.list` (phase 1)", "Medium",
-        "Camera/LiDAR creation, annotator capture (depth, segmentation) and calibration reads."),
+        "`sim__camera__create` / `capture` (RTX RGB to PNG), `sim__lidar__create` / `read`; "
+        "twin camera via `ur5e_dt__setup_camera_tf_graph`.",
+        "Have", "camera list (M1)", "Low",
+        "Depth and segmentation annotators and calibration reads are the remaining extras."),
     "capture": (
         "Viewport capture and recording", "Isaac Sim / desktop",
         "`screenshot`, `start_screen_recording` / `stop_screen_recording`, "
-        "`ur5e_dt__start_recording`.",
-        "Have", "`capture.screenshot`, `record_start` / `record_stop` (phases 1, 3)", "Medium",
-        "Headless capture from a chosen camera, auto-framing a robot and multi-angle prim "
-        "views (serionist `inspect_prim`) would make results visible without a desktop."),
+        "`ur5e_dt__start_recording`, `sim__viewport__frame`.",
+        "Have", "Kit viewport screenshot and MP4 (M7)", "Medium",
+        "Headless viewport recording from the pack and multi-angle prim views (serionist "
+        "`inspect_prim`) would make results visible without a desktop."),
     "ros": (
         "ROS 2 and OmniGraph", "Isaac Sim / ROS 2",
         "Twin only: `ur5e_dt__setup_camera_tf_graph`, `setup_pose_publisher`, "
         "`start_ros_driver`, `sync_real_poses`.",
-        "Partial", "not in the design", "Medium",
+        "Partial", "—", "Medium",
         "Generic Clock / TF / JointState / camera publishers and Action Graph editing "
         "(Tim0320/IsaacSim-MCP) would cover other robots."),
     "sdg": (
         "Randomization and synthetic data", "Replicator",
         "`ur5e_dt__randomize_object_poses`, `randomize_single_object` (twin only).",
-        "Partial", "not in the design", "Low",
+        "Partial", "—", "Low",
         "Semantic labels and Replicator jobs matter for perception datasets, not for control."),
     "humans": (
         "Humans, animation and navigation", "Isaac Sim / Omniverse",
         "None.",
-        "Missing", "not in the design", "Low",
+        "Missing", "—", "Low",
         "Animated people, crowds, keyframes and navmesh baking; outside the project's focus."),
     "logs": (
         "Logs and diagnostics", "Isaac Sim / Kit",
-        "None (the agent reads log files through the shell or `get_file`).",
-        "Missing", "not in the design", "High",
-        "A bridge tool returning recent Kit WARN/ERROR lines is cheap and shortens every "
-        "debugging loop; five servers have one."),
+        "`sim__logs__tail` (bounded tail of Kit's log file).",
+        "Partial", "filters, cursor, summary (M2)", "Medium",
+        "A cursor and a since-now summary turn the tail into a debugging loop; never hook Kit's "
+        "logging from Python (two servers deadlocked Kit that way)."),
     "lab": (
         "Isaac Lab training and evaluation", "Isaac Lab",
         "The 12 `isaaclab__*` tools: install info, task list, train/eval/play jobs, status, "
@@ -149,7 +152,7 @@ AREAS = {
     "design": (
         "Task design, scene specs and evidence", "Isaac Lab / Isaac Sim",
         "None.",
-        "Missing", "not in the design", "Low",
+        "Missing", "—", "Low",
         "Contracts and evidence bundles (Tim0320/IsaacLab-MCP) and simscene's verified scene "
         "specs are research-grade ideas for reproducibility, not core tools."),
     "docs": (

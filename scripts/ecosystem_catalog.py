@@ -291,8 +291,10 @@ How to read this page:
 - **isaac-mcp today**: *Have* means a named tool exists; *Partial* means only for the UR5e twin
   or part of the area; *run_python only* means an agent can do it by writing Kit Python;
   *Missing* means neither.
-- **Planned** points at the `sim.*` pack designed in
-  [GENERIC-SIM-TOOLS.md](GENERIC-SIM-TOOLS.md) (not built yet), with its rollout phase.
+- **isaac-mcp today** includes the `sim__*` and `assets__*` pack added by PR #11
+  (`exts/sim-tools`, documented in TOOLS-SCENE.md).
+- **Planned** names a milestone (M1–M7) in
+  [plans/SIM-TOOLS-FOLLOWUP.md](plans/SIM-TOOLS-FOLLOWUP.md); `—` means nothing is planned yet.
 - **Priority** is a judgement for a robot-agnostic sim and training server: *High* = build
   next, *Medium* = worth it after that, *Low* = only for specific projects, *Skip* = do not
   rebuild, *Done* = covered.
