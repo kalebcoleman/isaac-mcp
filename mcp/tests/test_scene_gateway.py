@@ -41,6 +41,13 @@ def test_full_catalog_and_errors(monkeypatch):
             assert schema["properties"]["orientation"]["maxItems"] == 4
             assert "quaternion" in schema["properties"]["orientation"]["description"]
             assert not listed["assets__import_usd"].annotations.readOnlyHint
+            for name in ("assets__import_path", "assets__prepare_workstation"):
+                schema = listed[name].inputSchema
+                assert {"session_id", "stage_id", "source_path"} <= set(
+                    schema["required"]
+                )
+                assert not listed[name].annotations.readOnlyHint
+            assert "prim_path" in listed["assets__import_path"].inputSchema["required"]
             roots = await c.call_tool("assets__roots", {})
             assert (
                 not roots.isError and json.loads(roots.content[0].text)["roots"] == []
@@ -99,7 +106,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
     hidden = gw.build_server({"ISAAC_MCP_SCENE_TOOLS": "0"})
     visible = gw.build_server({})
     assert len(hidden._tool_manager._tools) == 44
-    assert len(visible._tool_manager._tools) == 81
+    assert len(visible._tool_manager._tools) == 83
     assert "sim__stage__info" in visible._tool_manager._tools
     assert "sim__stage__info" not in hidden._tool_manager._tools
     assert sum(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools) == 23
@@ -110,7 +117,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
         gw._state_for(visible).client = BridgeClient(port=bridge.port)
 
         async def run():
-            for server, enabled, count in ((hidden, False, 51), (visible, True, 88)):
+            for server, enabled, count in ((hidden, False, 51), (visible, True, 90)):
                 async with create_connected_server_and_client_session(
                     server._mcp_server
                 ) as client:
@@ -167,3 +174,54 @@ def test_asset_stale_target_includes_current_identity_before_snapshot(monkeypatc
     )
     assert out["code"] == "STALE_TARGET"
     assert out["current_target"] == info
+
+
+@pytest.mark.parametrize("tool", ["assets.import_path", "assets.prepare_workstation"])
+def test_absolute_path_is_snapshotted_before_bridge_dispatch(tmp_path, tool):
+    root = tmp_path / "root"
+    root.mkdir()
+    source = root / "asset.usda"
+    source.write_text("#usda 1.0\n")
+    staging = tmp_path / "staging"
+    staging.mkdir(mode=0o700)
+    config = tmp_path / "config.json"
+    config.write_text(
+        json.dumps(
+            dict(
+                version=1,
+                profile="trusted_project",
+                roots={"project": str(root)},
+                staging=str(staging),
+            )
+        )
+    )
+    server = gw.build_server({"ISAAC_MCP_ASSET_CONFIG": str(config)})
+    state = gw._state_for(server)
+    seen = []
+
+    class Client:
+        def call(self, name, params=None):
+            if name == "sim.stage.info":
+                return dict(
+                    session_id="session", stage_id="stage", staging=str(staging)
+                )
+            seen.append((name, params))
+            filename, _ = state.asset_broker.verify(
+                params["snapshot_id"], params["manifest_sha256"]
+            )
+            assert filename.read_text() == source.read_text()
+            assert "source_path" not in params
+            return dict(status="ok", prepared=True)
+
+    state.client = Client()
+    params = dict(session_id="session", stage_id="stage", source_path=str(source))
+    if tool == "assets.import_path":
+        params["prim_path"] = "/World/Imported"
+    out = json.loads(gw._dispatch(tool, params, state))
+    assert out["status"] == "ok" and seen[0][0] == tool
+    denied = json.loads(
+        gw._dispatch(
+            tool, {**params, "source_path": str(tmp_path / "other.usda")}, state
+        )
+    )
+    assert denied["code"] == "ROOT_NOT_APPROVED" and len(seen) == 1

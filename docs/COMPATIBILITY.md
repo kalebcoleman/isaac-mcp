@@ -105,6 +105,13 @@ explicit stage targeting, units, authored/runtime distinction, and PhysX step/jo
 exercised on 6.2.0.0, then representative paths on 6.0.0.0, 6.0.0.1, 6.0.1.0 and 6.1.0.0.
 These are scoped tests, not blanket support for every asset, parameter, sensor or backend.
 
+The newer path-based project USD import and workstation preparation were also tested on
+all five packages above, in both windowed and headless sessions, using a layered textured
+fixture and an operator-supplied workstation. [Test evidence](evidence/project-usd-workstation/README.md)
+records the exact builds, sample coverage and limitations. A separate camera capture issue
+required a retry in those tests; the asset results do not establish that all other tools or
+future 6.x releases work.
+
 The compatibility follow-up replaces that experimental dependency with a UsdGeom/Replicator
 owned-CPU camera adapter and a feature-detected legacy LiDAR scan-buffer path. The two 6.0.0
 package builds are distinguished by four-component package metadata and full VERSION/build,

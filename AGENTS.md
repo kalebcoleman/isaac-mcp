@@ -17,10 +17,10 @@ configured filters.
 | Simulator sessions (optional) | 4 (`sim__*`) | only when `sim_launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
 | Isaac Lab (`isaaclab__*`) | 12 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | a Kit bridge is reachable; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
-| Generic scene and assets | 37 (`assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body and viewport) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots/scan/search run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
+| Generic scene and assets | 39 (`assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body and viewport) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots/scan/search run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
 | UR5e twin (`ur5e_dt__*`) | 23 | listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, a client that lists exactly 81 tools can see the
+With default groups and no namespace filter, a client that lists exactly 83 tools can see the
 host, Isaac Lab, generic and UR5e catalog tiers, but not the bridge built-ins. That does not prove that no
 bridge exists. The possible causes are:
 
@@ -35,7 +35,7 @@ bridge exists. The possible causes are:
   the server starts, so restart the MCP connection after starting Kit.
 
 The other 7 tools (bridge built-ins) require discovery from a reachable bridge. With the standard
-groups and bridge built-ins visible there are 88 tools in total. The optional desktop input and
+groups and bridge built-ins visible there are 90 tools in total. The optional desktop input and
 simulator session groups add 9 more. The initial generic tools are documented in `docs/TOOLS-SCENE.md`; the broader
 `docs/GENERIC-SIM-TOOLS.md` design includes capabilities not yet implemented. Untrusted
 loading and remote upload remain disabled; bounded trusted USDZ packages are supported.
@@ -94,6 +94,14 @@ See [docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md).
 
 ## Handle with care
 
+- Project USD tools require an explicitly user-approved trusted root and shared host/Kit staging;
+  copying includes the entire bounded project. Native USD parsers and resolvers are not sandboxed
+  or network-isolated. Common layers, MDL resources and MaterialX references are checked, but
+  arbitrary plugins, custom resolvers and procedural materials cannot be verified exhaustively.
+  Known missing or unsupported resources are errors; a successful import is not proof of visual
+  fidelity or physics readiness. Check units/up-axis and inspect the resulting prim and viewport.
+  Workstation preparation does not load the scene or replace an existing cached asset; see
+  [project USD setup and limitations](docs/TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation).
 - `run_python` executes Python inside Kit, and `put_file` / `get_file` / `stat_file` touch the
   filesystem. Verify the target PID and port (`status`, or the CLI check above) before
   scene-changing calls.
@@ -122,7 +130,7 @@ See [docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md).
 ## Changing tools
 
 Every registered tool must be documented in its `docs/TOOLS-*.md` page, and the counts above
-(each tier's Tools cell, the 81 and 7 subtotals and the 88 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
+(each tier's Tools cell, the 83 and 7 subtotals and the 90 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
 CI along with the host test suite (`pytest -q` from `mcp/`, see `.github/workflows/ci.yml`).
 After changing the twin tool registry, run `python3 scripts/gen_host_catalog.py --write` and commit the
 updated snapshot; `--check` and the host tests detect drift.

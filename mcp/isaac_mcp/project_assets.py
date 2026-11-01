@@ -243,6 +243,41 @@ class Broker:
                 + self.config_error,
             )
 
+    def locate(self, source_path):
+        """Map an absolute local path to an already-approved root, without widening it."""
+        self.require_profile()
+        if not isinstance(source_path, str) or not source_path.startswith("/"):
+            refuse(
+                "INVALID_PATH",
+                "Provide an absolute local USD path under an approved root.",
+            )
+        if (
+            "\\" in source_path
+            or ":" in source_path
+            or any(ord(c) < 32 for c in source_path)
+        ):
+            refuse(
+                "INVALID_PATH",
+                "URLs, backslashes and control characters are not supported.",
+            )
+        if any(part in ("", ".", "..") for part in source_path.split("/")[1:]):
+            refuse(
+                "INVALID_PATH",
+                "Empty, dot and traversal path components are forbidden.",
+            )
+        source = Path(source_path)
+        for root_id, (root, _) in self.roots.items():
+            try:
+                rel = source.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            usd_path(rel)
+            return root_id, rel
+        refuse(
+            "ROOT_NOT_APPROVED",
+            "The USD path is outside all user-approved project roots. Call assets.roots for setup.",
+        )
+
     def root_fd(self, root_id):
         if root_id not in self.roots:
             refuse(

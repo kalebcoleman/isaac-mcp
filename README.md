@@ -98,9 +98,19 @@ for tested releases, installation pins, and known limitations.
 
 ## Project USD and generic scene preview
 
-The optional trusted project configuration and 37 offline-discoverable scene/asset tools are
+The optional trusted project configuration and 39 offline-discoverable scene/asset tools are
 documented in [TOOLS-SCENE.md](docs/TOOLS-SCENE.md). They add local USD/URDF discovery/import,
 scene authoring, PhysX observations/stepping, RTX sensors and opt-in controllers.
 See the [43-tool fork comparison](docs/FORK-COMPARISON.md) and
 [validation limits](docs/evidence/project-scene/README.md). This preview does not implement
 untrusted OS isolation, authenticated remote upload or full fork parity. Bounded USDZ and released-6.x adapters are undergoing the separate compatibility gates.
+
+Project USD imports require a user-approved local folder and a shared host/Kit staging location.
+The tools copy the bounded project and check common USD, MDL and MaterialX dependencies, but
+cannot guarantee that every custom resolver, plugin, procedural material or external resource is
+detected or rendered correctly. Unsupported or missing dependencies are reported when detected;
+network and absolute authored references, tiled/dynamic resources and some material packages are
+not automatically collected. Generic imports require matching scene units and up-axis. Verify the
+returned prim and rendered result. This trusted-asset workflow is not a sandbox; see
+[project USD limitations and setup](docs/TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation).
+See the [Isaac Sim 6.x live import evidence](docs/evidence/project-usd-workstation/README.md).

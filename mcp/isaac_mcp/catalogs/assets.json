@@ -269,6 +269,185 @@
       "namespace": "assets",
       "owner_id": "generic-assets"
     },
+    "assets.prepare_workstation": {
+      "description": "Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "required": true
+        },
+        "source_path": {
+          "type": "string",
+          "description": "Absolute local USD path inside an already approved trusted root.",
+          "required": true
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim.stage.info (process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+        },
+        {
+          "name": "source_path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute local USD path inside an already approved trusted root."
+        }
+      ],
+      "namespace": "assets",
+      "owner_id": "generic-assets"
+    },
+    "assets.import_path": {
+      "description": "Import a trusted local USD from an absolute path under an approved project root. Copies and validates its project dependencies before authoring a reference; source files remain unchanged.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "required": true
+        },
+        "source_path": {
+          "type": "string",
+          "description": "Absolute local USD path inside an already approved trusted root.",
+          "required": true
+        },
+        "prim_path": {
+          "type": "string",
+          "description": "New absolute wrapper prim path; parent must exist.",
+          "required": true
+        },
+        "position": {
+          "type": "array",
+          "description": "Three finite coordinates in stage units.",
+          "required": false,
+          "default": [
+            0,
+            0,
+            0
+          ]
+        },
+        "orientation": {
+          "type": "array",
+          "description": "Unit quaternion [w,x,y,z].",
+          "required": false,
+          "default": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        "frame": {
+          "type": "string",
+          "description": "Pose frame: local or world.",
+          "required": false,
+          "default": "local"
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim.stage.info (process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+        },
+        {
+          "name": "source_path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute local USD path inside an already approved trusted root."
+        },
+        {
+          "name": "prim_path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "New absolute wrapper prim path; parent must exist."
+        },
+        {
+          "name": "position",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "has_default": true,
+          "description": "Three finite coordinates in stage units."
+        },
+        {
+          "name": "orientation",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "has_default": true,
+          "description": "Unit quaternion [w,x,y,z]."
+        },
+        {
+          "name": "frame",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "local",
+          "has_default": true,
+          "description": "Pose frame: local or world."
+        }
+      ],
+      "namespace": "assets",
+      "owner_id": "generic-assets"
+    },
     "assets.search": {
       "description": "Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again.",
       "parameters": {
