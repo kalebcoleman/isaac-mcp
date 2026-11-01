@@ -109,10 +109,14 @@ on the host hides all 37 tools per server; it is a visibility preference, not ac
 - Runtime state: `sim__timeline__control`, `sim__simulation__step` while paused,
   `sim__body__state`, `sim__joints__state` and `sim__joints__command` after physics is initialized.
 - Capture and sensors: `sim__camera__create` / `sim__camera__capture` (RTX), `sim__lidar__*`
-  (requires `--motion-bvh`), `sim__viewport__frame`. `NOT_READY` means render warm-up; on Isaac
-  Sim 6.0.0.0 a camera created after reopening a saved stage can stay `NOT_READY`.
+  (requires `--motion-bvh`), `sim__viewport__frame`. The default capture waits for fresh render
+  completions and a new renderer CPU transfer (`cpu_transfer_completed=true`);
+  `wait_for_render=false` allows a possibly stale Replicator buffer. `NOT_READY` means render
+  warm-up. Saved scenes omit recognized process-bound `/Orchestrator` graphs; re-export older
+  saved scenes and create fresh sensors after reopening.
 - `sim__stage__save` writes a new basename; it never overwrites or switches the current stage.
-  `sim__logs__tail` reads the selected Kit log.
+  It omits recognized process-bound `/Orchestrator` and SyntheticData graphs; re-export older
+  saved scenes before camera readout after reopening. `sim__logs__tail` reads the Kit log.
 - `sim__controller__*` execute inline Python in a ScriptNode. Use them only with
   `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1` at Kit launch and an explicit user request; this is not a
   sandbox.

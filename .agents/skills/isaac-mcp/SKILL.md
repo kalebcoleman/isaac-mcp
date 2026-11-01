@@ -105,11 +105,16 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
 - **Sensors and capture:** `sim__camera__create` then `sim__camera__capture` (RTX, PNG in the
   configured output root); `sim__lidar__*` needs Kit launched with `--motion-bvh`.
   `sim__viewport__frame` selects and frames an existing prim in the active viewport.
-  `NOT_READY` means rendering is still warming up; retry after a few frames. On Isaac Sim 6.0.0.0
-  a camera created after reopening a saved stage can stay `NOT_READY`; treat that as a known
-  limitation and use a fresh session.
+  By default `sim__camera__capture` waits for fresh render completions and a new renderer CPU
+  transfer (`cpu_transfer_completed=true`); `wait_for_render=false` permits the latest Replicator
+  buffer, which can be stale. `NOT_READY` means rendering is still warming up; retry after a few
+  frames. A saved scene from before the corrected save tool can retain a serialized
+  `/Orchestrator` graph; re-export it with `sim__stage__save` and create fresh sensors after
+  reopening.
 - **Save and diagnose:** `sim__stage__save` writes a new basename; it never overwrites or switches
-  the current stage. `sim__logs__tail` reads the selected Kit log.
+  the current stage. It omits recognized process-bound `/Orchestrator` and SyntheticData graphs,
+  so re-export older saved scenes before relying on camera readout after reopening.
+  `sim__logs__tail` reads the selected Kit log.
 - **Code execution is opt-in:** `sim__controller__create/update` run inline Python in a
   ScriptNode. Use them only when the user asked and Kit was launched with
   `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`; this is not a sandbox.
@@ -125,7 +130,7 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed | Read `current_target`; resend its `session_id` and `stage_id` explicitly |
 | `TIMELINE_ACTIVE` on an edit | Timeline is playing or paused | `sim__timeline__control` with `stop`, then retry |
-| `NOT_READY` from `sim__camera__capture` | Render warm-up, or the 6.0.0.0 reopened-stage edge | Retry after a few frames; use a fresh session on 6.0.0.0 |
+| `NOT_READY` from `sim__camera__capture` | Render warm-up, or an old saved scene with a serialized `/Orchestrator` graph | Retry after a few frames; re-export through `sim__stage__save` and create a fresh sensor |
 | `assets__roots` empty or a path is refused | No launch-approved root, or the file is outside it | Run the `isaac_mcp.project_assets` approval command in `docs/TOOLS-SCENE.md`; no tool can grant roots |
 | `envs_list` shows `import_errors` | A task module failed to import | Read the error; custom tasks need `ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` |
 | Metrics tools ask for the `isaaclab` extra | `tensorboard` not installed in the server env | `uv tool install --force --editable './mcp[isaaclab]'` from the repo |
