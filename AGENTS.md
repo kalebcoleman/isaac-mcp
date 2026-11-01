@@ -89,6 +89,14 @@ Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER
 
 ## Handle with care
 
+- Project USD tools require an explicitly user-approved trusted root and shared host/Kit staging;
+  copying includes the entire bounded project. Native USD parsers and resolvers are not sandboxed
+  or network-isolated. Common layers, MDL resources and MaterialX references are checked, but
+  arbitrary plugins, custom resolvers and procedural materials cannot be verified exhaustively.
+  Known missing or unsupported resources are errors; a successful import is not proof of visual
+  fidelity or physics readiness. Check units/up-axis and inspect the resulting prim and viewport.
+  Workstation preparation does not load the scene or replace an existing cached asset; see
+  [project USD setup and limitations](docs/TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation).
 - `run_python` executes Python inside Kit, and `put_file` / `get_file` / `stat_file` touch the
   filesystem. Verify the target PID and port (`status`, or the CLI check above) before
   scene-changing calls.

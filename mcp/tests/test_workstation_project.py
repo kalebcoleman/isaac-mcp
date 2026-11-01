@@ -225,6 +225,35 @@ def test_materialx_reported_as_usd_layer_is_still_checked(fixture, monkeypatch):
     assert not (cache / "workstation" / "vention.usd").exists()
 
 
+@pytest.mark.parametrize("reported_as", ["resolved", "unresolved"])
+def test_kit_runtime_mdl_is_checked_without_rejecting_it(
+    fixture, tmp_path, monkeypatch, reported_as
+):
+    project, cache, broker, scene = fixture
+    runtime = tmp_path / "OmniPBR.mdl"
+    runtime.write_text("mdl 1.4;\n")
+    scene.runtime_assets["OmniPBR.mdl"] = {
+        "path": str(runtime),
+        "sha256": hashlib.sha256(runtime.read_bytes()).hexdigest(),
+    }
+    snap = broker.snapshot("project", "workstation.usda")
+    compute = UsdUtils.ComputeAllDependencies
+
+    def with_runtime(*args, **kwargs):
+        layers, assets, missing = compute(*args, **kwargs)
+        if reported_as == "resolved":
+            return layers, list(assets) + [str(runtime)], missing
+        return layers, assets, list(missing) + ["OmniPBR.mdl"]
+
+    monkeypatch.setattr(UsdUtils, "ComputeAllDependencies", with_runtime)
+    result = scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
+    assert result["prepared"]
+    assert "OmniPBR.mdl" in result["runtime_dependencies"]
+    runtime.write_text("changed")
+    with pytest.raises(AssetError, match="runtime material is missing or changed"):
+        scene.validate_project_materials(snap["snapshot_id"], snap["manifest_sha256"])
+
+
 @pytest.mark.parametrize(
     "expression",
     ['texture_2d("https://example.invalid/a.png")', "texture_2d(make_path())"],

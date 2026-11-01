@@ -125,6 +125,11 @@ does not certify visual fidelity, physics readiness, or complete detection of ar
 The tool copies the entire bounded approved project, not only the reported dependencies, and is
 not an untrusted-USD sandbox. Keep the cache and snapshots while scenes still reference them.
 
+The import and workstation workflows were exercised in both windowed and headless sessions
+on installed Isaac Sim `6.0.0.0`, `6.0.0.1`, `6.0.1.0`, `6.1.0.0` and `6.2.0.0` on one
+Linux/NVIDIA machine. These tests cover the documented sample projects, not every USD or future
+release. See the [live test matrix and known camera issue](evidence/project-usd-workstation/README.md).
+
 Pose coordinates use **stage units**, `orientation=[w,x,y,z]` must be a finite unit quaternion,
 and `frame` is `local` or `world`. World transforms use the parent's inverse matrix; singular
 parents are refused. Source and target units/up-axis must match. No automatic normalization.

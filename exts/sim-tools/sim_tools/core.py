@@ -545,9 +545,25 @@ class Scene:
 
         filename, manifest = self.broker.verify(snapshot_id, manifest_sha256)
         root = filename.parents[len(Path(manifest["entry"]).parts) - 1]
-        layers, assets, _ = UsdUtils.ComputeAllDependencies(
+        layers, assets, missing = UsdUtils.ComputeAllDependencies(
             Sdf.AssetPath(str(filename))
         )
+        # A standalone resolver can report a known Kit material by name rather
+        # than by its installed path. Do not accept that fallback if the file
+        # recorded at startup is gone or has changed.
+        for dependency in missing:
+            runtime = self.runtime_assets.get(str(dependency))
+            if runtime is not None:
+                runtime_path = Path(runtime["path"])
+                if (
+                    not runtime_path.is_file()
+                    or hashlib.sha256(runtime_path.read_bytes()).hexdigest()
+                    != runtime["sha256"]
+                ):
+                    refuse(
+                        "DEPENDENCIES",
+                        "The required installed runtime material is missing or changed.",
+                    )
         dependency_names = [str(layer.realPath) for layer in layers] + [
             str(a) for a in assets
         ]
@@ -598,6 +614,23 @@ class Scene:
         # an asset. Inspect both collections and de-duplicate their paths.
         for dependency in dict.fromkeys(dependency_names):
             dep = Path(str(dependency))
+            runtime = next(
+                (v for v in self.runtime_assets.values() if str(dep) == v["path"]),
+                None,
+            )
+            if runtime is not None:
+                # Kit may report its built-in MDL as resolved, while standalone
+                # OpenUSD reports the same module as an unresolved name. Both
+                # forms are accepted only for the pinned installed runtime file.
+                if (
+                    not dep.is_file()
+                    or hashlib.sha256(dep.read_bytes()).hexdigest() != runtime["sha256"]
+                ):
+                    refuse(
+                        "DEPENDENCIES",
+                        "The required installed runtime material is missing or changed.",
+                    )
+                continue
             if dep.suffix.lower() == ".mtlx":
                 pending_mtlx.append(dep)
                 continue

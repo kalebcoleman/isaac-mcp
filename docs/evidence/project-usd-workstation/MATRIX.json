@@ -1,0 +1,301 @@
+{
+  "date": "2026-11-01",
+  "os": "Ubuntu 24.04.5 x86_64",
+  "gpu": "NVIDIA GeForce RTX 5080, 16303 MiB",
+  "project_code_sha256": "80ca1ed93c80fe90a2746501a423cd0122c8717b96410277ca1e7e45d7de89b9",
+  "parent_pr11": "6891967f563d0b9b96ec6e9bbde9ec1099b4367b",
+  "resolver_pr14": "3a2302f386e33cace7ce28898b2209c6726ae28c",
+  "runs": [
+    {
+      "isaacsim_package": "6.0.0.0",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "headless",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "82f6ddca89c1fd5b1fc4a355ff8dd1593728e06f2d9893b30a7c69b3348cff10",
+      "gpu_free_at_launch_mib": 12334,
+      "gpu_free_when_ready_mib": 12455,
+      "managed_stop_state": "exited",
+      "isaacsim_build": "6.0.0-rc.22+release.33481.407f3ea1.gl"
+    },
+    {
+      "isaacsim_package": "6.0.0.0",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "windowed",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "window_identified_and_captured": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "d83213e0068750702d6837782f258e747e337e1686dc18e5521e6d2be0f1e9c5",
+      "gpu_free_at_launch_mib": 12071,
+      "gpu_free_when_ready_mib": 9988,
+      "managed_stop_state": "exited",
+      "window_image_sha256": "5276e7fcd8d94a9a15116f843d85650c7cc3157e40ce5f410340f58171eacf4f",
+      "isaacsim_build": "6.0.0-rc.22+release.33481.407f3ea1.gl"
+    },
+    {
+      "isaacsim_package": "6.0.0.1",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "headless",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "2b78317ceb0b6f4f2f50f2772792078926a07c2f34c351fdc0f3e8b90b6c2716",
+      "gpu_free_at_launch_mib": 12821,
+      "gpu_free_when_ready_mib": 10454,
+      "managed_stop_state": "exited",
+      "isaacsim_build": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+    },
+    {
+      "isaacsim_package": "6.0.0.1",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "windowed",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "window_identified_and_captured": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "fa4562d32fbd3f86b4dc8953112f091cd1c20c129cb7ed19834ec57e9c1b0031",
+      "gpu_free_at_launch_mib": 12745,
+      "gpu_free_when_ready_mib": 10916,
+      "managed_stop_state": "exited",
+      "window_image_sha256": "4821409de60090e885a2d3b817505f14b6e6079bb1746d6ffb69976b3e9ff3a6",
+      "isaacsim_build": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+    },
+    {
+      "isaacsim_package": "6.0.1.0",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "headless",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "5cc241b934be05cf0cf12830f7f348bc64256cf6bd5b8c9fd678d4026ec81bab",
+      "gpu_free_at_launch_mib": 12195,
+      "gpu_free_when_ready_mib": 10324,
+      "managed_stop_state": "exited",
+      "isaacsim_build": "6.0.1-rc.7+release.42383.32955d8d.gl"
+    },
+    {
+      "isaacsim_package": "6.0.1.0",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "windowed",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "window_identified_and_captured": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "fb9d25042298b79dc3c5ee887b05cfd3521d03700b9faf61c4e5e0b5aa7370f1",
+      "gpu_free_at_launch_mib": 12100,
+      "gpu_free_when_ready_mib": 10297,
+      "managed_stop_state": "exited",
+      "window_image_sha256": "be6bd86f316258b2f726a36e8219540ba184cec61d591d8f5fea49881fdc830d",
+      "isaacsim_build": "6.0.1-rc.7+release.42383.32955d8d.gl"
+    },
+    {
+      "isaacsim_package": "6.1.0.0",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "headless",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "4cc022338c1f1d629f386c3252ed1601b122567a32bea2bbabed3e7700f87602",
+      "gpu_free_at_launch_mib": 12153,
+      "gpu_free_when_ready_mib": 10485,
+      "managed_stop_state": "exited",
+      "isaacsim_build": "6.1.0-rc.26+release.49347.2d230af4.gl"
+    },
+    {
+      "isaacsim_package": "6.1.0.0",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "windowed",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "window_identified_and_captured": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "bff799f7b0c048de6190bfe9a4c801d9ffb8fc75182f9a26f4254d9e3834c5d8",
+      "gpu_free_at_launch_mib": 12187,
+      "gpu_free_when_ready_mib": 10180,
+      "managed_stop_state": "exited",
+      "window_image_sha256": "4607f4bf369930f3d1969536bb7577957b48c0f157da3b7056bd41b72d6b15d3",
+      "isaacsim_build": "6.1.0-rc.26+release.49347.2d230af4.gl"
+    },
+    {
+      "isaacsim_package": "6.2.0.0",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "headless",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "791480d86c6f40c8edded98b3c842706414675509666d22ebc2004fbdd31ae39",
+      "gpu_free_at_launch_mib": 12463,
+      "gpu_free_when_ready_mib": 10521,
+      "managed_stop_state": "exited",
+      "isaacsim_build": "6.2.0-rc.14+release.52805.02189a84.gl"
+    },
+    {
+      "isaacsim_package": "6.2.0.0",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "mode": "windowed",
+      "checks": {
+        "missing_material_rejected": true,
+        "generic_import": true,
+        "root_id_import": true,
+        "window_identified_and_captured": true,
+        "workstation_prepared": true,
+        "workstation_loaded_and_materials_inspected": true
+      },
+      "material_counts": {
+        "geometry": 89,
+        "bound": 89,
+        "unresolved": 0
+      },
+      "camera_first_capture_error": true,
+      "camera_retry_succeeded": true,
+      "camera_image_sha256": "c4ed761f5444aa0845299255f658c8ef7a62e17496c3ffdbd746db302a8c1c44",
+      "gpu_free_at_launch_mib": 12138,
+      "gpu_free_when_ready_mib": 10166,
+      "managed_stop_state": "exited",
+      "window_image_sha256": "5d175649a5286ba301f681d3652c3077fbf7fb58c253f47628fde1b8b9ecd8ff",
+      "isaacsim_build": "6.2.0-rc.14+release.52805.02189a84.gl"
+    }
+  ],
+  "initial_launch_refusal": "Reusing a just-closed bridge port hit the normal bind guard while TCP connections were in TIME_WAIT; rerunning with a fresh port succeeded."
+}
