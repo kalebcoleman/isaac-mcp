@@ -2,6 +2,10 @@
 
 **Status: proposal, not shipped.** This plan covers generic scenes, robots, objects and small smoke fixtures, not full separate projects. Evidence labels: **Code** = static repository inspection at the base revision; **Package** = read-only inspection of the installed Isaac Sim 6.1.0 tree/stubs, not a running app; **Source** = cited vendor documentation; **Assumption** = design choice or behavior requiring validation. No Kit process was launched for this plan.
 
+The [end-to-end asset and scene plan](ASSET-SCENE-END-TO-END.md) combines this work with generic scene tools and
+proposes a separate user-trusted workflow. This document's isolated, fail-closed restrictions still apply to
+untrusted assets; its historical PR sequence and pre-merge code observations should be rechecked against current main.
+
 ## Starting point and integration
 
 - **Code:** `exts/ur5e-dt/ur5e_dt/extension.py`, `MCP_TOOL_REGISTRY`, `load_workstation`, `load_simple_room`, `add_objects`, `quick_start*` and `setup_camera_tf_graph` implement specific twin workflows, not a generic catalog. The workstation references bundled `workstation/vention.usd`; the room uses `get_assets_root_path()` and may resolve to local or cloud storage. `add_objects` enumerates selected assembly folders and treats `_physics` USDs as overlays; camera setup also creates a graph and attaches to a specific wrist. Those behaviors cannot all be represented by a single raw USD reference.

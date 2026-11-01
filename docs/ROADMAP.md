@@ -68,6 +68,8 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
   [generic tools draft](GENERIC-SIM-TOOLS.md) is a design, not an installed tool pack.
 - [ ] Implement and test general scene inspection, authoring, physics and capture in small stages. Re-run the UR5e
   baseline after changes and test at least one non-UR5e scene.
+- [ ] Deliver project-folder USD discovery/import and generic scene tools using the
+  [end-to-end plan](plans/ASSET-SCENE-END-TO-END.md), with live screenshots, security checks and actual agent use.
 
 ### 3. Reproducibility and portability
 
