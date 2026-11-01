@@ -85,7 +85,7 @@ def facts(prim):
 
 
 class Scene:
-    def __init__(self, get_stage, timeline, broker=None, output=None):
+    def __init__(self, get_stage, timeline, broker=None, output=None, render_binding=None):
         self.get_stage = get_stage
         self.timeline = timeline
         self.broker = broker or Broker()
@@ -103,6 +103,7 @@ class Scene:
         self.runtime_assets = {}
         self._runtime_edit_target = None
         self.device_error = None
+        self.render_binding = render_binding
 
     def require_runtime(self):
         if self.device_error:
@@ -531,7 +532,7 @@ class Scene:
                 stage.RemovePrim(p)
             raise
 
-    def save(self, stage, filename, runtime_poses=None):
+    def save(self, stage, filename, runtime_poses=None, reset_camera_render_handles=False):
         if self.timeline.is_playing():
             refuse(
                 "TIMELINE_ACTIVE",
@@ -544,6 +545,9 @@ class Scene:
                 "INVALID_OUTPUT",
                 "Use a simple basename ending .usda (<=65 characters).",
             )
+        from .render_export import camera_handles, reset_export_handles
+
+        handles = camera_handles(stage, reset_camera_render_handles, self.render_binding)
         self.output.mkdir(mode=0o700, parents=True, exist_ok=True)
         from isaac_mcp.project_assets import open_dir
 
@@ -555,6 +559,7 @@ class Scene:
             handle, tmp = tempfile.mkstemp(suffix=".usda", dir=self.output)
             os.close(handle)
             layer = stage.Flatten()
+            omitted_render_properties = reset_export_handles(layer, handles)
             omitted_render_paths = strip_runtime_render_state(layer)
             if runtime_poses:
                 apply_snapshot_poses(layer, runtime_poses)
@@ -571,6 +576,7 @@ class Scene:
                 stage_switched=False,
                 runtime_pose_count=len(runtime_poses or []),
                 omitted_runtime_render_paths=omitted_render_paths,
+                omitted_runtime_render_properties=omitted_render_properties,
                 snapshot="composed USD with runtime rigid-body poses"
                 if runtime_poses
                 else "composed USD",

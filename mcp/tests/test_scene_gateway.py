@@ -41,6 +41,11 @@ def test_full_catalog_and_errors(monkeypatch):
             assert schema["properties"]["orientation"]["maxItems"] == 4
             assert "quaternion" in schema["properties"]["orientation"]["description"]
             assert not listed["assets__import_usd"].annotations.readOnlyHint
+            save_schema = listed["sim__stage__save"].inputSchema
+            reset = save_schema["properties"]["reset_camera_render_handles"]
+            assert reset["type"] == "boolean" and reset["default"] is False
+            assert "reset_camera_render_handles" not in save_schema["required"]
+            assert "export policy" in reset["description"]
             roots = await c.call_tool("assets__roots", {})
             assert (
                 not roots.isError and json.loads(roots.content[0].text)["roots"] == []

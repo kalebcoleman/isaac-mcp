@@ -743,6 +743,12 @@
           "type": "string",
           "description": "New basename ending .usda; no directories.",
           "required": true
+        },
+        "reset_camera_render_handles": {
+          "type": "boolean",
+          "description": "Explicitly remove validated session-only ROS camera viewportHandle fields from the copy so native textures can rebuild after restart. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
+          "required": false,
+          "default": false
         }
       },
       "fields": [
@@ -772,6 +778,15 @@
           "default": null,
           "has_default": false,
           "description": "New basename ending .usda; no directories."
+        },
+        {
+          "name": "reset_camera_render_handles",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Explicitly remove validated session-only ROS camera viewportHandle fields from the copy so native textures can rebuild after restart. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship."
         }
       ],
       "namespace": "sim",

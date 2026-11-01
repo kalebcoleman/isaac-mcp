@@ -56,7 +56,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__physics__inspect` | Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. |
 | `sim__body__state` | Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. |
 | `sim__timeline__control` | Explicit play, pause or stop. Stop rewinds physics. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. |
-| `sim__stage__save` | Export a flattened copy, including session edits, to a new basename in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. |
+| `sim__stage__save` | Export a flattened copy, including session edits, to a new basename in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. ROS camera render handles require the explicit export option described below. |
 | `sim__viewport__frame` | Select and frame an existing prim in the active viewport. Does not change the scene; capture the verified app window using screenshot. |
 | `assets__search` | Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. |
 | `sim__prim__delete` | Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused. |
@@ -263,3 +263,16 @@ body-state/step and camera checks pass. Previously exported files can retain obs
 state: re-export a trusted scene through the corrected save tool into a new file, then reopen
 that copy. No runtime patch, implicit stage reset or private Replicator lifecycle call is used.
 See the compatibility evidence for the retained failure history and tested scope.
+
+A camera graph can create a `viewportHandle` that identifies a texture in the current
+process. Serializing that integer can prevent ROS camera publishers from rebuilding after
+restart. `sim__stage__save` refuses such affected saves by default and lists the properties.
+An agent exporting that scene can explicitly choose `reset_camera_render_handles=true`.
+This removes only validated, session-only handles associated with recognized native camera
+producers/helpers from the **new copy**, and returns `omitted_runtime_render_properties`.
+It preserves the camera, render product, render settings, other attributes, live layers and
+source files. The choice authorizes this export normalization; it does not prove who authored
+an attribute. Root/cross-layer opinions, ambiguous products, handle dependencies, incomplete
+composition or unavailable/mismatched native bindings still refuse with `SAVE_UNSUPPORTED`.
+Pause before saving an active scene; saving while playing remains refused. After Stop a
+native texture may have been torn down, so inspect a refusal rather than assuming it is live.
