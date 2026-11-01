@@ -55,7 +55,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__prim__set_transform` | Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation. |
 | `sim__physics__inspect` | Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. |
 | `sim__body__state` | Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. |
-| `sim__timeline__control` | Explicit play, pause or stop. Stop rewinds physics. Observe a pending native render/writer Stop for up to 5 seconds before returning or issuing a new Play; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and an explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. |
+| `sim__timeline__control` | Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. |
 | `sim__stage__save` | Export a flattened copy, including session edits, to a new basename in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. ROS camera render handles require the explicit export option described below. |
 | `sim__viewport__frame` | Select and frame an existing prim in the active viewport. Does not change the scene; capture the verified app window using screenshot. |
 | `assets__search` | Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. |
@@ -141,16 +141,23 @@ directory should be private to the OS user. Defaults are process-specific under 
 ## Sensors, physics and trusted controllers
 
 A pending Replicator render/writer Stop can outlast the timeline's first stopped frame.
-The generic timeline tool passively observes the loaded orchestrator's public status,
-bounded to five seconds, before completing Stop or issuing Play from that state. It
-rechecks the selected stage and stopped timeline after each ordinary update, and observes
-STOPPED across one further update. This is a transition check, not a fence for every
-future native callback. It never invokes Replicator's mutating completion helpers or
-replays Play automatically. `TIMELINE_BUSY` means the pending Stop did not settle;
-`TIMELINE_INTERRUPTED` reports a changed operation or requested state that was not retained.
-Inspect current stage/timeline state before explicitly retrying. Native API absence is
-reported as `TIMELINE_API_UNAVAILABLE`; a scene that has not loaded Replicator needs no
-Replicator wait. Pausing an already stopped timeline remains an observed no-op.
+An explicit Stop uses the loaded orchestrator's documented asynchronous completion API
+when its status remains STOPPING. This finalizes writers, restores capture settings and
+clears pending schedules; it is a mutation. In the 6.0.0.1 reopen failure, passive status
+observation never completed after the dispatcher reset to zero with old capture times.
+The adapter guards each continuation against stage, timeline and native-operation changes,
+awaits cancellation, and allows six ordinary updates for the installed delayed settings
+restoration. It does not launch an independent completion task or reissue Play.
+The five-second timeout is cooperative: synchronous native calls cannot be preempted,
+and native callbacks or detached tasks are not a complete ownership/lifetime fence.
+A failed/interrupted Stop can have partial effects; inspect the selected stage and timeline.
+
+Play only passively observes a pending Stop and observes STOPPED across another ordinary
+update; it never calls the mutating completion API. `TIMELINE_BUSY` means completion or
+observation did not settle; `TIMELINE_INTERRUPTED` reports a changed operation or requested
+state that was not retained. Retry explicitly after inspecting state. Native API absence
+is `TIMELINE_API_UNAVAILABLE`; a scene without loaded Replicator needs no Replicator wait.
+Pausing an already stopped timeline remains an observed no-op.
 
 Runtime APIs use PhysX or the qualified Newton adapter described below. Generic Play temporarily selects the session edit target
 so native physics writeback can override session-authored spawn poses. Stop restores the prior

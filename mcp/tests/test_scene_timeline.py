@@ -21,9 +21,151 @@ def anyio_backend():
 @pytest.fixture
 def native(monkeypatch):
     state = SimpleNamespace(name="STOPPING")
-    orchestrator = SimpleNamespace(get_status=lambda: state)
+
+    async def complete():
+        state.name = "STOPPED"
+
+    orchestrator = SimpleNamespace(get_status=lambda: state, wait_until_complete_async=complete)
     monkeypatch.setitem(sys.modules, "omni.replicator.core", SimpleNamespace(orchestrator=orchestrator))
     return state
+
+
+@pytest.mark.anyio
+async def test_explicit_stop_completes_stuck_reset_schedule(native):
+    frames = []
+
+    async def update():
+        frames.append(native.name)
+
+    result = await timeline.complete_requested_stop(update, lambda: None)
+    assert frames == ["STOPPED"] * 6
+    assert result == {"observed": "STOPPED", "updates": 6, "completion": "wait_until_complete_async"}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("change", ["stage", "native_operation", "module"])
+async def test_native_completion_cannot_resume_on_changed_target(native, monkeypatch, change):
+    entered, resume = asyncio.Event(), asyncio.Event()
+    mutations = []
+    changed = False
+
+    async def complete():
+        entered.set()
+        await resume.wait()
+        mutations.append("native-finalization")
+
+    orchestrator = sys.modules["omni.replicator.core"].orchestrator
+    orchestrator.wait_until_complete_async = complete
+
+    def validate():
+        if changed and change == "stage":
+            raise AssetError("STALE_TARGET", "stage replaced")
+
+    task = asyncio.create_task(timeline.complete_requested_stop(lambda: asyncio.sleep(0), validate))
+    await entered.wait()
+    changed = True
+    if change == "native_operation":
+        native.name = "STARTED"
+    elif change == "module":
+        monkeypatch.setitem(sys.modules, "omni.replicator.core", SimpleNamespace(orchestrator=orchestrator))
+    resume.set()
+    with pytest.raises(AssetError) as error:
+        await task
+    assert error.value.code == ("STALE_TARGET" if change == "stage" else "TIMELINE_INTERRUPTED")
+    assert not mutations
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_completion_timeout_and_cancellation_leave_no_running_coroutine(native, cancel):
+    entered, resume = asyncio.Event(), asyncio.Event()
+    effects = []
+
+    async def complete():
+        try:
+            entered.set()
+            await resume.wait()
+            effects.append("late-write")
+        finally:
+            effects.append("closed")
+
+    sys.modules["omni.replicator.core"].orchestrator.wait_until_complete_async = complete
+    task = asyncio.create_task(timeline.complete_requested_stop(lambda: asyncio.sleep(0), lambda: None, timeout=.02))
+    await entered.wait()
+    if cancel:
+        task.cancel()
+    with pytest.raises(asyncio.CancelledError if cancel else AssetError) as error:
+        await task
+    if not cancel:
+        assert error.value.code == "TIMELINE_BUSY"
+    resume.set()
+    await asyncio.sleep(0)
+    assert effects == ["closed"]
+
+
+@pytest.mark.anyio
+async def test_native_completion_exception_propagates_without_retry(native):
+    calls = []
+
+    async def complete():
+        calls.append(1)
+        await asyncio.sleep(0)
+        raise RuntimeError("native partial failure")
+
+    sys.modules["omni.replicator.core"].orchestrator.wait_until_complete_async = complete
+    with pytest.raises(RuntimeError, match="native partial failure"):
+        await timeline.complete_requested_stop(lambda: asyncio.sleep(0), lambda: None)
+    assert calls == [1]
+
+
+@pytest.mark.anyio
+async def test_missing_completion_api_refuses_and_passive_play_never_invokes_it(native):
+    del sys.modules["omni.replicator.core"].orchestrator.wait_until_complete_async
+    with pytest.raises(AssetError) as error:
+        await timeline.complete_requested_stop(lambda: asyncio.sleep(0), lambda: None)
+    assert error.value.code == "TIMELINE_API_UNAVAILABLE"
+    native.name = "STOPPED"
+    assert await timeline.complete_requested_stop(None, lambda: None) == {"observed": "STOPPED", "updates": 0}
+
+
+@pytest.mark.anyio
+async def test_failed_native_await_on_replaced_stage_does_not_handle_error_in_new_stage(native):
+    entered = asyncio.Event()
+    wake = asyncio.get_running_loop().create_future()
+    changed = False
+    effects = []
+
+    async def complete():
+        entered.set()
+        try:
+            await wake
+        except RuntimeError:
+            effects.append("native-exception-mutation")
+
+    sys.modules["omni.replicator.core"].orchestrator.wait_until_complete_async = complete
+
+    def validate():
+        if changed:
+            raise AssetError("STALE_TARGET", "stage replaced")
+
+    task = asyncio.create_task(timeline.complete_requested_stop(lambda: asyncio.sleep(0), validate))
+    await entered.wait()
+    changed = True
+    wake.set_exception(RuntimeError("native wait failed"))
+    with pytest.raises(AssetError, match="stage replaced"):
+        await task
+    assert not effects
+
+
+@pytest.mark.anyio
+async def test_completion_that_does_not_stop_is_not_reported_successful(native):
+    async def incomplete():
+        pass
+
+    sys.modules["omni.replicator.core"].orchestrator.wait_until_complete_async = incomplete
+    with pytest.raises(AssetError) as error:
+        await timeline.complete_requested_stop(lambda: asyncio.sleep(0), lambda: None)
+    assert error.value.code == "TIMELINE_BUSY"
 
 
 @pytest.mark.anyio
@@ -187,7 +329,7 @@ async def test_actual_stop_returns_after_native_drain(handler, native):
     native.name = "STARTED"
     result = await call(session_id="session", stage_id="stage", action="stop")
     assert result["status"] == "ok" and result["stopped"]
-    assert result["native_stop_observation"] == {"observed": "STOPPED", "updates": 2}
+    assert result["native_stop_observation"] == {"observed": "STOPPED", "updates": 6, "completion": "wait_until_complete_async"}
     assert state.restored == 1 and len(state.calls) == 1
 
 

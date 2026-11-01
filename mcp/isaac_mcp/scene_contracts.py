@@ -144,7 +144,7 @@ add(
 )
 add(
     "sim.timeline.control",
-    "Explicit play, pause or stop. Stop rewinds physics. Observe a pending native render/writer Stop for up to 5 seconds before returning or issuing a new Play; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and an explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step.",
+    "Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step.",
     dict(**TARGET, action=field("string", "play, pause, or stop.")),
 )
 add(
