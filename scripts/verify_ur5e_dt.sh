@@ -14,8 +14,9 @@ export_reference_if_missing() {
 FAILED=()
 run_check() {
   echo "== $1"
-  local out status=0
-  out="$("$PY" "$ROOT/scripts/bridge_exec.py" "$ROOT/scripts/checks/$1.py" 2>&1)" || status=$?
+  local out status=0 executor=bridge_exec.py
+  if [ "$1" = single_joint_motion ]; then executor=bridge_async_check.py; fi
+  out="$("$PY" "$ROOT/scripts/$executor" "$ROOT/scripts/checks/$1.py" 2>&1)" || status=$?
   echo "$out"
   # The client can also exit 0 when the bridge answers with an error.
   if [ "$status" -ne 0 ] || grep -qE '"error_type"|^Traceback|^\[Errno|"status": "error"' <<<"$out"; then
