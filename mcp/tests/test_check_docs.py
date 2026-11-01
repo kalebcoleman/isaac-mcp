@@ -27,7 +27,9 @@ PHRASES = {
     "bridge": (r"The other \d+ tools", "The other {} tools",
                lambda c: c["builtins"] + c["ur5e"]),
     "total": (r"there are \d+ tools in total", "there are {} tools in total",
-              lambda c: sum(c.values())),
+              lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e"))),
+    "optional": (r"groups add \d+ more", "groups add {} more",
+                 lambda c: c["desktop_input"] + c["sim_sessions"]),
 }
 
 

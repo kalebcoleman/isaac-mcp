@@ -48,8 +48,8 @@ such as `ur5e_dt__play_scene`.
 
 ## Choosing which local tools a server exposes
 
-The 21 local tools (the nine host gateway and desktop tools and the twelve `isaaclab__*` tools) are all registered by
-default. `ISAAC_MCP_LOCAL_TOOLS` selects groups of them for one server process, read once at startup. It is a
+The 21 standard local tools (the nine host gateway and desktop tools and the twelve `isaaclab__*` tools) are registered by
+default. Five desktop input tools and four simulator-session tools are opt-in. `ISAAC_MCP_LOCAL_TOOLS` selects groups for one server process, read once at startup. It is a
 comma-separated list of group names and aliases; unset or empty means `all`. An unknown name stops the server at
 startup with a message listing the valid names; it never registers nothing silently.
 
@@ -62,11 +62,19 @@ startup with a message listing the valid names; it never registers nothing silen
 | `screen_read` | `screen_info`, `list_windows`, `screen_recording_status` |
 | `screen_capture` | `screenshot`, `start_screen_recording`, `stop_screen_recording` |
 | `screen_control` | `raise_window` |
+| `screen_input` | `window_click`, `window_drag`, `window_scroll`, `window_type`, `window_key` (explicit opt-in) |
+| `sim_launch` | `sim__launch`, `sim__list`, `sim__status`, `sim__stop` (explicit opt-in) |
 | `gateway` | `refresh_tools`, `use_bridge` |
 
-Aliases: `all` (every group; the default), `readonly` (`isaaclab_read,screen_read`: the local tools annotated as read-only)
+Aliases: `all` (standard groups, excluding `screen_input` and `sim_launch`; the default), `readonly` (`isaaclab_read,screen_read`: the local tools annotated as read-only)
 and `none` (no local tools; a pure Kit gateway, since bridge tools are still discovered). Groups and aliases can be mixed, for example
 `readonly,gateway`.
+
+To enable input as well as the standard tools, set `ISAAC_MCP_LOCAL_TOOLS=all,screen_input` in the MCP client's
+server environment and reconnect. Selecting `screen_input` alone exposes only the five input tools; include
+`screen_read` and `screen_capture` if the client needs to identify and inspect a window. Input tools have
+conservative destructive and open-world annotations. To enable the separate simulator launcher, add `sim_launch`
+(for example, `all,screen_input,sim_launch`) and reconnect.
 
 - `isaaclab_probe` runs the configured Python interpreter; its startup code can have side effects. `envs_list` also
   imports configured task modules, which can run arbitrary code. Both tools use conservative non-read-only,
@@ -86,7 +94,7 @@ and `none` (no local tools; a pure Kit gateway, since bridge tools are still dis
   `gateway` is excluded; without the tools, a client cannot re-run or redirect it, so restart the MCP connection after
   starting Kit.
 - `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only the tools discovered from the bridge.
-  `ISAAC_MCP_LOCAL_TOOLS` filters only the host's own 21 tools. All three apply together.
+  `ISAAC_MCP_LOCAL_TOOLS` filters only the host's local tools. All three apply together.
 - `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
   server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
   [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.
@@ -100,13 +108,13 @@ and `none` (no local tools; a pure Kit gateway, since bridge tools are still dis
 
 These tools use the host's X11 display (`DISPLAY`, default `:0`), and do not require a Kit bridge. Their behavior
 depends on an accessible graphical session. Screenshots are saved under `~/Pictures/screen-mcp/` and recordings
-under `~/Videos/screen-mcp/` on the **host server** machine. They do not provide mouse or keyboard control.
+under `~/Videos/screen-mcp/` on the **host server** machine. Mouse and keyboard tools require the separate opt-in below.
 
 | MCP tool | Arguments and defaults | Use and effects |
 |---|---|---|
 | `screen_info` | none | Report display, monitors, auto-target, capture locations and recording state. |
-| `list_windows` | `filter=null` | List visible windows and IDs; the optional string filters title or window class. |
-| `raise_window` | `window=null`, `window_id=null` | Raise the matching window. A window selector is needed to select the intended window. |
+| `list_windows` | `filter=null` | List visible windows and IDs; the optional string filters title or window class. A `client` marker identifies windows reported by the window manager as application clients. |
+| `raise_window` | `window=null`, `window_id=null`, `expected_pid=null` | Request window-manager activation and verify it became active. Activation gives the window focus. Select the actual client window ID rather than a window-manager frame, and supply the expected PID when targeting a known process. Ambiguous titles owned by different processes require a window ID. |
 | `screenshot` | `monitor=null`, `window=null`, `window_id=null`, `max_width=1600` | Save a full-resolution PNG and return a caption plus inline image, scaled down to at most `max_width` (clamped to 320–3840). With no selector, auto-targets Isaac Sim/Lab if found, otherwise monitor 1. `monitor=0` means all monitors. |
 | `start_screen_recording` | `monitor=null`, `window=null`, `window_id=null`, `fps=15`, `max_width=1600`, `max_seconds=600`, `full_screen=true` | Start one MP4 recording; no audio. With no selector, auto-target a simulator window, otherwise monitor 1. `fps` is clamped to 1–30 and `max_seconds` to 5–3600. `full_screen=true` scales/pads to the primary monitor; false uses the window or monitor size capped by `max_width`. |
 | `stop_screen_recording` | none | Stop and finalize the active recording, reporting its path and result. |
@@ -116,6 +124,92 @@ Examples: `list_windows` with `{"filter":"Isaac"}`; `screenshot` with `{"window_
 `start_screen_recording` with `{"window_id":12345,"fps":15,"max_seconds":20,"full_screen":false}`; then
 `stop_screen_recording` with `{}`. Window capture reads the selected window's pixels, including when another window
 covers it. For a clean simulator viewport without desktop chrome, use the twin's `ur5e_dt__start_recording` instead.
+
+### Optional desktop input
+
+These tools use the existing `python-xlib` dependency and the X11 XTEST extension. No `xdotool` installation is needed.
+They work on the host's shared X11 desktop; native Wayland and headless sessions are not supported. They do not require
+a bridge and can operate windows other than Isaac Sim/Lab, so enable them only for a client you trust. They are off by
+default even when `ISAAC_MCP_LOCAL_TOOLS=all`. Window activation requires a window manager that implements
+`_NET_ACTIVE_WINDOW`.
+
+| MCP tool | Additional arguments | Use |
+|---|---|---|
+| `window_click` | `x`, `y`, `expected_width`, `expected_height`, `button="left"`, `clicks=1` | Click once or twice; buttons are `left`, `middle`, `right`. |
+| `window_drag` | `x`, `y`, `end_x`, `end_y`, `expected_width`, `expected_height` | Left-button drag inside one window. |
+| `window_scroll` | `x`, `y`, `expected_width`, `expected_height`, `direction`, `steps=1` | Scroll `up` or `down`, 1–10 steps. |
+| `window_type` | `text` | Type 1–200 printable ASCII characters without using the clipboard. |
+| `window_key` | `key`, `modifiers=null` | One navigation/edit key, F1–F12, or ASCII letter/digit; modifiers may be `ctrl` and `shift`. |
+
+Every input call also requires integer `window_id` and `expected_pid`, taken from a fresh `list_windows` result.
+Identify the actual client window, not an unrelated frame or dialog; some desktops list both. Inspect a fresh
+`screenshot(window_id=...)`, then use its **saved size**, not its potentially scaled inline image, for coordinate
+arguments. Convert inline-image coordinates by multiplying each axis by saved-size / inline-size. Coordinates are
+relative to the selected window's top-left corner. For example, for a 1200×800 window with ID 12345 and PID 6789,
+`window_click` takes `{"window_id":12345,"expected_pid":6789,"x":200,"y":100,"expected_width":1200,"expected_height":800}`.
+First use `raise_window(window_id=12345, expected_pid=6789)` if the window is covered. Take a new screenshot after an action changes the
+UI; refresh the size and coordinates after a resize. Input tool success means events were sent, not that the app has
+processed them. A busy simulator can take several seconds to show the result; wait and inspect before the next action.
+
+Pointer actions fail if the ID/PID or size changed, the point is offscreen, or another window covers a checked point.
+Keyboard actions require focus inside the selected window; click it first. Caps Lock must be off for `window_type`
+and letter keys. The key mapping must produce the requested characters with no modifier or Shift; alternate keyboard
+groups or layouts can still affect the result, so verify it in the UI. A held key,
+mouse button or modifier causes the action to fail. Popup menus or dialogs outside the chosen window may need a
+separately listed target; unlisted or untitled popups cannot be controlled by these tools. There is no clipboard,
+arbitrary shell-command, Unicode typing, or general accessibility-tree API in this first slice.
+
+X11 input is global: these checks reduce mistakes but cannot enforce a security boundary against other X11 clients,
+input grabs or a person changing focus. Cooperating MCP servers using the same `DISPLAY` spelling and `XDG_RUNTIME_DIR`
+share an input lock; other applications, users, or differently configured servers do not take that lock. A mouse move may cause hover effects
+even if a later target check rejects a click. Do not share the desktop concurrently while an agent is acting; use a
+dedicated session for stronger isolation.
+Enabling the tools grants the client the ability to trigger any action available in the targeted app, including file
+deletion or network operations. Tool annotations are advisory, and X11 window IDs/PIDs are not authentication.
+See the [desktop control plan](plans/DESKTOP-CONTROL.md) for remaining work and validation.
+
+### Optional simulator sessions
+
+Select `sim_launch` explicitly to expose these local Linux tools. They launch this repository's `run.sh` and manage only
+processes they started; they do not attach to or stop unrelated simulators. This runs the configured simulator Python,
+creates files, and can affect the GPU and network. All four tools have conservative annotations.
+
+| MCP tool | Arguments | Use |
+|---|---|---|
+| `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false` | Start a new process with a local bridge, chosen ROS domain and separate output/log and persistent Kit settings. Returns a session ID and PID before the bridge is ready. |
+| `sim__list` | none | List managed sessions, including those started by an earlier server process. |
+| `sim__status` | `session_id` | Check the original PID's identity, bridge PID/readiness and current memory snapshot. |
+| `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. |
+
+Example calls: `sim__launch` with `{"port":18766,"ros_domain":42}`, then `sim__status` with
+`{"session_id":"<id returned by launch>"}`. Wait until `state` is `running`, select that port with `use_bridge`, and
+verify its PID before operating the scene. If necessary, identify its graphical client with `list_windows` by PID.
+Use different ROS domains for isolated simulations; `allow_shared_domain=true` is an explicit exception when they
+intentionally need to communicate. Other ROS nodes must use the matching domain to communicate with a simulator.
+
+At server startup the operator may set these environment variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ISAAC_MCP_SIM_ROOT` | repository root when available | Repository containing the executable `run.sh`. Set it explicitly if the host is installed outside a checkout. |
+| `UR5E_DT_PYTHON` | `<root>/.venv/bin/python` | Optional configured Isaac Sim interpreter used by `run.sh`. |
+| `ISAAC_MCP_SIM_SESSIONS_DIR` | `~/.local/share/isaac-mcp/sim-sessions` | Managed session metadata, logs and separate output directories. |
+| `ISAAC_MCP_SIM_MAX_INSTANCES` | `2` | Maximum known bridge, managed Sim and configured Lab-job processes. `0` disables this count limit. |
+| `ISAAC_MCP_SIM_MIN_FREE_VRAM_MIB` | `8192` | Minimum free GPU memory at launch. |
+| `ISAAC_MCP_SIM_MIN_FREE_RAM_MIB` | `4096` | Minimum available system RAM at launch. |
+
+The count includes advertised local bridges, managed sessions still starting, and running jobs in the configured
+`ISAACLAB_JOBS_DIR`; processes outside those sources may not be counted. Port availability and ROS domains of known
+processes are checked, but other unadvertised ROS nodes may share a domain. Host servers using the same sessions
+directory serialize their launches; other programs or differently configured servers can race the checks. Current resource checks require Linux,
+`nvidia-smi`, and exactly one NVIDIA GPU. The memory thresholds and instance limit are operator settings, not guarantees:
+they do not reserve memory or predict scene, renderer, sensor or training peaks. There is no automatic termination if
+memory later runs low. Monitor workloads and tune the limits only after testing. Isaac Lab jobs have their own
+concurrency guards and explicit overrides; see [Lab tools](TOOLS-ISAACLAB.md#concurrency-guards). Managed sessions use
+separate Kit user configuration files, but other Kit caches and machine resources can still be shared.
+Stopping uses a Linux pidfd and the original boot and process-start identity to avoid signalling a reused PID.
+Linux 6.9 and newer receive the signal for the process group; older kernels receive it for the leader only, reported
+as `scope: "process"`, and a forced stop there may leave child processes that require separate cleanup.
 
 ## Kit bridge built-ins
 

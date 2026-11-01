@@ -4,6 +4,7 @@ import ast
 import asyncio
 import ctypes
 import importlib.util
+import json
 import math
 import os
 import sys
@@ -105,6 +106,23 @@ def test_stalled_or_missing_viewport_frames_fail_instead_of_infinite_catchup():
     stalled.add_frame(b"frame", 0.0, lambda frame: None)
     with pytest.raises(RuntimeError, match="five seconds behind"):
         stalled.finish(10.0, lambda frame: None)
+
+
+def test_recording_state_is_isolated_between_simulator_processes(tmp_path, monkeypatch):
+    tree = ast.parse(SOURCE.read_text())
+    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "_RecordingState")
+    module = ast.fix_missing_locations(ast.Module(body=[cls], type_ignores=[]))
+    namespace = {"os": os, "threading": threading, "json": json, "BASE_OUTPUT_DIR": str(tmp_path)}
+    exec(compile(module, str(SOURCE), "exec"), namespace)
+    monkeypatch.setattr(os, "getpid", lambda: 1001)
+    first = namespace["_RecordingState"]()
+    monkeypatch.setattr(os, "getpid", lambda: 1002)
+    second = namespace["_RecordingState"]()
+    first.save_state()
+    assert first.is_recording()
+    assert not second.is_recording()
+    second.clear_state()
+    assert first.is_recording()
 
 
 def test_stop_handler_reports_an_encoder_failure(tmp_path):

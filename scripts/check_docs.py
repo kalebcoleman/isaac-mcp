@@ -49,7 +49,9 @@ def expected_tools():
                         for target in node.targets))
     builtins = bridge_builtins()
     host = (tool_decorators(ROOT / "mcp/isaac_mcp/screen.py")
-            | tool_decorators(ROOT / "mcp/isaac_mcp/server.py") | builtins)
+            | tool_decorators(ROOT / "mcp/isaac_mcp/server.py")
+            | tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")
+            | tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py") | builtins)
     return {
         "docs/TOOLS-UR5E.md": {"ur5e_dt__" + name for name in registry},
         "docs/TOOLS-ISAACLAB.md": tool_decorators(ROOT / "mcp/isaac_mcp/isaaclab/tools.py"),
@@ -63,11 +65,15 @@ def tier_counts():
     builtins = bridge_builtins()
     host_only = (tool_decorators(ROOT / "mcp/isaac_mcp/screen.py")
                  | tool_decorators(ROOT / "mcp/isaac_mcp/server.py"))
-    return {"host": len(host_only), "isaaclab": len(expected["docs/TOOLS-ISAACLAB.md"]),
+    return {"host": len(host_only),
+            "desktop_input": len(tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")),
+            "sim_sessions": len(tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py")),
+            "isaaclab": len(expected["docs/TOOLS-ISAACLAB.md"]),
             "builtins": len(builtins), "ur5e": len(expected["docs/TOOLS-UR5E.md"])}
 
 
-TIER_ROWS = {"host": "Host gateway", "isaaclab": "Isaac Lab", "builtins": "Bridge built-ins",
+TIER_ROWS = {"host": "Host gateway", "desktop_input": "Desktop input (optional)",
+             "sim_sessions": "Simulator sessions (optional)", "isaaclab": "Isaac Lab", "builtins": "Bridge built-ins",
              "ur5e": "UR5e twin"}
 
 
@@ -93,7 +99,10 @@ def check_agent_guide(errors, text=None, counts=None):
         "The other N tools (bridge subtotal)":
             (r"The other (\d+) tools", actual["builtins"] + actual["ur5e"]),
         "there are N tools in total":
-            (r"there are (\d+) tools in total", sum(actual.values())),
+            (r"there are (\d+) tools in total",
+             sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e"))),
+        "groups add N more (optional subtotal)":
+            (r"groups add (\d+) more", actual["desktop_input"] + actual["sim_sessions"]),
     }
     for description, (pattern, value) in expected.items():
         found = re.findall(pattern, text)

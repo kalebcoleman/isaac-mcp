@@ -52,7 +52,9 @@ from mcp.server.lowlevel.server import NotificationOptions
 
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
-from .local_tools import ALL_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups
+from .local_tools import DEFAULT_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups
+from .desktop_input import register_desktop_input_tools
+from .sim_sessions import register_sim_session_tools
 from .screen import register_screen_tools
 
 logging.basicConfig(level=logging.INFO,
@@ -68,7 +70,7 @@ SERVER_INSTRUCTIONS = os.getenv(
     "started, or ISAAC_MCP_NAMESPACE / ISAAC_MCP_BUILTINS=0 may be hiding bridge "
     "tools. Find advertised bridges with the isaac_mcp.client CLI (--list-bridges) and "
     "confirm the chosen bridge's PID and port (status) before scene-changing calls, "
-    "and start Kit with the isaac.mcp.bridge extension only when none is advertised. "
+    "and start an additional Kit only when explicitly requested and resource checks permit. "
     "screenshot, list_windows, raise_window and the screen "
     "recording tools capture this Linux desktop. screenshot() and "
     "start_screen_recording() with no target pick the Isaac Sim or Isaac Lab "
@@ -479,9 +481,9 @@ async def _notify_tools_changed(ctx: Optional[Context]) -> None:
     """Tell the client its tool list changed. Never raises: a failed
     notification must not fail the tool that changed the registry.
 
-    Tools take ``ctx: Context = None`` rather than ``Context | None``: mcp 1.12.4
-    only injects a parameter annotated exactly ``Context`` (a union is treated as
-    an ordinary argument and leaks into the advertised schema); 1.30 accepts both.
+    Tools take ``ctx: Context = None`` rather than ``Context | None`` because older SDK
+    releases only inject a parameter annotated exactly ``Context`` (a union can be
+    treated as an ordinary argument and leak into the advertised schema).
     ``ctx`` is None when a tool is called directly rather than through a session."""
     if ctx is None:
         return
@@ -589,8 +591,8 @@ def build_server(env: Optional[Mapping[str, str]] = None,
 
     ``env`` defaults to ``os.environ``. The groups are parsed once, here; an unknown group
     raises :class:`LocalToolsError` before anything is registered. The module-level ``mcp`` is
-    ``build_server()``, so importing ``isaac_mcp.server`` with the variable unset registers all
-    the local tools, as it always did.
+    ``build_server()``, so importing ``isaac_mcp.server`` with the variable unset registers the
+    standard local tools. Desktop input requires the explicitly selected ``screen_input`` group.
 
     Each server gets its own bridge connection and discovery state (``state``, fresh unless the
     caller passes one), so servers built in one process neither share a socket nor skip tools
@@ -599,13 +601,23 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     env = os.environ if env is None else env
     groups = local_tool_groups(env)
     instructions = SERVER_INSTRUCTIONS
-    if groups != ALL_GROUPS and "ISAAC_MCP_INSTRUCTIONS" not in env:
+    if not DEFAULT_GROUPS <= groups and "ISAAC_MCP_INSTRUCTIONS" not in env:
         instructions += _RESTRICTED_NOTE
+    if "screen_input" in groups and "ISAAC_MCP_INSTRUCTIONS" not in env:
+        instructions += (" Desktop input is enabled on a shared X11 desktop. List the target "
+                         "window and inspect a fresh screenshot before acting; use its window ID, "
+                         "PID and original pixel size. Input can trigger arbitrary app actions.")
+    if "sim_launch" in groups and "ISAAC_MCP_INSTRUCTIONS" not in env:
+        instructions += (" Managed simulator launch is enabled. Use separate bridge ports and ROS "
+                         "domains, confirm readiness and PID with sim__status, and treat resource "
+                         "checks as snapshots rather than reservations.")
     state = _BridgeState() if state is None else state
     server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
     setattr(server, _STATE_ATTR, state)
     _advertise_tools_list_changed(server)
     register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups)
+    register_desktop_input_tools(server, groups=groups)
+    register_sim_session_tools(server, groups=groups, env=env)
     register_isaaclab_tools(server, groups=groups)
     _register_gateway_tools(server, groups)
     return server

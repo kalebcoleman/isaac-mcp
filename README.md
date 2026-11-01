@@ -58,12 +58,14 @@ The `isaaclab__*` tools discover an activated Isaac Lab environment or a checkou
 (see [`docs/ISAACLAB-TOOLS.md`](docs/ISAACLAB-TOOLS.md)).
 For simulator connection, window inspection, and agent workflow, see
 [`docs/MCP-SERVER.md`](docs/MCP-SERVER.md#agent-workflow).
+Optional X11 mouse/keyboard input and managed parallel simulator launches are explicitly enabled
+per MCP server; see [host tools](docs/TOOLS-HOST.md#optional-desktop-input) for setup and safeguards.
 
 ### Notes
 
 - Ports: 8766 = twin bridge (`run.sh` default; `--port N` or `UR5E_DT_PORT` to change); 8767 = Isaac Lab bridge by
   convention (`mcp/examples/isaaclab_bridge_launch.py`).
-- GPU: on a 16 GB card run one GPU job at a time and keep `num_envs` small; a running Kit app plus a training job
+- GPU: for training on a 16 GB card, begin with one GPU job and keep `num_envs` small; a running Kit app plus a training job
   contend for VRAM.
 - `scripts/catch_hang.sh` loops boot + `quick_start_with_workstation` to hunt a rare first-call hang flake; on a
   hang it saves evidence under `/tmp/isaac-mcp-hang/`.

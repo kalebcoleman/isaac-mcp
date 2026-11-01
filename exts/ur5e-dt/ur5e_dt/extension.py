@@ -181,7 +181,10 @@ class _RecordingState:
         self.capture_token = None
         self.recording_lock = threading.RLock()
         self.stopping = False
-        self.state_dir = "/tmp/isaacsim_recording"
+        # Each Kit process must own its recorder state. A shared state file
+        # makes separate simulator instances mistake each other's recording for theirs.
+        self.state_dir = (os.path.join(BASE_OUTPUT_DIR, ".recorder-state", str(os.getpid())) if BASE_OUTPUT_DIR
+                          else f"/tmp/isaacsim_recording-{os.getpid()}")
         self.state_file = os.path.join(self.state_dir, "recorder_state.json")
 
     def save_state(self):

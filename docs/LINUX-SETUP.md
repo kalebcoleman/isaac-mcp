@@ -48,7 +48,8 @@ installer handles the dependencies below; they should not be mixed into a system
 
 For recordings, `install.sh` supplies an `ffmpeg` shim backed by the host's `imageio-ffmpeg` package, unless an
 existing `~/.local/bin/ffmpeg` is present. A working system `ffmpeg` can also be used. Host screen tools have no
-mouse or keyboard control; see [host tools](TOOLS-HOST.md).
+mouse or keyboard control by default; the X11 input tools can be explicitly enabled as described in
+[host tools](TOOLS-HOST.md#optional-desktop-input).
 
 ## Optional UR5e mock ROS driver
 

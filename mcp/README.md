@@ -3,6 +3,8 @@
 Host-side Model Context Protocol (MCP) server for Isaac Sim, Isaac Lab and Omniverse Kit.
 It provides the Kit bridge gateway plus host-side desktop capture.
 The package provides one CLI, `isaac-mcp`.
+Opt-in groups also provide X11 desktop input and managed simulator sessions; see
+[host tools](../docs/TOOLS-HOST.md#optional-desktop-input) for configuration and limitations.
 
 Install it as an editable tool (shared by every MCP client):
 

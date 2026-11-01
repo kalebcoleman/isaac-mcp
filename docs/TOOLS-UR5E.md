@@ -29,7 +29,8 @@ and starting the host MCP server alone does not start Isaac Sim. The twin window
 
 Several panel actions, including Quick Start, loading the workstation or room, playing/stopping the scene and
 recording, have MCP tools in the reference below. Host screen tools can inspect and capture simulator windows, but
-they do not provide mouse or keyboard control, and not every panel control has an MCP equivalent.
+optional X11 mouse and keyboard tools can be enabled separately as described in
+[host tools](TOOLS-HOST.md#optional-desktop-input). Not every panel control has a dedicated MCP equivalent.
 
 ## Parameter conventions
 
