@@ -1,6 +1,6 @@
 # Plan: USD asset presets and project-folder discovery
 
-**Status: proposal, not shipped.** This plan covers generic scenes, robots, objects and small smoke fixtures, not full separate projects. Evidence labels: **Code** = static repository inspection at the base revision; **Package** = read-only inspection of the installed Isaac Sim 6.1.0 tree/stubs, not a running app; **Source** = cited vendor documentation; **Assumption** = design choice or behavior requiring validation. No Kit process was launched for this plan.
+**Status: proposal, not shipped.** On 2026-10-31 the owner chose a trusted-operator loader (operator-listed folders, bundled samples and the NVIDIA cloud library, in the normal session) as the first step; it is planned in [ISAACSIM-TOOLS-BUILD.md](ISAACSIM-TOOLS-BUILD.md) milestone M6 and is not a sandbox. The isolated loader below remains future work. This plan covers generic scenes, robots, objects and small smoke fixtures, not full separate projects. Evidence labels: **Code** = static repository inspection at the base revision; **Package** = read-only inspection of the installed Isaac Sim 6.1.0 tree/stubs, not a running app; **Source** = cited vendor documentation; **Assumption** = design choice or behavior requiring validation. No Kit process was launched for this plan.
 
 The [end-to-end asset and scene plan](ASSET-SCENE-END-TO-END.md) combines this work with generic scene tools and
 proposes a separate user-trusted workflow. This document's isolated, fail-closed restrictions still apply to
