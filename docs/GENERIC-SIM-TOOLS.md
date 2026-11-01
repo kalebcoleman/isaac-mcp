@@ -6,6 +6,10 @@
 > in a separate non-robot 6.2 scene; see [verification](VERIFICATION.md#generic-scene-api-validation). The tools and
 > the remaining proposed APIs still need implementation and validation.
 
+The [end-to-end asset and scene plan](plans/ASSET-SCENE-END-TO-END.md) combines this draft with project-folder
+discovery, current catalog/session behavior and the required live verification. Its proposed shared host/catalog
+integration supersedes this draft's original no-host-changes assumption; generic tools remain unimplemented.
+
 
 Design for a second Kit-side tool pack exposing **robot-agnostic** Isaac Sim
 capabilities: stage inspection, prim authoring/deletion, physics control and
