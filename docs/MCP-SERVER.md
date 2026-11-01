@@ -201,6 +201,59 @@ Add the server to `~/.config/opencode/opencode.jsonc`:
 }
 ```
 
+### Codex
+
+Add the server with the Codex CLI, or as a `[mcp_servers.isaac]` table in `~/.codex/config.toml`
+(the key is `mcp_servers`, not `mcpServers`):
+
+```bash
+codex mcp add isaac --env DISPLAY="${DISPLAY:-:0}" --env UR5E_DT_PORT=8766 \
+  -- "$(command -v isaac-mcp || echo "$HOME/.local/bin/isaac-mcp")"
+```
+
+```toml
+[mcp_servers.isaac]
+command = "/home/<user>/.local/bin/isaac-mcp"
+
+[mcp_servers.isaac.env]
+DISPLAY = ":0"
+UR5E_DT_PORT = "8766"
+# For the isaaclab__* job tools:
+# ISAACLAB_PYTHON = "/path/to/lab-env/bin/python"
+# ISAACLAB_ROOT = "/path/to/IsaacLab"
+```
+
+### Antigravity
+
+Add the server to `~/.gemini/config/mcp_config.json` (or a workspace's `.agents/mcp_config.json`),
+or open the agent panel's **…** menu → **MCP Servers** → **Manage MCP Servers** → **View raw
+config**. The file does not allow comments.
+
+```json
+{
+  "mcpServers": {
+    "isaac": {
+      "command": "/home/<user>/.local/bin/isaac-mcp",
+      "args": [],
+      "env": {
+        "DISPLAY": ":0",
+        "UR5E_DT_PORT": "8766"
+      }
+    }
+  }
+}
+```
+
+Format from [Antigravity's MCP docs](https://antigravity.google/docs/mcp) and
+[Codex's MCP docs](https://developers.openai.com/codex/mcp). On the test machine, `codex exec`
+called `screen_info` through a Codex entry of this form (2026-10-31); the Antigravity entry has not
+been tested here.
+
+### Agent skill
+
+The repository's `isaac-mcp` skill tells an agent how to use these tools safely in Claude Code,
+Codex, OpenCode and Antigravity. See [AGENT-SKILLS.md](AGENT-SKILLS.md).
+
 ### Limiting what a client can reach
 
 Bridge tools such as `run_python` and the `ur5e_dt__*` scene operations reach the client as soon as a Kit bridge

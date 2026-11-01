@@ -79,6 +79,11 @@ card.
 
 Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER.md).
 
+The `isaac-mcp` Agent Skill (`.agents/skills/isaac-mcp/`, linked from `.claude/skills/`) turns
+these rules into a step-by-step workflow and routes Isaac Lab and Isaac Sim domain questions to
+NVIDIA's official skills; Claude Code, Codex and OpenCode load it automatically in this checkout.
+See [docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md).
+
 ## Handle with care
 
 - `run_python` executes Python inside Kit, and `put_file` / `get_file` / `stat_file` touch the

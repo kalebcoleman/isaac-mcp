@@ -113,10 +113,28 @@ def check_agent_guide(errors, text=None, counts=None):
             errors.append(f"{where}: '{description}' says {found[0]}, the code has {value}")
 
 
+SKILLS_DIR = ROOT / ".agents" / "skills"
+
+
+def check_skill_tool_names(errors, expected=None, files=None):
+    """Every isaaclab__/ur5e_dt__ name a skill mentions must be a registered tool."""
+    expected = expected or expected_tools()
+    registered = {"isaaclab__": expected["docs/TOOLS-ISAACLAB.md"],
+                  "ur5e_dt__": expected["docs/TOOLS-UR5E.md"]}
+    for path in files if files is not None else sorted(SKILLS_DIR.rglob("*.md")):
+        text = path.read_text()
+        for prefix, names in registered.items():
+            # A trailing `*` marks a family (`ur5e_dt__quick_start*`): it must prefix a real tool.
+            for name, star in re.findall(r"\b(" + prefix + r"[a-z][a-z0-9_]*)(\*?)", text):
+                if name in names or (star and any(n.startswith(name) for n in names)):
+                    continue
+                errors.append(f"{path.relative_to(ROOT)}: names not in registry: {name}{star}")
+
+
 def main():
     errors = []
     files = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md")),
-             *sorted((ROOT / "mcp/docs").glob("*.md"))]
+             *sorted((ROOT / "mcp/docs").glob("*.md")), *sorted(SKILLS_DIR.rglob("*.md"))]
     for path in files:
         text = path.read_text()
         for link in re.findall(r"\]\(([^)]+)\)", text):
@@ -142,12 +160,14 @@ def main():
             stale = sorted(found - expected)
             if stale:
                 errors.append(f"{filename}: names not in registry: {', '.join(stale)}")
+    check_skill_tool_names(errors)
     check_agent_guide(errors)
     for error in errors:
         print(f"FAIL: {error}")
     if errors:
         return 1
-    print(f"Documentation checks passed ({len(files)} files; links, JSON, registered tool names and guide counts).")
+    print(f"Documentation checks passed ({len(files)} files; links, JSON, registered tool names, "
+          "skill tool names and guide counts).")
     return 0
 
 

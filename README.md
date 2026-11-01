@@ -87,6 +87,9 @@ for tested releases, installation pins, and known limitations.
 - [Host and bridge tools](docs/TOOLS-HOST.md) — connection management, desktop capture and bridge built-ins.
 - [Isaac Lab tools](docs/TOOLS-ISAACLAB.md) — task discovery, job management, checkpoints and metrics.
 - [Server setup and agent workflow](docs/MCP-SERVER.md) and [architecture](docs/ARCHITECTURE.md).
+- [Agent skill](docs/AGENT-SKILLS.md) — the `isaac-mcp` skill for Claude Code, Codex, OpenCode and Antigravity, and
+  how it routes to NVIDIA's Isaac Lab and Isaac Sim skills.
+- [Ecosystem](docs/ECOSYSTEM.md) — other Isaac Sim / Isaac Lab MCP servers and every tool they define.
 - [Isaac Lab implementation notes](docs/ISAACLAB-TOOLS.md) and [generic Sim tools design](docs/GENERIC-SIM-TOOLS.md)
   (the latter is a proposal, not an implemented pack).
 - [Vendoring](docs/VENDORING.md) and [publishing checklist](docs/PUBLISHING.md).
