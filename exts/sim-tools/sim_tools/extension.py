@@ -11,6 +11,7 @@ from isaac_mcp_bridge import get_mcp_bridge, ToolDefinition
 from isaac_mcp.scene_contracts import REGISTRY
 from isaac_mcp.project_assets import AssetError
 from .core import Scene, bounded, facts
+from .render_export import validate_native_binding
 
 
 class Extension(omni.ext.IExt):
@@ -18,6 +19,7 @@ class Extension(omni.ext.IExt):
         self.scene = Scene(
             lambda: omni.usd.get_context().get_stage(),
             omni.timeline.get_timeline_interface(),
+            render_binding=validate_native_binding,
         )
         # Exact vendor MDL module, resolved by Kit's MDL subsystem rather than USD.
         # No general missing-dependency bypass or user-configurable string whitelist.

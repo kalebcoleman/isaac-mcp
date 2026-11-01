@@ -173,7 +173,12 @@ add(
     "sim.stage.save",
     "Export a flattened copy, including session edits, to a new basename in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
     dict(
-        **TARGET, filename=field("string", "New basename ending .usda; no directories.")
+        **TARGET, filename=field("string", "New basename ending .usda; no directories."),
+        reset_camera_render_handles=field(
+            "boolean",
+            "Explicitly remove validated session-only ROS camera viewportHandle fields from the copy so native textures can rebuild after restart. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
+            False, default=False,
+        ),
     ),
 )
 add(
