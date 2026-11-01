@@ -10,7 +10,7 @@ named by `ISAACLAB_PYTHON` against the checkout at `ISAACLAB_ROOT`:
 
 | Tool | Runs | Notes |
 |---|---|---|
-| `isaaclab__train` | `scripts/reinforcement_learning/train.py` | `headless=true` by default, which passes `--viz none` |
+| `isaaclab__train` | `scripts/reinforcement_learning/train.py` | `headless=true` by default; ordinary jobs use `--viz none`, video jobs retain a windowless Kit renderer |
 | `isaaclab__eval` | `scripts/reinforcement_learning/play.py --checkpoint ...` | Isaac Lab has no separate eval script; headless by default |
 | `isaaclab__play` | `scripts/reinforcement_learning/play.py --checkpoint ...` | Opens a window by default (`--viz kit`), `num_envs=1` |
 
@@ -27,7 +27,14 @@ These were checked against an Isaac Lab 3.0.0 checkout and NVIDIA's own skills:
 - The RL backend is chosen with `rl_library` (Isaac Lab 3.0.0 accepts `rsl_rl`, `rl_games`, `skrl`,
   `sb3`, `rlinf` and `torchrl`). When omitted,
   the task's registered `default_agent` is used. Do not mix one library's agent config with another.
-- There is no `--headless` flag in Isaac Lab 3; the tools translate `headless` into `--viz none|kit`.
+- There is no `--headless` flag in Isaac Lab 3. Ordinary headless jobs use `--viz none`;
+  `extra_args=["--video", "--video_length=60"]` selects Kit with child-only `HEADLESS=1`.
+  Windowed jobs use Kit with `HEADLESS=0`. One explicit `--viz=VALUE` or
+  `--visualizer=VALUE` overrides the generated selection; non-Kit display settings belong
+  to that visualizer. Explicit `none` plus video is refused. See `docs/TOOLS-ISAACLAB.md`.
+- Video needs optional MoviePy 1.x and imageio-ffmpeg in the selected **Lab interpreter**.
+  A returned job id is not successful completion: check `runs_status` and `runs_tail`,
+  allow renderer startup time, and inspect recorded pixels or the actual window.
 - `extra_args` takes `--flag` / `--flag=value` and Hydra overrides such as
   `env.actions.joint_effort.scale=10.0` or `agent.seed=2024` (RL-Games uses `agent.params.seed`),
   plus `+key=value` or `~key`. See `docs/source/features/hydra.rst` in the Lab checkout. The
