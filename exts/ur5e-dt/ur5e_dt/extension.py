@@ -23,6 +23,7 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
 from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_uri
+from .object_pose import read_local_pose, set_local_pose
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
 from .tf_compat import use_legacy_transform_publisher
@@ -4629,26 +4630,8 @@ class DigitalTwin(omni.ext.IExt):
         raise RuntimeError("Could not place all objects without violating min_sep; reduce density.")
 
     def _set_obj_prim_pose(self, prim_path, position, quat_wxyz):
-        import omni.kit.commands
-        # Handle both Gf.Vec3d and tuple/list positions
-        if isinstance(position, Gf.Vec3d):
-            pos_value = position
-        else:
-            pos_value = Gf.Vec3d(*position)
-        
-        # Set orientation first, then translate (matches assemble_objects order)
-        omni.kit.commands.execute(
-            "ChangeProperty",
-            prop_path=f"{prim_path}.xformOp:orient",
-            value=Gf.Quatf(*quat_wxyz),
-            prev=None,
-        )
-        omni.kit.commands.execute(
-            "ChangeProperty",
-            prop_path=f"{prim_path}.xformOp:translate",
-            value=pos_value,
-            prev=None,
-        )
+        stage = omni.usd.get_context().get_stage()
+        set_local_pose(stage.GetPrimAtPath(prim_path), position, quat_wxyz)
 
     def assemble_objects(self, folder_path="/World/Objects"):
         """Assemble objects based on JSON assembly data, positioned relative to the current board pose."""
@@ -4702,20 +4685,8 @@ class DigitalTwin(omni.ext.IExt):
                 base_world_pos[2] + position['z']
             )
 
-            # Use quaternion directly from assembly data (w, x, y, z for Gf.Quatf)
-            q = rotation['quaternion']
-            orient_quat = Gf.Quatf(float(q['w']), float(q['x']), float(q['y']), float(q['z']))
-
-            # Set orientation first, then translate into position
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{prim_path}.xformOp:orient",
-                value=orient_quat,
-                prev=None)
-
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{prim_path}.xformOp:translate",
-                value=assembly_pos,
-                prev=None)
+            q = rotation["quaternion"]
+            self._set_obj_prim_pose(prim_path, assembly_pos, [q[k] for k in "wxyz"])
 
             assembled += 1
 
@@ -4754,16 +4725,7 @@ class DigitalTwin(omni.ext.IExt):
 
             pos = Gf.Vec3d(x_position, self._y_offset, self._z_offset)
 
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{child_path}.xformOp:translate",
-                value=pos,
-                prev=None)
-
-            # Reset orientation to identity quaternion (same op type as randomize uses)
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{child_path}.xformOp:orient",
-                value=Gf.Quatf(1, 0, 0, 0),
-                prev=None)
+            self._set_obj_prim_pose(child_path, pos, [1, 0, 0, 0])
 
             count += 1
 
@@ -5272,28 +5234,11 @@ class DigitalTwin(omni.ext.IExt):
         return poses
 
     def _restore_object_poses(self, poses, folder_path="/World/Objects"):
-        """Write back a snapshot produced by _save_all_object_poses.
-
-        Uses two-step ChangeProperty (orient first, then translate) consistent
-        with assemble_objects.
-        """
+        """Restore active local TRS poses produced by _save_all_object_poses."""
         for name, pose_data in poses.items():
             body_path = self._get_prim_path(name, folder_path)
-            stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(body_path)
-            if not prim or not prim.IsValid():
-                continue
-            quat = pose_data.get("quaternion", {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0})
-            pos = pose_data.get("position", {"x": 0.0, "y": 0.0, "z": 0.0})
-            omni.kit.commands.execute("ChangeProperty",
-                                     prop_path=f"{body_path}.xformOp:orient",
-                                     value=Gf.Quatf(float(quat["w"]), float(quat["x"]),
-                                                    float(quat["y"]), float(quat["z"])),
-                                     prev=None)
-            omni.kit.commands.execute("ChangeProperty",
-                                     prop_path=f"{body_path}.xformOp:translate",
-                                     value=Gf.Vec3d(pos["x"], pos["y"], pos["z"]),
-                                     prev=None)
+            if not self._write_prim_pose(body_path, pose_data):
+                raise RuntimeError(f"Failed to restore {body_path}; earlier objects may be restored")
 
     def hide_object(self, object_name, folder_path="/World/Objects"):
         """Hide an object: save its reference path + pose, then delete the prim.
@@ -5906,91 +5851,24 @@ class DigitalTwin(omni.ext.IExt):
             self._output_dir = os.path.abspath(output_dir)
 
     def _read_prim_pose(self, prim_path: str) -> Dict[str, Any]:
-        """Helper method to read pose (position, quaternion, scale) from a prim."""
+        """Read the composed local TRS pose, including Euler-rotation assets."""
         try:
-            from pxr import UsdGeom, Gf
-
             stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(prim_path)
-
-            if not prim.IsValid():
-                return None
-
-            translate_attr = prim.GetAttribute("xformOp:translate")
-            orient_attr = prim.GetAttribute("xformOp:orient")
-            scale_attr = prim.GetAttribute("xformOp:scale")
-
-            position = {"x": 0.0, "y": 0.0, "z": 0.0}
-            quaternion = {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}  # Identity quaternion
-            scale = {"x": 1.0, "y": 1.0, "z": 1.0}
-
-            if translate_attr.IsValid():
-                translate_value = translate_attr.Get()
-                if translate_value:
-                    position = {
-                        "x": float(translate_value[0]),
-                        "y": float(translate_value[1]),
-                        "z": float(translate_value[2])
-                    }
-
-            if orient_attr.IsValid():
-                orient_value = orient_attr.Get()
-                if orient_value:
-                    quaternion = {
-                        "w": float(orient_value.GetReal()),
-                        "x": float(orient_value.GetImaginary()[0]),
-                        "y": float(orient_value.GetImaginary()[1]),
-                        "z": float(orient_value.GetImaginary()[2])
-                    }
-
-            if scale_attr.IsValid():
-                scale_value = scale_attr.Get()
-                if scale_value:
-                    scale = {
-                        "x": float(scale_value[0]),
-                        "y": float(scale_value[1]),
-                        "z": float(scale_value[2])
-                    }
-
-            return {
-                "position": position,
-                "quaternion": quaternion,
-                "scale": scale
-            }
+            return read_local_pose(stage.GetPrimAtPath(prim_path))
         except Exception as e:
             carb.log_error(f"Error reading pose for {prim_path}: {e}")
             return None
 
     def _write_prim_pose(self, prim_path: str, pose_data: Dict[str, Any]) -> bool:
-        """Helper method to write pose (position, quaternion, scale) to a prim."""
+        """Restore an active local TRS pose without changing referenced source files."""
         try:
-            from pxr import Gf
-
             pos = pose_data.get("position", {"x": 0.0, "y": 0.0, "z": 0.0})
             quat = pose_data.get("quaternion", {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0})
             scale = pose_data.get("scale", {"x": 1.0, "y": 1.0, "z": 1.0})
-
             stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(prim_path)
-            if not prim.IsValid():
-                carb.log_error(f"Prim not found: {prim_path}")
-                return False
-
-            # Set attributes directly instead of using ChangeProperty command
-            # This avoids stale property reference issues in async context
-            translate_attr = prim.GetAttribute("xformOp:translate")
-            if translate_attr:
-                translate_attr.Set(Gf.Vec3d(pos["x"], pos["y"], pos["z"]))
-
-            orient_attr = prim.GetAttribute("xformOp:orient")
-            if orient_attr:
-                quat_gf = Gf.Quatf(quat["w"], quat["x"], quat["y"], quat["z"])
-                orient_attr.Set(quat_gf)
-
-            scale_attr = prim.GetAttribute("xformOp:scale")
-            if scale_attr:
-                scale_attr.Set(Gf.Vec3d(scale["x"], scale["y"], scale["z"]))
-
+            set_local_pose(stage.GetPrimAtPath(prim_path),
+                           [pos[k] for k in "xyz"], [quat[k] for k in "wxyz"],
+                           [scale[k] for k in "xyz"])
             return True
         except Exception as e:
             carb.log_error(f"Error writing pose for {prim_path}: {e}")
