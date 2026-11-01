@@ -220,13 +220,21 @@ class Extension(omni.ext.IExt):
                     timeline_was_stopped = False
                     if name == "sim.timeline.control":
                         import omni.kit.app as kit_app
-                        from .timeline import settle_stop
+                        from .timeline import complete_requested_stop, settle_stop
 
                         timeline_target = (args["session_id"], args["stage_id"])
                         timeline_was_stopped = self.scene.timeline.is_stopped()
+                        stop_target_guard = None
+                        if args.get("action") == "stop":
+                            from .runtime_edit import stop_edit_target_guard
+
+                            self.scene.target(*timeline_target)
+                            stop_target_guard = stop_edit_target_guard(self.scene, self.scene.stage())
 
                         def validate_stopped():
                             self.scene.target(*timeline_target)
+                            if stop_target_guard is not None:
+                                stop_target_guard()
                             if not self.scene.timeline.is_stopped():
                                 from isaac_mcp.project_assets import refuse
 
@@ -253,7 +261,7 @@ class Extension(omni.ext.IExt):
                         await asyncio.wait_for(kit_app.get_app().next_update_async(), 5)
                         self.scene.target(*timeline_target)
                         if args["action"] == "stop":
-                            result["native_stop_observation"] = await settle_stop(
+                            result["native_stop_observation"] = await complete_requested_stop(
                                 kit_app.get_app().next_update_async,
                                 validate_stopped,
                             )
