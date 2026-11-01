@@ -43,7 +43,7 @@ This skill covers how to drive the tools safely. For Isaac Lab and Isaac Sim dom
 4. For Isaac Lab work, call `isaaclab__install_info`. An error here means `ISAACLAB_PYTHON` /
    `ISAACLAB_ROOT` are not set in the server's environment; fix the client config, not the code.
 5. For generic scene or project-asset work, call `sim__stage__info` or `assets__roots`. The
-   37-tool `sim`/`assets` pack is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   39-tool pack (31 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan` and `assets__search` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -102,6 +102,15 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   side) → `assets__info` → `assets__import_usd` or `assets__import_urdf`. Only launch-approved
   trusted roots are accepted; there is no URL input and no untrusted/hostile-USD isolation.
   Import requires a stopped timeline, matching units/up-axis and a new wrapper path.
+  For a user-supplied absolute USD path under an approved root, use `assets__import_path`
+  with the current session/stage IDs. It preserves the source and copies the bounded project;
+  inspect the returned prim and rendered result before assuming visual or physics readiness.
+  For the UR5e workstation workflow, use `assets__prepare_workstation` with those IDs and
+  `source_path`. It prepares `workstation/vention.usd` in the private asset cache and returns
+  `loaded:false`; then call `ur5e_dt__load_workstation` and inspect `/World/Vention`.
+  The twin and selected Kit must share the cache. Existing files are not overwritten, and a
+  bundled/operator drop-in takes precedence over the cache; verify which file was loaded.
+  See `docs/TOOLS-SCENE.md` for approval, staging, dependency limitations and cache placement.
 - **Playback and runtime state:** `sim__timeline__control` (play/pause/stop) and
   `sim__simulation__step` (1–120 exact steps while paused). `sim__body__state` and
   `sim__joints__state` require initialized physics; `sim__joints__command` sets targets and
@@ -110,9 +119,16 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   configured output root); `sim__lidar__*` needs Kit launched with `--motion-bvh`.
   `sim__viewport__frame` selects and frames an existing prim in the active viewport.
   By default `sim__camera__capture` waits for fresh render completions and a new renderer CPU
-  transfer (`cpu_transfer_completed=true`); `wait_for_render=false` permits the latest Replicator
-  buffer, which can be stale. `NOT_READY` means rendering is still warming up; retry after a few
-  frames. A saved scene from before the corrected save tool can retain a serialized
+  transfer (`cpu_transfer_completed=true`). `wait_for_render=false` writes the last validated
+  tool-acquired CPU frame, with cache age and acquisition context; it requests no new render
+  or transfer. An unseeded cache returns `NOT_READY`: run a default/true capture first.
+  Ordinary Play does not seed or refresh the cache. Cached pixels can predate Stop/reset or
+  pose edits; sensor/stage teardown clears them. Acquisition commits before PNG publication,
+  so a filename conflict can leave a new valid cached frame without saving a new file.
+  A fresh capture's `RENDER_TIMEOUT` means render/CPU transfer did not complete within five
+  seconds; check rendering and the selected Kit log. It returns no image or stale fallback.
+  LiDAR retains its separate latest-completed-scan behavior and needs Play for acquisition.
+  A saved scene from before the corrected save tool can retain a serialized
   `/Orchestrator` graph; re-export it with `sim__stage__save` and create fresh sensors after
   reopening.
 - **Save and diagnose:** `sim__stage__save` writes a new basename; it never overwrites or switches
@@ -134,7 +150,8 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed | Read `current_target`; resend its `session_id` and `stage_id` explicitly |
 | `TIMELINE_ACTIVE` on an edit | Timeline is playing or paused | `sim__timeline__control` with `stop`, then retry |
-| `NOT_READY` from `sim__camera__capture` | Render warm-up, or an old saved scene with a serialized `/Orchestrator` graph | Retry after a few frames; re-export through `sim__stage__save` and create a fresh sensor |
+| `NOT_READY` on a nonwaiting camera capture | No validated tool-acquired frame in this sensor's cache | Capture with default/`wait_for_render=true`; ordinary Play or waiting a few frames will not seed it |
+| `RENDER_TIMEOUT` on a fresh camera capture | Matching render completions or CPU transfer did not finish within five seconds | Check rendering and `sim__logs__tail`; no image or stale fallback was returned. A pending native transfer can cause `RENDER_BUSY` on retry; allow completion before another fresh request |
 | `assets__roots` empty or a path is refused | No launch-approved root, or the file is outside it | Run the `isaac_mcp.project_assets` approval command in `docs/TOOLS-SCENE.md`; no tool can grant roots |
 | `envs_list` shows `import_errors` | A task module failed to import | Read the error; custom tasks need `ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` |
 | Metrics tools ask for the `isaaclab` extra | `tensorboard` not installed in the server env | `uv tool install --force --editable './mcp[isaaclab]'` from the repo |
@@ -143,5 +160,5 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 37 generic `sim`/`assets` tools and their limits), and `MCP-SERVER.md` for client setup.
+(the 39 generic tools: 31 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.
