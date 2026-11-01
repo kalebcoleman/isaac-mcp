@@ -127,6 +127,8 @@ support for a future 6.x release from its version number.
 The optional trusted project configuration and 39 offline-discoverable scene/asset tools are
 documented in [TOOLS-SCENE.md](docs/TOOLS-SCENE.md). They add local USD/URDF discovery/import,
 scene authoring, PhysX observations/stepping, RTX sensors and opt-in controllers.
+Camera captures acquire fresh pixels by default. `wait_for_render=false` explicitly reuses
+the last tool-acquired image (or returns `NOT_READY`); ordinary Play does not refresh it.
 See the [43-tool fork comparison](docs/FORK-COMPARISON.md) and
 [validation limits](docs/evidence/project-scene/README.md). This preview does not implement
 untrusted OS isolation, authenticated remote upload or full fork parity. Bounded USDZ and released-6.x adapters are undergoing the separate compatibility gates.

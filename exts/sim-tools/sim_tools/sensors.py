@@ -1,4 +1,4 @@
-"""Owned CPU Replicator storage, shared by old and new released RTX APIs.
+"""Owned render products and LiDAR CPU storage for released RTX APIs.
 
 Only typed, locally authored sensors. No model-selected config file, texture,
 URL, annotator, extension or code. Native creation may have partial effects;
@@ -7,10 +7,13 @@ cleanup is attempted and reported, never disguised as a successful creation.
 
 from pxr import UsdGeom
 from isaac_mcp.project_assets import refuse
-from .runtime import require_cpu_annotator
+from .runtime import require_sensor_api
 
 
 def dispose(sensor, stage_closing=False):
+    from .camera_capture import invalidate
+
+    invalidate(sensor)
     errors = []
     if sensor.get("annotator") is None and sensor.get("product") is None:
         return errors
@@ -97,7 +100,7 @@ def dispose(sensor, stage_closing=False):
 
 
 def create(stage, path, kind, width=640, height=480):
-    rep, identity = require_cpu_annotator(lidar=kind == "lidar")
+    rep, identity = require_sensor_api(lidar=kind == "lidar")
     if kind == "lidar":
         import carb.settings
 
@@ -107,7 +110,9 @@ def create(stage, path, kind, width=640, height=480):
                 "RTX LiDAR requires Motion BVH for correct motion effects. Launch a separate managed session with enable_motion_bvh=true, or use run.sh --motion-bvh. Existing renderer settings were not changed.",
             )
     sensor = dict(
-        adapter="replicator-owned-cpu-v1",
+        adapter=(
+            "hydra-renderer-cpu-v1" if kind == "camera" else "replicator-owned-cpu-v1"
+        ),
         release=identity["release"],
         build=identity["build"],
         stage=stage,
@@ -118,7 +123,6 @@ def create(stage, path, kind, width=640, height=480):
             camera.CreateVerticalApertureAttr(
                 camera.GetHorizontalApertureAttr().Get() * height / width
             )
-            annotator_name = "rgb"
             sensor["resolution"] = (height, width)
         else:
             # This supported command exists before experimental.rtx was shipped.
@@ -190,6 +194,16 @@ def create(stage, path, kind, width=640, height=480):
         sensor["product"] = product
         sensor["product_path"] = product.path
         sensor["product_layers"] = (stage.GetSessionLayer(), stage.GetRootLayer())
+        import omni.usd
+
+        if omni.usd.get_context().get_stage() != stage:
+            refuse("STALE_TARGET", "Stage changed during native sensor creation.")
+        sensor["prim"] = stage.GetPrimAtPath(path)
+        if kind == "camera":
+            # On-demand renderer readback needs no continuously attached RGB
+            # annotator. That redundant SDG branch caused paused ROS RGB writer
+            # cycles in the fresh 6.2 headless coexistence control.
+            return sensor
         # At ATTACHMENT, not just at retrieval: borrowed GPU storage crashed in
         # real use. There is deliberately no CameraSensor or GPU-copy fallback.
         annotator = rep.AnnotatorRegistry.get_annotator(

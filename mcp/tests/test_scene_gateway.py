@@ -53,6 +53,18 @@ def test_full_catalog_and_errors(monkeypatch):
             assert reset["type"] == "boolean" and reset["default"] is False
             assert "reset_camera_render_handles" not in save_schema["required"]
             assert "export policy" in reset["description"]
+            camera_wait = listed["sim__camera__capture"].inputSchema["properties"][
+                "wait_for_render"
+            ]
+            lidar_wait = listed["sim__lidar__read"].inputSchema["properties"][
+                "wait_for_render"
+            ]
+            assert camera_wait["default"] is True and lidar_wait["default"] is False
+            assert (
+                "NOT_READY" in camera_wait["description"]
+                and "tool acquisition" in camera_wait["description"]
+            )
+            assert "completed scan" in lidar_wait["description"]
             roots = await c.call_tool("assets__roots", {})
             assert (
                 not roots.isError and json.loads(roots.content[0].text)["roots"] == []

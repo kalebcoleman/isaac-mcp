@@ -76,6 +76,11 @@ With otherwise standard settings this restores 44 offline tools and 51 with brid
 The 23 UR5e tools, Isaac Lab, desktop tools and optional managed `sim__launch/list/status/stop`
 tools retain their existing rules. This discovery preference is not a security boundary.
 
+Camera capture defaults to a fresh bounded renderer CPU readback. With
+`wait_for_render=false`, it writes the last validated tool-acquired image and reports its
+age; ordinary Play does not populate this cache. An unseeded camera returns `NOT_READY`.
+Cached pixels can predate Stop/reset or scene edits. See [TOOLS-SCENE.md](docs/TOOLS-SCENE.md).
+
 ## Getting the full surface
 
 Simulator and twin work (the bridge built-ins and `ur5e_dt__*`) needs a running Kit bridge, so

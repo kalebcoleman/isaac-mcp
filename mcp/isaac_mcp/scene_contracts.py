@@ -173,11 +173,13 @@ add(
     "sim.stage.save",
     "Export a flattened copy, including session edits, to a new basename in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
     dict(
-        **TARGET, filename=field("string", "New basename ending .usda; no directories."),
+        **TARGET,
+        filename=field("string", "New basename ending .usda; no directories."),
         reset_camera_render_handles=field(
             "boolean",
             "Explicitly remove validated session-only ROS camera viewportHandle fields from the copy so native textures can rebuild after restart. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
-            False, default=False,
+            False,
+            default=False,
         ),
     ),
 )
@@ -438,14 +440,19 @@ REGISTRY["sim.material.create"]["parameters"].update(
     ),
     restitution=field("number", "Physics material restitution 0..1.", False, default=0),
 )
-REGISTRY["sim.prim.create"]["description"] += (
-    " Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale."
-)
+REGISTRY["sim.prim.create"][
+    "description"
+] += " Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale."
 
-for _name in ("sim.camera.capture", "sim.lidar.read"):
-    REGISTRY[_name]["parameters"]["wait_for_render"] = field(
-        "boolean",
-        "Camera: wait up to five seconds for four ordinary render completions and a new CPU transfer from this product. LiDAR: wait for one render; acquisition requires Play, so default false. False reads the latest buffer, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.",
-        False,
-        default=_name == "sim.camera.capture",
-    )
+REGISTRY["sim.camera.capture"]["parameters"]["wait_for_render"] = field(
+    "boolean",
+    "True: wait up to five seconds for render completions and a new owned CPU transfer. False: reuse the last validated tool acquisition, possibly from before Stop/reset or scene edits; NOT_READY until a true capture seeds it. Ordinary Play never refreshes this cache. PNG I/O still occurs. No implicit physics advance or atomic sensor/physics guarantee.",
+    False,
+    default=True,
+)
+REGISTRY["sim.lidar.read"]["parameters"]["wait_for_render"] = field(
+    "boolean",
+    "Wait up to five seconds for one render; acquisition requires Play. False reads the latest completed scan, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.",
+    False,
+    default=False,
+)

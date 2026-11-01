@@ -56,7 +56,7 @@ def test_product_cleanup_is_bound_to_its_stage_path_and_creation_layers(
     assert dispose(sensor) == []
 
 
-def test_failed_attachment_cannot_detach_or_destroy_on_a_new_stage(scene, monkeypatch):
+def test_creation_cannot_destroy_on_a_new_stage(scene, monkeypatch):
     from sim_tools import sensors
     from isaac_mcp.project_assets import AssetError
 
@@ -79,27 +79,77 @@ def test_failed_attachment_cannot_detach_or_destroy_on_a_new_stage(scene, monkey
         destroy=lambda: pytest.fail("destruction touched the newly selected stage"),
     )
 
-    def attach(products):
+    def create_product(*args, **kwargs):
         current[0] = other
-        raise RuntimeError("partial native attachment failure")
+        return product
 
-    annotator = SimpleNamespace(
-        attach=attach,
-        detach=lambda: pytest.fail("detach uses the global current stage"),
-    )
     rep = SimpleNamespace(
-        create=SimpleNamespace(render_product=lambda *a, **kw: product),
-        AnnotatorRegistry=SimpleNamespace(get_annotator=lambda *a, **kw: annotator),
+        create=SimpleNamespace(render_product=create_product),
     )
     monkeypatch.setattr(
         sensors,
-        "require_cpu_annotator",
+        "require_sensor_api",
         lambda **kw: (rep, dict(release="test", build="test")),
     )
-    with pytest.raises(AssetError, match="partial native attachment failure") as error:
+    with pytest.raises(AssetError, match="Stage changed") as error:
         sensors.create(stage, "/World/Camera", "camera")
     assert error.value.code == "SENSOR_CREATE_FAILED"
     assert "Stage changed" in str(error.value)
     assert calls == [("updates", False)]
     assert product.hydra_texture is None
     assert other.GetPrimAtPath(render_path).GetCustomDataByKey("user") == "preserve"
+
+
+def test_camera_creation_needs_no_annotator_and_disposal_clears_early_return(
+    scene, monkeypatch
+):
+    from sim_tools import sensors
+
+    stage = scene.stage()
+    usd = SimpleNamespace(get_context=lambda: SimpleNamespace(get_stage=lambda: stage))
+    monkeypatch.setitem(sys.modules, "omni", SimpleNamespace(usd=usd))
+    monkeypatch.setitem(sys.modules, "omni.usd", usd)
+    product = SimpleNamespace(path="/Render/Camera", hydra_texture=object())
+    rep = SimpleNamespace(
+        create=SimpleNamespace(render_product=lambda *a, **kw: product)
+    )
+    monkeypatch.setattr(
+        sensors,
+        "require_sensor_api",
+        lambda **kw: (rep, dict(release="test", build="test")),
+    )
+    sensor = sensors.create(stage, "/World/Camera", "camera", 96, 64)
+    assert "annotator" not in sensor and sensor["adapter"] == "hydra-renderer-cpu-v1"
+    calls = []
+    sensor.update(
+        product=None,
+        camera_cache=object(),
+        readback_pending=SimpleNamespace(close=lambda: calls.append("close")),
+    )
+    generation = sensor.get("capture_generation")
+    assert dispose(sensor) == []
+    assert (
+        calls == ["close"]
+        and "camera_cache" not in sensor
+        and "readback_pending" not in sensor
+    )
+    assert sensor["capture_generation"] is not generation
+
+
+def test_camera_api_does_not_require_unused_lidar_annotator_module(monkeypatch):
+    from sim_tools import runtime
+    from isaac_mcp.project_assets import AssetError
+
+    rep = SimpleNamespace(create=SimpleNamespace(render_product=lambda: None))
+    monkeypatch.setitem(
+        sys.modules, "omni", SimpleNamespace(replicator=SimpleNamespace(core=rep))
+    )
+    monkeypatch.setitem(sys.modules, "omni.replicator", SimpleNamespace(core=rep))
+    monkeypatch.setitem(sys.modules, "omni.replicator.core", rep)
+    monkeypatch.setitem(sys.modules, "omni.replicator.core.annotators", None)
+    monkeypatch.setattr(runtime, "runtime_identity", lambda: {"qualified": True})
+    monkeypatch.setattr(runtime, "sensor_stack_issues", lambda *a, **kw: [])
+    assert runtime.require_sensor_api()[0] is rep
+    with pytest.raises(AssetError) as error:
+        runtime.require_sensor_api(lidar=True)
+    assert error.value.code == "SENSOR_API_UNAVAILABLE"
