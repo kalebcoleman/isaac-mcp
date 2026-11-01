@@ -7,6 +7,7 @@ warm-up hides the first before/after readback. Inspect pixels and runtime pose.
 import argparse
 import asyncio
 import json
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +21,7 @@ async def validate(port, output, cycles=3):
     records, metrics = [], []
     out = Path(output)
     prefix = "/World/ColdCapture"
+    run_id = uuid.uuid4().hex[:8]
     async with stdio_client(parameters(port)) as (r, w):
         async with ClientSession(r, w) as client:
             await client.initialize()
@@ -102,8 +104,8 @@ async def validate(port, output, cycles=3):
                         path=path,
                         width=width,
                         height=height,
-                        position=[80, -6, 3.5],
-                        target=[80, 0, 1.2],
+                        position=[80, -12, 5],
+                        target=[80, 0, 1.3],
                         frame="world",
                     )
                     await invoke("sim__timeline__control", **target, action="play")
@@ -115,7 +117,7 @@ async def validate(port, output, cycles=3):
                             "sim__camera__capture",
                             **target,
                             path=path,
-                            filename=f"cold-{cycle}-{index}-{phase}.png",
+                            filename=f"cold-{run_id}-{cycle}-{index}-{phase}.png",
                         )
                         with Image.open(value["file"]) as image:
                             rgb = np.asarray(image).astype(float)
