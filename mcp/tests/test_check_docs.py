@@ -6,6 +6,7 @@ tool does not require editing this file; only AGENTS.md has to be brought up to 
 """
 
 import importlib.util
+import json
 import re
 from pathlib import Path
 
@@ -129,3 +130,68 @@ def test_missing_table_row_fails():
     prefix = "| " + LABELS["isaaclab"]
     text = "\n".join(line for line in GUIDE.splitlines() if not line.startswith(prefix)) + "\n"
     assert any("need exactly one" in e for e in errors_for(text))
+
+
+def skill_errors(tmp_path, body):
+    skill = tmp_path / "SKILL.md"
+    skill.write_text(body)
+    expected = {"docs/TOOLS-ISAACLAB.md": {"isaaclab__train", "isaaclab__runs_status"},
+                "docs/TOOLS-UR5E.md": {"ur5e_dt__quick_start", "ur5e_dt__quick_start_with_workstation"}}
+    errors = []
+    original_root = check_docs.ROOT
+    check_docs.ROOT = tmp_path
+    try:
+        check_docs.check_skill_tool_names(errors, expected=expected, files=[skill])
+    finally:
+        check_docs.ROOT = original_root
+    return errors
+
+
+def test_skill_with_registered_names_passes(tmp_path):
+    body = "Call `isaaclab__train`, then `isaaclab__runs_status`; `ur5e_dt__quick_start*` builds a scene."
+    assert skill_errors(tmp_path, body) == []
+
+
+def test_skill_with_stale_name_fails(tmp_path):
+    errors = skill_errors(tmp_path, "Call `isaaclab__train_start` first.")
+    assert errors == ["SKILL.md: names not in registry: isaaclab__train_start"]
+
+
+def test_skill_family_must_prefix_a_tool(tmp_path):
+    errors = skill_errors(tmp_path, "Use `ur5e_dt__quickstart*`.")
+    assert errors == ["SKILL.md: names not in registry: ur5e_dt__quickstart*"]
+
+
+def test_repository_skills_name_only_registered_tools():
+    errors = []
+    check_docs.check_skill_tool_names(errors)
+    assert errors == []
+
+
+def test_skill_scene_names_are_checked_when_catalogs_exist(tmp_path):
+    catalogs = tmp_path / "mcp" / "isaac_mcp" / "catalogs"
+    catalogs.mkdir(parents=True)
+    (catalogs / "sim.json").write_text(json.dumps({"tools": {"sim.stage.info": {}}}))
+    (catalogs / "assets.json").write_text(json.dumps({"tools": {"assets.roots": {}}}))
+    skill = tmp_path / "SKILL.md"
+    skill.write_text("Use `sim__stage__info` and `assets__roots`.")
+    errors = []
+    original = check_docs.ROOT
+    check_docs.ROOT = tmp_path
+    try:
+        check_docs.check_skill_tool_names(
+            errors,
+            expected={"docs/TOOLS-ISAACLAB.md": set(), "docs/TOOLS-UR5E.md": set(),
+                      "docs/TOOLS-HOST.md": {"sim__launch"}},
+            files=[skill],
+        )
+        skill.write_text("Use `sim__bogus`.")
+        check_docs.check_skill_tool_names(
+            errors,
+            expected={"docs/TOOLS-ISAACLAB.md": set(), "docs/TOOLS-UR5E.md": set(),
+                      "docs/TOOLS-HOST.md": {"sim__launch"}},
+            files=[skill],
+        )
+    finally:
+        check_docs.ROOT = original
+    assert errors == ["SKILL.md: names not in registry: sim__bogus"]

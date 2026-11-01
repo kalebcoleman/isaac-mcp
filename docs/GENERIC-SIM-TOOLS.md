@@ -20,6 +20,9 @@ Grounded in the installed Isaac Sim 6.2 tree (`$SP`, §3.25), `docs/ARCHITECTURE
 `mcp/docs/tool-authoring.md`, `mcp/docs/protocol.md`, and
 the UR5e pack's own registration code.
 
+The gaps that remain after the first implementation of these tools are planned in
+[plans/SIM-TOOLS-FOLLOWUP.md](plans/SIM-TOOLS-FOLLOWUP.md).
+
 ## 1. Goals and non-goals
 
 ### Goals

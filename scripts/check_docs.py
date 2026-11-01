@@ -117,12 +117,50 @@ def check_agent_guide(errors, text=None, counts=None):
             errors.append(f"{where}: '{description}' says {found[0]}, the code has {value}")
 
 
+SKILLS_DIR = ROOT / ".agents" / "skills"
+
+
+def scene_catalog_tools():
+    """Return the sim/assets packs' MCP names when their catalogs are present."""
+    result = {}
+    for prefix, filename in (("sim__", "sim.json"), ("assets__", "assets.json")):
+        path = ROOT / "mcp" / "isaac_mcp" / "catalogs" / filename
+        if not path.is_file():
+            continue
+        tools = json.loads(path.read_text()).get("tools", {})
+        result[prefix] = {name.replace(".", "__") for name in tools}
+    return result
+
+
+def check_skill_tool_names(errors, expected=None, files=None):
+    """Every registered tool name a skill mentions must exist in the registry."""
+    expected = expected or expected_tools()
+    registered = {"isaaclab__": expected["docs/TOOLS-ISAACLAB.md"],
+                  "ur5e_dt__": expected["docs/TOOLS-UR5E.md"]}
+    scene = scene_catalog_tools()
+    if "sim__" in scene:
+        registered["sim__"] = {
+            name for name in expected.get("docs/TOOLS-HOST.md", set())
+            if name.startswith("sim__")
+        } | scene["sim__"]
+    if "assets__" in scene:
+        registered["assets__"] = scene["assets__"]
+    for path in files if files is not None else sorted(SKILLS_DIR.rglob("*.md")):
+        text = path.read_text()
+        for prefix, names in registered.items():
+            # A trailing `*` marks a family (`ur5e_dt__quick_start*`): it must prefix a real tool.
+            for name, star in re.findall(r"\b(" + prefix + r"[a-z][a-z0-9_]*)(\*?)", text):
+                if name in names or (star and any(n.startswith(name) for n in names)):
+                    continue
+                errors.append(f"{path.relative_to(ROOT)}: names not in registry: {name}{star}")
+
+
 def main():
     from check_private_paths import check_tracked
 
     errors = check_tracked(ROOT)
     files = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md")),
-             *sorted((ROOT / "mcp/docs").glob("*.md"))]
+             *sorted((ROOT / "mcp/docs").glob("*.md")), *sorted(SKILLS_DIR.rglob("*.md"))]
     for path in files:
         text = path.read_text()
         for link in re.findall(r"\]\(([^)]+)\)", text):
@@ -148,12 +186,14 @@ def main():
             stale = sorted(found - expected)
             if stale:
                 errors.append(f"{filename}: names not in registry: {', '.join(stale)}")
+    check_skill_tool_names(errors)
     check_agent_guide(errors)
     for error in errors:
         print(f"FAIL: {error}")
     if errors:
         return 1
-    print(f"Documentation checks passed ({len(files)} files; links, JSON, registered tool names and guide counts).")
+    print(f"Documentation checks passed ({len(files)} files; links, JSON, registered tool names, "
+          "skill tool names and guide counts).")
     return 0
 
 
