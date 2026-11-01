@@ -181,3 +181,75 @@ def test_manifest_is_complete_and_fetch_targets_are_absent():
         assert sources[target] == source
     for entry in manifest.get("manual", []):
         assert entry["target"] not in sources
+
+
+def test_operator_drop_in_is_used_without_hash_check(monkeypatch, tmp_path):
+    """A licensed copy from another Isaac release must not be refused as corrupt."""
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(cache))
+    module = load_module()
+    fake_manifest(module, tmp_path)
+    module.ASSETS_DIR = tmp_path / "assets"
+    drop_in = module.ASSETS_DIR / "robot" / "test.usd"
+    drop_in.parent.mkdir(parents=True)
+    drop_in.write_bytes(b"operator copy from Isaac 6.2")
+    assert module.resolve_uri("robot/test.usd") == drop_in.as_uri()
+    assert module.resolve_path("robot/test.usd") == drop_in
+
+
+def group_manifest(module, tmp_path, root=b"root", layer=b"layer"):
+    """A two-file fetch group: a root USD and a sublayer it references."""
+    data = {
+        "version": 1,
+        "asset_root": "https://example.invalid/Assets/Isaac/5.1",
+        "remote": {"robot/test.usd": "Isaac/Robots/Test/test.usd"},
+        "fetch": [{"id": "test", "files": [
+            {"target": "robot/test.usd", "source": "Isaac/Robots/Test/test.usd",
+             "sha256": hashlib.sha256(root).hexdigest(), "size": len(root)},
+            {"target": "robot/configuration/base.usd",
+             "source": "Isaac/Robots/Test/configuration/base.usd",
+             "sha256": hashlib.sha256(layer).hexdigest(), "size": len(layer)},
+        ]}],
+    }
+    path = tmp_path / "assets-manifest.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    module.MANIFEST_PATH = path
+    module.ASSETS_DIR = tmp_path / "no-drop-ins"
+
+
+def write(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def test_cached_root_checks_its_sublayers(monkeypatch, tmp_path):
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(cache))
+    module = load_module()
+    group_manifest(module, tmp_path)
+    write(cache / "robot" / "test.usd", b"root")
+    write(cache / "robot" / "configuration" / "base.usd", b"LAYER")  # same size, wrong bytes
+    with pytest.raises(module.AssetCorrupt) as excinfo:
+        module.resolve_uri("robot/test.usd")
+    assert "robot/configuration/base.usd" in str(excinfo.value)
+
+
+def test_cached_root_with_missing_sublayer_is_refused(monkeypatch, tmp_path):
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(cache))
+    module = load_module()
+    group_manifest(module, tmp_path)
+    write(cache / "robot" / "test.usd", b"root")
+    with pytest.raises(module.AssetMissing) as excinfo:
+        module.resolve_uri("robot/test.usd")
+    assert "robot/configuration/base.usd" in str(excinfo.value)
+
+
+def test_complete_cached_group_resolves(monkeypatch, tmp_path):
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(cache))
+    module = load_module()
+    group_manifest(module, tmp_path)
+    write(cache / "robot" / "test.usd", b"root")
+    write(cache / "robot" / "configuration" / "base.usd", b"layer")
+    assert module.resolve_uri("robot/test.usd") == (cache / "robot" / "test.usd").as_uri()

@@ -5,10 +5,14 @@ The twin ships only assets whose licences permit redistribution (see
 Vention bench are resolved in this order:
 
 1. ``exts/ur5e-dt/assets/<path>`` — a local drop-in.  The excluded paths are
-   git-ignored, so an operator can place their own licensed copy here.
+   git-ignored, so an operator can place their own licensed copy here.  A
+   drop-in is used as-is: it may come from another Isaac Sim release, so it is
+   not compared with the manifest hashes.
 2. ``$UR5E_DT_ASSET_CACHE`` (default ``~/.cache/ur5e-dt/assets``) — populated
-   by ``scripts/fetch_ur5e_assets.py`` for offline runs.  Files listed in the
-   manifest are checked against their recorded size and SHA-256 before use.
+   by ``scripts/fetch_ur5e_assets.py`` for offline runs.  A cached file listed
+   in the manifest, and every cached file of the same fetch group (for the
+   robot, its ``configuration/`` sublayers), is checked against its recorded
+   size and SHA-256 before use.
 3. The pinned NVIDIA asset root for entries listed under ``remote`` in
    ``assets-manifest.json``.
 
@@ -131,6 +135,23 @@ def find_local(relpath: str) -> Path | None:
     return None
 
 
+def _from_cache(path: Path) -> bool:
+    """True when *path* is the operator cache's copy rather than a drop-in."""
+    try:
+        path.resolve().relative_to(cache_dir())
+    except ValueError:
+        return False
+    return True
+
+
+def fetch_group(relpath: str) -> dict | None:
+    """Return the manifest fetch group that contains *relpath*, if any."""
+    for group in manifest().get("fetch", []):
+        if any(entry.get("target") == relpath for entry in group.get("files", [])):
+            return group
+    return None
+
+
 def expected_asset(relpath: str) -> dict | None:
     """Return the manifest fetch entry for *relpath*, if one exists."""
     for group in manifest().get("fetch", []):
@@ -149,8 +170,31 @@ def _sha256(path: Path) -> str:
 
 
 def verify_local(relpath: str, path: Path) -> None:
-    """Check a manifest-tracked local file against its recorded hash and size."""
-    entry = expected_asset(relpath)
+    """Check a cached, manifest-tracked file and its fetch group before use.
+
+    Drop-ins under ``exts/ur5e-dt/assets`` are the operator's own copies and are
+    not compared with the manifest.  For a cached file, every other file of the
+    same fetch group must be cached and intact too, because USD loads the
+    group's sublayers from the cache without asking this module.
+    """
+    if not _from_cache(path):
+        return
+    group = fetch_group(relpath)
+    if group is None:
+        return
+    for entry in group.get("files", []):
+        target = entry.get("target")
+        if target == relpath:
+            continue
+        sibling = cache_dir() / target
+        if not sibling.is_file():
+            raise AssetMissing(target, offline=offline())
+        _verify_entry(target, sibling, entry)
+    _verify_entry(relpath, path, expected_asset(relpath))
+
+
+def _verify_entry(relpath: str, path: Path, entry: dict | None) -> None:
+    """Compare one file with its manifest size and SHA-256."""
     if not entry:
         return
     expected_size = entry.get("size")

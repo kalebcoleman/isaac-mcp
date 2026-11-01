@@ -157,7 +157,8 @@ Add:
 
 ## Fetch-on-demand design
 
-The twin runs inside Isaac Sim, so the operator already has a licensed copy of every NVIDIA asset.
+The twin runs inside Isaac Sim, whose licence already lets the operator use NVIDIA's asset library,
+online or from a local mirror. The twin only needs to reference or fetch those files, not ship them.
 `exts/ur5e-dt/ur5e_dt/asset_cache.py` resolves an asset in this order:
 
 1. **Bundled** — `exts/ur5e-dt/assets/<path>`, for the redistributable files.
