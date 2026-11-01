@@ -92,7 +92,8 @@ authorization and with GPU capacity available. On a single GPU, a running Kit ap
 training job can contend for GPU memory. This pack does not evict or stop a sim; it only
 refuses to start (see [Concurrency guards](#concurrency-guards)) unless the caller passes the
 override flags. `headless=true` is the default for `train`/`eval` to avoid a second
-renderer; `play` defaults to `headless=false` and opens a window. No actual training run is
+renderer for ordinary jobs; adding `--video` requires rendering even headlessly.
+`play` defaults to `headless=false` and opens a window. No actual training run is
 required or performed by this documentation.
 
 ### Environment variables (summary)
@@ -171,7 +172,7 @@ required or performed by this documentation.
   | `max_iterations` | integer | no | `null` | |
   | `seed` | integer | no | `null` | |
   | `device` | string | no | `null` | Sets `CUDA_VISIBLE_DEVICES` when not `cpu`. |
-  | `headless` | boolean | no | `true` | `true` → `--viz none`; `false` → `--viz kit`. |
+  | `headless` | boolean | no | `true` | No window. Normally `--viz none`; `--video` selects Kit with child-only `HEADLESS=1`. `false` selects Kit with `HEADLESS=0`. |
   | `checkpoint` | string | no | `null` | Path to resume from (must be under allowed roots). |
   | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. |
   | `extra_args` | array[string] | no | `null` | Validated flags/Hydra overrides. |
@@ -439,7 +440,22 @@ Historical verification includes:
   environment".
 - Job guards (job-vs-job, Kit-bridge, release after cancel) behaved as documented on the
   RTX 5080 (2026-10-30); four bugs were fixed in that pass.
-- Isaac Lab 3 has no `--headless` flag: headless jobs pass `--viz none`, windowed `--viz kit`.
+- Isaac Lab 3 has no `--headless` flag. Ordinary headless jobs pass `--viz none`.
+  With `extra_args=["--video", "--video_length=60"]`, headless jobs use `--viz kit`
+  and child-only `HEADLESS=1` so the renderer can produce frames without a window.
+  Windowed jobs select Kit and `HEADLESS=0`. These settings do not change the host
+  environment or another job. One explicit `--viz=VALUE` or `--visualizer=VALUE`
+  extra argument overrides the generated selection and is forwarded once, with a
+  response hint. Non-Kit visualizers retain their own Lab display configuration.
+  Duplicate/missing visualizer values and explicit `--viz=none` with `--video`
+  are refused before launch; other invalid backend choices fail in the job log.
+- Lab's optional video dependencies belong in the **Lab interpreter**, not just
+  the MCP host. The inspected Lab 3 launcher requires MoviePy 1.x
+  (`moviepy>=1.0.3,<2.0.0.dev0`) and `imageio-ffmpeg` for `--video`. They are not
+  required for plain headless training. Use the Lab checkout's documented `video`
+  extra or install these into a separate Lab environment; `install.sh --no-sim`
+  does not install or repair that environment. A job can start successfully and
+  later fail for a missing dependency; inspect `runs_status` and `runs_tail`.
   The RL backend is chosen with `--rl_library` (else the task default); `--num_episodes` was
   dropped because only the rlinf backend has it. `extra_args` accepts flags and Hydra
   overrides; rl_games needs `minibatch_size` to divide `num_envs * 24`.

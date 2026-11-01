@@ -8,12 +8,15 @@ Chosen Isaac Lab entry scripts and flags (relative to the resolved
 ``isaaclab_root``):
   * train:  scripts/reinforcement_learning/train.py
       flags: --task, --num_envs, --max_iterations, --seed, --checkpoint,
-             --device (launcher), --headless (launcher), plus validated extra_args
+             --device (launcher), --viz none|kit, plus validated extra_args
   * eval:   scripts/reinforcement_learning/play.py  (Isaac Lab has no separate
             eval entrypoint; play.py with --checkpoint is the eval path)
       flags: --task, --checkpoint, --num_envs, --rl_library, --viz none|kit (no --headless flag in Isaac Lab 3; picks the RL backend with --rl_library, else the task default; no per-backend --num_episodes)
   * play:   scripts/reinforcement_learning/play.py
-      flags: --task, --checkpoint, --num_envs, --headless (only when true)
+      flags: --task, --checkpoint, --num_envs, --viz none|kit
+
+Headless video needs a renderer, not ``--viz none``. It selects Kit with the
+documented child-only ``HEADLESS=1`` setting; normal headless jobs use no visualizer.
 
 Jobs are launched with ``shell=False`` and an explicit argv list, with
 ``start_new_session=True`` so the whole process group can be signalled.
@@ -104,6 +107,23 @@ def _validate_extra_args(extra_args) -> list[str]:
             raise ValueError(f"invalid extra_arg: {a!r}")
         out.append(a)
     return list(out)
+
+
+def _visualizer_args(headless: bool, extras: list[str]) -> list[str]:
+    # Lab 3 rejects --video with --viz none. HEADLESS in the child environment
+    # keeps the selected Kit renderer windowless, including for configured tasks.
+    explicit = [arg for arg in extras if arg.split('=', 1)[0] in ('--viz', '--visualizer')]
+    if len(explicit) > 1:
+        raise ValueError('supply only one explicit --viz= or --visualizer= override')
+    if explicit:
+        if '=' not in explicit[0] or not explicit[0].split('=', 1)[1]:
+            raise ValueError('extra_args visualizer override must use --viz=VALUE or --visualizer=VALUE')
+        if explicit[0].split('=', 1)[1] == 'none' and '--video' in extras:
+            raise ValueError('--video requires a capture-capable visualizer; remove the explicit --viz=none override')
+        # Preserve the existing explicit override, once, without a conflicting
+        # generated argument. Other backends retain their own Lab configuration.
+        return []
+    return ["--viz", "none" if headless and "--video" not in extras else "kit"]
 
 
 def _under(path: Path, root: Path) -> bool:
@@ -481,6 +501,7 @@ def _start_job_locked(
     extra_validated: list[str] | None = None,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
+    headless: bool | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     if not allow_concurrent:
@@ -513,6 +534,10 @@ def _start_job_locked(
     stdout_f = open(stdout_path, "wb")
     stderr_f = open(stderr_path, "wb")
     env = _child_env(root_path, device)
+    if headless is not None:
+        # A tool's explicit display choice wins over an inherited shell setting.
+        # Do not mutate os.environ or another job's launch configuration.
+        env["HEADLESS"] = "1" if headless else "0"
     if task_modules:
         env["ISAACLAB_TASK_MODULES"] = ",".join(task_modules)
         env["PYTHONPATH"] = os.pathsep.join(task_paths + [env["PYTHONPATH"]])
@@ -589,12 +614,12 @@ def train(
         argv += ["--checkpoint", ckpt]
     if device is not None:
         argv += ["--device", str(device)]
-    # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
-    argv += ["--viz", "none" if headless else "kit"]
+    argv += _visualizer_args(headless, extras)
     argv += extras
     return _start_job(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+        headless=headless,
     )
 
 
@@ -622,11 +647,11 @@ def eval_(
         argv += ["--rl_library", lib]
     if num_envs is not None:
         argv += ["--num_envs", str(num_envs)]
-    # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
-    argv += ["--viz", "none" if headless else "kit"]
+    argv += _visualizer_args(headless, extras)
     argv += extras
     return _start_job(python, root, "eval", task, argv, timeout_s=timeout_s,
-                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
+                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+                      headless=headless)
 
 
 def play(
@@ -651,11 +676,11 @@ def play(
     argv: list[str] = ["--task", task, "--checkpoint", ckpt, "--num_envs", str(num_envs)]
     if lib:
         argv += ["--rl_library", lib]
-    # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
-    argv += ["--viz", "none" if headless else "kit"]
+    argv += _visualizer_args(headless, extras)
     argv += extras
     return _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
-                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
+                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+                      headless=headless)
 
 
 def runs_list(state: str | None = None) -> dict[str, Any]:

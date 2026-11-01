@@ -50,7 +50,15 @@ def _launch(fn: Callable[..., Any], **kwargs: Any) -> str:
 
     def run() -> dict:
         out = fn(python=inst["python"], root=inst["isaaclab_root"], **kwargs)
-        if kwargs.get("headless") is False:
+        overrides = [arg for arg in kwargs.get("extra_args") or []
+                     if isinstance(arg, str) and arg.split('=', 1)[0] in ('--viz', '--visualizer')]
+        if overrides:
+            out["hint"] = (
+                "The explicit visualizer override is forwarded once. headless controls Kit's HEADLESS "
+                "setting; non-Kit visualizers use their own Lab configuration. Inspect runs_status/window "
+                "and runs_tail for the actual display and startup result."
+            )
+        elif kwargs.get("headless") is False:
             out["hint"] = _WINDOW_HINT
         return out
 
@@ -92,6 +100,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
     ) -> str:
         """Start a training job and return its job_id immediately; follow it with isaaclab__runs_status/tail.
 
+        headless=True with extra_args=['--video'] keeps a Kit renderer without a window;
+        video needs optional MoviePy/imageio-ffmpeg in the Lab interpreter.
         allow_concurrent: start even if another job is running (a 16 GB GPU normally fits one).
         allow_concurrent_gpu: start even if an Isaac Sim (Kit bridge) app is running on the GPU.
         """
@@ -116,6 +126,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
     ) -> str:
         """Run a policy checkpoint (headless by default) as a job and return its job_id.
 
+        headless=True with extra_args=['--video'] keeps a Kit renderer without a window;
+        video needs optional MoviePy/imageio-ffmpeg in the Lab interpreter.
         allow_concurrent: start even if another job is running (a 16 GB GPU normally fits one).
         allow_concurrent_gpu: start even if an Isaac Sim (Kit bridge) app is running on the GPU.
         """
@@ -140,6 +152,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
     ) -> str:
         """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel.
 
+        headless=True with extra_args=['--video'] keeps a Kit renderer without a window;
+        video needs optional MoviePy/imageio-ffmpeg in the Lab interpreter.
         allow_concurrent: start even if another job is running (a 16 GB GPU normally fits one).
         allow_concurrent_gpu: start even if an Isaac Sim (Kit bridge) app is running on the GPU.
         """

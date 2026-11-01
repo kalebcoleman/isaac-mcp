@@ -31,6 +31,56 @@ def make_fake_python(tmp_path: Path) -> Path:
     return p
 
 
+@pytest.mark.parametrize('tool', ['train', 'eval_', 'play'])
+@pytest.mark.parametrize('headless,extras,visualizer', [
+    (True, [], 'none'), (True, ['--video'], 'kit'),
+    (True, ['--video_length=60'], 'none'), (False, ['--video'], 'kit'),
+])
+def test_job_display_choice_is_child_local_and_video_keeps_renderer(
+        tmp_path, monkeypatch, tool, headless, extras, visualizer):
+    import json
+
+    root = tmp_path / 'lab'
+    root.mkdir()
+    checkpoint = root / 'model.pt'
+    checkpoint.write_bytes(b'fixture')
+    fake_py = make_fake_python(tmp_path)
+    fake_py.write_text('#!/usr/bin/env python3\nimport json,os,sys\n'
+                       'print(json.dumps({"headless":os.environ.get("HEADLESS"), "argv":sys.argv[1:]}))\n')
+    monkeypatch.setenv('HEADLESS', '0' if headless else '1')
+    args = dict(python=str(fake_py), root=str(root), task='T', headless=headless,
+                extra_args=extras, allow_concurrent_gpu=True)
+    if tool != 'train':
+        args['checkpoint'] = str(checkpoint)
+    result = getattr(jobs, tool)(**args)
+    assert wait_for_status(result['job_id'], 'succeeded') == 'succeeded'
+    payload = json.loads(jobs.runs_tail(result['job_id'])['lines'][-1])
+    assert payload['headless'] == ('1' if headless else '0')
+    assert payload['argv'][payload['argv'].index('--viz') + 1] == visualizer
+    assert os.environ['HEADLESS'] == ('0' if headless else '1')
+
+
+@pytest.mark.parametrize('headless', [False, True])
+@pytest.mark.parametrize('override', ['--viz=kit', '--visualizer=none', '--viz=newton_gl'])
+def test_explicit_visualizer_is_forwarded_once(tmp_path, monkeypatch, headless, override):
+    captured = {}
+    monkeypatch.setattr(jobs, '_start_job', lambda *a, **kw: captured.update(argv=a[4], **kw) or captured)
+    result = jobs.train(python='python', root=tmp_path, task='T', headless=headless, extra_args=[override])
+    assert result['argv'].count(override) == 1
+    assert '--viz' not in result['argv']
+    assert result['headless'] is headless
+
+
+@pytest.mark.parametrize('extras', [
+    ['--viz'], ['--visualizer='], ['--viz=kit', '--visualizer=none'],
+    ['--video', '--viz=none'], ['--video', '--visualizer=none'],
+])
+def test_ambiguous_or_incompatible_visualizer_is_refused_before_launch(monkeypatch, extras):
+    monkeypatch.setattr(jobs, '_start_job', lambda *a, **kw: pytest.fail('must not launch'))
+    with pytest.raises(ValueError, match='visualizer|viz'):
+        jobs.train(python='python', root='lab', task='T', extra_args=extras)
+
+
 @pytest.fixture(autouse=True)
 def isolated_jobs(tmp_path, monkeypatch):
     jd = tmp_path / "jobs"
