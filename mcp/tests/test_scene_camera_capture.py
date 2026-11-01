@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-from sim_tools.camera_capture import Readback, capture
+from sim_tools.camera_capture import Readback, RenderFrames, capture, wait_for_frames
 from isaac_mcp.project_assets import AssetError
 
 
@@ -23,7 +23,7 @@ def native(monkeypatch):
     calls = []
     texture = SimpleNamespace(
         frame=100,
-        get_frame_info=lambda handle=0: {"frame_number": texture.frame},
+        get_frame_info=lambda handle: {"frame_number": texture.frame},
         get_event_key=lambda: {"texture": 7},
         get_aov_info=lambda *a, **kw: [{"texture": {"rp_resource": "owned-rgb"}}],
     )
@@ -140,6 +140,122 @@ async def test_async_capture_waits_for_cpu_and_releases_subscription(native):
     )
     assert native.reset and len(validations) >= 5 and data.shape == (64, 64, 4)
     assert len(native.calls) == 1
+    assert observation["frame_number_after"] - observation["frame_number_before"] == 4
+    assert (
+        observation["frame_baseline"]
+        == "first completed render observed after this request"
+    )
+
+
+@pytest.mark.anyio
+async def test_cold_texture_is_only_read_during_a_valid_drawable_event(native):
+    event_frame = None
+    real_callback = None
+    original_update = sys.modules["omni.kit.app"].get_app().next_update_async
+
+    def frame_info(handle=0):
+        # Real Kit 6.2 throws on the former eager, result_handle=0 query.
+        if handle == 0:
+            raise RuntimeError("IHydraTexture::getFrameData for 0 failed")
+        assert handle == event_frame, "result handles must not escape their event"
+        return {"frame_number": handle}
+
+    native.texture.get_frame_info = frame_info
+
+    async def update():
+        nonlocal real_callback
+        if real_callback is None:
+            real_callback = native.callback
+
+            def callback(event):
+                nonlocal event_frame
+                event_frame = event["result_handle"]
+                try:
+                    real_callback(event)
+                finally:
+                    event_frame = None
+
+            native.callback = callback
+        await original_update()
+
+    sys.modules["omni.kit.app"].get_app = lambda: SimpleNamespace(next_update_async=update)
+    data, observation = await capture(native.sensor, lambda: None)
+    assert data.shape == (64, 64, 4)
+    assert observation["frame_number_before"] == 101
+    assert observation["frame_number_after"] == 105
+    assert native.reset and len(native.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_no_completed_render_times_out_without_reading_a_native_result(native):
+    native.texture.get_frame_info = lambda *a: pytest.fail("No frame exists")
+
+    async def update():
+        await asyncio.sleep(0)
+
+    sys.modules["omni.kit.app"].get_app = lambda: SimpleNamespace(next_update_async=update)
+    with pytest.raises(AssetError) as error:
+        await capture(native.sensor, lambda: None, timeout=0.01)
+    assert error.value.code == "RENDER_TIMEOUT"
+    assert native.reset and not native.calls
+
+
+@pytest.mark.anyio
+async def test_native_event_errors_are_not_retried_or_hidden(native):
+    def broken(handle):
+        raise RuntimeError("native frame failure")
+
+    native.texture.get_frame_info = broken
+    with pytest.raises(RuntimeError, match="native frame failure"):
+        await capture(native.sensor, lambda: None)
+    assert native.reset and not native.calls
+
+
+def test_frame_sequence_ignores_empty_handles_and_duplicate_completions(native):
+    handles = []
+
+    def read(handle):
+        handles.append(handle)
+        return {"frame_number": handle}
+
+    native.texture.get_frame_info = read
+    state = RenderFrames(native.texture)
+    for handle in [0, 8, 8, 0, 9, 9]:
+        state.observe({"result_handle": handle})
+    assert handles == [8, 8, 9, 9]
+    assert state.before == 8 and state.after == 9 and state.frames == 1
+
+
+@pytest.mark.anyio
+async def test_lidar_wait_uses_live_render_events_without_cpu_capture(native):
+    validations = []
+    observed = await wait_for_frames(native.texture, lambda: validations.append(True))
+    assert observed["frame_number_before"] == 101
+    assert observed["frame_number_after"] == 102
+    assert observed["completed_frames_observed"] == 1
+    assert native.reset and not native.calls and len(validations) >= 2
+
+
+@pytest.mark.anyio
+async def test_lidar_render_wait_timeout_releases_subscription(native):
+    async def update():
+        await asyncio.sleep(0)
+
+    sys.modules["omni.kit.app"].get_app = lambda: SimpleNamespace(next_update_async=update)
+    with pytest.raises(AssetError) as error:
+        await wait_for_frames(native.texture, lambda: None, timeout=0.01)
+    assert error.value.code == "RENDER_TIMEOUT"
+    assert native.reset and not native.calls
+
+
+@pytest.mark.anyio
+async def test_lidar_render_wait_target_change_releases_subscription(native):
+    def validate():
+        raise AssetError("STALE_TARGET", "Stage changed")
+
+    with pytest.raises(AssetError) as error:
+        await wait_for_frames(native.texture, validate)
+    assert error.value.code == "STALE_TARGET" and native.reset and not native.calls
 
 
 @pytest.mark.anyio

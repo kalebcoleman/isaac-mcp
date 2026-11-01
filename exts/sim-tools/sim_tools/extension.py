@@ -88,7 +88,6 @@ class Extension(omni.ext.IExt):
     async def _wait_sensor_frame(self, name, args):
         """Observe ordinary rendering without changing timeline or re-entering Kit."""
         from isaac_mcp.project_assets import refuse
-        import asyncio
         import time
 
         s = self.scene
@@ -145,45 +144,19 @@ class Extension(omni.ext.IExt):
                 timeline_time_after=s.timeline.get_current_time(),
             )
             return observation, data
-        before = (texture.get_frame_info() or {}).get("frame_number")
-        after = before
-        required_frames = 1
-        completed = 0
+        from .camera_capture import wait_for_frames
 
-        async def wait_frame():
-            nonlocal after, completed
-            while completed < required_frames:
-                await omni.kit.app.get_app().next_update_async()
-                s.target(args["session_id"], args["stage_id"])
-                if self.advanced.sensors.get(args["path"]) is not entry:
-                    refuse(
-                        "SENSOR_INVALIDATED",
-                        "Sensor was released while waiting for render.",
-                    )
-                frame = (texture.get_frame_info() or {}).get("frame_number")
-                if frame is not None and frame != after:
-                    completed += 1
-                    after = frame
-            # Annotators run after rendering. Yield an ordinary update for their
-            # postprocess dispatch; do not drive the Replicator orchestrator.
-            await omni.kit.app.get_app().next_update_async()
+        def validate_lidar():
+            s.target(args["session_id"], args["stage_id"])
+            if self.advanced.sensors.get(args["path"]) is not entry:
+                refuse("SENSOR_INVALIDATED", "Sensor changed while waiting for render.")
 
-        try:
-            await asyncio.wait_for(wait_frame(), timeout=5)
-        except asyncio.TimeoutError:
-            refuse(
-                "RENDER_TIMEOUT",
-                "Render/readback warm-up did not complete within five seconds. Check rendering is enabled; wait_for_render=false reads the latest frame explicitly, which can be stale.",
-            )
-        s.target(args["session_id"], args["stage_id"])
-        if self.advanced.sensors.get(args["path"]) is not entry:
-            refuse("SENSOR_INVALIDATED", "Sensor changed while waiting for render.")
+        observation = await wait_for_frames(texture, validate_lidar)
+        validate_lidar()
         return {
             "waited": True,
             "render_product": entry[1]["product_path"],
-            "frame_number_before": before,
-            "frame_number_after": after,
-            "completed_frames_observed": completed,
+            **observation,
             "wait_seconds": time.monotonic() - begin,
             "timeline_time_before": timeline_before,
             "timeline_time_after": s.timeline.get_current_time(),

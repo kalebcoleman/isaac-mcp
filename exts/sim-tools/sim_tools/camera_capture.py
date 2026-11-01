@@ -11,19 +11,104 @@ import time
 from isaac_mcp.project_assets import refuse
 
 
-class Readback:
+class RenderFrames:
+    """Frame numbers copied only while their owned drawable event is alive."""
+
+    def __init__(self, texture):
+        self.texture = texture
+        self.before = None
+        self.after = None
+        self.frames = 0
+
+    def observe(self, event):
+        handle = event["result_handle"]
+        if not handle:
+            return False
+        frame = (self.texture.get_frame_info(handle) or {}).get("frame_number")
+        if frame is None or frame == self.after:
+            return False
+        if self.before is None:
+            self.before = self.after = frame
+            return False
+        self.after = frame
+        self.frames += 1
+        return True
+
+    def observation(self):
+        return dict(
+            frame_number_before=self.before,
+            frame_number_after=self.after,
+            frame_baseline="first completed render observed after this request",
+            completed_frames_observed=self.frames,
+        )
+
+
+async def wait_for_frames(texture, validate, timeout=5):
+    """LiDAR render warm-up; this does not establish a new accumulated scan."""
+    try:
+        import omni.hydratexture as ht
+        import omni.kit.app
+        from carb.eventdispatcher import get_eventdispatcher
+
+        state = RenderFrames(texture)
+        error = None
+        active = True
+
+        def drawable(event):
+            nonlocal error
+            if active and error is None:
+                try:
+                    state.observe(event)
+                except Exception as exc:
+                    error = exc
+
+        subscription = get_eventdispatcher().observe_event(
+            observer_name="IsaacMCP.SensorRenderWait",
+            event_name=ht.GLOBAL_EVENT_DRAWABLE_CHANGED,
+            on_event=drawable,
+            filter=texture.get_event_key(),
+        )
+    except (ImportError, AttributeError) as exc:
+        refuse("SENSOR_API_UNAVAILABLE", "Render completion events unavailable: " + str(exc))
+
+    async def wait():
+        # Yield for post-render annotator dispatch even when the event already
+        # arrived. Never drive rendering, Play, or a nested application update.
+        while True:
+            await omni.kit.app.get_app().next_update_async()
+            validate()
+            if error is not None:
+                raise error
+            if state.frames:
+                return state.observation()
+
+    try:
+        return await asyncio.wait_for(wait(), timeout)
+    except asyncio.TimeoutError:
+        refuse(
+            "RENDER_TIMEOUT",
+            "Render warm-up did not complete within five seconds. Check rendering is enabled; no completed scan is implied by this wait.",
+        )
+    finally:
+        active = False
+        state.texture = None
+        subscription.reset()
+
+
+class Readback(RenderFrames):
     """One bounded native request; late callbacks cannot publish stale data."""
 
     def __init__(self, texture, resolution, renderer, convert, loop):
-        self.texture = texture
+        super().__init__(texture)
         self.resolution = resolution
         self.renderer = renderer
         self.convert = convert
         self.loop = loop
         self.future = loop.create_future()
-        self.before = (texture.get_frame_info() or {}).get("frame_number")
-        self.after = self.before
-        self.frames = 0
+        # A new texture has no render result yet. get_frame_info(0) throws
+        # getFrameData on released headless Kit builds instead of returning
+        # an empty dict. Only dereference the result_handle supplied by a
+        # drawable event, while that event is alive (the public API contract).
         self.queued = False
         self.finished = False
         self.active = True
@@ -69,18 +154,14 @@ class Readback:
         if not self.active or self.queued:
             return
         try:
-            handle = event["result_handle"]
-            frame = (self.texture.get_frame_info(handle) or {}).get("frame_number")
-            if frame is None or frame == self.after:
+            if not self.observe(event):
                 return
-            self.after = frame
-            self.frames += 1
             # Drain frames already in flight when the request arrived. Unlike
             # the old wait, the fourth completion schedules a NEW CPU transfer.
             if self.frames < 4:
                 return
             aovs = self.texture.get_aov_info(
-                handle, aov_name="LdrColor", include_texture=True
+                event["result_handle"], aov_name="LdrColor", include_texture=True
             )
             if not aovs:
                 return
@@ -165,9 +246,7 @@ async def capture(sensor, validate, timeout=5):
         return data, dict(
             waited=True,
             render_product=sensor["product_path"],
-            frame_number_before=state.before,
-            frame_number_after=state.after,
-            completed_frames_observed=state.frames,
+            **state.observation(),
             cpu_transfer_completed=True,
             wait_seconds=time.monotonic() - begin,
             meaning="CPU pixels transferred from this product after the requested render completions; not an atomic physics/sensor snapshot",
