@@ -9,7 +9,9 @@ The 6.0 and 6.1 probes used separate, locally resolved environments rather than 
 environment; a clean-install recipe for those builds has not been qualified by this repository. For selection,
 prerequisites, and what is optional, see [Linux setup by build](LINUX-SETUP.md#choose-a-simulator-build).
 See the [test details](evidence/compatibility-2026-10-31.md) and [verification guide](VERIFICATION.md) for the
-environment, results and omissions. Final qualification of the combined candidate remains pending.
+environment, results and omissions. The table preserves the historical smoke scope; newer
+[6.0.0.1 headless qualification](#6001-headless-follow-up-2026-11-01) is recorded separately below.
+Final qualification of the combined candidate across the requested builds and modes remains pending.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
 |---|---|---|
@@ -163,7 +165,51 @@ PR #11 fix `919683337785f3e95972e3ada057b95c57aca7df`: `sim__stage__save` defaul
 `retry_with`, and permits explicit normalization only after the documented association,
 composition, dependency and live-binding checks. Successful exports list
 `omitted_runtime_render_properties`; the original and live stage remain untouched. See
-[save policy and limitations](TOOLS-SCENE.md). Fresh-process live qualification of this implementation
-and the remaining release/mode matrix are **pending**. Preserve the original scene; do not manually
+[save policy and limitations](TOOLS-SCENE.md). The scoped 6.0.0.1 headless follow-up below
+includes save/reopen checks; qualification of the remaining release/mode matrix is **pending**. Preserve the original scene; do not manually
 edit it as an installation step. An already-stale reopened handle can lack a valid native binding
 and must refuse normalization rather than guess.
+
+## 6.0.0.1 headless follow-up (2026-11-01)
+
+The measured source is **`4499bf70c5f06c37cdf928dd1f3d2c29e5abf621`**, tree
+`072f8e689d3b5275c1be134488fa46b8a1c474d1`. This run used package **6.0.0.1**, build
+`6.0.0-rc.59+release.41464.5f2772bc.gl`, Kit `110.1.1+production.305458.6312fa25.gl`,
+**headless PhysX**, on Ubuntu 24.04.5 / RTX 5080 16 GiB / driver 580.178.04.
+It used an existing installation, not a clean-machine setup.
+
+All 14 broad phases returned zero, covering all 39 generic tools, 23 UR5e tools and
+seven bridge built-ins. The full-surface portion recorded 137 calls and 55 effect
+assertions. Separate checks covered 27 reopened sensor captures, 12 cold-camera
+attempts, 23 cache assertions, and 21 save/source-preservation assertions. The
+existing-physics-scene and legacy async-verifier regressions both passed with no new
+error lines in their respective intervals. These counts describe different scopes;
+they must not be added into a single all-feature guarantee.
+
+The earlier `2bbeee4a1eb8ab806be44ca7120cdf599dd923e8` run remains a recorded failure:
+18 camera captures and a LiDAR wall measurement succeeded before explicit Stop stayed
+in native `STOPPING` for minutes and named Play refused with `TIMELINE_BUSY`.
+Private diagnostic native completion restored Play/Pause with unchanged live layer
+hashes; that intervention was not a product pass. The fresh `4499bf7` run exercised
+the integrated explicit-Stop fix and passed the formerly failing sequence. Play was
+not automatically retried.
+
+The native review retained 24 error lines attributed to intentional missing/corrupt
+asset and zero-quaternion refusal tests, 17 illegal-cycle occurrences and 7,748
+simulation-time warning occurrences. No nested-task reentry, `GetCamera` or Force
+callback occurrences were recorded in that review. These observations do not establish
+that all native warnings are harmless or that their upstream causes are fixed.
+
+The video probe decoded 172 frames; visual review inspected only frames 10 and 160.
+The bench, room and arm were visible, with upper-arm/wrist cropping at the diagnostic
+zero pose. This was simulated ROS with Jazzy mock hardware, not a physical robot test.
+
+Provenance: the inspected compact handoff `public-facts-final6001h-4499.json`, recorded
+at `2026-11-01T23:45:17.301641+00:00`, has SHA-256
+`b061066f47fb3122c681fb31dfa527930f7dc877887147f0e5a1e10bcc7698da`.
+Its source records include the run-progress, regression, native-review, full-surface
+and camera/ROS-save summaries. The private reproduction harness, asset outputs and
+curated release index are **not yet published**; this summary is not a publicly
+reproducible bundle. Windowed final review and the complete five-build/mode matrix
+remain pending. Later documentation or bridge-lifecycle commits do not change this
+run's source identity or qualify their new runtime behavior.
