@@ -1,7 +1,7 @@
 # Isaac Sim through isaac-mcp
 
 Read this before calling bridge tools or editing a live stage. Full references are
-`docs/TOOLS-HOST.md` and `docs/TOOLS-UR5E.md` in the isaac-mcp repository.
+`docs/TOOLS-HOST.md`, `docs/TOOLS-UR5E.md` and `docs/TOOLS-SCENE.md` in the isaac-mcp repository.
 
 ## How the pieces connect
 
@@ -26,7 +26,8 @@ processes: screen and Isaac Lab tools working says nothing about the bridge.
 - Endpoint selection order: explicit port, then `UR5E_DT_PORT`, then `ISAAC_MCP_PORT`, then a lone
   advertised bridge. With several bridges, discovery refuses to guess: call `use_bridge`.
 - `use_bridge` lasts until the host restarts. Re-check `status` after switching.
-- Starting another simulator: only when none is advertised and the user wants one. With the
+- Reuse the intended reachable bridge. Start an additional isolated simulator only when the
+  user requested one and resource checks pass. With the
   optional `sim_launch` group, `sim__launch` starts an isolated session (own port, ROS domain,
   output directory) after resource checks; poll `sim__status` until `state` is `running`, then
   `use_bridge` to its port. `sim__stop` needs `expected_pid` and `confirm_discard=true`.
@@ -91,7 +92,8 @@ Rules of thumb:
 ## Generic scene and project assets (`sim__*`, `assets__*`)
 
 The `sim`/`assets` pack is on by default (`run.sh` enables `sim-tools`). `ISAAC_MCP_SCENE_TOOLS=0`
-on the host hides all 37 tools per server; it is a visibility preference, not access control.
+on the host hides all 39 tools (31 `sim`, 8 `assets`) per server; it is a visibility preference,
+not access control.
 
 - Call `sim__stage__info` first. Keep its `session_id` and `stage_id`; every call except discovery
   and stage-info needs them. A `STALE_TARGET` refusal returns `current_target`; resend those IDs
@@ -106,17 +108,32 @@ on the host hides all 37 tools per server; it is a visibility preference, not ac
   `assets__import_usd` / `assets__import_urdf`. Only launch-approved roots are accepted; there is
   no URL input and no untrusted/hostile-USD isolation. Import needs matching units/up-axis, a
   stopped timeline and a free wrapper path.
+  For an absolute USD path under an approved root, use `assets__import_path` with current
+  session/stage IDs. For the twin's workstation cache, `assets__prepare_workstation` prepares
+  a private copy but returns `loaded:false`; follow with `ur5e_dt__load_workstation` and inspect
+  `/World/Vention`. See [the main skill](../SKILL.md) and `docs/TOOLS-SCENE.md` for cache
+  precedence, approved-root setup and dependency limitations.
 - Runtime state: `sim__timeline__control`, `sim__simulation__step` while paused,
   `sim__body__state`, `sim__joints__state` and `sim__joints__command` after physics is initialized.
 - Capture and sensors: `sim__camera__create` / `sim__camera__capture` (RTX), `sim__lidar__*`
   (requires `--motion-bvh`), `sim__viewport__frame`. The default capture waits for fresh render
   completions and a new renderer CPU transfer (`cpu_transfer_completed=true`);
-  `wait_for_render=false` allows a possibly stale Replicator buffer. `NOT_READY` means render
-  warm-up. Saved scenes omit recognized process-bound `/Orchestrator` graphs; re-export older
-  saved scenes and create fresh sensors after reopening.
+  `wait_for_render=false` reads only the last validated tool-acquired CPU cache, with age and
+  acquisition context. An empty cache returns `NOT_READY`: use a default/true capture to seed
+  it. Ordinary Play or waiting more frames does not seed or refresh the cache. Cached pixels
+  may predate Stop/reset or pose edits; sensor/stage teardown clears them. Acquisition commits
+  before PNG publication, so a filename conflict can leave newly acquired pixels cached while
+  the file write fails. Fresh capture's `RENDER_TIMEOUT` instead means render/CPU transfer did
+  not finish within five seconds; inspect rendering and the Kit log. No image or stale fallback
+  is returned. A pending native transfer can cause `RENDER_BUSY` until it completes.
+  LiDAR keeps its separate latest-completed-scan behavior and requires Play for acquisition.
+  Saved scenes omit recognized process-bound `/Orchestrator` graphs; re-export older saved
+  scenes and create fresh sensors after reopening, following the save policy below.
 - `sim__stage__save` writes a new basename; it never overwrites or switches the current stage.
   It omits recognized process-bound `/Orchestrator` and SyntheticData graphs; re-export older
-  saved scenes before camera readout after reopening. `sim__logs__tail` reads the Kit log.
+  saved scenes before camera readout after reopening. ROS camera handles may require the
+  explicit `reset_camera_render_handles` export policy described in [the main skill](../SKILL.md);
+  a successful save still needs fresh-process reopen verification. `sim__logs__tail` reads the Kit log.
 - `sim__controller__*` execute inline Python in a ScriptNode. Use them only with
   `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1` at Kit launch and an explicit user request; this is not a
   sandbox.
