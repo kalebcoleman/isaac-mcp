@@ -485,3 +485,25 @@ def test_save_ros_pipeline_refuses_nonregenerable_or_user_dependency(scene, dama
     assert exc.value.code == "SAVE_UNSUPPORTED"
     assert not (scene.output / "unsafe-ros.usda").exists()
     assert stage.Flatten().ExportToString() == before
+
+
+@pytest.mark.parametrize("settings_path", ["/Render/OmniverseGlobalRenderSettings", "/World/UserSettings"])
+def test_save_removes_only_native_settings_links_to_owned_products(scene, settings_path):
+    stage = scene.stage()
+    owned = "/Render/OmniverseKit/HydraTextures/IsaacMCP_" + "b" * 32
+    user = "/Render/UserProduct"
+    for path in (owned, user):
+        stage.DefinePrim(path, "RenderProduct")
+    settings = stage.DefinePrim(settings_path, "RenderSettings")
+    settings.CreateRelationship("products").SetTargets([owned, user])
+    before = stage.Flatten().ExportToString()
+    if settings_path.startswith("/World/"):
+        with pytest.raises(AssetError, match="Preserved relationship"):
+            scene.save(stage, "user-settings.usda")
+    else:
+        saved = scene.save(stage, "native-settings.usda")
+        reopened = Usd.Stage.Open(saved["file"])
+        assert reopened.GetPrimAtPath(settings_path).GetRelationship("products").GetTargets() == [user]
+        assert reopened.GetPrimAtPath(user)
+        assert not reopened.GetPrimAtPath(owned)
+    assert stage.Flatten().ExportToString() == before

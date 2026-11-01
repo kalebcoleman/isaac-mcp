@@ -683,6 +683,7 @@ def strip_runtime_render_state(layer):
                     return True
         return False
     omitted = []
+    owned_products = set()
     for prim in output.Traverse():
         name = str(prim.GetPath())
         if name == "/Orchestrator":
@@ -738,6 +739,7 @@ def strip_runtime_render_state(layer):
             r"IsaacMCP_[0-9a-f]{32}", prim.GetName()
         ):
             omitted.append(name)
+            owned_products.add(prim.GetPath())
     # A user controller may reference a native graph. Dropping that dependency
     # silently would change its behavior; refuse before publishing the copy.
     omitted_paths = [Sdf.Path(name) for name in omitted]
@@ -755,11 +757,24 @@ def strip_runtime_render_state(layer):
                     "Preserved content connects to process-bound render state; saved copy not published. Live stage preserved.",
                 )
         for relationship in prim.GetRelationships():
-            if any(target.HasPrefix(path) for target in relationship.GetTargets()
-                   for path in omitted_paths):
+            targets = relationship.GetTargets()
+            removed = [target for target in targets
+                       if any(target.HasPrefix(path) for path in omitted_paths)]
+            if not removed:
+                continue
+            if (str(relationship.GetPath()) == "/Render/OmniverseGlobalRenderSettings.products"
+                    and prim.GetTypeName() == "RenderSettings"
+                    and all(target in owned_products for target in removed)):
+                # Kit automatically enrolls every live render product here.
+                # Remove only our omitted handles from the private copy; keep
+                # user products and their order. Other dependencies refuse.
+                relationship.SetTargets([target for target in targets if target not in removed])
+            else:
                 refuse(
                     "SAVE_UNSUPPORTED",
                     "Preserved relationship targets process-bound render state; saved copy not published. Live stage preserved.",
+                    relationship=str(relationship.GetPath()),
+                    targets=[str(target) for target in removed],
                 )
     # Remove deepest paths first. Never edit the live stage or its layers.
     for name in sorted(omitted, key=len, reverse=True):
