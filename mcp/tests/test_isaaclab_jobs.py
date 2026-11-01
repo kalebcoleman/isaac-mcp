@@ -376,3 +376,51 @@ def test_run_dir_from_log_reads_the_absolute_experiment_dir(tmp_path):
     log.write_text("no such line\n")
     assert jobs._run_dir_from_log(log) is None
     assert jobs._run_dir_from_log(tmp_path / "missing.log") is None
+
+
+def test_lab3_separate_root_and_name_with_spaces_and_terminal_colors(tmp_path):
+    log = tmp_path / "stdout.log"
+    log.write_text(
+        "[INFO] Logging experiment in directory: /old/root\n"
+        "\x1b[32m[INFO] Logging experiment in directory: /x/my runs/cartpole\x1b[0m\n"
+        "Exact experiment name requested from command line: 2026-11-01_trial one\n"
+    )
+    assert jobs._run_dir_from_log(log) == "/x/my runs/cartpole/2026-11-01_trial one"
+
+
+@pytest.mark.parametrize("name", ["..", ".", "../outside", "nested/run", "nested\\run", "bad\x00name"])
+def test_relative_experiment_name_cannot_escape_announced_root(tmp_path, name):
+    log = tmp_path / "stdout.log"
+    log.write_text("[INFO] Logging experiment in directory: /x/logs\n"
+                   f"Exact experiment name requested from command line: {name}\n")
+    assert jobs._run_dir_from_log(log) is None
+
+
+def test_basename_requires_an_earlier_root_and_bounded_header(tmp_path):
+    log = tmp_path / "stdout.log"
+    text = "Exact experiment name requested from command line: trial\n"
+    log.write_text(text + "[INFO] Logging experiment in directory: /later/root\n")
+    assert jobs._run_dir_from_log(log) is None
+    log.write_text("x" * 131072 + "\n[INFO] Logging experiment in directory: /x/logs\n" + text)
+    assert jobs._run_dir_from_log(log) is None
+
+
+def test_status_finds_checkpoint_in_lab3_resolved_run_directory(tmp_path):
+    job_id = "20261101-153515-Cartpole"
+    jd = jobs.jobs_dir() / job_id
+    jd.mkdir(parents=True)
+    experiment_root = tmp_path / "logs" / "rsl_rl" / "cartpole"
+    experiment = experiment_root / "2026-11-01_15-35-17"
+    experiment.mkdir(parents=True)
+    checkpoint = experiment / "model_1.pt"
+    checkpoint.write_bytes(b"test checkpoint")
+    (jd / "stdout.log").write_text(
+        f"[INFO] Logging experiment in directory: {experiment_root}\n"
+        f"Exact experiment name requested from command line: {experiment.name}\n"
+    )
+    jobs._write_job(jd, {"status": "succeeded", "exit_code": 0,
+                         "run_dir": str(jd), "log_dir": str(jd)})
+    result = jobs.runs_status(job_id)
+    assert result["run_dir"] == str(experiment)
+    assert result["latest_checkpoint"] == str(checkpoint.resolve())
+    assert result["state"] == "succeeded"

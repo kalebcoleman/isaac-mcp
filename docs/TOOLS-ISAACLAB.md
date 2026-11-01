@@ -236,7 +236,7 @@ required or performed by this documentation.
   | `job_id` | string | yes | — | Validated id. |
 - Returns:
   `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, log_dir, pid}`
-  plus `window: {id, title, width, height}` when the job is live and owns a window. `last_log_lines` is the last 20 lines of `stdout.log`. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log).
+  plus `window: {id, title, width, height}` when the job is live and owns a window. `last_log_lines` is the last 20 lines of `stdout.log`. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
 - Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10"}`
 
 ### `isaaclab__runs_tail`
