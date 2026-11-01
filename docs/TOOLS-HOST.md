@@ -1,7 +1,8 @@
 # Host and bridge tools
 
 The host `isaac-mcp` process speaks MCP to the client. It provides the gateway and desktop tools below even when
-Kit is disconnected. The seven bridge built-ins are discovered from a running Kit bridge; they can be hidden from
+Kit is disconnected. The 23 UR5e tools are also listed from a packaged catalog, even with Kit down; a live twin
+bridge is required to execute them. The seven bridge built-ins are discovered from a running Kit bridge; they can be hidden from
 the host's MCP list with `ISAAC_MCP_BUILTINS=0`. Other packs are documented in the [UR5e](TOOLS-UR5E.md) and
 [Isaac Lab](TOOLS-ISAACLAB.md) references.
 
@@ -10,7 +11,7 @@ client; these objects are not standalone shell commands or complete MCP protocol
 
 ## Connect and discover
 
-Start a compatible Kit application with its bridge enabled. For the supplied twin, `./run.sh --ur5e-dt --headless` starts the
+Start a compatible Kit application with its bridge enabled. For the supplied twin, `./run.sh --headless` starts the
 bridge on port 8766 by default. The host chooses an explicit port first, then `UR5E_DT_PORT`, then
 `ISAAC_MCP_PORT`; otherwise it discovers an unambiguous advertised bridge. Discovery can fail if there are no live
 bridges or several candidates. The host and the Kit app are separate processes: screen tools can work while the
@@ -18,7 +19,7 @@ bridge is unavailable.
 
 | MCP tool | Arguments | Use and effects |
 |---|---|---|
-| `refresh_tools` | none | Rediscover the selected bridge's registry after a bridge starts or a module changes. Adds or updates visible tools and removes tools no longer advertised. A failed or malformed discovery, or a collision between bridge tool names or with a host tool, leaves the existing list intact. The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after a refresh that changed the list; a client that ignores the notification still needs a reconnect (or `python -m isaac_mcp.client list_tools`). |
+| `refresh_tools` | none | Rediscover the selected bridge's registry after a bridge starts or a module changes. Adds or updates visible tools and removes tools no longer advertised; catalog-listed tools remain visible as proxies. A failed or malformed discovery, or a collision between bridge tool names or with a host tool, leaves the existing list intact. The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after a refresh that changed the list; a client that ignores the notification still needs a reconnect (or `python -m isaac_mcp.client list_tools`). |
 | `use_bridge` | `port` (integer, required) | Connect to a different bridge on that port, report its identity, and replace the previously discovered bridge tools. The choice lasts until the host server restarts. Sends `notifications/tools/list_changed` after replacing the tools. |
 
 For a bridge already connected, `status` verifies its PID, port, app version and other identity data; `list_bridges`
@@ -27,9 +28,9 @@ enabled and a bridge is reachable; `python -m isaac_mcp.client --list-bridges` w
 `{}` and `refresh_tools` with `{}`. Switching targets changes the selected simulation; verify the result before
 issuing scene-changing commands.
 
-A client that lists only the host and Isaac Lab tools may simply not have run `refresh_tools` since Kit started, or
-`ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may be hiding bridge tools (including `status` and `list_bridges`), so
-call `refresh_tools` and verify with the CLI below before concluding that no bridge exists or starting another Kit.
+Catalog-listed twin tools alone do not prove a live bridge is available. The client may have connected before Kit
+started, or `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may hide bridge tools (including `status` and
+`list_bridges`). Call `refresh_tools` and verify with the CLI below before starting another Kit.
 
 The bridge also has an internal `list_tools` discovery operation. It is intentionally hidden from the bridge's own
 advertised tool list, so it is not normally a dynamically registered MCP tool. Ask the MCP client to list tools, or
@@ -176,7 +177,7 @@ creates files, and can affect the GPU and network. All four tools have conservat
 
 | MCP tool | Arguments | Use |
 |---|---|---|
-| `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false`, `ur5e_dt=false` | Start a new process with a local bridge, chosen ROS domain and separate output/log and persistent Kit settings. Set `ur5e_dt=true` to load the twin panel and its 23 tools. Returns a session ID and PID before the bridge is ready. |
+| `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false`, `show_ur5e_panel=false` | Start a new process with a local bridge, UR5e tools, chosen ROS domain and separate output/log and persistent Kit settings. Set `show_ur5e_panel=true` to show the panel in a graphical session. Returns a session ID and PID before the bridge is ready. |
 | `sim__list` | none | List managed sessions, including those started by an earlier server process. |
 | `sim__status` | `session_id` | Check the original PID's identity, bridge PID/readiness and current memory snapshot. |
 | `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. |
@@ -184,8 +185,8 @@ creates files, and can affect the GPU and network. All four tools have conservat
 Example calls: `sim__launch` with `{"port":18766,"ros_domain":42}`, then `sim__status` with
 `{"session_id":"<id returned by launch>"}`. Wait until `state` is `running`, select that port with `use_bridge`, and
 verify its PID before operating the scene. If necessary, identify its graphical client with `list_windows` by PID.
-To start the twin at launch, add `"ur5e_dt":true`; without it, the managed simulator starts without the twin.
-The `ur5e_dt_on_start` field records the launch choice, not the extension's current state if it changes later.
+The UR5e tools are enabled in either mode. To show their tab at launch, add `"show_ur5e_panel":true`.
+The `show_ur5e_panel_on_start` field records the launch choice, not whether it remains visible later.
 The extension can also be enabled in an already running simulator; see [UR5e tools](TOOLS-UR5E.md#simulator-window).
 Use different ROS domains for isolated simulations; `allow_shared_domain=true` is an explicit exception when they
 intentionally need to communicate. Other ROS nodes must use the matching domain to communicate with a simulator.

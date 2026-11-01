@@ -69,6 +69,7 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     monkeypatch.setenv("PYTHONPATH", "/unrelated/project")
     monkeypatch.setenv("ISAAC_MCP_HOLD_TOKEN", "foreign")
     monkeypatch.setenv("ISAAC_MCP_BIND", "0.0.0.0")
+    monkeypatch.setenv("UR5E_DT_SHOW_PANEL", "1")
     result = sim._launch(setup, 18766, 197, True, False)
     assert result["state"] == "starting" and result["pid"] == 510
     saved = json.loads((Path(result["log"]).parent / "session.json").read_text())
@@ -79,13 +80,14 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     assert child["ISAAC_MCP_BIND"] == "127.0.0.1" and child["MCP_CLIENT_OUTPUT_DIR"] == result["output_dir"]
     assert child["UR5E_DT_PYTHON"] == "/configured/sim-python"
     assert "PYTHONPATH" not in child and "ISAAC_MCP_HOLD_TOKEN" not in child
+    assert "UR5E_DT_SHOW_PANEL" not in child
     assert "--headless" in captured["args"] and captured["start_new_session"] is True
-    assert "--ur5e-dt" not in captured["args"] and result["ur5e_dt_on_start"] is False
+    assert "--ur5e-panel" not in captured["args"] and result["show_ur5e_panel_on_start"] is False
     assert captured["args"][-1] == f"--/app/userConfigPath={result['user_config']}"
 
 
-@pytest.mark.parametrize("ur5e_dt", [False, True])
-def test_launch_selects_twin_extension(setup, monkeypatch, ur5e_dt):
+@pytest.mark.parametrize("show_panel", [False, True])
+def test_launch_selects_twin_panel(setup, monkeypatch, show_panel):
     captured = {}
 
     def popen(args, **kwargs):
@@ -95,9 +97,9 @@ def test_launch_selects_twin_extension(setup, monkeypatch, ur5e_dt):
     monkeypatch.setattr(sim.subprocess, "Popen", popen)
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
     monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
-    result = sim._launch(setup, 18766, 197, False, False, ur5e_dt)
-    assert ("--ur5e-dt" in captured["args"]) is ur5e_dt
-    assert result["ur5e_dt_on_start"] is ur5e_dt
+    result = sim._launch(setup, 18766, 197, False, False, show_panel)
+    assert ("--ur5e-panel" in captured["args"]) is show_panel
+    assert result["show_ur5e_panel_on_start"] is show_panel
 
 
 def test_relative_sessions_directory_is_shared_with_simulator(setup, monkeypatch, tmp_path):

@@ -69,7 +69,7 @@ For Ubuntu 22.04 use the matching `ros-humble-...` packages and Humble setup. Th
 tested on the machine listed here; the Humble mock-driver path has automated launcher tests but has not been
 live-tested as part of this check.
 
-Start the simulator with `./run.sh --ur5e-dt`, connect the MCP host, and call `ur5e_dt__start_ros_driver` with
+Start the simulator with `./run.sh`, connect the MCP host, and call `ur5e_dt__start_ros_driver` with
 `{"mode":"sim","action":"up","backend":"fake"}`. Use `action: "status"` to inspect it and `action: "down"` to
 stop it. The launcher uses `/opt/ros/jazzy/setup.bash` or `/opt/ros/humble/setup.bash` automatically; `ROS_SETUP`
 and `ROS_DISTRO` override that for a nonstandard installation. The same ROS domain and

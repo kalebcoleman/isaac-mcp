@@ -36,7 +36,7 @@ set the path for your machine or omit `UR5E_DT_PYTHON` to use this repo's `.venv
 ```bash
 export UR5E_DT_PYTHON=/path/to/isaacsim-env/bin/python
 export UR5E_DT_PORT=18766
-./run.sh --ur5e-dt --headless --port "$UR5E_DT_PORT"
+./run.sh --headless --port "$UR5E_DT_PORT"
 # In another terminal after the app is ready, with the same environment:
 ./verify.sh
 "$UR5E_DT_PYTHON" scripts/smoke_tools.py

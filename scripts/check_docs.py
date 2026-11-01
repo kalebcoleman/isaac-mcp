@@ -94,10 +94,10 @@ def check_agent_guide(errors, text=None, counts=None):
             errors.append(f"{where}: {label} row says {match.group(1)} tools, the code has "
                           f"{actual[tier]}")
     expected = {
-        "exactly N tools (host + Isaac Lab subtotal)":
-            (r"exactly (\d+) tools", actual["host"] + actual["isaaclab"]),
-        "The other N tools (bridge subtotal)":
-            (r"The other (\d+) tools", actual["builtins"] + actual["ur5e"]),
+        "exactly N tools (host + Isaac Lab + twin catalog subtotal)":
+            (r"exactly (\d+) tools", actual["host"] + actual["isaaclab"] + actual["ur5e"]),
+        "The other N tools (bridge built-ins subtotal)":
+            (r"The other (\d+) tools", actual["builtins"]),
         "there are N tools in total":
             (r"there are (\d+) tools in total",
              sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e"))),

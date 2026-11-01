@@ -62,7 +62,10 @@ or simultaneous human action. Headroom checks do not reserve resources. Native W
 multi-GPU launch selection, real hardware, high-sensor workloads and broad parallel-training
 capacity were not validated by these tests.
 
-## Optional twin and docked panel follow-up
+## Earlier optional-extension prototype (superseded)
+
+The following checks describe an earlier PR iteration. The final design below keeps the twin tools
+enabled by default and makes only the panel optional.
 
 - A fresh graphical `sim__launch` without `ur5e_dt` reached a responsive 6.2 bridge. Its extension
   manager had no twin panel and the MCP client saw no `ur5e_dt__*` tools. The configured sessions
@@ -82,3 +85,27 @@ capacity were not validated by these tests.
   `ur5e_dt=false` and `true`, respectively. The enabled session returned recording status.
   Both were stopped through `sim__stop`. These checks did not build a robot scene or exercise
   other Kit versions.
+
+## Always-listed tools and optional panel follow-up
+
+- Before starting Kit, a real MCP client saw all 23 `ur5e_dt__*` tools. A call returned an actionable
+  unavailable-bridge error; it did not launch a simulator. After a 6.2 session started, a catalog-listed
+  recording-status call succeeded before an explicit tool refresh.
+- A graphical managed session with the default hidden panel exposed all 23 live tools. Quick Start built
+  the UR5e, gripper and camera scene, and a five-second recording saved 25 frames and decoded successfully.
+  The repository's live
+  smoke test reported 20/20 checks passed for scene setup, object placement, save/restore, timeline,
+  recording, ROS driver status and scene cleanup. Its single-object randomization attempt returned a
+  crowded-placement warning. In a separate disposable session, single-object randomization succeeded
+  after other objects were removed to leave the specified placement area clear. The camera TF graph
+  and FMB1 assembly calls succeeded; real-pose sync reported the expected no-message error with no
+  real pose publisher connected.
+- During that smoke test's `new_stage` reset, Kit logged the previously documented
+  `NoneType.GetCamera` viewport exception. Quick Start subsequently rebuilt the scene, but this
+  follow-up did not check rendered frames after that reset. Earlier base/head comparisons and their
+  recovery checks are documented in [verification](../VERIFICATION.md#windowed-viewport-reset-comparison).
+- A second graphical session started with `show_ur5e_panel=true`. The twin and Console had the same Kit
+  dock ID and the tab was visible. Both disposable sessions were stopped through `sim__stop`. These
+  tests did not connect physical hardware, and do not establish behavior for other Kit versions.
+- A separate headless 6.2 session returned recording status and completed Quick Start through the
+  catalog-listed tools, then was stopped through `sim__stop`.

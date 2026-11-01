@@ -15,7 +15,7 @@ export OMNI_KIT_ACCEPT_EULA=YES UR5E_DT_PORT="$PORT"
 mkdir -p "$OUT"
 for i in $(seq 1 "$N"); do
   log="$OUT/run-$i.log"
-  "$ROOT/run.sh" --ur5e-dt --headless > "$log" 2>&1 &
+  "$ROOT/run.sh" --headless > "$log" 2>&1 &
   app=$!
   for _ in $(seq 1 60); do (exec 3<>/dev/tcp/127.0.0.1/"$PORT") 2>/dev/null && break; sleep 2; done
   start=$(date +%s)

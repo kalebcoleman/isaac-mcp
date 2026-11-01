@@ -29,8 +29,8 @@ It can be used independently by projects that need Isaac Sim or Isaac Lab tools.
 ```bash
 ./install.sh --accept-eula        # uv env with Isaac Sim 6.2.0.0 + the isaac-mcp CLI
 scripts/check_machine.sh          # OS, GPU/driver, disk, network, display, port checks (must pass)
-./run.sh                          # Generic Kit and MCP bridge on port 8766 (--headless for no window)
-# Or run ./run.sh --ur5e-dt      # Enable the UR5e panel and its tool pack
+./run.sh                          # Kit, MCP bridge and UR5e tools; panel hidden by default
+# Or run ./run.sh --ur5e-panel   # Show the UR5e panel as a docked tab
 ./verify.sh                       # In another terminal, check a running UR5e session
 ```
 

@@ -21,21 +21,19 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 
 ## Simulator window
 
-Plain `./run.sh` starts Isaac Sim and its bridge without the twin. Use `./run.sh --ur5e-dt` (or the
-dedicated `scripts/launch_ur5e_dt.sh`) to enable the `ur5e-dt` Kit extension. This is a change from earlier
-versions, where plain `./run.sh` enabled the twin automatically. Its startup creates the **UR5e Digital Twin**
-panel and registers the twin's bridge tools. In a graphical session the panel is docked
-alongside the Console tab when Console is available; the panel can be moved like other Kit tabs. The panel remains
-usable if docking is unavailable. `./run.sh --headless` has no visible simulator window.
-Starting the host MCP server alone does not start Isaac Sim.
+Plain `./run.sh` starts Isaac Sim, the bridge and the twin extension, but hides the **UR5e Digital Twin**
+panel by default. The 23 tools work with the panel hidden. Pass `--ur5e-panel` (or use the dedicated
+`scripts/launch_ur5e_dt.sh`) to show the panel; in a graphical session it docks alongside Console when
+available and can be moved like other Kit tabs. `./run.sh --headless` has no visible simulator window.
 The twin panel is separate from the optional `isaac.mcp.panel` registry inspector.
 
-Managed `sim__launch` sessions start **without** the twin by default. Pass `"ur5e_dt":true` when launching to
-load the extension, then select the new bridge with `use_bridge` and refresh its tools. Neither launching the
-extension nor showing its panel loads a robot scene; use Quick Start or a twin tool for that.
+Managed `sim__launch` sessions also start the twin tools with the panel hidden. Pass
+`"show_ur5e_panel":true` to show it in a graphical launch. Neither launching the extension nor showing its
+panel loads a robot scene; use Quick Start or a twin tool for that. The host MCP server lists these tools even
+when no simulator is running, but executing them requires a selected bridge that serves the extension.
 
-To enable the twin in a running simulator launched from this repository, use Kit's Extensions window to enable
-`ur5e-dt`, or, if the `run_python` bridge built-in is available, call it on the intended bridge with:
+In a simulator started without the extension, use Kit's Extensions window to enable `ur5e-dt`, or, if the
+`run_python` bridge built-in is available, call it on the intended bridge with:
 
 ```python
 manager = omni.kit.app.get_app().get_extension_manager()
@@ -43,10 +41,10 @@ manager.set_extension_enabled_immediate("ur5e-dt", True)
 result = {"enabled": manager.is_extension_enabled("ur5e-dt")}
 ```
 
-Call `refresh_tools` afterward so the host and client discover the 23 `ur5e_dt__*` tools. Disabling the extension
-unregisters those tools; refresh again to remove them from the host's list. Stop active recordings and other twin
-work before disabling it. If built-ins are filtered, `run_python` is unavailable; use the Extensions window or
-start a new managed session with `ur5e_dt=true` instead. Namespace filters can also hide the twin tools.
+Call `refresh_tools` afterward to obtain the live bridge's metadata. Disabling the extension unregisters the live
+tools, but their catalog entries remain visible and report that the extension is unavailable when called. Stop active
+recordings and other twin work before disabling it. If built-ins are filtered, `run_python` is unavailable; use the
+Extensions window or start a managed session instead. Namespace filters can also hide the twin tools.
 
 Several panel actions, including Quick Start, loading the workstation or room, playing/stopping the scene and
 recording, have MCP tools in the reference below. The buttons and tools are interfaces to extension operations;

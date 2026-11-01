@@ -779,8 +779,11 @@ class DigitalTwin(omni.ext.IExt):
         # Isaac Sim handles ROS2 initialization automatically through its bridge
         print("ROS2 bridge will be initialized by Isaac Sim when needed")
 
-        # Create the window UI
-        self._window = ScrollingWindow(title="UR5e Digital Twin", width=300, height=800)
+        # The tool handlers also use some widget models, so build the panel but
+        # keep it hidden unless explicitly requested for this simulator session.
+        show_panel = os.getenv("UR5E_DT_SHOW_PANEL") == "1" and os.getenv("UR5E_DT_HEADLESS") != "1"
+        self._window = ScrollingWindow(title="UR5e Digital Twin", width=300, height=800,
+                                       visible=show_panel)
         with self._window.frame:
             with ui.VStack(spacing=5):
                 self.create_ui()
@@ -794,7 +797,7 @@ class DigitalTwin(omni.ext.IExt):
         # Console can be created after this extension during startup. Deferred
         # docking seats the twin beside it once available instead of floating
         # over the viewport; a missing Console leaves the panel usable.
-        if os.getenv("UR5E_DT_HEADLESS") != "1":
+        if show_panel:
             try:
                 self._window.deferred_dock_in("Console", ui.DockPolicy.CURRENT_WINDOW_IS_ACTIVE)
             except Exception as exc:

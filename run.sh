@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${UR5E_DT_PORT:-${ISAAC_SIM_PORT:-8766}}"
 HEADLESS=0
-UR5E_DT=0
+SHOW_UR5E_PANEL="${UR5E_DT_SHOW_PANEL:-0}"
 SHOW_HELP=0
 EXTRA_ARGS=()
 
@@ -25,8 +25,8 @@ while [ "$#" -gt 0 ]; do
       HEADLESS=1
       shift
       ;;
-    --ur5e-dt)
-      UR5E_DT=1
+    --ur5e-panel|--ur5e-dt)
+      SHOW_UR5E_PANEL=1
       shift
       ;;
     --port)
@@ -54,7 +54,7 @@ if [ "$SHOW_HELP" = 1 ]; then
   cat <<EOF
 Usage: ./run.sh [options] [-- <extra kit args>]
 
-Launch Isaac Sim 6.2 with the Kit MCP bridge; optionally enable the UR5e extension.
+Launch Isaac Sim 6.2 with the Kit MCP bridge and UR5e tools.
 
 Configuration:
   Port:        $PORT (override with UR5E_DT_PORT or --port)
@@ -62,7 +62,8 @@ Configuration:
 
 Options:
   --headless     Run without visible window (sets UR5E_DT_HEADLESS=1)
-  --ur5e-dt      Enable the UR5e panel and its tools
+  --ur5e-panel   Show the UR5e panel (the tools are always enabled)
+  --ur5e-dt      Compatibility alias for --ur5e-panel
   --port N       Bridge port (default: 8766)
   -h, --help     Show this help message and exit
 EOF
@@ -77,14 +78,11 @@ fi
 
 export UR5E_DT_PORT="$PORT"
 
-# One shared bridge serves all packs. When the twin is requested, defer binding
-# until it has registered, preserving the launcher's socket-readiness contract.
+# Defer binding until the twin tools register, so bridge readiness means the
+# default pack is ready whether or not its panel is visible.
 export ISAAC_MCP_PORT="$PORT"
-if [ "$UR5E_DT" = 1 ]; then
-  export ISAAC_MCP_DEFER_START=1
-else
-  export ISAAC_MCP_DEFER_START=0
-fi
+export ISAAC_MCP_DEFER_START=1
+export UR5E_DT_SHOW_PANEL="$SHOW_UR5E_PANEL"
 export OMNI_KIT_ACCEPT_EULA=YES
 export PYTHONDONTWRITEBYTECODE=1
 export PATH="$HOME/.local/bin:$PATH"
@@ -126,11 +124,7 @@ SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))')
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
 
 EXT_ARGS=(--ext-folder "$ROOT/exts")
-TWIN_ARGS=()
-if [ "$UR5E_DT" = 1 ]; then
-  TWIN_ARGS=(--enable ur5e-dt)
-fi
 
 exec "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
-  "${EXT_ARGS[@]}" --enable isaac.mcp.bridge "${TWIN_ARGS[@]}" \
+  "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt \
   --enable isaacsim.ros2.bridge "${EXTRA_ARGS[@]}"
