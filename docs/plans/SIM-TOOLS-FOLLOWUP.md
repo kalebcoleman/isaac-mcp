@@ -1,19 +1,21 @@
 # Build plan: finishing the generic Isaac Sim tools after PR #11
 
 **Status: plan, not built.** Decisions D1–D4 were made by the owner on 2026-10-31 and 2026-11-01
-(see §2). Work starts after PR #11 is merged, when the owner asks for it in the thread that owns
-PR #12.
+(see §2). Implementation starts after the current PRs are validated and merged and the owner starts the
+next phase. This document does not authorize new tools, consolidation or removals during the
+current first-slice validation.
 
 ## 1. Where things stand
 
 Two other pull requests already cover much of what this plan first proposed:
 
 - **[PR #10](https://github.com/kalebcoleman/isaac-mcp/pull/10)** (`docs/asset-scene-e2e-plan`,
-  open against `main`): the plan `docs/plans/ASSET-SCENE-END-TO-END.md` for project-folder USD
+  merged into `main` on 2026-11-01 at `7429dbd`): the plan `docs/plans/ASSET-SCENE-END-TO-END.md` for project-folder USD
   assets and generic scene tools.
 - **[PR #11](https://github.com/kalebcoleman/isaac-mcp/pull/11)** (`feat/project-usd-generic-scene`,
-  draft, stacked on #10, **still being worked on** in its own thread as of 2026-11-01): the
-  implementation. Its Kit extension `exts/sim-tools` registers two namespaces on the shared
+  open, ready for review and based on `main` as checked on 2026-11-01): the implementation.
+  Its final integrated, all-exposed-tool validation across available 6.x builds is still in
+  progress; ready-for-review status is not a claim that those gates have passed. Its Kit extension `exts/sim-tools` registers two namespaces on the shared
   bridge, `sim` (31 tools) and `assets` (6 tools), with contracts in
   `mcp/isaac_mcp/scene_contracts.py`, offline catalogs `mcp/isaac_mcp/catalogs/{sim,assets}.json`,
   reference `docs/TOOLS-SCENE.md`, a tool-by-tool comparison with the whats2000 fork
@@ -47,8 +49,11 @@ general Action Graph editing, 3D generation) stay with PR #10's plan and are **o
 
 ## 3. Preconditions and working rules
 
-**Start only after PR #11 is merged into `main`** (it was still a draft, with work in progress in
-its own thread, when this was written). Never edit PR #11's branch or its thread's worktree.
+**Start implementation only after the current first-slice validation and merges finish and the
+owner starts this next phase.** PR #10 is merged; PR #11 is open against `main`, with final
+validation in progress. The owner authorized the current coordinator to finish and, only after
+validation, merge #11 → #13 → #14 → #12. That authorization does not start M0–M7 or the future
+consolidation and Isaac Lab phases below. Preserve other threads' worktrees.
 
 1. Read [AGENTS.md](../../AGENTS.md), the [agent skill](../../.agents/skills/isaac-mcp/SKILL.md),
    [tool-authoring.md](../../mcp/docs/tool-authoring.md), [protocol.md](../../mcp/docs/protocol.md),
@@ -128,8 +133,9 @@ Tool names below are proposals in PR #11's naming style; parameters are in addit
 
 No new tools. After PR #11 merges, rebase PR #12 (`docs/agent-skill-ecosystem`) onto `main`; it
 brings the agent skill, ECOSYSTEM.md, `scripts/ecosystem_capabilities.py` and this plan, none of
-which PR #11 has. A test merge of the two branches on 2026-11-01 conflicted only in two status lines, `docs/GENERIC-SIM-TOOLS.md` and
-`docs/plans/README.md`: keep both sides' content. `AGENTS.md`, `README.md`, `scripts/check_docs.py`
+which PR #11 has. Earlier test merges conflicted in status lines in `docs/GENERIC-SIM-TOOLS.md` and
+`docs/plans/README.md`; later combined candidates resolved them. Preserve both plan index entries
+and check the actual final merge rather than assuming those historical conflicts still exist. `AGENTS.md`, `README.md`, `scripts/check_docs.py`
 and `mcp/tests/test_check_docs.py` merged automatically, but rerun `check_docs.py` and the tests
 because tool counts change. Then run PR #11's full live suites on every supported build with
 the current harness, and record the baseline in `docs/evidence/scene-followup/M0/`. Then reconcile
@@ -282,6 +288,45 @@ three seconds of play for the ant to settle; `record_stop`; `sim.joints.state` w
 same run. Then update `scripts/ecosystem_capabilities.py` ("isaac-mcp today" column) and regenerate
 ECOSYSTEM.md, and update the agent skill, `docs/GENERIC-SIM-TOOLS.md` status and
 `docs/VERIFICATION.md`.
+
+### Future tool selection and consolidation (owner direction, 2026-11-01)
+
+Alongside M0–M7, the next phase uses the roughly 600 categorized tools in the
+[research catalog](../ECOSYSTEM.md) to select useful additions and audit our existing surface.
+This is planning for later PRs: do not remove, rename or combine tools during the current
+first-slice tests and merges, and do not treat this audit as a replacement for M0–M7.
+
+Before proposing implementation:
+
+1. Inventory the actual registered contracts and observed usage, including default and optional
+   groups, parameters, return/error schemas, side effects, approvals, targeting and discovery.
+   Reconcile the inventory with code, real MCP calls, the agent skill and per-tool documentation.
+2. Compare apparent overlaps by their actual behavior. For example, compare the UR5e Quick Start
+   variants' scene composition and startup effects, and `assets.scan` versus `assets.search`
+   filtering, traversal and returned metadata. Similar names or descriptions do not establish
+   interchangeability; retain differences that serve distinct tasks.
+3. Publish proposed **keep / combine / remove** decisions with evidence, affected workflows and
+   clients, security and version implications, and the compatibility cost. Have the owner review
+   these decisions before implementing public contract changes; do not infer approval to remove
+   a tool from approval to investigate duplication.
+4. Preserve agent discoverability and existing clients. Where appropriate, retain aliases or
+   backward-compatible parameters and responses; otherwise document a migration/deprecation
+   path, replacement mapping and transition period before removal. Cover offline catalogs,
+   enabled groups, namespace filters, descriptions, annotations and list-change notifications.
+5. Apply the same build/backend-specific real MCP verification, observed effects, failure cases,
+   screenshots and documentation requirements in §§3–4 to each affected contract and its aliases.
+   Update catalog counts, the agent skill, tool references and the comparison/evidence tables.
+   A success response or one version's result does not establish cross-version equivalence.
+
+### Later Isaac Lab planning
+
+Expanded Isaac Lab-specific improvements are a separate later phase, informed by the
+[catalog's Isaac Lab research](../ECOSYSTEM.md) and the
+[current Isaac Lab tool contracts](../TOOLS-ISAACLAB.md). Their detailed scope and design are
+**not yet established**. Future planning must inventory actual workflows and compatible Lab/Sim
+pairs, identify useful additions and overlaps, and propose acceptance gates before implementation.
+Link that future plan here when it exists. Current work still validates the existing Isaac Lab
+tools; it does not add Lab features or imply that every Lab version supports every Sim build.
 
 ## 6. Risks to watch
 
