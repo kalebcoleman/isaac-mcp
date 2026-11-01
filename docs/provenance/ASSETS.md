@@ -169,8 +169,11 @@ The twin runs inside Isaac Sim, so the operator already has a licensed copy of e
 
 The manifest pins the Isaac 5.1 generation because the twin was authored against those files; the
 old bundle was the 5.0 generation and already ran on the supported 6.x releases. The fetcher
-verifies the recorded SHA-256 and byte size, so a cached copy is reproducible. `load_ur5e` creates
-the missing `tool0` Xform at load time.
+verifies the recorded SHA-256 and byte size, so a cached copy is reproducible. The resolver also
+checks a cached file against the manifest before use; a mismatch raises `AssetCorrupt` with the
+`--force` command. Set `UR5E_DT_OFFLINE=1` for an air-gapped run: a missing cache entry then fails
+with `AssetMissing` and the fetch command instead of returning an unreachable URL. `load_ur5e`
+creates the missing `tool0` Xform at load time.
 
 The workstation has no public source. `load_workstation` accepts a user-supplied `vention.usd` in
 the cache and otherwise builds a simple placeholder bench with the same top-at-z=0 contract. The

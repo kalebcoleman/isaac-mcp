@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,32 @@ def load_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def fake_manifest(module, tmp_path, content: bytes = b"cached", target: str = "robot/test.usd"):
+    """Point the module at a tiny manifest and return (manifest_path, entry)."""
+    data = {
+        "version": 1,
+        "asset_root": "https://example.invalid/Assets/Isaac/5.1",
+        "remote": {target: "Isaac/Robots/Test/test.usd"},
+        "fetch": [
+            {
+                "id": "test",
+                "files": [
+                    {
+                        "target": target,
+                        "source": "Isaac/Robots/Test/test.usd",
+                        "sha256": hashlib.sha256(content).hexdigest(),
+                        "size": len(content),
+                    }
+                ],
+            }
+        ],
+    }
+    path = tmp_path / "assets-manifest.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    module.MANIFEST_PATH = path
+    return path, data
 
 
 def test_cache_dir_honours_environment(monkeypatch, tmp_path):
@@ -49,11 +77,80 @@ def test_remote_fallback_comes_from_the_manifest():
 
 def test_cache_wins_over_the_remote_fallback(monkeypatch, tmp_path):
     monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path))
-    cached = tmp_path / "robot" / "ur5e.usd"
+    module = load_module()
+    fake_manifest(module, tmp_path)
+    cached = tmp_path / "robot" / "test.usd"
     cached.parent.mkdir(parents=True)
     cached.write_bytes(b"cached")
+    assert module.resolve_uri("robot/test.usd") == cached.as_uri()
+
+
+def test_corrupt_cache_raises_with_fetch_guidance(monkeypatch, tmp_path):
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path))
     module = load_module()
-    assert module.resolve_uri("robot/ur5e.usd") == cached.as_uri()
+    fake_manifest(module, tmp_path)
+    cached = tmp_path / "robot" / "test.usd"
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(b"broken")  # same length as b"cached", different bytes
+    with pytest.raises(module.AssetCorrupt) as excinfo:
+        module.resolve_uri("robot/test.usd")
+    message = str(excinfo.value)
+    assert "corrupt" in message
+    assert "sha256 mismatch" in message
+    assert "fetch_ur5e_assets.py --force" in message
+
+
+def test_corrupt_cache_size_mismatch_is_reported(monkeypatch, tmp_path):
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path))
+    module = load_module()
+    fake_manifest(module, tmp_path)
+    cached = tmp_path / "robot" / "test.usd"
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(b"evil")
+    with pytest.raises(module.AssetCorrupt) as excinfo:
+        module.resolve_uri("robot/test.usd")
+    assert "size mismatch" in str(excinfo.value)
+
+
+def test_remote_fallback_is_used_when_online(monkeypatch, tmp_path):
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path))
+    monkeypatch.delenv("UR5E_DT_OFFLINE", raising=False)
+    module = load_module()
+    fake_manifest(module, tmp_path)
+    uri = module.resolve_uri("robot/test.usd")
+    assert uri == "https://example.invalid/Assets/Isaac/5.1/Isaac/Robots/Test/test.usd"
+
+
+def test_offline_uses_valid_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path))
+    monkeypatch.setenv("UR5E_DT_OFFLINE", "1")
+    module = load_module()
+    fake_manifest(module, tmp_path)
+    cached = tmp_path / "robot" / "test.usd"
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(b"cached")
+    assert module.resolve_uri("robot/test.usd") == cached.as_uri()
+
+
+def test_manual_asset_uses_operator_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path))
+    module = load_module()
+    cached = tmp_path / "workstation" / "vention.usd"
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(b"operator-supplied")
+    assert module.resolve_uri("workstation/vention.usd") == cached.as_uri()
+
+
+def test_offline_missing_cache_raises_with_guidance(monkeypatch, tmp_path):
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path))
+    monkeypatch.setenv("UR5E_DT_OFFLINE", "1")
+    module = load_module()
+    fake_manifest(module, tmp_path)
+    with pytest.raises(module.AssetMissing) as excinfo:
+        module.resolve_uri("robot/test.usd")
+    message = str(excinfo.value)
+    assert "offline" in message
+    assert "fetch_ur5e_assets.py" in message
 
 
 def test_manual_asset_raises_with_guidance(monkeypatch, tmp_path):

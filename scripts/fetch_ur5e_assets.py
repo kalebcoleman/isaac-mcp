@@ -5,7 +5,9 @@ The public repository ships only assets whose licences permit redistribution.
 The NVIDIA UR5e and RealSense models are downloaded from NVIDIA's public asset
 root into ``$UR5E_DT_ASSET_CACHE`` (default ``~/.cache/ur5e-dt/assets``).  The
 extension resolves bundled files first, then that cache, then the same pinned
-URL directly, so running this script is only needed for offline use.
+URL directly, so running this script is only needed for offline use. Cached
+files are checked against the manifest hash before use. Set ``UR5E_DT_OFFLINE=1``
+to refuse the remote fallback and fail clearly when the cache is incomplete.
 
 Examples::
 
@@ -158,6 +160,7 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
     )
     for item in manifest.get("manual", []):
         print(f"Manual: {item['target']} — {item['hint']}")
+    print("Air-gapped runs: set UR5E_DT_OFFLINE=1 after this fetch.")
     return 0
 
 
