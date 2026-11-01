@@ -1,8 +1,9 @@
 # Generic Isaac Sim Tool Pack (`sim.*`) — Design
 
-> **Status: design draft, generic tools not implemented.** The approved build plan is
-> [plans/ISAACSIM-TOOLS-BUILD.md](plans/ISAACSIM-TOOLS-BUILD.md); the tools will ship under the
-> namespace `isaacsim` (MCP `isaacsim__…`), not `sim`, because the host already uses `sim__*` for sessions. The original draft was written 2026-10-29 from static
+> **Status: design draft, generic tools not implemented on `main`.** Draft
+> [PR #11](https://github.com/kalebcoleman/isaac-mcp/pull/11) implements a first set of these tools in
+> `exts/sim-tools` under the namespaces `sim` and `assets`; the remaining gaps are planned in
+> [plans/SIM-TOOLS-FOLLOWUP.md](plans/SIM-TOOLS-FOLLOWUP.md). The original draft was written 2026-10-29 from static
 > inspection. The bridge attachment obstacle was addressed in the shared-bridge update: a temporary second pack and
 > the UR5e pack were exercised on one live 6.2 endpoint. The first stage/prim inspection APIs have now been checked
 > in a separate non-robot 6.2 scene; see [verification](VERIFICATION.md#generic-scene-api-validation). The tools and
