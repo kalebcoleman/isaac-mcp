@@ -274,5 +274,9 @@ It preserves the camera, render product, render settings, other attributes, live
 source files. The choice authorizes this export normalization; it does not prove who authored
 an attribute. Root/cross-layer opinions, ambiguous products, handle dependencies, incomplete
 composition or unavailable/mismatched native bindings still refuse with `SAVE_UNSUPPORTED`.
+Binding validation reads the already-retained texture objects through a bounded adapter for
+inspected Replicator cache layouts. It does not call create/attach APIs or pruning getters.
+An unfamiliar layout refuses. It never passes a USD integer to the native factory lookup:
+that lookup crashed during 6.2 live qualification; its handle contract was not established.
 Pause before saving an active scene; saving while playing remains refused. After Stop a
 native texture may have been torn down, so inspect a refusal rather than assuming it is live.

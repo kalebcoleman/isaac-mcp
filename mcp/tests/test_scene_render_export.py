@@ -188,32 +188,123 @@ def test_export_dependency_work_is_bounded(configured, monkeypatch):
     assert not (scene.output / "bounded.usda").exists()
 
 
-def test_binding_api_checks_context_and_supports_zero_handle(monkeypatch):
+@pytest.fixture
+def retained_binding(monkeypatch):
     import types
-    from sim_tools.render_export import validate_native_binding
-    data = {"context": "", "product": "/Render/Product", "camera": "/World/Camera"}
+    data = {"context": "", "product": "/Render/Product", "camera": "/World/Camera", "stage_id": 1}
     texture = types.SimpleNamespace(
         get_usd_context_name=lambda: data["context"],
         get_render_product_path=lambda: data["product"],
         get_camera_path=lambda: data["camera"], get_width=lambda: 1280, get_height=lambda: 720)
-    factory = types.SimpleNamespace(get_hydra_texture_from_handle=lambda handle: texture if handle == 0 else None)
+
+    class MultiTexture:
+        def __init__(self):
+            self.__hydra_textures = {"default": [types.SimpleNamespace(hydra_texture=texture)]}
+
+        @property
+        def _hydra_textures(self):
+            raise AssertionError("Pruning cache property must never be read")
+
+        def get(self, *args):
+            raise AssertionError("Pruning cache getter must never be called")
+
+    class Manager:
+        _hydra_textures = MultiTexture()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Factory and create/attach APIs must never be called")
+
+    core = types.ModuleType("omni.replicator.core")
+    core.vp_manager = types.SimpleNamespace(ViewportManager=Manager, get_render_product=forbidden,
+                                          attach_hydra_texture=forbidden)
+    replicator = types.ModuleType("omni.replicator")
+    replicator.core = core
     hydra = types.ModuleType("omni.hydratexture")
-    hydra.acquire_hydra_texture_factory_interface = lambda: factory
+    hydra.acquire_hydra_texture_factory_interface = forbidden
     usd = types.ModuleType("omni.usd")
-    usd.get_context = lambda: types.SimpleNamespace(get_name=lambda: "")
+    usd.get_context = lambda: types.SimpleNamespace(
+        get_name=lambda: "", get_stage=lambda: "stage", get_stage_id=lambda: data["stage_id"])
     omni = types.ModuleType("omni")
-    omni.hydratexture, omni.usd = hydra, usd
-    for name, module in [("omni", omni), ("omni.hydratexture", hydra), ("omni.usd", usd)]:
+    omni.hydratexture, omni.usd, omni.replicator = hydra, usd, replicator
+    for name, module in [("omni", omni), ("omni.hydratexture", hydra), ("omni.usd", usd),
+                         ("omni.replicator", replicator), ("omni.replicator.core", core)]:
         monkeypatch.setitem(sys.modules, name, module)
     entry = dict(path="/Render/Product.viewportHandle", product=data["product"], camera=data["camera"],
                  width=1280, height=720, handle=0)
+    cache = vars(Manager._hydra_textures)["_MultiTexture__hydra_textures"]
+    return data, entry, cache, texture, Manager
+
+
+def test_retained_binding_never_allocates_prunes_or_interprets_integer(retained_binding):
+    from sim_tools.render_export import validate_native_binding
+    data, entry, cache, texture, manager = retained_binding
+    before = tuple(cache["default"])
     validate_native_binding(entry)
-    data["context"] = "different-stage-context"
-    with pytest.raises(AssetError, match="binding differs"):
-        validate_native_binding(entry)
     entry["handle"] = 123
-    with pytest.raises(AssetError, match="no live texture"):
+    validate_native_binding(entry)
+    assert tuple(cache["default"]) == before
+    assert cache["default"][0].hydra_texture is texture
+
+
+@pytest.mark.parametrize("damage", ["context", "path", "camera", "resolution", "missing",
+                                   "duplicate", "destroyed", "shape", "bounds", "wrapper", "api"])
+def test_retained_binding_refuses_unavailable_ambiguous_or_changed_layout(retained_binding, damage):
+    import types
+    from sim_tools.render_export import validate_native_binding
+    data, entry, cache, texture, manager = retained_binding
+    if damage == "context":
+        data["context"] = "different-stage-context"
+    elif damage == "path":
+        data["product"] = "/Render/Other"
+    elif damage == "camera":
+        data["camera"] = "/World/Other"
+    elif damage == "resolution":
+        entry["width"] = 64
+    elif damage == "missing":
+        cache.clear()
+    elif damage == "duplicate":
+        cache["default"].append(types.SimpleNamespace(hydra_texture=texture))
+    elif damage == "destroyed":
+        cache["default"][0].hydra_texture = None
+    elif damage == "shape":
+        cache["default"] = tuple(cache["default"])
+    elif damage == "bounds":
+        cache["default"] *= 257
+    elif damage == "wrapper":
+        cache["default"][0] = types.SimpleNamespace()
+    elif damage == "api":
+        del texture.get_usd_context_name
+    with pytest.raises(AssetError, match="Cannot verify current native camera binding"):
         validate_native_binding(entry)
-    del factory.get_hydra_texture_from_handle
+
+
+def test_retained_binding_refuses_unknown_manager_shape(retained_binding):
+    from sim_tools.render_export import validate_native_binding
+    _, entry, _, _, manager = retained_binding
+    manager._hydra_textures = object()
     with pytest.raises(AssetError, match="Cannot verify"):
+        validate_native_binding(entry)
+
+
+@pytest.mark.parametrize("mutation", ["manager", "cache", "list", "wrapper", "stage"])
+def test_binding_change_during_native_getter_refuses(retained_binding, mutation):
+    import types
+    from sim_tools.render_export import validate_native_binding
+    data, entry, cache, texture, manager = retained_binding
+
+    def get_width():
+        if mutation == "manager":
+            manager._hydra_textures = object()
+        elif mutation == "cache":
+            vars(manager._hydra_textures)["_MultiTexture__hydra_textures"] = dict(cache)
+        elif mutation == "list":
+            cache["default"] = list(cache["default"])
+        elif mutation == "wrapper":
+            cache["default"][0] = types.SimpleNamespace(hydra_texture=texture)
+        elif mutation == "stage":
+            data["stage_id"] = 2
+        return 1280
+
+    texture.get_width = get_width
+    with pytest.raises(AssetError, match="changed during inspection"):
         validate_native_binding(entry)
