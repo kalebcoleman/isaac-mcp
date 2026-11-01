@@ -317,7 +317,7 @@ add(
 )
 add(
     "sim.camera.capture",
-    "Capture latest RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Returns dimensions/hash; NOT_READY requires render warm-up. Waits up to five seconds for ordinary rendering by default; no implicit Play or atomic physics-frame synchronization.",
+    "Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization.",
     dict(
         **TARGET,
         path=field("string", "Camera created by this pack."),
@@ -418,7 +418,7 @@ REGISTRY["sim.prim.create"]["description"] += (
 for _name in ("sim.camera.capture", "sim.lidar.read"):
     REGISTRY[_name]["parameters"]["wait_for_render"] = field(
         "boolean",
-        "Camera: prime an owned CPU readback and wait up to five seconds for four ordinary render completions. LiDAR: wait for one render; acquisition requires Play, so default false. False reads the latest buffer, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.",
+        "Camera: wait up to five seconds for four ordinary render completions and a new CPU transfer from this product. LiDAR: wait for one render; acquisition requires Play, so default false. False reads the latest buffer, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.",
         False,
         default=_name == "sim.camera.capture",
     )

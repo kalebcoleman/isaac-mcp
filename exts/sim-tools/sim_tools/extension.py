@@ -106,7 +106,7 @@ class Extension(omni.ext.IExt):
             return {
                 "waited": False,
                 "meaning": "latest available frame/scan; freshness not established by this call",
-            }
+            }, None
         if expected == "lidar" and not s.timeline.is_playing():
             refuse(
                 "SENSOR_PAUSED",
@@ -123,22 +123,31 @@ class Extension(omni.ext.IExt):
             )
         begin = time.monotonic()
         timeline_before = s.timeline.get_current_time()
-        primed = False
         if expected == "camera":
-            # On 6.0.0.0 a cold CPU readback can still contain the initial pose
-            # after later Hydra frames completed (reproduced on three cameras).
-            # Prime/discard that owned copy, then wait for further render work.
-            from .sensors import read
+            from .camera_capture import capture
 
-            try:
-                read(entry[1])
-                primed = True
-            except AssetError as e:
-                if e.code != "NOT_READY":
-                    raise
+            def validate():
+                s.target(args["session_id"], args["stage_id"])
+                if self.advanced.sensors.get(args["path"]) is not entry:
+                    refuse("SENSOR_INVALIDATED", "Sensor changed during CPU capture.")
+                if (
+                    texture.get_camera_path() != args["path"]
+                    or texture.get_render_product_path() != entry[1]["product_path"]
+                ):
+                    refuse(
+                        "SENSOR_MODIFIED",
+                        "Camera/render product binding changed outside this tool.",
+                    )
+
+            data, observation = await capture(entry[1], validate)
+            observation.update(
+                timeline_time_before=timeline_before,
+                timeline_time_after=s.timeline.get_current_time(),
+            )
+            return observation, data
         before = (texture.get_frame_info() or {}).get("frame_number")
         after = before
-        required_frames = 4 if expected == "camera" else 1
+        required_frames = 1
         completed = 0
 
         async def wait_frame():
@@ -175,21 +184,24 @@ class Extension(omni.ext.IExt):
             "frame_number_before": before,
             "frame_number_after": after,
             "completed_frames_observed": completed,
-            "cpu_readback_primed": primed,
             "wait_seconds": time.monotonic() - begin,
             "timeline_time_before": timeline_before,
             "timeline_time_after": s.timeline.get_current_time(),
             "meaning": "matching render completed after request; not an atomic physics/sensor snapshot",
-        }
+        }, None
 
     def handler(self, name):
         async def run(**args):
             try:
                 async with self._operation_lock:
                     render_observation = None
+                    camera_frame = None
                     if name in ("sim.camera.capture", "sim.lidar.read"):
-                        render_observation = await self._wait_sensor_frame(name, args)
-                    result = self.dispatch(name, args)
+                        (
+                            render_observation,
+                            camera_frame,
+                        ) = await self._wait_sensor_frame(name, args)
+                    result = self.dispatch(name, args, camera_frame=camera_frame)
                     if render_observation is not None:
                         result["render_observation"] = render_observation
                     if name == "sim.timeline.control":
@@ -253,7 +265,7 @@ class Extension(omni.ext.IExt):
 
         return run
 
-    def dispatch(self, name, a):
+    def dispatch(self, name, a, *, camera_frame=None):
         s = self.scene
         if name in {
             "sim.body.state",
@@ -430,4 +442,4 @@ class Extension(omni.ext.IExt):
                 camera=str(viewport.camera_path),
                 capture="Use screenshot with this application PID/window ID.",
             )
-        return self.advanced.execute(name, stage, a)
+        return self.advanced.execute(name, stage, a, camera_frame=camera_frame)

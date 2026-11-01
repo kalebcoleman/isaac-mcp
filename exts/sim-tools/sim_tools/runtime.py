@@ -52,6 +52,8 @@ def runtime_identity():
     extensions = {}
     for name in (
         "omni.replicator.core",
+        "omni.kit.hydra_texture",
+        "omni.kit.renderer.capture",
         "omni.syntheticdata",
         "isaacsim.sensors.rtx",
         "isaacsim.sensors.experimental.rtx",

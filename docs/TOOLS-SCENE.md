@@ -72,7 +72,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__joints__state` | Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. |
 | `sim__simulation__step` | Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. |
 | `sim__camera__create` | Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Needs rendered frames; width/height capped at 1024. |
-| `sim__camera__capture` | Capture latest RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Returns dimensions/hash; NOT_READY requires render warm-up. Waits up to five seconds for ordinary rendering by default; no implicit Play or atomic physics-frame synchronization. |
+| `sim__camera__capture` | Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. |
 | `sim__lidar__create` | Create generic RTX LiDAR while stopped using qualified installed 6.x APIs. Requires a session launched with enable_motion_bvh=true (run.sh --motion-bvh). No hardware preset promise. At most eight sensors; delete an exact owned sensor path to release resources. |
 | `sim__lidar__read` | Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. |
 | `sim__logs__tail` | Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs. |
@@ -165,10 +165,14 @@ entry in `sim_versions.py`, not a major-version guess.
 Launch a new LiDAR session with `sim__launch(enable_motion_bvh=true)` or `run.sh --motion-bvh`.
 This renderer setting is explicit because it consumes resources and affects the whole process.
 Create sensors stopped, explicitly play for warm-up, then pause to read completed output.
-Camera capture primes and discards an owned CPU readback, then normally waits up to five
-seconds for four observed render-product frame completions and postprocessing. This addresses
-an independently reproduced stale first capture on newly created 6.0.0.0 cameras;
-`wait_for_render=false` explicitly reads the latest buffer. LiDAR defaults to the latest
+Camera capture normally waits up to five seconds for four matching Hydra drawable events
+and a new renderer-managed CPU pixel transfer (`hydra-renderer-cpu-v1`). Advancing render
+counters alone did not prevent a stale Replicator pointer after paused physics steps on
+6.0.0.1. The default now bypasses that cached pointer, bounds and copies the callback buffer,
+and returns `cpu_transfer_completed=true`. Timeout/stage change returns no image; a pending
+native transfer prevents another request until completion. It does not step the Replicator
+orchestrator or change timeline state. `wait_for_render=false` explicitly permits the latest
+Replicator buffer, which can be stale. LiDAR defaults to the latest
 completed scan: its acquisition clock requires Play, and requesting a fresh render while
 paused returns `SENSOR_PAUSED`. Scan tick rate matches scan rate; accumulation is enabled.
 Render completion is **not** an atomic physics/sensor snapshot or proof of a fresh rotating
@@ -238,13 +242,18 @@ resolved package members must belong to the verified manifest. This is a bounded
 subset of USDZ, **not OS isolation**. Native resolver/plugins still run with the trusted
 process's permissions. Retain verified staging snapshots while referenced/saved outputs use them.
 
-Saved copies omit process-bound SyntheticData pipelines and pack-owned render products; their
+Saved copies omit recognized process-bound Replicator `/Orchestrator` graphs, SyntheticData
+pipelines and pack-owned render products; their
 native graph/CPU handles cannot be reopened as USD. Camera and LiDAR definitions, materials
 and user Action Graphs remain. The result lists `omitted_runtime_render_paths`. Unknown content
-inside a native pipeline returns `SAVE_UNSUPPORTED` before publication; the live stage is unchanged.
+inside a native pipeline or `/Orchestrator`, or a preserved controller connected to omitted
+runtime state, returns `SAVE_UNSUPPORTED` before publication; the live stage is unchanged.
 Create fresh sensors after reopening; a saved scene is not a running sensor or physics checkpoint.
 
-Known tested edge: on6.0.0.0, a fresh process can reopen the saved scene and inspect/step its
-bodies, but a newly created camera can keep returning `NOT_READY` even after extended playing
-warm-up. New-stage camera tests pass. Do not promise camera readout after reopening on that
-build; use the result/error as reported. See the compatibility evidence for failed alternatives.
+The earlier 6.0.0.0 reopened-camera `NOT_READY` failure was traced to a serialized
+Replicator orchestration graph suppressing recreation of its Python update subscription.
+New exports omit that recognized graph; fresh-process windowed and headless MCP reopen,
+body-state/step and camera checks pass. Previously exported files can retain obsolete native
+state: re-export a trusted scene through the corrected save tool into a new file, then reopen
+that copy. No runtime patch, implicit stage reset or private Replicator lifecycle call is used.
+See the compatibility evidence for the retained failure history and tested scope.

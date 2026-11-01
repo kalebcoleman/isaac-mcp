@@ -201,7 +201,7 @@ class Advanced:
         result["urdf_snapshot_id"] = snapshot_id
         return result
 
-    def execute(self, name, stage, a):
+    def execute(self, name, stage, a, *, camera_frame=None):
         s = self.s
         self.invalidate()
         if name == "sim.prim.delete":
@@ -683,7 +683,7 @@ class Advanced:
                 )
             from .sensors import read as read_sensor
 
-            data, _ = read_sensor(sensor)
+            data = camera_frame if camera_frame is not None else read_sensor(sensor)[0]
             if expected == "camera":
                 import numpy as np
                 from PIL import Image
@@ -723,9 +723,15 @@ class Advanced:
                     width=array.shape[1],
                     height=array.shape[0],
                     sha256=hashlib.sha256(file.read_bytes()).hexdigest(),
-                    source="Replicator CPU RGB annotator (owned copy)",
-                    adapter=sensor["adapter"],
-                    freshness="latest available render frame; not synchronized to physics step",
+                    source="Hydra renderer CPU callback (owned copy)"
+                    if camera_frame is not None
+                    else "Replicator CPU RGB annotator (owned copy)",
+                    adapter="hydra-renderer-cpu-v1"
+                    if camera_frame is not None
+                    else sensor["adapter"],
+                    freshness="new render and CPU transfer completed"
+                    if camera_frame is not None
+                    else "latest available render frame; can be stale",
                 )
         if name == "sim.logs.tail":
             import carb.settings
