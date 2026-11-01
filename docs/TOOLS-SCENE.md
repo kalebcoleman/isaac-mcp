@@ -142,7 +142,10 @@ directory should be private to the OS user. Defaults are process-specific under 
 
 Runtime APIs use PhysX or the qualified Newton adapter described below. Generic Play temporarily selects the session edit target
 so native physics writeback can override session-authored spawn poses. Stop restores the prior
-edit target after the normal application frame. External edit-target changes cause exact stepping
+edit target after the normal application frame, including Stop requested through the UR5e
+tools or application UI. A subsequent Play, stage change or extension shutdown cancels
+pending restoration; a layer deliberately selected by the user is preserved.
+External edit-target changes cause exact stepping
 to refuse, and Stop does not overwrite a target chosen by another editor. First generic Play on
 an externally running timeline requires an explicit Stop. This fixes the independently observed
 case where PhysX moved a body but stronger session poses left its image at spawn. `sim__simulation__step` accepts an initialized **paused**

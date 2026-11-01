@@ -37,6 +37,17 @@ class Extension(omni.ext.IExt):
         import asyncio
 
         self._operation_lock = asyncio.Lock()
+        import omni.kit.app as kit_app
+        import carb
+        from .runtime_edit import RuntimeEditRestorer
+
+        self._runtime_edit_restorer = RuntimeEditRestorer(
+            self.scene, kit_app.get_app().next_update_async, carb.log_error
+        )
+        self._timeline_events = (
+            self.scene.timeline.get_timeline_event_stream()
+            .create_subscription_to_pop(self._timeline_event)
+        )
         # Release attachments before Kit invalidates the closing stage. No
         # recursive application update, stage reset or timeline change here.
         self._stage_events = (
@@ -74,6 +85,8 @@ class Extension(omni.ext.IExt):
                     )
 
     def on_shutdown(self):
+        self._timeline_events = None
+        self._runtime_edit_restorer.cancel()
         self._stage_events = None
         self.advanced.close_sensors()
         self.scene.close_stage()
@@ -82,8 +95,15 @@ class Extension(omni.ext.IExt):
 
     def _stage_event(self, event):
         if event.type == int(omni.usd.StageEventType.CLOSING):
+            self._runtime_edit_restorer.cancel()
             self.advanced.close_sensors(stage_closing=True)
             self.scene.close_stage()
+
+    def _timeline_event(self, event):
+        if event.type == int(omni.timeline.TimelineEventType.STOP):
+            self._runtime_edit_restorer.stopped()
+        elif event.type == int(omni.timeline.TimelineEventType.PLAY):
+            self._runtime_edit_restorer.cancel()
 
     async def _wait_sensor_frame(self, name, args):
         """Observe ordinary rendering without changing timeline or re-entering Kit."""

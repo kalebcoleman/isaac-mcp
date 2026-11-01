@@ -137,12 +137,13 @@ class Scene:
 
     def end_runtime_edit(self, stage):
         previous = self._runtime_edit_target
-        self._runtime_edit_target = None
         if previous is None:
             return True
         if stage.GetEditTarget().GetLayer() != stage.GetSessionLayer():
+            self._runtime_edit_target = None
             return False  # Preserve a target deliberately chosen by an external editor.
         stage.SetEditTarget(previous)
+        self._runtime_edit_target = None
         return True
 
     def stage(self):
