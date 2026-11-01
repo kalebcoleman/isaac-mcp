@@ -42,19 +42,19 @@ repository. If they are not installed, read the `SKILL.md` on GitHub instead.
 | Need | Official skill | isaac-mcp side |
 |---|---|---|
 | Plan a demo or deliverable | `isaac-sim-workflow`, then `isaac-sim-orchestrator` | `status`, `screenshot` to report progress |
-| Drive a running Sim live | `isaac-sim-remote` (uses Kit's code-editor server on 8226) | Same job through `run_python` on the isaac-mcp bridge; use one, not both |
-| Physics bodies, joints, materials | `physics-simulation` | `run_python` edits, then read back |
-| Robot import and articulations | `urdf-mjcf-to-usd-conversion`, `usd-articulation`, `physx-to-newton-conversion` | `put_file` the asset, `run_python` to load and validate |
-| Scene assembly and transforms | `usd-pipeline`, `usd-composition-architecture`, `spatial-reasoning` | `run_python` stage reads and edits |
-| Assets will not load | `isaac-sim-assets` | `run_python` to read the asset root setting |
-| Cameras and sensors | `isaac-camera`, `isaac-sim-sensor`, `place-camera-aim-at`, `place-camera-max-coverage` | `screenshot`, `ur5e_dt__start_recording` |
-| Arm control | `manipulation-ik`, `motion-generation` | `run_python`; `ur5e_dt__*` for the twin |
+| Drive a running Sim live | `isaac-sim-remote` (uses Kit's code-editor server on 8226) | Same job through `sim__*` scene tools or `run_python` on the isaac-mcp bridge; use one, not both |
+| Physics bodies, joints, materials | `physics-simulation` | `sim__physics__inspect`, `sim__body__state`, `sim__joints__inspect/state`, `sim__material__*`; `run_python` only for gaps |
+| Robot import and articulations | `urdf-mjcf-to-usd-conversion`, `usd-articulation`, `physx-to-newton-conversion` | `assets__import_urdf` or `assets__import_usd`, then `sim__joints__*` and `sim__body__state` |
+| Scene assembly and transforms | `usd-pipeline`, `usd-composition-architecture`, `spatial-reasoning` | `sim__stage__tree`, `sim__prim__get/find/create/set_transform`; `run_python` only for unsupported edits |
+| Assets will not load | `isaac-sim-assets` | `assets__roots`/`assets__info` for approved projects, `sim__logs__tail`, `run_python` for the asset root setting |
+| Cameras and sensors | `isaac-camera`, `isaac-sim-sensor`, `place-camera-aim-at`, `place-camera-max-coverage` | `sim__camera__create/capture`, `sim__lidar__*`, `screenshot`, `ur5e_dt__start_recording` |
+| Arm control | `manipulation-ik`, `motion-generation` | `sim__joints__command/state/drive`; `ur5e_dt__*` for the twin |
 | ROS 2 | `isaac-sim-ros2-bridge`, `isaac-sim-ros-workspaces` | `ur5e_dt__setup_camera_tf_graph`, `ur5e_dt__start_ros_driver` (fake backend) |
 | Navigation | `navigation-primitives`, `occupancy-map`, `isaac-sim-robot-navigation`, `mobility-gen` | `run_python` |
-| Synthetic data | `data-collection-sim`, `action-and-event-data-generation` and the `actor-sdg-*` skills | `run_python`, `get_file` for outputs |
+| Synthetic data | `data-collection-sim`, `action-and-event-data-generation` and the `actor-sdg-*` skills | `sim__camera__capture`, `sim__stage__save`, `get_file` for outputs |
 | Headless or remote runs | `isaac-sim-headless-deployment`, `isaac-sim-web-viewer` | `sim__launch` with `headless=true` |
-| Rendering quality | `isaac-sim-rendering`, `validation-diff-gifs` | `screenshot`, `get_file` |
-| Hangs, crashes, slowness | `isaac-sim-troubleshooting`, `profile-isaac-sim` | `status`, `screenshot`, `run_python` for `carb` settings |
+| Rendering quality | `isaac-sim-rendering`, `validation-diff-gifs` | `sim__camera__capture`, `screenshot`, `get_file` |
+| Hangs, crashes, slowness | `isaac-sim-troubleshooting`, `profile-isaac-sim` | `status`, `sim__logs__tail`, `screenshot`, `run_python` for `carb` settings |
 | Install or upgrade | `isaac-sim-installation`, `isaac-sim-migration` | `status` reports the running app version |
 
 ## Precedence

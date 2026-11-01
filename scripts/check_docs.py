@@ -116,11 +116,31 @@ def check_agent_guide(errors, text=None, counts=None):
 SKILLS_DIR = ROOT / ".agents" / "skills"
 
 
+def scene_catalog_tools():
+    """Return the sim/assets packs' MCP names when their catalogs are present."""
+    result = {}
+    for prefix, filename in (("sim__", "sim.json"), ("assets__", "assets.json")):
+        path = ROOT / "mcp" / "isaac_mcp" / "catalogs" / filename
+        if not path.is_file():
+            continue
+        tools = json.loads(path.read_text()).get("tools", {})
+        result[prefix] = {name.replace(".", "__") for name in tools}
+    return result
+
+
 def check_skill_tool_names(errors, expected=None, files=None):
-    """Every isaaclab__/ur5e_dt__ name a skill mentions must be a registered tool."""
+    """Every registered tool name a skill mentions must exist in the registry."""
     expected = expected or expected_tools()
     registered = {"isaaclab__": expected["docs/TOOLS-ISAACLAB.md"],
                   "ur5e_dt__": expected["docs/TOOLS-UR5E.md"]}
+    scene = scene_catalog_tools()
+    if "sim__" in scene:
+        registered["sim__"] = {
+            name for name in expected.get("docs/TOOLS-HOST.md", set())
+            if name.startswith("sim__")
+        } | scene["sim__"]
+    if "assets__" in scene:
+        registered["assets__"] = scene["assets__"]
     for path in files if files is not None else sorted(SKILLS_DIR.rglob("*.md")):
         text = path.read_text()
         for prefix, names in registered.items():

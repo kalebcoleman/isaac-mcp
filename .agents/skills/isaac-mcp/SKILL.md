@@ -1,6 +1,6 @@
 ---
 name: isaac-mcp
-description: Operate NVIDIA Isaac Sim and Isaac Lab through the isaac-mcp server (tools named refresh_tools, use_bridge, run_python, status, screenshot, isaaclab__*, ur5e_dt__*, sim__*, window_*). Use when asked to inspect or change a running Isaac Sim scene, start or check an Isaac Lab training, eval or play job, read TensorBoard metrics or checkpoints, capture the simulator window, or work out why Isaac tools are missing from the client.
+description: Operate NVIDIA Isaac Sim and Isaac Lab through the isaac-mcp server (tools named refresh_tools, use_bridge, run_python, status, screenshot, isaaclab__*, ur5e_dt__*, sim__*, assets__*, window_*). Use when asked to inspect or change a running Isaac Sim scene, import a project USD or URDF, inspect or drive joints and physics, start or check an Isaac Lab training, eval or play job, read TensorBoard metrics or checkpoints, capture the simulator window, or work out why Isaac tools are missing from the client.
 ---
 
 # Operating Isaac Sim and Isaac Lab with isaac-mcp
@@ -21,11 +21,13 @@ This skill covers how to drive the tools safely. For Isaac Lab and Isaac Sim dom
    at a time on a single card (16 GB fits a small `num_envs`, not a large sweep).
 2. **Never start a second Kit when a bridge is reachable.** Discover first (step 2 below).
 3. **Verify the target before changing a scene.** Confirm the bridge's PID and port with `status`
-   before `run_python`, file writes or any `ur5e_dt__*` call that changes the stage.
+   before `run_python`, file writes or any `ur5e_dt__*`, `sim__*` or `assets__*` call that changes
+   the stage.
 4. **Look, don't ask.** When a window is open (play, a GUI Sim), take a `screenshot` or a short
    recording yourself and decide the next step from it.
-5. **Report tool results as they are.** Every tool returns JSON; failures come back as
-   `{"error": ..., "hint": ...}`. Quote the error and follow the hint before retrying.
+5. **Report tool results as they are.** Generic scene tools set MCP `isError` and return a `code`
+   such as `STALE_TARGET`; legacy tools use `{"error": ..., "hint": ...}`. Quote the error and
+   follow the hint before retrying.
 
 ## First calls in a session
 
@@ -38,6 +40,11 @@ This skill covers how to drive the tools safely. For Isaac Lab and Isaac Sim dom
    PID and app version are the process you mean.
 4. For Isaac Lab work, call `isaaclab__install_info`. An error here means `ISAACLAB_PYTHON` /
    `ISAACLAB_ROOT` are not set in the server's environment; fix the client config, not the code.
+5. For generic scene or project-asset work, call `sim__stage__info` or `assets__roots`. The
+   37-tool `sim`/`assets` pack is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   `assets__roots`, `assets__scan` and `assets__search` run on the host; the rest need the
+   `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
+   boundary.
 
 If a tool you expect is missing, it is usually filtered rather than broken:
 `ISAAC_MCP_LOCAL_TOOLS` selects host groups (`window_*` needs `screen_input`, `sim__*` needs
@@ -73,6 +80,40 @@ Details: [references/isaac-sim.md](references/isaac-sim.md).
   clean viewport video use the twin's `ur5e_dt__start_recording` instead of a screen recording.
 - `put_file`, `get_file` and `stat_file` act on the bridge machine with Kit's permissions.
 
+### Generic scene and project assets (`sim__*`, `assets__*`)
+
+These are the safe default for non-UR5e work. Prefer them over hand-written `run_python`.
+
+- **Start with `sim__stage__info`.** It returns the process, stage identity, units, up-axis and
+  the `session_id` / `stage_id` every other call needs. A `STALE_TARGET` refusal includes
+  `current_target`; resend those IDs explicitly. Never assume the target was retargeted.
+- **Inspect:** `sim__stage__tree`, `sim__prim__get`, `sim__prim__find` (literal substring, not
+  regex), `sim__physics__inspect`, `sim__joints__inspect`.
+- **Edit only while stopped:** `sim__prim__create`, `sim__prim__set_transform`,
+  `sim__prim__clone`, `sim__prim__delete` (`confirm=true`), `sim__stage__clear_owned`,
+  `sim__light__*`, `sim__material__*`, `sim__physics__configure`, `sim__joints__drive`.
+  Changes go to the session layer; source USD files are not rewritten. `TIMELINE_ACTIVE` means
+  stop the timeline first.
+- **Project assets:** `assets__roots` → `assets__scan` / `assets__search` (filename-only, host
+  side) → `assets__info` → `assets__import_usd` or `assets__import_urdf`. Only launch-approved
+  trusted roots are accepted; there is no URL input and no untrusted/hostile-USD isolation.
+  Import requires a stopped timeline, matching units/up-axis and a new wrapper path.
+- **Playback and runtime state:** `sim__timeline__control` (play/pause/stop) and
+  `sim__simulation__step` (1–120 exact steps while paused). `sim__body__state` and
+  `sim__joints__state` require initialized physics; `sim__joints__command` sets targets and
+  returns acknowledgment, not the achieved pose.
+- **Sensors and capture:** `sim__camera__create` then `sim__camera__capture` (RTX, PNG in the
+  configured output root); `sim__lidar__*` needs Kit launched with `--motion-bvh`.
+  `sim__viewport__frame` selects and frames an existing prim in the active viewport.
+  `NOT_READY` means rendering is still warming up; retry after a few frames. On Isaac Sim 6.0.0.0
+  a camera created after reopening a saved stage can stay `NOT_READY`; treat that as a known
+  limitation and use a fresh session.
+- **Save and diagnose:** `sim__stage__save` writes a new basename; it never overwrites or switches
+  the current stage. `sim__logs__tail` reads the selected Kit log.
+- **Code execution is opt-in:** `sim__controller__create/update` run inline Python in a
+  ScriptNode. Use them only when the user asked and Kit was launched with
+  `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`; this is not a sandbox.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Action |
@@ -82,11 +123,16 @@ Details: [references/isaac-sim.md](references/isaac-sim.md).
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use `python -m isaac_mcp.client list_tools --port <port>` |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
+| `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed | Read `current_target`; resend its `session_id` and `stage_id` explicitly |
+| `TIMELINE_ACTIVE` on an edit | Timeline is playing or paused | `sim__timeline__control` with `stop`, then retry |
+| `NOT_READY` from `sim__camera__capture` | Render warm-up, or the 6.0.0.0 reopened-stage edge | Retry after a few frames; use a fresh session on 6.0.0.0 |
+| `assets__roots` empty or a path is refused | No launch-approved root, or the file is outside it | Run the `isaac_mcp.project_assets` approval command in `docs/TOOLS-SCENE.md`; no tool can grant roots |
 | `envs_list` shows `import_errors` | A task module failed to import | Read the error; custom tasks need `ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` |
 | Metrics tools ask for the `isaaclab` extra | `tensorboard` not installed in the server env | `uv tool install --force --editable './mcp[isaaclab]'` from the repo |
 
 ## Reference
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
-input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, and `MCP-SERVER.md`
-for client setup. `AGENTS.md` at the repository root gives the tier map and current tool counts.
+input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
+(the 37 generic `sim`/`assets` tools and their limits), and `MCP-SERVER.md` for client setup.
+`AGENTS.md` at the repository root gives the tier map and current tool counts.

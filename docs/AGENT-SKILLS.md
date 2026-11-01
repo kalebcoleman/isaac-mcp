@@ -2,8 +2,9 @@
 
 The repository ships one Agent Skill (a `SKILL.md` folder in the open format read by Claude Code,
 Codex, OpenCode and Antigravity) that teaches an agent how to drive
-this server: discover and verify a bridge, run Isaac Lab jobs within the GPU guards, inspect a live
-Isaac Sim stage with `run_python`, and look at the simulator itself. It complements the tool
+this server: discover and verify a bridge, run Isaac Lab jobs within the GPU guards, inspect and
+edit a live Isaac Sim stage with the generic `sim__*`/`assets__*` tools or `run_python`, and look at
+the simulator itself. It complements the tool
 references (`TOOLS-*.md`), which say what each tool does; the skill says in what order to use them
 and when to stop and ask.
 
@@ -12,7 +13,7 @@ and when to stop and ask.
 ├── SKILL.md                       ground rules, first calls, Lab and Sim workflows, troubleshooting
 └── references/
     ├── isaac-lab.md               train/eval/play, Isaac Lab 3 conventions, guards, reading metrics
-    ├── isaac-sim.md               bridge selection, run_python patterns, capture, UR5e pack
+    ├── isaac-sim.md               bridge selection, generic scene/assets, run_python, capture, UR5e pack
     └── official-skills.md         NVIDIA's Isaac Lab and Isaac Sim skills, mapped to isaac-mcp tools
 .claude/skills/isaac-mcp           symlink to the canonical copy (Claude Code)
 ```
@@ -81,5 +82,7 @@ user skills directory.
 ## Keeping it current
 
 `scripts/check_docs.py` checks the skill's local links and that every `isaaclab__*` / `ur5e_dt__*`
-name it mentions is a registered tool, so renaming a tool fails CI until the skill is updated.
+name it mentions is a registered tool. When the `sim`/`assets` pack catalogs are present (after
+PR #11), it also checks `sim__*` / `assets__*` names against those catalogs. Renaming a tool fails
+CI until the skill is updated.
 When adding a tool group or a safety rule, update `SKILL.md` alongside the `TOOLS-*.md` page.

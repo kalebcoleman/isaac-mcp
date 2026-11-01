@@ -12,7 +12,7 @@ MCP client ──stdio──► isaac-mcp (host process)
                       isaac.mcp.bridge (extension inside Kit: Isaac Sim or Isaac Lab)
                         ├── built-ins: status, list_bridges, run_python, reload_tools,
                         │              put_file, get_file, stat_file
-                        └── tool packs registered under a namespace, e.g. ur5e_dt.*
+                        └── tool packs registered under a namespace, e.g. ur5e_dt.*, sim.*, assets.*
 ```
 
 Bridge tools appear in MCP as `<namespace>__<tool>` (dots are not allowed in MCP names), so
@@ -88,6 +88,35 @@ Rules of thumb:
   `window_key`) act inside one window. They need `expected_width` / `expected_height` from a fresh
   screenshot, so take one first. Prefer `run_python` or a named tool over clicking UI.
 
+## Generic scene and project assets (`sim__*`, `assets__*`)
+
+The `sim`/`assets` pack is on by default (`run.sh` enables `sim-tools`). `ISAAC_MCP_SCENE_TOOLS=0`
+on the host hides all 37 tools per server; it is a visibility preference, not access control.
+
+- Call `sim__stage__info` first. Keep its `session_id` and `stage_id`; every call except discovery
+  and stage-info needs them. A `STALE_TARGET` refusal returns `current_target`; resend those IDs
+  explicitly, because mutations never retarget silently.
+- Read with `sim__stage__tree`, `sim__prim__get`, `sim__prim__find`, `sim__physics__inspect` and
+  `sim__joints__inspect`.
+- Authored edits require a stopped timeline: `sim__prim__create` / `sim__prim__set_transform` /
+  `sim__prim__clone` / `sim__prim__delete` (`confirm=true`), `sim__stage__clear_owned`,
+  `sim__light__*`, `sim__material__*`, `sim__physics__configure`, `sim__joints__drive`. They write
+  to the session layer only; source USD files are not rewritten.
+- `assets__roots` → `assets__scan` / `assets__search` → `assets__info` →
+  `assets__import_usd` / `assets__import_urdf`. Only launch-approved roots are accepted; there is
+  no URL input and no untrusted/hostile-USD isolation. Import needs matching units/up-axis, a
+  stopped timeline and a free wrapper path.
+- Runtime state: `sim__timeline__control`, `sim__simulation__step` while paused,
+  `sim__body__state`, `sim__joints__state` and `sim__joints__command` after physics is initialized.
+- Capture and sensors: `sim__camera__create` / `sim__camera__capture` (RTX), `sim__lidar__*`
+  (requires `--motion-bvh`), `sim__viewport__frame`. `NOT_READY` means render warm-up; on Isaac
+  Sim 6.0.0.0 a camera created after reopening a saved stage can stay `NOT_READY`.
+- `sim__stage__save` writes a new basename; it never overwrites or switches the current stage.
+  `sim__logs__tail` reads the selected Kit log.
+- `sim__controller__*` execute inline Python in a ScriptNode. Use them only with
+  `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1` at Kit launch and an explicit user request; this is not a
+  sandbox.
+
 ## UR5e twin pack (`ur5e_dt__*`)
 
 The twin extension registers scene tools for a UR5e workstation: `ur5e_dt__quick_start*` variants
@@ -101,7 +130,9 @@ the twin.
 ## Typical safe sequence
 
 1. `refresh_tools` → bridge listing → `use_bridge` if needed → `status`.
-2. Read: `run_python` stage summary, `screenshot`.
-3. Change: one named tool or one small `run_python` edit.
-4. Verify: read the changed prim back, `screenshot` again.
-5. Report what changed, with the PID and port it changed on.
+2. For generic work, `sim__stage__info` and keep its `session_id` / `stage_id`. Otherwise read
+   with `run_python`.
+3. Read: `sim__stage__tree` / `sim__prim__get` or `run_python`, plus `screenshot`.
+4. Change: one named tool (`sim__*`, `assets__*`, `ur5e_dt__*`) or one small `run_python` edit.
+5. Verify: read the changed prim back, `screenshot` again.
+6. Report what changed, with the PID, port and (for generic tools) the session/stage IDs.

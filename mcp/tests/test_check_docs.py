@@ -6,6 +6,7 @@ tool does not require editing this file; only AGENTS.md has to be brought up to 
 """
 
 import importlib.util
+import json
 import re
 from pathlib import Path
 
@@ -165,3 +166,32 @@ def test_repository_skills_name_only_registered_tools():
     errors = []
     check_docs.check_skill_tool_names(errors)
     assert errors == []
+
+
+def test_skill_scene_names_are_checked_when_catalogs_exist(tmp_path):
+    catalogs = tmp_path / "mcp" / "isaac_mcp" / "catalogs"
+    catalogs.mkdir(parents=True)
+    (catalogs / "sim.json").write_text(json.dumps({"tools": {"sim.stage.info": {}}}))
+    (catalogs / "assets.json").write_text(json.dumps({"tools": {"assets.roots": {}}}))
+    skill = tmp_path / "SKILL.md"
+    skill.write_text("Use `sim__stage__info` and `assets__roots`.")
+    errors = []
+    original = check_docs.ROOT
+    check_docs.ROOT = tmp_path
+    try:
+        check_docs.check_skill_tool_names(
+            errors,
+            expected={"docs/TOOLS-ISAACLAB.md": set(), "docs/TOOLS-UR5E.md": set(),
+                      "docs/TOOLS-HOST.md": {"sim__launch"}},
+            files=[skill],
+        )
+        skill.write_text("Use `sim__bogus`.")
+        check_docs.check_skill_tool_names(
+            errors,
+            expected={"docs/TOOLS-ISAACLAB.md": set(), "docs/TOOLS-UR5E.md": set(),
+                      "docs/TOOLS-HOST.md": {"sim__launch"}},
+            files=[skill],
+        )
+    finally:
+        check_docs.ROOT = original
+    assert errors == ["SKILL.md: names not in registry: sim__bogus"]
