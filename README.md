@@ -1,8 +1,9 @@
 # isaac-mcp
 
-An MCP server that lets an LLM client drive **Isaac Sim 6.2** and **Isaac Lab 3.0**:
-it talks to a running Kit app over a local bridge, and it can also see the desktop (screenshots and screen
-recordings). Not tied to any one project.
+An MCP server that lets an agent operate Isaac Sim through a local Kit bridge. It can also use an
+optional Isaac Lab installation and capture an available desktop. The bundled installer pins
+**Isaac Sim 6.2.0.0**; selected workflows on earlier 6.x builds have separate, limited test evidence.
+See the [version and prerequisite matrix](docs/LINUX-SETUP.md#choose-a-simulator-build).
 
 Built on Aldrin Inbaraj's [`omni-kit-mcp`](https://github.com/inbarajaldrin/omni-kit-mcp) and
 [`isaac-sim-mcp`](https://github.com/inbarajaldrin/isaac-sim-mcp), with a screen-capture tool pack added.
@@ -24,19 +25,43 @@ The latter is MIT-licensed; upstream `omni-kit-mcp` publishes no license file. S
 This standalone repository contains the **MCP server, bridge, tools and the `ur5e-dt` extension**.
 It can be used independently by projects that need Isaac Sim or Isaac Lab tools.
 
-## Quick start
+## Quick start: bundled Isaac Sim 6.2
+
+From this checkout on Ubuntu 22.04 or 24.04 x86_64, first install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+and check NVIDIA's [6.2 hardware and driver requirements](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/requirements.html).
+The full installer needs a working NVIDIA GPU/driver, 40 GB free disk space, network access, and
+acceptance of the NVIDIA Omniverse EULA.
 
 ```bash
-./install.sh --accept-eula        # uv env with Isaac Sim 6.2.0.0 + the isaac-mcp CLI
-scripts/check_machine.sh          # OS, GPU/driver, disk, network, display, port checks (must pass)
-./run.sh                          # Kit, MCP bridge and UR5e tools; panel hidden by default
-# Or run ./run.sh --ur5e-panel   # Show the UR5e panel as a docked tab
-./verify.sh                       # In another terminal, check a running UR5e session
+scripts/check_machine.sh          # 6.2-specific preflight; see the note below
+./install.sh --accept-eula        # install the pinned 6.2 Sim environment and host server
+./run.sh                          # windowed Sim, bridge and tools; UR5e panel hidden
+# Alternatively: ./run.sh --headless
+# Optional:      ./run.sh --ur5e-panel
 ```
 
-Host server only (no Isaac Sim): `./install.sh --no-sim`, or `uv tool install "./mcp"`.
-For Linux prerequisites, Python imports, Isaac Lab, and optional ROS driver installation, see
-[`docs/LINUX-SETUP.md`](docs/LINUX-SETUP.md).
+If its Sim interpreter already exists, `check_machine.sh` checks for **exactly 6.2.0.0** and runs a
+small Torch CUDA kernel. It is not an independent version check for 6.0 or 6.1. It warns about a
+missing display; headless Sim still requires a compatible GPU and driver.
+
+Connect your agent's MCP client using the [client setup examples](docs/MCP-SERVER.md#4-client-configuration),
+then call `refresh_tools`; if needed use `use_bridge` to select the intended port. Confirm the PID
+with `status` when available and call `sim__stage__info` before changing the stage. Catalog-listed
+Sim/UR5e tools can appear before any simulator is connected. For an optional **scene-changing**
+6.2 UR5e workstation check, run `./verify.sh` only in an owned disposable session with its required
+assets prepared; it rebuilds/reopens the scene and may write files.
+
+For a host-only setup, use `./install.sh --no-sim`; this does not install Isaac Sim, Isaac Lab, or
+system ROS. To use an existing 6.0 or 6.1 Sim environment, follow the separate
+[version selection instructions](docs/LINUX-SETUP.md#choose-a-simulator-build); the full installer
+always targets 6.2. The bundled NVIDIA Kit extensions, including HydraTexture, are not separate pip
+installs. Isaac Lab and external ROS tools/drivers are optional for their respective workflows.
+
+Saving a ROS camera scene can require an explicit export choice: `sim__stage__save` defaults
+`reset_camera_render_handles=false` and refuses affected saves with the exact runtime properties
+and retry option. Opting in removes only validated handles from the new copy and reports
+`omitted_runtime_render_properties`; original and live files remain unchanged. See
+[scene save limitations](docs/TOOLS-SCENE.md). Qualification of the integrated fix is still pending.
 
 The launcher, verifier and 6.2 probe use the repository's `.venv` or the interpreter set by
 `UR5E_DT_PYTHON`. They no longer search an implicit project-specific environment.
@@ -76,7 +101,8 @@ per MCP server; see [host tools](docs/TOOLS-HOST.md#optional-desktop-input) for 
 Work in progress. The [project status and roadmap](docs/ROADMAP.md) records completed work, tested configurations,
 limitations and next steps. The current twin workflow is verified on Isaac Sim 6.2; broader version and platform
 support is a goal, not yet a blanket compatibility claim. See the [compatibility matrix](docs/COMPATIBILITY.md)
-for tested releases, installation pins, and known limitations.
+for tested builds, installation pins, pending final qualification, and known limitations. Do not infer
+support for a future 6.x release from its version number.
 
 ## Documentation
 

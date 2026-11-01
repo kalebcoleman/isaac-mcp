@@ -14,6 +14,20 @@ This skill covers how to drive the tools safely. For Isaac Lab and Isaac Sim dom
 (writing environments, rewards, USD assets, sensors), route to NVIDIA's official skills listed in
 [references/official-skills.md](references/official-skills.md).
 
+For setup, use `docs/LINUX-SETUP.md#choose-a-simulator-build` and `docs/COMPATIBILITY.md`: the
+full installer selects Sim 6.2.0.0, while 6.0/6.1 tests used separately prepared environments.
+Do not claim future releases or pending tests are supported. The Sim runtime supplies its own Kit
+extensions, including HydraTexture; its `.pyi` API descriptions are not an extra package to install.
+External system ROS and Isaac Lab are separate and only needed for the workflows that use them.
+The supplied launcher enables its bundled ROS bridge even without an external ROS installation.
+
+For ROS camera saves, `sim__stage__save` defaults `reset_camera_render_handles` to `false`.
+An affected export reports `SAVE_UNSUPPORTED` with `properties` and `retry_with`; inspect these
+before explicitly opting in to normalization with `true`. Successful exports report exact
+`omitted_runtime_render_properties`. Ambiguous, authored or unavailable bindings still refuse.
+This changes the private export only; it does not repair an already-stale scene or prove authorship.
+Pause before saving and check the exported scene after reopening in a fresh process.
+
 ## Ground rules
 
 1. **Ask before GPU work.** `isaaclab__train`, `isaaclab__eval`, `isaaclab__play` and `sim__launch`
@@ -43,7 +57,7 @@ This skill covers how to drive the tools safely. For Isaac Lab and Isaac Sim dom
 4. For Isaac Lab work, call `isaaclab__install_info`. An error here means `ISAACLAB_PYTHON` /
    `ISAACLAB_ROOT` are not set in the server's environment; fix the client config, not the code.
 5. For generic scene or project-asset work, call `sim__stage__info` or `assets__roots`. The
-   37-tool `sim`/`assets` pack is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   39-tool `sim`/`assets` pack is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan` and `assets__search` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.

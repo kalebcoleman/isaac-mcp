@@ -3,6 +3,36 @@
 Start here if you are an AI agent working in or with this repository. It is a map; the
 per-tool reference lives in `docs/`.
 
+## Setup guide for agents
+
+- Identify the requested Sim build and workflow from the context or installation; reuse their intended
+  running bridge when available.
+  The repository's full `./install.sh --accept-eula` creates the locked **6.2.0.0** environment;
+  it is not a selector for older builds. For an existing compatible 6.0/6.1 interpreter, use
+  [build selection and checks](docs/LINUX-SETUP.md#choose-a-simulator-build). Follow the user's
+  authorization for starting GPU work and avoid replacing an existing environment.
+- Read [Linux prerequisites](docs/LINUX-SETUP.md) and the [compatibility matrix](docs/COMPATIBILITY.md)
+  before recommending packages. The host, Sim, external system ROS, and Isaac Lab can use different
+  environments. Install external ROS or Isaac Lab only when the requested workflow needs them.
+  The supplied launcher enables NVIDIA's bundled ROS bridge; that does not install system ROS.
+- NVIDIA supplies the `omni.kit.hydra_texture` extension with the inspected Sim installations.
+  `omni.hydratexture` `.pyi` files describe its API; do not tell users to pip-install stubs or `omni`
+  as a separate fix. Kit modules normally become available inside the running app.
+- Client setup is in [MCP-SERVER.md](docs/MCP-SERVER.md#4-client-configuration). After connection,
+  use `refresh_tools`, select the intended bridge if needed, verify PID/port, and start scene work
+  with `sim__stage__info`. Offline tool listings do not prove a running or compatible simulator.
+  `scripts/check_machine.sh` is a **6.2-specific** preflight and can run a real CUDA kernel; use the
+  version-specific checks for earlier builds. `./verify.sh` changes the UR5e scene and is 6.2-specific.
+
+When saving a scene with native ROS camera render handles, `sim__stage__save` defaults to
+`reset_camera_render_handles=false`. An affected save refuses with `SAVE_UNSUPPORTED`, exact
+`properties` and `retry_with`. After inspecting that response, explicitly retry with the flag set
+to `true` only if normalization of those runtime fields in the exported copy is intended. The
+result reports `omitted_runtime_render_properties`; cameras and source/live layers remain intact.
+The flag does not bypass ambiguous, authored, dependent or unavailable-binding refusals, prove
+property authorship, or repair an already-stale opened file. Pause before saving and verify the
+new file in a fresh process. See [save limitations](docs/TOOLS-SCENE.md).
+
 ## What you can reach, by tier
 
 An MCP client only shows the tools it has been told about. Most of this project's surface

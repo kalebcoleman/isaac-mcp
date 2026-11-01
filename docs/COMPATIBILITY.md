@@ -6,8 +6,10 @@ its interpreter can be different from the simulator's.
 
 The table records what this repository has actually exercised, not a guarantee for every machine or feature.
 The 6.0 and 6.1 probes used separate, locally resolved environments rather than this project's locked 6.2
-environment. See the [test details](evidence/compatibility-2026-10-31.md) and
-[verification guide](VERIFICATION.md) for the environment, results and omissions.
+environment; a clean-install recipe for those builds has not been qualified by this repository. For selection,
+prerequisites, and what is optional, see [Linux setup by build](LINUX-SETUP.md#choose-a-simulator-build).
+See the [test details](evidence/compatibility-2026-10-31.md) and [verification guide](VERIFICATION.md) for the
+environment, results and omissions. Final qualification of the combined candidate remains pending.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
 |---|---|---|
@@ -147,6 +149,21 @@ The latest UR5e World adapter initializes asynchronously even when `/physicsScen
 it restores the temporary terminal-launch flag before awaiting and avoids nested Kit updates.
 See the final validation attachment for the6.2 verify/smoke/motion and existing-scene checks.
 
-The6.0.0.0 fresh-process saved-scene test remains partial: geometry/resting body state and new
-sensor creation work, but camera readout stays `NOT_READY` after extended warm-up. Removing
-serialized native render graphs fixed a creation error, not this remaining readout edge.
+The earlier 6.0.0.0 fresh-process saved-scene evidence remains partial: geometry/resting body
+state and new sensor creation worked, but camera readout stayed `NOT_READY` after extended
+warm-up. Later orchestration-graph export fixes are described in [scene tools](TOOLS-SCENE.md);
+the final combined-candidate version/mode matrix must requalify that workflow.
+
+On combined candidate `34b24a262ae32fb6ae9f4f3c47f670d108784d07`, a saved ROS camera scene
+reopened without RGB or CameraInfo although TF was received. A private copy with one stale
+`viewportHandle` property removed restored those streams in fresh 6.2 headless and windowed tests.
+That experiment does not qualify the integrated product fix. The combined branch now includes
+PR #11 fix `919683337785f3e95972e3ada057b95c57aca7df`: `sim__stage__save` defaults
+`reset_camera_render_handles=false`, refuses affected saves with exact `properties` and
+`retry_with`, and permits explicit normalization only after the documented association,
+composition, dependency and live-binding checks. Successful exports list
+`omitted_runtime_render_properties`; the original and live stage remain untouched. See
+[save policy and limitations](TOOLS-SCENE.md). Fresh-process live qualification of this implementation
+and the remaining release/mode matrix are **pending**. Preserve the original scene; do not manually
+edit it as an installation step. An already-stale reopened handle can lack a valid native binding
+and must refuse normalization rather than guess.

@@ -27,10 +27,51 @@ scripts/check_machine.sh
 ./run.sh
 ```
 
-`./install.sh` uses `uv` to create the Python 3.12 simulator environment and install the host server. It does not
-install Isaac Lab or the system ROS driver. Use `./install.sh --no-sim` to install only the host server; `run.sh`
-requires a separate Sim environment. `run.sh --headless` omits the visible simulator window. The checker also warns
-about an absent simulator environment when it has not yet been installed.
+`./install.sh` requires [uv](https://docs.astral.sh/uv/getting-started/installation/) to be installed first.
+It creates the pinned 6.2 Python 3.12 simulator environment and installs the host server, including the host's
+TensorBoard metrics extra. It does **not** install Isaac Lab or system ROS. Use `./install.sh --no-sim` for the
+host only; `run.sh` still needs a compatible separate Sim environment. `run.sh --headless` omits the visible
+window but still requires a compatible NVIDIA GPU and driver. The checker warns if Sim is not installed; if an
+interpreter exists, it expects exactly 6.2.0.0 and launches a small Torch CUDA kernel. It is not a version-neutral
+6.x or CPU-only diagnostic.
+
+## Choose a simulator build
+
+The full repository installer and lock select **6.2.0.0 only**. Earlier builds below were exercised in separate,
+previously prepared environments on the recorded Ubuntu 24.04.5 machine. They were not certified as clean installs
+by the repository installer. The final combined-PR save/reopen and broader cross-mode qualification remain pending;
+see [compatibility](COMPATIBILITY.md) and [per-release evidence](evidence/project-scene/RUNS.md) for the exact scope.
+
+| Isaac Sim Python package | How to select it for this repository | What the existing evidence establishes |
+|---|---|---|
+| `6.0.0.0` | Existing compatible Python 3.12 environment; set `UR5E_DT_PYTHON` below. | Selected workflows exercised in both modes; earlier reopened-camera evidence was incomplete; final-candidate reopen qualification remains pending. |
+| `6.0.0.1` | Existing compatible Python 3.12 environment; set `UR5E_DT_PYTHON` below. | Selected workflows exercised in both modes; final combined-candidate qualification pending. |
+| `6.0.1.0` | Existing compatible Python 3.12 environment; set `UR5E_DT_PYTHON` below. | Selected workflows exercised in both modes; final combined-candidate qualification pending. |
+| `6.1.0.0` | Existing compatible Python 3.12 environment; set `UR5E_DT_PYTHON` below. | Selected workflows exercised in both modes; final combined-candidate qualification pending. |
+| `6.2.0.0` | `./install.sh --accept-eula` installs the pinned environment, or select a compatible existing one. | Baseline workflows exercised; the candidate save/reopen fix and final matrix are pending qualification. |
+| Other or future builds | No automatic compatibility claim or tested install recipe. | Unverified. |
+
+To use an existing environment without syncing the repository's 6.2 lock into it:
+
+```bash
+./install.sh --no-sim  # installs the host; does not install or replace the Sim environment
+ISAAC_SIM_PYTHON=/absolute/path/to/sim-env/bin/python
+"$ISAAC_SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
+uv pip check --python "$ISAAC_SIM_PYTHON"
+UR5E_DT_PYTHON="$ISAAC_SIM_PYTHON" ./run.sh --port 8766  # use an unused port; add --headless if desired
+```
+
+The package check and `uv pip check` identify the interpreter and dependency conflicts; they do not prove GPU,
+renderer, ROS, sensor or every-tool compatibility. Check the running bridge's PID/version and app build as described
+in [compatibility](COMPATIBILITY.md#checking-an-installation). For obtaining an older Sim, consult NVIDIA's
+[6.0 Python install guide](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/installation/install_python.html) or
+[6.0.1 guide](https://docs.isaacsim.omniverse.nvidia.com/6.0.1/installation/install_python.html); a vendor Sim
+installation alone is not proof that this repository's additional dependencies resolved correctly. The older test
+environments were corrected independently; no universal clean-install command for them is claimed here.
+
+For the supplied launcher, the packaged `isaacsim.ros2.bridge` is enabled even when no external ROS CLI/driver is
+installed. System ROS is needed only when an external ROS workflow calls for it. Isaac Lab is a separate optional
+installation; choose its Sim pairing from the [Lab matrix](COMPATIBILITY.md#isaac-lab-ros-and-platforms).
 
 ## Python imports and libraries
 
@@ -43,14 +84,23 @@ installer handles the dependencies below; they should not be mixed into a system
 | Host MCP server | Python 3.10 or newer; `mcp`, `mss`, `PIL` (Pillow), `Xlib` (python-xlib), `imageio_ffmpeg` | `./install.sh` or `./install.sh --no-sim` installs the host package and its dependencies. Screen capture requires an accessible graphical display; window selection/raising uses X11/XWayland. |
 | Host Isaac Lab metrics | `tensorboard` | `./install.sh` installs the host with the `isaaclab` extra. If installing the host separately, use the `[isaaclab]` extra for metrics. |
 | Isaac Sim and twin | Python 3.12; `isaacsim`, `omni`, `carb`, `pxr`, `numpy`, `scipy`, `yaml` (PyYAML), plus project dependencies including `matplotlib`, `torch` and `torchvision` | The root environment is synced by `./install.sh`; Sim supplies its Kit/USD modules. Many Kit imports are available only after Kit starts, not from an arbitrary Python interpreter. PyYAML reads an optional camera configuration. |
-| Simulator ROS bridge | `rclpy`, `sensor_msgs`, `tf2_msgs` and default message types | Supplied by the enabled Isaac Sim ROS 2 bridge. Custom ROS interfaces need a workspace built for Sim's Python 3.12; see [NVIDIA's ROS setup](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_ros.html). |
+| Simulator renderer and camera runtime | `omni.hydratexture` and `omni.kit.hydra_texture` inside Kit | Bundled NVIDIA extension in the inspected Sim installs; enabled/resolved as part of the Kit runtime where needed. `.pyi` files are type descriptions, not a separate user installation. Do not install an unrelated `omni` package or copy vendor files. |
+| Simulator ROS bridge | `rclpy`, `sensor_msgs`, `tf2_msgs` and default message types inside Kit | Supplied by the enabled Isaac Sim ROS 2 bridge; the repository launcher enables it. Custom ROS interfaces need a workspace built for Sim's Python 3.12; see [NVIDIA's ROS setup](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_ros.html). |
 | Isaac Lab jobs | Isaac Lab 3.0, its Python environment, compatible Isaac Sim, task modules and the selected training library | Install Isaac Lab separately. An activated environment or a checkout-local `.venv` can be discovered; use `ISAACLAB_PYTHON` and `ISAACLAB_ROOT` to select another installation. See [Isaac Lab tools](TOOLS-ISAACLAB.md). |
 | External ROS driver | System ROS `ros2`, UR driver, controller CLI, and Cyclone DDS | Install the matching ROS distribution and packages below. The launcher sources the system ROS setup itself. |
 
 For recordings, `install.sh` supplies an `ffmpeg` shim backed by the host's `imageio-ffmpeg` package, unless an
-existing `~/.local/bin/ffmpeg` is present. A working system `ffmpeg` can also be used. Host screen tools have no
-mouse or keyboard control by default; the X11 input tools can be explicitly enabled as described in
+existing `~/.local/bin/ffmpeg` is present. A working system `ffmpeg` can also be used. A windowed workflow needs
+an accessible display; host window and input controls were tested with X11/XWayland, not native Wayland.
+A headless Sim can still render sensor output but has no visible window to click or capture. Host screen tools have
+no mouse or keyboard control by default; the X11 input tools can be explicitly enabled as described in
 [host tools](TOOLS-HOST.md#optional-desktop-input).
+
+If a Kit module or renderer extension appears missing, first check the selected Sim interpreter and the
+running Kit extension manager/startup log. Do not try to fix a Kit import by installing `omni` or `.pyi` files
+into the host Python. The supplied launcher requests `isaac.mcp.bridge`, `sim-tools`, `ur5e-dt` and
+`isaacsim.ros2.bridge`; the UR5e panel is optional. After connecting the correct bridge, `status` and
+`sim__stage__info` help verify the running process and build; listing catalog tools by itself does not.
 
 ## Optional UR5e mock ROS driver
 
