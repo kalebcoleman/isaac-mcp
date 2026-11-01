@@ -639,6 +639,39 @@ def strip_runtime_render_state(layer):
     omitted = []
     for prim in output.Traverse():
         name = str(prim.GetPath())
+        if name == "/Orchestrator":
+            # Replicator's session graph has a Python event subscription which
+            # USD cannot serialize. In 1.13.4 the reopened graph makes
+            # _is_tick_graph() true, skipping _subscribe_update(); render frames
+            # complete but CPU annotators remain empty. Let Replicator rebuild
+            # its own graph/subscription in the next process. Do not call its
+            # private lifecycle APIs or mutate the live stage to repair this.
+            native_nodes = {
+                "OgnReadFabricTime": "omni.replicator.core.ReadFabricTime",
+                "OrchestratorUpdate": "omni.replicator.core.OgnUpdateOrchestrator",
+            }
+            children = list(prim.GetChildren())
+            if (
+                prim.GetTypeName() != "OmniGraph"
+                or prim.GetAttribute("evaluator:type").Get() != "push"
+                or prim.GetAttribute("pipelineStage").Get() != "pipelineStageSimulation"
+                or not children
+                or not any(c.GetName() == "OgnReadFabricTime" for c in children)
+                or any(
+                    c.GetTypeName() != "OmniGraphNode"
+                    or c.GetName() not in native_nodes
+                    or c.GetAttribute("node:type").Get()
+                    != native_nodes.get(c.GetName())
+                    or c.GetChildren()
+                    for c in children
+                )
+            ):
+                refuse(
+                    "SAVE_UNSUPPORTED",
+                    "Unrecognized /Orchestrator content; saved copy not published. Live stage preserved.",
+                )
+            omitted.append(name)
+            continue
         if not name.startswith("/Render/"):
             continue
         if prim.GetTypeName() == "OmniGraph" and prim.GetName() == "SDGPipeline":
@@ -658,6 +691,22 @@ def strip_runtime_render_state(layer):
             r"IsaacMCP_[0-9a-f]{32}", prim.GetName()
         ):
             omitted.append(name)
+    # A user controller may reference a native graph. Dropping that dependency
+    # silently would change its behavior; refuse before publishing the copy.
+    omitted_paths = [Sdf.Path(name) for name in omitted]
+    for prim in output.Traverse():
+        if any(prim.GetPath().HasPrefix(path) for path in omitted_paths):
+            continue
+        for attr in prim.GetAttributes():
+            if any(
+                target.HasPrefix(path)
+                for target in attr.GetConnections()
+                for path in omitted_paths
+            ):
+                refuse(
+                    "SAVE_UNSUPPORTED",
+                    "Preserved content connects to process-bound render state; saved copy not published. Live stage preserved.",
+                )
     # Remove deepest paths first. Never edit the live stage or its layers.
     for name in sorted(omitted, key=len, reverse=True):
         output.RemovePrim(name)

@@ -338,3 +338,81 @@ def test_save_omits_native_render_handles_but_preserves_scene_and_source(scene):
         scene.save(st, "unknown-graph.usda")
     assert exc.value.code == "SAVE_UNSUPPORTED"
     assert not (scene.output / "unknown-graph.usda").exists()
+
+
+@pytest.mark.parametrize("async_graph", [False, True])
+def test_save_omits_replicator_orchestrator_without_touching_live_stage(
+    scene, async_graph
+):
+    from pxr import Sdf
+
+    st = scene.stage()
+    native = Sdf.Layer.CreateAnonymous()
+    native.ImportFromString("""#usda 1.0
+    def OmniGraph "Orchestrator" {
+        token evaluator:type = "push"
+        token pipelineStage = "pipelineStageSimulation"
+        def OmniGraphNode "OgnReadFabricTime" {
+            token node:type = "omni.replicator.core.ReadFabricTime"
+        }
+    }
+    """)
+    st.GetRootLayer().subLayerPaths.append(native.identifier)
+    if async_graph:
+        n = st.DefinePrim("/Orchestrator/OrchestratorUpdate", "OmniGraphNode")
+        n.CreateAttribute("node:type", Sdf.ValueTypeNames.Token).Set(
+            "omni.replicator.core.OgnUpdateOrchestrator"
+        )
+        n.CreateAttribute(
+            "inputs:rationalTimeOfSimNumerator", Sdf.ValueTypeNames.Int64
+        ).SetConnections(
+            ["/Orchestrator/OgnReadFabricTime.outputs:fabricFrameTimeNumerator"]
+        )
+    st.DefinePrim("/World/Controller", "OmniGraph")
+    before = st.Flatten().ExportToString()
+    saved = scene.save(st, "orchestrator-copy.usda")
+    reopened = Usd.Stage.Open(saved["file"])
+    assert not reopened.GetPrimAtPath("/Orchestrator")
+    assert reopened.GetPrimAtPath("/World/Controller")
+    assert "/Orchestrator" in saved["omitted_runtime_render_paths"]
+    assert st.Flatten().ExportToString() == before
+
+    # A user graph connected to the native graph must never lose its input.
+    user = st.GetPrimAtPath("/World/Controller")
+    user.CreateAttribute("inputs:time", Sdf.ValueTypeNames.Int64).SetConnections(
+        ["/Orchestrator/OgnReadFabricTime.outputs:fabricFrameTimeNumerator"]
+    )
+    with pytest.raises(AssetError, match="connects to process-bound"):
+        scene.save(st, "dependent-controller.usda")
+    assert not (scene.output / "dependent-controller.usda").exists()
+
+
+@pytest.mark.parametrize("content", ["unknown_node", "unmarked", "empty"])
+def test_save_refuses_unrecognized_orchestrator_content(scene, content):
+    from pxr import Sdf
+
+    layer = Sdf.Layer.CreateAnonymous()
+    attributes = (
+        'token evaluator:type = "push"\n token pipelineStage = "pipelineStageSimulation"'
+        if content != "unmarked"
+        else ""
+    )
+    node = (
+        ""
+        if content == "empty"
+        else """def OmniGraphNode "OgnReadFabricTime" {
+        token node:type = "omni.replicator.core.ReadFabricTime"
+    }"""
+    )
+    layer.ImportFromString(
+        f'#usda 1.0\ndef OmniGraph "Orchestrator" {{\n {attributes}\n {node}\n }}'
+    )
+    st = scene.stage()
+    st.GetRootLayer().subLayerPaths.append(layer.identifier)
+    if content == "unknown_node":
+        st.DefinePrim("/Orchestrator/UserNode", "OmniGraphNode")
+    before = st.Flatten().ExportToString()
+    with pytest.raises(AssetError, match="Unrecognized /Orchestrator"):
+        scene.save(st, "unrecognized.usda")
+    assert st.Flatten().ExportToString() == before
+    assert not (scene.output / "unrecognized.usda").exists()
