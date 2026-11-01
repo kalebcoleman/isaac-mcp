@@ -317,18 +317,38 @@ def _latest_checkpoint(run_dir: Any) -> str | None:
 
 
 _SAVED_CKPT_RE = re.compile(r"saving checkpoint '([^']+)'")
-_EXPERIMENT_DIR_RE = re.compile(r"Exact experiment name requested from command line:\s*(/\S+)")
+_EXPERIMENT_DIR_RE = re.compile(r"^Exact experiment name requested from command line:[ \t]*([^\r\n]+)$", re.MULTILINE)
+_EXPERIMENT_ROOT_RE = re.compile(r"^(?:\[INFO\]:?[ \t]*)?Logging experiment in directory:[ \t]*(/[^\r\n]+)$", re.MULTILINE)
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def _run_dir_from_log(log_path: Path) -> str | None:
-    """Isaac Lab prints the absolute experiment dir near the top of the log before any checkpoint exists."""
+    """Read the bounded log header, including Lab 3's separate root/name lines."""
     try:
         with log_path.open("rb") as f:
             head = f.read(131072).decode("utf-8", errors="replace")
     except OSError:
         return None
+    head = _ANSI_RE.sub("", head)
     m = _EXPERIMENT_DIR_RE.search(head)
-    return m.group(1) if m else None
+    if not m:
+        return None
+    name = m.group(1).strip()
+    if not name or any(ord(c) < 32 for c in name):
+        return None
+    if Path(name).is_absolute():
+        return name  # Earlier libraries print the complete path on this line.
+    # A basename belongs to the most recently announced experiment root. Never
+    # treat arbitrary relative paths or traversal from stdout as a directory.
+    if name in {".", ".."} or "/" in name or "\\" in name:
+        return None
+    roots = list(_EXPERIMENT_ROOT_RE.finditer(head[:m.start()]))
+    if not roots:
+        return None
+    root = roots[-1].group(1).strip()
+    if any(ord(c) < 32 for c in root):
+        return None
+    return str(Path(root) / name)
 
 
 def _checkpoint_from_log(log_path: Path) -> str | None:
@@ -682,6 +702,7 @@ def runs_status(job_id: str) -> dict[str, Any]:
         logged = _run_dir_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
         if logged and Path(logged).exists():
             run_dir = logged
+            ckpt = _latest_checkpoint(run_dir)
     if ckpt and not _latest_checkpoint(run_dir):
         # the experiment dir (parent of nn/ for rl_games) is the run dir tools like metrics_summary want
         p = Path(ckpt).parent
