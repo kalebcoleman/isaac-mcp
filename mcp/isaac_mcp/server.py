@@ -309,14 +309,16 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
     departed = {}
     for mcp_name, canonical in list(state.name_map.items()):
         if canonical not in tools:
+            previous_tool = server._tool_manager._tools.get(mcp_name)
             _drop_tool(server, mcp_name)
             state.name_map.pop(mcp_name, None)
-            departed[canonical] = state.registered_meta.pop(mcp_name, None)
+            state.registered_meta.pop(mcp_name, None)
+            departed[canonical] = previous_tool
     for name, (canonical, meta, tool) in staged.items():
         if name in offline_names:
-            # The live copy replaces the offline proxy. A client only needs telling when what it
-            # sees (description, parameters) differs from what the snapshot already showed.
-            if _surface(meta) != _surface(offline.catalog[canonical]):
+            # A live copy replaces the proxy. Notify only if its client-visible
+            # schema, description or other advertised metadata differs.
+            if _tool_surface(server._tool_manager._tools.get(name)) != _tool_surface(tool):
                 changed.append(f"{canonical} (updated)")
         else:
             changed.append(f"{canonical} (updated)" if name in state.name_map else canonical)
@@ -324,11 +326,14 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
         state.name_map[name] = canonical
         state.registered_meta[name] = meta
     # A catalog tool this bridge does not (or no longer) serve stays listed as an offline proxy.
-    _sync_offline(server, state)
-    for canonical, last_meta in departed.items():
+    offline_changes = _sync_offline(server, state)
+    # A departed live tool may have been replaced by its catalog proxy. Its
+    # visible change is handled below, so do not count the replacement twice.
+    changed.extend(change for canonical, change in offline_changes.items() if canonical not in departed)
+    for canonical, previous_tool in departed.items():
         reverted = offline.catalog.get(canonical) if offline is not None else None
         if reverted is not None and canonical in offline_names.values():
-            if _surface(last_meta) != _surface(reverted):
+            if _tool_surface(previous_tool) != _tool_surface(server._tool_manager._tools.get(_mcp_name(canonical))):
                 changed.append(f"{canonical} (offline)")
         else:
             changed.append(f"{canonical} (removed)")
@@ -361,20 +366,25 @@ def _offline_for(server: Any) -> Optional[_OfflineTools]:
     return getattr(server, _OFFLINE_ATTR, None)
 
 
-def _surface(meta: Optional[Dict[str, Any]]) -> Any:
-    """What a client sees of a tool: its description and parameter schema."""
-    return None if meta is None else (meta.get("description"), meta.get("fields"))
+def _tool_surface(tool: Any) -> Any:
+    """Client-visible fields, excluding the handler and bridge routing state."""
+    if tool is None:
+        return None
+    return (tool.description, tool.parameters, getattr(tool, "title", None), getattr(tool, "meta", None),
+            getattr(tool, "annotations", None), getattr(tool, "icons", None))
 
 
-def _sync_offline(server: Any, state: _BridgeState) -> None:
+def _sync_offline(server: Any, state: _BridgeState) -> Dict[str, str]:
     """Make the server's offline proxies match the catalog, the filters and the live tools.
 
     Every catalog tool that passes the view filters and is not currently served by the selected
     bridge has a proxy; a tool the bridge now serves, or a filter now hides, loses it. The filters
-    are re-read from the process environment each time, as live discovery does. Idempotent."""
+    are re-read from the process environment each time, as live discovery does. Returns changes
+    by canonical name; an unchanged replacement by a live tool is not a visible change."""
+    changed: Dict[str, str] = {}
     offline = _offline_for(server)
     if offline is None:
-        return
+        return changed
     wanted = {_mcp_name(canonical): (canonical, meta)
               for canonical, meta in offline.catalog.items() if _visible(canonical, meta)}
     for name in list(offline.names):
@@ -383,8 +393,9 @@ def _sync_offline(server: Any, state: _BridgeState) -> None:
             offline.categories.pop(name, None)
         elif name not in wanted:                  # hidden since it was installed
             _drop_tool(server, name)
-            offline.names.pop(name)
+            canonical = offline.names.pop(name)
             offline.categories.pop(name, None)
+            changed[canonical] = f"{canonical} (removed)"
     for name, (canonical, meta) in wanted.items():
         if name in state.name_map:
             continue                              # served live (authoritative)
@@ -393,10 +404,13 @@ def _sync_offline(server: Any, state: _BridgeState) -> None:
             continue
         if name in server._tool_manager._tools and name not in offline.names:
             raise RuntimeError(f"offline catalog tool {canonical!r} collides with host tool {name!r}")
+        was_proxy = name in offline.names
         _drop_tool(server, name)                  # FastMCP keeps the first tool of a name
         register_dynamic_tool(server, name, canonical, meta, state=state, category=category)
         offline.names[name] = canonical
         offline.categories[name] = category
+        changed[canonical] = f"{canonical} (updated)" if was_proxy else canonical
+    return changed
 
 
 def _offline_note(server: Any) -> str:
@@ -667,6 +681,15 @@ async def _notify_tools_changed(ctx: Optional[Context]) -> None:
         logger.warning(f"Could not send tools/list_changed notification: {e}")
 
 
+def _tool_list_surface(server: FastMCP) -> Dict[str, Any]:
+    """The client-visible registry, excluding handlers and bridge routing state."""
+    return {name: _tool_surface(tool) for name, tool in server._tool_manager._tools.items()}
+
+
+def _changed_tool_names(before: Dict[str, Any], after: Dict[str, Any]) -> List[str]:
+    return sorted(name for name in before.keys() | after.keys() if before.get(name) != after.get(name))
+
+
 def _screen_port(state: Optional[_BridgeState] = None) -> int | None:
     """Bridge port for auto-targeting, before or after the client connects."""
     client = (state or _DEFAULT_STATE).client
@@ -697,9 +720,9 @@ async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None)
         identity = new_client.call("status")
     except Exception as e:  # noqa: BLE001
         return f"Error: {e}"
+    before = _tool_list_surface(server)
     old_client = state.client
     state.client = new_client
-    had_tools = bool(state.name_map)
     for name in list(state.name_map):
         _drop_tool(server, name)
     state.name_map.clear()
@@ -712,12 +735,15 @@ async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None)
         except Exception:  # noqa: BLE001
             pass
     try:
-        added = discover_and_register_tools(server)
+        discover_and_register_tools(server)
     except Exception as e:  # noqa: BLE001
-        if had_tools:  # the previous bridge's tools were dropped above
+        changed = _changed_tool_names(before, _tool_list_surface(server))
+        if changed:
             await _notify_tools_changed(ctx)
-        return f"Connected to port {port} but tool discovery failed: {e}" + _offline_note(server)
-    if had_tools or added:
+        return (f"Connected to port {port} but tool discovery failed: {e}"
+                + (f"\nChanged {len(changed)} tool(s): {changed}" if changed else "") + _offline_note(server))
+    changed = _changed_tool_names(before, _tool_list_surface(server))
+    if changed:
         await _notify_tools_changed(ctx)
     try:
         summary = json.dumps(identity, indent=2, sort_keys=True)
@@ -725,7 +751,8 @@ async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None)
         summary = str(identity)
     return (
         f"switched to bridge on port {port}\n{summary}\n"
-        f"registered/updated {len(added)} tool(s)" + _offline_note(server)
+        f"registered/updated/removed {len(changed)} tool(s)"
+        + (f": {changed}" if changed else "") + _offline_note(server)
     )
 
 

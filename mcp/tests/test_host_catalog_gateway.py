@@ -528,6 +528,106 @@ def test_changing_the_filter_is_applied_at_the_next_switch(monkeypatch):
     assert not set(PROXIES) & set(listed) and gw.offline_tools(server) == []
 
 
+@pytest.mark.parametrize("action", ["refresh_tools", "use_bridge"])
+@pytest.mark.parametrize("one_live_tool", [False, True])
+def test_filter_changes_notify_for_catalog_tools(monkeypatch, action, one_live_tool):
+    class EmptyBridge:
+        port = 9
+
+        def call(self, tool, params=None, **kwargs):
+            if tool == "list_tools":
+                catalog = host_catalog.load_catalog()
+                return {"tools": {"ur5e_dt.play_scene": catalog["ur5e_dt.play_scene"]} if one_live_tool else {}}
+            return {"pid": 1, "port": self.port}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(gw, "BridgeClient", lambda **kwargs: EmptyBridge())
+    server, notes = build(), []
+    args = {"port": 9} if action == "use_bridge" else {}
+
+    async def go():
+        async with session(server, notes) as client:
+            await client.initialize()
+            before = await tools(client)
+            monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "sim")
+            hidden = await call(action, args)(client)
+            hidden_names, hidden_notes = await tools(client), len(notes)
+            again = await call(action, args)(client)
+            unchanged_notes = len(notes)
+            monkeypatch.delenv("ISAAC_MCP_NAMESPACE")
+            shown = await call(action, args)(client)
+            return before, hidden, hidden_names, hidden_notes, again, unchanged_notes, shown, await tools(client)
+
+    before, hidden, hidden_names, hidden_notes, again, unchanged_notes, shown, after = asyncio.run(go())
+    assert set(PROXIES) <= set(before) and not set(PROXIES) & set(hidden_names)
+    assert set(PROXIES) <= set(after)
+    assert "23 tool(s)" in hidden and "23 tool(s)" in shown
+    assert "0 tool(s)" in again or "registry unchanged" in again
+    if action == "refresh_tools":
+        assert all(f"{canonical} (removed)" in hidden for canonical in PROXIES.values())
+        assert all(canonical in shown for canonical in PROXIES.values())
+    assert (hidden_notes, unchanged_notes, len(notes)) == (1, 1, 2)
+
+
+def test_switch_to_identical_client_surface_does_not_notify(monkeypatch):
+    class Bridge:
+        def __init__(self, port=None, **kwargs):
+            self.port = port
+
+        def call(self, tool, params=None, **kwargs):
+            if tool == "status":
+                return {"pid": 1, "port": self.port}
+            catalog = host_catalog.load_catalog()
+            return {"tools": {"ur5e_dt.play_scene": catalog["ur5e_dt.play_scene"]}}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(gw, "BridgeClient", Bridge)
+    server, notes = build(), []
+    async def go():
+        async with session(server, notes) as client:
+            await client.initialize()
+            answer = await call("use_bridge", {"port": 9})(client)
+            return answer, await tools(client), gw._state_for(server).client.port
+
+    answer, listed, port = asyncio.run(go())
+    assert "0 tool(s)" in answer and set(PROXIES) <= set(listed)
+    assert port == 9 and not notes
+
+
+def test_failed_switch_still_notifies_when_it_changes_offline_proxies(monkeypatch):
+    class Bridge:
+        def __init__(self, port=None, **kwargs):
+            self.port = port
+
+        def call(self, tool, params=None, **kwargs):
+            if tool == "status":
+                return {"pid": 1, "port": self.port}
+            if self.port == 9:
+                raise OSError("bridge died mid-discovery")
+            return {"tools": {}}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(gw, "BridgeClient", Bridge)
+    server, notes = build(), []
+
+    async def go():
+        async with session(server, notes) as client:
+            await client.initialize()
+            monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "sim")
+            answer = await call("use_bridge", {"port": 9})(client)
+            return answer, await tools(client)
+
+    answer, listed = asyncio.run(go())
+    assert "tool discovery failed" in answer and "Changed 23 tool(s)" in answer
+    assert not set(PROXIES) & set(listed) and len(notes) == 1
+
+
 def test_the_builtins_gate_does_not_hide_catalog_tools(monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
     server = build()
@@ -564,6 +664,66 @@ def test_meta_category_hooks_label_proxies_including_hooks_added_after_build():
     (listed,) = run(server, tools)                       # the session's startup syncs the proxies
     assert listed[PLAY].meta == {"category": "twin"}
     assert gw.build_server({})._tool_manager._tools[PLAY].meta == {"category": "twin"}
+
+
+def test_refresh_notifies_when_an_offline_proxy_category_changes(monkeypatch):
+    class EmptyBridge:
+        def call(self, tool, params=None, **kwargs):
+            return {"tools": {}}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(gw, "BridgeClient", lambda **kwargs: EmptyBridge())
+    server, notes = build(), []
+
+    async def go():
+        async with session(server, notes) as client:
+            await client.initialize()
+            gw.register_meta_category_hook(lambda name: "twin" if name.startswith("ur5e_dt.") else None)
+            first = await call("refresh_tools")(client)
+            listed = await tools(client)
+            second = await call("refresh_tools")(client)
+            return first, listed, second
+
+    first, listed, second = asyncio.run(go())
+    assert "23 tool(s)" in first and "ur5e_dt.play_scene (updated)" in first
+    assert listed[PLAY].meta == {"category": "twin"}
+    assert "registry unchanged" in second and len(notes) == 1
+
+
+def test_refresh_notifies_when_category_changes_across_live_proxy_transitions(monkeypatch):
+    class Bridge:
+        live = False
+
+        def call(self, tool, params=None, **kwargs):
+            catalog = host_catalog.load_catalog()
+            return {"tools": {"ur5e_dt.play_scene": catalog["ur5e_dt.play_scene"]} if self.live else {}}
+
+        def close(self):
+            pass
+
+    bridge = Bridge()
+    monkeypatch.setattr(gw, "BridgeClient", lambda **kwargs: bridge)
+    server, notes = build(), []
+
+    async def go():
+        async with session(server, notes) as client:
+            await client.initialize()
+            gw.register_meta_category_hook(lambda name: "policy" if name == "ur5e_dt.play_scene" else None)
+            bridge.live = True
+            became_live = await call("refresh_tools")(client)
+            live_meta, live_notes = (await tools(client))[PLAY].meta, len(notes)
+            gw._META_CATEGORY_HOOKS.clear()
+            bridge.live = False
+            became_offline = await call("refresh_tools")(client)
+            offline_meta = (await tools(client))[PLAY].meta
+            return became_live, live_meta, live_notes, became_offline, offline_meta
+
+    became_live, live_meta, live_notes, became_offline, offline_meta = asyncio.run(go())
+    assert "ur5e_dt.play_scene (updated)" in became_live and live_meta == {"category": "policy"}
+    assert "ur5e_dt.play_scene (offline)" in became_offline and offline_meta is None
+    assert (live_notes, len(notes)) == (1, 2)
 
 
 def test_a_live_tool_may_not_take_an_offline_proxys_name_under_another_canonical(monkeypatch):
