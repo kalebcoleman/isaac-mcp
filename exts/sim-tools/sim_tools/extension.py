@@ -216,6 +216,27 @@ class Extension(omni.ext.IExt):
                 async with self._operation_lock:
                     render_observation = None
                     camera_frame = None
+                    timeline_target = None
+                    timeline_was_stopped = False
+                    if name == "sim.timeline.control":
+                        import omni.kit.app as kit_app
+                        from .timeline import settle_stop
+
+                        timeline_target = (args["session_id"], args["stage_id"])
+                        timeline_was_stopped = self.scene.timeline.is_stopped()
+
+                        def validate_stopped():
+                            self.scene.target(*timeline_target)
+                            if not self.scene.timeline.is_stopped():
+                                from isaac_mcp.project_assets import refuse
+
+                                refuse(
+                                    "TIMELINE_INTERRUPTED",
+                                    "Timeline changed while awaiting native Stop; no automatic Play retry.",
+                                )
+
+                        if args.get("action") == "play" and self.scene.timeline.is_stopped():
+                            await settle_stop(kit_app.get_app().next_update_async, validate_stopped)
                     if name in ("sim.camera.capture", "sim.lidar.read"):
                         (
                             render_observation,
@@ -230,6 +251,12 @@ class Extension(omni.ext.IExt):
 
                         # Await the ordinary frame, never recursively pump the app loop.
                         await asyncio.wait_for(kit_app.get_app().next_update_async(), 5)
+                        self.scene.target(*timeline_target)
+                        if args["action"] == "stop":
+                            result["native_stop_observation"] = await settle_stop(
+                                kit_app.get_app().next_update_async,
+                                validate_stopped,
+                            )
                         if self.scene.timeline.is_stopped():
                             result["edit_target_restored"] = (
                                 self.scene.end_runtime_edit(self.scene.stage())
@@ -242,6 +269,21 @@ class Extension(omni.ext.IExt):
                         result["effects"] = (
                             "Timeline state observed after an application update; physics readiness requires a runtime read."
                         )
+                        expected = {
+                            "play": result["playing"],
+                            "stop": result["stopped"],
+                            "pause": not result["playing"] and (
+                                not result["stopped"] or timeline_was_stopped
+                            ),
+                        }[args["action"]]
+                        if not expected:
+                            from isaac_mcp.project_assets import refuse
+
+                            refuse(
+                                "TIMELINE_INTERRUPTED",
+                                "Requested timeline state was not retained; inspect the returned state before retrying.",
+                                observed_state=result,
+                            )
                 import json
 
                 if len(json.dumps(result).encode()) > 65536:
