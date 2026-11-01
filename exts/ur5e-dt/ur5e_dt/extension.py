@@ -22,6 +22,7 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # The bridge extension owns the process-wide socket; the twin owns only its
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
+from .graph_compat import ensure_fixed_graph
 from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_uri
 from .object_pose import read_local_pose, set_local_pose
 from .robot_visuals import prepare_robot_visuals
@@ -3393,18 +3394,14 @@ class DigitalTwin(omni.ext.IExt):
             print("Error: RG2 gripper not found at /World/RG2_Gripper. Import and attach gripper first.")
             return
 
-        # Clean up any previous physics callback
-        self._stop_gripper_physics()
 
         graph_path = "/Graph/ActionGraph_RG2"
         keys = og.Controller.Keys
 
         stage = omni.usd.get_context().get_stage()
-        if stage.GetPrimAtPath(graph_path):
-            stage.RemovePrim(graph_path)
 
-        (graph, nodes, _, _) = og.Controller.edit(
-            {"graph_path": graph_path, "evaluator_name": "execution"},
+        (graph, nodes, _, _) = ensure_fixed_graph(
+            stage, og, {"graph_path": graph_path, "evaluator_name": "execution"},
             {
                 keys.CREATE_NODES: [
                     ("tick", "omni.graph.action.OnPlaybackTick"),
@@ -3437,6 +3434,8 @@ class DigitalTwin(omni.ext.IExt):
                 ],
             }
         )
+
+        self._stop_gripper_physics()
 
         # Store attribute paths for the physics callback (Float64 target → rg2_gripper_joint;
         # callback fills the JointState name[]/position[] on state_pub each step).
@@ -3664,12 +3663,10 @@ class DigitalTwin(omni.ext.IExt):
         graph_path = "/Graph/ActionGraph_UR5e_ForcePublish"
         keys = og.Controller.Keys
         stage = omni.usd.get_context().get_stage()
-        if stage.GetPrimAtPath(graph_path):
-            stage.RemovePrim(graph_path)
 
         # Create OmniGraph with OnPlaybackTick for ROS2 publisher execution
-        (graph, nodes, _, _) = og.Controller.edit(
-            {"graph_path": graph_path, "evaluator_name": "execution"},
+        (graph, nodes, _, _) = ensure_fixed_graph(
+            stage, og, {"graph_path": graph_path, "evaluator_name": "execution"},
             {
                 keys.CREATE_NODES: [
                     ("tick", "omni.graph.action.OnPlaybackTick"),

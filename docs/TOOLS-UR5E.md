@@ -377,3 +377,7 @@ stays in that state; a replacement stage or concurrent Stop is never resumed.
 - Default randomization limits are fixed and not exposed via MCP (see `randomize_object_poses` / `randomize_single_object`).
 
 These tools require a running compatible Kit process and, for the twin, the simulator resources described in the README. The examples do not start training.
+
+Repeated Quick Start reuses matching fixed gripper/force graphs, including graphs composed
+from another USD layer or a reopened stage. Conflicting graph contracts are refused and
+preserved rather than removed from source layers.
