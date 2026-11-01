@@ -27,6 +27,7 @@ import re
 import signal
 import subprocess
 import threading
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -155,7 +156,24 @@ def _read_job(job_dir: Path) -> dict[str, Any] | None:
 
 
 def _write_job(job_dir: Path, data: dict[str, Any]) -> None:
-    (job_dir / "job.json").write_text(json.dumps(data, indent=2, default=str))
+    # Status/cancel readers do not all hold the watcher lock. Publish one whole
+    # JSON snapshot so they see the previous or next record, never truncation.
+    payload = json.dumps(data, indent=2, default=str)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=job_dir,
+            prefix=".job-", suffix=".tmp", delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, job_dir / "job.json")
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _update_job(job_dir: Path, **fields: Any) -> dict[str, Any]:

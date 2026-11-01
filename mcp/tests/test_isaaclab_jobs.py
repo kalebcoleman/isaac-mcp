@@ -424,3 +424,72 @@ def test_status_finds_checkpoint_in_lab3_resolved_run_directory(tmp_path):
     assert result["run_dir"] == str(experiment)
     assert result["latest_checkpoint"] == str(checkpoint.resolve())
     assert result["state"] == "succeeded"
+
+
+def test_job_readers_see_complete_record_during_publication(monkeypatch):
+    import concurrent.futures
+    import threading
+
+    job_id = "20261101-153515-atomic"
+    jd = jobs.jobs_dir() / job_id
+    jd.mkdir(parents=True)
+    before = {"status": "succeeded", "exit_code": 0, "generation": "old"}
+    after = {**before, "generation": "new", "details": "complete " * 1000}
+    jobs._write_job(jd, before)
+    ready, release = threading.Event(), threading.Event()
+    replace = jobs.os.replace
+
+    def held_replace(source, target):
+        assert Path(source).parent == jd and Path(source).name.startswith(".job-")
+        assert Path(target) == jd / "job.json"
+        ready.set()
+        assert release.wait(5), "reader did not release publication"
+        replace(source, target)
+
+    monkeypatch.setattr(jobs.os, "replace", held_replace)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        def publish():
+            with jobs._jobs_lock:
+                jobs._write_job(jd, after)
+        future = executor.submit(publish)
+        try:
+            assert ready.wait(5), "writer never reached publication"
+            assert jobs._read_job(jd) == before
+            assert jobs.runs_status(job_id)["state"] == "succeeded"
+            assert jobs.runs_cancel(job_id)["cancelled"] is False
+        finally:
+            release.set()
+        future.result(timeout=5)
+    assert jobs._read_job(jd) == after
+    assert not list(jd.glob(".job-*.tmp"))
+
+
+@pytest.mark.parametrize("failure", ["replace", "fsync"])
+def test_failed_metadata_publication_preserves_old_record_and_cleans_temp(monkeypatch, failure):
+    jd = jobs.jobs_dir() / "20261101-153515-failed-publish"
+    jd.mkdir(parents=True)
+    before = {"status": "succeeded", "exit_code": 0}
+    jobs._write_job(jd, before)
+    original = (jd / "job.json").read_bytes()
+
+    def fail(*args):
+        raise OSError("simulated publication failure")
+
+    monkeypatch.setattr(jobs.os, failure, fail)
+    with pytest.raises(OSError, match="publication failure"):
+        jobs._write_job(jd, {"status": "cancelled"})
+    assert (jd / "job.json").read_bytes() == original
+    assert not list(jd.glob(".job-*.tmp"))
+
+
+def test_atomic_job_write_does_not_follow_existing_destination_symlink(tmp_path):
+    jd = jobs.jobs_dir() / "20261101-153515-symlink"
+    jd.mkdir(parents=True)
+    other = tmp_path / "unrelated"
+    other.write_text("preserve this file")
+    (jd / "job.json").symlink_to(other)
+    record = {"status": "succeeded"}
+    jobs._write_job(jd, record)
+    assert other.read_text() == "preserve this file"
+    assert not (jd / "job.json").is_symlink()
+    assert jobs._read_job(jd) == record
