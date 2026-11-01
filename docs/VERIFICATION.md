@@ -55,6 +55,27 @@ minimum-SDK** passes and wheel/sdist/npm dry-run results belong to
 `4499bf7` check. Historical runtime failures and later scoped retests retain their own
 source identities in the [compatibility record](COMPATIBILITY.md).
 
+### CPU and package follow-up after the listener fix
+
+At exact commit `ece55d130020e56e2f7f7781e0df6335d816e159` (tree
+`10e15bffc9d7e97ddc264bdf99a715dcae7f61ec`), the local host suite passed
+**1,184 tests in 170.61 seconds**, with only the intentional duplicate-ZIP-member
+warning. The earlier bridge accept-thread EBADF warning was not observed in this run.
+This candidate includes the listener lifecycle fix; non-recurrence in one full run
+does not prove the absence of every startup/shutdown race. The `4499bf7` warning above
+remains part of the historical record.
+
+MCP **1.22.0** minimum-SDK checks passed **216 tests in 27.69 seconds**, retaining the
+Pydantic unresolved `lifespan` forward-reference warning. Documentation/privacy,
+asset, catalog and whitespace checks, wheel/sdist builds and `npm pack --dry-run`
+also passed on this exact commit. The retained summary's SHA-256 values matched all
+five local logs (host, minimum-SDK, static checks, build and npm dry run) when inspected.
+
+These are CPU/package results, not a new native run, package publication or clean-install
+qualification. In particular, the ongoing 6.0.0.1 runtime evidence at `4499bf7` is not
+relabeled to this candidate. The earlier `2bbeee4` package results remain valid historical
+observations; this follow-up records a separate package check at `ece55d1`.
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
