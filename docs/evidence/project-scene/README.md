@@ -27,7 +27,7 @@ records remain observations of the actual runs, but their redacted bytes differ 
 `REDACTED-SHA256SUMS` inside each bundle verifies distributed bytes; source/image/response hashes
 inside historical transcripts identify the original observations and must not be treated as
 hashes of redacted JSON. Saved robot geometry, private native dumps and unreviewed images are
-omitted. Large recordings and snapshots stay outside Git. Selected images below are unchanged
+omitted, including inline base64 screenshot payloads in transcripts and copied diffs. Large recordings and snapshots stay outside Git. Selected images below are unchanged
 application-window captures, each under 400 KB; no terminal or personal desktop content is kept.
 
 The privacy guard runs with `scripts/check_docs.py`, including nested gzip/tar/zip payloads,

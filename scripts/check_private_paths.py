@@ -42,6 +42,10 @@ def inspect_bytes(name: str, data: bytes, *, depth=0, budget=None):
     if depth > MAX_DEPTH or min(budget) < 0:
         return [f"{name}: privacy scan limit exceeded"]
     errors = []
+    if re.search(rb'"data"\s*:\s*"[A-Za-z0-9+/=]{1000}', data):
+        errors.append(
+            f"{name}: embedded opaque image/binary data must be a separately reviewed artifact"
+        )
     # JSON slash escapes do not make an absolute workstation path public-safe.
     decoded = data.replace(b"\\/", b"/")
     if HOME_PATH.search(decoded) or WORKTREE_PATH in decoded:

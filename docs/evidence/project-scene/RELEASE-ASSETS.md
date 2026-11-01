@@ -7,8 +7,8 @@ by marking this release draft.
 
 | Asset URL | SHA-256 | Bytes |
 |---|---|---:|
-| [compatibility-followup-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/compatibility-followup-redacted.tar.gz) | `c9d54949e36ebc86057ce7b2520049b9f1933d6f5debac221e9de7c4e2e229d9` | 16485989 |
-| [historical-evidence-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/historical-evidence-redacted.tar.gz) | `1651271544878f130df4f069800e3d97ad469302b51479860da4c39abf15ef18` | 7392202 |
+| [compatibility-followup-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/compatibility-followup-redacted.tar.gz) | `d0e2020a8d360735f73652d4e54d9f706f02df9d4d45371ce0c4f8d41ff8fe88` | 4668085 |
+| [historical-evidence-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/historical-evidence-redacted.tar.gz) | `205b5d9bad4074d6f7d053d40231f07fa1dcb3dcdb154a2578926ea1d119d2bb` | 1089241 |
 | [omitted-artifacts.json](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/omitted-artifacts.json) | `e0227a3860e5641896e745da8f5f14ebdf2d892c9ce2f1ca9bde3be96b84ee2e` | 15357 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`

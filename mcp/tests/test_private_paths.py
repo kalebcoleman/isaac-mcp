@@ -52,3 +52,7 @@ def test_malformed_or_excessive_archive_fails_closed():
     assert scan.inspect_bytes("large.gz", gzip.compress(b"a" * 1000), budget=[100, 10])
     assert scan.inspect_bytes("deep", b"safe", depth=6)
     assert not scan.inspect_bytes("safe.zip", _zip("summary.txt", b"<sim-install>/kit"))
+
+
+def test_opaque_screenshot_bytes_cannot_hide_in_transcripts():
+    assert scan.inspect_bytes("transcript.json", b'{"data":"' + b"a" * 1200 + b'"}')
