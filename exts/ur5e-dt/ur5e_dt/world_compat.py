@@ -38,7 +38,10 @@ async def paused_scene_edit(timeline, app, get_stage):
         for _ in range(4):
             await update()
     finally:
-        if was_playing and get_stage() == stage and timeline.is_paused():
+        # Timeline exposes is_playing/is_stopped in every inspected 6.x build;
+        # there is no is_paused() method on the older native interface.
+        if (was_playing and get_stage() == stage
+                and not timeline.is_playing() and not timeline.is_stopped()):
             timeline.play()
             for _ in range(4):
                 await update()

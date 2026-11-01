@@ -80,8 +80,8 @@ def test_scene_edit_preserves_state_and_does_not_resume_replaced_stage(initial, 
         def is_playing(self):
             return state["timeline"] == "playing"
 
-        def is_paused(self):
-            return state["timeline"] == "paused"
+        def is_stopped(self):
+            return state["timeline"] == "stopped"
 
         def pause(self):
             state["timeline"] = "paused"
