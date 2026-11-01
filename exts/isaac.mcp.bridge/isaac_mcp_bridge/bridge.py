@@ -907,8 +907,12 @@ class McpBridge:
                 self._bind_host = host
                 self._started_at = time.time()
             self._socket.listen(socket.SOMAXCONN)
+            # Configure before publishing the worker: stop() may close the
+            # listener before that worker gets its first time slice.
+            self._socket.settimeout(1.0)
             self._server_thread = threading.Thread(
-                target=self._accept_loop, name="isaac.mcp.bridge-accept", daemon=True)
+                target=self._accept_loop, args=(self._socket,),
+                name="isaac.mcp.bridge-accept", daemon=True)
             self._server_thread.start()
             _write_portfile(host, port)
             _log_info(f"[isaac.mcp.bridge] serving on {host}:{port}")
@@ -952,11 +956,12 @@ class McpBridge:
             _remove_portfile(self._port)
         _log_info("[isaac.mcp.bridge] server stopped")
 
-    def _accept_loop(self) -> None:
-        self._socket.settimeout(1.0)
-        while self._running:
+    def _accept_loop(self, listener) -> None:
+        # Keep this generation's listener. A late old worker must never accept
+        # from a replacement socket after a stop/start cycle.
+        while self._running and self._socket is listener:
             try:
-                sock, address = self._socket.accept()
+                sock, address = listener.accept()
             except socket.timeout:
                 continue
             except OSError:
@@ -974,9 +979,12 @@ class McpBridge:
                 target=self._serve_client, args=(conn,),
                 name=f"isaac.mcp.bridge-client-{conn.connection_id}", daemon=True)
             with self._lock:
+                if not self._running or self._socket is not listener:
+                    sock.close()
+                    break
                 self._connections[conn.connection_id] = conn
+                conn.thread.start()
             _log_info(f"[isaac.mcp.bridge] client {conn.connection_id} connected from {address}")
-            conn.thread.start()
 
     def _serve_client(self, conn: _ClientConnection) -> None:
         """One client's read loop. Every failure path is scoped to this
