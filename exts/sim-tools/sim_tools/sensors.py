@@ -201,8 +201,8 @@ def create(stage, path, kind, width=640, height=480):
         sensor["prim"] = stage.GetPrimAtPath(path)
         if kind == "camera":
             # On-demand renderer readback needs no continuously attached RGB
-            # annotator. That redundant SDG branch caused paused ROS RGB writer
-            # cycles in the fresh 6.2 headless coexistence control.
+            # annotator. This removes a redundant SDG branch, but native ROS
+            # writer cycle warnings also reproduced without it in fresh tests.
             return sensor
         # At ATTACHMENT, not just at retrieval: borrowed GPU storage crashed in
         # real use. There is deliberately no CameraSensor or GPU-copy fallback.
