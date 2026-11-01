@@ -48,8 +48,7 @@ general Action Graph editing, 3D generation) stay with PR #10's plan and are **o
 ## 3. Preconditions and working rules
 
 **Start only after PR #11 is merged into `main`** (it was still a draft, with work in progress in
-its own thread, when this was written). Never edit PR #11's branch or worktree
-(the worktree its own thread uses).
+its own thread, when this was written). Never edit PR #11's branch or its thread's worktree.
 
 1. Read [AGENTS.md](../../AGENTS.md), the [agent skill](../../.agents/skills/isaac-mcp/SKILL.md),
    [tool-authoring.md](../../mcp/docs/tool-authoring.md), [protocol.md](../../mcp/docs/protocol.md),
