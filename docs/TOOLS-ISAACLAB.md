@@ -147,7 +147,8 @@ required or performed by this documentation.
 - Parameters: none.
 - Returns: `{python, isaaclab_version, isaacsim_version, isaaclab_root, venv}` on success;
   `{"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}` (or a probe error)
-  on failure.
+  on failure. A successful probe can still return null version fields if distributions are absent;
+  it does not establish task import, renderer or training readiness.
 - Example call shape: `{"tool": "isaaclab__install_info", "arguments": {}}`
 
 ### `isaaclab__envs_list`

@@ -17,16 +17,18 @@ uv tool install --force --editable ./mcp
 
 Both commands install `isaac-mcp`. The installer also creates an `~/.local/bin/ffmpeg` shim for the Kit
 viewport recorder when that path does not already contain an unrelated file; a direct `uv tool install` does
-not create that shim. Omit `--no-sim` to install the repository's Isaac Sim environment as well.
+not create that shim. For the pinned Sim installation and EULA requirements, follow [Linux setup](../docs/LINUX-SETUP.md).
 
 Client configs: from the `isaac-mcp` repository root run
-`./install.sh --claude` for Claude Code and Claude Desktop. Details:
+`./install.sh --no-sim --claude` for Claude Code and Claude Desktop. Details:
 [docs/MCP-SERVER.md](../docs/MCP-SERVER.md).
 
 The 23 `ur5e_dt__*` tools are listed from a packaged catalog even before a simulator is running.
 They execute through a bridge that has the twin extension loaded; when no suitable bridge is available,
 they return an error with connection guidance. The supplied `run.sh` enables the tools while hiding their
-panel by default; use `--ur5e-panel` to show it. Other available tools include:
+panel by default; use `--ur5e-panel` to show it. The generic scene/asset pack is also
+catalog-listed; see [scene tools](../docs/TOOLS-SCENE.md) for its runtime requirements
+and trusted-root setup. Other available tools include:
 
 | Tool | Purpose |
 |---|---|
