@@ -89,7 +89,8 @@ for tested releases, installation pins, and known limitations.
 - [Server setup and agent workflow](docs/MCP-SERVER.md) and [architecture](docs/ARCHITECTURE.md).
 - [Agent skill](docs/AGENT-SKILLS.md) — the `isaac-mcp` skill for Claude Code, Codex, OpenCode and Antigravity, and
   how it routes to NVIDIA's Isaac Lab and Isaac Sim skills.
-- [Ecosystem](docs/ECOSYSTEM.md) — other Isaac Sim / Isaac Lab MCP servers and every tool they define.
+- [Ecosystem](docs/ECOSYSTEM.md) — every tool other Isaac Sim / Isaac Lab MCP servers define, grouped by capability
+  with isaac-mcp's coverage and what to build next ([by repository](docs/ECOSYSTEM-BY-REPO.md)).
 - [Isaac Lab implementation notes](docs/ISAACLAB-TOOLS.md) and [generic Sim tools design](docs/GENERIC-SIM-TOOLS.md)
   (the latter is a proposal, not an implemented pack).
 - [Vendoring](docs/VENDORING.md) and [publishing checklist](docs/PUBLISHING.md).
