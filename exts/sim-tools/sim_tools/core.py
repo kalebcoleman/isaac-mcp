@@ -1078,6 +1078,9 @@ def strip_runtime_render_state(layer):
         "omni.graph.nodes.GpuInteropRenderProductEntry",
         "isaacsim.sensors.rtx.IsaacCreateRTXLidarScanBuffer",
         "omni.graph.action.RationalTimeSyncGate",
+        # Replicator 1.13.38 creates this writer/annotator synchronization gate
+        # instead of the older action gate. It is regenerated on attachment.
+        "omni.replicator.core.OgnRationalTimeSyncGateOnce",
         "omni.replicator.nv.ReadRpFabricTime",
         "omni.syntheticdata.SdNoOp",
         "isaacsim.core.nodes.IsaacSimulationGate",
@@ -1175,6 +1178,8 @@ def strip_runtime_render_state(layer):
                     refuse(
                         "SAVE_UNSUPPORTED",
                         "Unknown content in native SyntheticData pipeline; saved copy not published. Live stage preserved.",
+                        path=str(child.GetPath()),
+                        node_type=child.GetAttribute("node:type").Get(),
                     )
             omitted.append(name)
         elif prim.GetTypeName() == "RenderProduct" and re.fullmatch(

@@ -449,9 +449,16 @@ def camera_pipeline(stage, kind="Image"):
 
 
 @pytest.mark.parametrize("kind", ["Image", "CameraInfo"])
-def test_save_regenerable_ros_camera_pipeline_preserves_authored_helper(scene, kind):
+@pytest.mark.parametrize("gate", [
+    "omni.graph.action.RationalTimeSyncGate",
+    "omni.replicator.core.OgnRationalTimeSyncGateOnce",
+])
+def test_save_regenerable_ros_camera_pipeline_preserves_authored_helper(scene, kind, gate):
     stage = scene.stage()
     helper, _ = camera_pipeline(stage, kind)
+    stage.GetPrimAtPath("/Render/PostProcess/SDGPipeline/Sync").GetAttribute(
+        "node:type"
+    ).Set(gate)
     before = stage.Flatten().ExportToString()
     result = scene.save(stage, "ros-camera.usda")
     reopened = Usd.Stage.Open(result["file"])
@@ -460,6 +467,20 @@ def test_save_regenerable_ros_camera_pipeline_preserves_authored_helper(scene, k
         "inputs:renderProductPath"
     ).GetConnections() == helper.GetAttribute("inputs:renderProductPath").GetConnections()
     assert not reopened.GetPrimAtPath("/Render/PostProcess/SDGPipeline")
+    assert stage.Flatten().ExportToString() == before
+
+
+def test_save_unknown_sync_node_reports_identity_and_preserves_live_stage(scene):
+    stage = scene.stage()
+    camera_pipeline(stage)
+    node_path = "/Render/PostProcess/SDGPipeline/Sync"
+    stage.GetPrimAtPath(node_path).GetAttribute("node:type").Set("custom.UnreviewedGate")
+    before = stage.Flatten().ExportToString()
+    with pytest.raises(AssetError) as error:
+        scene.save(stage, "unreviewed-gate.usda")
+    assert error.value.code == "SAVE_UNSUPPORTED"
+    assert error.value.details == {"path": node_path, "node_type": "custom.UnreviewedGate"}
+    assert not (scene.output / "unreviewed-gate.usda").exists()
     assert stage.Flatten().ExportToString() == before
 
 
