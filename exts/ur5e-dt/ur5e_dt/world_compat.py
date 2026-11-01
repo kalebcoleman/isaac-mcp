@@ -8,6 +8,40 @@ changed across an await, and never suppress asyncio's re-entry diagnostics.
 """
 
 import builtins
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def paused_scene_edit(timeline, app, get_stage):
+    """Let a large visual reference settle without advancing physics.
+
+    On 6.0.0.1/Kit 110.1.1, importing the workstation during playback and
+    immediately stopping reproducibly faults the Motion BVH renderer. Pausing
+    around composition and draining four ordinary updates on each side of
+    resume fixes that sequence. No nested update or destructive stop/reset.
+    Never resume a replaced stage or override a concurrent explicit stop.
+    """
+    stage = get_stage()
+    was_playing = timeline.is_playing()
+
+    async def update():
+        await app.next_update_async()
+        if get_stage() != stage:
+            raise RuntimeError("Stage changed during workstation composition; inspect the new stage before retrying")
+
+    if was_playing:
+        timeline.pause()
+    try:
+        if was_playing:
+            await update()
+        yield
+        for _ in range(4):
+            await update()
+    finally:
+        if was_playing and get_stage() == stage and timeline.is_paused():
+            timeline.play()
+            for _ in range(4):
+                await update()
 
 
 def extension_world(factory):

@@ -295,6 +295,11 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 
 ### `ur5e_dt__load_workstation`
 
+When playing, workstation composition temporarily pauses physics and drains ordinary
+render updates before restoring playback. This avoids the observed 6.0.0.1 Motion BVH
+crash when an immediate Stop followed a live bench import. A paused/stopped timeline
+stays in that state; a replacement stage or concurrent Stop is never resumed.
+
 - Bridge: `ur5e_dt.load_workstation`
 - Parameters: none.
 - Async: yes.

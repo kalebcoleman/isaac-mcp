@@ -25,7 +25,7 @@ from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_kno
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
 from .tf_compat import use_legacy_transform_publisher
-from .world_compat import initialized_extension_world
+from .world_compat import initialized_extension_world, paused_scene_edit
 
 
 def _use_legacy_tf_publisher(og):
@@ -2563,6 +2563,14 @@ class DigitalTwin(omni.ext.IExt):
         print("Scene loaded successfully.")
 
     async def load_workstation(self):
+        # Large-reference composition must complete outside active physics;
+        # otherwise older Motion BVH renderers can fault on the following Stop.
+        async with paused_scene_edit(
+            self._timeline, omni.kit.app.get_app(), omni.usd.get_context().get_stage
+        ):
+            await self._load_workstation()
+
+    async def _load_workstation(self):
         """Load the Vention workstation bench under the robot (additive, visual-only).
 
         References the bundled vention.usd at /World/Vention and places it so the
@@ -2570,7 +2578,7 @@ class DigitalTwin(omni.ext.IExt):
         the robot base (ROBOT_BASE_Z=0.0) and objects already sit. The robot is NOT
         moved and ROBOT_BASE_Z is NOT changed, so ROS pose parity is untouched. The
         bench has no colliders; the default ground plane's z=0 collision is retained
-        and only its visual is hidden. Safe to call while the sim is playing.
+        and only its visual is hidden. The wrapper pauses and restores playback.
         """
         import time
         import omni.kit.app

@@ -65,3 +65,60 @@ def test_async_initialization_handles_old_and_new_context_contracts(behavior):
     else:
         assert isinstance(asyncio.run(compat.initialized_extension_world(World)), World)
     assert calls == (["initialize"] if behavior in ("none", "not_initialized") else [])
+
+
+@pytest.mark.parametrize("initial", ["playing", "paused", "stopped"])
+@pytest.mark.parametrize("failure", [None, "native", "stage", "stop"])
+def test_scene_edit_preserves_state_and_does_not_resume_replaced_stage(initial, failure):
+    import asyncio
+
+    state = {"timeline": initial, "stage": object(), "updates": 0}
+    original_stage = state["stage"]
+    calls = []
+
+    class Timeline:
+        def is_playing(self):
+            return state["timeline"] == "playing"
+
+        def is_paused(self):
+            return state["timeline"] == "paused"
+
+        def pause(self):
+            state["timeline"] = "paused"
+            calls.append("pause")
+
+        def play(self):
+            state["timeline"] = "playing"
+            calls.append("play")
+
+    class App:
+        async def next_update_async(self):
+            state["updates"] += 1
+            await asyncio.sleep(0)
+
+    async def exercise():
+        async with compat.paused_scene_edit(Timeline(), App(), lambda: state["stage"]):
+            assert state["timeline"] != "playing"
+            if failure == "native":
+                raise RuntimeError("native import failed")
+            if failure == "stage":
+                state["stage"] = object()
+            if failure == "stop":
+                state["timeline"] = "stopped"
+
+    if failure in ("native", "stage"):
+        with pytest.raises(RuntimeError, match="native import|Stage changed"):
+            asyncio.run(exercise())
+    else:
+        asyncio.run(exercise())
+    if failure == "stage":
+        assert state["stage"] != original_stage
+        assert "play" not in calls
+    elif failure == "stop":
+        assert state["timeline"] == "stopped"
+        assert "play" not in calls
+    else:
+        assert state["timeline"] == initial
+        assert calls == (["pause", "play"] if initial == "playing" else [])
+        if not failure:
+            assert state["updates"] >= 4
