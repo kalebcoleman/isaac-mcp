@@ -253,3 +253,86 @@ def test_complete_cached_group_resolves(monkeypatch, tmp_path):
     write(cache / "robot" / "test.usd", b"root")
     write(cache / "robot" / "configuration" / "base.usd", b"layer")
     assert module.resolve_uri("robot/test.usd") == (cache / "robot" / "test.usd").as_uri()
+
+
+
+def relocated_manifest(module, tmp_path):
+    path, data = fake_manifest(module, tmp_path, target="sensors/test.usd")
+    data["fetch"][0]["files"][0]["cache_path"] = "Isaac/Sensors/Intel/RealSense/test.usd"
+    data["fetch"][0]["files"].append({
+        "target": "Isaac/Materials/material.mdl", "source": "Isaac/Materials/material.mdl",
+        "sha256": hashlib.sha256(b"material").hexdigest(), "size": 8,
+    })
+    path.write_text(json.dumps(data))
+    module.ASSETS_DIR = tmp_path / "drop-ins"
+    return path, data
+
+
+def test_relative_sensor_dependencies_keep_upstream_layout(monkeypatch, tmp_path):
+    module = load_module()
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("UR5E_DT_OFFLINE", "1")
+    relocated_manifest(module, tmp_path)
+    usd = module.cached_path("sensors/test.usd")
+    material = module.cached_path("Isaac/Materials/material.mdl")
+    write(usd, b"cached")
+    write(material, b"material")
+    assert (usd.parent / "../../../Materials/material.mdl").resolve() == material
+    assert module.resolve_uri("sensors/test.usd") == usd.as_uri()
+    assert module.resolve_path("sensors/test.usd") == usd
+    material.unlink()
+    with pytest.raises(module.AssetMissing, match="Isaac/Materials/material.mdl"):
+        module.resolve_uri("sensors/test.usd")
+    write(material, b"MATERIAL")
+    with pytest.raises(module.AssetCorrupt, match="sha256 mismatch"):
+        module.resolve_uri("sensors/test.usd")
+
+
+def test_old_flat_sensor_cache_requires_refetch(monkeypatch, tmp_path):
+    module = load_module()
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("UR5E_DT_OFFLINE", "1")
+    relocated_manifest(module, tmp_path)
+    old = tmp_path / "cache/sensors/test.usd"
+    write(old, b"cached")
+    with pytest.raises(module.AssetMissing, match="fetch_ur5e_assets.py"):
+        module.resolve_uri("sensors/test.usd")
+    assert old.read_bytes() == b"cached"
+
+
+def test_relocated_sensor_still_prefers_operator_drop_in(monkeypatch, tmp_path):
+    module = load_module()
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path / "cache"))
+    relocated_manifest(module, tmp_path)
+    drop_in = module.ASSETS_DIR / "sensors/test.usd"
+    write(drop_in, b"different licensed release with collected materials")
+    assert module.resolve_uri("sensors/test.usd") == drop_in.as_uri()
+
+
+def test_manifest_cache_location_cannot_escape(monkeypatch, tmp_path):
+    module = load_module()
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path / "cache"))
+    path, data = relocated_manifest(module, tmp_path)
+    for location in ("../outside", "/absolute"):
+        data["fetch"][0]["files"][0]["cache_path"] = location
+        path.write_text(json.dumps(data))
+        with pytest.raises(ValueError, match="relative"):
+            module.cached_path("sensors/test.usd")
+
+
+def test_fetch_and_check_use_manifest_cache_location(monkeypatch, tmp_path):
+    module = load_module()
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(cache))
+    _, data = relocated_manifest(module, tmp_path)
+    spec = importlib.util.spec_from_file_location("sensor_fetch_test", REPO / "scripts/fetch_ur5e_assets.py")
+    fetcher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fetcher)
+    source = tmp_path / "mirror"
+    for entry, content in zip(data["fetch"][0]["files"], (b"cached", b"material")):
+        write(source / entry["source"], content)
+    assert fetcher.check(data, cache) == 1
+    assert fetcher.fetch(data, cache, str(source), False) == 0
+    assert fetcher.check(data, cache) == 0
+    assert not (cache / "sensors/test.usd").exists()
+    assert module.resolve_path("sensors/test.usd").read_bytes() == b"cached"

@@ -54,10 +54,65 @@
           "target": "sensors/rsd455.usd",
           "source": "Isaac/Sensors/Intel/RealSense/rsd455.usd",
           "sha256": "0546588c4c33e54975ddb1ef5bb9924c75948e1f6da81e249ca844874f2ca0e1",
-          "size": 4463997
+          "size": 4463997,
+          "cache_path": "Isaac/Sensors/Intel/RealSense/rsd455.usd"
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Anodized.mdl",
+          "sha256": "5469bfef01fbd8c4b1784ed90884a29d93eb68ce6f27a8ae61803411ea3fb713",
+          "size": 1586,
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Anodized.mdl"
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Cast.mdl",
+          "sha256": "78c3edb2398c7a48618ebe011a9a9d09802e56e1af041ea7797b115f934bce53",
+          "size": 2006,
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Cast.mdl"
+        },
+        {
+          "source": "Isaac/Materials/Base/Plastics/Plastic_ABS.mdl",
+          "sha256": "996caa235e62010e15fcf8c820ffdf502a3c276fc416d3f95298e325adf44616",
+          "size": 1522,
+          "target": "Isaac/Materials/Base/Plastics/Plastic_ABS.mdl"
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_BaseColor.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_BaseColor.png",
+          "sha256": "d1d042502d7d94bca13cee10c63ab5b3801fb0a46e26d79169e13f5b9c7b5a31",
+          "size": 16903
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_ORM.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_ORM.png",
+          "sha256": "768f2dbb4f702a9624b912b431efd1a6a8e0ff3e93744cf54f3866ef8f7986e9",
+          "size": 637843
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_Normal.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Anodized/Aluminum_Anodized_Normal.png",
+          "sha256": "6dc1cb1b23a9abd766188a85ccbad1a2639d0a9a334f284e359c6c5d4438608e",
+          "size": 3321558
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_BaseColor.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_BaseColor.png",
+          "sha256": "03ab7494d37e1f6551a26894628c5fe03a65b4d85a09ed11337e184852a580b3",
+          "size": 1154931
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_ORM.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_ORM.png",
+          "sha256": "571eba5a99da444b681609a722a29914490c6dae45d230dac471a45875211a4c",
+          "size": 4198310
+        },
+        {
+          "source": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_N.png",
+          "target": "Isaac/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_N.png",
+          "sha256": "812c0161ea14abc581cb35c47b33dc6005c089f8e82dca6cb4dd4832deb0556c",
+          "size": 6557833
         }
       ],
-      "note": "The RealSense USD references NVIDIA's material libraries over HTTPS. Kit caches them after the first online load; the model itself is self-contained."
+      "note": "Keep the sensor at its source-relative cache path so its three relative MDL references resolve. The nine pinned material/texture dependencies are fetched and verified with the USD. OmniPBR and OmniGlass are provided by Kit. No NVIDIA file is redistributed or rewritten."
     }
   ],
   "manual": [

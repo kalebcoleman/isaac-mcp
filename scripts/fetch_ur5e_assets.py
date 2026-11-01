@@ -110,7 +110,7 @@ def check(manifest: dict, cache: Path) -> int:
     missing: list[str] = []
     bad: list[str] = []
     for _, entry in _iter_files(manifest):
-        path = cache / entry["target"]
+        path = cache / entry.get("cache_path", entry["target"])
         if not path.is_file():
             missing.append(entry["target"])
             continue
@@ -133,7 +133,7 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
     fetched = skipped = 0
     total_bytes = 0
     for group, entry in _iter_files(manifest):
-        destination = cache / entry["target"]
+        destination = cache / entry.get("cache_path", entry["target"])
         if destination.is_file() and not force:
             if _verify(destination, entry) is None:
                 skipped += 1

@@ -191,3 +191,20 @@ removes the dependency entirely.
   screenshots and logs, or the vendored Python code.
 - If the fresh public repository is created with `git filter-repo`, run this audit again on the
   cleaned tree: deleting files in a new commit leaves them in history.
+
+
+### RealSense dependency layout correction
+
+Live offline-cache validation found that the published D455 USD uses three relative MDL
+references, not HTTPS references. Placing it directly at `sensors/rsd455.usd` broke those
+paths. The logical twin name stays `sensors/rsd455.usd`; the manifest now stores the fetched
+file at `<cache>/Isaac/Sensors/Intel/RealSense/rsd455.usd`, preserving the upstream hierarchy.
+Three MDLs and six textures are pinned by SHA-256 and size and checked as one fetch group.
+Kit supplies the imported `OmniPBR` and `OmniGlass` modules. The fetcher does not rewrite or
+redistribute the NVIDIA files. Existing operator drop-ins remain untouched.
+
+After updating, rerun `python3 scripts/fetch_ur5e_assets.py`; old flat-cache sensor files are
+left in place and unused. `--check` reports the missing canonical path and dependencies until
+the new layout is fetched. A missing or modified dependency refuses cached sensor loading
+with the fetch/repair command, including in offline mode. These checks protect this pinned
+trusted asset set; they are not a general USD sandbox or a dependency parser for arbitrary MDL.

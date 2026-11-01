@@ -49,7 +49,7 @@ class AssetMissing(FileNotFoundError):
 
     def __init__(self, relpath: str, *, offline: bool = False):
         self.relpath = relpath
-        candidates = [str(ASSETS_DIR / relpath), str(cache_dir() / relpath)]
+        candidates = [str(ASSETS_DIR / relpath), str(cached_path(relpath))]
         remote = remote_uri(relpath)
         heading = "Asset not available offline" if offline else "Asset not available"
         lines = [
@@ -128,8 +128,7 @@ def offline() -> bool:
 
 def find_local(relpath: str) -> Path | None:
     """Return the first local copy of *relpath*, or None."""
-    for base in (ASSETS_DIR, cache_dir()):
-        candidate = base / relpath
+    for candidate in (ASSETS_DIR / relpath, cached_path(relpath)):
         if candidate.is_file():
             return candidate
     return None
@@ -161,6 +160,19 @@ def expected_asset(relpath: str) -> dict | None:
     return None
 
 
+def cached_path(relpath: str) -> Path:
+    """Keep source-relative dependencies anchored inside the operator cache.
+
+    The logical twin name remains stable; only a manifest-pinned cache layout
+    may differ. Drop-ins keep their operator-supplied layout and are untouched.
+    """
+    entry = expected_asset(relpath) or {}
+    relative = Path(entry.get("cache_path", relpath))
+    if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+        raise ValueError("Manifest cache path must stay relative to the asset cache")
+    return cache_dir() / relative
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as fh:
@@ -186,7 +198,7 @@ def verify_local(relpath: str, path: Path) -> None:
         target = entry.get("target")
         if target == relpath:
             continue
-        sibling = cache_dir() / target
+        sibling = cached_path(target)
         if not sibling.is_file():
             raise AssetMissing(target, offline=offline())
         _verify_entry(target, sibling, entry)
