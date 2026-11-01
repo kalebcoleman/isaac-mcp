@@ -154,10 +154,11 @@ body poses/DOF observations. It does not render, pump nested application updates
 changing an authored USD transform moved an active simulated body. Angular runtime values and
 drive targets use radians; USD authored joint diagnostics and angular drive gains use degrees.
 
-RTX cameras use UsdGeom and a Replicator RGB annotator configured for owned CPU
-storage **at attachment** (`device=cpu`, `do_array_copy=True`). The earlier experimental
-CameraSensor path crashed in native CUDA; asking that path for a CPU result at retrieval
-was insufficient. Cameras do not require `isaacsim.sensors.experimental.rtx`.
+RTX cameras use UsdGeom, an owned Replicator render product and an on-demand renderer
+CPU readback. They attach no RGB annotator: that redundant branch triggered paused ROS
+RGB writer cycle warnings in a controlled 6.2 headless test. The earlier experimental
+CameraSensor path crashed in native CUDA; asking it for a CPU result at retrieval was
+insufficient. Cameras do not require `isaacsim.sensors.experimental.rtx`.
 LiDAR uses the installed `IsaacSensorCreateRtxLidar` command and Cartesian CPU annotator,
 including the older 6.0.0.0 API. The full build, running Kit and loaded extensions must match
 a qualified stack; missing/conflicting identity and unknown builds fail before native creation.
@@ -174,8 +175,20 @@ counters alone did not prevent a stale Replicator pointer after paused physics s
 6.0.0.1. The default now bypasses that cached pointer, bounds and copies the callback buffer,
 and returns `cpu_transfer_completed=true`. Timeout/stage change returns no image; a pending
 native transfer prevents another request until completion. It does not step the Replicator
-orchestrator or change timeline state. `wait_for_render=false` explicitly permits the latest
-Replicator buffer, which can be stale. LiDAR defaults to the latest
+orchestrator or change timeline state. `wait_for_render=false` writes a PNG from the last
+validated **tool-acquired** CPU frame, without queuing rendering, a transfer or an annotator.
+It returns `NOT_READY` until a default/true capture has seeded the cache. Ordinary Play does
+not seed or refresh it. This replaces the previous continuously updated Replicator-buffer
+semantics. The response reports cache age and the acquisition's render/timeline observations
+separately from this call; observed render numbers are not an exact callback-image ID.
+Cached pixels may predate Stop/reset, pose edits or physics steps. A failed waiting capture
+still fails; only an explicit nonwaiting call may reuse an older valid frame. Cache commit
+occurs after final acquisition validation, before PNG publication: an output filename conflict
+can therefore leave a new valid cached acquisition while reporting file failure.
+Each camera retains one read-only RGBA8 frame, discarded on sensor/stage teardown and never
+reused by a new sensor at the same path. Eight 1024×1024 caches retain at most 32 MiB of pixel
+data; converter lists, in-flight transfers and PNG/RGB copies are additional memory.
+LiDAR acquisition is unchanged and defaults to the latest
 completed scan: its acquisition clock requires Play, and requesting a fresh render while
 paused returns `SENSOR_PAUSED`. Scan tick rate matches scan rate; accumulation is enabled.
 Render completion is **not** an atomic physics/sensor snapshot or proof of a fresh rotating

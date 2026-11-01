@@ -9,7 +9,14 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-from sim_tools.camera_capture import Readback, RenderFrames, capture, wait_for_frames
+from sim_tools.camera_capture import (
+    Readback,
+    RenderFrames,
+    cached,
+    capture,
+    invalidate,
+    wait_for_frames,
+)
 from isaac_mcp.project_assets import AssetError
 
 
@@ -47,7 +54,7 @@ def native(monkeypatch):
         texture.frame += 1
         state.callback({"result_handle": texture.frame})
         if calls and not getattr(state, "stall", False):
-            calls[0][0](object(), len(values), 64, 64, "TextureFormat.RGBA8_UNORM")
+            calls[-1][0](object(), len(values), 64, 64, "TextureFormat.RGBA8_UNORM")
         await asyncio.sleep(0)
 
     app = SimpleNamespace(get_app=lambda: SimpleNamespace(next_update_async=update))
@@ -178,7 +185,9 @@ async def test_cold_texture_is_only_read_during_a_valid_drawable_event(native):
             native.callback = callback
         await original_update()
 
-    sys.modules["omni.kit.app"].get_app = lambda: SimpleNamespace(next_update_async=update)
+    sys.modules["omni.kit.app"].get_app = lambda: SimpleNamespace(
+        next_update_async=update
+    )
     data, observation = await capture(native.sensor, lambda: None)
     assert data.shape == (64, 64, 4)
     assert observation["frame_number_before"] == 101
@@ -193,7 +202,9 @@ async def test_no_completed_render_times_out_without_reading_a_native_result(nat
     async def update():
         await asyncio.sleep(0)
 
-    sys.modules["omni.kit.app"].get_app = lambda: SimpleNamespace(next_update_async=update)
+    sys.modules["omni.kit.app"].get_app = lambda: SimpleNamespace(
+        next_update_async=update
+    )
     with pytest.raises(AssetError) as error:
         await capture(native.sensor, lambda: None, timeout=0.01)
     assert error.value.code == "RENDER_TIMEOUT"
@@ -241,7 +252,9 @@ async def test_lidar_render_wait_timeout_releases_subscription(native):
     async def update():
         await asyncio.sleep(0)
 
-    sys.modules["omni.kit.app"].get_app = lambda: SimpleNamespace(next_update_async=update)
+    sys.modules["omni.kit.app"].get_app = lambda: SimpleNamespace(
+        next_update_async=update
+    )
     with pytest.raises(AssetError) as error:
         await wait_for_frames(native.texture, lambda: None, timeout=0.01)
     assert error.value.code == "RENDER_TIMEOUT"
@@ -296,3 +309,132 @@ async def test_missing_renderer_api_is_an_actionable_refusal(native):
     with pytest.raises(AssetError) as error:
         await capture(native.sensor, lambda: None)
     assert error.value.code == "SENSOR_API_UNAVAILABLE" and not native.calls
+
+
+def test_empty_cache_requires_tool_acquisition_without_native_work(native):
+    with pytest.raises(AssetError) as error:
+        cached(native.sensor, lambda: None)
+    assert error.value.code == "NOT_READY"
+    assert "wait_for_render=true" in str(error.value)
+    assert not native.calls and not hasattr(native, "callback")
+
+
+@pytest.mark.anyio
+async def test_cache_is_last_acquisition_with_explicit_historical_metadata(native):
+    context = dict(timeline_state="playing", timeline_time_s=12)
+    data, fresh = await capture(
+        native.sensor, lambda: None, context=lambda: context.copy()
+    )
+    assert not data.flags.writeable and "readback_pending" not in native.sensor
+    context.update(timeline_state="stopped", timeline_time_s=0)
+    native.values[:] = [99] * len(native.values)
+    for _ in range(2):
+        old, observation = cached(native.sensor, lambda: None)
+        assert old is data and np.all(old == 42)
+        assert not observation["waited"] and not observation["cpu_transfer_completed"]
+        assert observation["cache_age_seconds"] >= 0
+        assert (
+            observation["acquisition"]["acquisition_context_after"]["timeline_time_s"]
+            == 12
+        )
+        assert len(native.calls) == 1
+    # Neither callers nor previous response dictionaries may change provenance.
+    fresh["cpu_transfer_completed"] = False
+    observation["acquisition"]["cpu_transfer_completed"] = False
+    assert cached(native.sensor, lambda: None)[1]["acquisition"][
+        "cpu_transfer_completed"
+    ]
+    new, _ = await capture(native.sensor, lambda: None)
+    assert new is not data and np.all(new == 99)
+    assert cached(native.sensor, lambda: None)[0] is new
+    assert "readback_pending" not in native.sensor
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "change", ["generation", "product", "texture", "stage", "path", "resolution"]
+)
+async def test_cache_never_crosses_a_changed_generation_or_binding(native, change):
+    await capture(native.sensor, lambda: None)
+    if change == "generation":
+        invalidate(native.sensor)
+    elif change == "texture":
+        native.sensor["product"].hydra_texture = object()
+    else:
+        key, value = {
+            "product": ("product", SimpleNamespace(hydra_texture=native.texture)),
+            "stage": ("stage", object()),
+            "path": ("product_path", "/Render/Replaced"),
+            "resolution": ("resolution", (64, 96)),
+        }[change]
+        native.sensor[key] = value
+    with pytest.raises(AssetError) as error:
+        cached(native.sensor, lambda: None)
+    assert error.value.code in ("NOT_READY", "SENSOR_INVALIDATED")
+    assert len(native.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_fresh_failure_never_returns_old_cache_or_accepts_late_pixels(native):
+    old, _ = await capture(native.sensor, lambda: None)
+    native.stall = True
+    with pytest.raises(AssetError) as error:
+        await capture(native.sensor, lambda: None, timeout=0.01)
+    assert error.value.code == "RENDER_TIMEOUT"
+    assert cached(native.sensor, lambda: None)[0] is old
+    pending = native.sensor["readback_pending"]
+    invalidate(native.sensor)
+    assert not pending.active and "camera_cache" not in native.sensor
+    native.calls[-1][0](object(), 16384, 64, 64, "TextureFormat.RGBA8_UNORM")
+    await asyncio.sleep(0)
+    assert (
+        "camera_cache" not in native.sensor and "readback_pending" not in native.sensor
+    )
+
+
+@pytest.mark.anyio
+async def test_final_validation_failure_cannot_commit_pixels(native):
+    def validate():
+        pending = native.sensor.get("readback_pending")
+        if pending is not None and pending.future.done():
+            raise AssetError("STALE_TARGET", "Target changed after CPU transfer")
+
+    with pytest.raises(AssetError) as error:
+        await capture(native.sensor, validate)
+    assert error.value.code == "STALE_TARGET"
+    assert (
+        "camera_cache" not in native.sensor and "readback_pending" not in native.sensor
+    )
+    assert native.reset
+
+
+@pytest.mark.anyio
+async def test_disposal_during_native_completion_cannot_repopulate_cache(native):
+    def validate():
+        pending = native.sensor.get("readback_pending")
+        if pending is not None and pending.future.done():
+            invalidate(native.sensor)
+
+    with pytest.raises(AssetError, match="generation"):
+        await capture(native.sensor, validate)
+    assert "camera_cache" not in native.sensor and native.reset
+
+
+@pytest.mark.anyio
+async def test_failed_subscription_does_not_leave_a_busy_native_request(
+    native, monkeypatch
+):
+    def fail(**kwargs):
+        raise RuntimeError("event subscription failed")
+
+    monkeypatch.setattr(
+        sys.modules["carb.eventdispatcher"],
+        "get_eventdispatcher",
+        lambda: SimpleNamespace(observe_event=fail),
+    )
+    with pytest.raises(RuntimeError, match="subscription failed"):
+        await capture(native.sensor, lambda: None)
+    assert (
+        "readback_pending" not in native.sensor and "camera_cache" not in native.sensor
+    )
+    assert not native.calls

@@ -6,9 +6,73 @@ Only public Kit APIs are used. No CUDA pointer access or orchestrator stepping.
 """
 
 import asyncio
+import copy
+from dataclasses import dataclass
 import time
 
 from isaac_mcp.project_assets import refuse
+
+
+@dataclass(frozen=True)
+class CameraFrame:
+    """Pixel transport and freshness are independent, explicit facts."""
+
+    data: object
+    fresh: bool
+
+
+def invalidate(sensor):
+    """Invalidate even partially created/disposed cameras and late callbacks."""
+    sensor["capture_generation"] = object()
+    sensor.pop("camera_cache", None)
+    pending = sensor.pop("readback_pending", None)
+    if pending is not None:
+        pending.close()
+
+
+def binding(sensor):
+    product = sensor.get("product")
+    texture = getattr(product, "hydra_texture", None)
+    if product is None or texture is None:
+        refuse("SENSOR_INVALIDATED", "Camera render resources were released.")
+    return (
+        sensor.setdefault("capture_generation", object()),
+        product,
+        texture,
+        sensor.get("stage"),
+        sensor["product_path"],
+        tuple(sensor["resolution"]),
+    )
+
+
+def validate_binding(sensor, expected, validate):
+    validate()
+    current = binding(sensor)
+    if (
+        any(a is not b for a, b in zip(current[:4], expected[:4]))
+        or current[4:] != expected[4:]
+    ):
+        refuse("SENSOR_INVALIDATED", "Camera generation or render resources changed.")
+
+
+def cached(sensor, validate):
+    """No renderer/annotator request: reuse the last validated acquisition."""
+    validate()
+    record = sensor.get("camera_cache")
+    if record is None:
+        refuse(
+            "NOT_READY",
+            "No tool-acquired camera frame is cached. Call capture with wait_for_render=true first; ordinary Play does not seed or refresh this cache.",
+        )
+    validate_binding(sensor, record["binding"], validate)
+    return record["data"], dict(
+        waited=False,
+        render_product=sensor["product_path"],
+        cpu_transfer_completed=False,
+        cache_age_seconds=max(0, time.monotonic() - record["acquired_at"]),
+        acquisition=copy.deepcopy(record["observation"]),
+        meaning="Last validated tool acquisition; may predate Stop/reset, pose edits or physics steps. No new render or CPU transfer requested. PNG encoding and file I/O still occur.",
+    )
 
 
 class RenderFrames:
@@ -69,7 +133,10 @@ async def wait_for_frames(texture, validate, timeout=5):
             filter=texture.get_event_key(),
         )
     except (ImportError, AttributeError) as exc:
-        refuse("SENSOR_API_UNAVAILABLE", "Render completion events unavailable: " + str(exc))
+        refuse(
+            "SENSOR_API_UNAVAILABLE",
+            "Render completion events unavailable: " + str(exc),
+        )
 
     async def wait():
         # Yield for post-render annotator dispatch even when the event already
@@ -186,15 +253,18 @@ class Readback(RenderFrames):
             self.future.exception()
 
 
-async def capture(sensor, validate, timeout=5):
+async def capture(sensor, validate, timeout=5, context=None):
     """Await ordinary updates and a CPU callback, restoring all subscriptions."""
     validate()
+    expected_binding = binding(sensor)
+    context_before = context() if context else None
     pending = sensor.get("readback_pending")
     if pending is not None and not pending.finished:
         refuse(
             "RENDER_BUSY",
             "A timed-out CPU transfer is still pending. Wait or recreate this owned camera; another native request was not queued.",
         )
+    state = None
     try:
         import omni.hydratexture as ht
         import omni.kit.app
@@ -227,23 +297,29 @@ async def capture(sensor, validate, timeout=5):
             on_event=state.drawable,
             filter=texture.get_event_key(),
         )
-    except (ImportError, AttributeError) as e:
-        refuse(
-            "SENSOR_API_UNAVAILABLE",
-            "Fresh renderer CPU capture unavailable: " + str(e),
-        )
+    except Exception as e:
+        if state is not None:
+            state.close()
+            if sensor.get("readback_pending") is state:
+                sensor.pop("readback_pending", None)
+        if isinstance(e, (ImportError, AttributeError)):
+            refuse(
+                "SENSOR_API_UNAVAILABLE",
+                "Fresh renderer CPU capture unavailable: " + str(e),
+            )
+        raise
     begin = time.monotonic()
 
     async def wait():
         while not state.future.done():
             await omni.kit.app.get_app().next_update_async()
-            validate()
+            validate_binding(sensor, expected_binding, validate)
         return await state.future
 
     try:
         data = await asyncio.wait_for(wait(), timeout)
-        validate()
-        return data, dict(
+        validate_binding(sensor, expected_binding, validate)
+        observation = dict(
             waited=True,
             render_product=sensor["product_path"],
             **state.observation(),
@@ -251,6 +327,22 @@ async def capture(sensor, validate, timeout=5):
             wait_seconds=time.monotonic() - begin,
             meaning="CPU pixels transferred from this product after the requested render completions; not an atomic physics/sensor snapshot",
         )
+        if context:
+            observation.update(
+                acquisition_context_before=context_before,
+                acquisition_context_after=context(),
+            )
+        # Commit only on the normal Kit/tool loop after final target validation.
+        # This is the acquisition boundary, before subsequent PNG publication.
+        # The render counter is an observation, not an exact callback image ID.
+        data.setflags(write=False)
+        sensor["camera_cache"] = dict(
+            binding=expected_binding,
+            data=data,
+            acquired_at=time.monotonic(),
+            observation=copy.deepcopy(observation),
+        )
+        return data, observation
     except asyncio.TimeoutError:
         refuse(
             "RENDER_TIMEOUT",
@@ -259,3 +351,7 @@ async def capture(sensor, validate, timeout=5):
     finally:
         state.close()
         subscription.reset()
+        # Completed futures retain their ndarray. Keep only the cache reference;
+        # unfinished native callbacks still guard against another queued request.
+        if state.finished and sensor.get("readback_pending") is state:
+            sensor.pop("readback_pending", None)

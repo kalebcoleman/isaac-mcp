@@ -47,8 +47,9 @@ class Extension(omni.ext.IExt):
             self.scene, kit_app.get_app().next_update_async, carb.log_error
         )
         self._timeline_events = (
-            self.scene.timeline.get_timeline_event_stream()
-            .create_subscription_to_pop(self._timeline_event)
+            self.scene.timeline.get_timeline_event_stream().create_subscription_to_pop(
+                self._timeline_event
+            )
         )
         # Release attachments before Kit invalidates the closing stage. No
         # recursive application update, stage reset or timeline change here.
@@ -123,10 +124,10 @@ class Extension(omni.ext.IExt):
         wait = args.pop("wait_for_render", expected == "camera")
         if type(wait) is not bool:
             refuse("INVALID_VALUE", "wait_for_render must be boolean.")
-        if not wait:
+        if not wait and expected == "lidar":
             return {
                 "waited": False,
-                "meaning": "latest available frame/scan; freshness not established by this call",
+                "meaning": "latest completed LiDAR scan; freshness not established by this call",
             }, None
         if expected == "lidar" and not s.timeline.is_playing():
             refuse(
@@ -145,14 +146,25 @@ class Extension(omni.ext.IExt):
         begin = time.monotonic()
         timeline_before = s.timeline.get_current_time()
         if expected == "camera":
-            from .camera_capture import capture
+            from .camera_capture import CameraFrame, cached, capture
 
             def validate():
                 s.target(args["session_id"], args["stage_id"])
                 if self.advanced.sensors.get(args["path"]) is not entry:
                     refuse("SENSOR_INVALIDATED", "Sensor changed during CPU capture.")
+                prim = s.prim(s.stage(), args["path"])
+                if not prim.IsActive() or prim != entry[1]["prim"]:
+                    refuse(
+                        "SENSOR_INVALIDATED", "Camera prim is inactive or was replaced."
+                    )
                 if (
-                    texture.get_camera_path() != args["path"]
+                    getattr(entry[1].get("product"), "hydra_texture", None)
+                    is not texture
+                    or texture.get_usd_context_name()
+                    != omni.usd.get_context().get_name()
+                    or (texture.get_height(), texture.get_width())
+                    != entry[1]["resolution"]
+                    or texture.get_camera_path() != args["path"]
                     or texture.get_render_product_path() != entry[1]["product_path"]
                 ):
                     refuse(
@@ -160,12 +172,25 @@ class Extension(omni.ext.IExt):
                         "Camera/render product binding changed outside this tool.",
                     )
 
-            data, observation = await capture(entry[1], validate)
+            def context():
+                return dict(
+                    timeline_time_s=s.timeline.get_current_time(),
+                    timeline_state=(
+                        "playing"
+                        if s.timeline.is_playing()
+                        else "stopped" if s.timeline.is_stopped() else "paused"
+                    ),
+                )
+
+            if wait:
+                data, observation = await capture(entry[1], validate, context=context)
+            else:
+                data, observation = cached(entry[1], validate)
             observation.update(
                 timeline_time_before=timeline_before,
                 timeline_time_after=s.timeline.get_current_time(),
             )
-            return observation, data
+            return observation, CameraFrame(data, fresh=wait)
         from .camera_capture import wait_for_frames
 
         def validate_lidar():

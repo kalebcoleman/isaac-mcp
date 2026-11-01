@@ -7,6 +7,7 @@ import pytest
 from test_scene_usd import scene
 from isaac_mcp.project_assets import AssetError
 from sim_tools.advanced import Advanced
+from sim_tools.camera_capture import CameraFrame
 from pxr import Usd, UsdPhysics, UsdGeom, UsdShade
 
 
@@ -51,24 +52,30 @@ def test_camera_requires_owned_cpu_data_and_preserves_existing_output(
     advanced.invalidate()
     pixels = np.full((64, 96, 4), 42, dtype=np.uint8)
 
-    class Annotator:
-        def get_data(self, *, device, do_array_copy):
-            assert device == "cpu" and do_array_copy
-            return pixels
-
     advanced.sensors["/World/Camera"] = (
         "camera",
-        dict(annotator=Annotator(), resolution=(64, 96), adapter="test-owned-cpu"),
+        dict(resolution=(64, 96), adapter="hydra-renderer-cpu-v1"),
     )
     args = dict(path="/World/Camera", filename="capture.png")
-    result = advanced.execute("sim.camera.capture", advanced.s.stage(), args)
+    result = advanced.execute(
+        "sim.camera.capture",
+        advanced.s.stage(),
+        args,
+        camera_frame=CameraFrame(pixels, True),
+    )
+    assert result["freshness"] == "new render and CPU transfer completed"
     assert (result["width"], result["height"]) == (96, 64)
     with Image.open(result["file"]) as image:
         assert image.mode == "RGB" and image.getpixel((0, 0)) == (42, 42, 42)
     original = (advanced.s.output / "capture.png").read_bytes()
     pixels.fill(99)
     with pytest.raises(FileExistsError):
-        advanced.execute("sim.camera.capture", advanced.s.stage(), args)
+        advanced.execute(
+            "sim.camera.capture",
+            advanced.s.stage(),
+            args,
+            camera_frame=CameraFrame(pixels, True),
+        )
     assert (advanced.s.output / "capture.png").read_bytes() == original
 
     class BorrowedGPU:
@@ -77,16 +84,25 @@ def test_camera_requires_owned_cpu_data_and_preserves_existing_output(
         def numpy(self):
             pytest.fail("must never copy a borrowed GPU pointer")
 
-    advanced.sensors["/World/Camera"][1]["annotator"] = SimpleNamespace(
-        get_data=lambda **kw: BorrowedGPU()
-    )
     with pytest.raises(AssetError, match="no GPU-pointer fallback"):
         advanced.execute(
             "sim.camera.capture",
             advanced.s.stage(),
             dict(path="/World/Camera", filename="unsafe.png"),
+            camera_frame=CameraFrame(BorrowedGPU(), True),
         )
     assert not (advanced.s.output / "unsafe.png").exists()
+    cached = advanced.execute(
+        "sim.camera.capture",
+        advanced.s.stage(),
+        dict(path="/World/Camera", filename="cached.png"),
+        camera_frame=CameraFrame(pixels, False),
+    )
+    assert "cached acquisition" in cached["freshness"] and "Cached" in cached["source"]
+    with Image.open(cached["file"]) as image:
+        assert image.getpixel((0, 0)) == (99, 99, 99)
+    with pytest.raises(AssetError, match="validated renderer"):
+        advanced.execute("sim.camera.capture", advanced.s.stage(), args)
 
 
 def test_light_material_clone_delete(advanced):

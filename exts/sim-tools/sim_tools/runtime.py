@@ -84,9 +84,11 @@ def runtime_identity():
     result["physics_adapter"] = (
         "newton-direct-step-fabric-v1"
         if result["physics_engine"] == "newton"
-        else "physx-simulation-manager-v1"
-        if result["physics_engine"] == "physx"
-        else None
+        else (
+            "physx-simulation-manager-v1"
+            if result["physics_engine"] == "physx"
+            else None
+        )
     )
     if result["physics_engine"] == "newton":
         from isaacsim.physics.newton import acquire_stage
@@ -127,7 +129,7 @@ def runtime_identity():
     return result
 
 
-def require_cpu_annotator(lidar=False):
+def require_sensor_api(lidar=False):
     """Select the owned-CPU adapter; never fall back to a borrowed CUDA buffer.
 
     Validation covers these release builds, plus feature checks. Unknown builds
@@ -145,6 +147,13 @@ def require_cpu_annotator(lidar=False):
         )
     try:
         import omni.replicator.core as rep
+
+        if not callable(getattr(rep.create, "render_product", None)):
+            refuse(
+                "SENSOR_API_UNAVAILABLE", "Replicator render product API unavailable."
+            )
+        if not lidar:
+            return rep, identity
         from omni.replicator.core.annotators import Annotator
 
         for func in (rep.AnnotatorRegistry.get_annotator, Annotator.get_data):

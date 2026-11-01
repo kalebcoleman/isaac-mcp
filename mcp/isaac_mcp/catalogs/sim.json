@@ -2077,7 +2077,7 @@
         },
         "wait_for_render": {
           "type": "boolean",
-          "description": "Camera: wait up to five seconds for four ordinary render completions and a new CPU transfer from this product. LiDAR: wait for one render; acquisition requires Play, so default false. False reads the latest buffer, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.",
+          "description": "True: wait up to five seconds for render completions and a new owned CPU transfer. False: reuse the last validated tool acquisition, possibly from before Stop/reset or scene edits; NOT_READY until a true capture seeds it. Ordinary Play never refreshes this cache. PNG I/O still occurs. No implicit physics advance or atomic sensor/physics guarantee.",
           "required": false,
           "default": true
         }
@@ -2126,7 +2126,7 @@
           "required": false,
           "default": true,
           "has_default": true,
-          "description": "Camera: wait up to five seconds for four ordinary render completions and a new CPU transfer from this product. LiDAR: wait for one render; acquisition requires Play, so default false. False reads the latest buffer, possibly stale. No implicit physics advance or atomic sensor/physics guarantee."
+          "description": "True: wait up to five seconds for render completions and a new owned CPU transfer. False: reuse the last validated tool acquisition, possibly from before Stop/reset or scene edits; NOT_READY until a true capture seeds it. Ordinary Play never refreshes this cache. PNG I/O still occurs. No implicit physics advance or atomic sensor/physics guarantee."
         }
       ],
       "namespace": "sim",
@@ -2272,7 +2272,7 @@
         },
         "wait_for_render": {
           "type": "boolean",
-          "description": "Camera: wait up to five seconds for four ordinary render completions and a new CPU transfer from this product. LiDAR: wait for one render; acquisition requires Play, so default false. False reads the latest buffer, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.",
+          "description": "Wait up to five seconds for one render; acquisition requires Play. False reads the latest completed scan, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.",
           "required": false,
           "default": false
         }
@@ -2321,7 +2321,7 @@
           "required": false,
           "default": false,
           "has_default": true,
-          "description": "Camera: wait up to five seconds for four ordinary render completions and a new CPU transfer from this product. LiDAR: wait for one render; acquisition requires Play, so default false. False reads the latest buffer, possibly stale. No implicit physics advance or atomic sensor/physics guarantee."
+          "description": "Wait up to five seconds for one render; acquisition requires Play. False reads the latest completed scan, possibly stale. No implicit physics advance or atomic sensor/physics guarantee."
         }
       ],
       "namespace": "sim",

@@ -681,9 +681,14 @@ class Advanced:
                     "SENSOR_FORMAT",
                     "Camera resolution changed outside configured bounds.",
                 )
-            from .sensors import read as read_sensor
+            from .camera_capture import CameraFrame
 
-            data = camera_frame if camera_frame is not None else read_sensor(sensor)[0]
+            if not isinstance(camera_frame, CameraFrame):
+                refuse(
+                    "NOT_READY",
+                    "Capture requires validated renderer acquisition or an explicit tool-acquired cache read.",
+                )
+            data = camera_frame.data
             if expected == "camera":
                 import numpy as np
                 from PIL import Image
@@ -723,15 +728,17 @@ class Advanced:
                     width=array.shape[1],
                     height=array.shape[0],
                     sha256=hashlib.sha256(file.read_bytes()).hexdigest(),
-                    source="Hydra renderer CPU callback (owned copy)"
-                    if camera_frame is not None
-                    else "Replicator CPU RGB annotator (owned copy)",
-                    adapter="hydra-renderer-cpu-v1"
-                    if camera_frame is not None
-                    else sensor["adapter"],
-                    freshness="new render and CPU transfer completed"
-                    if camera_frame is not None
-                    else "latest available render frame; can be stale",
+                    source=(
+                        "Hydra renderer CPU callback (owned copy)"
+                        if camera_frame.fresh
+                        else "Cached owned CPU pixels from the last validated tool acquisition"
+                    ),
+                    adapter="hydra-renderer-cpu-v1",
+                    freshness=(
+                        "new render and CPU transfer completed"
+                        if camera_frame.fresh
+                        else "cached acquisition; may predate Stop/reset, pose edits or physics steps"
+                    ),
                 )
         if name == "sim.logs.tail":
             import carb.settings
