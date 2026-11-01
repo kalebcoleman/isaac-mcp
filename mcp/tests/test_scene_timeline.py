@@ -275,7 +275,8 @@ def handler(monkeypatch, native):
     spec = importlib.util.spec_from_file_location("sim_tools._test_timeline_extension", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    state = SimpleNamespace(mode="stop", frames=0, calls=[], changed=False, interrupt=False, restored=0)
+    state = SimpleNamespace(mode="stop", frames=0, calls=[], changed=False, interrupt=False, restored=0, edit_target="root")
+    stage = SimpleNamespace(GetEditTarget=lambda: state.edit_target)
 
     async def update():
         await asyncio.sleep(0)
@@ -297,7 +298,7 @@ def handler(monkeypatch, native):
     ext = module.Extension()
     ext._operation_lock = asyncio.Lock()
     ext.scene = SimpleNamespace(
-        target=target, stage=lambda: "stage", end_runtime_edit=restore,
+        target=target, stage=lambda: stage, end_runtime_edit=restore, _runtime_edit_target=None,
         timeline=SimpleNamespace(is_stopped=lambda: state.mode == "stop", is_playing=lambda: state.mode == "play", get_current_time=lambda: 0),
     )
 

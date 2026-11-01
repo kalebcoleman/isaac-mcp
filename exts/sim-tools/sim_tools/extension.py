@@ -224,9 +224,17 @@ class Extension(omni.ext.IExt):
 
                         timeline_target = (args["session_id"], args["stage_id"])
                         timeline_was_stopped = self.scene.timeline.is_stopped()
+                        stop_target_guard = None
+                        if args.get("action") == "stop":
+                            from .runtime_edit import stop_edit_target_guard
+
+                            self.scene.target(*timeline_target)
+                            stop_target_guard = stop_edit_target_guard(self.scene, self.scene.stage())
 
                         def validate_stopped():
                             self.scene.target(*timeline_target)
+                            if stop_target_guard is not None:
+                                stop_target_guard()
                             if not self.scene.timeline.is_stopped():
                                 from isaac_mcp.project_assets import refuse
 

@@ -3,6 +3,24 @@
 import asyncio
 
 
+def stop_edit_target_guard(scene, stage):
+    """Accept our pending lease restoration, not another editor's target."""
+    expected = stage.GetEditTarget()
+    previous = scene._runtime_edit_target
+
+    def validate():
+        nonlocal expected, previous
+        current = stage.GetEditTarget()
+        if previous is not None and scene._runtime_edit_target is None and current == previous:
+            expected, previous = previous, None
+        if current != expected:
+            from isaac_mcp.project_assets import refuse
+
+            refuse("EDIT_TARGET_CHANGED", "Selected edit target changed during native Stop completion; the external target was preserved.")
+
+    return validate
+
+
 class RuntimeEditRestorer:
     def __init__(self, scene, next_update, report_error):
         self.scene = scene

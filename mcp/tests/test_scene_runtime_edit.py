@@ -9,7 +9,7 @@ import pytest
 pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
 from pxr import Sdf, Usd
-from sim_tools.runtime_edit import RuntimeEditRestorer
+from sim_tools.runtime_edit import RuntimeEditRestorer, stop_edit_target_guard
 from test_scene_usd import scene  # noqa: F401 - shared real-USD fixture
 
 
@@ -22,6 +22,40 @@ def restorer(scene):
     frame = asyncio.get_running_loop().create_future()
     errors = []
     return RuntimeEditRestorer(scene, lambda: frame, errors.append), frame, errors
+
+
+def test_stop_guard_allows_own_restoration_once_and_preserves_external_target(scene):
+    from isaac_mcp.project_assets import AssetError
+
+    stage = scene.stage()
+    initial = stage.GetEditTarget()
+    scene.begin_runtime_edit(stage)
+    guard = stop_edit_target_guard(scene, stage)
+    guard()
+    scene.end_runtime_edit(stage)
+    guard()
+    assert stage.GetEditTarget() == initial
+    stage.SetEditTarget(stage.GetSessionLayer())
+    with pytest.raises(AssetError) as error:
+        guard()
+    assert error.value.code == "EDIT_TARGET_CHANGED"
+    assert stage.GetEditTarget().GetLayer() == stage.GetSessionLayer()
+
+
+def test_stop_guard_rejects_target_chosen_while_lease_is_being_restored(scene):
+    from isaac_mcp.project_assets import AssetError
+
+    stage = scene.stage()
+    scene.begin_runtime_edit(stage)
+    guard = stop_edit_target_guard(scene, stage)
+    external = Sdf.Layer.CreateAnonymous()
+    stage.GetRootLayer().subLayerPaths.append(external.identifier)
+    stage.SetEditTarget(external)
+    scene.end_runtime_edit(stage)
+    with pytest.raises(AssetError) as error:
+        guard()
+    assert error.value.code == "EDIT_TARGET_CHANGED"
+    assert stage.GetEditTarget().GetLayer() == external
 
 
 @pytest.mark.anyio
