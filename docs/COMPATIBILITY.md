@@ -40,9 +40,21 @@ transform checks with that version. Existing environments created from the earli
 - Historical short training and windowed play checks used Isaac Lab **3.0.0 / Isaac Sim 6.2.0.0** on the machines
   described in the [Lab guide](TOOLS-ISAACLAB.md#verified-vs-version-and-platform-limitations). Those checks do not
   establish long-running training, every task, or Lab behavior on the older Sim probes above.
-- NVIDIA's [cross-product matrix](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/compatibility.html)
-  pairs Sim 6.1.0 with Lab `v3.0.0-EA` and Sim 6.2.0 with Lab `v3.0.0-GA`. Those are NVIDIA's product pairings, not
-  additional tests of this MCP project. Select matching ROS workspaces and custom interfaces as described there.
+- NVIDIA's published Isaac Lab and Sim pairings are shown below. The release dates are UTC. They describe NVIDIA's
+  versions, not additional MCP tests: the 6.0 and 6.1 Sim smoke checks above did **not** test Isaac Lab.
+
+  | Isaac Sim | Isaac Lab release | Published |
+  |---|---|---|
+  | 6.0.0 | [`v3.0.0-beta2`](https://github.com/isaac-sim/IsaacLab/releases/tag/v3.0.0-beta2) | 2026-06-17 |
+  | 6.0.1 | [`v3.0.0-beta2.patch1`](https://github.com/isaac-sim/IsaacLab/releases/tag/v3.0.0-beta2.patch1) | 2026-07-02 |
+  | 6.1 | [`v3.0.0-EA`](https://github.com/isaac-sim/IsaacLab/releases/tag/v3.0.0-EA) (early access) | 2026-09-16 |
+  | 6.2 | [`v3.0.0`](https://github.com/isaac-sim/IsaacLab/releases/tag/v3.0.0) (general availability) | 2026-10-20 |
+
+  The Lab 3.0 general-availability tag is `v3.0.0`; NVIDIA's
+  [cross-product matrix](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/compatibility.html) calls it
+  `v3.0.0-GA`. The first 3.0 beta, also for Sim 6.0, was published on
+  [2026-03-17](https://github.com/isaac-sim/IsaacLab/releases/tag/v3.0.0-beta). Select matching ROS workspaces and
+  custom interfaces as described in the matrix.
 - ROS 2 Jazzy mock-driver and simulated sensor checks have been exercised on the 6.2 Ubuntu 24.04 setup. Humble
   has launcher tests but has not been live-tested in that check; a physical UR5e was not used. See
   [Linux setup](LINUX-SETUP.md#optional-ur5e-mock-ros-driver) and [verification](VERIFICATION.md#last-live-check).
