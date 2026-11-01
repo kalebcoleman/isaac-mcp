@@ -26,6 +26,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -73,7 +74,7 @@ def _download(url: str, destination: Path, entry: dict) -> None:
     fd, tmp_name = tempfile.mkstemp(prefix=destination.name + ".", dir=destination.parent)
     tmp = Path(tmp_name)
     try:
-        with urllib.request.urlopen(url, timeout=120) as response, tmp.open("wb") as out:
+        with os.fdopen(fd, "wb") as out, urllib.request.urlopen(url, timeout=120) as response:
             status = getattr(response, "status", 200)
             if status != 200:
                 raise RuntimeError(f"HTTP {status} for {url}")
