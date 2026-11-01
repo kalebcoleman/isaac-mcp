@@ -50,6 +50,15 @@ and drive attributes use a 0.01 tolerance. These are regression checks for this 
 general test for arbitrary robots or proof of hardware fidelity; intentionally different drive settings require a
 different expected baseline.
 
+The motion check schedules a bounded Kit coroutine through the existing persistent
+`run_python` session, then polls for its measured result. It awaits ordinary Kit frames;
+it does not call nested `app.update()`. It requires the reopened stage to be stopped,
+waits for a previous native Stop to settle, and refuses stage/timeline changes,
+non-finite joints or a stalled clock. Use exclusive control of this disposable scene
+until the check finishes: the bridge's per-call admission lock does not cover the
+whole scheduled coroutine. A lost host connection does not automatically cancel a
+Kit task; the check also has its own 90-second and 12,000-frame bounds.
+
 The check exports a missing reference checkpoint from the current stage, checks that the exported file uses relative
 asset references, and requests an asynchronous reopen. A later scene check verifies the expected prims are present;
 the `opening` result itself only means the open was scheduled. A regenerated checkpoint's SHA-256 can differ between
