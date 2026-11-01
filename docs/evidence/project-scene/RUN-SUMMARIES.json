@@ -1,0 +1,1322 @@
+[
+  {
+    "run": "final6000",
+    "release": "6.0.0.0",
+    "product_sha": "9fe39d4fee7605733da54c127092cae3f20c75a6",
+    "pid": 1783978,
+    "port": 19000,
+    "ros_domain": 160,
+    "backend": "physx",
+    "windowed": true,
+    "motion_bvh": true,
+    "tools": [
+      "assets__import_usd",
+      "assets__info",
+      "assets__roots",
+      "assets__scan",
+      "sim__body__state",
+      "sim__camera__capture",
+      "sim__camera__create",
+      "sim__lidar__create",
+      "sim__lidar__read",
+      "sim__material__apply",
+      "sim__material__create",
+      "sim__physics__configure",
+      "sim__physics__inspect",
+      "sim__prim__create",
+      "sim__prim__delete",
+      "sim__prim__find",
+      "sim__prim__get",
+      "sim__prim__set_transform",
+      "sim__simulation__step",
+      "sim__stage__clear_owned",
+      "sim__stage__info",
+      "sim__stage__save",
+      "sim__stage__tree",
+      "sim__timeline__control",
+      "sim__viewport__frame"
+    ],
+    "transcripts": [
+      {
+        "file": "runs/final6000-core.json",
+        "calls": 32,
+        "errors": 7
+      },
+      {
+        "file": "runs/final6000-edges.json",
+        "calls": 23,
+        "errors": 12
+      },
+      {
+        "file": "runs/final6000-sensors.json",
+        "calls": 327,
+        "errors": 0
+      },
+      {
+        "file": "runs/final6000-clear.json",
+        "calls": 4,
+        "errors": 1
+      }
+    ],
+    "runtime_identity": {
+      "release": "6.0.0.0",
+      "build": "6.0.0-rc.22+release.33481.407f3ea1.gl",
+      "reported_core": "6.0.0",
+      "identity_source": "package and VERSION",
+      "packages": {
+        "isaacsim": "6.0.0.0",
+        "isaacsim-kernel": "6.0.0.0",
+        "isaacsim-core": "6.0.0.0",
+        "isaacsim-sensor": "6.0.0.0",
+        "isaacsim-replicator": "6.0.0.0"
+      },
+      "version_files": {
+        "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.22+release.33481.407f3ea1.gl"
+      },
+      "kit_build": "110.0.0+feature.276876.4a5123f4.gl",
+      "extensions": {
+        "omni.replicator.core": {
+          "id": "omni.replicator.core-1.13.4",
+          "version": "1.13.4",
+          "enabled": true
+        },
+        "omni.syntheticdata": {
+          "id": "omni.syntheticdata-0.6.15",
+          "version": "0.6.15",
+          "enabled": true
+        },
+        "isaacsim.sensors.rtx": {
+          "id": "isaacsim.sensors.rtx-15.14.1",
+          "version": "15.14.1",
+          "enabled": true
+        },
+        "isaacsim.sensors.experimental.rtx": {
+          "enabled": false
+        },
+        "isaacsim.core.simulation_manager": {
+          "id": "isaacsim.core.simulation_manager-1.12.0",
+          "version": "1.12.0",
+          "enabled": true
+        },
+        "isaacsim.physics.newton": {
+          "enabled": false
+        },
+        "isaacsim.physics.newton.tensors": {
+          "enabled": false
+        },
+        "omni.warp.core": {
+          "id": "omni.warp.core-1.12.0",
+          "version": "1.12.0",
+          "enabled": true
+        }
+      },
+      "qualified_build": true,
+      "issues": [],
+      "physics_engine": "physx",
+      "physics_adapter": "physx-simulation-manager-v1",
+      "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+      "physics_packages": {
+        "newton": {
+          "installed_version": "1.0.0",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        },
+        "mujoco": {
+          "installed_version": "3.5.0",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        },
+        "mujoco_warp": {
+          "installed_version": "3.5.0.2",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        }
+      },
+      "warp": {
+        "version": "1.12.0",
+        "module": "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.12.0+lx64/warp/__init__.py"
+      }
+    },
+    "stage_identity_record": {
+      "status": "ok",
+      "session_id": "c7c3682356014708a9565a4e48f30673",
+      "stage_id": "a944ebd5c96849d485d20f1f55c9d310",
+      "pid": 1783978,
+      "source": "anon:0x3697c580:World0.usd",
+      "default_prim": null,
+      "meters_per_unit": 1.0,
+      "up_axis": "Z",
+      "prim_count": 11,
+      "truncated": false,
+      "playing": false,
+      "stopped": true,
+      "time_s": 0.0,
+      "profile": "trusted_project",
+      "sandboxed": false,
+      "staging": "<worktree>/.work/runs/final6000/staging",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "runtime_edit_target_managed": false,
+      "device_error": null,
+      "runtime": {
+        "release": "6.0.0.0",
+        "build": "6.0.0-rc.22+release.33481.407f3ea1.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.0",
+          "isaacsim-kernel": "6.0.0.0",
+          "isaacsim-core": "6.0.0.0",
+          "isaacsim-sensor": "6.0.0.0",
+          "isaacsim-replicator": "6.0.0.0"
+        },
+        "version_files": {
+          "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.22+release.33481.407f3ea1.gl"
+        },
+        "kit_build": "110.0.0+feature.276876.4a5123f4.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.4",
+            "version": "1.13.4",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.14.1",
+            "version": "15.14.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "enabled": false
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.0.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.5.0.2",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.12.0",
+          "module": "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.12.0+lx64/warp/__init__.py"
+        }
+      },
+      "app_ready": true,
+      "sensor_resources": {
+        "count": 0,
+        "cleanup_errors": []
+      }
+    }
+  },
+  {
+    "run": "final6001",
+    "release": "6.0.0.1",
+    "product_sha": "1135ec42c88c3dfedfad7966bc606f0e4d8ba39f",
+    "pid": 1774418,
+    "port": 19001,
+    "ros_domain": 161,
+    "backend": "physx",
+    "windowed": true,
+    "motion_bvh": true,
+    "tools": [
+      "assets__import_usd",
+      "assets__info",
+      "assets__roots",
+      "assets__scan",
+      "sim__body__state",
+      "sim__camera__capture",
+      "sim__camera__create",
+      "sim__lidar__create",
+      "sim__lidar__read",
+      "sim__material__apply",
+      "sim__material__create",
+      "sim__physics__configure",
+      "sim__physics__inspect",
+      "sim__prim__create",
+      "sim__prim__delete",
+      "sim__prim__find",
+      "sim__prim__get",
+      "sim__prim__set_transform",
+      "sim__simulation__step",
+      "sim__stage__clear_owned",
+      "sim__stage__info",
+      "sim__stage__save",
+      "sim__stage__tree",
+      "sim__timeline__control",
+      "sim__viewport__frame"
+    ],
+    "transcripts": [
+      {
+        "file": "runs/final6001-core.json",
+        "calls": 32,
+        "errors": 7
+      },
+      {
+        "file": "runs/final6001-edges.json",
+        "calls": 23,
+        "errors": 12
+      },
+      {
+        "file": "runs/final6001-sensors.json",
+        "calls": 327,
+        "errors": 0
+      },
+      {
+        "file": "runs/final6001-clear.json",
+        "calls": 4,
+        "errors": 1
+      }
+    ],
+    "runtime_identity": {
+      "release": "6.0.0.1",
+      "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+      "reported_core": "6.0.0",
+      "identity_source": "package and VERSION",
+      "packages": {
+        "isaacsim": "6.0.0.1",
+        "isaacsim-kernel": "6.0.0.1",
+        "isaacsim-core": "6.0.0.1",
+        "isaacsim-sensor": "6.0.0.1",
+        "isaacsim-replicator": "6.0.0.1"
+      },
+      "version_files": {
+        "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+      },
+      "kit_build": "110.1.1+production.305458.6312fa25.gl",
+      "extensions": {
+        "omni.replicator.core": {
+          "id": "omni.replicator.core-1.13.25",
+          "version": "1.13.25",
+          "enabled": true
+        },
+        "omni.syntheticdata": {
+          "id": "omni.syntheticdata-0.6.15",
+          "version": "0.6.15",
+          "enabled": true
+        },
+        "isaacsim.sensors.rtx": {
+          "id": "isaacsim.sensors.rtx-15.17.0",
+          "version": "15.17.0",
+          "enabled": true
+        },
+        "isaacsim.sensors.experimental.rtx": {
+          "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+          "version": "1.4.3",
+          "enabled": true
+        },
+        "isaacsim.core.simulation_manager": {
+          "id": "isaacsim.core.simulation_manager-1.15.4",
+          "version": "1.15.4",
+          "enabled": true
+        },
+        "isaacsim.physics.newton": {
+          "enabled": false
+        },
+        "isaacsim.physics.newton.tensors": {
+          "enabled": false
+        },
+        "omni.warp.core": {
+          "id": "omni.warp.core-1.13.0",
+          "version": "1.13.0",
+          "enabled": true
+        }
+      },
+      "qualified_build": true,
+      "issues": [],
+      "physics_engine": "physx",
+      "physics_adapter": "physx-simulation-manager-v1",
+      "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+      "physics_packages": {
+        "newton": {
+          "installed_version": "1.2.0",
+          "loaded": true,
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+          "loaded_version": "1.2.0"
+        },
+        "mujoco": {
+          "installed_version": "3.8.0",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        },
+        "mujoco_warp": {
+          "installed_version": "3.8.0.3",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        }
+      },
+      "warp": {
+        "version": "1.13.0",
+        "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+      }
+    },
+    "stage_identity_record": {
+      "status": "ok",
+      "session_id": "2b218ef5c5d84e6abb171c4252a9ce3e",
+      "stage_id": "c0c321c38f3b482db8b0c5271a0ebe52",
+      "pid": 1774418,
+      "source": "anon:0x458dfa80:World0.usd",
+      "default_prim": null,
+      "meters_per_unit": 1.0,
+      "up_axis": "Z",
+      "prim_count": 11,
+      "truncated": false,
+      "playing": false,
+      "stopped": true,
+      "time_s": 0.0,
+      "profile": "trusted_project",
+      "sandboxed": false,
+      "staging": "<worktree>/.work/runs/final6001/staging",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "runtime_edit_target_managed": false,
+      "device_error": null,
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "app_ready": true,
+      "sensor_resources": {
+        "count": 0,
+        "cleanup_errors": []
+      }
+    }
+  },
+  {
+    "run": "final601",
+    "release": "6.0.1.0",
+    "product_sha": "b824ac17bb83ca33f7ae5dace24f3ea75cf2a736",
+    "pid": 1791988,
+    "port": 19010,
+    "ros_domain": 163,
+    "backend": "physx",
+    "windowed": true,
+    "motion_bvh": true,
+    "tools": [
+      "assets__import_usd",
+      "assets__info",
+      "assets__roots",
+      "assets__scan",
+      "sim__body__state",
+      "sim__camera__capture",
+      "sim__camera__create",
+      "sim__lidar__create",
+      "sim__lidar__read",
+      "sim__material__apply",
+      "sim__material__create",
+      "sim__physics__configure",
+      "sim__physics__inspect",
+      "sim__prim__create",
+      "sim__prim__delete",
+      "sim__prim__find",
+      "sim__prim__get",
+      "sim__prim__set_transform",
+      "sim__simulation__step",
+      "sim__stage__clear_owned",
+      "sim__stage__info",
+      "sim__stage__save",
+      "sim__stage__tree",
+      "sim__timeline__control",
+      "sim__viewport__frame"
+    ],
+    "transcripts": [
+      {
+        "file": "runs/final601-core.json",
+        "calls": 32,
+        "errors": 7
+      },
+      {
+        "file": "runs/final601-edges.json",
+        "calls": 23,
+        "errors": 12
+      },
+      {
+        "file": "runs/final601-sensors.json",
+        "calls": 327,
+        "errors": 0
+      },
+      {
+        "file": "runs/final601-clear.json",
+        "calls": 4,
+        "errors": 1
+      }
+    ],
+    "runtime_identity": {
+      "release": "6.0.1.0",
+      "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+      "reported_core": "6.0.1",
+      "identity_source": "package and VERSION",
+      "packages": {
+        "isaacsim": "6.0.1.0",
+        "isaacsim-kernel": "6.0.1.0",
+        "isaacsim-core": "6.0.1.0",
+        "isaacsim-sensor": "6.0.1.0",
+        "isaacsim-replicator": "6.0.1.0"
+      },
+      "version_files": {
+        "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+      },
+      "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+      "extensions": {
+        "omni.replicator.core": {
+          "id": "omni.replicator.core-1.13.27",
+          "version": "1.13.27",
+          "enabled": true
+        },
+        "omni.syntheticdata": {
+          "id": "omni.syntheticdata-0.6.15",
+          "version": "0.6.15",
+          "enabled": true
+        },
+        "isaacsim.sensors.rtx": {
+          "id": "isaacsim.sensors.rtx-15.17.1",
+          "version": "15.17.1",
+          "enabled": true
+        },
+        "isaacsim.sensors.experimental.rtx": {
+          "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+          "version": "1.4.6",
+          "enabled": true
+        },
+        "isaacsim.core.simulation_manager": {
+          "id": "isaacsim.core.simulation_manager-1.15.6",
+          "version": "1.15.6",
+          "enabled": true
+        },
+        "isaacsim.physics.newton": {
+          "enabled": false
+        },
+        "isaacsim.physics.newton.tensors": {
+          "enabled": false
+        },
+        "omni.warp.core": {
+          "id": "omni.warp.core-1.13.0",
+          "version": "1.13.0",
+          "enabled": true
+        }
+      },
+      "qualified_build": true,
+      "issues": [],
+      "physics_engine": "physx",
+      "physics_adapter": "physx-simulation-manager-v1",
+      "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+      "physics_packages": {
+        "newton": {
+          "installed_version": "1.2.1",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        },
+        "mujoco": {
+          "installed_version": "3.8.0",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        },
+        "mujoco_warp": {
+          "installed_version": "3.8.0.3",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        }
+      },
+      "warp": {
+        "version": "1.13.0",
+        "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+      }
+    },
+    "stage_identity_record": {
+      "status": "ok",
+      "session_id": "8ea027c75c7f4b0a889300adb937c6f1",
+      "stage_id": "20109bedad904c3cb2d9c9f678ea6aac",
+      "pid": 1791988,
+      "source": "anon:0x36eeae60:World0.usd",
+      "default_prim": null,
+      "meters_per_unit": 1.0,
+      "up_axis": "Z",
+      "prim_count": 11,
+      "truncated": false,
+      "playing": false,
+      "stopped": true,
+      "time_s": 0.0,
+      "profile": "trusted_project",
+      "sandboxed": false,
+      "staging": "<worktree>/.work/runs/final601/staging",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "runtime_edit_target_managed": false,
+      "device_error": null,
+      "runtime": {
+        "release": "6.0.1.0",
+        "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+        "reported_core": "6.0.1",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.1.0",
+          "isaacsim-kernel": "6.0.1.0",
+          "isaacsim-core": "6.0.1.0",
+          "isaacsim-sensor": "6.0.1.0",
+          "isaacsim-replicator": "6.0.1.0"
+        },
+        "version_files": {
+          "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+        },
+        "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.27",
+            "version": "1.13.27",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.1",
+            "version": "15.17.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+            "version": "1.4.6",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.6",
+            "version": "1.15.6",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "app_ready": true,
+      "sensor_resources": {
+        "count": 0,
+        "cleanup_errors": []
+      }
+    }
+  },
+  {
+    "run": "review61",
+    "release": "6.1.0.0",
+    "product_sha": "faaf73d5eb7b135cd703fb56da1369f85d346e37",
+    "pid": 1804891,
+    "port": 19061,
+    "ros_domain": 164,
+    "backend": "physx",
+    "windowed": true,
+    "motion_bvh": true,
+    "tools": [
+      "assets__import_urdf",
+      "assets__import_usd",
+      "assets__info",
+      "assets__roots",
+      "assets__scan",
+      "assets__search",
+      "sim__body__state",
+      "sim__camera__capture",
+      "sim__camera__create",
+      "sim__controller__create",
+      "sim__controller__update",
+      "sim__joints__command",
+      "sim__joints__drive",
+      "sim__joints__inspect",
+      "sim__joints__state",
+      "sim__lidar__create",
+      "sim__lidar__read",
+      "sim__light__create",
+      "sim__light__modify",
+      "sim__logs__tail",
+      "sim__material__apply",
+      "sim__material__create",
+      "sim__physics__configure",
+      "sim__physics__inspect",
+      "sim__prim__clone",
+      "sim__prim__create",
+      "sim__prim__delete",
+      "sim__prim__find",
+      "sim__prim__get",
+      "sim__prim__set_transform",
+      "sim__simulation__step",
+      "sim__stage__clear_owned",
+      "sim__stage__info",
+      "sim__stage__save",
+      "sim__stage__tree",
+      "sim__timeline__control",
+      "sim__viewport__frame"
+    ],
+    "transcripts": [
+      {
+        "file": "runs/review61-core.json",
+        "calls": 32,
+        "errors": 7
+      },
+      {
+        "file": "runs/review61-expanded.json",
+        "calls": 48,
+        "errors": 5
+      },
+      {
+        "file": "runs/review61-edges.json",
+        "calls": 23,
+        "errors": 12
+      },
+      {
+        "file": "runs/review61-sensors.json",
+        "calls": 327,
+        "errors": 0
+      },
+      {
+        "file": "runs/review61-clear.json",
+        "calls": 4,
+        "errors": 1
+      }
+    ],
+    "runtime_identity": {
+      "release": "6.1.0.0",
+      "build": "6.1.0-rc.26+release.49347.2d230af4.gl",
+      "reported_core": "6.1.0",
+      "identity_source": "package and VERSION",
+      "packages": {
+        "isaacsim": "6.1.0.0",
+        "isaacsim-kernel": "6.1.0.0",
+        "isaacsim-core": "6.1.0.0",
+        "isaacsim-sensor": "6.1.0.0",
+        "isaacsim-replicator": "6.1.0.0"
+      },
+      "version_files": {
+        "<sim-install-61>/lib/python3.12/site-packages/isaacsim/VERSION": "6.1.0-rc.26+release.49347.2d230af4.gl"
+      },
+      "kit_build": "110.3.0+feature.371399.00c488ae.gl",
+      "extensions": {
+        "omni.replicator.core": {
+          "id": "omni.replicator.core-1.13.36",
+          "version": "1.13.36",
+          "enabled": true
+        },
+        "omni.syntheticdata": {
+          "id": "omni.syntheticdata-0.6.17",
+          "version": "0.6.17",
+          "enabled": true
+        },
+        "isaacsim.sensors.rtx": {
+          "id": "isaacsim.sensors.rtx-15.17.5",
+          "version": "15.17.5",
+          "enabled": true
+        },
+        "isaacsim.sensors.experimental.rtx": {
+          "id": "isaacsim.sensors.experimental.rtx-1.9.0",
+          "version": "1.9.0",
+          "enabled": true
+        },
+        "isaacsim.core.simulation_manager": {
+          "id": "isaacsim.core.simulation_manager-1.17.1",
+          "version": "1.17.1",
+          "enabled": true
+        },
+        "isaacsim.physics.newton": {
+          "enabled": false
+        },
+        "isaacsim.physics.newton.tensors": {
+          "enabled": false
+        },
+        "omni.warp.core": {
+          "id": "omni.warp.core-1.16.0",
+          "version": "1.16.0",
+          "enabled": true
+        }
+      },
+      "qualified_build": true,
+      "issues": [],
+      "physics_engine": "physx",
+      "physics_adapter": "physx-simulation-manager-v1",
+      "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+      "physics_packages": {
+        "newton": {
+          "installed_version": "1.5.0",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        },
+        "mujoco": {
+          "installed_version": "3.11.0",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        },
+        "mujoco_warp": {
+          "installed_version": "3.11.0",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        }
+      },
+      "warp": {
+        "version": "1.16.0",
+        "module": "<sim-install-61>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.16.0+lx64/warp/__init__.py"
+      }
+    },
+    "stage_identity_record": {
+      "status": "ok",
+      "session_id": "d0a77009a3c041c8bbed2989b2cac909",
+      "stage_id": "7a9328a4a07b41f19fb69dbbd1f11a6e",
+      "pid": 1804891,
+      "source": "anon:0x4d247340:World0.usd",
+      "default_prim": null,
+      "meters_per_unit": 1.0,
+      "up_axis": "Z",
+      "prim_count": 11,
+      "truncated": false,
+      "playing": false,
+      "stopped": true,
+      "time_s": 0.0,
+      "profile": "trusted_project",
+      "sandboxed": false,
+      "staging": "<worktree>/.work/runs/review61/staging",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "runtime_edit_target_managed": false,
+      "device_error": null,
+      "runtime": {
+        "release": "6.1.0.0",
+        "build": "6.1.0-rc.26+release.49347.2d230af4.gl",
+        "reported_core": "6.1.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.1.0.0",
+          "isaacsim-kernel": "6.1.0.0",
+          "isaacsim-core": "6.1.0.0",
+          "isaacsim-sensor": "6.1.0.0",
+          "isaacsim-replicator": "6.1.0.0"
+        },
+        "version_files": {
+          "<sim-install-61>/lib/python3.12/site-packages/isaacsim/VERSION": "6.1.0-rc.26+release.49347.2d230af4.gl"
+        },
+        "kit_build": "110.3.0+feature.371399.00c488ae.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.36",
+            "version": "1.13.36",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.9.0",
+            "version": "1.9.0",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.1",
+            "version": "1.17.1",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.16.0",
+            "version": "1.16.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.16.0",
+          "module": "<sim-install-61>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.16.0+lx64/warp/__init__.py"
+        }
+      },
+      "app_ready": true,
+      "sensor_resources": {
+        "count": 0,
+        "cleanup_errors": []
+      }
+    }
+  },
+  {
+    "run": "review62",
+    "release": "6.2.0.0",
+    "product_sha": "08cf0c9c826aacde31d88410872974de2b157446",
+    "pid": 1812070,
+    "port": 19063,
+    "ros_domain": 167,
+    "backend": "physx",
+    "windowed": true,
+    "motion_bvh": true,
+    "tools": [
+      "assets__import_urdf",
+      "assets__import_usd",
+      "assets__info",
+      "assets__roots",
+      "assets__scan",
+      "assets__search",
+      "sim__body__state",
+      "sim__camera__capture",
+      "sim__camera__create",
+      "sim__controller__create",
+      "sim__controller__update",
+      "sim__joints__command",
+      "sim__joints__drive",
+      "sim__joints__inspect",
+      "sim__joints__state",
+      "sim__lidar__create",
+      "sim__lidar__read",
+      "sim__light__create",
+      "sim__light__modify",
+      "sim__logs__tail",
+      "sim__material__apply",
+      "sim__material__create",
+      "sim__physics__configure",
+      "sim__physics__inspect",
+      "sim__prim__clone",
+      "sim__prim__create",
+      "sim__prim__delete",
+      "sim__prim__find",
+      "sim__prim__get",
+      "sim__prim__set_transform",
+      "sim__simulation__step",
+      "sim__stage__clear_owned",
+      "sim__stage__info",
+      "sim__stage__save",
+      "sim__stage__tree",
+      "sim__timeline__control",
+      "sim__viewport__frame"
+    ],
+    "transcripts": [
+      {
+        "file": "runs/review62-core.json",
+        "calls": 32,
+        "errors": 7
+      },
+      {
+        "file": "runs/review62-expanded.json",
+        "calls": 48,
+        "errors": 5
+      },
+      {
+        "file": "runs/review62-edges.json",
+        "calls": 23,
+        "errors": 12
+      },
+      {
+        "file": "runs/review62-sensors.json",
+        "calls": 327,
+        "errors": 0
+      },
+      {
+        "file": "runs/review62-clear.json",
+        "calls": 4,
+        "errors": 1
+      }
+    ],
+    "runtime_identity": {
+      "release": "6.2.0.0",
+      "build": "6.2.0-rc.14+release.52805.02189a84.gl",
+      "reported_core": "6.2.0",
+      "identity_source": "package and VERSION",
+      "packages": {
+        "isaacsim": "6.2.0.0",
+        "isaacsim-kernel": "6.2.0.0",
+        "isaacsim-core": "6.2.0.0",
+        "isaacsim-sensor": "6.2.0.0",
+        "isaacsim-replicator": "6.2.0.0"
+      },
+      "version_files": {
+        "<sim-install-6.2>/lib/python3.12/site-packages/isaacsim/VERSION": "6.2.0-rc.14+release.52805.02189a84.gl"
+      },
+      "kit_build": "110.4.0+feature.386251.187cf21b.gl",
+      "extensions": {
+        "omni.replicator.core": {
+          "id": "omni.replicator.core-1.13.38",
+          "version": "1.13.38",
+          "enabled": true
+        },
+        "omni.syntheticdata": {
+          "id": "omni.syntheticdata-0.6.17",
+          "version": "0.6.17",
+          "enabled": true
+        },
+        "isaacsim.sensors.rtx": {
+          "id": "isaacsim.sensors.rtx-15.17.5",
+          "version": "15.17.5",
+          "enabled": true
+        },
+        "isaacsim.sensors.experimental.rtx": {
+          "id": "isaacsim.sensors.experimental.rtx-2.0.1",
+          "version": "2.0.1",
+          "enabled": true
+        },
+        "isaacsim.core.simulation_manager": {
+          "id": "isaacsim.core.simulation_manager-1.17.4",
+          "version": "1.17.4",
+          "enabled": true
+        },
+        "isaacsim.physics.newton": {
+          "enabled": false
+        },
+        "isaacsim.physics.newton.tensors": {
+          "enabled": false
+        },
+        "omni.warp.core": {
+          "id": "omni.warp.core-1.17.0",
+          "version": "1.17.0",
+          "enabled": true
+        }
+      },
+      "qualified_build": true,
+      "issues": [],
+      "physics_engine": "physx",
+      "physics_adapter": "physx-simulation-manager-v1",
+      "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+      "physics_packages": {
+        "newton": {
+          "installed_version": "1.6.1",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        },
+        "mujoco": {
+          "installed_version": "3.12.0",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        },
+        "mujoco_warp": {
+          "installed_version": "3.12.0",
+          "loaded": false,
+          "module": null,
+          "loaded_version": null
+        }
+      },
+      "warp": {
+        "version": "1.17.0",
+        "module": "<sim-install-6.2>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.17.0+lx64/warp/__init__.py"
+      }
+    },
+    "stage_identity_record": {
+      "status": "ok",
+      "session_id": "848dd3ff34514682aeae3c59013741d6",
+      "stage_id": "a70ba0cf83d34cc3abd02587267a2683",
+      "pid": 1812070,
+      "source": "anon:0x551904a0:World0.usd",
+      "default_prim": null,
+      "meters_per_unit": 1.0,
+      "up_axis": "Z",
+      "prim_count": 11,
+      "truncated": false,
+      "playing": false,
+      "stopped": true,
+      "time_s": 0.0,
+      "profile": "trusted_project",
+      "sandboxed": false,
+      "staging": "<worktree>/.work/runs/review62/staging",
+      "usd_version": [
+        0,
+        25,
+        11
+      ],
+      "runtime_edit_target_managed": false,
+      "device_error": null,
+      "runtime": {
+        "release": "6.2.0.0",
+        "build": "6.2.0-rc.14+release.52805.02189a84.gl",
+        "reported_core": "6.2.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.2.0.0",
+          "isaacsim-kernel": "6.2.0.0",
+          "isaacsim-core": "6.2.0.0",
+          "isaacsim-sensor": "6.2.0.0",
+          "isaacsim-replicator": "6.2.0.0"
+        },
+        "version_files": {
+          "<sim-install-6.2>/lib/python3.12/site-packages/isaacsim/VERSION": "6.2.0-rc.14+release.52805.02189a84.gl"
+        },
+        "kit_build": "110.4.0+feature.386251.187cf21b.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.38",
+            "version": "1.13.38",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.4",
+            "version": "1.17.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.17.0",
+            "version": "1.17.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.6.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.17.0",
+          "module": "<sim-install-6.2>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.17.0+lx64/warp/__init__.py"
+        }
+      },
+      "app_ready": true,
+      "sensor_resources": {
+        "count": 0,
+        "cleanup_errors": []
+      }
+    }
+  }
+]

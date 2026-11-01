@@ -25,6 +25,7 @@ from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_kno
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
 from .tf_compat import use_legacy_transform_publisher
+from .world_compat import initialized_extension_world
 
 
 def _use_legacy_tf_publisher(og):
@@ -1192,7 +1193,9 @@ class DigitalTwin(omni.ext.IExt):
                     world = World.instance()
                     if world is not None:
                         world.clear_all_callbacks()
-                        world.clear()
+                        # OPENED already refers to the new stage. Never clear
+                        # its USD or synchronously pump Kit from this callback.
+                        world.scene.clear(registry_only=True)
                 except Exception as e:
                     # World.clear() can fail on a stage that is already gone; the singleton must still be dropped.
                     print(f"[ur5e-dt] World.clear skipped on stage event: {e}")
@@ -2504,15 +2507,10 @@ class DigitalTwin(omni.ext.IExt):
         await self._wait_for_stage()
         stage = omni.usd.get_context().get_stage()
 
-        # Only initialize simulation context if physics scene doesn't exist yet
-        physics_scene_prim = stage.GetPrimAtPath("/physicsScene")
-        if not physics_scene_prim or not physics_scene_prim.IsValid():
-            world = World()
-            await world.initialize_simulation_context_async()
-            print("Initialized simulation context and physics scene")
-        else:
-            world = World()
-            print("Physics scene already exists, skipping initialization")
+        # World() otherwise takes the standalone synchronous path under
+        # SimulationApp and pumps app.update inside this async MCP task.
+        world = await initialized_extension_world(World)
+        print("Simulation context initialized")
 
         # Check for ground plane on stage and add if missing
         ground_prim = stage.GetPrimAtPath("/World/defaultGroundPlane")
@@ -3055,8 +3053,7 @@ class DigitalTwin(omni.ext.IExt):
         world = World.instance()
         if world is None:
             print("World not initialized. Creating simulation context for existing stage...")
-            world = World()
-            await world.initialize_simulation_context_async()
+            world = await initialized_extension_world(World)
             # Note: Not adding ground plane here - assumes existing scene has one or user doesn't want it
             print("Simulation context initialized.")
 
@@ -6302,8 +6299,10 @@ class DigitalTwin(omni.ext.IExt):
 
             # Stop simulation
             timeline = omni.timeline.get_timeline_interface()
-            if timeline.is_playing():
+            if not timeline.is_stopped():
                 timeline.stop()
+            app = omni.kit.app.get_app()
+            await app.next_update_async()
 
             # Clear Python-side caches
             if self._mcp is not None:
@@ -6324,7 +6323,10 @@ class DigitalTwin(omni.ext.IExt):
             if world is not None:
                 try:
                     world.clear_all_callbacks()
-                    world.clear()
+                    # The entire stage is about to close. World.clear() calls
+                    # synchronous clear_stage()/app.update() and can dispatch a
+                    # viewport redraw while its selected camera is being deleted.
+                    world.scene.clear(registry_only=True)
                 except Exception as e:
                     print(f"[new_stage] World.clear warning: {e}")
                 try:
@@ -6333,7 +6335,7 @@ class DigitalTwin(omni.ext.IExt):
                     print(f"[new_stage] clear_instance warning: {e}")
 
             # Open a fresh stage
-            omni.usd.get_context().new_stage()
+            await omni.usd.get_context().new_stage_async()
 
             # Let Kit process the stage teardown
             app = omni.kit.app.get_app()

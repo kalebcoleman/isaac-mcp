@@ -95,7 +95,11 @@ conservative destructive and open-world annotations. To enable the separate simu
   `gateway` is excluded; without the tools, a client cannot re-run or redirect it, so restart the MCP connection after
   starting Kit.
 - `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only the tools discovered from the bridge.
-  `ISAAC_MCP_LOCAL_TOOLS` filters only the host's local tools. All three apply together.
+  `ISAAC_MCP_LOCAL_TOOLS` filters only the host's local tools. These compose with
+  `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 37 generic `sim`/`assets`
+  tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
+  and optional managed-session tools are unaffected. With standard local groups, opting out
+  gives 44 offline tools or 51 with bridge built-ins. These are visibility controls, not isolation.
 - `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
   server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
   [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.
@@ -177,7 +181,7 @@ creates files, and can affect the GPU and network. All four tools have conservat
 
 | MCP tool | Arguments | Use |
 |---|---|---|
-| `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false`, `show_ur5e_panel=false` | Start a new process with a local bridge, UR5e tools, chosen ROS domain and separate output/log and persistent Kit settings. Set `show_ur5e_panel=true` to show the panel in a graphical session. Returns a session ID and PID before the bridge is ready. |
+| `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false`, `show_ur5e_panel=false`, `enable_motion_bvh=false`, `physics_backend="physx"` | Start a new process with a local bridge, UR5e tools, chosen ROS domain and separate output/log and persistent Kit settings. Set `show_ur5e_panel=true` to show the panel in a graphical session. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the new process’s installed Newton engine with no fallback. Returns a session ID and PID before the bridge is ready. |
 | `sim__list` | none | List managed sessions, including those started by an earlier server process. |
 | `sim__status` | `session_id` | Check the original PID's identity, bridge and Kit readiness, and current memory snapshot. |
 | `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. |

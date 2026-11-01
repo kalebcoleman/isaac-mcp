@@ -267,10 +267,11 @@ class BridgeClient:
 
     # -- lifecycle --
 
-    def connect(self) -> None:
+    def connect(self, timeout: Optional[float] = None) -> None:
         if self._sock is None:
             self._sock = socket.create_connection(
-                _resolve_endpoint(self._host, self._port), timeout=self.timeout)
+                _resolve_endpoint(self._host, self._port),
+                timeout=self.timeout if timeout is None else timeout)
             self._buffer = b""
 
     def close(self) -> None:
@@ -357,7 +358,7 @@ class BridgeClient:
             self.close()
         for attempt in (0, 1):
             try:
-                self.connect()
+                self.connect(timeout=t)
                 return self._roundtrip(tool, params, t, execution_reserve_s)
             except socket.timeout:
                 self.close()   # response may still arrive on the old socket

@@ -18,7 +18,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Literal, Iterable, Mapping
 
 try:
     import fcntl
@@ -204,7 +204,10 @@ def _check_port(port: int) -> None:
 
 
 def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
-            allow_shared_domain: bool, show_ur5e_panel: bool = False) -> dict:
+            allow_shared_domain: bool, show_ur5e_panel: bool = False,
+            enable_motion_bvh: bool = False, physics_backend: Literal["physx", "newton"] = "physx") -> dict:
+    if physics_backend not in ("physx", "newton"):
+        raise ValueError("physics_backend must be physx or newton")
     if not 1024 <= port <= 65535:
         raise ValueError("port must be between 1024 and 65535")
     # The bundled Cyclone profile probes participant indices 0..100. At
@@ -257,6 +260,7 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
             child_env.pop(key, None)
         child_env.update({"UR5E_DT_PORT": str(port), "ISAAC_MCP_PORT": str(port),
                           "ISAAC_MCP_BIND": "127.0.0.1", "ROS_DOMAIN_ID": str(ros_domain),
+                          "ISAAC_MCP_PHYSICS_BACKEND": physics_backend,
                           "MCP_CLIENT_OUTPUT_DIR": str(output),
                           "ISAAC_MCP_SIM_SESSION_ID": session_id,
                           "ISAAC_MCP_SIM_SESSION_DIR": str(directory)})
@@ -265,6 +269,7 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
         user_config = directory / "user.config.json"
         args = ([str(launcher), "--port", str(port)] + (["--headless"] if headless else [])
                 + (["--ur5e-panel"] if show_ur5e_panel else [])
+                + (["--motion-bvh"] if enable_motion_bvh else [])
                 + ["--", f"--/app/userConfigPath={user_config}"])
         with log.open("wb") as stream:
             proc = subprocess.Popen(args, cwd=str(root), env=child_env, stdin=subprocess.DEVNULL,
@@ -283,6 +288,8 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
         record = {"id": session_id, "pid": proc.pid, "start_ticks": identity[1], "boot_id": boot_id, "port": port,
                   "ros_domain": ros_domain, "headless": headless,
                   "show_ur5e_panel_on_start": show_ur5e_panel,
+                  "enable_motion_bvh": enable_motion_bvh,
+                  "physics_backend": physics_backend,
                   "started_at": time.time(),
                   "log": str(log), "output_dir": str(output), "user_config": str(user_config),
                   "initial_resources": resources}
@@ -351,18 +358,23 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
 
     @mcp.tool(name="sim__launch", annotations=PYTHON_EXECUTION)
     def sim_launch(port: int, ros_domain: int, headless: bool = False,
-                   allow_shared_domain: bool = False, show_ur5e_panel: bool = False) -> dict:
+                   allow_shared_domain: bool = False, show_ur5e_panel: bool = False,
+                   enable_motion_bvh: bool = False, physics_backend: Literal["physx", "newton"] = "physx") -> dict:
         """Launch a managed Isaac Sim instance using a distinct local port and ROS domain.
 
         Checks a configurable instance limit, port, known ROS domains and current free resources.
         ROS domains 0–231 are allowed with the bundled Cyclone DDS profile.
         UR5e tools are enabled either way; set show_ur5e_panel=true to show their panel
         in a graphical session. Resource checks are snapshots, not reservations.
+        Set enable_motion_bvh=true for accurate RTX LiDAR motion compensation;
+        it increases rendering cost and GPU memory use in this new session.
+        physics_backend selects physx (default) or newton for this new process;
+        missing Newton dependencies fail without switching back to PhysX.
         Fake-driver records are session-scoped; stop the driver before stopping the session.
         The URSim driver backend is unavailable because its resources are host-wide.
         Launching runs configured local code.
         """
-        return _launch(settings, port, ros_domain, headless, allow_shared_domain, show_ur5e_panel)
+        return _launch(settings, port, ros_domain, headless, allow_shared_domain, show_ur5e_panel, enable_motion_bvh, physics_backend)
 
     @mcp.tool(name="sim__list", annotations=PYTHON_EXECUTION)
     def sim_list() -> dict:

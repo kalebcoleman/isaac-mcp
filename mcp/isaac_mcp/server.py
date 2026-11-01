@@ -94,6 +94,9 @@ SERVER_INSTRUCTIONS = os.getenv(
     "isaaclab__runs_status reports the job's window_id for screenshot(window_id=...).")
 
 RESPONSE_TIMEOUT_S = 300.0
+# Discovery must not make host recovery tools wait behind a stalled native Kit
+# call. Mutations keep their existing timeout and are never retried on timeout.
+DISCOVERY_TIMEOUT_S = 5.0
 
 
 def _namespace_filter() -> Optional[set]:
@@ -246,9 +249,11 @@ def _mcp_name(canonical: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]", "_", canonical.replace(".", "__"))
 
 
-def _visible(canonical: str, meta: Dict[str, Any]) -> bool:
+def _visible(canonical: str, meta: Dict[str, Any], state=None) -> bool:
     """Apply the view filters: namespace allowlist + builtins gate."""
     namespace = meta.get("namespace")
+    if namespace in {"sim", "assets"} and not getattr(state, "scene_tools_enabled", True):
+        return False
     if namespace is None:  # bridge builtins (run_python, reload_tools)
         return _builtins_enabled()
     allow = _namespace_filter()
@@ -271,13 +276,13 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
     state = _state_for(server)
     offline = _offline_for(server)
     offline_names = offline.names if offline is not None else {}
-    result = state.get_client().call("list_tools")
+    result = state.get_client().call("list_tools", timeout=DISCOVERY_TIMEOUT_S)
     if not isinstance(result, dict) or not isinstance(result.get("tools"), dict):
         raise RuntimeError("bridge list_tools response has no tools dictionary")
     if any(not isinstance(name, str) or not isinstance(meta, dict)
            for name, meta in result["tools"].items()):
         raise RuntimeError("bridge list_tools contains an invalid tool entry")
-    tools = {name: meta for name, meta in result["tools"].items() if _visible(name, meta)}
+    tools = {name: meta for name, meta in result["tools"].items() if _visible(name, meta, state)}
     names = {}
     for canonical, meta in tools.items():
         if "fields" not in meta:
@@ -386,7 +391,7 @@ def _sync_offline(server: Any, state: _BridgeState) -> Dict[str, str]:
     if offline is None:
         return changed
     wanted = {_mcp_name(canonical): (canonical, meta)
-              for canonical, meta in offline.catalog.items() if _visible(canonical, meta)}
+              for canonical, meta in offline.catalog.items() if _visible(canonical, meta, state)}
     for name in list(offline.names):
         if name in state.name_map:                # the live copy took over this name
             offline.names.pop(name)
@@ -429,7 +434,7 @@ def _offline_note(server: Any) -> str:
 
 
 _BRIDGE_HELP = (
-    "To use it: find a bridge that loaded the ur5e-dt extension with "
+    "To use it: find a bridge that loaded the requested tool extension (ur5e-dt or sim-tools) with "
     "`python -m isaac_mcp.client --list-bridges` and select it with use_bridge(port), or start "
     "Kit yourself (`./run.sh --headless`, or sim__launch when simulator launch is enabled) "
     "and call refresh_tools. This server never starts a simulator "
@@ -487,6 +492,24 @@ def _build_tool_function(name: str, canonical: str, description: str,
     for f in ordered:
         annotation = (Literal[tuple(f["enum"])] if f["kind"] == "enum"
                       else _KIND_ANNOTATIONS[f["kind"]])
+        # These versioned contracts also carry usable client-side descriptions and
+        # typed vectors. Leave the legacy bridge/UR5e schema surface unchanged.
+        from .scene_contracts import REGISTRY
+        if canonical in REGISTRY:
+            from typing import Annotated
+            from pydantic import Field
+            spec = REGISTRY[canonical]["parameters"][f["name"]]
+            bounds = {}
+            if f["kind"] == "array":
+                strings = f["name"] in {"observe_prims", "observe_joints"}
+                annotation = list[str] if strings else list[float]
+                lengths = {"position": 3, "orientation": 4, "scale": 3,
+                           "color": 3, "gravity": 3, "target": 3}
+                if f["name"] in lengths:
+                    bounds = {"min_length": lengths[f["name"]], "max_length": lengths[f["name"]]}
+                else:
+                    bounds = {"max_length": {"observe_prims": 16, "observe_joints": 8}.get(f["name"], 128)}
+            annotation = Annotated[annotation, Field(description=spec["description"], **bounds)]
         if f["required"] and not f["has_default"]:
             param_list.append(f["name"])
         else:
@@ -524,7 +547,18 @@ def _tool_implementation(canonical: str, params: Dict[str, Any],
     # policy hook judges the call the bridge will actually receive rather than the
     # signature's placeholders.
     params = {k: v for k, v in params.items() if v is not None}
-    return _post_dispatch(canonical, params, _dispatch(canonical, params, state))
+    result = _post_dispatch(canonical, params, _dispatch(canonical, params, state))
+    # Preserve legacy tools' return behavior; new contracts use MCP's error envelope.
+    from .scene_contracts import REGISTRY
+    if canonical in REGISTRY:
+        from mcp.server.fastmcp.exceptions import ToolError
+        try:
+            data = json.loads(result)
+        except (ValueError, TypeError):
+            data = {}
+        if result.startswith("Error:") or data.get("status") == "error":
+            raise ToolError(result)
+    return result
 
 
 def _dispatch(canonical: str, params: Dict[str, Any],
@@ -545,7 +579,32 @@ def _dispatch(canonical: str, params: Dict[str, Any],
             return blocked
 
     try:
-        result = (state or _DEFAULT_STATE).get_client().call(canonical, params)
+        active = state or _DEFAULT_STATE
+        if canonical.startswith("assets."):
+            from .project_assets import Broker, AssetError
+            if not hasattr(active, "asset_broker"):
+                active.asset_broker = Broker()
+            broker = active.asset_broker
+            try:
+                if canonical == "assets.roots":
+                    return json.dumps(broker.listing())
+                if canonical == "assets.search":
+                    return json.dumps(broker.search(**params))
+                if canonical == "assets.scan":
+                    return json.dumps(broker.scan(**params))
+                if canonical in ("assets.info", "assets.import_usd", "assets.import_urdf"):
+                    # Verify destination identity BEFORE reading/copying project files.
+                    info = active.get_client().call("sim.stage.info")
+                    if info.get("session_id") != params.get("session_id") or info.get("stage_id") != params.get("stage_id"):
+                        raise AssetError("STALE_TARGET", "Review current_target and resend its IDs explicitly; no project was read and this call was not retargeted.",
+                                         current_target={k: info.get(k) for k in ("session_id", "stage_id", "pid", "source", "default_prim", "meters_per_unit", "up_axis")})
+                    if not broker.staging or str(broker.staging) != info.get("staging"):
+                        raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. Remote upload is disabled.")
+                    snapshot = broker.snapshot(params["root_id"], params["relative_path"], kind="urdf" if canonical=="assets.import_urdf" else "usd")
+                    params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
+            except (AssetError, OSError) as e:
+                return json.dumps(dict(status="error", code=getattr(e,"code","FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
+        result = active.get_client().call(canonical, params)
         return json.dumps(result, indent=2, default=repr)
     except BridgeError as e:
         if (str(e).startswith("unknown tool") and "known_tools" in e.details
@@ -615,10 +674,14 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
     if category is _UNSET:
         category = _meta_category(canonical)
 
-    if category is not None:
-        server.tool(meta={"category": category})(handler)
-    else:
-        server.tool()(handler)
+    options = {"meta": {"category": category}} if category is not None else {}
+    from .scene_contracts import REGISTRY
+    if canonical in REGISTRY:
+        from mcp.types import ToolAnnotations
+        read_only = canonical in {"assets.roots", "assets.scan", "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.physics.inspect", "sim.body.state", "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "assets.search", "sim.lidar.read"}
+        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update"},
+                                                 idempotentHint=read_only, openWorldHint=canonical.startswith(("assets.", "sim.controller.")))
+    server.tool(**options)(handler)
 
 
 # ==================== Server ====================
@@ -817,6 +880,14 @@ def build_server(env: Optional[Mapping[str, str]] = None,
                          "domains, confirm readiness and PID with sim__status, and treat resource "
                          "checks as snapshots rather than reservations.")
     state = _BridgeState() if state is None else state
+    scene_option = env.get("ISAAC_MCP_SCENE_TOOLS", "1").strip().lower()
+    if scene_option not in {"0", "false", "no", "1", "true", "yes"}:
+        raise ValueError("ISAAC_MCP_SCENE_TOOLS must be 1/true/yes or 0/false/no")
+    state.scene_tools_enabled = scene_option in {"1", "true", "yes"}
+    from .project_assets import Broker
+    state.asset_broker = Broker(env.get("ISAAC_MCP_ASSET_CONFIG", ""))
+    if state.asset_broker.requested_profile != "trusted_project":
+        raise RuntimeError("PROFILE_UNAVAILABLE: isolated/unrecognized profiles cannot start this trusted MCP server. No restricted endpoint or OS sandbox is implemented; no fallback.")
     server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
     setattr(server, _STATE_ATTR, state)
     _advertise_tools_list_changed(server)

@@ -96,3 +96,50 @@ timeout 30 ros2 topic echo --once /tf_cam tf2_msgs/msg/TFMessage
 
 These calls change the scene and exercise simulated publishers only. Use the matching ROS distribution and
 workspace for other environments; a delivered transform is not a physical-robot or camera-image test.
+
+## Project asset and generic scene preview (separate feature gates)
+
+The new 37-tool pack has its own [evidence and version matrix](evidence/project-scene/README.md),
+separate from the historical UR5e/PR #9 runs above. The same-host trusted-project workflow,
+explicit stage targeting, units, authored/runtime distinction, and PhysX step/joint paths were
+exercised on 6.2.0.0, then representative paths on 6.0.0.0, 6.0.0.1, 6.0.1.0 and 6.1.0.0.
+These are scoped tests, not blanket support for every asset, parameter, sensor or backend.
+
+The compatibility follow-up replaces that experimental dependency with a UsdGeom/Replicator
+owned-CPU camera adapter and a feature-detected legacy LiDAR scan-buffer path. The two 6.0.0
+package builds are distinguished by four-component package metadata and full VERSION/build,
+not `get_version()[0]`. Running Kit and loaded extension/library identities are recorded and
+checked; a new or conflicting stack does not inherit support from its major version.
+
+Disposable Newton trials on all five installed releases measured gravity, collision rest,
+positive/negative joint targets, exact paused step timing, repeated Play/Pause/Stop and pose
+exports. Newton <=6.0.1 requires a scoped native playing-flag correction for paused steps;
+all tested Newton paths avoid stale captured CUDA graphs and publish poses through Fabric.
+Runtime observations use the selected engine, with no PhysX/USD substitution. Newton is
+qualified only for the recorded stacks and meter stages, with scoped MuJoCo evidence.
+The [per-release matrix](evidence/project-scene/RUNS.md) records all37 tools on each installed
+PhysX release, independent agents, repeated captures, known failures and later retests. Newton trials
+are not a claim that every backend/asset/edge case passed.
+
+The follow-up also removes synchronous World initialization/clear calls from the twin's async
+workflow. A visible 6.1 reset/rebuild smoke passed 20/20 without the previously reproduced
+nested-task or GetCamera errors; the actual application window rendered after rebuilding.
+Historical failures above remain part of the record. Further release-specific regressions,
+sensor stress and independent client use are required before broader claims.
+
+Bounded stored USDZ packages are implemented for trusted projects, including package-member
+dependency checks. A live 6.0.0.0 package import/save test and headless export reopening passed.
+This is not an archive sandbox. Isolated untrusted import, authenticated remote upload and
+named manifests remain unfinished. No version match or passed asset validator supplies those
+missing enforcement/transport guarantees. See [tool setup](TOOLS-SCENE.md).
+
+Owner decision2026-11-01: PR11 is a first slice. Its measured support does not include isolated
+untrusted loading, authenticated remote upload, named presets or full fork parity. Those gates
+remain open. New native failures and harness failures are retained in the draft evidence release.
+The latest UR5e World adapter initializes asynchronously even when `/physicsScene` already exists;
+it restores the temporary terminal-launch flag before awaiting and avoids nested Kit updates.
+See the final validation attachment for the6.2 verify/smoke/motion and existing-scene checks.
+
+The6.0.0.0 fresh-process saved-scene test remains partial: geometry/resting body state and new
+sensor creation work, but camera readout stays `NOT_READY` after extended warm-up. Removing
+serialized native render graphs fixed a creation error, not this remaining readout edge.

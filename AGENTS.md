@@ -17,10 +17,11 @@ configured filters.
 | Simulator sessions (optional) | 4 (`sim__*`) | only when `sim_launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
 | Isaac Lab (`isaaclab__*`) | 12 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | a Kit bridge is reachable; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
+| Generic scene and assets | 37 (`assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body and viewport) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots/scan/search run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
 | UR5e twin (`ur5e_dt__*`) | 23 | listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, a client that lists exactly 44 tools can see the
-host, Isaac Lab and UR5e catalog tiers, but not the bridge built-ins. That does not prove that no
+With default groups and no namespace filter, a client that lists exactly 81 tools can see the
+host, Isaac Lab, generic and UR5e catalog tiers, but not the bridge built-ins. That does not prove that no
 bridge exists. The possible causes are:
 
 - no Kit bridge is running;
@@ -34,9 +35,16 @@ bridge exists. The possible causes are:
   the server starts, so restart the MCP connection after starting Kit.
 
 The other 7 tools (bridge built-ins) require discovery from a reachable bridge. With the standard
-groups and bridge built-ins visible there are 51 tools in total. The optional desktop input and
-simulator session groups add 9 more. `docs/GENERIC-SIM-TOOLS.md` describes a `sim.*` pack that is
-a design only and is not built, so do not look for those tools.
+groups and bridge built-ins visible there are 88 tools in total. The optional desktop input and
+simulator session groups add 9 more. The initial generic tools are documented in `docs/TOOLS-SCENE.md`; the broader
+`docs/GENERIC-SIM-TOOLS.md` design includes capabilities not yet implemented. Untrusted
+loading and remote upload remain disabled; bounded trusted USDZ packages are supported.
+
+Set `ISAAC_MCP_SCENE_TOOLS=0` in the MCP server environment to hide the entire generic
+scene/asset pack, both offline and after bridge refresh. It is read once per server startup.
+With otherwise standard settings this restores 44 offline tools and 51 with bridge built-ins.
+The 23 UR5e tools, Isaac Lab, desktop tools and optional managed `sim__launch/list/status/stop`
+tools retain their existing rules. This discovery preference is not a security boundary.
 
 ## Getting the full surface
 
@@ -104,12 +112,21 @@ Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER
 - Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). The job
   inspection and Python probe tools can have side effects and are not in `readonly`;
   `screenshot` writes files and returns desktop pixels. Annotations are hints, not enforcement.
-  Bridge tools are not annotated.
+  Generic scene/asset tools carry conservative host annotations; legacy bridge tools are unchanged.
 
 ## Changing tools
 
 Every registered tool must be documented in its `docs/TOOLS-*.md` page, and the counts above
-(each tier's Tools cell, the 44 and 7 subtotals and the 51 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
+(each tier's Tools cell, the 81 and 7 subtotals and the 88 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
 CI along with the host test suite (`pytest -q` from `mcp/`, see `.github/workflows/ci.yml`).
 After changing the twin tool registry, run `python3 scripts/gen_host_catalog.py --write` and commit the
 updated snapshot; `--check` and the host tests detect drift.
+
+Evidence must use neutral `<repo>`, `<worktree>`, `<home>` and `<sim-install>` placeholders.
+`check_docs.py` also scans tracked bytes and nested gzip/tar/zip members for private home and
+worktree paths; it fails closed on unreadable/oversized archives. Six byte-pinned legacy UR5e
+assets contain third-party provenance paths and are exempt only while unchanged, because these
+assets must not be edited. New files, changed assets and evidence have no such exemption.
+Review screenshot pixels separately; the byte scanner cannot recognize text inside images.
+Keep large redacted transcripts and reproduction bundles in the draft evidence release, with
+URL and SHA-256 in the evidence index. Keep only compact summaries and a few images <=400 KB in Git.

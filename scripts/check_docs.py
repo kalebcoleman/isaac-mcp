@@ -52,7 +52,11 @@ def expected_tools():
             | tool_decorators(ROOT / "mcp/isaac_mcp/server.py")
             | tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")
             | tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py") | builtins)
+    import sys
+    sys.path.insert(0, str(ROOT / "mcp"))
+    from isaac_mcp.scene_contracts import REGISTRY
     return {
+        "docs/TOOLS-SCENE.md": {name.replace(".","__") for name in REGISTRY},
         "docs/TOOLS-UR5E.md": {"ur5e_dt__" + name for name in registry},
         "docs/TOOLS-ISAACLAB.md": tool_decorators(ROOT / "mcp/isaac_mcp/isaaclab/tools.py"),
         "docs/TOOLS-HOST.md": host,
@@ -65,7 +69,7 @@ def tier_counts():
     builtins = bridge_builtins()
     host_only = (tool_decorators(ROOT / "mcp/isaac_mcp/screen.py")
                  | tool_decorators(ROOT / "mcp/isaac_mcp/server.py"))
-    return {"host": len(host_only),
+    return {"generic": len(expected["docs/TOOLS-SCENE.md"]), "host": len(host_only),
             "desktop_input": len(tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")),
             "sim_sessions": len(tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py")),
             "isaaclab": len(expected["docs/TOOLS-ISAACLAB.md"]),
@@ -74,7 +78,7 @@ def tier_counts():
 
 TIER_ROWS = {"host": "Host gateway", "desktop_input": "Desktop input (optional)",
              "sim_sessions": "Simulator sessions (optional)", "isaaclab": "Isaac Lab", "builtins": "Bridge built-ins",
-             "ur5e": "UR5e twin"}
+             "ur5e": "UR5e twin", "generic": "Generic scene and assets"}
 
 
 def check_agent_guide(errors, text=None, counts=None):
@@ -95,12 +99,12 @@ def check_agent_guide(errors, text=None, counts=None):
                           f"{actual[tier]}")
     expected = {
         "exactly N tools (host + Isaac Lab + twin catalog subtotal)":
-            (r"exactly (\d+) tools", actual["host"] + actual["isaaclab"] + actual["ur5e"]),
+            (r"exactly (\d+) tools", actual["host"] + actual["isaaclab"] + actual["ur5e"] + actual["generic"]),
         "The other N tools (bridge built-ins subtotal)":
             (r"The other (\d+) tools", actual["builtins"]),
         "there are N tools in total":
             (r"there are (\d+) tools in total",
-             sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e"))),
+             sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic"))),
         "groups add N more (optional subtotal)":
             (r"groups add (\d+) more", actual["desktop_input"] + actual["sim_sessions"]),
     }
@@ -114,7 +118,9 @@ def check_agent_guide(errors, text=None, counts=None):
 
 
 def main():
-    errors = []
+    from check_private_paths import check_tracked
+
+    errors = check_tracked(ROOT)
     files = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md")),
              *sorted((ROOT / "mcp/docs").glob("*.md"))]
     for path in files:

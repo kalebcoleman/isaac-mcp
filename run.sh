@@ -8,6 +8,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${UR5E_DT_PORT:-${ISAAC_SIM_PORT:-8766}}"
 HEADLESS=0
 SHOW_UR5E_PANEL="${UR5E_DT_SHOW_PANEL:-0}"
+PHYSICS_BACKEND="${ISAAC_MCP_PHYSICS_BACKEND:-physx}"
 SHOW_HELP=0
 EXTRA_ARGS=()
 
@@ -24,6 +25,17 @@ while [ "$#" -gt 0 ]; do
     --headless)
       HEADLESS=1
       shift
+      ;;
+    --motion-bvh)
+      EXTRA_ARGS+=("--/renderer/raytracingMotion/enabled=true"
+                   "--/renderer/raytracingMotion/enableHydraEngineMasking=true"
+                   "--/renderer/raytracingMotion/enabledForHydraEngines=0,1,2,3,4")
+      shift
+      ;;
+    --physics-backend)
+      [ "$#" -ge 2 ] || { echo "--physics-backend needs physx or newton" >&2; exit 2; }
+      PHYSICS_BACKEND="$2"
+      shift 2
       ;;
     --ur5e-panel|--ur5e-dt)
       SHOW_UR5E_PANEL=1
@@ -62,6 +74,8 @@ Configuration:
 
 Options:
   --headless     Run without visible window (sets UR5E_DT_HEADLESS=1)
+  --motion-bvh   Enable RTX sensor motion compensation (increases GPU memory use)
+  --physics-backend physx|newton  Select this new session's engine (default: physx)
   --ur5e-panel   Show the UR5e panel (the tools are always enabled)
   --ur5e-dt      Compatibility alias for --ur5e-panel
   --port N       Bridge port (default: 8766)
@@ -77,6 +91,10 @@ if (exec 3<>/dev/tcp/127.0.0.1/"$PORT") 2>/dev/null; then
 fi
 
 export UR5E_DT_PORT="$PORT"
+case "$PHYSICS_BACKEND" in
+  physx|newton) export ISAAC_MCP_PHYSICS_BACKEND="$PHYSICS_BACKEND" ;;
+  *) echo "--physics-backend must be physx or newton" >&2; exit 2 ;;
+esac
 
 # Defer binding until the twin tools register, so bridge readiness means the
 # default pack is ready whether or not its panel is visible.
@@ -126,5 +144,5 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim
 EXT_ARGS=(--ext-folder "$ROOT/exts")
 
 exec "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
-  "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt \
+  "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt --enable sim-tools \
   --enable isaacsim.ros2.bridge "${EXTRA_ARGS[@]}"

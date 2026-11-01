@@ -83,6 +83,21 @@ def main(argv=None) -> int:
     mode.add_argument("--check", action="store_true", help="fail if the snapshot differs (default)")
     parser.add_argument("--output", type=Path, default=OUTPUT, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    sys.path.insert(0, str(ROOT / "mcp"))
+    from isaac_mcp.scene_contracts import REGISTRY
+    for namespace in ("assets", "sim"):
+        tools = {}
+        for canonical, meta in REGISTRY.items():
+            if canonical.startswith(namespace + "."):
+                tools[canonical] = dict(**meta, fields=_field_specs()(meta["parameters"]),
+                                        namespace=namespace, owner_id="generic-"+namespace)
+        dest = ROOT / "mcp/isaac_mcp/catalogs" / (namespace+".json")
+        expected = render(dict(version=1,namespace=namespace,tools=tools))
+        if args.write:
+            dest.write_text(expected)
+        elif not dest.exists() or dest.read_text()!=expected:
+            print(str(dest)+" is stale; run --write",file=sys.stderr)
+            return 1
     text = render(build_ur5e_catalog())
     if args.write:
         args.output.parent.mkdir(parents=True, exist_ok=True)

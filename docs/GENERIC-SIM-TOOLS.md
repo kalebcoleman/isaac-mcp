@@ -1,6 +1,6 @@
 # Generic Isaac Sim Tool Pack (`sim.*`) — Design
 
-> **Status: design draft, generic tools not implemented.** The original draft was written 2026-10-29 from static
+> **Status: historical design draft.** A scoped implementation now exists in [TOOLS-SCENE.md](TOOLS-SCENE.md); the contracts below are proposals, not the current registry. The original draft was written 2026-10-29 from static
 > inspection. The bridge attachment obstacle was addressed in the shared-bridge update: a temporary second pack and
 > the UR5e pack were exercised on one live 6.2 endpoint. The first stage/prim inspection APIs have now been checked
 > in a separate non-robot 6.2 scene; see [verification](VERIFICATION.md#generic-scene-api-validation). The tools and

@@ -23,3 +23,5 @@ docs/mcp-tool-exposure/
 *.egg-info/
 .env
 .mcp.json
+
+.work/
