@@ -32,6 +32,29 @@ builds, and the npm package dry run. [View the run](https://github.com/kalebcole
 On the same date, the shared-bridge implementation in commit `382d2cb` passed 481 local host tests, the documentation
 checks, the wheel and sdist builds, and the npm package dry run.
 
+### Combined-candidate CPU checks (2026-11-01)
+
+At exact commit `4499bf70c5f06c37cdf928dd1f3d2c29e5abf621` (tree
+`072f8e689d3b5275c1be134488fa46b8a1c474d1`), the local full host suite passed
+**1,182 tests in 170.46 seconds**, with two warnings. One was the intentional duplicate
+ZIP member fixture. The other was a `PytestUnhandledThreadExceptionWarning` in
+`test_bridge_admission::test_run_python_is_exclusive_and_a_mark_survives_a_wrapper`:
+thread `isaac.mcp.bridge-accept` raised `OSError: [Errno 9] Bad file descriptor` at
+`bridge.py:956`, in `self._socket.settimeout(1.0)`. No tests failed, but the thread
+exception remains a follow-up item; this result does not establish that it is harmless.
+
+The separate minimum-SDK run with **MCP 1.22.0** passed **216 tests in 27.74 seconds**.
+It retained the Pydantic `IncompleteFieldDefinitionWarning` for an unresolved
+`lifespan` forward reference. Neither warning was suppressed for these checks.
+
+These results come from the retained local host/minimum-SDK logs and source-identity
+summary. They do not establish native simulator behavior, clean installation, package
+publication or completion of the version/mode matrix. The earlier **1,170 host / 216
+minimum-SDK** passes and wheel/sdist/npm dry-run results belong to
+`2bbeee4a1eb8ab806be44ca7120cdf599dd923e8`; packaging was not rerun as part of this
+`4499bf7` check. Historical runtime failures and later scoped retests retain their own
+source identities in the [compatibility record](COMPATIBILITY.md).
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
