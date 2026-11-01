@@ -82,7 +82,7 @@ user skills directory.
 ## Keeping it current
 
 `scripts/check_docs.py` checks the skill's local links and that every `isaaclab__*` / `ur5e_dt__*`
-name it mentions is a registered tool. When the `sim`/`assets` pack catalogs are present (after
-PR #11), it also checks `sim__*` / `assets__*` names against those catalogs. Renaming a tool fails
+name it mentions is a registered tool. It also checks `sim__*` / `assets__*` names against
+the checked-in catalogs and optional host tools. Renaming a tool fails
 CI until the skill is updated.
 When adding a tool group or a safety rule, update `SKILL.md` alongside the `TOOLS-*.md` page.

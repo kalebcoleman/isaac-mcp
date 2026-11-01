@@ -35,6 +35,29 @@ window but still requires a compatible NVIDIA GPU and driver. The checker warns 
 interpreter exists, it expects exactly 6.2.0.0 and launches a small Torch CUDA kernel. It is not a version-neutral
 6.x or CPU-only diagnostic.
 
+### Installation scope and reproducibility
+
+Run the full installer from a dedicated checkout intended for the pinned build. It runs
+`uv sync --python 3.12` in the current directory; it can update that environment and resolve
+an out-of-date lock. It does not use `UR5E_DT_PYTHON` to choose an installation target.
+For a dependency sync that refuses lock changes, use `uv sync --locked --python 3.12` in
+that dedicated checkout after accepting the EULA. This sync installs simulator dependencies
+only; it does not perform the installer's prerequisite checks or host setup.
+
+Both installer modes replace the user-level editable `isaac-mcp` uv tool installation and
+create/update the repository's ffmpeg shim if no unrelated file occupies that path. Neither
+mode changes MCP client configuration unless a registration option such as `--claude` is
+supplied. Use [manual host setup](MCP-SERVER.md#1-installation) if the shim is unnecessary.
+Do not point a new sync at an existing user-managed Sim or Lab environment. Existing environment
+names and locations need no rename, relocation or symlink; select their interpreters explicitly.
+
+The recorded locked-sync test used a separate copy of an existing Sim environment, as described
+in [compatibility](COMPATIBILITY.md). Host tests and package builds are CPU-only validation;
+they do not qualify a clean native installation. A clean-machine Sim setup and a clean Lab
+video dependency installation remain unverified. Previously prepared environments and private
+package overlays must be reported as such, with exact package/build, source revision and
+headless/windowed mode. See [verification](VERIFICATION.md) for command scopes.
+
 ## Choose a simulator build
 
 The full repository installer and lock select **6.2.0.0 only**. Earlier builds below were exercised in separate,

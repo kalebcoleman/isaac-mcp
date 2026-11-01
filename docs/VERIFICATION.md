@@ -10,13 +10,18 @@ From the repo root, run:
 
 ```bash
 cd mcp
-uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q
+uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab --extra scene-test pytest -q
 uv build
 ```
 
 From the repository root, `python3 scripts/check_docs.py` checks relative file links, fenced JSON examples and the
-registered tool names in the three tool references. It does not check external URLs, link fragments, parameter
+registered tool names in the four tool references, agent tier counts, skill tool names, and private-path bytes. It does not check external URLs, link fragments, parameter
 semantics, or every prose claim.
+
+The `scene-test` extra installs standalone `usd-core` into the isolated **host test** environment.
+Do not add it to a Sim environment as a substitute for Kit's USD bindings. From the repository root,
+`python3 scripts/check_assets.py` checks bundled asset licences and
+`python3 scripts/gen_host_catalog.py --check` detects packaged twin-catalog drift.
 
 The GitHub Actions workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs these CPU-only checks
 plus the documentation check and `npm pack --dry-run` on pushes and pull requests. It does not launch Isaac Sim, train a policy, or test real
@@ -131,8 +136,8 @@ disabled and re-enabled; all 23 twin tools returned. In a separate session, the 
 `./verify.sh` passed, and `scripts/smoke_tools.py` passed 20/20 checks. The latter still reported the known narrow-strip
 warning for `randomize_single_object`; its headless run also produced an MP4 using the twin's real-time viewport
 recording path. These checks exercised simulated scene behavior, not real hardware or every ROS,
-windowed, GPU, OS, or Sim-version combination. No training was run. The generic `sim.*` pack remains a design and was
-not part of these tests.
+windowed, GPU, OS, or Sim-version combination. No training was run. The generic `sim.*` pack was still a design at that source revision and was
+not part of these tests; current implementation evidence is linked below.
 
 A separate direct Kit launch, without the `run.sh` deferral handshake, used `ISAAC_MCP_PORT=0` and
 `UR5E_DT_PORT=18766`. Its bridge status reported port 18766 and discovery returned all 23 twin tools. The ROS library
@@ -181,7 +186,7 @@ The command preserves a nonzero simulator exit status and also fails if the mark
 log location in either case. The explicit `exit` stays inside the subshell. The script reports assertion failures with a
 nonzero exit status, while Kit controls startup failures. The JSON lists the checks, observed helper behavior, Isaac Sim
 distribution version, Python version and platform. The check validates selected building blocks
-for `stage.info`, `stage.tree`, `prim.get` and `prim.find`; it does not test those future tools, an MCP bridge, deep-tree
+for `stage.info`, `stage.tree`, `prim.get` and `prim.find`; it does not test the registered MCP tools, an MCP bridge, deep-tree
 limits, physics, capture, real hardware, or every stage and installation type. Isaac's deprecated `core.utils` helpers
 are optional observations; the USD checks run directly against the active Kit context.
 

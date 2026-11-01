@@ -16,8 +16,9 @@ The latter is MIT-licensed; upstream `omni-kit-mcp` publishes no license file. S
 |---|---|
 | `mcp/` | Host MCP server (`isaac-mcp`): stdio server, Kit bridge client, screen tools. Pure Python, no Isaac dependency. |
 | `exts/isaac.mcp.bridge/` | Kit extension: the socket bridge and tool registry inside Kit. |
+| `exts/sim-tools/` | Generic scene and trusted project assets: 31 `sim__*` and 8 `assets__*` tools. See [scene tools](docs/TOOLS-SCENE.md). |
 | `exts/isaac.mcp.panel/` | Kit extension: registry inspector UI. |
-| `exts/ur5e-dt/` | Tool pack: the UR5e digital-twin tools (23 `ur5e_dt.*`) and their assets. One pack among others to come. |
+| `exts/ur5e-dt/` | Tool pack: the UR5e digital-twin tools (23 `ur5e_dt__*`) and their assets. |
 | `mcp/isaac_mcp/isaaclab/` | Isaac Lab 3.0 tool pack: 12 host-side `isaaclab__*` tools (install info, task list, train/eval/play jobs, run status/tail/cancel, checkpoints, TensorBoard metrics). See [`docs/ISAACLAB-TOOLS.md`](docs/ISAACLAB-TOOLS.md). |
 | `npm/` | Optional `npx` launcher (runs the Python server through `uvx`). |
 | `scripts/`, `run.sh`, `verify.sh`, `install.sh` | Launch, check and install helpers (Ubuntu 22.04/24.04, Python 3.12). |
@@ -109,6 +110,7 @@ support for a future 6.x release from its version number.
 - [Agent guide](AGENTS.md) — which tools exist in which tier, and how to reach all of them.
 - [Linux setup](docs/LINUX-SETUP.md) — OS, driver, Python, Isaac Lab and optional ROS requirements.
 - [Compatibility](docs/COMPATIBILITY.md) — simulator and Lab versions, tested workflows, and limitations.
+- [Scene and asset tools](docs/TOOLS-SCENE.md) — generic stages, physics, sensors, trusted imports and export limits.
 - [UR5e tools](docs/TOOLS-UR5E.md) — all twin tools, arguments and example calls.
 - [Host and bridge tools](docs/TOOLS-HOST.md) — connection management, desktop capture and bridge built-ins.
 - [Isaac Lab tools](docs/TOOLS-ISAACLAB.md) — task discovery, job management, checkpoints and metrics.

@@ -30,9 +30,13 @@ in-flight call must drain before the twin can re-register.
 The host MCP server is installed automatically when running `./install.sh` from the repository root:
 
 ```bash
-./install.sh                    # Installs isaac-mcp editable via uv tool
-./install.sh --claude           # Also writes Claude Code and Claude Desktop configs
+./install.sh --no-sim           # Host only, editable via uv tool; no Sim/Lab install
+# Optional, only to register these clients:
+./install.sh --no-sim --claude  # Also writes Claude Code and Claude Desktop configs
 ```
+
+For the pinned simulator installation, follow [Linux setup](LINUX-SETUP.md); the full installer
+requires `--accept-eula` (or an existing `OMNI_KIT_ACCEPT_EULA=YES`).
 
 To install or reinstall only the host MCP tool manually:
 
@@ -57,7 +61,15 @@ canonical `ur5e_dt.<tool>` names appear to MCP clients as `ur5e_dt__<tool>`. The
 [UR5e tool reference](TOOLS-UR5E.md) for actual names, parameters and side effects. Joint-position and pause tools
 are not registered by this pack.
 
-### Bridge Management Built-ins
+### Generic scene and assets (`sim__*`, `assets__*`)
+
+The 39 generic tools are catalog-listed by default. `assets__roots`, `assets__scan` and
+`assets__search` execute on the host; the others require `sim-tools` in the selected Kit.
+See [scene tools](TOOLS-SCENE.md) for trusted-root configuration and runtime prerequisites,
+and [the agent tier map](../AGENTS.md#what-you-can-reach-by-tier) for counts and filters.
+
+### Bridge discovery and selection
+
 - `list_bridges`: Lists all running Kit bridge instances (PID, port, and app name). *Note: This is a Kit bridge built-in that appears when connected to a bridge.*
 - `use_bridge`: Points the host MCP server at a different bridge port at runtime without restarting the client.
 - `refresh_tools`: Forces rediscovery of tools from the currently connected bridge.

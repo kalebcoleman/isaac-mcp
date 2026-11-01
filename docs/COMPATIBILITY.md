@@ -85,7 +85,7 @@ unused bridge port and ROS domain, and verify the selected PID before scene-chan
 [verification](VERIFICATION.md#live-ur5e-baseline) for the test's effects and `--sim-version` option.
 
 For a simulated ROS check on the tested Ubuntu/Jazzy setup, select the disposable bridge, run Quick Start, add
-objects, call `setup_pose_publisher` and `setup_camera_tf_graph`, then play the scene. In a separate terminal, from
+objects, call `ur5e_dt__setup_pose_publisher` and `ur5e_dt__setup_camera_tf_graph`, then play the scene. In a separate terminal, from
 the repository root, use the same ROS domain as the simulator and source the shared DDS configuration:
 
 ```bash
@@ -101,7 +101,7 @@ workspace for other environments; a delivered transform is not a physical-robot 
 
 ## Project asset and generic scene preview (separate feature gates)
 
-The new 37-tool pack has its own [evidence and version matrix](evidence/project-scene/README.md),
+The current 39-tool pack has its own [evidence and version matrix](evidence/project-scene/README.md),
 separate from the historical UR5e/PR #9 runs above. The same-host trusted-project workflow,
 explicit stage targeting, units, authored/runtime distinction, and PhysX step/joint paths were
 exercised on 6.2.0.0, then representative paths on 6.0.0.0, 6.0.0.1, 6.0.1.0 and 6.1.0.0.

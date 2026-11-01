@@ -54,8 +54,12 @@ Pause before saving and check the exported scene after reopening in a fresh proc
    by `ISAAC_MCP_BUILTINS=0` or `ISAAC_MCP_NAMESPACE`. It exits 2 with `[]` when none is advertised.
 3. With several bridges, call `use_bridge` with the listed port, then `status`, and check that the
    PID and app version are the process you mean.
-4. For Isaac Lab work, call `isaaclab__install_info`. An error here means `ISAACLAB_PYTHON` /
-   `ISAACLAB_ROOT` are not set in the server's environment; fix the client config, not the code.
+4. For Isaac Lab work, call `isaaclab__install_info`. Inspect the returned error: installation
+   discovery, interpreter execution and package metadata are separate checks. Missing configuration
+   is only one possible cause; valid automatic discovery needs no explicit variables. Confirm
+   non-null Lab/Sim versions and the intended interpreter/root before task discovery. See
+   `docs/TOOLS-ISAACLAB.md#locating-an-isaac-lab-install`; do not reinstall or rename an existing
+   environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__stage__info` or `assets__roots`. The
    39-tool pack (31 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan` and `assets__search` run on the host; the rest need the
