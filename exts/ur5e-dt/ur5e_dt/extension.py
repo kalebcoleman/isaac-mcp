@@ -4153,6 +4153,18 @@ class DigitalTwin(omni.ext.IExt):
             print(f"ActionGraph already exists at {graph_path}, skipping creation.")
             return
 
+        # Native camera TF publishers already convert USD camera axes to ROS
+        # optical axes. Override only the ROS name so it matches the existing
+        # image/CameraInfo frame without adding a second rotation. Both native
+        # TF adapters honor isaac:nameOverride. Keep the sensor asset untouched.
+        from pxr import Sdf
+        stage.GetPrimAtPath(CAMERA_PRIM).CreateAttribute(
+            "isaac:nameOverride", Sdf.ValueTypeNames.String
+        ).Set("camera_link")
+
+        # Camera annotators and TF use the same monotonic simulation clock,
+        # including after Stop/Play. Mixing reset-on-stop images with a
+        # non-resetting TF clock leaves messages hundreds of seconds apart.
         print(f"Creating ActionGraph: {graph_path}")
         print(f"Camera: {CAMERA_PRIM}")
         print(f"Resolution: {IMAGE_WIDTH}x{IMAGE_HEIGHT}")
@@ -4190,11 +4202,11 @@ class DigitalTwin(omni.ext.IExt):
                     ("RenderProduct.inputs:height", IMAGE_HEIGHT),
                     ("CameraInfoPublish.inputs:topicName", "camera_info"),
                     ("CameraInfoPublish.inputs:frameId", "camera_link"),
-                    ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", True),
+                    ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", False),
                     ("RGBPublish.inputs:topicName", ROS2_TOPIC),
                     ("RGBPublish.inputs:type", "rgb"),
                     ("RGBPublish.inputs:frameId", "camera_link"),
-                    ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
+                    ("RGBPublish.inputs:resetSimulationTimeOnStop", False),
                     ("TFPublish.inputs:topicName", "tf_cam"),
                     (f"{tf_target}.inputs:targetPrims", CAMERA_PRIM),
                     (f"{tf_target}.inputs:parentPrim", "/World"),
@@ -4487,11 +4499,11 @@ class DigitalTwin(omni.ext.IExt):
                         ("RenderProduct.inputs:height", height),
                         ("CameraInfoPublish.inputs:topicName", "camera_info"),
                         ("CameraInfoPublish.inputs:frameId", "camera_link"),
-                        ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", True),
+                        ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", False),
                         ("RGBPublish.inputs:topicName", topic),
                         ("RGBPublish.inputs:type", "rgb"),
                         ("RGBPublish.inputs:frameId", "camera_link"),
-                        ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
+                        ("RGBPublish.inputs:resetSimulationTimeOnStop", False),
                     ],
                     keys.CONNECT: [
                         ("OnPlaybackTick.outputs:tick", "RunOnce.inputs:execIn"),

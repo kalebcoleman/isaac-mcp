@@ -123,6 +123,12 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
   `camera_width` and `camera_height` to override it; the former project-specific location is no longer read implicitly.
 - Preconditions: UR5e must be loaded (e.g. after `quick_start_with_workstation`); otherwise returns an error.
 - Side effects: creates `/World/rsd455` (if absent) and `/Graph/ActionGraph_Camera`.
+- RGB and CameraInfo use the `camera_link` optical frame. The native TF publisher converts
+  USD camera axes to ROS optical axes; the camera's `isaac:nameOverride` makes its `/tf_cam`
+  child frame match those image headers. Subscribe/remap `/tf_cam` when using TF consumers.
+- Image, CameraInfo and TF timestamps use monotonic simulation time across Stop/Play.
+  The ROS camera helpers regenerate their native session render pipeline on playback;
+  saved output retains the authored Action Graph and camera definition.
 - Example: `{}`
 
 ### `ur5e_dt__assemble_objects`
