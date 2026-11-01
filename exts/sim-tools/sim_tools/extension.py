@@ -294,6 +294,7 @@ class Extension(omni.ext.IExt):
         mutations = {
             "assets.import_urdf",
             "assets.import_usd",
+            "assets.import_path",
             "sim.prim.create",
             "sim.prim.set_transform",
         }
@@ -375,7 +376,11 @@ class Extension(omni.ext.IExt):
                 return self.advanced.import_urdf(stage, **a)
             if name == "assets.info":
                 return s.inspect_asset(**a)[2]
-            return s.import_asset(stage, **a)
+            if name == "assets.prepare_workstation":
+                return s.prepare_workstation(**a)
+            if name in ("assets.import_path", "assets.import_usd"):
+                return s.import_path(stage, **a)
+            raise RuntimeError("Unknown asset operation: " + name)
         if name == "sim.body.state":
             from .advanced import physics_manager
 

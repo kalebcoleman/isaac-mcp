@@ -1,13 +1,22 @@
 """USD operations. Session-layer-only edits, no Kit update/step calls."""
 
 import math
+import hashlib
 import os
 from pathlib import Path
 import re
+import shutil
 import tempfile
 import uuid
 from pxr import Ar, Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdUtils
-from isaac_mcp.project_assets import Broker, AssetError, refuse, relative
+from isaac_mcp.project_assets import (
+    Broker,
+    AssetError,
+    refuse,
+    relative,
+    open_dir,
+    read_regular,
+)
 
 CAP = 10000
 
@@ -529,6 +538,405 @@ class Scene:
             with Usd.EditContext(stage, stage.GetSessionLayer()):
                 stage.RemovePrim(p)
             raise
+
+    def validate_project_materials(self, snapshot_id, manifest_sha256):
+        """Validate bounded literal MDL and MaterialX project dependencies."""
+        import xml.etree.ElementTree as ET
+
+        filename, manifest = self.broker.verify(snapshot_id, manifest_sha256)
+        root = filename.parents[len(Path(manifest["entry"]).parts) - 1]
+        layers, assets, _ = UsdUtils.ComputeAllDependencies(
+            Sdf.AssetPath(str(filename))
+        )
+        dependency_names = [str(layer.realPath) for layer in layers] + [
+            str(a) for a in assets
+        ]
+        for package, details in manifest.get("packages", {}).items():
+            package_path = str(root / package)
+            used = package == manifest["entry"] or any(
+                package_path in value for value in dependency_names
+            )
+            if used and any(
+                Path(member).suffix.lower() in {".mdl", ".mtlx"}
+                for member in details.get("members", {})
+            ):
+                refuse(
+                    "DEPENDENCIES_UNSUPPORTED",
+                    "USDZ packages containing MDL or MaterialX need package-aware material validation: "
+                    + package,
+                )
+        textures = []
+        other_mdl_resources = []
+        materialx = []
+
+        def reference(parent, value, kind):
+            if (
+                not value
+                or value.startswith("/")
+                or ":" in value
+                or "\\" in value
+                or any(c in value for c in "<>$#?{}")
+            ):
+                refuse(
+                    "DEPENDENCIES_UNSUPPORTED",
+                    kind
+                    + " contains an absolute, network or dynamic reference: "
+                    + value,
+                )
+            target = Path(os.path.normpath(str(parent / value)))
+            try:
+                rel = target.relative_to(root).as_posix()
+                relative(rel)
+            except ValueError:
+                refuse("DEPENDENCIES", kind + " escapes the approved project: " + value)
+            if rel not in manifest["files"]:
+                refuse("DEPENDENCIES", "Missing " + kind + ": " + rel)
+            return target, rel
+
+        pending_mtlx = []
+        # USD releases disagree on whether MaterialX is reported as a layer or
+        # an asset. Inspect both collections and de-duplicate their paths.
+        for dependency in dict.fromkeys(dependency_names):
+            dep = Path(str(dependency))
+            if dep.suffix.lower() == ".mtlx":
+                pending_mtlx.append(dep)
+                continue
+            if dep.suffix.lower() != ".mdl":
+                continue
+            try:
+                mdl_rel = dep.relative_to(root).as_posix()
+            except ValueError:
+                refuse(
+                    "DEPENDENCIES_UNSUPPORTED",
+                    "External MDL module is outside the approved project snapshot.",
+                )
+            relative(mdl_rel)
+            if mdl_rel not in manifest["files"]:
+                refuse(
+                    "DEPENDENCIES", "MDL material missing from the snapshot: " + mdl_rel
+                )
+            text = dep.read_text(encoding="utf-8")
+            # Comments do not describe texture resources. For safety reject
+            # escaped/expressive arguments rather than guessing at MDL syntax.
+            text = re.sub(
+                r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*',
+                lambda match: match.group() if match.group().startswith('"') else "",
+                text,
+                flags=re.S,
+            )
+            # We support only absolute MDL module names. A relative or otherwise
+            # nonstandard import could hide another file with its own resources.
+            without_using = re.sub(
+                r"\busing\s+::[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*\s+import\s+[^;]+;",
+                "",
+                text,
+            )
+            if re.search(
+                r"\busing\s+|\bimport(?!\s*::)\s+|#\s*include\b", without_using
+            ):
+                refuse(
+                    "DEPENDENCIES_UNSUPPORTED",
+                    "A relative or unsupported MDL import cannot be validated: "
+                    + mdl_rel,
+                )
+            allowed = {
+                "OmniPBR",
+                "tex",
+                "state",
+                "base",
+                "df",
+                "math",
+                "anno",
+                "limits",
+                "debug",
+                "scene",
+            }
+            modules = re.findall(
+                r"\b(?:using|import)\s+::([A-Za-z_][A-Za-z_0-9]*)", text
+            )
+            if any(module not in allowed for module in modules):
+                refuse(
+                    "DEPENDENCIES_UNSUPPORTED",
+                    "A custom MDL module cannot be validated: " + mdl_rel,
+                )
+            if "OmniPBR" in modules:
+                runtime = self.runtime_assets.get("OmniPBR.mdl")
+                if (
+                    not runtime
+                    or not Path(runtime["path"]).is_file()
+                    or hashlib.sha256(Path(runtime["path"]).read_bytes()).hexdigest()
+                    != runtime["sha256"]
+                ):
+                    refuse(
+                        "DEPENDENCIES",
+                        "The required installed OmniPBR MDL module is missing or changed.",
+                    )
+            resource = r"(texture_(?:2d|3d|cube|ptex)|light_profile|bsdf_measurement)"
+            starts = list(re.finditer(r"\b" + resource + r"\s*\(", text))
+            calls = list(re.finditer(r"\b" + resource + r"\s*\(([^()]*)\)", text))
+            if len(starts) != len(calls):
+                refuse(
+                    "DEPENDENCIES_UNSUPPORTED",
+                    "A complex MDL resource expression cannot be validated: " + mdl_rel,
+                )
+            for call in calls:
+                kind = (
+                    "MDL texture"
+                    if call.group(1).startswith("texture_")
+                    else "MDL resource"
+                )
+                arg = call.group(2).strip()
+                if not arg:
+                    continue
+                match = re.match(r'^"([^"\\]+)"(?:\s*,.*)?$', arg, flags=re.S)
+                if not match or "<" in arg:
+                    refuse(
+                        "DEPENDENCIES_UNSUPPORTED",
+                        "A non-literal, escaped or tiled MDL resource cannot be validated: "
+                        + mdl_rel,
+                    )
+                value = match.group(1)
+                _, rel = reference(dep.parent, value, kind)
+                (textures if kind == "MDL texture" else other_mdl_resources).append(rel)
+        visited = set()
+        while pending_mtlx:
+            dep = pending_mtlx.pop()
+            try:
+                rel = dep.relative_to(root).as_posix()
+                relative(rel)
+            except ValueError:
+                refuse(
+                    "DEPENDENCIES_UNSUPPORTED",
+                    "MaterialX is outside the project snapshot.",
+                )
+            if rel in visited:
+                continue
+            if rel not in manifest["files"] or len(visited) >= 1000:
+                refuse(
+                    "DEPENDENCIES", "Missing or excessive MaterialX dependency: " + rel
+                )
+            visited.add(rel)
+            data = dep.read_bytes()
+            if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
+                refuse(
+                    "DEPENDENCIES_UNSUPPORTED",
+                    "MaterialX XML declarations/entities are unsupported: " + rel,
+                )
+            try:
+                xml = ET.fromstring(data)
+            except ET.ParseError:
+                refuse("DEPENDENCIES_UNSUPPORTED", "Invalid MaterialX document: " + rel)
+            for element in xml.iter():
+                if element.get("fileprefix"):
+                    refuse(
+                        "DEPENDENCIES_UNSUPPORTED",
+                        "MaterialX fileprefix requires resolver support: " + rel,
+                    )
+                values = []
+                if element.get("type") == "filename" and element.get("value"):
+                    values.append(element.get("value"))
+                for key in ("file", "filename", "href"):
+                    if element.get(key):
+                        values.append(element.get(key))
+                for value in values:
+                    target, name = reference(dep.parent, value, "MaterialX dependency")
+                    materialx.append(name)
+                    if target.suffix.lower() == ".mtlx":
+                        pending_mtlx.append(target)
+                    elif target.suffix.lower() in {
+                        ".mdl",
+                        ".usd",
+                        ".usda",
+                        ".usdc",
+                        ".usdz",
+                        ".abc",
+                        ".xml",
+                    }:
+                        refuse(
+                            "DEPENDENCIES_UNSUPPORTED",
+                            "Nested material or scene dependency requires additional validation: "
+                            + name,
+                        )
+        return dict(
+            mdl_literal_textures=textures[:32],
+            mdl_texture_count=len(textures),
+            mdl_other_resources=other_mdl_resources[:32],
+            mdl_other_resource_count=len(other_mdl_resources),
+            materialx_dependencies=materialx[:32],
+            materialx_dependency_count=len(materialx),
+            truncated=len(textures) > 32
+            or len(other_mdl_resources) > 32
+            or len(materialx) > 32,
+            note="Literal MDL and MaterialX paths checked. Custom MDL modules, dynamic/tiled paths and MaterialX fileprefix are refused; this is not a sandbox.",
+        )
+
+    def import_path(self, stage, snapshot_id, manifest_sha256, prim_path, **pose):
+        self.inspect_asset(snapshot_id, manifest_sha256)
+        materials = self.validate_project_materials(snapshot_id, manifest_sha256)
+        result = self.import_asset(
+            stage, snapshot_id, manifest_sha256, prim_path, **pose
+        )
+        result["material_checks"] = materials
+        return result
+
+    def prepare_workstation(self, snapshot_id, manifest_sha256):
+        """Publish a validated trusted snapshot to the existing UR5e cache contract.
+
+        This prepares files only; the twin's load_workstation/quick-start performs
+        the scene edit. The source project and existing cache entry are never edited.
+        """
+        filename, asset, info = self.inspect_asset(snapshot_id, manifest_sha256)
+        materials = self.validate_project_materials(snapshot_id, manifest_sha256)
+        _, manifest = self.broker.verify(snapshot_id, manifest_sha256)
+        source_root = filename.parents[len(Path(manifest["entry"]).parts) - 1]
+        override = os.getenv("UR5E_DT_ASSET_CACHE", "").strip()
+        xdg = os.getenv("XDG_CACHE_HOME", "").strip()
+        cache = (
+            Path(override).expanduser()
+            if override
+            else (Path(xdg).expanduser() if xdg else Path.home() / ".cache")
+            / "ur5e-dt"
+            / "assets"
+        )
+        if not cache.is_absolute() or ".." in cache.parts:
+            refuse("CONFIG", "UR5E_DT_ASSET_CACHE must be an absolute local directory.")
+        repo = Path(__file__).resolve().parents[3]
+        if cache == repo or repo in cache.parents:
+            refuse("CONFIG", "Workstation cache must be outside the repository.")
+        for root, _ in self.broker.roots.values():
+            if cache == root or cache in root.parents or root in cache.parents:
+                refuse(
+                    "CONFIG",
+                    "Workstation cache and approved project roots must be disjoint.",
+                )
+        staging = self.broker.staging
+        if cache == staging or cache in staging.parents or staging in cache.parents:
+            refuse("CONFIG", "Workstation cache and project staging must be disjoint.")
+
+        # Walk/create without following symlink components; final cache must be
+        # owned by this user and not writable by other users.
+        fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            for part in cache.parts[1:]:
+                try:
+                    os.mkdir(part, 0o700, dir_fd=fd)
+                except FileExistsError:
+                    pass
+                new = os.open(
+                    part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd
+                )
+                os.close(fd)
+                fd = new
+            st = os.fstat(fd)
+            if st.st_uid != os.getuid() or st.st_mode & 0o022:
+                refuse(
+                    "CONFIG",
+                    "Workstation cache must be owned by this user and not group/world writable.",
+                )
+            try:
+                os.mkdir("workstation", 0o700, dir_fd=fd)
+            except FileExistsError:
+                pass
+            wsfd = os.open(
+                "workstation", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd
+            )
+            try:
+                st = os.fstat(wsfd)
+                if st.st_uid != os.getuid() or st.st_mode & 0o022:
+                    refuse("CONFIG", "Workstation directory is not safely owned.")
+                try:
+                    os.stat("vention.usd", dir_fd=wsfd, follow_symlinks=False)
+                except FileNotFoundError:
+                    pass
+                else:
+                    refuse(
+                        "ALREADY_EXISTS",
+                        "workstation/vention.usd already exists; no files were overwritten.",
+                    )
+            finally:
+                os.close(wsfd)
+        finally:
+            os.close(fd)
+
+        workstation = cache / "workstation"
+        token = uuid.uuid4().hex
+        work = Path(tempfile.mkdtemp(prefix=".prepare-", dir=workstation))
+        bundle = workstation / ("project-" + token)
+        wrapper = workstation / (".vention-" + token + ".usda")
+        published = False
+        try:
+            # Copy exactly the verified bounded snapshot; re-check every digest
+            # while reading and reject symlink/replacement races.
+            for rel, digest in manifest["files"].items():
+                relative(rel)
+                src = source_root / rel
+                parent_fd = open_dir(src.parent)
+                try:
+                    before = os.stat(src.name, dir_fd=parent_fd, follow_symlinks=False)
+                    data = read_regular(parent_fd, src.name, before)
+                finally:
+                    os.close(parent_fd)
+                if hashlib.sha256(data).hexdigest() != digest:
+                    refuse(
+                        "SNAPSHOT_CHANGED",
+                        "Snapshot changed while preparing the workstation.",
+                    )
+                dest = work / rel
+                dest.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                with dest.open("xb") as stream:
+                    stream.write(data)
+            self.broker.verify(snapshot_id, manifest_sha256)
+            work.rename(bundle)
+            layer = Sdf.Layer.CreateNew(str(wrapper))
+            staged = Usd.Stage.Open(layer)
+            root = UsdGeom.Xform.Define(staged, "/Workstation").GetPrim()
+            staged.SetDefaultPrim(root)
+            UsdGeom.SetStageMetersPerUnit(staged, info["meters_per_unit"])
+            UsdGeom.SetStageUpAxis(staged, info["up_axis"])
+            reference = "./" + bundle.name + "/" + manifest["entry"]
+            if (
+                not root.GetReferences().AddReference(reference)
+                or staged.GetCompositionErrors()
+            ):
+                refuse(
+                    "COMPOSITION_ERROR", "Prepared workstation wrapper did not compose."
+                )
+            if not layer.Save():
+                refuse("FILESYSTEM", "Could not save the workstation wrapper.")
+            # Do not silently accept unresolved dependencies after relocation.
+            _, _, missing = UsdUtils.ComputeAllDependencies(Sdf.AssetPath(str(wrapper)))
+            missing = [str(x) for x in missing if str(x) not in self.runtime_assets]
+            if missing:
+                refuse(
+                    "DEPENDENCIES",
+                    "Prepared workstation has unresolved dependencies: "
+                    + repr(missing[:12]),
+                )
+            try:
+                os.link(wrapper, workstation / "vention.usd", follow_symlinks=False)
+            except FileExistsError:
+                refuse(
+                    "ALREADY_EXISTS",
+                    "workstation/vention.usd was created concurrently; no file was overwritten.",
+                )
+            published = True
+            return dict(
+                **info,
+                prepared=True,
+                loaded=False,
+                material_checks=materials,
+                workstation_file=str(workstation / "vention.usd"),
+                source_preserved=True,
+                copied_project_files=len(manifest["files"]),
+                next_tool="ur5e_dt__load_workstation",
+                verification="Call the twin tool, then inspect /World/Vention and its visible result. The twin must use this cache and have no higher-priority workstation drop-in.",
+                limitations="Trusted USD only; network/outside-snapshot dependencies are refused. USD dependency discovery cannot prove arbitrary resolver/plugin or directory dependencies complete.",
+            )
+        finally:
+            wrapper.unlink(missing_ok=True)
+            if not published:
+                shutil.rmtree(work, ignore_errors=True)
+                shutil.rmtree(bundle, ignore_errors=True)
 
     def save(self, stage, filename, runtime_poses=None):
         if self.timeline.is_playing():

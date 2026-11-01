@@ -64,6 +64,28 @@ add(
     ),
 )
 add(
+    "assets.prepare_workstation",
+    "Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox.",
+    dict(
+        **TARGET,
+        source_path=field(
+            "string", "Absolute local USD path inside an already approved trusted root."
+        ),
+    ),
+)
+add(
+    "assets.import_path",
+    "Import a trusted local USD from an absolute path under an approved project root. Copies and validates its project dependencies before authoring a reference; source files remain unchanged.",
+    dict(
+        **TARGET,
+        source_path=field(
+            "string", "Absolute local USD path inside an already approved trusted root."
+        ),
+        prim_path=field("string", "New absolute wrapper prim path; parent must exist."),
+        **POSE,
+    ),
+)
+add(
     "sim.stage.info",
     "Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations.",
 )

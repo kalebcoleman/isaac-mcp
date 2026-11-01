@@ -94,7 +94,7 @@ for tested releases, installation pins, and known limitations.
 
 ## Project USD and generic scene preview
 
-The optional trusted project configuration and 37 offline-discoverable scene/asset tools are
+The optional trusted project configuration and 39 offline-discoverable scene/asset tools are
 documented in [TOOLS-SCENE.md](docs/TOOLS-SCENE.md). They add local USD/URDF discovery/import,
 scene authoring, PhysX observations/stepping, RTX sensors and opt-in controllers.
 See the [43-tool fork comparison](docs/FORK-COMPARISON.md) and

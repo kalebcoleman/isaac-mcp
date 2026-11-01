@@ -592,7 +592,7 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                     return json.dumps(broker.search(**params))
                 if canonical == "assets.scan":
                     return json.dumps(broker.scan(**params))
-                if canonical in ("assets.info", "assets.import_usd", "assets.import_urdf"):
+                if canonical in ("assets.info", "assets.import_usd", "assets.import_urdf", "assets.prepare_workstation", "assets.import_path"):
                     # Verify destination identity BEFORE reading/copying project files.
                     info = active.get_client().call("sim.stage.info")
                     if info.get("session_id") != params.get("session_id") or info.get("stage_id") != params.get("stage_id"):
@@ -600,7 +600,12 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                                          current_target={k: info.get(k) for k in ("session_id", "stage_id", "pid", "source", "default_prim", "meters_per_unit", "up_axis")})
                     if not broker.staging or str(broker.staging) != info.get("staging"):
                         raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. Remote upload is disabled.")
-                    snapshot = broker.snapshot(params["root_id"], params["relative_path"], kind="urdf" if canonical=="assets.import_urdf" else "usd")
+                    if canonical in ("assets.prepare_workstation", "assets.import_path"):
+                        params = dict(params)
+                        root_id, relative_path = broker.locate(params.pop("source_path"))
+                    else:
+                        root_id, relative_path = params["root_id"], params["relative_path"]
+                    snapshot = broker.snapshot(root_id, relative_path, kind="urdf" if canonical=="assets.import_urdf" else "usd")
                     params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e,"code","FILESYSTEM"), message=str(e), **getattr(e, "details", {})))

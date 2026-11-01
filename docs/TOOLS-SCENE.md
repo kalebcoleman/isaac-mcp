@@ -1,6 +1,6 @@
 # Project USD and generic scene tools
 
-**Implementation preview; end-to-end acceptance incomplete.** Thirty-seven catalogued tools implement
+**Implementation preview; end-to-end acceptance incomplete.** Thirty-nine catalogued tools implement
 trusted local/shared-mount projects and explicit scene operations. Untrusted isolation, authenticated
 remote upload and named presets are **unavailable**, not silently substituted. Bounded USDZ support is available only in the trusted-project profile.
 See [evidence](evidence/project-scene/README.md) for actual tests and missing gates.
@@ -35,7 +35,7 @@ A missing/different mount produces an error, never an implicit transfer via `put
 
 All names below remain discoverable offline by default, subject to existing namespace filters.
 Set `ISAAC_MCP_SCENE_TOOLS=0` on the host server and restart that MCP connection to hide
-all 37 generic tools, including live bridge discovery. This per-server preference preserves
+all 39 generic tools, including live bridge discovery. This per-server preference preserves
 UR5e, Isaac Lab, desktop and managed-session tools; it is not an enforcement boundary.
 `ISAAC_MCP_LOCAL_TOOLS` does not select these catalogued tools. `assets__roots` and
 `assets__scan` and `assets__search` execute in the host broker even without Kit. Other tools explain an absent
@@ -47,6 +47,8 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `assets__scan` | Bounded filename-only USD discovery on the MCP host. No USD parser. Results are untrusted data. |
 | `assets__info` | Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. |
 | `assets__import_usd` | Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes. |
+| `assets__prepare_workstation` | Take an absolute USD path under an already approved trusted root, validate its bounded snapshot in the selected Kit, and prepare a private workstation cache without overwriting. Returns `loaded:false`; call `ur5e_dt__load_workstation` and inspect `/World/Vention` to verify. |
+| `assets__import_path` | Import an approved trusted project's USD by absolute path, preserving the source and relative project layout. Requires the selected session/stage, a free prim path and matching stage units/up-axis. |
 | `sim__stage__info` | Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations. |
 | `sim__stage__tree` | Bounded stage hierarchy including inactive prims. Text is untrusted data. |
 | `sim__prim__get` | Read local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown. |
@@ -84,9 +86,44 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 Other than discovery and stage-info, every tool requires exact `session_id` and `stage_id`
 from stage-info. Tokens are stale-target guards, **not authentication**. Check stage-info again
 after selecting/restarting Kit. Asset preparation checks the destination before copying files.
-The public schemas expose only root IDs/relative paths; broker snapshot parameters are internal.
+Public asset schemas accept approved root IDs/relative paths or an absolute path under an approved
+root; broker snapshot parameters are internal.
 Errors from these tools set MCP `isError`; legacy tools retain their prior result envelopes.
 Connection/timeout failures after dispatch have unknown outcomes: inspect before retrying.
+
+### Project USD and the UR5e workstation
+
+For an ordinary object or robot, call `assets__roots`, then `sim__stage__info`, and pass the
+absolute USD path to `assets__import_path` (or use the approved root ID and relative path with
+`assets__import_usd`). The broker copies the bounded
+approved project with relative layout intact. Kit checks the snapshot's USD layers, material
+and texture dependencies and returns the created prim path, units and dependency counts. Inspect
+the resulting prim or viewport before assuming physics is ready.
+
+For a workstation, after the same one-time trusted-root approval, call
+`assets__prepare_workstation` with the exact `session_id` and `stage_id` from `sim__stage__info`
+and `source_path` set to the absolute USD path under that root. The tool writes a private project
+copy and wrapper to `workstation/vention.usd` under `UR5E_DT_ASSET_CACHE` (or the twin's default
+XDG cache), and reports the destination and dependency checks. It does **not** load the scene:
+call `ur5e_dt__load_workstation` or the appropriate workstation quick-start, then inspect
+`/World/Vention`. The twin and selected Kit must use the same cache. The resolver introduced in
+PR #14 prefers a bundled/operator drop-in over the cache; remove neither automatically and check
+which one the twin actually used. Existing workstation files are never replaced. The cache must
+be outside the repository and disjoint from approved roots and staging.
+
+The user is responsible for trusting and having rights to the asset. Existing USD checks refuse
+missing or outside-snapshot dependencies, URLs and unsupported paths; native USD parsing can
+invoke installed resolvers before the check and this trusted workflow is not network isolation.
+Absolute authored references are not rewritten into the snapshot. USD dependency inspection may
+not identify every custom resolver, plugin, or directory-valued dependency. The path-based workflows
+also check literal MDL texture, light-profile and BSDF-measurement paths and MaterialX
+filename/include references. They refuse custom MDL modules, MDL/MaterialX inside USDZ,
+MaterialX fileprefix, certain nested materials, network/absolute paths and non-literal or tiled
+resource expressions they cannot validate. These checks cover common dependencies, not every
+possible material or plugin: inspect the loaded asset and its renderer output. A success result
+does not certify visual fidelity, physics readiness, or complete detection of arbitrary resources.
+The tool copies the entire bounded approved project, not only the reported dependencies, and is
+not an untrusted-USD sandbox. Keep the cache and snapshots while scenes still reference them.
 
 Pose coordinates use **stage units**, `orientation=[w,x,y,z]` must be a finite unit quaternion,
 and `frame` is `local` or `world`. World transforms use the parent's inverse matrix; singular
