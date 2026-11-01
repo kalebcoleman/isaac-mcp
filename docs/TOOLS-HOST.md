@@ -179,12 +179,17 @@ creates files, and can affect the GPU and network. All four tools have conservat
 |---|---|---|
 | `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false`, `show_ur5e_panel=false` | Start a new process with a local bridge, UR5e tools, chosen ROS domain and separate output/log and persistent Kit settings. Set `show_ur5e_panel=true` to show the panel in a graphical session. Returns a session ID and PID before the bridge is ready. |
 | `sim__list` | none | List managed sessions, including those started by an earlier server process. |
-| `sim__status` | `session_id` | Check the original PID's identity, bridge PID/readiness and current memory snapshot. |
+| `sim__status` | `session_id` | Check the original PID's identity, bridge and Kit readiness, and current memory snapshot. |
 | `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. |
 
 Example calls: `sim__launch` with `{"port":18766,"ros_domain":42}`, then `sim__status` with
 `{"session_id":"<id returned by launch>"}`. Wait until `state` is `running`, select that port with `use_bridge`, and
 verify its PID before operating the scene. If necessary, identify its graphical client with `list_windows` by PID.
+Managed launches accept ROS domains 0–231. With the bundled Cyclone DDS profile's participant-index range, domain
+232 would make discovery probe beyond UDP port 65535.
+`starting` means Kit reports it is still initializing. `readiness_unknown` means the bridge answered but cannot
+report Kit readiness (for example, an older bridge); verify the application before using scene tools. An unavailable
+bridge reports `starting_or_unresponsive`.
 The UR5e tools are enabled in either mode. To show their tab at launch, add `"show_ur5e_panel":true`.
 The `show_ur5e_panel_on_start` field records the launch choice, not whether it remains visible later.
 The extension can also be enabled in an already running simulator; see [UR5e tools](TOOLS-UR5E.md#simulator-window).
@@ -222,7 +227,7 @@ the selected bridge and the host's built-in filter.
 
 | MCP tool | Arguments and defaults | Use and effects |
 |---|---|---|
-| `status` | none | Return bridge process identity, port, app version, headless state and registry information. |
+| `status` | none | Return bridge process identity, port, app version, Kit `app_ready` (`true`, `false`, or `null` if unknown), headless state and registry information. |
 | `list_bridges` | none | List bridge instances advertised on the bridge machine. |
 | `run_python` | `code` (string, required); `session_id="default"`, `persistent=false` | Execute Python on Kit's main thread with `omni`, `carb` and common USD symbols preloaded. Assign `result` to return a value. Persistent sessions retain eligible variables for the same ID; a stage-open event clears session state when the subscription is available. Arbitrary code can change the scene or access files. |
 | `reload_tools` | `module` (string, required) | Reload an autoloaded tool package by module name, then call host `refresh_tools` to update the client-facing registry. If that pack has a call in flight, reload is refused until it finishes. |

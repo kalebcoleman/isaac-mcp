@@ -24,6 +24,18 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
+from .tf_compat import use_legacy_transform_publisher
+
+
+def _use_legacy_tf_publisher(og):
+    from importlib.metadata import PackageNotFoundError, version
+
+    node_version = og.GraphRegistry().get_node_type_version("isaacsim.core.nodes.IsaacComputeTransformTree")
+    try:
+        sim_version = version("isaacsim")
+    except PackageNotFoundError:
+        sim_version = None
+    return use_legacy_transform_publisher(node_version, sim_version)
 
 # MCP output directory configuration
 BASE_OUTPUT_DIR = os.getenv("MCP_CLIENT_OUTPUT_DIR", "").strip()
@@ -4076,6 +4088,17 @@ class DigitalTwin(omni.ext.IExt):
         print(f"ROS2 Topic: {ROS2_TOPIC}")
 
         keys = og.Controller.Keys
+        legacy_tf = _use_legacy_tf_publisher(og)
+        tf_nodes = [] if legacy_tf else [("TFCompute", "isaacsim.core.nodes.IsaacComputeTransformTree")]
+        tf_target = "TFPublish" if legacy_tf else "TFCompute"
+        tf_connections = [("OnPlaybackTick.outputs:tick", "TFPublish.inputs:execIn")] if legacy_tf else [
+            ("OnPlaybackTick.outputs:tick", "TFCompute.inputs:execIn"),
+            ("TFCompute.outputs:execOut", "TFPublish.inputs:execIn"),
+            ("TFCompute.outputs:parentFrames", "TFPublish.inputs:parentFrames"),
+            ("TFCompute.outputs:childFrames", "TFPublish.inputs:childFrames"),
+            ("TFCompute.outputs:translations", "TFPublish.inputs:translations"),
+            ("TFCompute.outputs:orientations", "TFPublish.inputs:orientations"),
+        ]
 
         (graph, nodes, _, _) = og.Controller.edit(
             {"graph_path": graph_path, "evaluator_name": "execution"},
@@ -4088,9 +4111,8 @@ class DigitalTwin(omni.ext.IExt):
                     ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
                     ("CameraInfoPublish", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
                     ("RGBPublish", "isaacsim.ros2.bridge.ROS2CameraHelper"),
-                    ("TFCompute", "isaacsim.core.nodes.IsaacComputeTransformTree"),
                     ("TFPublish", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
-                ],
+                ] + tf_nodes,
                 keys.SET_VALUES: [
                     ("RenderProduct.inputs:cameraPrim", CAMERA_PRIM),
                     ("RenderProduct.inputs:width", IMAGE_WIDTH),
@@ -4103,8 +4125,8 @@ class DigitalTwin(omni.ext.IExt):
                     ("RGBPublish.inputs:frameId", "camera_link"),
                     ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
                     ("TFPublish.inputs:topicName", "tf_cam"),
-                    ("TFCompute.inputs:targetPrims", CAMERA_PRIM),
-                    ("TFCompute.inputs:parentPrim", "/World"),
+                    (f"{tf_target}.inputs:targetPrims", CAMERA_PRIM),
+                    (f"{tf_target}.inputs:parentPrim", "/World"),
                     ("ReadSimTime.inputs:resetOnStop", False),
                 ],
                 keys.CONNECT: [
@@ -4112,22 +4134,13 @@ class DigitalTwin(omni.ext.IExt):
                     ("RunOnce.outputs:step", "RenderProduct.inputs:execIn"),
                     ("RenderProduct.outputs:execOut", "CameraInfoPublish.inputs:execIn"),
                     ("RenderProduct.outputs:execOut", "RGBPublish.inputs:execIn"),
-                    # Isaac Sim 6.x: ROS2PublishTransformTree no longer resolves targetPrims itself
-                    # (its legacy pose-tree path publishes nothing); IsaacComputeTransformTree
-                    # computes the tree and feeds the four data ports below.
-                    ("OnPlaybackTick.outputs:tick", "TFCompute.inputs:execIn"),
-                    ("TFCompute.outputs:execOut", "TFPublish.inputs:execIn"),
-                    ("TFCompute.outputs:parentFrames", "TFPublish.inputs:parentFrames"),
-                    ("TFCompute.outputs:childFrames", "TFPublish.inputs:childFrames"),
-                    ("TFCompute.outputs:translations", "TFPublish.inputs:translations"),
-                    ("TFCompute.outputs:orientations", "TFPublish.inputs:orientations"),
                     ("RenderProduct.outputs:renderProductPath", "CameraInfoPublish.inputs:renderProductPath"),
                     ("RenderProduct.outputs:renderProductPath", "RGBPublish.inputs:renderProductPath"),
                     ("Context.outputs:context", "CameraInfoPublish.inputs:context"),
                     ("Context.outputs:context", "RGBPublish.inputs:context"),
                     ("Context.outputs:context", "TFPublish.inputs:context"),
                     ("ReadSimTime.outputs:simulationTime", "TFPublish.inputs:timeStamp"),
-                ],
+                ] + tf_connections,
             }
         )
 
@@ -5660,6 +5673,16 @@ class DigitalTwin(omni.ext.IExt):
 
             # Create the action graph using OmniGraph API
             keys = og.Controller.Keys
+            legacy_tf = _use_legacy_tf_publisher(og)
+            tf_nodes = [] if legacy_tf else [("compute_transform_tree", "isaacsim.core.nodes.IsaacComputeTransformTree")]
+            tf_connections = [("on_playback_tick.outputs:tick", "ros2_publish_transform_tree.inputs:execIn")] if legacy_tf else [
+                ("on_playback_tick.outputs:tick", "compute_transform_tree.inputs:execIn"),
+                ("compute_transform_tree.outputs:execOut", "ros2_publish_transform_tree.inputs:execIn"),
+                ("compute_transform_tree.outputs:parentFrames", "ros2_publish_transform_tree.inputs:parentFrames"),
+                ("compute_transform_tree.outputs:childFrames", "ros2_publish_transform_tree.inputs:childFrames"),
+                ("compute_transform_tree.outputs:translations", "ros2_publish_transform_tree.inputs:translations"),
+                ("compute_transform_tree.outputs:orientations", "ros2_publish_transform_tree.inputs:orientations"),
+            ]
             
             (graph, nodes, _, _) = og.Controller.edit(
                 {
@@ -5671,19 +5694,12 @@ class DigitalTwin(omni.ext.IExt):
                         ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
                         ("ros2_context", "isaacsim.ros2.bridge.ROS2Context"),
                         ("isaac_read_simulation_time", "isaacsim.core.nodes.IsaacReadSimulationTime"),
-                        ("compute_transform_tree", "isaacsim.core.nodes.IsaacComputeTransformTree"),
                         ("ros2_publish_transform_tree", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
-                    ],
+                    ] + tf_nodes,
                     keys.CONNECT: [
-                        ("on_playback_tick.outputs:tick", "compute_transform_tree.inputs:execIn"),
-                        ("compute_transform_tree.outputs:execOut", "ros2_publish_transform_tree.inputs:execIn"),
-                        ("compute_transform_tree.outputs:parentFrames", "ros2_publish_transform_tree.inputs:parentFrames"),
-                        ("compute_transform_tree.outputs:childFrames", "ros2_publish_transform_tree.inputs:childFrames"),
-                        ("compute_transform_tree.outputs:translations", "ros2_publish_transform_tree.inputs:translations"),
-                        ("compute_transform_tree.outputs:orientations", "ros2_publish_transform_tree.inputs:orientations"),
                         ("ros2_context.outputs:context", "ros2_publish_transform_tree.inputs:context"),
                         ("isaac_read_simulation_time.outputs:simulationTime", "ros2_publish_transform_tree.inputs:timeStamp"),
-                    ],
+                    ] + tf_connections,
                     keys.SET_VALUES: [
                         ("ros2_publish_transform_tree.inputs:topicName", topic_name),
                         ("isaac_read_simulation_time.inputs:resetOnStop", False),
@@ -5694,8 +5710,9 @@ class DigitalTwin(omni.ext.IExt):
             # Get the stage to set relationships
             stage = omni.usd.get_context().get_stage()
             
-            # parentPrim / targetPrims now live on the compute node (Isaac Sim 6.x)
-            ros2_node_path = f"{graph_path}/compute_transform_tree"
+            # 6.0.0.0 resolves targets in the publisher; newer releases use the compute node.
+            node_name = "ros2_publish_transform_tree" if legacy_tf else "compute_transform_tree"
+            ros2_node_path = f"{graph_path}/{node_name}"
             ros2_prim = stage.GetPrimAtPath(ros2_node_path)
             
             if ros2_prim.IsValid():

@@ -484,10 +484,48 @@ def test_status_reports_instance_identity():
         assert ident["headless"] in (None, True, False)  # off-Kit: no signals
         assert ident["app"]                              # falls back to argv[0]
         assert ident["app_version"] is None              # no carb off-Kit
+        assert ident["app_ready"] is None                 # no Kit off-Kit
         assert isinstance(ident["namespaces"], list)
         assert ident["tools"] >= 1 and ident["uptime_s"] >= 0
     finally:
         bridge.stop()
+
+
+@pytest.mark.parametrize("ready", [True, False])
+def test_status_reports_kit_readiness(monkeypatch, ready):
+    import sys
+    import types
+
+    from isaac_mcp_bridge import builtins
+
+    omni = types.ModuleType("omni")
+    kit = types.ModuleType("omni.kit")
+    app = types.ModuleType("omni.kit.app")
+    app.get_app = lambda: types.SimpleNamespace(is_app_ready=lambda: ready)
+    omni.kit, kit.app = kit, app
+    for name, module in (("omni", omni), ("omni.kit", kit), ("omni.kit.app", app)):
+        monkeypatch.setitem(sys.modules, name, module)
+    assert builtins.cmd_status(make_bridge())["app_ready"] is ready
+
+
+def test_status_survives_unavailable_kit_readiness(monkeypatch):
+    import sys
+    import types
+
+    from isaac_mcp_bridge import builtins
+
+    omni = types.ModuleType("omni")
+    kit = types.ModuleType("omni.kit")
+    app = types.ModuleType("omni.kit.app")
+
+    def unavailable():
+        raise ValueError("readiness unavailable")
+
+    app.get_app = unavailable
+    omni.kit, kit.app = kit, app
+    for name, module in (("omni", omni), ("omni.kit", kit), ("omni.kit.app", app)):
+        monkeypatch.setitem(sys.modules, name, module)
+    assert builtins.cmd_status(make_bridge())["app_ready"] is None
 
 
 def test_stat_file_verifies_content(tmp_path):

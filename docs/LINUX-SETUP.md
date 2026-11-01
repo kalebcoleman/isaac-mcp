@@ -17,6 +17,7 @@ The recorded test machine on 2026-10-31 was Ubuntu **24.04.5 LTS (Noble)**, x86_
 driver 580.178.04, Python 3.12.3, Isaac Sim 6.2.0.0, Isaac Lab 3.0.0, and ROS 2 Jazzy. That is one tested
 configuration, not a claim that every Ubuntu, driver, simulator or hardware combination has been tested. NVIDIA's
 published tested driver can differ; consult the requirements link above.
+See [compatibility](COMPATIBILITY.md) for tested simulator releases and their individual limitations.
 
 From the repository root:
 

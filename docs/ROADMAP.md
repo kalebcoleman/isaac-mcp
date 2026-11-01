@@ -71,8 +71,15 @@ generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack supp
 
 ### 3. Reproducibility and portability
 
-- [ ] Define a supported-version and platform matrix separately for the host, bridge, twin, desktop capture and Lab
-  tools; test clean installs on each selected target before documenting them as supported.
+- [ ] Expand the [compatibility matrix](COMPATIBILITY.md) for the host, bridge, twin, desktop capture and Lab tools;
+  test clean installs and representative workflows on each selected target before documenting them as supported.
+- [x] Align the locked 6.2 NumPy version with the Isaac Sim kernel metadata and repeat the headless simulator and
+  ROS transform checks in a dependency-consistent environment; see the [compatibility evidence](evidence/compatibility-2026-10-31.md).
+- [ ] Repeat representative Isaac Lab jobs with installations using the updated 6.2 dependency lock.
+- [ ] Investigate asyncio task re-entry and destroyed pending tasks observed during the 6.0 and 6.1 scene checks;
+  repeat viewport and scene tests after a fix. See the [compatibility evidence](evidence/compatibility-2026-10-31.md).
+- [ ] Reproduce and address the 6.0.0.1 panel becoming undocked after an extension reload observed during the
+  compatibility checks; a fresh launch docked it normally.
 - [ ] Make Isaac Lab discovery and setup work cleanly with user-provided installations; document required paths and
   task-module registration, and test an installation outside the developer's default layout.
 - [ ] Record the task, seed, versions, command, configuration and artifact locations needed to reproduce a Lab job;

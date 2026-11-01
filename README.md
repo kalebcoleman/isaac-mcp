@@ -75,12 +75,14 @@ per MCP server; see [host tools](docs/TOOLS-HOST.md#optional-desktop-input) for 
 
 Work in progress. The [project status and roadmap](docs/ROADMAP.md) records completed work, tested configurations,
 limitations and next steps. The current twin workflow is verified on Isaac Sim 6.2; broader version and platform
-support is a goal, not yet a blanket compatibility claim.
+support is a goal, not yet a blanket compatibility claim. See the [compatibility matrix](docs/COMPATIBILITY.md)
+for tested releases, installation pins, and known limitations.
 
 ## Documentation
 
 - [Agent guide](AGENTS.md) — which tools exist in which tier, and how to reach all of them.
 - [Linux setup](docs/LINUX-SETUP.md) — OS, driver, Python, Isaac Lab and optional ROS requirements.
+- [Compatibility](docs/COMPATIBILITY.md) — simulator and Lab versions, tested workflows, and limitations.
 - [UR5e tools](docs/TOOLS-UR5E.md) — all twin tools, arguments and example calls.
 - [Host and bridge tools](docs/TOOLS-HOST.md) — connection management, desktop capture and bridge built-ins.
 - [Isaac Lab tools](docs/TOOLS-ISAACLAB.md) — task discovery, job management, checkpoints and metrics.

@@ -39,6 +39,8 @@ def test_launch_checks_port_domain_limit_and_resources(setup, monkeypatch):
         sim._launch(setup, 80, 9, False, False)
     with pytest.raises(ValueError, match="ros_domain"):
         sim._launch(setup, 18766, 233, False, False)
+    with pytest.raises(ValueError, match="Cyclone DDS"):
+        sim._launch(setup, 18766, 232, False, False)
     setup["ISAAC_MCP_SIM_MAX_INSTANCES"] = "1"
     with pytest.raises(RuntimeError, match="already active"):
         sim._launch(setup, 18766, 9, False, False)
@@ -173,8 +175,12 @@ def test_starting_managed_session_reserves_port_and_domain(setup, monkeypatch):
 def test_status_verifies_bridge_pid_and_reports_reused_pid_as_exited(setup, monkeypatch):
     record = _record(setup)
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
-    monkeypatch.setattr(sim.client, "call", lambda *a, **kw: {"pid": 510})
+    monkeypatch.setattr(sim.client, "call", lambda *a, **kw: {"pid": 510, "app_ready": True})
     assert sim._status(setup, record["id"])["state"] == "running"
+    monkeypatch.setattr(sim.client, "call", lambda *a, **kw: {"pid": 510, "app_ready": False})
+    assert sim._status(setup, record["id"])["state"] == "starting"
+    monkeypatch.setattr(sim.client, "call", lambda *a, **kw: {"pid": 510})
+    assert sim._status(setup, record["id"])["state"] == "readiness_unknown"
     monkeypatch.setattr(sim.client, "call", lambda *a, **kw: {"pid": 511})
     assert sim._status(setup, record["id"])["state"] == "port_conflict"
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 99999))
@@ -182,6 +188,14 @@ def test_status_verifies_bridge_pid_and_reports_reused_pid_as_exited(setup, monk
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
     monkeypatch.setattr(sim, "_boot_id", lambda: "new-boot")
     assert sim._status(setup, record["id"])["state"] == "exited"
+
+
+@pytest.mark.parametrize("value", [None, 0, "true"])
+def test_status_does_not_treat_unknown_readiness_as_ready(setup, monkeypatch, value):
+    record = _record(setup)
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
+    monkeypatch.setattr(sim.client, "call", lambda *a, **kw: {"pid": 510, "app_ready": value})
+    assert sim._status(setup, record["id"])["state"] == "readiness_unknown"
 
 
 def test_stop_requires_confirmation_matching_pid_and_process_group(setup, monkeypatch):

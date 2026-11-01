@@ -177,6 +177,16 @@ def cmd_stat_file(bridge, path: str) -> Dict[str, Any]:
     return {"path": p, "exists": True, "bytes": size, "sha256": h.hexdigest()}
 
 
+def _app_ready():
+    """Return Kit's readiness, or None when the application cannot report it."""
+    try:
+        from omni.kit.app import get_app
+        ready = get_app().is_app_ready()
+        return ready if isinstance(ready, bool) else None
+    except Exception:  # Readiness is optional; status must remain available.
+        return None
+
+
 def cmd_status(bridge) -> Dict[str, Any]:
     """Instance identity over the wire — WHICH bridge answered this socket.
 
@@ -200,6 +210,7 @@ def cmd_status(bridge) -> Dict[str, Any]:
         "bind_host": bridge._bind_host,
         "hostname": _socket.gethostname(),
         "python": platform.python_version(),
+        "app_ready": _app_ready(),
         "started": started,
         "uptime_s": round(time.time() - started, 1) if started else None,
         "namespaces": sorted(bridge._namespaces),

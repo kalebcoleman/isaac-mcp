@@ -57,6 +57,12 @@ machines and is **informational**, not a required match. The checks do not prove
 ROS topic, or visual result. `scripts/smoke_tools.py` exercises additional twin tools and also rebuilds the stage;
 review its output for warnings and its documented exclusions.
 
+To check a different installed release, run `scripts/smoke_tools.py --sim-version 6.1` with a host Python that can
+import the MCP package and `UR5E_DT_PORT` pointing at the selected disposable session. The option changes only the
+expected app-version prefix; it does not establish compatibility or change the simulator installation. Check the
+package version separately: the app's reported version may omit a fourth version segment. See
+[compatibility](COMPATIBILITY.md) for the results obtained so far.
+
 The validator is [`scripts/validate_ur5e_check.py`](../scripts/validate_ur5e_check.py). It rejects missing,
 malformed, non-finite or out-of-range observations, and `verify.sh` exits nonzero if a check or its response fails.
 If a check fails, inspect the named result and the simulator log before changing limits.

@@ -207,8 +207,10 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
             allow_shared_domain: bool, show_ur5e_panel: bool = False) -> dict:
     if not 1024 <= port <= 65535:
         raise ValueError("port must be between 1024 and 65535")
-    if not 0 <= ros_domain <= 232:
-        raise ValueError("ros_domain must be between 0 and 232")
+    # The bundled Cyclone profile probes participant indices 0..100. At
+    # domain 232 those discovery ports extend beyond UDP's 65535 limit.
+    if not 0 <= ros_domain <= 231:
+        raise ValueError("ros_domain must be between 0 and 231 for the bundled Cyclone DDS profile")
     root = Path(env.get("ISAAC_MCP_SIM_ROOT", str(_DEFAULT_ROOT))).expanduser().resolve()
     launcher = root / "run.sh"
     if not launcher.is_file() or not os.access(launcher, os.X_OK):
@@ -302,10 +304,15 @@ def _status(env: Mapping[str, str], session_id: str) -> dict:
         return {**_public(session), "state": "exited"}
     try:
         response = client.call("status", host="127.0.0.1", port=session["port"], timeout=2)
-        if response.get("pid") == session["pid"]:
-            state = "running"
-        else:
+        if response.get("pid") != session["pid"]:
             state = "port_conflict"
+        elif response.get("app_ready") is True:
+            state = "running"
+        elif response.get("app_ready") is False:
+            state = "starting"
+        else:
+            # Older or non-Kit bridges cannot attest to application readiness.
+            state = "readiness_unknown"
     except (OSError, RuntimeError, client.BridgeError):
         state = "starting_or_unresponsive"
     try:
@@ -346,6 +353,7 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
         """Launch a managed Isaac Sim instance using a distinct local port and ROS domain.
 
         Checks a configurable instance limit, port, known ROS domains and current free resources.
+        ROS domains 0–231 are allowed with the bundled Cyclone DDS profile.
         UR5e tools are enabled either way; set show_ur5e_panel=true to show their panel
         in a graphical session. Resource checks are snapshots, not reservations.
         Launching runs configured local code.
@@ -360,7 +368,7 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
 
     @mcp.tool(name="sim__status", annotations=PYTHON_EXECUTION)
     def sim_status(session_id: str) -> dict:
-        """Report one managed simulator's process, bridge readiness and current resources."""
+        """Report a managed simulator's process, Kit readiness and current resources."""
         return _status(settings, session_id)
 
     @mcp.tool(name="sim__stop", annotations=PYTHON_EXECUTION)
