@@ -244,7 +244,7 @@ def cmd_list_bridges(bridge) -> Dict[str, Any]:
     port) to report its siblings, e.g. ephemeral-port instances."""
     import json as _json
     import os as _os
-    from .bridge import _runtime_dir
+    from .bridge import _runtime_dir, _is_portfile_name, _valid_portfile
 
     found = []
     try:
@@ -252,10 +252,14 @@ def cmd_list_bridges(bridge) -> Dict[str, Any]:
     except OSError:
         return {"bridges": found}
     for name in names:
+        if not _is_portfile_name(name):
+            continue
         try:
             with open(_os.path.join(_runtime_dir(), name)) as f:
                 info = _json.load(f)
-            _os.kill(int(info["pid"]), 0)   # liveness
+            if not _valid_portfile(name, info):
+                continue
+            _os.kill(info["pid"], 0)   # liveness, not proof of a responsive Kit
             found.append(info)
         except Exception:
             continue

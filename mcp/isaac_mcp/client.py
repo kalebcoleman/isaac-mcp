@@ -48,6 +48,7 @@ Exit codes: 0 = success · 1 = bridge answered with an error ·
 
 import json
 import os
+import re
 import secrets
 import socket
 from typing import Any, Dict, Optional
@@ -139,6 +140,21 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
+def _is_portfile_name(name: str) -> bool:
+    return re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*\.json", name) is not None
+
+
+def _valid_portfile(name: str, info) -> bool:
+    """Mirrors the bridge advertisement contract, not an authentication check."""
+    return (isinstance(info, dict) and _is_portfile_name(name)
+            and type(info.get("pid")) is int and info["pid"] > 0
+            and type(info.get("port")) is int and 1 <= info["port"] <= 65535
+            and name == f"{info['pid']}-{info['port']}.json"
+            and isinstance(info.get("host", "127.0.0.1"), str)
+            and bool(info.get("host", "127.0.0.1").strip())
+            and "\0" not in info.get("host", "127.0.0.1"))
+
+
 def discover_bridges() -> list:
     """Live advertised bridges: [{pid, port, host, app, started}]. Stale
     portfiles (dead pid or dead socket) are pruned best-effort."""
@@ -148,11 +164,15 @@ def discover_bridges() -> list:
     except OSError:
         return found
     for name in names:
+        if not _is_portfile_name(name):
+            continue
         path = os.path.join(_runtime_dir(), name)
         try:
             with open(path) as f:
                 info = json.load(f)
-            if not _pid_alive(int(info["pid"])):
+            if not _valid_portfile(name, info):
+                continue
+            if not _pid_alive(info["pid"]):
                 raise OSError("stale portfile: process gone")
             probe = socket.create_connection(
                 (info.get("host", DEFAULT_HOST), int(info["port"])), timeout=0.5)
