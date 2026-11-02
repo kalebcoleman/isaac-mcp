@@ -181,6 +181,34 @@ other Newton builds, resolve the original `20f2953` stepping stall, or establish
 clean-machine/full-installer result. Earlier CPU records and warnings remain intact;
 see the [compatibility matrix](COMPATIBILITY.md) for separately measured native scopes.
 
+### CPU and package follow-up after common wrench-header correction (2026-11-02)
+
+At exact commit `2c8ce63b33dbabf02b2216f9d512ff9a23724d9c` (tree
+`77fc20b42b97eebdb0aa04273bb7ef5281bd3001`), the full host suite passed **1,340 tests
+in 170.94 seconds**, retaining the intentional duplicate-ZIP-member warning. Focused
+world/twin-physics compatibility and host-catalog checks passed **177 tests in 23.57
+seconds**. The separate **MCP 1.22.0** minimum-SDK run passed **216 tests in 26.52
+seconds**, retaining the Pydantic unresolved `lifespan` annotation warning. These are
+pytest timings, distinct from the wrapper elapsed times in the retained records.
+All jobs completed normally with exit zero and a clean checkout at the recorded identity.
+
+Documentation/privacy, assets, catalog, verifier shell syntax and whitespace checks,
+wheel/sdist builds and `npm pack --dry-run` passed. Inspection verified all six actual
+command-output log hashes and endings against the summary, whose SHA-256 is
+`958c4d3d5deecae5325857da05f5b9c57e95408022d84120005f66ccb9f0e30e`.
+The separately verified identity record lists the commands' tool versions (Python 3.12.3,
+uv 0.12.14, Node v26.13.0 and npm 11.20.0) and package sizes/digests: a 118,792-byte
+wheel and 288,025-byte sdist. These are build results, not package publication.
+
+This candidate integrates source `7454f4466788d8acef7e3d8e900dd021c7d7c167`.
+The candidate12 comparison records an identical physics helper, with extension differences
+limited to a setup docstring and rate diagnostic; it does not claim a byte-identical
+extension or a new native run. Exact integrated reopening of a newly gated PhysX save
+and affected build/mode checks remained pending at this CPU handoff. Legacy ungated
+PhysX graphs retain their documented default/cached warm-up behavior. The original
+`166e10d` wrench-header failure and `20f2953` stepping stall remain historical evidence;
+CPU passes alone do not close native defects or qualify clean-machine/full-installer use.
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
