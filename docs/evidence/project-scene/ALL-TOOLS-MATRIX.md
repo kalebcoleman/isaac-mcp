@@ -6,6 +6,15 @@ The real MCP inventories contain **90 default tools** and **99** with
 `ISAAC_MCP_LOCAL_TOOLS=all,screen_input,sim_launch`. Disabling the generic pack
 with those optional groups selected leaves 60 tools. Every name is tracked below.
 
+Current-runtime 6.0.0.1 PhysX both-mode results and the three remaining newer
+agent-save reopens are recorded in [RECENT-6001](RECENT-6001-20261102.json).
+Its original independent ledger retains 37 scoped passes / three partials /
+59 uncalled tools; desktop input acknowledgements were not always followed by
+the intended visible effect. The later save-reopen result is separate. All five
+builds now have broad PhysX H/W records, with source-specific later-fix checks;
+this is not a single-head all-backend certification and does not resolve the
+original 6.0.1 native-step stall. Broader Newton and standalone Lab remain open.
+
 The earlier 6.2 PhysX runs used `2729b076817e9a0672825ed7e3cc7d160fda96db`
 (headless) and `884a8fa6f8ca7ab55e3c68874c97703e44df7b18` (windowed).
 Runtime source is unchanged between those heads and `8106771`; the later changes

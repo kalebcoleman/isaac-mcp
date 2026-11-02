@@ -31,10 +31,14 @@ by marking this release draft.
 | [sim-62w-clean-c2ceb-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-62w-clean-c2ceb-redacted.tar.gz) | `272ae373c28c09d5fdf00cc9fac0d297fa6b615e1cec61a8b3bd9dbfb1c5602d` | 2094115 |
 | [agent62w-c2ceb-clean-evidence-v2.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent62w-c2ceb-clean-evidence-v2.tar.gz) | `e6cb470ebab6921cf5f205bdc490edafa6af2f5643a980b37880a4c84603ae69` | 2179254 |
 | [agent-62w-c2ceb-clean-full-ur-video.mp4](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-62w-c2ceb-clean-full-ur-video.mp4) | `8589aa39015a3787345cc508fa275b76b16e0d865fb086721feaa714602c4c75` | 165202 |
-
 | [sim-6000h-c2ceb-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6000h-c2ceb-redacted.tar.gz) | `a726f92cc08756edd00cea00e65e7e722cc13b89948d0f1bdf592c21ded34acc` | 1058942 |
 | [sim-6000w-c2ceb-reopen-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6000w-c2ceb-reopen-redacted.tar.gz) | `68c06168fa44022c8fb8e16b98e09a607b07efdb1dcc20918756b2461fceae5b` | 1557682 |
 | [agent6000w-c2ceb-redacted-v1.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent6000w-c2ceb-redacted-v1.tar.gz) | `4ff5cde47f12c392e71947e0bb2150b541852c426294f7a7c43cb350ea6d59b2` | 1085393 |
+| [sim-6001h-c2ceb-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6001h-c2ceb-redacted.tar.gz) | `b5992bf19b9e30c79ef809ca337eb171594163f58c7aed14da56dfe515ad913b` | 1810323 |
+| [sim-6001w-c2ceb-reopen-records-v2.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6001w-c2ceb-reopen-records-v2.tar.gz) | `9f2904473e464efd29cfd2fda4649c97be9900b9c460699542ff0cc3576a5852` | 999485 |
+| [sim-6001w-c2ceb-native-redacted.log.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6001w-c2ceb-native-redacted.log.gz) | `bcc97a9d1d19045bda0f313a9e0b4ee8e91579286dcc5a7143c3e20b8e023ae6` | 3659855 |
+| [agent-saves-601-62-c2ceb-reopens-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-saves-601-62-c2ceb-reopens-redacted.tar.gz) | `561a39a5b6dceea04035afb1d3deb18bf3f0bc2ec53a02ee359e1fef55d2bad8` | 339949 |
+| [agent6001w-c2ceb-redacted-v1.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent6001w-c2ceb-redacted-v1.tar.gz) | `461806ed37675e2209401f8aea914d368c20a05416165124aa5664b3c25c1d8e` | 1846493 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
@@ -118,3 +122,12 @@ parent/reopen bundle. Raw agent videos and private Console pixels are excluded.
 Its labeled 1440-by-610 video is a privacy crop of the actual motion recording,
 with 308 frames decoded and four sampled; three original reviewed PNGs are also
 included. [Compact facts](RECENT-6000-20261102.json) identify 29 source records.
+
+The current 6.0.0.1 supplement contains both-mode broad records and a separate
+fresh reopen of its independent task save. The large native windowed log is
+split into a standalone gzip; the records archive identifies it rather than
+omitting warnings. The independent bundle preserves its original partial input
+and save ledger, 27 effects checks, original reviewed PNGs and 296-frame video.
+The separate 6.0.1/6.2 reopen bundle closes those newer task saves' fresh-process
+checks, without changing their original ledgers or resolving the original stall.
+[Compact source identities](RECENT-6001-20261102.json) map all 36 records.
