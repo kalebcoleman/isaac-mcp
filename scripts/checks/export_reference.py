@@ -1,12 +1,10 @@
-# Writes the reference checkpoint (name from its manifest) from the open stage, with relative asset paths.
-# Run after quick_start. Replace __ROOT__ with the project path is handled by bridge_exec.
-import json, pathlib
+# Root/reference checkpoint plus its composed local PhysicsScene; never overwrites.
+import json
+import pathlib
+import runpy
 import omni.usd
+
 root = pathlib.Path('__ROOT__')
 manifest = json.loads((root / 'checkpoints' / 'ur5e-dt-workstation-person-view-portable.json').read_text())
-target = root / 'checkpoints' / manifest['checkpoint']
-stage = omni.usd.get_context().get_stage()
-stage.GetRootLayer().Export(str(target))
-text = target.read_text().replace('file://' + str(root) + '/', '../')
-target.write_text(text)
-result = {'written': target.name, 'relative_asset_refs': text.count('../exts/'), 'absolute_refs_left': text.count(str(root))}
+export = runpy.run_path(str(root / 'scripts/checkpoint_export.py'))['export_checkpoint']
+result = export(omni.usd.get_context().get_stage(), root / 'checkpoints' / manifest['checkpoint'])

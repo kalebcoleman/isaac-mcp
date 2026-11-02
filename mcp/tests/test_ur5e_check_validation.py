@@ -26,6 +26,11 @@ def responses():
             "world_children": [*ROOTS, "/World/Vention"], "ur5e_present": True,
             "rg2_present": True, "gravity_disabled_on_robot_links": [],
         }},
+        "scene_physics": {"result": {
+            "scenes": [{"path": "/physicsScene", "type": "PhysicsScene",
+                        "gpu_dynamics": False, "broadphase": "MBP", "steps_per_second": 120}],
+            "initialized": True, "runtime_dt": 1 / 120,
+        }},
         "gravity_robot_chain": {"result": {root: {
             "rigid_bodies": 1, "gravity_enabled": [], "gravity_enabled_count": 0,
         } for root in ROOTS}},
@@ -40,6 +45,7 @@ def responses():
         }},
         "export_reference": {"result": {
             "written": "checkpoint.usda", "absolute_refs_left": 0, "relative_asset_refs": 4,
+            "physics_scene": {"type": "PhysicsScene", "path": "/physicsScene"},
         }},
         "reopen_checkpoint": {"result": {
             "checkpoint_present": True, "opening": True, "sha256_matches_manifest": False,
@@ -48,7 +54,7 @@ def responses():
 
 
 @pytest.mark.parametrize("check", [
-    "quick_start", "scene_prims", "gravity_robot_chain", "joint_limits", "drive_settings",
+    "quick_start", "scene_prims", "scene_physics", "gravity_robot_chain", "joint_limits", "drive_settings",
     "single_joint_motion", "export_reference", "reopen_checkpoint",
 ])
 def test_good_observations_pass(check, responses):
@@ -59,6 +65,11 @@ def test_good_observations_pass(check, responses):
     ("quick_start", lambda r: r.update(status="error"), "quick_start"),
     ("scene_prims", lambda r: r["result"].update(ur5e_present=False), "UR5e"),
     ("scene_prims", lambda r: r["result"]["world_children"].remove("/World/Vention"), "Vention"),
+    ("scene_physics", lambda r: r["result"]["scenes"].clear(), "exactly one"),
+    ("scene_physics", lambda r: r["result"]["scenes"][0].update(type=""), "definition"),
+    ("scene_physics", lambda r: r["result"]["scenes"][0].update(gpu_dynamics=True), "CPU"),
+    ("scene_physics", lambda r: r["result"]["scenes"][0].update(steps_per_second=60), "120 Hz"),
+    ("scene_physics", lambda r: r["result"].update(runtime_dt=1/60), "timestep"),
     ("gravity_robot_chain", lambda r: r["result"][ROOTS[0]].update(gravity_enabled_count=1), "gravity"),
     ("gravity_robot_chain", lambda r: r["result"][ROOTS[0]].update(gravity_enabled_count=False), "gravity"),
     ("gravity_robot_chain", lambda r: r["result"][ROOTS[1]].update(rigid_bodies=0), "rigid bodies"),
@@ -81,7 +92,7 @@ def test_missing_result_and_unknown_check_fail():
     assert validate("unknown_check", {"result": {}})
 
 
-@pytest.mark.parametrize("bad_check", [None, "gravity_robot_chain", "quick_start"])
+@pytest.mark.parametrize("bad_check", [None, "gravity_robot_chain", "quick_start", "scene_physics"])
 def test_verifier_rejects_semantic_failures_with_successful_client(tmp_path, responses, bad_check):
     root = tmp_path / "checkout"
     scripts = root / "scripts"
@@ -100,6 +111,8 @@ def test_verifier_rejects_semantic_failures_with_successful_client(tmp_path, res
         responses[bad_check]["result"][ROOTS[0]]["gravity_enabled_count"] = 1
     elif bad_check == "quick_start":
         responses[bad_check]["status"] = "error"
+    elif bad_check == "scene_physics":
+        responses[bad_check]["result"]["scenes"][0]["type"] = ""
     response_dir = tmp_path / "responses"
     response_dir.mkdir()
     for name, response in responses.items():
@@ -127,5 +140,7 @@ def test_verifier_rejects_semantic_failures_with_successful_client(tmp_path, res
     assert result.returncode == (1 if bad_check else 0), result.stdout + result.stderr
     if bad_check:
         assert f"FAILED: {bad_check}" in result.stdout
+        if bad_check == "scene_physics":
+            assert "== single_joint_motion" not in result.stdout
     else:
         assert "all checks passed" in result.stdout
