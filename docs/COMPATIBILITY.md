@@ -12,7 +12,8 @@ See the [test details](evidence/compatibility-2026-10-31.md) and [verification g
 environment, results and omissions. The table preserves the historical smoke scope; newer
 [headless](#6001-headless-follow-up-2026-11-01) and
 [windowed](#6001-windowed-follow-up-2026-11-02) 6.0.0.1 observations and the
-[6.0.1.0 headless follow-up](#6010-headless-follow-up-2026-11-02) are recorded separately below.
+[6.0.1.0 headless](#6010-headless-follow-up-2026-11-02) and
+[windowed follow-ups](#6010-windowed-follow-up-2026-11-02) are recorded separately below.
 Final qualification of the combined candidate across the requested builds and modes remains pending.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
@@ -352,3 +353,81 @@ these separate observations. The redacted supplement is listed in the
 The fix is qualified only for these 6.0.1.0 headless PhysX fixtures; windowed, other-build,
 Newton and clean-install claims require their own evidence. Historical invocation records
 for all 99 names do not establish 99-tool all-version verification or final readiness.
+
+
+## 6.0.1.0 windowed follow-up (2026-11-02)
+
+**Actual-use qualification remains incomplete because the original stepping stall is
+unresolved.** The following separate runs used package **6.0.1.0**, build
+`6.0.1-rc.7+release.42383.32955d8d.gl`, Kit `110.1.2+production.326809.f9bf0dda.gl`,
+windowed PhysX on Ubuntu 24.04.5 / RTX 5080 / driver 580.178.04, with existing installations.
+
+At exact **`20f2953bb28361f29b0aa720513b5d8bc2d415ed`**, all 14 broad phases passed,
+including 141 full-surface calls / 54 assertions across the generic/UR5e/built-in scopes.
+Separate authored-effect checks passed 24 calls / 12 checks, and articulated URDF checks
+passed 25 calls / 7 checks. Legacy and existing-physics regressions returned zero with
+zero recorded error/reentry/cycle/time occurrences in their respective intervals.
+The earlier broad native review retained 24 intentional-negative error lines and 61
+simulation-time warnings; the Console showed 258 warnings and 63 errors. These are
+different counting scopes. All 186 video frames decoded; the runtime owner viewed only
+frames 10 and 170, with upper-arm/wrist cropping at the diagnostic zero pose.
+
+The subsequent independent task completed 52 requests, then request 53 for 108 simulation
+steps produced no observed success or timeout response. Its ledger records 27 scoped
+passes, three partial results and 69 uncalled names. The 87 decoded recording frames
+precede the stall; recording termination, final save and final Console review were not
+established. A captured stack placed execution inside native `simulate()` through
+`SimulationManager.step`; debugger attachment was denied, so there is no native backtrace
+or established cause. Client closure did not establish cancellation. Normal stop failed
+to exit within 25 seconds; identity-checked forced termination removed the process.
+That was cleanup, not recovery, and the stall is not a confirmed crash.
+
+A different process at the same `20f2953` source completed eight repeat cycles / 76 calls
+with recording, capture and 12+108-step sequences. It then hosted a new independent task
+after explicit `new_stage` and named Quick Start; it was not pristine at task start.
+The corrected v2 ledger records **89 requests, 39 names, 38 scoped passes, one partial
+result and 60 uncalled names**. Fourteen checks covered sample fall/rest, Agilebot and
+UR5e target/return measurements, capture and save; 480 measured steps advanced four
+seconds at 120 Hz. The saved scene was not reopened in a fresh process. All 232 window-video
+frames decoded, but only four were visually sampled; UR motion was measured and separately
+photographed, not shown in that recording. The partial discovery result admitted a diagnostic
+log as a bridge. The original ledger's copied process/port and overbroad observation wording
+are corrected by a separate v2/addendum; raw records remain unchanged. Neither this task
+nor the successful repeats explains or resolves the earlier stall.
+
+A separate legacy-checkpoint defect lost a session-authored PhysicsScene type in the
+root-only export. Reopening created a default GPU/60 Hz scene instead of preserving
+CPU/MBP/120 Hz. This explains the configuration/time-step loss, **not the stall**. The
+[legacy export contract](TOOLS-SCENE.md) now preserves a root reference copy plus an
+eligible composed local PhysicsScene, excludes other session content, refuses unsafe
+runtime state and publishes without overwriting. It is not full-session preservation or
+native solver-state serialization; generic stage save retains its own contract.
+
+An initial candidate check used `20f2953` plus helper SHA-256
+`2f55200a6418434144991c1d6fc9254981b31d59c24538c44534d8e66021f0a7`.
+A separate fresh process at exact **`6bc45c2977270de748b58c630c21cd03f0d74fb6`** then
+qualified the integrated checkpoint and discovery fixes:
+
+- Four discovery calls/checks found only the real endpoint through the native built-in
+  and host CLI; the intentional failure log remained byte-identical.
+- Ten checkpoint-reopen calls found one typed CPU/MBP/120 Hz scene before and after Play;
+  12 named simulation steps advanced 0.1 seconds. Separate raw helper export preserved
+  15 live-layer and 14 disk-file hashes plus the edit target, and refused an existing
+  destination unchanged. Raw helper export is distinct from named-tool coverage.
+- Legacy and existing-physics regressions returned zero with zero scoped error/reentry/
+  cycle/time counts. The runtime owner's final Console review recorded 23 warnings and
+  23 errors; the native sample had four error and 20 warning lines. Intentional discovery
+  failure and a missing-parent-directory harness failure were retained. Transient
+  `NO_STAGE` polling and a Console-input schema refusal also remain recorded. Warnings
+  include closed-client responses and schema/setup messages; no blanket harmlessness
+  claim follows. This process exited normally; temporary Console captures were deleted.
+
+Provenance: inspected `601w-handoff-6bc.json`, timestamp `2026-11-02T01:35:53.527027+00:00`,
+SHA-256 `3adcec65eefc272f3acf087fb3bcfa0daf411625e83a785a1bead7da0a28d4b2`;
+all 26 original source-record hashes matched. The separately inspected v2 ledger SHA-256 is
+`23fc86b4a366a01565361e138edb32b7e08ac34b0237903c5ee1ffc07dc4a710`, with addendum
+`7c906199091b9381aff476fcbaadd80c723a5a47884b219e88d0b80838f52f60`.
+Redacted reproduction supplements remain in the unpublished draft evidence release;
+publication curation is ongoing. These narrow integrated checks do not constitute a
+new broad all-tool run, clean-install qualification, other-build support or closure of
+the unresolved `20f2953` actual-use failure.
