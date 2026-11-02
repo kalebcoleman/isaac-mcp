@@ -76,6 +76,31 @@ qualification. In particular, the ongoing 6.0.0.1 runtime evidence at `4499bf7` 
 relabeled to this candidate. The earlier `2bbeee4` package results remain valid historical
 observations; this follow-up records a separate package check at `ece55d1`.
 
+### CPU and package follow-up after viewport and URDF fixes (2026-11-02)
+
+At exact commit `742560d5f19b5b5dceb0a24405f6b8e26cdf3815` (tree
+`4c4f5a40db67b53e830c4e11055c987735137afd`), the local full host suite passed
+**1,215 tests in 170.99 seconds**, with only the intentional duplicate-ZIP-member
+warning. No bridge accept-thread EBADF warning was observed in this run; the earlier
+`4499bf7` warning remains historical evidence, and non-recurrence does not prove all
+listener races are absent. Minimum-SDK checks with **MCP 1.22.0** passed **216 tests in
+27.48 seconds**, retaining the Pydantic unresolved `lifespan` forward-reference warning.
+
+Documentation/privacy, asset, catalog and whitespace checks, wheel/sdist builds and
+`npm pack --dry-run` also passed. The host suite used the isolated Python 3.12 command
+above; the separate minimum-SDK run pinned MCP 1.22.0. The retained command record
+identifies uv 0.12.14, Node v26.13.0 and npm 11.20.0. Inspection confirmed the endings
+and SHA-256 hashes of all five retained logs against the exact-source summary. The
+static-check log is explicitly a transcription of tool output and recorded zero exits;
+the host, minimum-SDK, build and npm logs retain their command output. The summary also
+records wheel/sdist sizes and digests; these artifacts were built, not published.
+
+These checks cover CPU behavior and packaging only. They do not qualify a clean native
+installation, Kit/Lab/ROS execution or the remaining version/mode matrix. Native results
+retain their measured source identities, including the separate `20f2953` windowed run.
+Later documentation-only integration does not relabel these CPU results, and the earlier
+`ece55d1` checks remain a separate historical record.
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
