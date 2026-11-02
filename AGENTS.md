@@ -33,6 +33,14 @@ The flag does not bypass ambiguous, authored, dependent or unavailable-binding r
 property authorship, or repair an already-stale opened file. Pause before saving and verify the
 new file in a fresh process. See [save limitations](docs/TOOLS-SCENE.md).
 
+When a physics read or step returns `PHYSICS_STATE_INVALID`, inspect its backend, path and
+field: this is invalid observed runtime data, not a request to rewrite the caller's pose.
+A step error can include partial execution and before/after clock diagnostics; the after
+clock may be unavailable. Do not count elapsed simulation time as valid physics or blindly
+retry the step. No rollback or automatic retry is provided. Inspect solver diagnostics and
+the [step error contract](docs/TOOLS-SCENE.md) before continuing; `DEVICE_ERROR` quarantine
+still applies to GPU faults. Successful error reporting does not establish solver recovery.
+
 ## What you can reach, by tier
 
 An MCP client only shows the tools it has been told about. Most of this project's surface
