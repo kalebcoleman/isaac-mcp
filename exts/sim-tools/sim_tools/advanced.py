@@ -182,6 +182,16 @@ class Advanced:
             )
         if not generated.is_absolute():
             generated = output / generated
+        from .urdf import prepare_generated_physics
+
+        converted_physics = prepare_generated_physics(
+            generated,
+            output,
+            movable_joints=sum(
+                joint.get("type") in ("revolute", "continuous", "prismatic")
+                for joint in tree.findall("joint")
+            ),
+        )
         # Generated artifacts are service-owned derivatives, not an approval of a
         # new model-supplied folder. Reuse the normal bounded snapshot pipeline.
         from isaac_mcp.project_assets import Broker, open_dir
@@ -199,6 +209,7 @@ class Advanced:
             stage, snap["snapshot_id"], snap["manifest_sha256"], prim_path, **pose
         )
         result["urdf_snapshot_id"] = snapshot_id
+        result["converted_physics"] = converted_physics
         return result
 
     def execute(self, name, stage, a, *, camera_frame=None):

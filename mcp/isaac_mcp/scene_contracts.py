@@ -406,7 +406,7 @@ add(
 )
 add(
     "assets.import_urdf",
-    "Convert a trusted approved relative URDF project using the installed importer, then snapshot and import its USD. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API.",
+    "Convert a trusted approved relative URDF project using the installed importer. Select the shared Physics=physics variant on private generated output when present; refuse missing bodies or expected revolute/prismatic joints before snapshot/import. Returns authored counts, not runtime readiness. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API.",
     dict(
         **TARGET, **ASSET, prim_path=field("string", "New wrapper prim path."), **POSE
     ),
