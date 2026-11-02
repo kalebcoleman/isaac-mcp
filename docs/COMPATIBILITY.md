@@ -253,8 +253,9 @@ review qualifies the original geometry-under-station wording accordingly.
 Source fix `97325af8d6eaf85e5ef3c5088ff0805dd19ae65f`, integrated in `37a73583`, changes
 framing to supported session-layer camera edits, reports native failures and
 `render_complete=false`, and documents partial effects and refusals in
-[scene tools](TOOLS-SCENE.md). Fresh live qualification of that fix is pending; it does
-not retroactively change this `4499bf7` run or establish all-version readiness.
+[scene tools](TOOLS-SCENE.md). The subsequent partial attempt and corrected live retest
+are recorded below; they do not retroactively change this `4499bf7` run or establish
+all-version readiness.
 
 Provenance: inspected `public-facts-final6001w-4499.json`, timestamp
 `2026-11-02T00:04:54.401402+00:00`, SHA-256
@@ -263,4 +264,37 @@ all nine referenced source-record hashes were verified. The compact handoff and 
 review preserve the original observations. The reproduction harness, asset outputs and
 curated release index remain unpublished. This is an existing-installation, simulated
 ROS check, not physical hardware or clean-install validation; remaining builds/modes
-and the new viewport fix still need their own qualification.
+still need their own qualification. The viewport follow-up below is limited to 6.0.0.1 windowed.
+
+### Viewport preservation and typed-error retest
+
+The initial fresh `37a73583` attempt passed six preservation/transform checks, then a
+deliberately injected native false return exposed a duplicate-`effects` `TypeError` in
+the error serializer. That partial attempt remains a failure record. Source fix
+`5717217`, integrated into **`eea18c823f5e462763297951039771f80467e450`**, corrected the
+wrapper; it was tested in a new **6.0.0.1 windowed PhysX** process.
+
+The fresh retest recorded **46 real MCP calls and 12 passing checks**. Root and referenced
+camera layers were preserved, the intended camera effect was authored in the session
+layer, and the prior nondefault edit target was restored. Deliberately injected native
+false returns and exceptions produced typed `VIEWPORT_FRAME_FAILED` responses with
+partial-effect descriptions. Empty geometry, unsafe session-sublayer camera opinions,
+look-through targets and read-only sessions were refused in their tested fixtures.
+These injected failures test error handling; they were not spontaneous native failures.
+
+The runtime owner's separate visual review at `2026-11-02T00:11:02.274294+00:00`
+reported a centered selected cube in the actual application-window capture, SHA-256
+`bef55a3134b03c7879e32b299beedf048745a5296c153541ba22864c73d6113d`.
+This is visual framing evidence, not a physics check or an assertion that
+`render_complete=false` proves a rendered view. The separate Console review recorded
+16 warnings and zero errors; warnings included native USD/layer, look-through fixture
+and closed-client socket messages. The scoped native review recorded zero error,
+cycle, simulation-time, reentry, `GetCamera` or Force callback occurrences. No blanket
+harmlessness or all-socket-races claim follows from those observations.
+
+The inspected records are `summary.json`, `visual-review.json` and `console-review.json`
+from the private `frame6001w_eea-viewport` run. The original summary's pending visual
+status remains unchanged; the later timestamped review supplies the visual observation.
+Reproduction publication remains pending. This qualifies the tested viewport cases on
+this exact build/mode/source only, not other releases, a new full-surface run, clean
+installation or completion of the remaining matrix.
