@@ -71,7 +71,8 @@ done
 
 if [ "$PY_AUTODETECT" = 1 ]; then
   if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/scripts/isaac_env.py" ]; then
-    if DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python 2>/dev/null)" && [ -n "$DETECTED" ]; then
+    # Any Isaac Sim 6.x; the first match in the documented search order wins.
+    if DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6)" && [ -n "$DETECTED" ]; then
       PY="$DETECTED"
       if [ "$SHOW_HELP" != 1 ]; then
         echo "run.sh: auto-detected interpreter $PY (pin one with ISAAC_MCP_PYTHON=/path/to/python; list all with scripts/isaac_env.py find)" >&2

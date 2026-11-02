@@ -225,19 +225,42 @@ def test_symlinked_venv_python(world):
     assert c["isaacsim"] == "6.2.0.0"
 
 
-def test_selection_version_highest_and_ties(world):
+def test_selection_first_match_wins_and_version_only_filters(world):
     old = make_env(world.home / "venvs" / "a", sim="6.0.0.0")
     new1 = make_env(world.home / "venvs" / "b", sim="6.2.0.0")
     make_env(world.home / "venvs" / "c", sim="6.2.0.0")
     cands = find(world)
     chosen, _ = ie.select({}, cands)
-    assert chosen["path"] == str(new1)  # highest; tie goes to the earlier one
+    assert chosen["path"] == str(old)  # first match in search order, not the newest
     chosen, _ = ie.select({}, cands, require="6.0")
     assert chosen["path"] == str(old)
     chosen, err = ie.select({}, cands, require="5.1")
     assert chosen is None and "5.1" in err
     chosen, _ = ie.select({}, cands, require="6.2.0.0")
-    assert chosen["path"] == str(new1)
+    assert chosen["path"] == str(new1)  # first of the matching ones
+
+
+def test_a_workspace_env_is_not_overridden_by_a_newer_env_elsewhere(world, monkeypatch):
+    """Review of PR 52: a newer unrelated project venv must not beat the workspace env."""
+    ws = world.tmp / "workspace"
+    mine = make_env(ws / "envs" / "sim-6.2", sim="6.2.0.0")
+    make_env(world.home / "oldproj" / ".venv", sim="6.3.0.0")
+    env = {"ISAAC_MCP_WORKSPACE": str(ws)}
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(ws))
+    chosen, _ = ie.select(env, find(world, env))
+    assert chosen["path"] == str(mine)
+    chosen, _ = ie.select(env, find(world, env), require="6")
+    assert chosen["path"] == str(mine)
+
+
+def test_stale_dist_info_folders_report_the_highest_version(world):
+    py = make_env(world.repo / ".venv", sim="6.2.0.0")
+    site = world.repo / ".venv" / "lib" / "python3.12" / "site-packages"
+    info = site / "isaacsim-10.0.0.0.dist-info"
+    info.mkdir()
+    (info / "METADATA").write_text("Name: isaacsim\nVersion: 10.0.0.0\n")
+    [c] = find(world)
+    assert c["path"] == str(py) and c["isaacsim"] == "10.0.0.0"
 
 
 def test_selection_lab_preference(world):

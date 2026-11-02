@@ -411,10 +411,15 @@ def _isaac_sim_data_file(ext_prefix: str, relative: str) -> str:
         base = os.environ.get(name, "").strip()
         if base:
             roots.extend([os.path.join(base, "extscache"), os.path.join(base, "kit", "extscache")])
+    def version_of(match):
+        folder = os.path.relpath(match, root).split(os.sep)[0]
+        numbers = folder[len(ext_prefix) + 1 :].split("+")[0].split("-")[0].split(".")
+        return tuple(int(n) if n.isdigit() else -1 for n in numbers)
+
     for root in roots:
-        matches = sorted(glob.glob(os.path.join(root, f"{ext_prefix}-*", relative)))
+        matches = glob.glob(os.path.join(root, f"{ext_prefix}-*", relative))
         if matches:
-            return matches[-1]
+            return max(matches, key=version_of)
     return ""
 
 

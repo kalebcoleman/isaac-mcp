@@ -42,6 +42,9 @@ DRIVE = "C" + ":"
         'p = os.path.expanduser("~/Documents/isaac")',
         'PY="$HOME/envs/sim/bin/python"',
         "python ~/env_isaaclab/bin/python run.py",
+        'PY="$HOME"/env_isaaclab/bin/python',
+        'p = os.path.join(os.path.expanduser("~"), "myproj")',
+        'p = Path.home() / "Documents" / "isaac"',
     ],
 )
 def test_user_specific_paths_are_flagged(checker, tmp_path, line):
@@ -53,6 +56,7 @@ def test_user_specific_paths_are_flagged(checker, tmp_path, line):
     "line",
     [
         'cache = Path.home() / ".cache" / "ur5e-dt"',
+        'ws = Path.home() / "isaac-workspace"',
         'p = os.path.expanduser("~/.local/share/isaac-mcp/jobs")',
         'out = "~/Pictures/screen-mcp"',
         'WS_SETUP="${WS_SETUP:-$HOME/ros2_ws/install/setup.bash}"',

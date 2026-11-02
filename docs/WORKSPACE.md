@@ -44,7 +44,8 @@ untested.
    cd "$ISAAC_MCP_WORKSPACE/isaac-mcp"
    ```
 
-2. **Create the sub-folders.** `init` never overwrites anything that exists.
+2. **Create the sub-folders.** `init` never overwrites anything that exists. New folders are
+   not group- or world-writable (0755 under the usual umask).
 
    ```bash
    python3 scripts/isaac_env.py init
@@ -127,7 +128,9 @@ is found.
 
 ## What is auto-detected, and where it looks
 
-First match wins, in this order:
+The first match in this order is used, even if a newer Isaac Sim exists further down the
+list; the version only filters. `run.sh` asks for any Isaac Sim 6.x
+(`resolve-python --require-version 6`). Pin a specific interpreter with `ISAAC_MCP_PYTHON`.
 
 1. `ISAAC_MCP_PYTHON`, then `UR5E_DT_PYTHON` (deprecated alias), then `ISAAC_SIM_PYTHON`.
 2. `<workspace>/envs/*/bin/python`.
@@ -142,9 +145,9 @@ First match wins, in this order:
    `/isaac-sim`.
 
 The asset stores are searched in this order (see [ASSETS.md](ASSETS.md#lookup-order)):
-project stores, `ISAAC_MCP_ASSET_PATH`, `<workspace>/assets` (only when
-`ISAAC_MCP_WORKSPACE` is set and the folder exists), then the old default
-`~/.cache/ur5e-dt/assets`. Nothing existing is moved.
+project stores, then either `ISAAC_MCP_ASSET_PATH` (when set, it **replaces** the next two) or
+`<workspace>/assets` (only when `ISAAC_MCP_WORKSPACE` is set and the folder exists) followed by
+the old default `~/.cache/ur5e-dt/assets`. Nothing existing is moved.
 
 ## What is not auto-detected
 
