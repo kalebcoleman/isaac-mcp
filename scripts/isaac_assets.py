@@ -381,12 +381,15 @@ def _check_zip_directory(archive: Path, limits: Limits) -> None:
         total = struct.unpack("<H", tail[i + 10 : i + 12])[0]
         cd_size = struct.unpack("<L", tail[i + 12 : i + 16])[0]
         end_pos = base + i
-        if total == 0xFFFF or cd_size == 0xFFFFFFFF:
-            j = tail.rfind(b"PK\x06\x06", 0, i)
-            if j >= 0 and len(tail) - j >= 56:
-                total = struct.unpack("<Q", tail[j + 32 : j + 40])[0]
-                cd_size = struct.unpack("<Q", tail[j + 40 : j + 48])[0]
-                end_pos = base + j
+        # Mirror zipfile: if the 20-byte zip64 locator sits right before the end record and
+        # the 56-byte zip64 record right before that, those values replace the legacy ones
+        # unconditionally (not only when a legacy field is saturated).
+        loc = i - 20
+        rec = loc - 56
+        if loc >= 0 and rec >= 0 and tail[loc : loc + 4] == b"PK\x06\x07" and tail[rec : rec + 4] == b"PK\x06\x06":
+            total = struct.unpack("<Q", tail[rec + 32 : rec + 40])[0]
+            cd_size = struct.unpack("<Q", tail[rec + 40 : rec + 48])[0]
+            end_pos = base + rec
         pos = end_pos - cd_size
         if pos < 0:
             raise CliError("malformed zip archive: central directory size is inconsistent")
@@ -434,8 +437,12 @@ def _extract_archive(archive: Path, into: Path, limits: Limits | None = None) ->
                 if rel in names:
                     raise CliError(f"duplicate archive member: {rel}")
                 names.add(rel)
-                with zf.open(info) as src:
-                    _copy_stream(src, into / rel, limits, rel)
+                try:
+                    with zf.open(info) as src:
+                        _copy_stream(src, into / rel, limits, rel)
+                except (RuntimeError, NotImplementedError) as exc:
+                    # zipfile reports encrypted entries and unsupported methods this way.
+                    raise CliError(f"unsupported zip entry {info.filename!r}: {exc}") from exc
         return
     try:
         tf = _open_tar(archive, limits)
@@ -550,8 +557,8 @@ def _publish(dfd: int, tmp: str, name: str, force: bool) -> None:
 def _unlink_quietly(dfd: int, name: str) -> None:
     try:
         os.unlink(name, dir_fd=dfd)
-    except FileNotFoundError:
-        pass
+    except OSError:
+        pass  # best effort: the error that caused the cleanup is the one worth reporting
 
 
 def _write_new_file(dfd: int, name: str, write) -> str:
