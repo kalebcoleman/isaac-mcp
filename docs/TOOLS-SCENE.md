@@ -183,6 +183,17 @@ body poses/DOF observations. It does not render, pump nested application updates
 changing an authored USD transform moved an active simulated body. Angular runtime values and
 drive targets use radians; USD authored joint diagnostics and angular drive gains use degrees.
 
+Invalid observed body poses, velocities or joint values return `PHYSICS_STATE_INVALID`
+with the backend, path and field. This reports bad runtime data, not a malformed caller
+pose. A step failure after the native call starts includes a `step` object with the
+requested count, timestep, observed before/after physics times (after may be `null`),
+measured/expected delta, failure phase and Fabric-update state. A matching clock delta
+does not prove valid physics. Other native exceptions return `STEP_FAILED`; existing GPU fault
+quarantine remains `DEVICE_ERROR`. There is no rollback, reset or automatic retry.
+Inspect the solver diagnostics before continuing. A preflight refusal does not claim
+that steps were attempted. These error-reporting safeguards do not repair native solver
+instability or establish support for every contact/solver configuration.
+
 RTX cameras use UsdGeom, an owned Replicator render product and an on-demand renderer
 CPU readback. They attach no RGB annotator. Removing that redundant branch passed an initial
 6.2 headless coexistence control, but later fresh camera-only and LiDAR-only controls still

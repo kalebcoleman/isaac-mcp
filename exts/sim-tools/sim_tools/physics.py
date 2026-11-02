@@ -1,6 +1,6 @@
 """Backend-specific runtime observations. Never substitute authored USD state."""
 
-from isaac_mcp.project_assets import refuse
+from isaac_mcp.project_assets import AssetError, refuse
 from .core import vector
 
 # Qualified by the disposable two-cycle motion/joint/timing/export trials on all
@@ -41,6 +41,25 @@ def array(value):
     if hasattr(value, "numpy"):
         value = value.numpy()
     return value
+
+
+def runtime_vector(value, count, *, path, field, backend):
+    """Validate observed solver data without reporting it as a bad user pose.
+
+    Do not return nonfinite numbers or replace them with authored USD values.
+    This is an observation failure, not proof that resetting or retrying is safe.
+    """
+    try:
+        return vector(value, count)
+    except AssetError as exc:
+        refuse(
+            "PHYSICS_STATE_INVALID",
+            f"{backend} returned invalid {field} for {path}: {exc}",
+            path=path,
+            field=field,
+            backend=backend,
+            effects="Runtime state is invalid. Inspect solver diagnostics before further stepping; no USD fallback or automatic reset was performed.",
+        )
 
 
 def prepare(stage):
@@ -126,8 +145,8 @@ def body_state(path, time_s, include_dynamics=False, stage=None):
             refuse("PHYSICS_FORMAT", "Newton transform must have seven components.")
         position, q = transform[:3], transform[3:]
         source = "Newton rigid-body tensor view"
-    vector(q, 4)
-    vector(position, 3)
+    runtime_vector(q, 4, path=path, field="orientation_xyzw", backend=engine)
+    runtime_vector(position, 3, path=path, field="world_position", backend=engine)
     result = dict(
         path=path,
         world_position=position,
@@ -146,7 +165,7 @@ def body_state(path, time_s, include_dynamics=False, stage=None):
             refuse("STALE_TARGET", "Dynamics require the explicitly selected stage.")
         view = view_for(path)
         velocities = array(view.get_velocities()).tolist()[0]
-        vector(velocities, 6)
+        runtime_vector(velocities, 6, path=path, field="velocities", backend=engine)
         masses = array(view.get_masses()).reshape(-1).tolist()
         if len(masses) != 1 or not math.isfinite(masses[0]) or masses[0] < 0:
             refuse("PHYSICS_FORMAT", "Expected one finite nonnegative runtime mass.")
