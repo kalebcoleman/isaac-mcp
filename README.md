@@ -95,6 +95,23 @@ Start with this read-only request:
 The [terminal connection check](docs/LINUX-SETUP.md#connect-and-check-without-changing-the-scene)
 provides the same first inspection without an agent. A successful tool listing alone does not prove Sim is running.
 
+### Before building the UR5e demo
+
+The read-only connection check needs no robot or bench. **UR5e Quick Start needs the NVIDIA
+robot asset**; it is kept in an operator cache rather than bundled in this repository.
+For predictable local reuse, prepare the robot and RealSense sensor files before the demo:
+
+```bash
+# From checkout root, before the UR workflow; requires network and applicable asset terms.
+python3 scripts/fetch_ur5e_assets.py
+python3 scripts/fetch_ur5e_assets.py --check
+```
+
+Valid cached files are reused, not downloaded on every launch. The fetcher does not obtain the
+private Vention bench; that is a separate operator-supplied asset, with a placeholder available
+when absent. See [cache selection, offline mode and asset terms](docs/LINUX-SETUP.md#prepare-the-ur5e-and-sensor-assets)
+before using an existing shared cache or a custom location. `install.sh` does not run this fetcher.
+
 ## Add only the workflows you need
 
 | Workflow | Start here |
