@@ -269,3 +269,42 @@ def test_ephemeral_bind_and_discovery(monkeypatch, tmp_path):
         loop.call_soon_threadsafe(loop.stop)
         t.join(timeout=2)
         loop.close()
+
+
+@pytest.mark.parametrize('name,info,expected', [
+    ('123-8766.json', {'pid': 123, 'port': 8766, 'host': 'localhost'}, True),
+    ('123-8766.json', {'pid': 123, 'port': 8766}, True),
+    ('tool-failures-123.log', {'pid': 123, 'message': 'diagnostic'}, False),
+    ('123-8766.json', {'pid': 124, 'port': 8766}, False),
+    ('123-8766.json', {'pid': 123, 'port': 8767}, False),
+    ('123-8766.json', {'pid': 123, 'port': '8766'}, False),
+    ('123-8766.json', {'pid': 123, 'port': 8766, 'host': ''}, False),
+    ('123-65536.json', {'pid': 123, 'port': 65536}, False),
+    ('1-8766.json', {'pid': True, 'port': 8766}, False),
+    ('123-8766.json', [], False),
+])
+def test_discovery_metadata_contract_matches_bridge(name, info, expected):
+    from isaac_mcp import client
+    from isaac_mcp_bridge import bridge
+    assert client._valid_portfile(name, info) is expected
+    assert bridge._valid_portfile(name, info) is expected
+
+
+def test_diagnostic_log_not_listed_or_deleted_as_a_bridge(monkeypatch, tmp_path):
+    from isaac_mcp import client
+    from isaac_mcp_bridge import bridge, builtins
+    monkeypatch.setenv('XDG_RUNTIME_DIR', str(tmp_path))
+    with LiveBridge() as live:
+        runtime = tmp_path / 'isaac-mcp'
+        # The first failure is a valid JSON document with a live PID, exactly
+        # the shape that previously leaked through the native list_bridges.
+        failure = runtime / f'tool-failures-{os.getpid()}.log'
+        payload = json.dumps({'pid': os.getpid(), 'error_type': 'ToolError', 'message': 'failed'})
+        failure.write_text(payload + '\n')
+        malformed = runtime / f'{os.getpid()}-65536.json'
+        malformed.write_text(json.dumps({'pid': os.getpid(), 'port': 65536}))
+        assert [x['port'] for x in builtins.cmd_list_bridges(live.bridge)['bridges']] == [live.port]
+        assert [x['port'] for x in client.discover_bridges()] == [live.port]
+        bridge._sweep_stale_portfiles()
+        assert failure.read_text() == payload + '\n'
+        assert malformed.exists()

@@ -1,5 +1,6 @@
 """Checkpoint references survive cache relocation without editing source USDs."""
 import json
+import shutil
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -7,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 pytest.importorskip("pxr.Usd")
-from pxr import Sdf, Usd, UsdGeom
+from pxr import Sdf, Usd, UsdGeom, UsdPhysics
 
 
 def test_export_rewrites_plain_and_file_uri_assets_in_private_copy(tmp_path, monkeypatch):
@@ -23,6 +24,7 @@ def test_export_rewrites_plain_and_file_uri_assets_in_private_copy(tmp_path, mon
     asset.SetDefaultPrim(UsdGeom.Xform.Define(asset, "/Robot").GetPrim())
     asset.GetRootLayer().Save()
     stage = Usd.Stage.CreateInMemory()
+    UsdPhysics.Scene.Define(stage, "/physicsScene")
     stage.DefinePrim("/Plain").GetReferences().AddReference(str(cache / "robot.usda"))
     # The generic asset-valued field tests URI decoding too; no file is copied.
     stage.DefinePrim("/Asset").CreateAttribute("asset", Sdf.ValueTypeNames.Asset).Set(
@@ -34,6 +36,8 @@ def test_export_rewrites_plain_and_file_uri_assets_in_private_copy(tmp_path, mon
     monkeypatch.setitem(sys.modules, "omni", SimpleNamespace(usd=usd))
     monkeypatch.setitem(sys.modules, "omni.usd", usd)
     script = Path(__file__).resolve().parents[2] / "scripts/checks/export_reference.py"
+    (root / "scripts").mkdir()
+    shutil.copy(script.parents[1] / "checkpoint_export.py", root / "scripts/checkpoint_export.py")
     namespace = {}
     exec(compile(script.read_text().replace("__ROOT__", str(root)), str(script), "exec"), namespace)
     assert namespace["result"]["relative_asset_refs"] == 2

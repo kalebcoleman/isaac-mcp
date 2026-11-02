@@ -14,7 +14,7 @@ export_reference_if_missing() {
 FAILED=()
 run_check() {
   echo "== $1"
-  local out status=0 executor=bridge_exec.py
+  local out status=0 executor=bridge_exec.py failures_before=${#FAILED[@]}
   if [ "$1" = single_joint_motion ]; then executor=bridge_async_check.py; fi
   out="$("$PY" "$ROOT/scripts/$executor" "$ROOT/scripts/checks/$1.py" 2>&1)" || status=$?
   echo "$out"
@@ -24,6 +24,7 @@ run_check() {
   elif ! printf '%s\n' "$out" | "$PY" "$ROOT/scripts/validate_ur5e_check.py" "$1"; then
     FAILED+=("$1")
   fi
+  [ "${#FAILED[@]}" -eq "$failures_before" ]
 }
 # First call after a cold boot compiles shaders and caches assets: 2+ minutes on a fresh machine, ~3 s afterwards.
 run_quick_start() {
@@ -40,6 +41,7 @@ if [ "${REBUILD:-0}" = "1" ]; then  # opt-in stress test: rebuilding a loaded sc
   echo "== quick_start (2nd, rebuild)"; run_quick_start
 fi
 run_check scene_prims
+run_check scene_physics || { echo "== FAILED: scene_physics; motion/export skipped"; exit 1; }
 run_check gravity_robot_chain
 run_check joint_limits
 run_check drive_settings
@@ -47,7 +49,9 @@ export_reference_if_missing
 run_check reopen_checkpoint
 sleep 10
 run_check scene_prims
+run_check scene_physics || { echo "== FAILED: scene_physics; reopened motion skipped"; exit 1; }
 run_check single_joint_motion
+run_check scene_physics
 if [ -n "${LOG:-}" ]; then
   echo "== [Error] lines in app log: $(grep -c '\[Error\]' "$LOG")"
   echo "== [Force callback] lines in app log: $(grep -c 'Force callback' "$LOG")"

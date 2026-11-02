@@ -52,6 +52,24 @@ def validate(check, response):
         require(result.get("rg2_present") is True, "RG2 gripper is missing")
         require(result.get("gravity_disabled_on_robot_links") == [],
                 "robot links have gravity enabled or the gravity observation is missing")
+    elif check == "scene_physics":
+        scenes = result.get("scenes")
+        require(isinstance(scenes, list) and len(scenes) == 1,
+                "expected exactly one typed PhysicsScene")
+        if isinstance(scenes, list) and len(scenes) == 1 and isinstance(scenes[0], dict):
+            scene = scenes[0]
+            require(scene.get("path") == "/physicsScene" and scene.get("type") == "PhysicsScene",
+                    "the configured /physicsScene definition was lost")
+            require(scene.get("gpu_dynamics") is False and scene.get("broadphase") == "MBP",
+                    "the UR5e fixture no longer uses CPU dynamics/MBP")
+            require(_near(scene.get("steps_per_second"), 120, 1e-6),
+                    "the UR5e fixture no longer uses 120 Hz")
+        else:
+            require(False, "invalid physics scene observation")
+        require(type(result.get("initialized")) is bool, "physics initialization state is missing")
+        if result.get("initialized"):
+            require(_near(result.get("runtime_dt"), 1 / 120, 1e-9),
+                    "runtime physics timestep differs from configured 120 Hz")
     elif check == "gravity_robot_chain":
         for root in ROOTS:
             data = result.get(root)
@@ -97,6 +115,9 @@ def validate(check, response):
         count = result.get("relative_asset_refs")
         require(isinstance(count, int) and not isinstance(count, bool) and count > 0,
                 "checkpoint has no relative asset references")
+        scene = result.get("physics_scene", {})
+        require(isinstance(scene, dict) and scene.get("type") == "PhysicsScene"
+                and scene.get("path") == "/physicsScene", "checkpoint physics definition was not verified")
     elif check == "reopen_checkpoint":
         require(result.get("checkpoint_present") is True, "reference checkpoint is missing")
         require(result.get("opening") is True, "reference checkpoint open was not scheduled")

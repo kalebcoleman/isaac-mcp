@@ -367,3 +367,14 @@ An unfamiliar layout refuses. It never passes a USD integer to the native factor
 that lookup crashed during 6.2 live qualification; its handle contract was not established.
 Pause before saving an active scene; saving while playing remains refused. After Stop a
 native texture may have been torn down, so inspect a refusal rather than assuming it is live.
+
+The legacy `scripts/checks/export_reference.py` and `export_checkpoint.py` have a narrower
+contract: a root-layer reference copy plus the composed **local PhysicsScene** definition.
+Other session edits are excluded. They retain cache-relative asset references and refuse
+ambiguous/reference-derived physics definitions, unsupported scene properties and retained
+process-bound render state. They do not normalize camera handles. Publication never overwrites
+an existing file, including a timestamp collision. The UR5e verifier checks the known fixture's
+single CPU/MBP/120 Hz scene before export and after reopen, and its initialized timestep after
+motion; it stops before motion if the reopened physics configuration differs. The exporter
+preserves the source rate rather than forcing every scene to 120 Hz. Use the generic save tool
+for its composed snapshot contract above.

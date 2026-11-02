@@ -27,6 +27,7 @@ import hmac
 import inspect
 import json
 import os
+import re
 import socket
 import struct
 import sys
@@ -1770,6 +1771,25 @@ def _portfile_path(port: int) -> str:
     return os.path.join(_runtime_dir(), f"{os.getpid()}-{port}.json")
 
 
+def _is_portfile_name(name: str) -> bool:
+    return re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*\.json", name) is not None
+
+
+def _valid_portfile(name: str, info) -> bool:
+    """Advertisements, not diagnostic logs sharing this directory.
+
+    Kept in sync with the stdlib-only, independently deployable client by tests.
+    This validates discovery data; it is not authentication of a process.
+    """
+    return (isinstance(info, dict) and _is_portfile_name(name)
+            and type(info.get("pid")) is int and info["pid"] > 0
+            and type(info.get("port")) is int and 1 <= info["port"] <= 65535
+            and name == f"{info['pid']}-{info['port']}.json"
+            and isinstance(info.get("host", "127.0.0.1"), str)
+            and bool(info.get("host", "127.0.0.1").strip())
+            and "\0" not in info.get("host", "127.0.0.1"))
+
+
 #: Where a failing call's frames are written, beside the portfiles this process already owns.
 #: `ISAAC_MCP_LOG_DIR` lets a cell point it at that run's own state directory, so a run's
 #: failures land with the rest of its evidence; unset, the doorway's runtime dir is used, because
@@ -1907,11 +1927,15 @@ def _sweep_stale_portfiles() -> None:
     except OSError:
         return
     for name in names:
+        if not _is_portfile_name(name):
+            continue
         path = os.path.join(_runtime_dir(), name)
         try:
             with open(path) as f:
-                pid = int(json.load(f)["pid"])
-            os.kill(pid, 0)
+                info = json.load(f)
+            if not _valid_portfile(name, info):
+                continue
+            os.kill(info["pid"], 0)
         except (OSError, ValueError, KeyError):
             try:
                 os.unlink(path)
