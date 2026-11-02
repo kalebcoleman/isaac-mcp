@@ -74,7 +74,7 @@ its non-locked simulator sync. Use `--no-sim` with the chosen registration flag 
 |---|---|---|
 | Full CPU/package checks at `d725f84cb853bf5ceb2fa3b7d13d0e002d29becf` | 1,246 host tests; 216 minimum-SDK tests; docs/privacy/assets/catalog, wheel/sdist and npm dry run passed | Intentional ZIP and Pydantic lifespan warnings retained; no native qualification from CPU checks. [Exact record](VERIFICATION.md) |
 | New isolated venv, inputs from `2fdf4044ffdaa081431c14485a88d00abe185c07` | Locked sync exited 0 in **18.13 s**; `uv pip check` passed **186 packages**; metadata checked; both input hashes unchanged | Existing Ubuntu machine and populated cache. Copied project inputs, no full `install.sh`, client registration or existing environment changes |
-| Native follow-ups using that locked venv at `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` | Runtime owner reports scoped headless/windowed checks and fresh saved-output reopening | Separate execution from the install-only record; final compact 6.2 evidence index/independent review is being consolidated. Do not infer full matrix completion or warning-free behavior |
+| Native follow-ups using that locked venv at `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` | Committed records cover both PhysX modes, independent actual use and fresh reopening of the older agent save | Separate from the install-only record. The newer clean-agent save still needs its own fresh reopen; see the [source/mode summary](COMPATIBILITY.md#6200-physx-follow-up-2026-11-02). No full-matrix or warning-free claim |
 | Existing environments used for earlier 6.2 demo runs | Completed effects retain their original source and installed stack | NumPy **2.5.4** conflicts with the installed kernel's **2.3.1** pin; not dependency-clean. No causal warning/stall inference |
 | Previously prepared 6.0/6.1 environments | Four version-specific dependency checks passed | Not clean installs from this repository's 6.2 lock; mode/source-specific native results remain separate |
 | Lab 3.0 / Sim 6.2 video checks | Scoped train/eval/play results recorded | Existing Lab environment with a private dependency overlay; not clean Lab/video installation qualification |
@@ -86,9 +86,14 @@ and **82,297 simulation-time warning occurrences**; cycle/reentry/GetCamera/forc
 edit-target markers were zero. The sampled Console showed **60,703 warnings / 63 errors**,
 a different cumulative scope. These are retained observations, not a harmlessness claim.
 The review sampled two of 193 decoded diagnostic-video frames, with cropping; it does not
-establish that every frame was inspected. This parent review precedes the separate independent clean-stack task. The runtime owner
-has since reported that task complete; its curated index will carry the final source-identified
-records. Neither report closes the original 6.0.1 stall or the remaining matrix gates.
+establish that every frame was inspected. This parent review precedes the separate independent
+clean-stack task. The [committed parent/setup index](evidence/project-scene/RECENT-62-20261102.json)
+and [independent-task addendum](evidence/project-scene/RECENT-62-AGENT-20261102.json) now record
+51 and 15 source hashes respectively. The independent task's 92 requests / 17 checks and
+bounded eight-warning / zero-error interval are separate from the final whole-session
+24-error / 83,214-warning log. Its new composed save still needs fresh-process reopening;
+the successful reopen in the parent index is the older `2fdf404` output. Neither result
+closes the original 6.0.1 stall or the remaining matrix gates.
 
 The install-only record contains the actual commands, return codes and package metadata;
 its original scope is not rewritten by later native work. Checked packages included:
