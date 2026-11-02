@@ -526,8 +526,8 @@ def _build_tool_function(name: str, canonical: str, description: str,
         f"def {name}({params_str}) -> str:\n"
         f"    return _tool_impl({canonical!r}, locals())\n"
     )
-    local_ns = {"_tool_impl": (_tool_implementation if state is None
-                               else functools.partial(_tool_implementation, state=state))}
+    local_ns = {"_tool_impl": functools.partial(
+        _tool_implementation, state=state, mcp_result=True)}
     exec(func_code, local_ns)
     func = local_ns[name]
     func.__doc__ = description
@@ -536,7 +536,8 @@ def _build_tool_function(name: str, canonical: str, description: str,
 
 
 def _tool_implementation(canonical: str, params: Dict[str, Any],
-                         state: Optional[_BridgeState] = None) -> str:
+                         state: Optional[_BridgeState] = None, *,
+                         mcp_result: bool = False) -> Any:
     """Shared implementation for all dynamic tools.
 
     Every dynamically registered bridge tool called through this host crosses both
@@ -547,18 +548,41 @@ def _tool_implementation(canonical: str, params: Dict[str, Any],
     # policy hook judges the call the bridge will actually receive rather than the
     # signature's placeholders.
     params = {k: v for k, v in params.items() if v is not None}
-    result = _post_dispatch(canonical, params, _dispatch(canonical, params, state))
-    # Preserve legacy tools' return behavior; new contracts use MCP's error envelope.
+    dispatched = _dispatch(canonical, params, state)
+    result = _post_dispatch(canonical, params, dispatched)
+    # A post-dispatch annotation must not turn a known failed call into MCP
+    # success. Preserve the legacy text/structured payload and output schema;
+    # only the protocol error bit changes for registered legacy bridge tools.
+    failed = _failed_tool_result(dispatched) or _failed_tool_result(result)
     from .scene_contracts import REGISTRY
     if canonical in REGISTRY:
         from mcp.server.fastmcp.exceptions import ToolError
-        try:
-            data = json.loads(result)
-        except (ValueError, TypeError):
-            data = {}
-        if result.startswith("Error:") or data.get("status") == "error":
+        if failed:
             raise ToolError(result)
+    elif mcp_result and failed:
+        from mcp.types import CallToolResult, TextContent
+        return CallToolResult(
+            content=[TextContent(type="text", text=result)],
+            structuredContent={"result": result},
+            isError=True,
+        )
     return result
+
+
+def _failed_tool_result(result: str) -> bool:
+    """Recognize gateway failures and the bridge's explicit application errors.
+
+    JSON strings (including a user script returning "Error: ..." as data),
+    arrays, and successful objects containing an error-looking message remain
+    ordinary results. This does not infer success from an arbitrary payload.
+    """
+    if result.startswith("Error:"):
+        return True
+    try:
+        data = json.loads(result)
+    except (ValueError, TypeError):
+        return False
+    return isinstance(data, dict) and data.get("status") == "error"
 
 
 def _dispatch(canonical: str, params: Dict[str, Any],
