@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "recorded_utc": "2026-11-02T13:01:49.438319+00:00",
+  "recorded_utc": "2026-11-02T13:10:49.366591+00:00",
   "sessions": [
     {
       "tag": "newton61h_ba1d4b2",
@@ -475,12 +475,21 @@
       "primitive_control": "Private raw override convexHull to boundingCube in six proven boxes; 63calls/2160steps finite but first and later cycles scattered. Not adopted.",
       "separated_control": "Candidate hull blocks moved beyond robot reach at[-2,-2] in fresh anonymous stage within same process; first120steps returned PHYSICS_STATE_INVALID wrist orientation. Does not prove collision with robot caused prior failures.",
       "fresh_repeat": "Fresh process candidate1, 62calls/2160steps across three Stop/Play cycles: first two approximately retained pyramid, third collapsed despite finite body/joint values. No initial-camera close clipping in this repeat.",
-      "urplay_control": "Same fresh-repeat process, subsequent explicit twin Play restoration; first120steps returned PHYSICS_STATE_INVALID. No reliable recovery.",
+      "urplay_control": "Same fresh-repeat process, explicit twin Play restoration followed by a requested120-step call refused with EDIT_TARGET_CHANGED in0.0629966s. This guard requires the managed session edit target; no attempted steps or new NaN are established. The previous v1 derived note misclassified it; raw call008 is unchanged.",
       "visual": "Generic saved PNGs are not application-window or Console captures. Reviewed first-cycle and third-cycle fresh PNGs plus third-cycle primitive PNG: first shows overlapping top-down blocks, later images show separated blocks. No complete robot view or all-frame visual claim.",
       "cleanup": "Both floor PID2896390 and repeat PID2905716 absent after guarded normal SIGINT. Room-timeout PID2893016 needed guarded SIGKILL after failed SIGINT; separate failure before adapter was called."
     }
   },
   "source_decision": "The box adapter, tests and draft contract are parked privately and NOT included in source1c48532 or PR16. CPU106 pass and initial narrow stable intervals did not establish reliable solver behavior; boundingCube alternative also failed the intended stable-stack effect.",
+  "correction": {
+    "utc": "2026-11-02T13:10:49.028409+00:00",
+    "correction": "v1 derived notes incorrectly described URPlay call008 as PHYSICS_STATE_INVALID. Actual error is EDIT_TARGET_CHANGED; no attempted steps/new NaN established. Distinct separated-hull call024 remains PHYSICS_STATE_INVALID. No raw tool response changed.",
+    "raw_record": ".work/compat-followup/newton61h_box_fresh_repeat-urplay/call-008.json",
+    "raw_sha256": "3308de01d27518c3ebfcb4976c3f0ae32d13c4bd4f4254c4f07db86c7505a6c9",
+    "raw_bytes": 1331,
+    "superseded_compact_sha256": "d5d5f0dff7fd70723bd7d7fb5dff30fec631779fda4f0b9cdc1a05fc3c22bc55",
+    "superseded_archive_sha256": "c450357b3f0ffc657ecaf42fb6394b76648624a9b408aa10e687729ce303d3f6"
+  },
   "remaining": [
     "Prepared IsaacSim6.1.0.0, NewtonMJWarp, Linux headless only. No clean-install/all-version/backend or physical-robot qualification.",
     "Original20f6.0.1windowed108-step stall, other Newton crashes/NaNs and ROS/Fabric rendering failures retain separate histories; no causal unification or remedy claimed.",
@@ -676,10 +685,16 @@
       "bytes": 1331
     },
     {
-      "label": "newton61-box-diagnostics-summary.json",
-      "path": ".work/compat-followup/newton61-box-diagnostics-summary.json",
-      "sha256": "6183766958d6bb1ef583677d08743ec1f61b01845efb7e29943734489174985f",
-      "bytes": 156498
+      "label": "newton61-contact-correction.json",
+      "path": ".work/compat-followup/newton61-contact-correction.json",
+      "sha256": "1ff1c9e2c1d6c38b3b00b10d2a47036cb5eb370e130af3ba4d0caf31de5d59f3",
+      "bytes": 708
+    },
+    {
+      "label": "newton61-box-diagnostics-summary-v2.json",
+      "path": ".work/compat-followup/newton61-box-diagnostics-summary-v2.json",
+      "sha256": "d96fcf081af1b43e62b381a34326c242e856295a191dab71d8aac38c03caf3a3",
+      "bytes": 156675
     },
     {
       "label": "newton-box-candidate1-identity.json",

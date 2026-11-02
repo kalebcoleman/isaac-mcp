@@ -1234,7 +1234,9 @@ Later cycles scattered the assembly. A fresh repeat completed 2,160 steps across
 three Stop/Play cycles: the first two were near their authored positions, but the
 third moved a block about 216 mm, despite finite returned states. A separate box-
 primitive control also scattered; moving the hull assembly away from the robot
-produced a NaN failure, and a twin-specific Play follow-up did not recover it.
+produced a NaN failure. The twin-specific Play follow-up instead returned
+`EDIT_TARGET_CHANGED` before stepping: its managed session edit-target precondition
+was unmet. That refusal establishes neither attempted steps nor another NaN.
 **The collider adapter, tests and proposed contract were parked privately and
 are not shipped.** A finite result is not evidence of stable contact behavior.
 
@@ -1246,8 +1248,19 @@ not solver checkpoints. All four PIDs are absent; three stopped via guarded
 SIGINT, the room-stall process via guarded force stop. Cleanup is not recovery.
 
 The [draft supplement](RELEASE-ASSETS.md) retains 483 individual tool-call
-records, 38 key references and hashes for 694 original inputs. All 691 distributed
+records, 39 key references and hashes for 695 original inputs. All 692 distributed
 member hashes and nested privacy checks passed; no geometry, media, native dumps
 or installed/vendor modules are included. The original `20f` stall, remaining
 Newton qualification and final all-tool reconciliation stay open. PR #16 remains
 a draft; these findings do not establish all-version or backend-wide support.
+
+
+**Evidence correction:** the first derived compact incorrectly called the
+UR-Play follow-up a `PHYSICS_STATE_INVALID` result. Its unchanged call 008
+(SHA-256 `3308de01d27518c3ebfcb4976c3f0ae32d13c4bd4f4254c4f07db86c7505a6c9`)
+returned `EDIT_TARGET_CHANGED` in 0.063 seconds. The v2 compact/archive correct
+that interpretation and retain the superseded hashes. The original archive is
+kept as historical evidence; use v2 for the corrected summary. The separate
+moved-away hull trial is the actual NaN observation. Also, 216 mm is the maximum
+block displacement; the earlier approximately 28 mm description concerned the
+top block's height loss, a different measurement.
