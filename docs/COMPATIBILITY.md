@@ -20,9 +20,10 @@ The [6.0.0.0 current-runtime follow-up](#6000-physx-follow-up-2026-11-02) record
 The [current 6.0.0.1 PhysX and later save-reopen results](#6001-current-runtime-physx-follow-up-2026-11-02) retain the earlier runs above as historical evidence.
 Final qualification of the combined candidate across the requested builds and modes remains pending.
 The [6.2 Newton twin candidate follow-up](#6200-newton-twin-candidates-2026-11-02) separates
-broad candidate runs from later narrow reopen/force checks and the unresolved integrated PhysX header defect.
+broad candidate runs from later narrow reopen/force checks and the historical integrated PhysX header defect.
 The [PhysX wrench follow-up](#6200-physx-wrench-correction-candidate-2026-11-02) records
-that defect and candidate12's scoped correction; final integrated reopen qualification remains separate.
+that defect and candidate12's scoped correction. The later [integrated affected-path checks](#integrated-affected-physx-paths-across-five-builds-2026-11-02)
+record five-build PhysX results without relabelling the earlier full-tool evidence.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
 |---|---|---|
@@ -871,10 +872,11 @@ five seconds of lag with one frame. The later warmed recording does not erase th
 See the [twin contract](TOOLS-UR5E.md) for explicit UR Play restoration, force capability
 checks and recording limits; ordinary generic Play is not proof of restored twin callbacks.
 
-**Integrated PhysX qualification remains incomplete.** The first fresh windowed reopen
+**The original integrated PhysX failure remains recorded.** The first fresh windowed reopen
 at `166e10db31cc2e24fad66b204c00301c1281bfae` produced actual wrench messages with zero
 timestamps and empty frames despite working motion. The [later correction candidate](#6200-physx-wrench-correction-candidate-2026-11-02)
-has separate evidence; integrated native revalidation remains pending in this record.
+has separate evidence; the later [integrated affected-path checks](#integrated-affected-physx-paths-across-five-builds-2026-11-02)
+record fresh native revalidation within their stated scope.
 PhysX's native in-memory robot pose writes during Play must not be described as preserved
 by the Newton checks above: saved-file, graph, physics-setting and edit-target preservation
 are distinct observations, not proof of unchanged live robot poses or disk overwrite.
@@ -941,8 +943,9 @@ sampled frames 10 and 100 from the original 169-frame headless and candidate12 1
 windowed recordings; both crop the wrist/gripper. A separate final window showed the complete
 bent arm/gripper. This update did not repeat pixel review or infer physics from the recordings.
 
-Candidate12 observed a new validity gate and saved the current graph, but its **fresh reopen
-on the final integrated head remains pending at this handoff**. As the [twin contract](TOOLS-UR5E.md)
+Candidate12 observed a new validity gate and saved the current graph. Fresh reopening was
+pending at that handoff; the later [exact integrated checks](#integrated-affected-physx-paths-across-five-builds-2026-11-02)
+now record it separately. As the [twin contract](TOOLS-UR5E.md)
 explains, fresh PhysX graphs gate publication until a complete sample exists. Legacy ungated
 PhysX graphs remain unchanged on reopen and may emit default/cached values before a valid
 callback; a successful warmed legacy test is not proof of a gate. Check capability and actual
@@ -950,3 +953,86 @@ messages. These candidate passes do not erase the original `166e10d` failure, co
 affected five-build/mode checks, or resolve the original `20f2953` stepping stall. Newton,
 clean-machine/full-installer and broader backend claims remain separate. The larger transcript
 bundle is in the [unpublished draft release index](evidence/project-scene/RELEASE-ASSETS.md).
+
+## Integrated affected PhysX paths across five builds (2026-11-02)
+
+The [committed affected-path supplement](evidence/project-scene/RECENT-AFFECTED-PHYSX-2C8-20261102.json)
+records exact source `2c8ce63b33dbabf02b2216f9d512ff9a23724d9c`, tree
+`77fc20b42b97eebdb0aa04273bb7ef5281bd3001`. Its SHA-256 is
+`28597c734ac91958238f24e35bcc9a2620c698804474a9cdb6e1053ccbf3673d`;
+all 88 key original hashes and sizes were verified for this update. All ten runs used
+PhysX and Python 3.12.3 with motion BVH enabled. Older prepared environments remain
+separate from the isolated locked 6.2 environment; this is not a new installation test.
+
+**The affected UR paths passed in both modes on each of the five builds below.** Each
+headless full-surface run completed **137 calls / 55 assertions**; each windowed run
+completed **141 / 54**. Each exercised all **23 UR tools and seven bridge built-ins**,
+with nine additional calls checking an existing PhysicsScene. Named generic support and
+managed targeting were exercised, but this is not a new complete 99-tool matrix or an
+independent-agent task.
+
+| Sim package | Exact application build | Kit | Headless callback scope | Windowed callback scope |
+|---|---|---|---|---|
+| 6.0.0.0 | `6.0.0-rc.22+release.33481.407f3ea1.gl` | `110.0.0+feature.276876.4a5123f4.gl` | Same process after settled Stop, 11 calls / 16 checks | Fresh reopen, 10 calls / 16 checks |
+| 6.0.0.1 | `6.0.0-rc.59+release.41464.5f2772bc.gl` | `110.1.1+production.305458.6312fa25.gl` | Same process after settled Stop, 11 calls / 16 checks | Fresh reopen, 10 calls / 16 checks |
+| 6.0.1.0 | `6.0.1-rc.7+release.42383.32955d8d.gl` | `110.1.2+production.326809.f9bf0dda.gl` | Same process after settled Stop, 11 calls / 16 checks | Fresh reopen, 10 calls / 16 checks |
+| 6.1.0.0 | `6.1.0-rc.26+release.49347.2d230af4.gl` | `110.3.0+feature.371399.00c488ae.gl` | Same process after settled Stop, 11 calls / 16 checks | Fresh reopen, 10 calls / 16 checks |
+| 6.2.0.0 | `6.2.0-rc.14+release.52805.02189a84.gl` | `110.4.0+feature.386251.187cf21b.gl` | Fresh reopen, 10 calls / 16 checks | Fresh reopen, 10 calls / 16 checks |
+
+The six fresh-process checks comprise 6.2 headless plus all five windowed runs. The
+6.2 headless process opened candidate12's newly gated save; its windowed process opened
+the exact `2c8ce63` headless output. The other four headless callback tests stayed in
+their existing process and explicitly stopped before taking preservation baselines.
+They must not be described as four additional fresh reopens. All ten checks observed
+two actual ROS gripper commands across Stop/Play, joint motion and nonzero advancing
+`tool0` wrench headers. These integrated observations address the measured callback/header
+failure on these tested paths; the original `166e10d` failure remains in the history.
+Candidate12's known-load result retains its candidate identity and was not rerun by this batch.
+
+Source files, graph, PhysicsScene opinions and edit target compared equal. Diagnostic
+copies excluding enumerated native body pose/velocity and joint-state fields preserved
+remaining static robot/object opinions. **Whole-root and robot-subtree byte equality were
+false in every run** because native PhysX wrote pose/state into memory. These passes do
+not establish byte-preserved live layers or a disk overwrite. Legacy ungated graphs still
+have the documented default/cached-value warm-up caveat; a later valid sample does not
+retrofit a gate into an old graph.
+
+The initial 6.0.0.0 headless supplemental predicate compared a generic leased session
+edit target with the original target restored by Stop and failed equality. ROS effects
+and file/graph/physics/static comparisons passed. Its client also overlapped parent-harness
+completion. That attempt remains separate from the successful sequential retry with an
+explicit settled Stop before the baseline; no failed record was replaced.
+
+| Build / mode | Final native errors / warnings | Simulation-time / cycle occurrences | Windowed Console warnings / errors | Decoded video frames |
+|---|---|---|---|---|
+| 6.0.0.0 / headless | 6 / 166 | 0 / 0 | — | 174 |
+| 6.0.0.0 / windowed | 6 / 157 | 0 / 0 | 162 / 11 | 189 |
+| 6.0.0.1 / headless | 6 / 151 | 1 / 0 | — | 172 |
+| 6.0.0.1 / windowed | 6 / 157 | 2 / 0 | 162 / 11 | 188 |
+| 6.0.1.0 / headless | 6 / 147 | 1 / 0 | — | 172 |
+| 6.0.1.0 / windowed | 6 / 151 | 2 / 0 | 155 / 11 | 186 |
+| 6.1.0.0 / headless | 6 / 147 | 0 / 0 | — | 171 |
+| 6.1.0.0 / windowed | 6 / 153 | 2 / 0 | 156 / 11 | 191 |
+| 6.2.0.0 / headless | 6 / 157 | 2 / 0 | — | 171 |
+| 6.2.0.0 / windowed | 6 / 156 | 1 / 0 | 159 / 11 | 191 |
+
+Each native log's six Error lines belong to the deliberate invalid-quaternion traceback;
+no force-callback error was recorded. The filtered windowed Console views confirmed that
+negative test, not each of the 11 UI error entries individually. Cooking warnings and
+simulation-time occurrences remain recorded without a harmlessness claim. In 6.0.0.1
+and 6.1, acknowledged clicks initially failed to select Console; verified screenshots
+and a later retry established the inspected tab. No cause is assigned to that desktop behavior.
+
+The runtime owner decoded each full recording but visually sampled only frames **10 and
+100**. Wrist/gripper cropping affects all clips. Motion was not clearly distinguishable
+in the sampled 6.0.0.1 headless and 6.0.1 headless/windowed views; runtime joint/ROS checks
+supply the motion evidence. Separate final window reviews showed complete bent arms and
+attached grippers. This documentation update did not repeat pixel review. All ten owned
+Kit processes exited; no unrelated process was stopped.
+
+Earlier generic, host, Lab and independent-task evidence keeps its original source identity.
+The component-equivalence manifest compares implementation bytes; it is not a rerun or
+proof of every edge case. **The original `20f2953` / 6.0.1 native-step stall remains
+unresolved.** Applicable Newton checks, final per-tool/version reconciliation and clean-machine/
+full-installer qualification remain separate. The [draft release index](evidence/project-scene/RELEASE-ASSETS.md)
+links the larger redacted transcript bundle; the release remains unpublished and PR16 unmerged.
