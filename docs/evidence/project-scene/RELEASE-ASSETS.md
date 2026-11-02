@@ -7,6 +7,7 @@ by marking this release draft.
 
 | Asset URL | SHA-256 | Bytes |
 |---|---|---:|
+| [camera-clipping-five-builds-1f21407-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/camera-clipping-five-builds-1f21407-redacted.tar.gz) | `aad719256407192a7c93179fe2c1da29739f1161dad901d79b869400b47e1698` | 2792133 |
 | [newton61-contact-controls-ba1-box1-v2-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton61-contact-controls-ba1-box1-v2-redacted.tar.gz) | `b2e7a68b7b27733dd7a55d070f153369711aca382759dcefd4ec9291c0168579` | 665451 |
 | [newton61-contact-controls-ba1-box1-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton61-contact-controls-ba1-box1-redacted.tar.gz) | `c450357b3f0ffc657ecaf42fb6394b76648624a9b408aa10e687729ce303d3f6` | 664073 |
 | [compatibility-followup-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/compatibility-followup-redacted.tar.gz) | `d0e2020a8d360735f73652d4e54d9f706f02df9d4d45371ce0c4f8d41ff8fe88` | 4668085 |
@@ -199,3 +200,9 @@ Use the Newton61 **v2** contact-control supplement. It corrects the first
 derived note: the UR-Play follow-up returned `EDIT_TARGET_CHANGED`, not a new
 NaN or established attempted steps. Raw records are unchanged; the earlier
 archive is retained as superseded history.
+
+The camera-clipping bundle includes four specifically reviewed original PNGs of the
+synthetic fixture (6.2 actual window before/after and two headless camera outputs).
+All other pixels, saved geometry and source assets are omitted; image hashes and
+scoped visual reviews remain. Its 500 core MCP calls exclude auxiliary viewport/
+desktop and managed-session calls. The release is still a draft requiring access.

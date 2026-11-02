@@ -1264,3 +1264,64 @@ kept as historical evidence; use v2 for the corrected summary. The separate
 moved-away hull trial is the actual NaN observation. Also, 216 mm is the maximum
 block displacement; the earlier approximately 28 mm description concerned the
 top block's height loss, a different measurement.
+
+
+## New-camera clipping: five builds, both modes
+
+Exact combined `1f21407eacd02aa1387aa4348611aa60b7848a06` passed this focused
+qualification on 6.0.0.0, 6.0.0.1, 6.0.1.0, 6.1.0.0 and 6.2.0.0, headless and
+windowed, in ten fresh serial processes. Each run retained 42 positive real-MCP
+calls plus eight invalid-unit control calls and passed 91 predicates. Across the
+ten runs that is 500 core calls, 40 new cameras and 80 captured images. The 910
+predicates include 420 successful-result checks and 490 count, metadata, pixel,
+hash, saved-USD and refusal checks; they are not 910 physical-effect experiments.
+Auxiliary viewport/desktop records are counted separately in the bundle.
+
+New cameras use physical clipping distances of 1 cm and 1,000 m, converted to the
+selected stage's units. Meter and centimeter fixtures at 128×128 and 384×384
+showed red and green targets 23 cm away. Moving red inside the near plane removed
+red pixels while green remained; restoring red restored those pixels. PNG hashes
+and dimensions matched responses. Both saved stages per run were independently
+opened with standalone OpenUSD and preserved both camera clipping ranges. Invalid
+zero stage units returned `INVALID_STAGE_UNITS` without creating a camera,
+changing the root layer or losing the original edit target.
+
+Actual windowed application screenshots were inspected before and after the
+fixture and with the Console selected after positive and negative controls.
+The final UI warning/error counters and whole native-file counts are different scopes:
+
+| Package build | H native warnings/errors | W native warnings/errors | Final W Console warnings/errors |
+|---|---:|---:|---:|
+| 6.0.0.0 | 13/0 | 15/0 | 17/0 |
+| 6.0.0.1 | 15/0 | 18/0 | 21/0 |
+| 6.0.1.0 | 12/0 | 15/0 | 17/0 |
+| 6.1.0.0 | 12/0 | 14/0 | 15/0 |
+| 6.2.0.0 | 13/0 | 15/0 | 19/0 |
+
+All ten final native logs had zero error, traceback, nested-task, force-callback,
+illegal-cycle and simulation-time-warning occurrences in the recorded categories.
+Other warnings remain, including USD/schema, low-resolution DLSS, released Hydra
+interfaces and client socket closure. Successful fixture behavior is not a general
+harmlessness claim. All ten owned PIDs exited normally following managed SIGINT.
+
+Limits are explicit: the backend selection was PhysX, but this rendering fixture
+performed no physics steps. Native RenderProduct/settings allocation changed the
+anonymous root during successful creation; whole-root preservation is not claimed.
+The image fixtures crop the cubes horizontally, while the separately framed actual
+viewport shows a whole red cube. Saved-USD attribute inspection is not fresh Kit
+camera-reuse qualification. The first headless driver stopped checking a PID too
+soon after SIGINT; the subsequent exit and bounded-wait correction are retained.
+The first 6.2 window click missed required dimensions and was refused by schema
+before input; the corrected guarded input succeeded. No independent agent task was
+newly performed for this focused fixture.
+
+The [compact index](RECENT-CAMERA-CLIPPING-1F21407-20261102.json) pins 39 key
+records and complete source/build/session identities. Its draft bundle retains 1,028
+original byte hashes, 583 individual call records including auxiliary calls, full
+redacted native logs, the actual harness and four reviewed synthetic-fixture images.
+[Reproduction instructions](CAMERA-CLIPPING-REPRODUCTION.md) separate deployment
+paths, prepared installs and the diagnostic bootstrap from product runtime. No user
+USD/URDF, vendor sources, crash dumps or unreviewed pixels are distributed.
+This pass does not resolve Newton crashes/NaNs/contact instability, ROS/Fabric black
+images, the original `20f` stalled task, or the remaining final all-tool review gates.
+PR #16 and the evidence release remain draft and unmerged/unpublished.

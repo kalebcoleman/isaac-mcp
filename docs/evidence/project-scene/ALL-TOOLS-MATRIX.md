@@ -1,7 +1,8 @@
 # All exposed tools: final validation ledger
 
 Validation remains in progress. All implementation PRs are unmerged; combined PR #16
-is a draft. The candidate at this update is `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`.
+is a draft. The original census below was assembled against `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`;
+later source-specific qualification is linked separately, without relabeling those calls.
 The real MCP inventories contain **90 default tools** and **99** with
 `ISAAC_MCP_LOCAL_TOOLS=all,screen_input,sim_launch`. Disabling the generic pack
 with those optional groups selected leaves 60 tools. Every name is tracked below.
@@ -192,3 +193,13 @@ unreliable recovery require fixes or an explicit unresolved limitation.
 | `window_key` | opt-in | Real host/display; verify selected simulator window/PID and observable output | 4 recorded calls; Click, type and key visible effects (4499bf7, 884a8fa). Scope/arguments/response references: JSON index. |
 | `window_scroll` | opt-in | Real host/display; verify selected simulator window/PID and observable output | 3 recorded calls; Scroll visibly moves Console content (4499bf7, 884a8fa). Scope/arguments/response references: JSON index. |
 | `window_type` | opt-in | Real host/display; verify selected simulator window/PID and observable output | 2 recorded calls; Click, type and key visible effects (4499bf7, 884a8fa). Scope/arguments/response references: JSON index. |
+
+
+The later [new-camera clipping qualification](RECENT-CAMERA-CLIPPING-1F21407-20261102.json)
+uses exact `1f21407` in ten fresh H/W processes. It adds meter/centimeter depth-effect,
+resolution, saved-USD-attribute and invalid-unit evidence for `sim__camera__create`
+and `sim__camera__capture`, with the supporting named prim/material/save workflow.
+It does not rerun all 99 names, simulate body motion, or resolve the documented
+Newton crashes/instability and original `20f` stall. The final per-tool source and
+backend reconciliation remains required; a historical invocation is not a current
+all-version effect pass.
