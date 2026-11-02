@@ -15,7 +15,9 @@ fails closed; no remote upload service or unrestricted fallback is advertised.
 ## Evidence map and scope
 
 - [Current all-tool validation ledger](ALL-TOOLS-MATRIX.md), [99-name argument/evidence index](ALL-TOOLS-INDEX-20261102.json),
-  [recent source-identified checks](RECENT-CHECKS-20261102.json), [final validation work and failures](FINAL-VALIDATION.md).
+  [recent headless checks](RECENT-CHECKS-20261102.json),
+  [6.0.1 windowed checks and unresolved stall](RECENT-601W-20261102.json),
+  [final validation work and failures](FINAL-VALIDATION.md).
 - [Earlier per-tool behavior](TOOL-COVERAGE.md), [release/backend results](RUNS.md),
   [compact call inventories](RUN-SUMMARIES.json), [installed package records](INSTALLATIONS.json).
 - [43-tool fork comparison](../../FORK-COMPARISON.md), [setup and schemas](../../TOOLS-SCENE.md),
@@ -76,6 +78,14 @@ records are in [final validation](FINAL-VALIDATION.md); CPU results do not repla
 cross-version live behavior or independent-agent gates.
 
 ## Measured behavior and retained failures
+
+The later 6.0.1 windowed run at `20f2953` passed its broad suite, then stalled in a
+native synchronous physics step during independent use. It required force-stop of
+the owned process. Successful fresh repeats and a new named-workflow task do not
+resolve that failure. A separate legacy checkpoint physics-type defect and bridge
+discovery defect were fixed and qualified narrowly at combined `6bc45c2`.
+The [windowed supplement](RECENT-601W-20261102.json) preserves all distinct scopes;
+the original stall remains an open material limitation.
 
 Earlier revisions called all 37 tools through real MCP on each of the five installed PhysX releases. Exact
 cases and revision differences are in RUNS.md. Each release passed a 217-capture stress sequence

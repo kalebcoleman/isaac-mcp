@@ -1,0 +1,849 @@
+{
+  "created_utc": "2026-11-02T01:35:53.527027+00:00",
+  "scope": "Source-identified 6.0.1.0 windowed qualification supplement. Distinct runs and code identities; not all99/all-version readiness.",
+  "identity": {
+    "release": "6.0.1.0",
+    "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+    "kit": "110.1.2+production.326809.f9bf0dda.gl",
+    "backend": "physx",
+    "mode": "windowed",
+    "os": "Ubuntu24.04.5",
+    "gpu": "RTX5080 16303MiB",
+    "driver": "580.178.04",
+    "host_python": "3.12.3",
+    "host_mcp": "1.30.0"
+  },
+  "broad20f": {
+    "sha": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+    "pid": 2469951,
+    "port": 18913,
+    "ros_domain": 223,
+    "phases": 14,
+    "fullsurface_calls": 141,
+    "effect_assertions": 54,
+    "tool_scopes": [
+      "39 generic across project15/generic/fullsurface phases",
+      "all23 UR5e",
+      "7 bridge built-ins"
+    ],
+    "effect_links": {
+      "calls": 24,
+      "checks": 12
+    },
+    "urdf_runtime": {
+      "calls": 25,
+      "checks": 7
+    },
+    "legacy": [
+      {
+        "label": "existing-physics",
+        "command": [
+          "<worktree>/.work/host/bin/python",
+          "<worktree>/.work/compat-followup/existing_physics_scene.py",
+          "18913",
+          "<worktree>/.work/compat-followup/final601w_20f-existing-physics.json"
+        ],
+        "returncode": 0,
+        "seconds": 5.202481508255005,
+        "native_start": 27846488,
+        "native_end": 28416143,
+        "native_sha256": "7d63893ec4aab1673c39d1b5943395d69cc34c9db9e3a46f24f7ccbbca761d0c",
+        "counts": {
+          "[Error]": 0,
+          "Cannot enter into task": 0,
+          "Task was destroyed": 0,
+          "Force callback": 0,
+          "GetCamera": 0,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0,
+          "Edit target changed": 0
+        }
+      },
+      {
+        "label": "legacy-async",
+        "command": [
+          "bash",
+          "<worktree>/.work/integration/20f2953bb28361f29b0aa720513b5d8bc2d415ed/scripts/verify_ur5e_dt.sh"
+        ],
+        "returncode": 0,
+        "seconds": 29.737492084503174,
+        "native_start": 28416143,
+        "native_end": 30684679,
+        "native_sha256": "a289a382cedf36fbf4b80d6c410790ae4d72dd0a48750bde67133fae3f742135",
+        "counts": {
+          "[Error]": 0,
+          "Cannot enter into task": 0,
+          "Task was destroyed": 0,
+          "Force callback": 0,
+          "GetCamera": 0,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0,
+          "Edit target changed": 0
+        }
+      }
+    ],
+    "native_visual_review": {
+      "code_sha": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+      "reviewed_utc": "2026-11-02T00:42:06.760374+00:00",
+      "session": {
+        "pid": 2469951,
+        "port": 18913,
+        "ros_domain": 223,
+        "headless": false
+      },
+      "window_id": 46137357,
+      "native_file": ".work/runs/final601w_20f/kit-native.log",
+      "native_prefix_bytes": 27594822,
+      "native_prefix_sha256": "d934e9f46d1a48fb34d5b6dbd5022e869c6701105f80f11eb1b99cb7e1e32423",
+      "native_counts": {
+        "[Error]": 24,
+        "Illegal cycle connection": 0,
+        "getSimulationTimeMonotonicAtTime": 61,
+        "Cannot enter into task": 0,
+        "Task was destroyed": 0,
+        "GetCamera": 0,
+        "Force callback": 0,
+        "Edit target changed": 0
+      },
+      "console": {
+        "warnings": 258,
+        "errors": 63,
+        "inspection": "Opened actual Console; Error search displays offline-missing/corrupt-cache failures and zero-quaternion negative case; warning lines include failed client replies. Native24error lines match those intentional cases. Warning absence is not claimed."
+      },
+      "images_reviewed": [
+        {
+          "file": ".work/compat-followup/final601w_20f-fullsurface/window-010.png",
+          "sha256": "1a7a0f36aa72f347f203987fc088a25ee5fca988f24f6b8061a135753ed18b0f"
+        },
+        {
+          "file": ".work/compat-followup/final601w_20f-fullsurface/window-140.png",
+          "sha256": "6c5c655af3fddce4f9bd2862dd78c39ea329ef01d85defaef6a90fb22b70ffc3"
+        },
+        {
+          "file": ".work/compat-followup/final601w_20f-fullsurface/review-frame-10.png",
+          "sha256": "2f553562f4411211c3b00ac204a8154fb036fde87d5e39fe86e98267c526432b"
+        },
+        {
+          "file": ".work/compat-followup/final601w_20f-fullsurface/review-frame-170.png",
+          "sha256": "a72b526a598928c350df12ce75d4c16ce48b3299afac00bcf8baa5b2406a7b6a"
+        },
+        {
+          "file": ".work/compat-followup/final601w_20f-fullsurface/ros-gripper-camera.png",
+          "sha256": "80e12b1ffc811ec81b62b23b8e9f4f3f6c9008c42db2f3405d2468e4f29e7fed"
+        }
+      ],
+      "visual_observation": "First actual window shows cleared generic stage grid and remaining protected assets. Final actual window shows a normal bent UR arm, attached RG2 and real workstation/room. Wrist ROS image shows nonblank wood wall and gripper fingers. All186video frames decoded; frames10/170 viewed: diagnostic zero pose crops upper arm/wrist, elbow changes between samples. Not all frames visually reviewed.",
+      "whole_run_status": "14 broad phases passed,141MCPcalls54fullsurface assertions; independent and legacy follow-up not included."
+    },
+    "later_stall_not_superseded": true
+  },
+  "original_stall": {
+    "sha": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+    "diagnosis": {
+      "utc": "2026-11-02T00:58:55.354441+00:00",
+      "code_sha": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+      "pid": 2469951,
+      "port": 18913,
+      "ros_domain": 223,
+      "window_id": 46137357,
+      "mode": "windowed",
+      "backend": "physx",
+      "release": "6.0.1.0",
+      "status": "unresolved native synchronous simulation stall; not a confirmed crash",
+      "native_stack": "SimulationManager.step:948 _physics_sim_interface.simulate(dt,simulation_time)",
+      "gdb": "native attach denied, no system settings changed",
+      "graceful_stop": "sim__stop SIGINT; process did not exit within25s",
+      "force_stop": "sim__stop SIGKILL; process absent and GPU memory returned to624MiB",
+      "visual_review": "Actual window screenshot6a8f985e shows pre-step Agilebot pose, floating sample, person_view. Console was not opened/repainted while main thread stalled.",
+      "limitation": "Client disconnect does not establish native cancellation. Single reproduction, cause not established. Source checkpoint authored120Hz but returned native stepsdt1/60; investigating independently.",
+      "files": [
+        {
+          "path": ".work/sessions/d7495536aa56492695ee7bec65a19d0a/sim.log",
+          "size": 146954,
+          "sha256": "722920ad8c07b61d3cc4454899c1bec7e655c7e53128acf6c516b58c43c43592"
+        },
+        {
+          "path": ".work/runs/final601w_20f/kit-native.log",
+          "size": 60698776,
+          "sha256": "3bd97e571b88358a09a41f94613cda13d3da90037eb76528867683a712a6c407"
+        },
+        {
+          "path": ".work/compat-followup/final601w_20f-stall-gdb.txt",
+          "size": 261,
+          "sha256": "734ba920970bc38353a56fc79116cc8fd0cc21c5e1334e0d2b71d501ae53bc32"
+        },
+        {
+          "path": ".work/compat-followup/final601w_20f-stall-signal.json",
+          "size": 248,
+          "sha256": "7f376ca389798ffe9ce0c57f23b984afced8a373a694dce8e5ad1275203bb502"
+        },
+        {
+          "path": ".work/compat-followup/final601w_20f-stall-graceful-stop.json",
+          "size": 570,
+          "sha256": "14457124b201820e0ba0e8f10a4d1b4e2bf70eb3347a39358c3d62c67fcbe38c"
+        },
+        {
+          "path": ".work/runs/final601w_20f/mcp-stop.json",
+          "size": 570,
+          "sha256": "810137e13ee79dc338335b83a894baba02f42106d8ac83404d02e14e384a88ff"
+        }
+      ]
+    },
+    "pending_request": {
+      "recorded_utc": "2026-11-02T00:49:26.817665+00:00",
+      "planned_request_index": 53,
+      "tool": "sim__simulation__step",
+      "arguments": {
+        "session_id": "e7daa566d66a4ff09ed1dc688abf13d2",
+        "stage_id": "f4c2dc8f45b74c909a754225c78ace47",
+        "steps": 108,
+        "observe_prims": [
+          "/World/Agent601Demo/Sample",
+          "/World/UR5e/wrist_3_link",
+          "/World/RG2_Gripper/rg2_base_link"
+        ],
+        "observe_joints": [
+          "/World/Agent601Demo/Agilebot/Asset/root_joint",
+          "/World/UR5e/root_joint"
+        ]
+      },
+      "status": "pending native response; client interrupted to prevent remaining queued requests",
+      "last_completed_call": 52,
+      "request_dispatched_approx_utc": "2026-11-02T00:48:22.506Z",
+      "no_success_or_timeout_response_observed": true,
+      "pid": 2469951
+    },
+    "completed_requests": 52,
+    "ledger_status_counts": {
+      "uncalled": 69,
+      "pass": 27,
+      "partial": 3
+    },
+    "status": "Unresolved native synchronous simulate hang; cleanup is not recovery; no crash/root-cause claim."
+  },
+  "negative_reproduction": {
+    "sha": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+    "pid": 2486947,
+    "port": 18914,
+    "ros_domain": 224,
+    "initial_replay_completed": true,
+    "cycles": 8,
+    "repeat_calls": 76,
+    "each_108_step_delta_s": 1.8,
+    "scope": "Same old root-only checkpoint reopened in new process, then eight measured cycles and recording. No product code fix. Does not establish original stall resolved."
+  },
+  "new_named_task": {
+    "sha": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+    "pid": 2486947,
+    "port": 18914,
+    "ros_domain": 224,
+    "requests": 89,
+    "registered_names": 39,
+    "checks": 14,
+    "ledger_status_counts": {
+      "uncalled": 60,
+      "pass": 38,
+      "partial": 1
+    },
+    "measurements": {
+      "total_exact_steps": 480,
+      "measured_physics_delta_s": 4.0,
+      "dt_s": 0.008333333333333333,
+      "physics_time_before_s": 0.03333333333333333,
+      "physics_time_after_s": 4.033333333333333,
+      "timeline_time_s": 0.016666666666666666,
+      "sample_initial_authored_z": 1.4,
+      "sample_initialized_z": 1.3931869268417358,
+      "sample_midfall_z": 1.307348608970642,
+      "sample_midfall_vz": -1.3080003261566162,
+      "sample_rest_z": 1.0399999618530273,
+      "sample_rest_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "sample_rest_angular_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "sample_expected_rest_z": 1.04,
+      "agilebot_target_error_rad": 4.631042480468528e-05,
+      "ur_target_error_rad": 1.2096762657121118e-06,
+      "agilebot_return_error_rad": 0.0002898810780607164,
+      "ur_return_error_rad": 2.2155818513169834e-08,
+      "joint_position_tolerance_rad": 0.001,
+      "agilebot_target_velocities": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "agilebot_return_velocities": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "wrist_displacement_at_target_m": 0.08552378787635508,
+      "gripper_displacement_at_target_m": 0.08585534365466121,
+      "gripper_wrist_relative_pose_changes": {
+        "46": {
+          "translation_change_m": 9.953434090773534e-05,
+          "rotation_matrix_max_difference": 0.0035642086675779982
+        },
+        "49": {
+          "translation_change_m": 1.935724520512613e-07,
+          "rotation_matrix_max_difference": 1.1606777165830175e-06
+        },
+        "50": {
+          "translation_change_m": 1.0013942046146e-07,
+          "rotation_matrix_max_difference": 1.2693550192700223e-06
+        },
+        "63": {
+          "translation_change_m": 4.0384278396935384e-08,
+          "rotation_matrix_max_difference": 9.594034592050856e-07
+        },
+        "64": {
+          "translation_change_m": 1.2105989702618896e-07,
+          "rotation_matrix_max_difference": 1.2642592601943919e-06
+        }
+      },
+      "sensor_image_measurements": {
+        "33": {
+          "sha256": "4870fca5dd39d480c188f4de3bd2b2c51c161b2ecbcfe9f781046a776d3f43dc",
+          "tool_hash_matches": true,
+          "size": [
+            640,
+            480
+          ],
+          "red_pixels": 1790,
+          "red_centroid_xy": [
+            130.89273743016759,
+            225.9508379888268
+          ],
+          "red_bounds_xy": [
+            110,
+            202,
+            152,
+            248
+          ],
+          "cpu_transfer_completed": true
+        },
+        "48": {
+          "sha256": "bbf2a91b52530d9538ea87f2104240172535d528a39f978e9a0b64ae3d943195",
+          "tool_hash_matches": true,
+          "size": [
+            640,
+            480
+          ],
+          "red_pixels": 1717,
+          "red_centroid_xy": [
+            133.59697146185206,
+            267.26965637740244
+          ],
+          "red_bounds_xy": [
+            113,
+            242,
+            153,
+            289
+          ],
+          "cpu_transfer_completed": true
+        },
+        "52": {
+          "sha256": "a8988fb10a528c8e77bd2746c409a28fb25725cd8d9f1cb66f96e1840815f384",
+          "tool_hash_matches": true,
+          "size": [
+            640,
+            480
+          ],
+          "red_pixels": 1764,
+          "red_centroid_xy": [
+            136.7579365079365,
+            380.31689342403627
+          ],
+          "red_bounds_xy": [
+            118,
+            357,
+            157,
+            404
+          ],
+          "cpu_transfer_completed": true
+        }
+      },
+      "red_centroid_descent_px": 154.36605543520946
+    },
+    "preservation": {
+      "time_utc": "2026-11-02T01:08:45.808243+00:00",
+      "source_asset_count": 44,
+      "changed_assets": [],
+      "frozen_file_count": 261,
+      "changed_frozen_files": [],
+      "explicit_new_stage_authorized": true,
+      "rebuilt_ur5e_and_rg2_preserved_during_additive_work": true,
+      "vention_matrix_unchanged": true
+    },
+    "video": {
+      "file": "<home>/Videos/screen-mcp/screen-20261101-180420-880.mp4",
+      "sha256": "1dc9571e366e2b47e672c3ea6da8c17a5a572d61822e2e7e40dfacd6aacb512a",
+      "bytes": 83079,
+      "frames": 232,
+      "duration_s": 23.2,
+      "fps": 10,
+      "width": 960,
+      "height": 600,
+      "decode_all_frames_completed": true,
+      "reviewed_frames": [
+        0,
+        30,
+        150,
+        231
+      ],
+      "observed": "Selected Sim window, visible Agilebot pose change and red sample descending out of viewport. Full sensor view independently shows sample at rest. UR motion is measured and photographed separately, not shown in this recording.",
+      "stop_tool_request": 55
+    },
+    "access_release": {
+      "time_utc": "2026-11-02T01:09:20.774419+00:00",
+      "pid": 2486947,
+      "port": 18914,
+      "window_id": 46137357,
+      "client_exit_requested": true,
+      "recording_stopped_by_tool55": true,
+      "ros_fixtures_started": false,
+      "kit_not_stopped_by_agent": true,
+      "exclusive_access_released": true,
+      "last_verified_timeline": "paused",
+      "physics_time_s": 4.033333333333333,
+      "timeline_time_s": 0.016666666666666666,
+      "session_id": "8941b2f0eca148d6a95fdd8e56239b6a",
+      "stage_id": "9663e742b48b47bf9df868419db5ca69",
+      "client_exited_normally": true
+    },
+    "process_history": "Different process from stalled PID; root replay and8repeat controls preceded the agent in this process. Agent explicitly new_stage then named quick_start_with_workstation. Not a pristine process launch at task start.",
+    "derived_ledger_correction": "Original fresh-task ledger contains copied old PID/port and overbroad joint observation wording; separate audited v2 correction accompanies publication. Real call records identify2486947/18914.",
+    "reopen": "New composed save not yet reopened in fresh process; not a native solver checkpoint."
+  },
+  "checkpoint_candidate": {
+    "runtime_sha": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+    "helper_sha256": "2f55200a6418434144991c1d6fc9254981b31d59c24538c44534d8e66021f0a7",
+    "calls": 10,
+    "before": {
+      "scenes": [
+        {
+          "path": "/physicsScene",
+          "type": "PhysicsScene",
+          "gpu_dynamics": false,
+          "broadphase": "MBP",
+          "steps_per_second": 120
+        }
+      ],
+      "initialized": false,
+      "runtime_dt": null
+    },
+    "after": {
+      "scenes": [
+        {
+          "path": "/physicsScene",
+          "type": "PhysicsScene",
+          "gpu_dynamics": false,
+          "broadphase": "MBP",
+          "steps_per_second": 120
+        }
+      ],
+      "initialized": true,
+      "runtime_dt": 0.008333333333333333
+    },
+    "delta_s": 0.09999999999999999,
+    "scope": "20f runtime plus exact helper bytes, not integrated6bc qualification."
+  },
+  "integrated6bc": {
+    "sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+    "pid": 2504734,
+    "port": 18915,
+    "ros_domain": 225,
+    "discovery": {
+      "sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+      "session": {
+        "id": "11fe64b147254aadbb3ed2681c10b688",
+        "pid": 2504734,
+        "port": 18915,
+        "ros_domain": 225,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793582569.6623125,
+        "log": "<worktree>/.work/sessions/11fe64b147254aadbb3ed2681c10b688/sim.log",
+        "output_dir": "<worktree>/.work/sessions/11fe64b147254aadbb3ed2681c10b688/output",
+        "user_config": "<worktree>/.work/sessions/11fe64b147254aadbb3ed2681c10b688/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15150,
+          "ram_available_mib": 51635
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "calls": 4,
+      "native_advertisements": [
+        {
+          "pid": 2504734,
+          "port": 18915,
+          "host": "127.0.0.1",
+          "started": 1793582575.3039422,
+          "app": "Isaac-Sim Python",
+          "app_version": "6.0.1",
+          "headless": false
+        }
+      ],
+      "host_advertisements": [
+        {
+          "pid": 2504734,
+          "port": 18915,
+          "host": "127.0.0.1",
+          "started": 1793582575.3039422,
+          "app": "Isaac-Sim Python",
+          "app_version": "6.0.1",
+          "headless": false
+        }
+      ],
+      "diagnostic": "tool-failures-2504734.log",
+      "diagnostic_sha256_before": "8b2b6ebad282694c515da8a8fae878fddf641394d24c34f0cf6d847a1584df7f",
+      "diagnostic_sha256_after": "8b2b6ebad282694c515da8a8fae878fddf641394d24c34f0cf6d847a1584df7f",
+      "diagnostic_line_count": 1,
+      "expected_failure": true,
+      "checks": {
+        "native_only_endpoints": true,
+        "host_only_endpoints": true,
+        "own_endpoint_present_both": true,
+        "diagnostic_preserved": true
+      }
+    },
+    "legacy": [
+      {
+        "label": "existing-physics",
+        "command": [
+          "<worktree>/.work/host/bin/python",
+          "<worktree>/.work/compat-followup/existing_physics_scene.py",
+          "18915",
+          "<worktree>/.work/compat-followup/check601w_6bc-existing-physics.json"
+        ],
+        "returncode": 0,
+        "seconds": 5.475628614425659,
+        "native_start": 6566082,
+        "native_end": 7131606,
+        "native_sha256": "fb8cfb04e750f0e233bb97c867fc5ac13008fb6ad4596dd6103f7aaebeb70119",
+        "counts": {
+          "[Error]": 0,
+          "Cannot enter into task": 0,
+          "Task was destroyed": 0,
+          "Force callback": 0,
+          "GetCamera": 0,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0,
+          "Edit target changed": 0
+        }
+      },
+      {
+        "label": "legacy-async",
+        "command": [
+          "bash",
+          "<worktree>/.work/integration/6bc45c2977270de748b58c630c21cd03f0d74fb6/scripts/verify_ur5e_dt.sh"
+        ],
+        "returncode": 0,
+        "seconds": 26.97825050354004,
+        "native_start": 7131958,
+        "native_end": 8838131,
+        "native_sha256": "35486ec6ff5b2c9b7625c5335c3052d78c2453db57f45e55747fb7ec24a376b2",
+        "counts": {
+          "[Error]": 0,
+          "Cannot enter into task": 0,
+          "Task was destroyed": 0,
+          "Force callback": 0,
+          "GetCamera": 0,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0,
+          "Edit target changed": 0
+        }
+      }
+    ],
+    "checkpoint_calls": 10,
+    "before": {
+      "scenes": [
+        {
+          "path": "/physicsScene",
+          "type": "PhysicsScene",
+          "gpu_dynamics": false,
+          "broadphase": "MBP",
+          "steps_per_second": 120
+        }
+      ],
+      "initialized": false,
+      "runtime_dt": null
+    },
+    "after": {
+      "scenes": [
+        {
+          "path": "/physicsScene",
+          "type": "PhysicsScene",
+          "gpu_dynamics": false,
+          "broadphase": "MBP",
+          "steps_per_second": 120
+        }
+      ],
+      "initialized": true,
+      "runtime_dt": 0.008333333333333333
+    },
+    "delta_s": 0.09999999999999999,
+    "preservation": {
+      "layers": 15,
+      "disk_files": 14,
+      "hashes_edit_target_stage_equal": true,
+      "existing_destination": "FileExistsError",
+      "output_sha256": "adc9d2f1936de114f5200e6bbbb0f706da39ac4116473c8eb4d49ef70c893fd6"
+    },
+    "review": {
+      "utc": "2026-11-02T01:28:10.057872+00:00",
+      "sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+      "pid": 2504734,
+      "window_id": 46137357,
+      "mode": "windowed",
+      "console": {
+        "warnings": 23,
+        "errors": 23,
+        "reviewed": "Actual Console tab and Warning text filter viewed. Errors correspond to intentional discovery ValueError plus harness missing output directory FileNotFoundError; not suppressed/cleared.",
+        "warnings_observed": [
+          "RobotMotionSchema generated schema path unresolved at startup",
+          "triangle mesh large triangles",
+          "invalid empty SdfPath",
+          "disjoint gripper joint transforms during setup",
+          "repeated World initialization; constructor parameters ignored",
+          "startup closed-client BrokenPipe and EBADF responses"
+        ],
+        "limitations": "No assertion every warning is harmless. Selected arm/gripper connected visually after measured motion; fresh native schema warning not evaluated for MotionPlanning tools beyond this exposed surface."
+      },
+      "native": {
+        "bytes": 18307818,
+        "sha256": "b3b919872b53938b54efc84600d2205a2432a87752995b44cb5881c7bfabf053",
+        "counts": {
+          "[Error]": 4,
+          "[Warning]": 20,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0,
+          "Edit target changed": 0
+        }
+      },
+      "screenshots": [
+        {
+          "file": "<worktree>/.work/compat-followup/check601w_6bc-console/screen-025.png",
+          "sha256": "986cafda572c426d4373bc04b9b7c8a85bbbb603ddaf9e61c5dc40229a180442",
+          "size": 249908,
+          "retained": false
+        },
+        {
+          "file": "<home>/Pictures/screen-mcp/screen-20261101-182728-178.png",
+          "sha256": "986cafda572c426d4373bc04b9b7c8a85bbbb603ddaf9e61c5dc40229a180442",
+          "size": 249908,
+          "retained": false
+        },
+        {
+          "file": "<worktree>/.work/compat-followup/check601w_6bc-console/screen-010.png",
+          "sha256": "bafa849cefe7ac480d8577febc24b7ec959db2965294d9aba004e7a803eb975a",
+          "size": 210766,
+          "retained": false
+        },
+        {
+          "file": "<home>/Pictures/screen-mcp/screen-20261101-182602-419.png",
+          "sha256": "bafa849cefe7ac480d8577febc24b7ec959db2965294d9aba004e7a803eb975a",
+          "size": 210766,
+          "retained": false
+        },
+        {
+          "file": "<worktree>/.work/compat-followup/check601w_6bc-console/screen-014.png",
+          "sha256": "55e3a205f950d1c3929aa78b281337c5926a2bc13b87027ee010699baa099eca",
+          "size": 250138,
+          "retained": false
+        },
+        {
+          "file": "<home>/Pictures/screen-mcp/screen-20261101-182628-504.png",
+          "sha256": "55e3a205f950d1c3929aa78b281337c5926a2bc13b87027ee010699baa099eca",
+          "size": 250138,
+          "retained": false
+        },
+        {
+          "file": "<worktree>/.work/compat-followup/check601w_6bc-console/screen-019.png",
+          "sha256": "490887ee6584bfcd3724cc1ee8723594e6ba4b3c673527a5b78b82e457fb6f96",
+          "size": 248361,
+          "retained": false
+        },
+        {
+          "file": "<home>/Pictures/screen-mcp/screen-20261101-182701-733.png",
+          "sha256": "490887ee6584bfcd3724cc1ee8723594e6ba4b3c673527a5b78b82e457fb6f96",
+          "size": 248361,
+          "retained": false
+        },
+        {
+          "file": "<worktree>/.work/compat-followup/check601w_6bc-console/screen-003.png",
+          "sha256": "f1abfd11d42865cf73a3728e9cc5867e5fbad8e68d4322fff356d1e8094f8ab9",
+          "size": 210885,
+          "retained": false
+        },
+        {
+          "file": "<home>/Pictures/screen-mcp/screen-20261101-182521-184.png",
+          "sha256": "f1abfd11d42865cf73a3728e9cc5867e5fbad8e68d4322fff356d1e8094f8ab9",
+          "size": 210885,
+          "retained": false
+        }
+      ],
+      "cleanup": {
+        "owned_pid_exited": true,
+        "temporary_console_captures_deleted": true
+      },
+      "scope": "Narrow checkpoint/discovery qualification plus full legacy verifier, not broad all-tool matrix; original 20f stall unresolved."
+    },
+    "harness_failures_retained": [
+      "Initial preservation attempt missing test output parent: FileNotFoundError; fixed setup only.",
+      "Initial Console click omitted required dimensions: MCP schema refusal; no event sent."
+    ],
+    "scope": "Fresh narrow integrated product qualification plus legacy verifier, not broad all-tool final-head qualification."
+  },
+  "source_records": {
+    "broad_phases": {
+      "path": "<worktree>/.work/compat-followup/final601w_20f-run-progress.json",
+      "sha256": "0a002bf7d6a4b658130e41d8abdfb796f00804277858a2fac11cb81880a6e20e",
+      "bytes": 30380
+    },
+    "broad_tools": {
+      "path": "<worktree>/.work/compat-followup/final601w_20f-fullsurface/summary.json",
+      "sha256": "0a46d446cef7f860f82a547cfeee5a072a6e39e23518ba2c482b87f074ee27dd",
+      "bytes": 2594
+    },
+    "broad_visual_native_review": {
+      "path": "<worktree>/.work/compat-followup/final601w_20f-native-review.json",
+      "sha256": "eea8e72afe82c39e1d0aae6f1e94f36d120787832885f295c88fca517961422f",
+      "bytes": 2496
+    },
+    "legacy": {
+      "path": "<worktree>/.work/compat-followup/final601w_20f-regression-summary.json",
+      "sha256": "2350b125ca910791ba670cd66b25889d6b558e05ee883d555bf97fd204b6155c",
+      "bytes": 2720
+    },
+    "independent_usd_effects": {
+      "path": "<worktree>/.work/compat-followup/final601w_20f-effect-links/summary.json",
+      "sha256": "996bbaf96da80fa6e9737c3c788a8aa804e520faedee86790591056275abe781",
+      "bytes": 19992
+    },
+    "urdf_runtime": {
+      "path": "<worktree>/.work/compat-followup/final601w_20f-urdf-runtime/summary.json",
+      "sha256": "5cccf4e67ed2479608c2e11b998f7c7624d5b094cc642351c3b418c9abbed138",
+      "bytes": 9725
+    },
+    "original_stall": {
+      "path": "<worktree>/.work/compat-followup/final601w_20f-stall-diagnostic.json",
+      "sha256": "c701d328f512a49b4ae844df2fc1326d423ec6cfb4db99463f8cac8bcffdc39b",
+      "bytes": 2164
+    },
+    "pending_request": {
+      "path": "<worktree>/.work/compat-followup/agent-final601w-20f/publication/pending-step53.json",
+      "sha256": "d1ea63ed2a7ca75c3648881d3f618e280c007fda990f6dae2e61f44247c3f086",
+      "bytes": 782
+    },
+    "stalled_task_ledger": {
+      "path": "<worktree>/.work/compat-followup/agent-final601w-20f/publication/all99-tool-ledger.json",
+      "sha256": "77e87d703408aca560f3e6b894ee2b336879094ed95157128ce9bf1750d20819",
+      "bytes": 34718
+    },
+    "eight_repeat_cycles": {
+      "path": "<worktree>/.work/compat-followup/repro601w_20f-repeat/summary.json",
+      "sha256": "8c63b0787fbee3f9e84aa6244a46c25f3371c58702438fdf92d3f3a472b8a423",
+      "bytes": 14564
+    },
+    "new_task_measurements": {
+      "path": "<worktree>/.work/compat-followup/agent601w-fresh20f/publication/measurements.json",
+      "sha256": "be822cab0bd840dcb980a7b6ce0528307c9bd554f6e00944c99f001f4218125b",
+      "bytes": 3225
+    },
+    "new_task_preservation": {
+      "path": "<worktree>/.work/compat-followup/agent601w-fresh20f/publication/preservation.json",
+      "sha256": "ee362c3f2c4e8ca96dac38002eb93e8217d944f00a9c9fd37744bcccd0a8bd17",
+      "bytes": 302
+    },
+    "new_task_checks": {
+      "path": "<worktree>/.work/compat-followup/agent601w-fresh20f/publication/checks.json",
+      "sha256": "518bee2bf7f7fe1446a58e3978abcfdf00e86ccaf78eaa70383d26287d91267b",
+      "bytes": 7392
+    },
+    "new_task_original_ledger": {
+      "path": "<worktree>/.work/compat-followup/agent601w-fresh20f/publication/all99-tool-ledger.json",
+      "sha256": "f873f7a1df84025acd5207d44a015a5e2dce13a970ec93366e7d2a70c3e45666",
+      "bytes": 37605
+    },
+    "new_task_release": {
+      "path": "<worktree>/.work/compat-followup/agent601w-fresh20f/publication/access-release.json",
+      "sha256": "253561b8a67cd9e64b8cfc328b0db829e667f55fb33f2dcce1cb0d2a91631fae",
+      "bytes": 546
+    },
+    "new_task_video": {
+      "path": "<worktree>/.work/compat-followup/agent601w-fresh20f/publication/video-review.json",
+      "sha256": "265010a5f32227607325c698ba0d73a3cf3dfeb649f907268aa5af45bf294fe8",
+      "bytes": 623
+    },
+    "new_task_root_visual_review": {
+      "path": "<worktree>/.work/compat-followup/agent601w-fresh20f/root-visual-review-20261102.json",
+      "sha256": "8a552ca35045df06b60cfa83d08217afd109b7964d55c45866fd85ead70c9b76",
+      "bytes": 1979
+    },
+    "candidate_helper_reopen": {
+      "path": "<worktree>/.work/compat-followup/repro601w_20f-checkpoint-reopen-retry/summary.json",
+      "sha256": "9769d9650f75e19c863af478f2254fab7d417c291b5f847b5be1ec68c1d632fc",
+      "bytes": 3677
+    },
+    "integrated_discovery": {
+      "path": "<worktree>/.work/compat-followup/check601w_6bc-discovery/summary.json",
+      "sha256": "e995e40ee2136f0d9c2bf7c8b533cc8b8f94c23d5086e1d716b27df94ca24286",
+      "bytes": 1939
+    },
+    "integrated_checkpoint": {
+      "path": "<worktree>/.work/compat-followup/check601w_6bc-checkpoint-reopen/summary.json",
+      "sha256": "e77daac69c390ecd6254a48272b37bc5b550a06f9796ad6deb8ed9171056a8cd",
+      "bytes": 3748
+    },
+    "integrated_legacy": {
+      "path": "<worktree>/.work/compat-followup/check601w_6bc-regression-summary.json",
+      "sha256": "333900a6d4913612d2a940faf28cc44eaf8f5f411be3e17ec72e6eccb10e919b",
+      "bytes": 2716
+    },
+    "integrated_console_native_cleanup": {
+      "path": "<worktree>/.work/compat-followup/check601w_6bc-console/review.json",
+      "sha256": "d971a5b8e77f574dc682772cedce211a8cc33410c2ea841e22cbb07adac8fc7b",
+      "bytes": 4203
+    },
+    "integrated_preservation": {
+      "path": "<worktree>/.work/compat-followup/check601w_6bc-preservation-retry/call-003.json",
+      "sha256": "bcb727fb94e6f1ebf4f540a24014b715de5f6e00cafd4c7a10ee162919c5c02f",
+      "bytes": 36810
+    },
+    "shutdown_final601w_20f": {
+      "path": "<worktree>/.work/runs/final601w_20f/mcp-stop.json",
+      "sha256": "810137e13ee79dc338335b83a894baba02f42106d8ac83404d02e14e384a88ff",
+      "bytes": 570
+    },
+    "shutdown_repro601w_20f": {
+      "path": "<worktree>/.work/runs/repro601w_20f/mcp-stop.json",
+      "sha256": "b280598b6a7f3b0fa124b3bc269dfb581ca5024c8d18d539577376a844990f3b",
+      "bytes": 570
+    },
+    "shutdown_check601w_6bc": {
+      "path": "<worktree>/.work/runs/check601w_6bc/mcp-stop.json",
+      "sha256": "8a0f55d13ffe200e4c6e36575363e892c620f2af2568c91d37c5be7821299ba0",
+      "bytes": 570
+    }
+  }
+}
