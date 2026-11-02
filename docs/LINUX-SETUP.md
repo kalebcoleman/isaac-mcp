@@ -161,6 +161,92 @@ The [compatibility record](COMPATIBILITY.md) is authoritative for measured scope
 viewport and URDF follow-ups have superseded some early pending checks, while the original
 6.0.1 windowed native-step stall and remaining matrix gates remain open.
 
+## Prepare the UR5e and sensor assets
+
+The host connection and `sim__stage__info` do not require a robot or workstation. A UR5e
+Quick Start does need the NVIDIA robot USD and its dependencies. The NVIDIA UR5e and
+RealSense D455 files are **not bundled** in this repository; redistributable gripper and
+object assets remain bundled with their notices. `install.sh` installs packages, not these
+cached models. Downloading models does not replace the MCP server or require downloading
+again on every launch.
+
+From the checkout root, before starting the UR workflow, prepare the operator cache:
+
+```bash
+python3 scripts/fetch_ur5e_assets.py
+python3 scripts/fetch_ur5e_assets.py --check
+```
+
+The first command downloads missing/mismatched manifest files from the configured NVIDIA
+asset root and skips already valid files. The second reads the cache only: exit 0 means all
+manifest fetch entries match size/SHA-256; exit 1 reports missing or mismatched entries.
+It checks neither the manual Vention bench nor native rendering/physics readiness.
+Do not repair or replace a cache while another simulator or user is relying on its files.
+
+The assets remain subject to NVIDIA's applicable terms; see [asset notices](provenance/ASSETS.md)
+and [vendoring](VENDORING.md). The fetcher has **no `--accept-eula` flag or interactive EULA
+acceptance step**. The installer's `--accept-eula` controls simulator setup; it is not an
+asset-redistribution license. Obtain the necessary permission before downloading or copying.
+
+### Cache location and supported options
+
+The default is `$XDG_CACHE_HOME/ur5e-dt/assets` when `XDG_CACHE_HOME` is set, otherwise
+`~/.cache/ur5e-dt/assets`. `UR5E_DT_ASSET_CACHE` overrides it. Use the same cache in the
+fetcher's environment and the selected **Kit process**; setting it only in the MCP client
+cannot change an already-running Kit process's environment.
+
+```bash
+# Choose your own writable cache, outside Git; prepare it before launching a new session.
+export UR5E_DT_ASSET_CACHE=/absolute/path/to/ur5e-assets
+python3 scripts/fetch_ur5e_assets.py --check
+# If preparation is needed and authorized, fetch into this same cache:
+python3 scripts/fetch_ur5e_assets.py
+python3 scripts/fetch_ur5e_assets.py --check
+# After a successful check, launch the intended new session using local assets only:
+UR5E_DT_OFFLINE=1 ./run.sh --port 8766
+```
+
+The initial check may return 1 on a new cache; that is a missing-asset result, not success.
+All options can be inspected without fetching: `python3 scripts/fetch_ur5e_assets.py --help`.
+
+| Option | Scope |
+|---|---|
+| `--cache-dir PATH` | Overrides the destination for this invocation only; select the same directory through `UR5E_DT_ASSET_CACHE` when launching Kit |
+| `--asset-root URL_OR_DIRECTORY` | Overrides the source for this invocation; an existing local mirror must have the manifest's source-relative layout. `UR5E_DT_ASSET_ROOT` is the environment equivalent |
+| `--check` | Verifies existing cache bytes only; no download or repair |
+| `--force` | Re-fetches/copies even matching files; intentional replacement, not a normal startup requirement |
+
+The [manifest](../exts/ur5e-dt/assets-manifest.json) pins the **Isaac asset-library 5.1**
+paths and byte hashes. That asset generation is separate from the selected **Sim 6.2**
+package version; do not substitute an arbitrary asset-library version. The sensor cache
+preserves its source-relative MDL/texture layout. Keep the whole fetched group intact,
+rather than moving only `rsd455.usd` into a different folder.
+
+### Local reuse, remote fallback and failures
+
+Resolution prefers a local file under `exts/ur5e-dt/assets`, then the operator cache, then
+an allowed configured NVIDIA URL for supported robot/sensor entries. Operator drop-ins
+under the repository asset directory are not manifest-verified; keep private files out of Git.
+Cached manifest entries **and their fetch-group dependencies** are verified before use.
+Valid local files are reused. Missing/corrupt group members refuse instead of silently
+bypassing verification with a network URL.
+
+If no local top-level asset exists and offline mode is disabled, the resolver can give Kit
+the configured remote URI. This is not the same as populating and verifying the operator
+cache; it requires network access and does not prove the remote load succeeded. Prefer
+explicit prefetch plus `--check` when preparing an offline or repeatable run.
+
+`UR5E_DT_OFFLINE=1` disables this twin resolver's remote fallback. With the robot absent,
+Quick Start returns **`Asset not available offline: robot/ur5e.usd`** and preparation guidance.
+That is a real failed operation; it must not be counted as a loaded robot. Offline mode does
+not firewall Kit, arbitrary USD references or other extensions, and it does not prevent an
+explicit fetcher invocation from downloading. For a fully offline preparation, use a local mirror.
+
+The **Vention bench is separate**: no public download is configured. Supply an approved
+licensed workstation project through [workstation preparation](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation),
+or use the twin's placeholder bench when the manual asset is absent. A placeholder does not
+replace the mandatory UR robot asset. Basic connection and generic scene work require neither.
+
 ## Troubleshooting the first connection
 
 | Symptom | Check and next step |
@@ -172,6 +258,7 @@ viewport and URDF follow-ups have superseded some early pending checks, while th
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
+| `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
 | `SAVE_UNSUPPORTED` | Inspect returned properties/retry guidance; pause and follow the explicit normalization contract in [scene tools](TOOLS-SCENE.md) |
 | `TIMELINE_BUSY` or a call stops responding | Preserve logs and identity; do not repeatedly replay Play or assume a client timeout cancels native work. See the known stall in [compatibility](COMPATIBILITY.md) |
 | No display / screenshot fails | Use the actual X11/XWayland display for window tools, or headless sensor capture; neither creates a desktop session |

@@ -9,6 +9,28 @@ For installation identities, lock-preserving commands and evidence-reporting fie
 [setup check](LINUX-SETUP.md#connect-and-check-without-changing-the-scene). The suites below have
 different scopes; native verifiers can build scenes and move joints.
 
+## Interpreting deliberate asset failures
+
+Native regression harnesses may temporarily hide a robot asset with offline mode enabled,
+then supply a corrupt cached file, to verify explicit missing/corrupt-asset refusals. Those
+calls intentionally fail and can leave Error entries in the Console. A passing **test** means
+its expected refusal was observed; it does not mean the failed Quick Start loaded a robot.
+The separate recovery check must restore the original bytes, verify their hash and demonstrate
+successful named-tool loading. Retain the failed calls and recovery records together.
+
+For example, the retained `current6000w_c2ceb-asset-failures` summary at exact
+`c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`, Sim **6.0.0.0 windowed PhysX**, records
+14 calls and four checks: missing optional bench/placeholder, missing offline robot refusal,
+corrupt robot refusal, and restored-cache recovery. The restored robot SHA-256 is
+`d7a290e94f3de151fdf660007f6a53448cbda8cf558d83fd04a91c00eda5bbc7`, matching the manifest.
+This disposable-scene test is not proof that Quick Start transactionally preserves an arbitrary
+existing stage, and it does not complete the version/mode matrix.
+
+Outside an identified negative test, an offline-missing or corrupt-asset error is an actual
+setup/operation failure. Inspect the selected cache and follow [asset preparation](LINUX-SETUP.md#prepare-the-ur5e-and-sensor-assets);
+do not label an unexplained error expected merely because similar tests exist. Keep cumulative
+Console counts distinct from scoped native-log intervals and do not suppress unrelated errors.
+
 ## Host checks
 
 From the repo root, run:
