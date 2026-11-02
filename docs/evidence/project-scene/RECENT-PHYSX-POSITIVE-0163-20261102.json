@@ -1,0 +1,2517 @@
+{
+  "schema_version": 1,
+  "prepared_at": "2026-11-02T15:14:54.915517+00:00",
+  "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+  "tree": "ed22076e3816591c7027584455576e9b73661a55",
+  "scope": "Scoped current positive PhysX body/joint/step qualification, all five installed package builds in headless and windowed modes. Supplement to the immutable99-tool census, not a replay of the whole surface.",
+  "release_target": "User direction2026-11-02: PhysX only. Newton evidence remains experimental; no additional Newton investigation/qualification is part of this work.",
+  "machine": {
+    "recorded_at": "2026-11-02T15:00:01.990234+00:00",
+    "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+    "os_release": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n",
+    "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+    "host_python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "host_mcp": "1.30.0",
+    "gpu": "NVIDIA GeForce RTX 5080, 580.178.04, 16303 MiB, 2676 MiB, 13157 MiB",
+    "launch_scope": "Prepared older Python environments and locked cached6.2 environment, not a clean installer test. Product source frozen, managed launcher adds diagnostic faulthandler and disables crash-dump upload; exact per-run launcher/source hashes and boot args retained.",
+    "commands": "launch_twin_no_upload.py; physics_positive_qualification_v2.py; physics_positive_window_phase.py; manage.py stop; final_twin_log_review.py",
+    "harness": {
+      ".work/compat-followup/physics_positive_qualification.py": "19c2f5e789d01951673b16deb5a6e27dedf2e8629b1bb4fd90148f48256a1ad9",
+      ".work/compat-followup/physics_positive_qualification_v2.py": "dda642c7dcbc629eb8f587add6717b98c42802efdc13f2b03a504b0e114558b9",
+      ".work/compat-followup/physics_positive_headless_matrix.py": "bfbd00646bc490e8dfd651778b6987d78f1616726032bb0a8d564442f6ae6138",
+      ".work/compat-followup/physics_positive_headless_matrix_v2.py": "bc3e75ecaddf962c7748e68a31e9f6a69e96e3bdf0a73875b1ca0196ed651dbe",
+      ".work/compat-followup/physics_positive_window_phase.py": "b3343be33c215f241ce97035cb4f270707889e6f0de2b301a74d833e90901ba7",
+      ".work/compat-followup/record_physics_visual_review.py": "ed2b585692096fb7aeff1f6c033ef629d871df4e8b5a1bfbee216b58a741d359",
+      ".work/compat-followup/launch_twin_no_upload.py": "322d5f59f5f56e07ddfc31658b799f19ea5118f784cdde1759faaf1d8f487e98",
+      ".work/compat-followup/manage.py": "22c78c2021fabb60280d41dda08e1b0392f6ea4a338cbf48273cb3f0301c8409",
+      ".work/compat-followup/desktop_console.py": "4bb914d4b9be57e4b1d0c9e5843e7027f8d35637046e7171c09031b4f33724e1",
+      ".work/compat-followup/final_twin_log_review.py": "f5c9ea287fabcc02e6007aa59b7b0c7779dcb7d04f9e4e50dcc07f377f267f81"
+    }
+  },
+  "python_metadata": {
+    "recorded_at": "2026-11-02T15:14:53.860046+00:00",
+    "scope": "Post-run metadata-only queries of exact launched interpreter paths; no Sim import/Kit/GPU or environment changes. Initial probe incorrectly required an MCP distribution in Kit interpreter; fixed reader reports absent distributions as null. MCP server runs in separately recorded host environment.",
+    "records": [
+      {
+        "version_key": "6000",
+        "command": [
+          "<sim-install-6000>/bin/python",
+          "-I",
+          "-c",
+          "import sys,json,importlib.metadata as m\np={}\nfor n in [\"isaacsim\",\"numpy\",\"mcp\"]:\n try:p[n]=m.version(n)\n except m.PackageNotFoundError:p[n]=None\nprint(json.dumps(dict(executable=sys.executable,python=sys.version,packages=p)))"
+        ],
+        "returncode": 0,
+        "stdout": {
+          "executable": "<sim-install-6000>/bin/python",
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "packages": {
+            "isaacsim": "6.0.0.0",
+            "numpy": "2.3.1",
+            "mcp": null
+          }
+        },
+        "stderr": ""
+      },
+      {
+        "version_key": "6001",
+        "command": [
+          "<sim-install-6001>/bin/python",
+          "-I",
+          "-c",
+          "import sys,json,importlib.metadata as m\np={}\nfor n in [\"isaacsim\",\"numpy\",\"mcp\"]:\n try:p[n]=m.version(n)\n except m.PackageNotFoundError:p[n]=None\nprint(json.dumps(dict(executable=sys.executable,python=sys.version,packages=p)))"
+        ],
+        "returncode": 0,
+        "stdout": {
+          "executable": "<sim-install-6001>/bin/python",
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "packages": {
+            "isaacsim": "6.0.0.1",
+            "numpy": "2.3.1",
+            "mcp": null
+          }
+        },
+        "stderr": ""
+      },
+      {
+        "version_key": "601",
+        "command": [
+          "<sim-install-601>/bin/python",
+          "-I",
+          "-c",
+          "import sys,json,importlib.metadata as m\np={}\nfor n in [\"isaacsim\",\"numpy\",\"mcp\"]:\n try:p[n]=m.version(n)\n except m.PackageNotFoundError:p[n]=None\nprint(json.dumps(dict(executable=sys.executable,python=sys.version,packages=p)))"
+        ],
+        "returncode": 0,
+        "stdout": {
+          "executable": "<sim-install-601>/bin/python",
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "packages": {
+            "isaacsim": "6.0.1.0",
+            "numpy": "2.3.1",
+            "mcp": null
+          }
+        },
+        "stderr": ""
+      },
+      {
+        "version_key": "61",
+        "command": [
+          "<sim-install-61>/bin/python",
+          "-I",
+          "-c",
+          "import sys,json,importlib.metadata as m\np={}\nfor n in [\"isaacsim\",\"numpy\",\"mcp\"]:\n try:p[n]=m.version(n)\n except m.PackageNotFoundError:p[n]=None\nprint(json.dumps(dict(executable=sys.executable,python=sys.version,packages=p)))"
+        ],
+        "returncode": 0,
+        "stdout": {
+          "executable": "<sim-install-61>/bin/python",
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "packages": {
+            "isaacsim": "6.1.0.0",
+            "numpy": "2.3.1",
+            "mcp": null
+          }
+        },
+        "stderr": ""
+      },
+      {
+        "version_key": "62",
+        "command": [
+          "<worktree>/.work/clean-setup62-2fdf/.venv/bin/python",
+          "-I",
+          "-c",
+          "import sys,json,importlib.metadata as m\np={}\nfor n in [\"isaacsim\",\"numpy\",\"mcp\"]:\n try:p[n]=m.version(n)\n except m.PackageNotFoundError:p[n]=None\nprint(json.dumps(dict(executable=sys.executable,python=sys.version,packages=p)))"
+        ],
+        "returncode": 0,
+        "stdout": {
+          "executable": "<worktree>/.work/clean-setup62-2fdf/.venv/bin/python",
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "packages": {
+            "isaacsim": "6.2.0.0",
+            "numpy": "2.3.1",
+            "mcp": "1.12.4"
+          }
+        },
+        "stderr": ""
+      }
+    ]
+  },
+  "cases": [
+    {
+      "tag": "physics6000h_0163b3f_r2",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "headless",
+      "session": {
+        "id": "f8e37d588bd847199fd5b66034ee6331",
+        "pid": 2979115,
+        "port": 18990,
+        "ros_domain": 180,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793631153.1107879,
+        "log": "<worktree>/.work/sessions/f8e37d588bd847199fd5b66034ee6331/sim.log",
+        "output_dir": "<worktree>/.work/sessions/f8e37d588bd847199fd5b66034ee6331/output",
+        "user_config": "<worktree>/.work/sessions/f8e37d588bd847199fd5b66034ee6331/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15135,
+          "ram_available_mib": 52180
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.0.0",
+        "build": "6.0.0-rc.22+release.33481.407f3ea1.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.0",
+          "isaacsim-kernel": "6.0.0.0",
+          "isaacsim-core": "6.0.0.0",
+          "isaacsim-sensor": "6.0.0.0",
+          "isaacsim-replicator": "6.0.0.0"
+        },
+        "version_files": {
+          "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.22+release.33481.407f3ea1.gl"
+        },
+        "kit_build": "110.0.0+feature.276876.4a5123f4.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.4",
+            "version": "1.13.4",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.14.1",
+            "version": "15.14.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "enabled": false
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.0.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.5.0.2",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.12.0",
+          "module": "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.12.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 44,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333767950535,
+        0.10000000521540642,
+        0.5000000260770321,
+        1.0000000521540642,
+        1.0000000521540642,
+        0.10000000521540642
+      ],
+      "body_z_before": 2.9754750728607178,
+      "body_z_after13_steps": 2.8426313400268555,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2979115,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T14:52:51.523050+00:00",
+        "log": ".work/runs/physics6000h_0163b3f_r2/kit-native.log",
+        "bytes": 1387330,
+        "sha256": "71aa5480a2bd56c6273783f71f3d46e9ef08040ec79ee68b4cd75da8370ed43d",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 8,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "physics6000w_0163b3f",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "windowed",
+      "session": {
+        "id": "08a1c6b8fe4943f6a3f6c424563d35b4",
+        "pid": 2986970,
+        "port": 19024,
+        "ros_domain": 185,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793631734.4853253,
+        "log": "<worktree>/.work/sessions/08a1c6b8fe4943f6a3f6c424563d35b4/sim.log",
+        "output_dir": "<worktree>/.work/sessions/08a1c6b8fe4943f6a3f6c424563d35b4/output",
+        "user_config": "<worktree>/.work/sessions/08a1c6b8fe4943f6a3f6c424563d35b4/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15111,
+          "ram_available_mib": 52059
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.0.0",
+        "build": "6.0.0-rc.22+release.33481.407f3ea1.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.0",
+          "isaacsim-kernel": "6.0.0.0",
+          "isaacsim-core": "6.0.0.0",
+          "isaacsim-sensor": "6.0.0.0",
+          "isaacsim-replicator": "6.0.0.0"
+        },
+        "version_files": {
+          "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.22+release.33481.407f3ea1.gl"
+        },
+        "kit_build": "110.0.0+feature.276876.4a5123f4.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.4",
+            "version": "1.13.4",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.14.1",
+            "version": "15.14.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "enabled": false
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.0.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.5.0.2",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.12.0",
+          "module": "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.12.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 45,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333767950535,
+        0.10000000521540642,
+        0.5000000260770321,
+        1.0000000521540642,
+        1.0000000521540642,
+        0.10000000521540642
+      ],
+      "body_z_before": 2.9754750728607178,
+      "body_z_after13_steps": 2.8426313400268555,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2986970,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T15:04:37.072676+00:00",
+        "log": ".work/runs/physics6000w_0163b3f/kit-native.log",
+        "bytes": 1391095,
+        "sha256": "5e23d52fb09ae191bde4b5b29a78f229b212443689a6a37a42c351996dfb443a",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 11,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "reviewed_at": "2026-11-02T15:04:36.036998+00:00",
+        "pid": 2986970,
+        "window_id": 41943051,
+        "client_dimensions": [
+          1440,
+          900
+        ],
+        "reviewed_images": [
+          {
+            "path": ".work/compat-followup/physics6000w_0163b3f-console/screen-003.png",
+            "bytes": 145765,
+            "sha256": "b68b0a702220c04fa40263f9a8b03d5bb09357190b8e41e2181668b44e3f8ddc"
+          },
+          {
+            "path": ".work/compat-followup/physics6000w_0163b3f-console/screen-006.png",
+            "bytes": 341984,
+            "sha256": "0990fef949c2448d1829c0dd88be4a1431978928f953c6be659e48ab3a826235"
+          },
+          {
+            "path": ".work/compat-followup/physics6000w_0163b3f-console/screen-010.png",
+            "bytes": 383767,
+            "sha256": "58b27ecad81acb77737da6f60465dcce0a0eec414c497158f863b0960f4cd3d1"
+          }
+        ],
+        "console": {
+          "warnings": 13,
+          "errors": 0
+        },
+        "observation": "Before empty stage; after floor and original block articulation/cube visibly rendered. Opened Console shows13warnings0errors, including plugin/schema startup warnings and bridge client-close warnings. No black output or named-tool failure observed in this bounded task; no general harmlessness claim.",
+        "scope": "Actual application-window before/after and opened Console reviewed by runtime owner; three stills, no video. Wide framing limits fine geometry detail. Numerical MCP observations establish motion; still images do not prove physical behavior. Private image files are not approved for redistribution."
+      }
+    },
+    {
+      "tag": "physics6001h_0163b3f",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "headless",
+      "session": {
+        "id": "6a95cdd237224f949f798c8570d0f6b6",
+        "pid": 2978445,
+        "port": 18989,
+        "ros_domain": 231,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793631104.67975,
+        "log": "<worktree>/.work/sessions/6a95cdd237224f949f798c8570d0f6b6/sim.log",
+        "output_dir": "<worktree>/.work/sessions/6a95cdd237224f949f798c8570d0f6b6/output",
+        "user_config": "<worktree>/.work/sessions/6a95cdd237224f949f798c8570d0f6b6/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15153,
+          "ram_available_mib": 51658
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 44,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333333333331,
+        0.09999999999999999,
+        0.5,
+        1.0,
+        0.9999999999999998,
+        0.09999999999999999
+      ],
+      "body_z_before": 2.9754750728607178,
+      "body_z_after13_steps": 2.8426313400268555,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2978445,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T14:51:59.184262+00:00",
+        "log": ".work/runs/physics6001h_0163b3f/kit-native.log",
+        "bytes": 1580208,
+        "sha256": "3be27453b8cb071067c5824af69f27a1bd76c626cfbf2d76aaf23e3789767a9e",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 9,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "physics6001w_0163b3f",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "windowed",
+      "session": {
+        "id": "3866f5d0a3ea47f28fdf6504ec5744bc",
+        "pid": 2985258,
+        "port": 19023,
+        "ros_domain": 184,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793631569.509887,
+        "log": "<worktree>/.work/sessions/3866f5d0a3ea47f28fdf6504ec5744bc/sim.log",
+        "output_dir": "<worktree>/.work/sessions/3866f5d0a3ea47f28fdf6504ec5744bc/output",
+        "user_config": "<worktree>/.work/sessions/3866f5d0a3ea47f28fdf6504ec5744bc/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 14983,
+          "ram_available_mib": 51997
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 45,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333333333331,
+        0.09999999999999999,
+        0.5,
+        1.0,
+        0.9999999999999998,
+        0.09999999999999999
+      ],
+      "body_z_before": 2.9754750728607178,
+      "body_z_after13_steps": 2.8426313400268555,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2985258,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T15:02:14.100277+00:00",
+        "log": ".work/runs/physics6001w_0163b3f/kit-native.log",
+        "bytes": 20874626,
+        "sha256": "51290f5a15493d1907a9f2c7d3bbbae488192c76948eb087bf02a4f05872ddf1",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 12,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "reviewed_at": "2026-11-02T15:02:13.040519+00:00",
+        "pid": 2985258,
+        "window_id": 41943053,
+        "client_dimensions": [
+          1440,
+          900
+        ],
+        "reviewed_images": [
+          {
+            "path": ".work/compat-followup/physics6001w_0163b3f-console/screen-003.png",
+            "bytes": 146536,
+            "sha256": "2228e4eff5226ca57f16d32738dec09eadf723da3b6b67ce55eb0a706d80836b"
+          },
+          {
+            "path": ".work/compat-followup/physics6001w_0163b3f-console/screen-006.png",
+            "bytes": 342218,
+            "sha256": "3e365a2cfe18a1f7a746d00d6b11fd1bd129fc5e74efb6f1ea6d804ac387998a"
+          },
+          {
+            "path": ".work/compat-followup/physics6001w_0163b3f-console/screen-010.png",
+            "bytes": 385017,
+            "sha256": "dbd16daf8e5fe434d6228627f5c119a866b2c493ca164add70d111e2afea0905"
+          }
+        ],
+        "console": {
+          "warnings": 14,
+          "errors": 0
+        },
+        "observation": "Before empty stage; after floor and original block articulation/cube visibly rendered. Opened Console shows14warnings0errors, including USD schema/path/startup warnings and three bridge client-close warnings. No black output or named-tool failure observed in this bounded task; no general harmlessness claim.",
+        "scope": "Actual application-window before/after and opened Console reviewed by runtime owner; three stills, no video. Wide framing limits fine geometry detail. Numerical MCP observations establish motion; still images do not prove physical behavior. Private image files are not approved for redistribution."
+      }
+    },
+    {
+      "tag": "physics601h_0163b3f",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "headless",
+      "session": {
+        "id": "eb1e2fcbabe848a5aeed7f311cfec9a3",
+        "pid": 2978055,
+        "port": 18988,
+        "ros_domain": 230,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793631094.270442,
+        "log": "<worktree>/.work/sessions/eb1e2fcbabe848a5aeed7f311cfec9a3/sim.log",
+        "output_dir": "<worktree>/.work/sessions/eb1e2fcbabe848a5aeed7f311cfec9a3/output",
+        "user_config": "<worktree>/.work/sessions/eb1e2fcbabe848a5aeed7f311cfec9a3/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15152,
+          "ram_available_mib": 51401
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.1.0",
+        "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+        "reported_core": "6.0.1",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.1.0",
+          "isaacsim-kernel": "6.0.1.0",
+          "isaacsim-core": "6.0.1.0",
+          "isaacsim-sensor": "6.0.1.0",
+          "isaacsim-replicator": "6.0.1.0"
+        },
+        "version_files": {
+          "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+        },
+        "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.27",
+            "version": "1.13.27",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.1",
+            "version": "15.17.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+            "version": "1.4.6",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.6",
+            "version": "1.15.6",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 44,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333333333331,
+        0.09999999999999999,
+        0.5,
+        1.0,
+        0.9999999999999998,
+        0.09999999999999999
+      ],
+      "body_z_before": 2.9754750728607178,
+      "body_z_after13_steps": 2.8426313400268555,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2978055,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T14:51:44.331968+00:00",
+        "log": ".work/runs/physics601h_0163b3f/kit-native.log",
+        "bytes": 1601619,
+        "sha256": "9cd12581c942485a4705fde0de6de486cd407073384a3ad6a16755dacec6a30d",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 10,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "physics601w_0163b3f",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "windowed",
+      "session": {
+        "id": "424222a2cbc34e37a1e58bce1d80e6e2",
+        "pid": 2983431,
+        "port": 19022,
+        "ros_domain": 183,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793631460.6468513,
+        "log": "<worktree>/.work/sessions/424222a2cbc34e37a1e58bce1d80e6e2/sim.log",
+        "output_dir": "<worktree>/.work/sessions/424222a2cbc34e37a1e58bce1d80e6e2/output",
+        "user_config": "<worktree>/.work/sessions/424222a2cbc34e37a1e58bce1d80e6e2/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15001,
+          "ram_available_mib": 52139
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.1.0",
+        "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+        "reported_core": "6.0.1",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.1.0",
+          "isaacsim-kernel": "6.0.1.0",
+          "isaacsim-core": "6.0.1.0",
+          "isaacsim-sensor": "6.0.1.0",
+          "isaacsim-replicator": "6.0.1.0"
+        },
+        "version_files": {
+          "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+        },
+        "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.27",
+            "version": "1.13.27",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.1",
+            "version": "15.17.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+            "version": "1.4.6",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.6",
+            "version": "1.15.6",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 45,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333333333331,
+        0.09999999999999999,
+        0.5,
+        1.0,
+        0.9999999999999998,
+        0.09999999999999999
+      ],
+      "body_z_before": 2.98569393157959,
+      "body_z_after13_steps": 2.8705625534057617,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2983431,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T14:59:29.131460+00:00",
+        "log": ".work/runs/physics601w_0163b3f/kit-native.log",
+        "bytes": 13967700,
+        "sha256": "3b56ac3c9a668b8a724309e8c181cf71eebb41ebb64188e0f8b4392fef748803",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 9,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "reviewed_at": "2026-11-02T14:59:28.084172+00:00",
+        "pid": 2983431,
+        "window_id": 41943053,
+        "client_dimensions": [
+          1440,
+          900
+        ],
+        "reviewed_images": [
+          {
+            "path": ".work/compat-followup/physics601w_0163b3f-console/screen-003.png",
+            "bytes": 146536,
+            "sha256": "2228e4eff5226ca57f16d32738dec09eadf723da3b6b67ce55eb0a706d80836b"
+          },
+          {
+            "path": ".work/compat-followup/physics601w_0163b3f-console/screen-006.png",
+            "bytes": 342308,
+            "sha256": "66c6d51ec91a1e36dbb6d9e70fb0b30e71c74afa683fd740acb993d2daab39d6"
+          },
+          {
+            "path": ".work/compat-followup/physics601w_0163b3f-console/screen-010.png",
+            "bytes": 382151,
+            "sha256": "61a2055495c15ea4cc962783eb4747172183de5ad6668b84b413ba8c3730ad0c"
+          }
+        ],
+        "console": {
+          "warnings": 11,
+          "errors": 0
+        },
+        "observation": "Before empty stage; after floor and original block articulation/cube visibly rendered. Opened Console shows11warnings0errors, including USD schema/path warnings and bridge client-close BrokenPipe/Bad-file-descriptor warnings. No black output or named-tool failure observed in this bounded task; warnings retained, not a general harmlessness claim.",
+        "scope": "Actual application-window before/after and opened Console reviewed by runtime owner; three stills, no video. Wide framing limits fine geometry detail. Numerical MCP observations establish motion; still images do not prove physical behavior. Private image files are not approved for redistribution."
+      }
+    },
+    {
+      "tag": "physics61h_0163b3f_r2",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "headless",
+      "session": {
+        "id": "187b59c7af8a4eccac85e16821cb4389",
+        "pid": 2977644,
+        "port": 18987,
+        "ros_domain": 229,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793631080.7143402,
+        "log": "<worktree>/.work/sessions/187b59c7af8a4eccac85e16821cb4389/sim.log",
+        "output_dir": "<worktree>/.work/sessions/187b59c7af8a4eccac85e16821cb4389/output",
+        "user_config": "<worktree>/.work/sessions/187b59c7af8a4eccac85e16821cb4389/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15153,
+          "ram_available_mib": 52159
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.1.0.0",
+        "build": "6.1.0-rc.26+release.49347.2d230af4.gl",
+        "reported_core": "6.1.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.1.0.0",
+          "isaacsim-kernel": "6.1.0.0",
+          "isaacsim-core": "6.1.0.0",
+          "isaacsim-sensor": "6.1.0.0",
+          "isaacsim-replicator": "6.1.0.0"
+        },
+        "version_files": {
+          "<sim-install-61>/lib/python3.12/site-packages/isaacsim/VERSION": "6.1.0-rc.26+release.49347.2d230af4.gl"
+        },
+        "kit_build": "110.3.0+feature.371399.00c488ae.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.36",
+            "version": "1.13.36",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.2",
+            "version": "1.6.2",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.9.0",
+            "version": "1.9.0",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.1",
+            "version": "1.17.1",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.16.0",
+            "version": "1.16.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.16.0",
+          "module": "<sim-install-61>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.16.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 44,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333333333331,
+        0.09999999999999999,
+        0.5,
+        1.0,
+        0.9999999999999998,
+        0.09999999999999999
+      ],
+      "body_z_before": 2.9754750728607178,
+      "body_z_after13_steps": 2.8426313400268555,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2977644,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T14:51:33.919037+00:00",
+        "log": ".work/runs/physics61h_0163b3f_r2/kit-native.log",
+        "bytes": 1464799,
+        "sha256": "b205bbb473125267ccb184027a5e79e5f74de849586fb5b5267498c894864e62",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 6,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "physics61w_0163b3f",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "windowed",
+      "session": {
+        "id": "ce5a375e8aa8472b8dbac0c4208fd70b",
+        "pid": 2982229,
+        "port": 19021,
+        "ros_domain": 182,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793631336.039943,
+        "log": "<worktree>/.work/sessions/ce5a375e8aa8472b8dbac0c4208fd70b/sim.log",
+        "output_dir": "<worktree>/.work/sessions/ce5a375e8aa8472b8dbac0c4208fd70b/output",
+        "user_config": "<worktree>/.work/sessions/ce5a375e8aa8472b8dbac0c4208fd70b/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 14997,
+          "ram_available_mib": 52077
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.1.0.0",
+        "build": "6.1.0-rc.26+release.49347.2d230af4.gl",
+        "reported_core": "6.1.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.1.0.0",
+          "isaacsim-kernel": "6.1.0.0",
+          "isaacsim-core": "6.1.0.0",
+          "isaacsim-sensor": "6.1.0.0",
+          "isaacsim-replicator": "6.1.0.0"
+        },
+        "version_files": {
+          "<sim-install-61>/lib/python3.12/site-packages/isaacsim/VERSION": "6.1.0-rc.26+release.49347.2d230af4.gl"
+        },
+        "kit_build": "110.3.0+feature.371399.00c488ae.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.36",
+            "version": "1.13.36",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.2",
+            "version": "1.6.2",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.9.0",
+            "version": "1.9.0",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.1",
+            "version": "1.17.1",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.16.0",
+            "version": "1.16.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.16.0",
+          "module": "<sim-install-61>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.16.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 45,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333333333331,
+        0.09999999999999999,
+        0.5,
+        1.0,
+        0.9999999999999998,
+        0.09999999999999999
+      ],
+      "body_z_before": 2.98569393157959,
+      "body_z_after13_steps": 2.8705625534057617,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2982229,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T14:57:40.272682+00:00",
+        "log": ".work/runs/physics61w_0163b3f/kit-native.log",
+        "bytes": 1468819,
+        "sha256": "7508ca9b9ab51ca9aef181ea62c2e4d2a5bdc0be778a1d83154c4a9b11a40356",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 9,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "reviewed_at": "2026-11-02T14:57:39.263206+00:00",
+        "pid": 2982229,
+        "window_id": 41943053,
+        "client_dimensions": [
+          1440,
+          900
+        ],
+        "reviewed_images": [
+          {
+            "path": ".work/compat-followup/physics61w_0163b3f-console/screen-003.png",
+            "bytes": 150255,
+            "sha256": "9bb1c5402b0b7a8bdfbd6f511e486ce5b999a1553425395803a6bb3b1a1fdc2b"
+          },
+          {
+            "path": ".work/compat-followup/physics61w_0163b3f-console/screen-006.png",
+            "bytes": 355180,
+            "sha256": "45bc544bbb5b168f61407455fbb9634ee45c9625c02f85041cdf507e98a7df22"
+          },
+          {
+            "path": ".work/compat-followup/physics61w_0163b3f-console/screen-010.png",
+            "bytes": 384465,
+            "sha256": "017e1eb9156f8b960a1a71dec71eccd20b5203476804c2d841b8fec80c24f775"
+          }
+        ],
+        "console": {
+          "warnings": 9,
+          "errors": 0
+        },
+        "observation": "Before empty stage; after floor and original two-link block fixture/cube visibly rendered. Console visible9warnings0errors, including prepared-environment pxr already-loaded and three bridge client-close BrokenPipe/Bad-file-descriptor warnings. No black image or functional tool failure observed in this bounded task.",
+        "scope": "Actual application-window before/after and opened Console reviewed by runtime owner; three stills, no video. Wide framing limits fine geometry detail. Numerical MCP observations establish motion; still images do not prove physical behavior. Private image files are not approved for redistribution."
+      }
+    },
+    {
+      "tag": "physics62h_0163b3f",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "headless",
+      "session": {
+        "id": "eb980aefa482469795b1e369d8a97dcc",
+        "pid": 2971185,
+        "port": 18986,
+        "ros_domain": 228,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793630518.2376318,
+        "log": "<worktree>/.work/sessions/eb980aefa482469795b1e369d8a97dcc/sim.log",
+        "output_dir": "<worktree>/.work/sessions/eb980aefa482469795b1e369d8a97dcc/output",
+        "user_config": "<worktree>/.work/sessions/eb980aefa482469795b1e369d8a97dcc/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15134,
+          "ram_available_mib": 52268
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.2.0.0",
+        "build": "6.2.0-rc.14+release.52805.02189a84.gl",
+        "reported_core": "6.2.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.2.0.0",
+          "isaacsim-kernel": "6.2.0.0",
+          "isaacsim-core": "6.2.0.0",
+          "isaacsim-sensor": "6.2.0.0",
+          "isaacsim-replicator": "6.2.0.0"
+        },
+        "version_files": {
+          "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/VERSION": "6.2.0-rc.14+release.52805.02189a84.gl"
+        },
+        "kit_build": "110.4.0+feature.386251.187cf21b.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.38",
+            "version": "1.13.38",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.2",
+            "version": "1.6.2",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.2",
+            "version": "2.0.2",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.4",
+            "version": "1.17.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.17.0",
+            "version": "1.17.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.6.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.17.0",
+          "module": "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.17.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 44,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333333333331,
+        0.09999999999999999,
+        0.5,
+        1.0,
+        0.9999999999999998,
+        0.09999999999999999
+      ],
+      "body_z_before": 2.9754750728607178,
+      "body_z_after13_steps": 2.8426313400268555,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2971185,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T14:50:44.376008+00:00",
+        "log": ".work/runs/physics62h_0163b3f/kit-native.log",
+        "bytes": 1610516,
+        "sha256": "823aa7112a4d11aae48fc8603631825a89b64e2f7eaddaa66ce1abef5e5dcf28",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 12,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "physics62w_0163b3f",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "mode": "windowed",
+      "session": {
+        "id": "d93a44dcfd17418b88aa0c0184a72244",
+        "pid": 2980281,
+        "port": 19020,
+        "ros_domain": 181,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793631216.1569874,
+        "log": "<worktree>/.work/sessions/d93a44dcfd17418b88aa0c0184a72244/sim.log",
+        "output_dir": "<worktree>/.work/sessions/d93a44dcfd17418b88aa0c0184a72244/output",
+        "user_config": "<worktree>/.work/sessions/d93a44dcfd17418b88aa0c0184a72244/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15147,
+          "ram_available_mib": 52244
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.2.0.0",
+        "build": "6.2.0-rc.14+release.52805.02189a84.gl",
+        "reported_core": "6.2.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.2.0.0",
+          "isaacsim-kernel": "6.2.0.0",
+          "isaacsim-core": "6.2.0.0",
+          "isaacsim-sensor": "6.2.0.0",
+          "isaacsim-replicator": "6.2.0.0"
+        },
+        "version_files": {
+          "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/VERSION": "6.2.0-rc.14+release.52805.02189a84.gl"
+        },
+        "kit_build": "110.4.0+feature.386251.187cf21b.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.38",
+            "version": "1.13.38",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.2",
+            "version": "1.6.2",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.2",
+            "version": "2.0.2",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.4",
+            "version": "1.17.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.17.0",
+            "version": "1.17.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.6.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.17.0",
+          "module": "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.17.0+lx64/warp/__init__.py"
+        }
+      },
+      "core_mcp_calls": 45,
+      "expected_error_calls": 10,
+      "assertions": 23,
+      "all_assertions_pass": true,
+      "requested_steps": [
+        1,
+        12,
+        60,
+        120,
+        120,
+        12
+      ],
+      "sum_requested_steps": 325,
+      "step_simulation_deltas": [
+        0.008333333333333331,
+        0.09999999999999999,
+        0.5,
+        1.0,
+        0.9999999999999998,
+        0.09999999999999999
+      ],
+      "body_z_before": 2.98569393157959,
+      "body_z_after13_steps": 2.8705625534057617,
+      "body_z_on_floor": 0.10000000149011612,
+      "runtime_elbow_positive": 0.20330841839313507,
+      "runtime_elbow_negative": -0.20347696542739868,
+      "arm_world_displacement": 0.10099649462816564,
+      "source_fixture_hashes_preserved": {
+        "<worktree>/.work/fixture/robot.usda": "de7aa0cccf1fdb63d71a8e669a30b5b458f70e927446adbfa2dc2345dc48eee0",
+        "<worktree>/.work/fixture/material.usda": "bd8047d569928ccf93433b41574bb629506ba5865559c0e326cda0d839e12c9a",
+        "<worktree>/.work/fixture/textures/paint.png": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+        "<worktree>/.work/fixture/LICENSE.txt": "ab735bd6889a12fc3c498cf857ee2575db0f746a86077e7def32f1b46343eeb1"
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 2980281,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T14:55:35.656983+00:00",
+        "log": ".work/runs/physics62w_0163b3f/kit-native.log",
+        "bytes": 1609430,
+        "sha256": "019f2dee5fbd88f87db55fa6fdf14c7bbe56cba3ba90e755c080fc6ef87b8c88",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 9,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "reviewed_at": "2026-11-02T14:55:34.645730+00:00",
+        "pid": 2980281,
+        "window_id": 41943053,
+        "client_dimensions": [
+          1440,
+          900
+        ],
+        "reviewed_images": [
+          {
+            "path": ".work/compat-followup/physics62w_0163b3f-console/screen-003.png",
+            "bytes": 153504,
+            "sha256": "796c2116b6644b7599fb15573f44141c57820c53b23914620a9880ad30d6c4c7"
+          },
+          {
+            "path": ".work/compat-followup/physics62w_0163b3f-console/screen-006.png",
+            "bytes": 351198,
+            "sha256": "4ce90aa1d4791fd567e6303ea9a7a00e842b3835270a677bdb67721210212889"
+          },
+          {
+            "path": ".work/compat-followup/physics62w_0163b3f-console/screen-013.png",
+            "bytes": 382670,
+            "sha256": "92d45091b0944c3eee7912d6a104e2a83c3d435e56e3732887ffc201a245ec59"
+          }
+        ],
+        "console": {
+          "warnings": 9,
+          "errors": 0
+        },
+        "observation": "Actual native window: before empty stage; after floor and original block articulation/cube visible, not black. Wide framing limits fine geometry detail. Console tab opened and reviewed; three bridge client-close warnings (BrokenPipe/Bad file descriptor) visible along with startup warnings. All named physics calls completed; screenshot is not a measurement of physical motion.",
+        "harness_limit": "First Console click refused missing expected_width/height before any input; corrected explicit1440x900 target then opened Console. No product change."
+      }
+    }
+  ],
+  "totals": {
+    "cases": 10,
+    "core_mcp_calls": 445,
+    "expected_error_calls": 100,
+    "assertions": 230,
+    "assertion_scope": "23 per case includes target identity, stopped/playing refusals, finite runtime data, measured physical effects/timing, preflight clock preservation, reinitialization and four source-file hashes. Not230 independent motion experiments.",
+    "successful_named_steps": 3250
+  },
+  "effects": [
+    "Runtime mass/velocity/quaternion and named articulation DOFs are finite on the selected PhysX engine, with no USD fallback.",
+    "Original fixture falls from z3 onto the known floor;Elbow reaches+.2 and-.2radians and the arm world pose moves.",
+    "1,12,60,120,120,12 requested steps measure their expected120Hz simulation intervals; no rendered-frame claim.",
+    "Stopped/playing,bounded-input,missing-path,stale-target andjoint-limit requests refuse. Invalid paused preflights do not advance the observed clock.",
+    "Explicit Stop then Play/Pause permits another finite measured12-step observation in the same stage/session. Four original project fixture file hashes unchanged."
+  ],
+  "limitations": [
+    "Original20f6.0.1W108-step stall remains unresolved; this smaller fixture is not a reproduction or remedy of that full-scene failure.",
+    "Existing Newton failures/scoped6.2 successes remain experimental limitations; this PhysX work establishes no Newton recovery or all6.2 Newton support.",
+    "Latest1f clipping fixture files were previously reopened standaloneUSD, not freshKit reuse. No camera creation/capture was used in this fixture.",
+    "Prepared older environments and locked cached6.2 environment with upload-disabled diagnostic bootstrap; no clean-machine/full-installer or executed Lab locked-replay qualification.",
+    "First62H client attempt stopped before Play because its error parser did not unwrap MCP error text. v2 recreated the stopped stage in the same owned process. All other qualified cases used fresh processes.",
+    "One61 launch refused port reuse while TCP was TIME_WAIT; a6000 launch refused ROSdomain232 outside0..231. Corrected private driver used distinct ports and valid domains; guards unchanged, no Kit started for either refusal.",
+    "First62W Console click lacked dimensions and schema refused it before input. Explicit observed1440x900 dimensions then succeeded.",
+    "Five actual window Console reviews show0errors with nonzero startup/USD/bridge-client-close warnings. UI counters differ from native-line counts and are not merged. No suppression or general harmlessness claim.",
+    "Three actual stills per window were reviewed, with wide framing and no video. Numerical MCP readbacks establish physics effects; screenshots do not. Images remain private, only original hashes/review records distributed.",
+    "No newly independent natural-language agent task was run for this regression. Existing agent tasks keep their original heads and scoped outcomes.",
+    "All ten owned PIDs exited normally via managedSIGINT and were confirmed absent; no user process terminated. No product code changed. PR16 remains draft/unmerged; release unpublished."
+  ],
+  "records": [
+    {
+      "label": "physics6000h_0163b3f_r2/summary.json",
+      "path": ".work/compat-followup/physics6000h_0163b3f_r2-physics-positive-v2/summary.json",
+      "sha256": "7a96928a27d76189500cc4af88e0dcd62db6707bdf95f76a2b400b305aa072aa",
+      "bytes": 4145
+    },
+    {
+      "label": "physics6000h_0163b3f_r2/checks.json",
+      "path": ".work/compat-followup/physics6000h_0163b3f_r2-physics-positive-v2/checks.json",
+      "sha256": "a58f017c004f35dbb2e67a9ce5a654d73e6183a961c764de999cdbaee069e085",
+      "bytes": 37536
+    },
+    {
+      "label": "physics6000h_0163b3f_r2/source-files-before.json",
+      "path": ".work/compat-followup/physics6000h_0163b3f_r2-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics6000h_0163b3f_r2/source-files-after.json",
+      "path": ".work/compat-followup/physics6000h_0163b3f_r2-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics6000h_0163b3f_r2/shutdown",
+      "path": ".work/runs/physics6000h_0163b3f_r2/shutdown-log-review-final.json",
+      "sha256": "ec719c1df1066102efa97151a4de4ff84536051e5d1bb538434969bd5941987e",
+      "bytes": 649
+    },
+    {
+      "label": "physics6000h_0163b3f_r2/source",
+      "path": ".work/runs/physics6000h_0163b3f_r2/source-hashes.json",
+      "sha256": "c149a832eb1042c0568753e9ab2ed2f94d67412d7b159308a482fa92727b25f3",
+      "bytes": 9919
+    },
+    {
+      "label": "physics6000w_0163b3f/summary.json",
+      "path": ".work/compat-followup/physics6000w_0163b3f-physics-positive-v2/summary.json",
+      "sha256": "6da838080eef4a3ffbbd48d201266e863fcbb762c879f45d9989a3df32b6e882",
+      "bytes": 4164
+    },
+    {
+      "label": "physics6000w_0163b3f/checks.json",
+      "path": ".work/compat-followup/physics6000w_0163b3f-physics-positive-v2/checks.json",
+      "sha256": "092675e4b6fb5b60da18865790f3919f97ed952dac271e4fac24e6c45e6a795c",
+      "bytes": 37527
+    },
+    {
+      "label": "physics6000w_0163b3f/source-files-before.json",
+      "path": ".work/compat-followup/physics6000w_0163b3f-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics6000w_0163b3f/source-files-after.json",
+      "path": ".work/compat-followup/physics6000w_0163b3f-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics6000w_0163b3f/shutdown",
+      "path": ".work/runs/physics6000w_0163b3f/shutdown-log-review-final.json",
+      "sha256": "cf48d89437cac655283905bf22dadd2e3e7bc555c485dc1041daca84927df1bb",
+      "bytes": 647
+    },
+    {
+      "label": "physics6000w_0163b3f/source",
+      "path": ".work/runs/physics6000w_0163b3f/source-hashes.json",
+      "sha256": "65aa8193c8c1223ea5ec5444a8ad1b49d20cfcfa0c1607bcbc30127869477ab4",
+      "bytes": 9919
+    },
+    {
+      "label": "physics6000w_0163b3f/visual",
+      "path": ".work/compat-followup/physics6000w_0163b3f-console/visual-review.json",
+      "sha256": "7f6beb48af0e4b0f3c766f20cb73d191a8fe6e8673f08fe0f16adbbf0a5508a9",
+      "bytes": 1524
+    },
+    {
+      "label": "physics6001h_0163b3f/summary.json",
+      "path": ".work/compat-followup/physics6001h_0163b3f-physics-positive-v2/summary.json",
+      "sha256": "db375f46899ce287b1b55566090202bf5e6925b96c3f1b44f6cbcee4ae22b971",
+      "bytes": 4309
+    },
+    {
+      "label": "physics6001h_0163b3f/checks.json",
+      "path": ".work/compat-followup/physics6001h_0163b3f-physics-positive-v2/checks.json",
+      "sha256": "edc5942e81d4f2c296c50a9c35180e2f2027f194235a7a98d5515beba3c83864",
+      "bytes": 37581
+    },
+    {
+      "label": "physics6001h_0163b3f/source-files-before.json",
+      "path": ".work/compat-followup/physics6001h_0163b3f-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics6001h_0163b3f/source-files-after.json",
+      "path": ".work/compat-followup/physics6001h_0163b3f-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics6001h_0163b3f/shutdown",
+      "path": ".work/runs/physics6001h_0163b3f/shutdown-log-review-final.json",
+      "sha256": "4e1b3d96b4896c9e73a801fcce5072138bb0d56308612bf2e98ad98ee2a0cedd",
+      "bytes": 646
+    },
+    {
+      "label": "physics6001h_0163b3f/source",
+      "path": ".work/runs/physics6001h_0163b3f/source-hashes.json",
+      "sha256": "a3aefa1f86ed4dd6d00c62d5d18e659bdd2371496129e47a93ba92bf3bcc845c",
+      "bytes": 9919
+    },
+    {
+      "label": "physics6001w_0163b3f/summary.json",
+      "path": ".work/compat-followup/physics6001w_0163b3f-physics-positive-v2/summary.json",
+      "sha256": "34504aec34bbac7c8cc15fd8fb61dbb2b4bcf95e4516b48b54e8fabc925e34b4",
+      "bytes": 4329
+    },
+    {
+      "label": "physics6001w_0163b3f/checks.json",
+      "path": ".work/compat-followup/physics6001w_0163b3f-physics-positive-v2/checks.json",
+      "sha256": "93ee82725aa7fc20ffc7dfc14e961488aefe97350edfe937b446e3d93fec3303",
+      "bytes": 37581
+    },
+    {
+      "label": "physics6001w_0163b3f/source-files-before.json",
+      "path": ".work/compat-followup/physics6001w_0163b3f-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics6001w_0163b3f/source-files-after.json",
+      "path": ".work/compat-followup/physics6001w_0163b3f-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics6001w_0163b3f/shutdown",
+      "path": ".work/runs/physics6001w_0163b3f/shutdown-log-review-final.json",
+      "sha256": "1fe02119cf671897484bb7cfc4cfa90e7f07ade1481bfadfd2bba8194fff6152",
+      "bytes": 648
+    },
+    {
+      "label": "physics6001w_0163b3f/source",
+      "path": ".work/runs/physics6001w_0163b3f/source-hashes.json",
+      "sha256": "b7cdfd2fa76bdf42314391bf9972c7859fabff0de528562d5ccf33bd2b8fdb34",
+      "bytes": 9919
+    },
+    {
+      "label": "physics6001w_0163b3f/visual",
+      "path": ".work/compat-followup/physics6001w_0163b3f-console/visual-review.json",
+      "sha256": "aa2f5f55d7c857ec07f3552b39657153dc1e98238b9d798040e3b9a80abedc2c",
+      "bytes": 1532
+    },
+    {
+      "label": "physics601h_0163b3f/summary.json",
+      "path": ".work/compat-followup/physics601h_0163b3f-physics-positive-v2/summary.json",
+      "sha256": "a16c6ef7a82a38576b9a3f6f5fb797a9318d0e368247a35ce73535718ddc3e92",
+      "bytes": 4229
+    },
+    {
+      "label": "physics601h_0163b3f/checks.json",
+      "path": ".work/compat-followup/physics601h_0163b3f-physics-positive-v2/checks.json",
+      "sha256": "5f04878a214ca56dc958536605bdbbaaef668b9e5385839a07100909ca50f8fb",
+      "bytes": 37347
+    },
+    {
+      "label": "physics601h_0163b3f/source-files-before.json",
+      "path": ".work/compat-followup/physics601h_0163b3f-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics601h_0163b3f/source-files-after.json",
+      "path": ".work/compat-followup/physics601h_0163b3f-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics601h_0163b3f/shutdown",
+      "path": ".work/runs/physics601h_0163b3f/shutdown-log-review-final.json",
+      "sha256": "dfb6a22da2071e1a9376cd77bf44d4a732d0dade8c34e5146fc0f5c120c57954",
+      "bytes": 646
+    },
+    {
+      "label": "physics601h_0163b3f/source",
+      "path": ".work/runs/physics601h_0163b3f/source-hashes.json",
+      "sha256": "05431e0899abe66fb6f7f962022924b4490c40af04d78503c1f894dcfb530483",
+      "bytes": 9919
+    },
+    {
+      "label": "physics601w_0163b3f/summary.json",
+      "path": ".work/compat-followup/physics601w_0163b3f-physics-positive-v2/summary.json",
+      "sha256": "2cc821f16a00d8ec0a67a8e0275031edabc89adaca8bb58d2109bdccace922ff",
+      "bytes": 4249
+    },
+    {
+      "label": "physics601w_0163b3f/checks.json",
+      "path": ".work/compat-followup/physics601w_0163b3f-physics-positive-v2/checks.json",
+      "sha256": "e8340e6bb76a3830ef5255f361011b57563eee0338b055da2d0f7a6c718327e2",
+      "bytes": 37960
+    },
+    {
+      "label": "physics601w_0163b3f/source-files-before.json",
+      "path": ".work/compat-followup/physics601w_0163b3f-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics601w_0163b3f/source-files-after.json",
+      "path": ".work/compat-followup/physics601w_0163b3f-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics601w_0163b3f/shutdown",
+      "path": ".work/runs/physics601w_0163b3f/shutdown-log-review-final.json",
+      "sha256": "aa7f94cddb9ff3d9a96186365a4e1b72a5e043017ef952e373650b105dc905a3",
+      "bytes": 646
+    },
+    {
+      "label": "physics601w_0163b3f/source",
+      "path": ".work/runs/physics601w_0163b3f/source-hashes.json",
+      "sha256": "6dcbdda0b74ddde46b49f2f2de5d928d237b3050f55171e6c25d57efec617bee",
+      "bytes": 9919
+    },
+    {
+      "label": "physics601w_0163b3f/visual",
+      "path": ".work/compat-followup/physics601w_0163b3f-console/visual-review.json",
+      "sha256": "98a48086baeb096aa93309591d0e0ec533e2177bb1128db415dbdcfd0ba3bf61",
+      "bytes": 1568
+    },
+    {
+      "label": "physics61h_0163b3f_r2/summary.json",
+      "path": ".work/compat-followup/physics61h_0163b3f_r2-physics-positive-v2/summary.json",
+      "sha256": "ee02aae2fa3a49e8f5a7c9d4cd596a10521a288021fc7bc91c05e29713fd7a52",
+      "bytes": 4227
+    },
+    {
+      "label": "physics61h_0163b3f_r2/checks.json",
+      "path": ".work/compat-followup/physics61h_0163b3f_r2-physics-positive-v2/checks.json",
+      "sha256": "d1284120ecf0a177e83edf1a0318bdaa4b7e67190c65e58a54427f7c5a39ed84",
+      "bytes": 37344
+    },
+    {
+      "label": "physics61h_0163b3f_r2/source-files-before.json",
+      "path": ".work/compat-followup/physics61h_0163b3f_r2-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics61h_0163b3f_r2/source-files-after.json",
+      "path": ".work/compat-followup/physics61h_0163b3f_r2-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics61h_0163b3f_r2/shutdown",
+      "path": ".work/runs/physics61h_0163b3f_r2/shutdown-log-review-final.json",
+      "sha256": "946fc2ba99fdcaa769b937c27b1f7d611d19f047eaef840fe2dc48a2576bcbbc",
+      "bytes": 647
+    },
+    {
+      "label": "physics61h_0163b3f_r2/source",
+      "path": ".work/runs/physics61h_0163b3f_r2/source-hashes.json",
+      "sha256": "f33b4b85e882cfa6905b67a3ffa0cd6d34eb8820966122bc369a153daab643f1",
+      "bytes": 9919
+    },
+    {
+      "label": "physics61w_0163b3f/summary.json",
+      "path": ".work/compat-followup/physics61w_0163b3f-physics-positive-v2/summary.json",
+      "sha256": "32cbf6e336b96ebdcedf42d4ddaed7d552b8489ba6e1f310429e8b810bb1ea58",
+      "bytes": 4245
+    },
+    {
+      "label": "physics61w_0163b3f/checks.json",
+      "path": ".work/compat-followup/physics61w_0163b3f-physics-positive-v2/checks.json",
+      "sha256": "01131b96398cf1e3d54146bebedf65c68c7196037a6f99089d34cc972f7b1c41",
+      "bytes": 37960
+    },
+    {
+      "label": "physics61w_0163b3f/source-files-before.json",
+      "path": ".work/compat-followup/physics61w_0163b3f-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics61w_0163b3f/source-files-after.json",
+      "path": ".work/compat-followup/physics61w_0163b3f-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics61w_0163b3f/shutdown",
+      "path": ".work/runs/physics61w_0163b3f/shutdown-log-review-final.json",
+      "sha256": "2bd4ba0b9d29c80567da052c1e6ab1376f2742a699170ba3ad95c66fc7c5f080",
+      "bytes": 644
+    },
+    {
+      "label": "physics61w_0163b3f/source",
+      "path": ".work/runs/physics61w_0163b3f/source-hashes.json",
+      "sha256": "9a83a41df04ab173baeac8389a159b50073a3420bbffb64d429cbaa376b4a0c5",
+      "bytes": 9919
+    },
+    {
+      "label": "physics61w_0163b3f/visual",
+      "path": ".work/compat-followup/physics61w_0163b3f-console/visual-review.json",
+      "sha256": "11f824e5787cbd14609d8b2cdc72510bcbf1732c3b089bff35a36c7c9a480c80",
+      "bytes": 1534
+    },
+    {
+      "label": "physics62h_0163b3f/summary.json",
+      "path": ".work/compat-followup/physics62h_0163b3f-physics-positive-v2/summary.json",
+      "sha256": "bd7bc11a1be15b5f7b7493669d4bfd15b0b2d878600e5e7a14d9e8e24a579f74",
+      "bytes": 4367
+    },
+    {
+      "label": "physics62h_0163b3f/checks.json",
+      "path": ".work/compat-followup/physics62h_0163b3f-physics-positive-v2/checks.json",
+      "sha256": "1cf52a8b8ea7230c513e9af41575e6858521a2cebd2d22bcf0d0459040c1c656",
+      "bytes": 37743
+    },
+    {
+      "label": "physics62h_0163b3f/source-files-before.json",
+      "path": ".work/compat-followup/physics62h_0163b3f-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics62h_0163b3f/source-files-after.json",
+      "path": ".work/compat-followup/physics62h_0163b3f-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics62h_0163b3f/shutdown",
+      "path": ".work/runs/physics62h_0163b3f/shutdown-log-review-final.json",
+      "sha256": "6e1ba2c14af631289dc376436190b988783e7ca71bcc635683fa99d65ce4c8db",
+      "bytes": 645
+    },
+    {
+      "label": "physics62h_0163b3f/source",
+      "path": ".work/runs/physics62h_0163b3f/source-hashes.json",
+      "sha256": "5c0f507141489eeb2d513c92fb6560571be96183434fbfb24b25463960d0e6e9",
+      "bytes": 9919
+    },
+    {
+      "label": "physics62w_0163b3f/summary.json",
+      "path": ".work/compat-followup/physics62w_0163b3f-physics-positive-v2/summary.json",
+      "sha256": "d1adc9ffd62c37fcab45166d603f2a9c4fe7867c189e2c95bf96692fffcdceac",
+      "bytes": 4386
+    },
+    {
+      "label": "physics62w_0163b3f/checks.json",
+      "path": ".work/compat-followup/physics62w_0163b3f-physics-positive-v2/checks.json",
+      "sha256": "2de14642ffb33a5681d69fd21907a05bf36688b4079d129164433402a9e72c77",
+      "bytes": 38380
+    },
+    {
+      "label": "physics62w_0163b3f/source-files-before.json",
+      "path": ".work/compat-followup/physics62w_0163b3f-physics-positive-v2/source-files-before.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics62w_0163b3f/source-files-after.json",
+      "path": ".work/compat-followup/physics62w_0163b3f-physics-positive-v2/source-files-after.json",
+      "sha256": "abce9d4793d6541eab77da2dcc819a17c141e9e490cec2afd10dcf8370aac8fb",
+      "bytes": 674
+    },
+    {
+      "label": "physics62w_0163b3f/shutdown",
+      "path": ".work/runs/physics62w_0163b3f/shutdown-log-review-final.json",
+      "sha256": "dacecf0037d119ee36f27bf66420ce0e8d6dfb3b2fdc6886bb70321215c621e3",
+      "bytes": 644
+    },
+    {
+      "label": "physics62w_0163b3f/source",
+      "path": ".work/runs/physics62w_0163b3f/source-hashes.json",
+      "sha256": "d7c8c2442f85765430c8342ce7b533fc3bbf3586ce0fde9f5db0fc6c7a1f417f",
+      "bytes": 9919
+    },
+    {
+      "label": "physics62w_0163b3f/visual",
+      "path": ".work/compat-followup/physics62w_0163b3f-console/visual-review.json",
+      "sha256": "461cdca2081b3dd180506c52128f9803479e8877e8f89403d34b34d6574d9a41",
+      "bytes": 1454
+    },
+    {
+      "label": "machine",
+      "path": ".work/compat-followup/physics-positive-0163-machine.json",
+      "sha256": "72039b90a95e8171f3c7f90eea5c3f3eb983185f8062ab347b23239fe799578d",
+      "bytes": 2511
+    },
+    {
+      "label": "python-metadata",
+      "path": ".work/compat-followup/physics-positive-python-metadata.json",
+      "sha256": "7e6316b4ea8c66588f17a0240885b6d5846a659700d4a83499d5f8b16253efdc",
+      "bytes": 4109
+    }
+  ]
+}

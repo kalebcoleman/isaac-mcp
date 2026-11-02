@@ -13,8 +13,11 @@ real MCP discovery confirms 90 default / 99 optional-inclusive tools; eight
 online/offline filter profiles retain their exact environment settings. The map
 links 12,073 retained call records and 1,583 observation links from 39 source-identified
 cases. These counts include expected errors and failed workflows, not 99 verified
-tools on every backend. Latest normal PhysX checks and material native failures
-remain explicit; the combined PR is still a draft.
+tools on every backend. The later [exact `0163` normal PhysX supplement](PHYSX-CURRENT-POSITIVE.md)
+adds 445 calls / 230 assertions across five builds in both modes, closing the narrow
+body/joint/step gap without changing those historical counts. PhysX is the release
+target; Newton remains experimental. The original `20f` PhysX stall remains open,
+and the combined PR is still a draft.
 
 The latest [affected PhysX qualification](RECENT-AFFECTED-PHYSX-2C8-20261102.json)
 uses exact combined `2c8ce63` on all five installed builds, headless and windowed:
