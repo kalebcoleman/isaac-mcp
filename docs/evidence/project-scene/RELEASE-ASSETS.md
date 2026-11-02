@@ -43,6 +43,7 @@ by marking this release draft.
 | [newton-twin62-c2-candidates-v2-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton-twin62-c2-candidates-v2-redacted.tar.gz) | `57bcdb0cfb0d58b720e84e4ef3667c2031e1c3469ea60d1557d92fb389d799b6` | 2803657 |
 | [physx-wrench62-166-candidates-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/physx-wrench62-166-candidates-redacted.tar.gz) | `b1b884ddd2017e726ed5195b541e4d2d9cad3cc5d212d9aa391f5962681d1aae` | 1354455 |
 | [affected-physx-five-builds-2c8-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/affected-physx-five-builds-2c8-redacted.tar.gz) | `d7996dc94648c15ea28d86b646f1fa0f8a66c08311e4a8f44e6e5421c4b431e3` | 5661671 |
+| [newton6001-failures-controls-2c8-v3-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton6001-failures-controls-2c8-v3-redacted.tar.gz) | `a9f793289db4fff06ef5f2fa03d1a599813facd3380c6d8f4b20fc84409496ab` | 944056 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
@@ -179,3 +180,13 @@ originals and their limited sampling, not distributed images.
 [The 88-record compact index](RECENT-AFFECTED-PHYSX-2C8-20261102.json) retains
 source identities, native writeback and warning scopes. The 99-tool ledger,
 older Newton and original `20f` stall remain separate.
+
+
+The Newton 6.0.0.1 failure supplement contains 717 redacted members, including
+selected line-numbered stack excerpts, actual MCP calls, private candidate/config
+identities, failed predicates and cleanup. All 728 identified originals were
+rehashed. Raw minidumps, crash environment metadata, complete crash logs, geometry
+and media are omitted. The bundle preserves the native reporter's automatic
+upload attempt in one private control; delivery was not established. Later
+disposable diagnostics disable current/old dump uploads locally. Neither a stack
+location nor a successful earlier phase establishes a native root cause.
