@@ -153,6 +153,34 @@ These passes do not resolve the earlier `20f2953` stepping stall, establish a ca
 for a concurrent native driver refusal, or qualify a pending native retry. Earlier
 full-suite records and warnings remain historical evidence.
 
+### CPU and package follow-up after Newton twin changes (2026-11-02)
+
+At exact commit `166e10db31cc2e24fad66b204c00301c1281bfae` (tree
+`914965bbe1de76e5be9bac8862579d9ac80c6069`), the full host suite passed **1,335 tests
+in 171.55 seconds**, with only the intentional duplicate-ZIP-member warning. Focused
+world/twin-physics compatibility and host-catalog checks passed **172 tests in 23.56
+seconds**. The separate **MCP 1.22.0** minimum-SDK run passed **216 tests in 26.51
+seconds**, retaining the Pydantic unresolved `lifespan` annotation warning. These are
+pytest-reported durations; the records separately retain wrapper elapsed times.
+All jobs completed normally with exit zero and a clean checkout at the recorded identity.
+
+Documentation/privacy, asset, catalog, verifier shell-syntax and whitespace checks,
+wheel/sdist builds and `npm pack --dry-run` also passed. Inspection confirmed the
+endings and SHA-256 hashes of all six actual-command-output logs (focused, host,
+minimum-SDK, static, build and npm) against the retained summary, whose SHA-256 is
+`359b67e4314b5891dec0ecd25323d5f4e4882eca8651dccb4b6f4b55938139fb`.
+The identity and command records retain Python 3.12.3, uv 0.12.14, Node v26.13.0,
+npm 11.20.0 and the commands used. The summary records the 118,792-byte wheel and
+288,004-byte sdist with their digests; neither artifact was published by these checks.
+
+The integrated runtime modules match the private Newton candidate10 module hashes;
+matching bytes are not a new native execution. Candidate9 broad runs and candidate10
+narrow reopen/force checks retain their own identities, and exact integrated native
+qualification remained pending at this CPU handoff. These results do not qualify
+other Newton builds, resolve the original `20f2953` stepping stall, or establish a
+clean-machine/full-installer result. Earlier CPU records and warnings remain intact;
+see the [compatibility matrix](COMPATIBILITY.md) for separately measured native scopes.
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
