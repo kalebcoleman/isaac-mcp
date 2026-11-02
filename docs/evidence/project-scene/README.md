@@ -7,6 +7,15 @@ and 31 generic scene tools; PR #15 adds two asset workflow tools, for 39 combine
 Isolated untrusted loading, authenticated remote upload, presets/manifests and the
 remaining fork-parity work are deferred, not completed capabilities.
 
+The latest [affected PhysX qualification](RECENT-AFFECTED-PHYSX-2C8-20261102.json)
+uses exact combined `2c8ce63` on all five installed builds, headless and windowed:
+all 23 UR tools and seven built-ins, real ROS effects, existing PhysicsScene and
+saved callback checks. [Final validation](FINAL-VALIDATION.md#integrated-affected-physx-paths-five-builds-both-modes)
+separates fresh reopens from same-process checks, retains the initial edit-target
+predicate failure, and records native writeback and visual limits. This is an
+affected-path supplement, not a relabeling of historical 99-tool or agent evidence;
+the original `20f` stall and remaining Newton checks are still open.
+
 The trusted workflow is exercised through real MCP with original multifile USD/URDF/USDZ
 fixtures and a separately licensed real Agilebot robot. Root checks, snapshots, dependency
 inspection, filters and managed launch are **not an OS sandbox**. Untrusted configuration

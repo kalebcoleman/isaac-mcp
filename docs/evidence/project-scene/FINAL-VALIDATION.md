@@ -15,8 +15,9 @@ and diagnostic intervention remain separate from the fresh product results.
 
 
 This is a chronological record: the earlier commit-specific results and failure history below
-remain historical. The combined candidate at this update is PR #16 at
-`c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`, still draft and unmerged. No original
+remain historical. The latest affected PhysX qualification below uses exact combined
+`2c8ce63b33dbabf02b2216f9d512ff9a23724d9c`; subsequent PR #16 head `41574b5`
+changes documentation only. The PR remains draft and unmerged. No original
 implementation PR is being merged separately. The [all-tool ledger](ALL-TOOLS-MATRIX.md)
 tracks the current 90 default / 99 optional-inclusive tool surface.
 
@@ -952,8 +953,8 @@ Actual ROS force/torque was approximately
 twin reopen passed ten calls/16 checks, including two actual ROS gripper commands
 across Stop/Play and advancing, nonempty wrench headers. The same process then
 completed all 23 UR names/seven built-ins in 141 requests/54 assertions and saved
-a newly gated graph. Fresh reopening of that new save on the final integration
-remains a separate next check.
+a newly gated graph. Fresh reopening of that new save was pending at this candidate
+checkpoint; the exact integrated qualification below subsequently passed it.
 
 Source files, graphs, physics opinions and the caller's edit target were preserved
 in the narrow reopen interval. Native PhysX updated in-memory rigid-body poses,
@@ -980,3 +981,78 @@ and the [draft bundle](RELEASE-ASSETS.md) retain the initial failure, diagnostic
 experiment and exact candidate scopes. The final integrated affected-release/mode
 queue, generic/older Newton coverage and original `20f` stepping stall remain
 separate; this is not all-version completion or merge readiness.
+
+
+## Integrated affected PhysX paths: five builds, both modes
+
+Exact combined `2c8ce63b33dbabf02b2216f9d512ff9a23724d9c` completed ten serial
+disposable runs on 6.0.0.0, 6.0.0.1, 6.0.1.0, 6.1.0.0 and 6.2.0.0, each headless
+and windowed. [The compact index](RECENT-AFFECTED-PHYSX-2C8-20261102.json) records
+88 source hashes, complete runtime-module hashes, package/Kit builds, PID/port/ROS
+domain, reviews and final log counts. The host was Ubuntu 24.04.5, RTX 5080,
+driver 580.178.04. Older prepared environments and the locked 6.2 environment
+remain distinct; this does not establish clean-machine installation.
+
+Every headless full-surface run made 137 MCP requests with 55 passing assertions;
+every windowed run made 141 with 54. Each exercised all 23 UR names and seven
+bridge built-ins, plus named generic observation/stepping and managed-session
+targeting. Actual simulated ROS joint/gripper commands, trajectory action,
+RGB/CameraInfo/TF, object placement, recording and saved outputs supplied effect
+checks. Every run also passed the nine-call existing-`/physicsScene` scenario.
+Physical robot operation was not attempted.
+
+The first 6.2 headless process freshly reopened candidate 12's newly gated save.
+All five windowed processes freshly reopened their corresponding headless output.
+Each of those six fresh processes passed ten calls/16 checks: two real ROS RG2
+commands across Stop/Play, measured joints, advancing nonzero `tool0` wrench
+headers and preservation checks. The other four headless runs passed the same
+16 checks in 11 calls in their existing processes, with explicit named Stop before
+the preservation baseline. They are not additional fresh-process reopens.
+
+The first supplemental 6.0.0.0 headless attempt failed edit-target equality: its
+baseline captured the generic tool's temporary session lease, while Stop restored
+the original target. Its client also overlapped the parent harness's completion.
+Actual ROS effects and source/graph/physics/static checks passed. The original
+failed comparison and ordering are retained; the sequential retry first stopped
+the stage, then passed all checks. No product change or lost caller edit target
+is inferred from that initial predicate failure.
+
+In all ten preservation intervals source files, graph and PhysicsScene opinions,
+the settled edit target and the stated static fields compared equal. Whole-root
+and robot-subtree equality were false because native PhysX wrote poses, velocities
+and joint state in memory. The static comparison excludes those enumerated fields
+only in diagnostic copies. It is not a root-immutability claim or evidence of a
+source-file overwrite.
+
+| Package | Native errors / warnings, H | Native errors / warnings, W | Actual windowed Console warnings / errors |
+|---|---:|---:|---:|
+| 6.0.0.0 | 6 / 166 | 6 / 157 | 162 / 11 |
+| 6.0.0.1 | 6 / 151 | 6 / 157 | 162 / 11 |
+| 6.0.1.0 | 6 / 147 | 6 / 151 | 155 / 11 |
+| 6.1.0.0 | 6 / 147 | 6 / 153 | 156 / 11 |
+| 6.2.0.0 | 6 / 157 | 6 / 156 | 159 / 11 |
+
+These native counts are after owned-process exit. Each six-error group is the
+deliberate invalid-quaternion traceback. Console filtering showed that negative
+case, but not every Console entry was individually sampled. Cooking warnings and
+0–2 simulation-time warnings per run remain in the logs; no illegal-cycle or
+force-callback errors occurred in these runs. This does not establish general
+warning harmlessness. Some desktop clicks were acknowledged without the intended
+tab change; screenshots detected this and later input selected Console before
+the error search. No cause was established.
+
+Recordings decoded 171–191 frames; only frames 10 and 100 of each were visually
+sampled. Wrists were cropped, and some pairs showed little visible motion.
+Actual final application-window captures showed the complete bent arm and
+attached gripper. Joint/ROS measurements, not cropped video alone, establish
+the stated motion effects. Private Console pixels and robot geometry are excluded
+from the 2,156-member [draft bundle](RELEASE-ASSETS.md). All owned PIDs exited.
+
+A 128-file Git-blob comparison with `c2ceb7f` finds only three twin modules and
+the UR catalog changed; generic, host and Lab implementations are unchanged in
+that comparison. This avoids relabeling earlier broad generic/host/Lab and actual
+agent evidence as a new run. The supplement's per-tool call references point to
+actual arguments/results; it is not a new complete 99-tool matrix. Applicable
+older Newton qualification, final evidence reconciliation and the original `20f`
+6.0.1 windowed stepping stall remain separate. Successful later runs do not explain
+that stall. PR #16 and the evidence release remain draft, unmerged and unpublished.
