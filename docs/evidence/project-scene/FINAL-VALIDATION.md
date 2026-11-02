@@ -2,9 +2,12 @@
 
 **Current review entry point:** the [tool/source/backend reconciliation](CURRENT-TOOL-RECONCILIATION.md)
 maps all 99 names against exact `fdb7a02` discovery and retained native evidence.
-It distinguishes later `2c` twin and `1f` camera scopes from older broad runs,
-records the latest normal-physics check gap, and retains material Newton failures
-and the original `20f` stall. The chronological pending statements below belong
+It distinguishes later `2c` twin and `1f` camera scopes from older broad runs.
+The [exact `0163` supplement](PHYSX-CURRENT-POSITIVE.md) closes the later normal
+PhysX body/joint/step gap across five builds and both modes. PhysX is now the
+user-selected release target; Newton failures and bounded 6.2 successes remain
+experimental limitations. The original `20f` PhysX stall remains unresolved.
+The chronological pending statements below belong
 to their stated source/phase; use the reconciliation for current disposition.
 No new broad simulation or readiness claim is made by this evidence update.
 

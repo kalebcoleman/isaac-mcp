@@ -2,6 +2,14 @@
 
 This is the final inventory/evidence map for review, **not completion of all requested runtime gates**. The real MCP inventory was captured at `fdb7a02da1be003e3d338f676ba8105720869ea3` (tree `77407d490684970161f223c28b2548f1d4289db2`). Subsequent `7bafbea` changes documentation only; the tested process is not relabeled.
 
+**Supplement:** the later [exact `0163b3f` PhysX regression](PHYSX-CURRENT-POSITIVE.md)
+closes the normal body/joint/step coverage gap in this snapshot, with 445 calls / 230
+assertions across all five H/W pairs. Its counts are separate from the census below.
+Per the user's 2026-11-02 direction, PhysX is the release target; Newton remains
+experimental and needs no additional investigation for this release. Existing Newton
+failures and bounded 6.2 successes remain recorded. The original `20f` PhysX stall
+still needs a bounded reproduction/recovery disposition.
+
 All **99 names** have retained calls. This census indexes **12,073 call records across 39 source-identified cases**, with **1,583 explicit or recomputed observation links**. These are record counts, including repeated observations, expected refusals and failed workflows; they are not deduplicated dispatches, independent effect tests, or proof that 99 tools work on every backend. Original input hashes, JSON pointers, actual arguments and MCP envelopes are retained. The original [1,944-call index](ALL-TOOLS-INDEX-20261102.json) remains immutable.
 
 The [compact machine-readable ledger](CURRENT-TOOL-RECONCILIATION-20261102.json) has one row per tool and per-case counters/sample call IDs. The [draft-release index and two record parts](RELEASE-ASSETS.md) contain full lookups and actual responses. Each `Rxx` case identifies the exact source, release, mode and backend; a table cell never changes the original SHA. Draft attachments require repository access.
@@ -26,9 +34,9 @@ The 99 names are 31 generic scene + 8 assets + 23 UR5e + 7 bridge built-ins + 12
 Twenty-one complete module comparisons match the retained references byte for byte: current twin modules match `2c8ce63`; host error-envelope code matches `826b84b`; current camera/advanced modules match `1f21407`; physics observation code matches `ba1d4b2`; selected host files match `884a8fa`; Lab, asset, core/timeline/runtime-edit files match `c2ceb7f`. Matching modules document source relationships, not an execution of a newer complete head.
 
 - Broad PhysX fixtures exist in both modes for all five installed releases. Their source heads differ. Later `2c8ce63` affected runs exercise all 23 UR tools and seven built-ins in all ten cells; later `1f21407` camera fixtures exercise units/clipping/resolution/refusal effects in all ten cells. Earlier generic workflows and independent tasks retain their own source identities.
-- The newest body/joint/step invalid-data checks have CPU coverage and a fresh `ba1d4b2` Newton error-reporting fixture (33 calls / 14 checks). A targeted **normal PhysX path on the latest runtime across five H/W cells remains unrecorded here**. Do not present the older positive observations as final-head tests. The next useful native run is this narrow check, rather than another complete unchanged tool suite.
+- The newest body/joint/step invalid-data checks have CPU coverage and a fresh `ba1d4b2` Newton error-reporting fixture (33 calls / 14 checks). The normal PhysX path was unrecorded when this JSON census was made; the later [exact `0163` supplement](PHYSX-CURRENT-POSITIVE.md) now qualifies it on all five H/W pairs. Neither record relabels the older positive observations.
 - The `1f` newly saved camera fixtures were reopened with standalone OpenUSD, not fresh Kit. Earlier fresh sensor/agent-save reopens remain separate; fresh-Kit reuse of these new clipping fixtures is an additional narrow check if claimed.
-- **Material limitations remain:** original `20f` 6.0.1 windowed 108-step stall; Newton 6.0.0.1 crashes/room stall; Newton 6.0.1 and 6.1 nonfinite assembled-scene states, black rendering and retained fatal transitions. Private controls, a typed error, process cleanup and successful later tasks do not resolve those failures. Newton 1.0 RG2 mounting is unsupported; older unavailable wrench APIs are distinct. Candidate9/10 Newton6.2 evidence is bounded historical qualification, not a current all-tool backend pass.
+- **The PhysX risk remains:** original `20f` 6.0.1 windowed 108-step stall. **Experimental Newton limitations remain:** 6.0.0.1 crashes/room stall; 6.0.1 and 6.1 nonfinite assembled-scene states, black rendering and retained fatal transitions. Private controls, a typed error, process cleanup and successful later tasks do not resolve those failures. Newton 1.0 RG2 mounting is unsupported; older unavailable wrench APIs are distinct. Candidate9/10 Newton6.2 evidence is bounded historical qualification, not all 6.2 Newton support. No further Newton qualification is a release gate under the revised user scope.
 - Prepared older installations, a scoped locked 6.2 venv and the diagnostic crash-upload-disabled launcher are explicit. Full-installer/clean-machine qualification remains open. Lab3/Sim6.2 has two dependency metadata conflicts and an unexecuted locked replay. No physical robot, future release, distinct-host authenticated upload or isolated-untrusted support is claimed.
 
 PR #16 remains draft and unmerged. These findings support review and the next bounded checks; they do not authorize merging around a material failure. Residual warnings retain their scope and uncertain impact, without making warning counts an unconditional blocker.
@@ -62,7 +70,7 @@ The original `eea` URDF mass/collision check failed; later `230f4b3` independent
 | `put_file` | O/O | O/O | O/O | O/O | O/O | builtin byte roundtrip |
 | `reload_tools` | O/O | O/O | O/O | O/O | O/O | reloaded fixture 7 |
 | `run_python` | O/O | O/O | O/O | O/O | O/O | builtin arithmetic |
-| `sim__body__state` | O/O | O/O | O/O | O/O | O/O | Observed body falls with positive runtime mass and increased downward velocity; latest strict-reporting positive-path check remains open. |
+| `sim__body__state` | O/O | O/O | O/O | O/O | O/O | Historical gravity/runtime-mass observation; current path additionally qualified in the separate 0163 H/W supplement. |
 | `sim__camera__capture` | F/F | F/F | F/F | F/F | F/F | 1f new-camera clipping: meter/cm units, near-plane pixel change, two resolutions, invalid-unit refusal; no physics steps. |
 | `sim__camera__create` | F/F | F/F | F/F | F/F | F/F | 1f new-camera clipping: meter/cm units, near-plane pixel change, two resolutions, invalid-unit refusal; no physics steps. |
 | `sim__controller__create` | O/O | O/O | O/O | O/O | O/O | Updated opt-in controller changes independent Visual prim readback to z=2 |
@@ -70,7 +78,7 @@ The original `eea` URDF mass/collision check failed; later `230f4b3` independent
 | `sim__joints__command` | O/O | O/O | O/O | O/O | O/O | 120 steps advance 1 simulated second; commanded elbow reaches -0.2 rad and body rests on floor |
 | `sim__joints__drive` | O/O | O/O | O/O | O/O | O/O | Runtime elbow reaches authored +0.2 rad drive |
 | `sim__joints__inspect` | O/O | O/O | O/O | O/O | O/O | Loaded fixture exposes authored revolute-joint configuration |
-| `sim__joints__state` | O/O | O/O | O/O | O/O | O/O | Runtime elbow reaches authored +0.2 rad drive; latest strict-reporting positive-path check remains open. |
+| `sim__joints__state` | O/O | O/O | O/O | O/O | O/O | Historical runtime elbow observation; current path additionally qualified in the separate 0163 H/W supplement. |
 | `sim__launch` | O/O | O/O | O/O | O/O | O/O | Managed launch PID matches later independent Kit stage response |
 | `sim__lidar__create` | O/O | O/O | O/O | O/O | O/O | LiDAR scan contains the known wall at 2.5m within .03m |
 | `sim__lidar__read` | O/O | O/O | O/O | O/O | O/O | LiDAR scan contains the known wall at 2.5m within .03m |
@@ -88,7 +96,7 @@ The original `eea` URDF mass/collision check failed; later `230f4b3` independent
 | `sim__prim__find` | O/O | O/O | O/O | O/O | O/O | Bounded Robot search contains the independently loaded wrapper |
 | `sim__prim__get` | O/O | O/O | O/O | O/O | O/O | Independent imported wrapper readback is world [0.5,0,0] |
 | `sim__prim__set_transform` | O/O | O/O | O/O | O/O | O/O | Independent imported wrapper readback is world [0.5,0,0] |
-| `sim__simulation__step` | O/O | O/O | O/O | O/O | O/O | 120 steps advance 1 simulated second; commanded elbow reaches -0.2 rad and body rests on floor; latest strict-reporting positive-path check remains open. |
+| `sim__simulation__step` | O/O | O/O | O/O | O/O | O/O | Historical timing/joint/floor observations; current path additionally qualified in the separate 0163 H/W supplement. |
 | `sim__stage__clear_owned` | O/O | O/O | O/O | O/O | O/O | Independent post-clear tree omits deleted owned roots while retaining protected robot |
 | `sim__stage__info` | O/O | O/O | O/O | O/O | O/O | Stage info matches selected managed PID and has explicit stage/session identities |
 | `sim__stage__save` | O/O | O/O | O/C | O/O | O/O | Private saved copy and source/live-layer preservation checks; default runtime-handle refusal and explicit normalization are distinct. W601 extra save/reopen is linked separately. |
