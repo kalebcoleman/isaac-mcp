@@ -862,3 +862,66 @@ the included profile/lock and explicit installation paths rather than reconstruc
 from prose. [Compact facts and 91 original record hashes](RECENT-LAB-20261102.json) link the
 scopes; [the draft supplement](RELEASE-ASSETS.md) contains redacted records and setup inputs.
 The original `20f` simulator stall remains unresolved, and broader Newton work is separate.
+
+
+## Newton twin adapter candidates, 6.2 headless and windowed
+
+Source change `1e9f194979b2f3ecf4654d88c8439a14a9a55062` was qualified as private
+candidates on combined `c2ceb7f`, preserving the combined asset/workstation code.
+Candidate 10's three complete runtime module hashes match that committed diff
+applied to the combined base. Candidate 9 lacks the later dynamic `frame_id`
+assignment; its broader observations are not relabeled as candidate 10 results.
+[The compact record](RECENT-NEWTON-TWIN-62-20261102.json) identifies 23 key originals;
+the [draft supplement](RELEASE-ASSETS.md) includes the larger logs, calls and harnesses.
+
+The installed package was 6.2.0.0, build `6.2.0-rc.14+release.52805.02189a84.gl`,
+Kit `110.4.0+feature.386251.187cf21b.gl`, Newton 1.6.1 / MuJoCo Warp 3.12.0,
+CPU device and 120 Hz. CPU device does not mean the native MuJoCo CPU solver.
+The host remained Ubuntu 24.04.5, RTX 5080, driver 580.178.04, Python 3.12.3.
+
+Candidate 9 completed 138 headless calls/56 assertions and 142 windowed calls/55
+assertions, including all 23 UR tools and seven bridge built-ins. Additional
+31-call headless and 32-call windowed runs each passed 23 checks: actual ROS
+RG2 commands, three measured joint targets, mimic relationships, pad gaps,
+ROS forces, recording and saved output. The original headless recording started
+before cold initialization and failed with a lag error and one frame; the
+separate after-warm-up recording succeeded. Videos decoded 264 and 265 frames;
+three frames per clip were visually sampled. Bases were cropped. Windowed frame
+0 retained the earlier view; later samples used the requested camera. This is
+not all-frame visual inspection or proof of physics from pictures.
+
+Earlier saved-twin Play returned success with unavailable tensors/callbacks;
+a later initialization attempt changed authored robot transforms. Session-scoped
+initialization fixed the observed robot/graph/physics subtree changes. One
+whole-root comparison still failed because native render metadata changed.
+Candidate 9's otherwise functional reopened wrench stream had an empty frame
+name; candidate 10 freshly reopened both saved outputs in separate processes.
+Each completed 10 calls/16 checks, including two actual ROS gripper commands
+across Stop/Play, advancing `tool0` wrench headers and source/root/subtree/graph/
+physics/edit-target preservation in those narrow intervals.
+
+A separate original two-body control used a 2 kg stationary wrist with a `tool0`
+frame translated 0.1 m and rotated 90 degrees. Six named MCP calls/eight checks
+and an independent ROS subscriber measured approximately
+`[-19.62000084, 0, -0.00000067, 0, 1.96200008, 0]` N/N·m versus the expected
+`[-19.62, 0, 0, 0, 1.962, 0]`. Runtime mass, stationary joint, advancing frame
+headers and unchanged source hashes were checked. This establishes the scoped
+native wrench/frame conversion, not physical sensor calibration or a separate
+measurement of the RG2 equality-weld reaction.
+
+Candidate 9 final native logs contained 6 errors/14,264 warnings headless and
+8 errors/47 warnings windowed, including intentional negative cases and a
+retained inspection-harness exception. Its windowed Console separately showed
+50 warnings/18 errors. Candidate 10 narrow H/W processes each ended with zero
+native errors/17 warnings; the actual windowed Console showed 19 warnings/zero
+errors. The known-load process ended with zero errors/12 warnings. No general
+harmless-warning claim follows. All owned processes exited.
+
+Final integrated affected PhysX and older Newton checks remain separate. The
+first `166e10d` PhysX fresh-reopen check subsequently found a zero timestamp and
+empty frame in actual wrench messages; its callback correction is not qualified
+by these Newton results. Newton 1.0 full-twin mounting remains unsupported after
+the bundled USD parser disproved a path-only weld relocation. Older backends
+without a native wrench output report unavailable. Generic Newton coverage,
+clean-machine/full-installer qualification and the original `20f` 6.0.1 stepping
+stall remain separate, unresolved gates.

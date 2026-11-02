@@ -33,6 +33,13 @@ The fork itself was also run through its real MCP interface on this same 6.2/Phy
 
 
 
+The [6.2 Newton twin candidate evidence](evidence/project-scene/RECENT-NEWTON-TWIN-62-20261102.json)
+adds measured UR/RG2, ROS, recording and fresh-reopen behavior on the stated
+MuJoCo Warp configuration, plus a known-load frame-conversion control. It does
+not establish the fork's Newton parity or a complete integrated backend matrix.
+An integrated PhysX reopened-wrench header defect is being corrected separately;
+the successful Newton control does not cover that failure.
+
 ## Mapping and gaps
 
 Evidence labels are defined in the [run index](evidence/project-scene/README.md). Each implemented
