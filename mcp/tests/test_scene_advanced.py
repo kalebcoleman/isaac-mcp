@@ -275,6 +275,62 @@ def test_owned_sensor_delete_releases_resources_before_removing_usd(advanced):
     assert not advanced.sensors
 
 
+@pytest.mark.parametrize("child_type", ["Camera", "OmniLidar"])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("child_owned", [False, True])
+def test_sensor_parent_delete_refuses_descendants_without_releasing_resources(
+    advanced, child_type, nested, child_owned
+):
+    stage = advanced.s.stage()
+    advanced.invalidate()
+    parent = "/World/Camera"
+    child = parent + ("/Group/Sensor" if nested else "/Sensor")
+    calls = []
+
+    def register(path, kind):
+        advanced.s.owned.add(path)
+        advanced.sensors[path] = (
+            kind,
+            dict(
+                annotator=SimpleNamespace(detach=lambda: calls.append((path, "detach"))),
+                product=SimpleNamespace(destroy=lambda: calls.append((path, "destroy"))),
+            ),
+        )
+
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        UsdGeom.Camera.Define(stage, parent)
+        stage.DefinePrim(child, child_type)
+    register(parent, "camera")
+    if child_owned:
+        register(child, "camera" if child_type == "Camera" else "lidar")
+    layers = (stage.GetRootLayer(), stage.GetSessionLayer())
+    before = [layer.ExportToString() for layer in layers]
+    owned_before = advanced.s.owned.copy()
+    sensors_before = advanced.sensors.copy()
+
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.prim.delete", stage, dict(path=parent, confirm=True))
+    assert error.value.code == "PROTECTED_PRIM"
+    assert calls == []
+    assert advanced.s.owned == owned_before
+    assert advanced.sensors == sensors_before
+    assert [layer.ExportToString() for layer in layers] == before
+
+    if child_owned:
+        # Leaf-first deletion releases both resource sets and quota slots.
+        for path in (child, parent):
+            result = advanced.execute(
+                "sim.prim.delete", stage, dict(path=path, confirm=True)
+            )
+            assert result["deleted"] == path and not stage.GetPrimAtPath(path)
+        assert calls == [
+            (path, action)
+            for path in (child, parent)
+            for action in ("detach", "destroy")
+        ]
+        assert not advanced.sensors and not advanced.s.owned
+
+
 def test_sensor_limit_refuses_before_native_creation(advanced):
     stage = advanced.s.stage()
     advanced.invalidate()

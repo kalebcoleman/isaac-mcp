@@ -65,10 +65,11 @@ def deletable(s, stage, p, direct_sensor=False):
     nodes, truncated = bounded(stage, p, 200)
     if truncated:
         refuse("LIMIT", "Subtree deletion exceeds 200 prims.")
+    # Direct deletion releases only this sensor, never sensors below it.
     if any(
         n.HasAPI(UsdPhysics.ArticulationRootAPI)
         or (
-            not direct_sensor
+            (not direct_sensor or n.GetPath() != prim.GetPath())
             and (n.IsA(UsdGeom.Camera) or n.GetTypeName() == "OmniLidar")
         )
         or n.GetMetadata("no_delete")
