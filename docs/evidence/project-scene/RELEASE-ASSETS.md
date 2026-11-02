@@ -31,7 +31,6 @@ by marking this release draft.
 | [sim-62w-clean-c2ceb-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-62w-clean-c2ceb-redacted.tar.gz) | `272ae373c28c09d5fdf00cc9fac0d297fa6b615e1cec61a8b3bd9dbfb1c5602d` | 2094115 |
 | [agent62w-c2ceb-clean-evidence-v2.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent62w-c2ceb-clean-evidence-v2.tar.gz) | `e6cb470ebab6921cf5f205bdc490edafa6af2f5643a980b37880a4c84603ae69` | 2179254 |
 | [agent-62w-c2ceb-clean-full-ur-video.mp4](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-62w-c2ceb-clean-full-ur-video.mp4) | `8589aa39015a3787345cc508fa275b76b16e0d865fb086721feaa714602c4c75` | 165202 |
-
 | [sim-6000h-c2ceb-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6000h-c2ceb-redacted.tar.gz) | `a726f92cc08756edd00cea00e65e7e722cc13b89948d0f1bdf592c21ded34acc` | 1058942 |
 | [sim-6000w-c2ceb-reopen-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6000w-c2ceb-reopen-redacted.tar.gz) | `68c06168fa44022c8fb8e16b98e09a607b07efdb1dcc20918756b2461fceae5b` | 1557682 |
 | [agent6000w-c2ceb-redacted-v1.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent6000w-c2ceb-redacted-v1.tar.gz) | `4ff5cde47f12c392e71947e0bb2150b541852c426294f7a7c43cb350ea6d59b2` | 1085393 |
