@@ -271,8 +271,12 @@ def offline() -> bool:
 
 
 def _bases(store: Path) -> tuple[Path, Path]:
-    """Folders inside a store that hold assets: the pack folder, then the flat store."""
-    return store / PACK, store
+    """Folders inside a store that hold assets: the pack folder, then the flat store.
+
+    The pack folder is resolved so a symlinked ``ur5e-dt`` still yields the same
+    paths as the files inside it.
+    """
+    return (store / PACK).resolve(), store
 
 
 def _search_bases() -> list[tuple[Path, str]]:
@@ -393,6 +397,42 @@ def pins(base: Path) -> dict[str, str]:
     return found
 
 
+def _containing_bases(path: Path) -> list[Path]:
+    resolved = path.resolve()
+    found: list[Path] = []
+    for store in stores():
+        for base in _bases(store):
+            try:
+                resolved.relative_to(base)
+            except ValueError:
+                continue
+            found.append(base)
+    return found
+
+
+def _recover_base(relpath: str, path: Path) -> Path | None:
+    """Pick the store folder to verify against when the caller did not say which.
+
+    If the lookup for *relpath* lands on *path*, its folder is the answer. Otherwise
+    fall back to the most specific folder containing *path*, and require every other
+    containing folder's pin for the file to agree (fail closed on ambiguity).
+    """
+    located = _locate(relpath)
+    if located is not None and located[0].resolve() == path.resolve():
+        return None if located[1] == "dropin" else located[2]
+    bases = _containing_bases(path)
+    if not bases:
+        return None
+    chosen = max(bases, key=lambda b: len(b.parts))
+    resolved = path.resolve()
+    for other in bases:
+        if other != chosen:
+            pin = pins(other).get(resolved.relative_to(other).as_posix())
+            if pin:
+                _check_pin(relpath, path, other, pin)
+    return chosen
+
+
 def _check_pin(relpath: str, path: Path, base: Path, pinned: str) -> None:
     actual = _sha256(path)
     if actual != pinned:
@@ -431,9 +471,10 @@ def verify_local(relpath: str, path: Path, base: Path | None = None) -> None:
     root file.  *base* is the store folder the lookup chose; it defaults to the
     most specific store folder that contains *path*.
     """
-    base = base if base is not None else _store_base(path)
     if base is None:
-        return
+        base = _recover_base(relpath, path)
+        if base is None:
+            return
     pinned = pins(base).get(path.resolve().relative_to(base).as_posix())
     if pinned:
         _check_pin(relpath, path, base, pinned)

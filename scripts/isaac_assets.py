@@ -24,9 +24,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import bz2
+import gzip
+import io
 import json
+import lzma
 import os
+import secrets
 import shutil
+import struct
 import sys
 import tarfile
 import tempfile
@@ -296,11 +302,86 @@ def _copy_stream(src, dest: Path, limits: Limits, name: str) -> None:
             out.write(chunk)
 
 
+# Tar headers (including PAX/GNU extended headers) are read before any member is counted,
+# so the decompressed stream itself is bounded: payload limit + per-member header
+# allowance + a fixed allowance for extended-header data.
+METADATA_ALLOWANCE = 1 << 20
+PER_MEMBER_OVERHEAD = 3 * 512
+
+
+class _BoundedReader(io.RawIOBase):
+    """Read-only wrapper that fails once more than *limit* bytes have been read."""
+
+    def __init__(self, raw, limit: int):
+        self._raw, self._limit, self._count = raw, limit, 0
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        data = self._raw.read(len(buffer))
+        self._count += len(data)
+        if self._count > self._limit:
+            raise CliError(
+                f"archive expands past the allowed {self._limit} bytes while reading its headers "
+                "and contents; raise --max-total-bytes if this is expected"
+            )
+        buffer[: len(data)] = data
+        return len(data)
+
+
+def _open_tar(archive: Path, limits: Limits):
+    raw = open(archive, "rb")
+    magic = raw.read(6)
+    raw.seek(0)
+    if magic[:2] == b"\x1f\x8b":
+        stream = gzip.GzipFile(fileobj=raw)
+    elif magic[:3] == b"BZh":
+        stream = bz2.BZ2File(raw)
+    elif magic[:6] == b"\xfd7zXZ\x00":
+        stream = lzma.LZMAFile(raw)
+    else:
+        stream = raw
+    bound = limits.total_bytes + limits.members * PER_MEMBER_OVERHEAD + METADATA_ALLOWANCE
+    reader = io.BufferedReader(_BoundedReader(stream, bound))
+    try:
+        return tarfile.open(fileobj=reader, mode="r|")
+    except BaseException:
+        raw.close()
+        raise
+
+
+def _zip_entry_count(archive: Path) -> int | None:
+    """Read the entry count from the end-of-central-directory record without parsing the rest."""
+    with archive.open("rb") as fh:
+        fh.seek(0, os.SEEK_END)
+        size = fh.tell()
+        tail_len = min(size, 65535 + 22 + 20 + 56 + 1024)
+        fh.seek(size - tail_len)
+        tail = fh.read()
+    i = tail.rfind(b"PK\x05\x06")
+    if i < 0 or len(tail) - i < 22:
+        return None
+    total = struct.unpack("<H", tail[i + 10 : i + 12])[0]
+    if total != 0xFFFF:
+        return total
+    j = tail.rfind(b"PK\x06\x06", 0, i)
+    if j >= 0 and len(tail) - j >= 56:
+        return struct.unpack("<Q", tail[j + 32 : j + 40])[0]
+    return None
+
+
 def _extract_archive(archive: Path, into: Path, limits: Limits | None = None) -> None:
     """Extract regular files only, validating every member; owners are not kept."""
     limits = limits or Limits(DEFAULT_MAX_MEMBERS, DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_TOTAL_BYTES)
     names: set[str] = set()
     if archive.name.lower().endswith(".zip"):
+        count = _zip_entry_count(archive)
+        if count is not None and count > limits.members:
+            raise CliError(
+                f"archive has {count} members, more than {limits.members}; "
+                "raise --max-members if this is expected"
+            )
         try:
             zf = zipfile.ZipFile(archive)
         except zipfile.BadZipFile as exc:
@@ -323,8 +404,8 @@ def _extract_archive(archive: Path, into: Path, limits: Limits | None = None) ->
                     _copy_stream(src, into / rel, limits, rel)
         return
     try:
-        tf = tarfile.open(archive, "r:*")
-    except (tarfile.TarError, OSError) as exc:
+        tf = _open_tar(archive, limits)
+    except (tarfile.TarError, OSError, EOFError) as exc:
         raise CliError(f"not a valid tar archive: {archive} ({exc})") from exc
     with tf:
         for member in tf:
@@ -368,68 +449,106 @@ def _walk_directory(root: Path) -> dict[str, Path]:
     return found
 
 
-def _default_mode() -> int:
-    """Permission bits a plain file would get (mkstemp creates 0600)."""
-    umask = os.umask(0)
-    os.umask(umask)
-    return 0o666 & ~umask
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+_DIR_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | _NOFOLLOW
 
 
-def _temp_beside(target: Path) -> tuple[int, Path]:
-    """Create a unique, exclusively-opened temp file in *target*'s directory."""
-    fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.", suffix=".part")
-    os.chmod(name, _default_mode())
-    return fd, Path(name)
+def _open_dir_chain(pack_dir: Path, parts: tuple[str, ...]) -> int:
+    """Open *pack_dir*, then each folder in *parts* below it, creating missing ones.
+
+    Every step uses ``O_NOFOLLOW`` relative to the previous directory handle, so a
+    symlink planted anywhere below the pack folder is refused before anything is
+    created through it. Returns a directory file descriptor the caller must close.
+    """
+    fd = os.open(pack_dir, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        for part in parts:
+            try:
+                nxt = os.open(part, _DIR_FLAGS, dir_fd=fd)
+            except FileNotFoundError:
+                os.mkdir(part, 0o755, dir_fd=fd)
+                nxt = os.open(part, _DIR_FLAGS, dir_fd=fd)
+            except OSError as exc:
+                raise CliError(
+                    f"refusing destination: {part!r} under {pack_dir} is a symlink or not a folder"
+                ) from exc
+            os.close(fd)
+            fd = nxt
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
 
 
-def _publish(tmp: Path, target: Path, force: bool) -> None:
-    """Move *tmp* to *target*; without ``force`` never replace anything that exists."""
+def _temp_name(name: str) -> str:
+    return f".{name}.{secrets.token_hex(8)}.part"
+
+
+def _publish(dfd: int, tmp: str, name: str, force: bool) -> None:
+    """Move *tmp* to *name* inside directory *dfd*; without ``force`` never replace anything."""
     if force:
-        os.replace(tmp, target)
+        os.rename(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
         return
     try:
-        os.link(tmp, target)
+        os.link(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd, follow_symlinks=False)
     except FileExistsError:
-        tmp.unlink(missing_ok=True)
-        raise CliError(f"refusing to overwrite (use --force): {target}") from None
+        os.unlink(tmp, dir_fd=dfd)
+        raise CliError(f"refusing to overwrite (use --force): {name}") from None
     except OSError:
-        # Filesystem without hard links: fall back to a check followed by a rename.
-        if target.exists() or target.is_symlink():
-            tmp.unlink(missing_ok=True)
-            raise CliError(f"refusing to overwrite (use --force): {target}") from None
-        os.replace(tmp, target)
-        return
-    tmp.unlink(missing_ok=True)
+        # No hard links on this filesystem: create the destination exclusively and copy.
+        # O_EXCL means a file that appears in the meantime is never replaced.
+        try:
+            out_fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, 0o666, dir_fd=dfd)
+        except FileExistsError:
+            os.unlink(tmp, dir_fd=dfd)
+            raise CliError(f"refusing to overwrite (use --force): {name}") from None
+        try:
+            with os.fdopen(out_fd, "wb") as out, open(
+                tmp, "rb", opener=lambda path, flags: os.open(path, flags, dir_fd=dfd)
+            ) as src:
+                shutil.copyfileobj(src, out, 1 << 20)
+        except BaseException:
+            os.unlink(name, dir_fd=dfd)
+            raise
+    os.unlink(tmp, dir_fd=dfd)
 
 
-def _install_file(src: Path, target: Path, pack_dir: Path, force: bool) -> None:
-    """Copy *src* to *target* without following symlinks planted under the pack folder."""
-    parent = target.parent
-    while parent != pack_dir:
-        if parent.is_symlink():
-            raise CliError(f"refusing destination under a symlinked directory: {parent}")
-        if parent == parent.parent:
-            raise CliError(f"destination escapes the pack folder: {target}")
-        parent = parent.parent
-    fd, tmp = _temp_beside(target)
+def _write_new_file(dfd: int, name: str, write) -> str:
+    """Create a uniquely named temp file in *dfd* (exclusive, no symlink following)."""
+    tmp = _temp_name(name)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, 0o666, dir_fd=dfd)
     try:
-        with os.fdopen(fd, "wb") as out, src.open("rb") as handle:
-            shutil.copyfileobj(handle, out, 1 << 20)
-        _publish(tmp, target, force)
+        with os.fdopen(fd, "wb") as out:
+            write(out)
+    except BaseException:
+        os.unlink(tmp, dir_fd=dfd)
+        raise
+    return tmp
+
+
+def _install_file(src: Path, rel: str, pack_dir: Path, force: bool) -> None:
+    """Copy *src* to ``<pack_dir>/<rel>`` without following symlinks below the pack folder."""
+    *parents, name = PurePosixPath(rel).parts
+    dfd = _open_dir_chain(pack_dir, tuple(parents))
+    try:
+        def write(out):
+            with src.open("rb") as handle:
+                shutil.copyfileobj(handle, out, 1 << 20)
+
+        tmp = _write_new_file(dfd, name, write)
+        _publish(dfd, tmp, name, force)
     finally:
-        tmp.unlink(missing_ok=True)
+        os.close(dfd)
 
 
 def _write_pins(pack_dir: Path, entries: dict[str, str]) -> None:
-    lines = [f"{digest}  {name}\n" for name, digest in sorted(entries.items())]
-    target = pack_dir / asset_cache.PINS_FILE
-    fd, tmp = _temp_beside(target)
+    text = "".join(f"{digest}  {name}\n" for name, digest in sorted(entries.items()))
+    dfd = _open_dir_chain(pack_dir, ())
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as out:
-            out.write("".join(lines))
-        os.replace(tmp, target)
+        tmp = _write_new_file(dfd, asset_cache.PINS_FILE, lambda out: out.write(text.encode("utf-8")))
+        os.rename(tmp, asset_cache.PINS_FILE, src_dir_fd=dfd, dst_dir_fd=dfd)
     finally:
-        tmp.unlink(missing_ok=True)
+        os.close(dfd)
 
 
 def cmd_add(args) -> int:
@@ -479,12 +598,11 @@ def cmd_add(args) -> int:
             if target.is_symlink() or _inside_repo(target.parent):
                 raise CliError(f"refusing unsafe destination: {target}")
 
+        pack_dir.mkdir(parents=True, exist_ok=True)
         pins = dict(asset_cache.pins(pack_dir))
         for rel in sorted(sources):
-            target = pack_dir / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            _install_file(sources[rel], target, pack_dir, args.force)
-            digest = sha256(target)
+            _install_file(sources[rel], rel, pack_dir, args.force)
+            digest = sha256(pack_dir / rel)
             pins[rel] = digest
             print(f"added {rel}  sha256:{digest[:12]}")
         _write_pins(pack_dir, pins)
