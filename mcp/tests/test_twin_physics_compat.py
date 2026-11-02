@@ -341,11 +341,11 @@ def test_wrench_selects_named_wrist_and_transforms_frame_and_origin(rotation, ex
     view = NS(check=lambda: True, count=1, max_links=2,
               shared_metatype=NS(link_indices={"wrist_3_link": 0, "quick_changer_link": 1}),
               get_link_incoming_joint_force=lambda: forces)
-    got = compat.newton_tool_wrench(NS(_physics_view=view), s)
+    got = compat.tool_wrench(NS(_physics_view=view), s)
     assert got == pytest.approx(expected)
     forces[0, 0, 0] = float("nan")
     with pytest.raises(RuntimeError, match="not finite"):
-        compat.newton_tool_wrench(NS(_physics_view=view), s)
+        compat.tool_wrench(NS(_physics_view=view), s)
 
 
 @pytest.mark.parametrize("seconds, expected", [
@@ -407,7 +407,8 @@ def test_saved_twin_runtime_restores_only_uninitialized_process_configuration(
     assert not native.configured
 
 
-def test_rebinding_saved_graphs_does_not_rebuild_or_author_usd(monkeypatch):
+@pytest.mark.parametrize("engine", ["physx", "newton"])
+def test_rebinding_saved_graphs_does_not_rebuild_or_author_usd(monkeypatch, engine):
     import ast
     from types import SimpleNamespace as NS
     source = ast.parse((path.parent / "extension.py").read_text())
@@ -417,7 +418,7 @@ def test_rebinding_saved_graphs_does_not_rebuild_or_author_usd(monkeypatch):
     stage = NS(GetPrimAtPath=lambda path: True)  # No USD mutation API supplied.
     namespace = {"omni": NS(usd=NS(get_context=lambda: NS(get_stage=lambda: stage))),
                  "og": NS(get_node_by_path=lambda p: p),
-                 "selected_engine": lambda: "newton",
+                 "selected_engine": lambda: engine,
                  "wrench_capability": lambda: {"available": True},
                  "subscribe_physics_step": lambda callback: events.append(callback) or callback}
     exec(compile(ast.Module(body=[fn], type_ignores=[]), "rebind", "exec"), namespace)
@@ -458,8 +459,9 @@ def test_gate_cleanup_before_graph_creation_never_queries_missing_og_attribute()
 
 @pytest.mark.parametrize("initial_frame", ["", "stale-frame"])
 @pytest.mark.parametrize("header_failure", [False, True])
-def test_newton_force_callback_restores_frame_before_enabling_publisher(
-        monkeypatch, initial_frame, header_failure):
+@pytest.mark.parametrize("engine", ["physx", "newton"])
+def test_force_callback_restores_frame_and_time_before_publishing(
+        monkeypatch, initial_frame, header_failure, engine):
     import ast
     import sys
     from types import SimpleNamespace as NS
@@ -479,10 +481,10 @@ def test_newton_force_callback_restores_frame_before_enabling_publisher(
         return NS(set=put)
 
     namespace = {
-        "selected_engine": lambda: "newton",
+        "selected_engine": lambda: engine,
         "og": NS(Controller=NS(attribute=attribute)),
         "omni": NS(usd=NS(get_context=lambda: NS(get_stage=lambda: object()))),
-        "newton_tool_wrench": lambda *args: [1, 2, 3, 4, 5, 6],
+        "tool_wrench": lambda *args: [1, 2, 3, 4, 5, 6],
         "physics_stamp": compat.physics_stamp,
         "wrench_capability": lambda: {"available": True},
     }

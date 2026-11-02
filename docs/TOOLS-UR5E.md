@@ -88,6 +88,15 @@ backends lacking this output, or an already initialized scene with the output
 disabled, report `force_publisher.available: false` and its reason instead of
 publishing placeholder zero wrenches. No active solver is rebuilt to enable it.
 
+PhysX and Newton both select the named `wrist_3_link`, transform its incoming
+joint force and moment into `tool0`, and restore that frame name and the observed
+physics timestamp on every valid sample. This corrects the legacy PhysX publisher's
+last-row assumption and zero/empty headers after reopening. Fresh graphs gate
+publication until a complete sample is available. Legacy PhysX graphs without a
+validity gate remain unchanged when reopened and can publish default or cached
+values before a valid callback; use a new disposable twin stage to create the
+guarded graph. Read `force_publisher` and verify actual messages after warm-up.
+
 ## Parameter conventions
 
 - Parameter shapes come from `MCP_TOOL_REGISTRY` in `extension.py`; required/default
@@ -149,7 +158,9 @@ publishing placeholder zero wrenches. No active solver is rebuilt to enable it.
   caller's edit target restored unless an external editor changed it. This does
   not promise byte-identical in-memory root layers: native viewport/render
   metadata can change during opening or playback. Source files are not saved by
-  this operation. A legacy
+  this operation. PhysX's normal USD writeback can also update in-memory body poses,
+  velocities and joint state during playback; the scoped Newton initialization
+  policy is not a claim of PhysX root-layer byte preservation. A legacy
   Newton force graph without a validity gate is refused; use a new disposable
   stage and Quick Start to build the current graph.
 - `force_publisher` reports the runtime wrench capability/readiness when a twin
@@ -408,7 +419,11 @@ stays in that state; a replacement stage or concurrent Stop is never resumed.
 
 ## Typical safe simulation workflow
 
-1. **Connect**: ensure the twin bridge is up on `8766`; call `status` and refresh the MCP client tool list; the bridge CLI also supports `list_tools`.
+1. **Connect**: call `refresh_tools`, discover bridges and select the intended endpoint
+   with `use_bridge`; verify its PID and port with `status` before changing a scene.
+   `8766` is only the default. If discovery tools are filtered, use
+   `python -m isaac_mcp.client --list-bridges`, then probe the explicit host and port
+   as described in [the agent guide](../AGENTS.md#getting-the-full-surface).
 2. **Fresh stage (optional)**: `ur5e_dt__new_stage` to free memory, then rebuild.
 3. **Build scene**: `ur5e_dt__quick_start_with_workstation` (or `quick_start` / `quick_start_with_workstation_and_simple_room`).
 4. **Camera ROS (optional)**: `ur5e_dt__setup_camera_tf_graph` after UR5e is loaded.

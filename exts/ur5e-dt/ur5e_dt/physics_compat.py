@@ -221,8 +221,13 @@ def wrench_capability():
             "quantity": "tree-parent wrench; loop-closing equality reaction is not a separate sensor"}
 
 
-def newton_tool_wrench(articulation, stage):
-    """Map the named wrist child-joint wrench to tool0, including its origin."""
+def tool_wrench(articulation, stage):
+    """Map a native PhysX/Newton wrist child-joint wrench to tool0.
+
+    Both native tensor providers expose link incoming joint forces in the child
+    joint frame. Select the named wrist, not the last link (which can be the
+    QuickChanger), then transform both the orientation and moment origin.
+    """
     import numpy as np
     from pxr import Gf, UsdGeom, UsdPhysics
 

@@ -32,7 +32,7 @@ from .physics_compat import (
     subscribe_physics_step, close_physics_step,
     configure_newton_gripper, runtime_link_matrix,
     prepare_newton_tensors, prepare_newton_wrench, wrench_capability,
-    newton_tool_wrench, physics_stamp, prepare_saved_twin_runtime,
+    tool_wrench, physics_stamp, prepare_saved_twin_runtime,
 )
 
 
@@ -1419,16 +1419,17 @@ class DigitalTwin(omni.ext.IExt):
             self._stop_physics_callback('_force_physx_sub', '_effort_articulation',
                                         '_force_publish_active', '_force_warmup')
             self._force_graph_path = force_graph
-            if selected_engine() == "newton":
-                self._force_publish_status = dict(wrench_capability(), status="warming_up")
+            self._force_publish_status = dict(wrench_capability(), status="warming_up")
+            newton_force = selected_engine() == "newton"
+            if newton_force:
                 if not stage.GetPrimAtPath(force_graph + "/valid"):
                     self._force_publish_status.update(available=False, status="unavailable",
                         reason="Saved Newton force graph lacks a validity gate; rebuild on a new twin stage")
                     return
-                self._set_force_gate(False, required=True)
-                if not self._force_publish_status["available"]:
-                    self._force_publish_status["status"] = "unavailable"
-                    return
+            self._set_force_gate(False, required=newton_force)
+            if not self._force_publish_status["available"]:
+                self._force_publish_status["status"] = "unavailable"
+                return
             # Recover the publisher OG node handle from the existing graph
             pub_prim = stage.GetPrimAtPath(f"{force_graph}/publisher")
             if pub_prim:
@@ -3608,10 +3609,10 @@ class DigitalTwin(omni.ext.IExt):
     def setup_force_publish_action_graph(self):
         """Setup force publishing as geometry_msgs/WrenchStamped on /force_torque_sensor_broadcaster/wrench_sim.
 
-        Uses a physics step callback to read measured joint forces at physics rate
-        (~60 Hz). Uses get_measured_joint_forces() which returns 6-DOF spatial forces
-        [Fx, Fy, Fz, Tx, Ty, Tz] per joint. Publishes full wrench from the UR5e wrist joint,
-        matching the real robot's force_torque_sensor_broadcaster message format.
+        Uses a physics step callback to read the native incoming-joint force
+        [Fx, Fy, Fz, Tx, Ty, Tz] at the named wrist. Publishes the transformed
+        tool0 wrench with simulation time, using the real robot's
+        force_torque_sensor_broadcaster message format.
         """
         import omni.physx
 
@@ -3631,8 +3632,6 @@ class DigitalTwin(omni.ext.IExt):
             self._force_publish_status["status"] = "unavailable"
             print(f"Force publisher unavailable: {capability['reason']}; no zero-wrench publisher created")
             return
-        newton_force = capability["backend"] == "newton"
-
         # Check that UR5e prim exists in the scene (may survive hot-reload even if Python state is lost)
         stage_check = omni.usd.get_context().get_stage()
         if not stage_check.GetPrimAtPath("/World/UR5e"):
@@ -3661,19 +3660,20 @@ class DigitalTwin(omni.ext.IExt):
                 keys.CREATE_NODES: [
                     ("tick", "omni.graph.action.OnPlaybackTick"),
                     ("context", "isaacsim.ros2.bridge.ROS2Context"),
-                    ("publisher", "isaacsim.ros2.bridge.ROS2Publisher")
-                ] + ([("valid", "omni.graph.action.Branch")] if newton_force else []),
+                    ("publisher", "isaacsim.ros2.bridge.ROS2Publisher"),
+                    ("valid", "omni.graph.action.Branch"),
+                ],
                 keys.SET_VALUES: [
                     ("publisher.inputs:messageName", "WrenchStamped"),
                     ("publisher.inputs:messagePackage", "geometry_msgs"),
                     ("publisher.inputs:topicName", "force_torque_sensor_broadcaster/wrench_sim"),
-                ] + ([("valid.inputs:condition", False)] if newton_force else []),
+                    ("valid.inputs:condition", False),
+                ],
                 keys.CONNECT: [
                     ("context.outputs:context", "publisher.inputs:context"),
-                ] + ([
                     ("tick.outputs:tick", "valid.inputs:execIn"),
                     ("valid.outputs:execTrue", "publisher.inputs:execIn"),
-                ] if newton_force else [("tick.outputs:tick", "publisher.inputs:execIn")])
+                ]
             }
         )
 
@@ -3697,22 +3697,23 @@ class DigitalTwin(omni.ext.IExt):
         print(f"UR5e Force Publisher created at {graph_path}")
         print("Publishing geometry_msgs/WrenchStamped to topic: /force_torque_sensor_broadcaster/wrench_sim")
         print("Full 6-DOF wrench (Fx, Fy, Fz, Tx, Ty, Tz) from UR5e wrist joint")
-        print("Joint forces read at physics rate (~60 Hz)")
+        print("Joint forces read at the configured physics rate")
 
     def _on_physics_step_force(self, dt):
         """Physics step callback - read joint forces and update OmniGraph WrenchStamped attributes.
 
-        Uses get_measured_joint_forces() which returns 6-DOF spatial forces
-        [Fx, Fy, Fz, Tx, Ty, Tz] per joint. Publishes full wrench from the last joint
-        (wrist joint) as geometry_msgs/WrenchStamped.
+        Reads the named wrist's native incoming-joint wrench and transforms it
+        to tool0 before publishing, with the observed simulation timestamp.
         """
         if self._force_pub_node is None:
             # Cleared by a stage OPENED event; the publisher graph is gone until it is rebuilt.
             return
         newton_force = selected_engine() == "newton"
         try:
-            if newton_force:
-                self._set_force_gate(False, required=True)
+            # New graphs gate both engines until a complete valid sample. Old
+            # PhysX saved graphs without this node remain readable; do not
+            # rebuild their authored graph merely to restore Python callbacks.
+            self._set_force_gate(False, required=newton_force)
             artic = self._lazy_init_articulation(
                 '_effort_articulation', '/World/UR5e',
                 'force_pub_ctrl', '_force_warmup')
@@ -3724,32 +3725,24 @@ class DigitalTwin(omni.ext.IExt):
             if getattr(artic, '_physics_view', None) is None:
                 return
 
-            # get_measured_joint_forces returns shape (num_articulations, num_joints, 6)
-            # where 6 = [Fx, Fy, Fz, Tx, Ty, Tz]
-            forces = ([newton_tool_wrench(artic, omni.usd.get_context().get_stage())]
-                      if newton_force else self._effort_articulation.get_measured_joint_forces())
-            if forces is not None and len(forces) > 0:
-                # Use last joint (wrist joint) - full 6-DOF wrench
-                wrist = forces[0] if newton_force else forces[0][-1]
-                node = self._force_pub_node
-                og.Controller.attribute("inputs:wrench:force:x", node).set(float(wrist[0]))
-                og.Controller.attribute("inputs:wrench:force:y", node).set(float(wrist[1]))
-                og.Controller.attribute("inputs:wrench:force:z", node).set(float(wrist[2]))
-                og.Controller.attribute("inputs:wrench:torque:x", node).set(float(wrist[3]))
-                og.Controller.attribute("inputs:wrench:torque:y", node).set(float(wrist[4]))
-                og.Controller.attribute("inputs:wrench:torque:z", node).set(float(wrist[5]))
-                if newton_force:
-                    from isaacsim.core.simulation_manager import SimulationManager
-                    sec, nanosec = physics_stamp(float(SimulationManager.get_simulation_time()))
-                    # ROS2Publisher's dynamic header values are process state:
-                    # a saved graph can reopen with an empty frame_id. Publish
-                    # the frame together with each validated transformed sample.
-                    og.Controller.attribute("inputs:header:frame_id", node).set("tool0")
-                    og.Controller.attribute("inputs:header:stamp:sec", node).set(sec)
-                    og.Controller.attribute("inputs:header:stamp:nanosec", node).set(nanosec)
-                    self._set_force_gate(True, required=True)
-                self._force_publish_status = dict(wrench_capability(), status="ready")
-                self._force_last_error = None
+            wrist = tool_wrench(artic, omni.usd.get_context().get_stage())
+            from isaacsim.core.simulation_manager import SimulationManager
+            sec, nanosec = physics_stamp(float(SimulationManager.get_simulation_time()))
+            node = self._force_pub_node
+            og.Controller.attribute("inputs:wrench:force:x", node).set(float(wrist[0]))
+            og.Controller.attribute("inputs:wrench:force:y", node).set(float(wrist[1]))
+            og.Controller.attribute("inputs:wrench:force:z", node).set(float(wrist[2]))
+            og.Controller.attribute("inputs:wrench:torque:x", node).set(float(wrist[3]))
+            og.Controller.attribute("inputs:wrench:torque:y", node).set(float(wrist[4]))
+            og.Controller.attribute("inputs:wrench:torque:z", node).set(float(wrist[5]))
+            # Dynamic ROS fields are process state on both engines; saved
+            # graphs can reopen with an empty frame and a zero timestamp.
+            og.Controller.attribute("inputs:header:frame_id", node).set("tool0")
+            og.Controller.attribute("inputs:header:stamp:sec", node).set(sec)
+            og.Controller.attribute("inputs:header:stamp:nanosec", node).set(nanosec)
+            self._set_force_gate(True, required=newton_force)
+            self._force_publish_status = dict(wrench_capability(), status="ready")
+            self._force_last_error = None
         except Exception as e:
             self._force_publish_status = dict(available=False, status="unavailable", reason=str(e))
             if str(e) != getattr(self, "_force_last_error", None):
@@ -3761,7 +3754,7 @@ class DigitalTwin(omni.ext.IExt):
         path = "/Graph/ActionGraph_UR5e_ForcePublish/valid"
         if stage is None or not stage.GetPrimAtPath(path):
             if required:
-                raise RuntimeError("Newton force publisher has no validity gate; rebuild its graph")
+                raise RuntimeError("Force publisher has no validity gate; rebuild its graph")
             return
         og.Controller.attribute(path + ".inputs:condition").set(value)
 
