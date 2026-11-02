@@ -19,6 +19,8 @@ The [6.2.0.0 follow-up](#6200-physx-follow-up-2026-11-02) separates existing and
 The [6.0.0.0 current-runtime follow-up](#6000-physx-follow-up-2026-11-02) records broad checks, an independent task and a separate 60 Hz reopen.
 The [current 6.0.0.1 PhysX and later save-reopen results](#6001-current-runtime-physx-follow-up-2026-11-02) retain the earlier runs above as historical evidence.
 Final qualification of the combined candidate across the requested builds and modes remains pending.
+The [6.2 Newton twin candidate follow-up](#6200-newton-twin-candidates-2026-11-02) separates
+broad candidate runs from later narrow reopen/force checks and the unresolved integrated PhysX header defect.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
 |---|---|---|
@@ -806,3 +808,78 @@ budget. Later [Lab native/setup evidence](REPRODUCIBILITY.md#self-contained-lab-
 records scoped train/eval/play results with two retained dependency conflicts. Generic Newton,
 dependency-clean Lab setup, clean-machine/full-installer testing and final review remain
 separate open gates; no all-tool/all-version readiness claim follows.
+
+## 6.2.0.0 Newton twin candidates (2026-11-02)
+
+The [committed Newton twin supplement](evidence/project-scene/RECENT-NEWTON-TWIN-62-20261102.json)
+has SHA-256 `7340be6cac7421b000579de54cf818301dd0967d89e5b247cc1ac6d05e6c3d8b`;
+all 23 original source hashes and sizes were verified for this update. These runs used
+private candidates on combined base `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`.
+Candidate10's complete runtime modules match source
+`1e9f194979b2f3ecf4654d88c8439a14a9a55062` applied to that base. Candidate9 lacks the
+later dynamic wrench `frame_id` assignment. Neither set is relabelled as an execution
+of integrated `166e10d` or a later documentation head.
+
+The environment was **Sim 6.2.0.0**, build `6.2.0-rc.14+release.52805.02189a84.gl`,
+Kit `110.4.0+feature.386251.187cf21b.gl`, Python 3.12.3, Newton 1.6.1,
+MuJoCo Warp 3.12.0 and Warp 1.17.0, on Ubuntu 24.04.5 / RTX 5080 / driver 580.178.04.
+The selected engine was Newton, solver **MuJoCo Warp**, device **CPU**, at **120 Hz**.
+CPU device does not establish use of the native MuJoCo CPU solver, and this twin
+workflow is separate from generic Newton tools and Isaac Lab's Newton/MJWarp pairing.
+
+| Candidate and scope | Headless | Windowed |
+|---|---|---|
+| Candidate9 broad requests / assertions | 138 / 56 passed | 142 / 55 passed |
+| Candidate9 additional output calls / checks | 31 / 23 passed | 32 / 23 passed |
+| Candidate10 fresh saved-twin reopen calls / checks | 10 / 16 passed | 10 / 16 passed |
+| Candidate9 final native errors / warnings | 6 / 14,264 | 8 / 47 |
+| Candidate9 simulation-time / cycle occurrences | 14,092 / 0 | 5 / 0 |
+| Candidate10 narrow native errors / warnings | 0 / 17 | 0 / 17 |
+
+The broad requests include the catalog listing and exercise all **23 UR5e tools and
+seven bridge built-ins**. Output checks measured actual ROS RG2 commands, three joint
+targets, mimic relationships, runtime pad gaps, forces, recording and saved output.
+They do not prove every tool parameter or backend. Candidate9's reopened wrench stream
+still had an empty frame name. Candidate10's separate fresh processes checked two actual
+ROS gripper commands across Stop/Play and nonempty `tool0` headers with advancing physics
+timestamps. Source/root/robot-subtree/graph/physics/edit-target preservation passed in
+those narrow Newton intervals; this is not universal whole-root preservation.
+
+A separate candidate10 known-load control passed **six calls / eight checks** with a
+stationary 2 kg wrist, `tool0` rotated 90 degrees about Y and offset by 0.1 m. The actual
+product ROS wrench measured approximately `[-19.62000084, 0, -0.00000067, 0, 1.96200008, 0]`
+N/N·m against expected `[-19.62, 0, 0, 0, 1.962, 0]`. Runtime mass, stationarity, advancing
+headers and unchanged source hashes were checked. This qualifies that gravity/frame/offset
+control, not physical sensor calibration, contact forces or an independent RG2 equality-weld
+reaction measurement. Its final native log had zero errors and 12 warnings.
+
+Candidate9 windowed Console counts were **50 warnings / 18 errors**; candidate10's were
+**19 / 0**. These are separate from native-log counts. Retained errors include negative
+tests and an inspection-harness exception; the counts do not establish harmlessness.
+All owned candidate processes exited. Runtime-owner visual review sampled three frames
+from each 264-frame headless and 265-frame windowed output video. Bases were cropped;
+windowed frame zero retained the previous camera view. The separate broad windowed
+video had 193 decoded frames, two sampled, with wrist cropping. This update did not repeat
+pixel review or infer physics from video.
+
+Earlier failures remain in the [detailed evidence](evidence/project-scene/FINAL-VALIDATION.md):
+saved-twin Play succeeding without tensors/callbacks, root transform normalization,
+whole-root changes from viewport metadata, and cold recording refusing after more than
+five seconds of lag with one frame. The later warmed recording does not erase that failure.
+See the [twin contract](TOOLS-UR5E.md) for explicit UR Play restoration, force capability
+checks and recording limits; ordinary generic Play is not proof of restored twin callbacks.
+
+**Integrated PhysX qualification remains incomplete.** The first fresh windowed reopen
+at `166e10db31cc2e24fad66b204c00301c1281bfae` produced actual wrench messages with zero
+timestamps and empty frames despite working motion. Its correction remains pending here.
+PhysX's native in-memory robot pose writes during Play must not be described as preserved
+by the Newton checks above: saved-file, graph, physics-setting and edit-target preservation
+are distinct observations, not proof of unchanged live robot poses or disk overwrite.
+
+Newton **1.0 full-twin mounting is unsupported**; a bundled-USD parser probe disproved
+path-only weld relocation. Older backends without incoming-joint wrench output report
+unavailable, not substitute zeros; native MuJoCo CPU/VBD do not qualify from these results.
+Remaining integrated/older-build checks, generic backend qualification and clean-machine/
+full-installer testing stay separate. The original `20f2953` 6.0.1 stepping stall remains
+unresolved. The larger bundle is indexed in the [unpublished draft release](evidence/project-scene/RELEASE-ASSETS.md);
+these scoped results do not establish all-version readiness or public artifact availability.
