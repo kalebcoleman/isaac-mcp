@@ -674,6 +674,12 @@ class Advanced:
             )
         if name in ("sim.camera.create", "sim.lidar.create"):
             p, parent = s.new_path(stage, a["path"])
+            if str(p) in self.sensors:
+                refuse(
+                    "CONFLICT",
+                    "Path still has registered sensor resources after external USD changes. "
+                    "Use a new stage to release them before reusing this path.",
+                )
             pose = s.pose(
                 stage,
                 parent,

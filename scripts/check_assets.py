@@ -17,8 +17,8 @@ ASSETS = REPO / "exts" / "ur5e-dt" / "assets"
 MANIFEST = REPO / "exts" / "ur5e-dt" / "assets-manifest.json"
 
 EXCLUDED_EXTRA = (
-    "exts/ur5e-dt/assets/gripper/RG2.usd",
-    "exts/ur5e-dt/assets/gripper/husarion_rg2/husarion_rg2_fixed.usd",
+    "gripper/RG2.usd",
+    "gripper/husarion_rg2/husarion_rg2_fixed.usd",
 )
 EXCLUDED_PREFIXES = (
     "exts/ur5e-dt/assets/robot/",

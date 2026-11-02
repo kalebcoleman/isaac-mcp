@@ -306,6 +306,9 @@ Delete an exact owned sensor path while stopped to detach its annotator and rele
 render product. Clear/subtree deletion still protects sensors. Cleanup is bound to the
 original stage and creation layers; foreign composition opinions cause a partial-cleanup
 error instead of cross-layer deletion. Stage closing and extension shutdown release resources.
+If an editor or another extension removes the sensor's USD prim, its registered resources
+remain protected: creation at that same path returns `CONFLICT` rather than overwriting
+the cleanup record. Use a new stage to release those resources before reusing the path.
 Reported CUDA illegal-address errors latch `device_error`: runtime/sensor operations refuse
 until process restart. A native crash may bypass that guard. Inspect, save when possible,
 Stop, and restart only the owned disposable process. See the compatibility follow-up evidence
