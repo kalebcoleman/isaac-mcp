@@ -1,7 +1,7 @@
 # All exposed tools: final validation ledger
 
 Validation remains in progress. All implementation PRs are unmerged; combined PR #16
-is a draft. Its latest candidate is `20f2953bb28361f29b0aa720513b5d8bc2d415ed`.
+is a draft. The candidate at this update is `6bc45c2977270de748b58c630c21cd03f0d74fb6`.
 The real MCP inventories contain **90 default tools** and **99** with
 `ISAAC_MCP_LOCAL_TOOLS=all,screen_input,sim_launch`. Disabling the generic pack
 with those optional groups selected leaves 60 tools. Every name is tracked below.
@@ -36,8 +36,14 @@ The subsequent `eea18c8` 6.0.1.0 headless broad suite passed its 14 phases, but 
 URDF readback found missing physical properties behind an invalid native variant
 selection. `230f4b3` fixes the private conversion output; fresh 6.0.1.0 headless
 qualification independently verified mass/collision/geometry and measured two-link
-joint motion. The current 6.0.1.0 windowed broad run is in progress. Other-build URDF
-fix qualification, 6.1.0.0 both modes, affected 6.2/6.0.0.0 paths and final Newton
+joint motion. The `20f2953` 6.0.1.0 windowed broad run passed, but its later independent
+task stalled in a native 108-step call and required owned-process force termination.
+Fresh repeats and a separate successful 89-request task do not resolve that failure.
+The [new supplement](RECENT-601W-20261102.json) also records independent light/clone/URDF
+effects and fresh `6bc45c2` checkpoint/discovery qualification. Use the agent bundle's
+v2 ledger/addendum; copied PID/port and overbroad observations in v1 are corrected
+without rewriting original calls. Other-build URDF fix qualification, final 6.1.0.0
+both-mode records, affected 6.2/6.0.0.0 paths and final Newton
 coverage remain pending. All 12 Isaac Lab tools passed a real Lab 3.0 / Sim 6.2 workflow at `411d89f` (41 calls, 16 effect checks). Later mode/video fixes were tested as exact source bytes on a private `33de98d`-based candidate and integrated into `2bbeee4`; these scoped results do not establish other Lab/Sim pairings or a clean installation.
 Host/display tools need one actual-display run, plus simulator target verification.
 

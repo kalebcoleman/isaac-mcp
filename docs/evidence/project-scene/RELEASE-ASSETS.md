@@ -15,6 +15,10 @@ by marking this release draft.
 | [viewport-6001w-eea18c8-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/viewport-6001w-eea18c8-redacted.tar.gz) | `fd24bb6a09bd6f71feed6cbfb254c2d3bb0d5c9b35e7a85a4054ca4408a1858e` | 956920 |
 | [agent-6001w-4499-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-6001w-4499-redacted.tar.gz) | `42202f3a1aae091cf627284c1b24162dda16bfb7f859ea11d5d01fd5548773fe` | 4600087 |
 | [sim-601h-eea-urdf230-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-601h-eea-urdf230-redacted.tar.gz) | `0a8a62c9deee9f0af0232312ecb51fdd73c189ec56529d7bdb4decd16cdba089` | 3478861 |
+| [sim-601w-20f-broad-stall-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-601w-20f-broad-stall-redacted.tar.gz) | `c0ae3dd2dcc25b47e6c505d5d3440541fbedad3c34a2a6d446c406e740735c04` | 2169089 |
+| [sim-601w-repeats-20f-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-601w-repeats-20f-redacted.tar.gz) | `9072b764b6f6434c867cb04ad92feac20c005277e1a844c21271f01a5de91163` | 2437143 |
+| [sim-601w-checkpoint-discovery-6bc-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-601w-checkpoint-discovery-6bc-redacted.tar.gz) | `a65d1290cc576017cfbc22788e44d17e76032906c57af5a957e89bee0cc80e35` | 727974 |
+| [agent-601w-20f-stall-and-new-task-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-601w-20f-stall-and-new-task-redacted.tar.gz) | `e09b5cc6b90ea37232dcb4f776c376a487d6768b326ef951655d2bf07e83b588` | 2134988 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
@@ -40,3 +44,15 @@ its later URDF missing-physics finding, and the fresh `230f4b3` narrow fix quali
 The save harness exit 143 and expected-error parser failure remain separate from
 successful assertions. No 6.0.1 windowed or other-build URDF pass is inferred.
 [Compact source-identified checks](RECENT-CHECKS-20261102.json) map those observations.
+
+The four 6.0.1 windowed supplements distinguish exact `20f2953` broad passes and
+its later unresolved native step stall; fresh replay/repeat controls; two independent
+agent tasks; and exact `6bc45c2` checkpoint/discovery qualification. The repeated
+successes and different-process named workflow do not resolve the original stall.
+The successful task's `correction-v2` ledger/addendum correct copied PID/port and
+observation-scope mistakes in the retained v1 derived ledger; raw calls are unchanged.
+Agent media includes before-stall evidence and the later successful workcell, with
+explicit video sampling limits. The replay bundle retains the original checkpoint
+configuration finding; source/saved USD geometry is omitted. One unpublished combined
+bundle exceeded the normal nested privacy budget and was split; no guard limit was
+raised. [Compact facts and source hashes](RECENT-601W-20261102.json) map these runs.

@@ -15,8 +15,8 @@ and diagnostic intervention remain separate from the fresh product results.
 
 
 This is a chronological record: the earlier commit-specific results and failure history below
-remain historical. The current combined candidate is PR #16 at
-`20f2953bb28361f29b0aa720513b5d8bc2d415ed`, still draft and unmerged. No original
+remain historical. The combined candidate at this update is PR #16 at
+`6bc45c2977270de748b58c630c21cd03f0d74fb6`, still draft and unmerged. No original
 implementation PR is being merged separately. The [all-tool ledger](ALL-TOOLS-MATRIX.md)
 tracks the current 90 default / 99 optional-inclusive tool surface.
 
@@ -475,3 +475,76 @@ assertion to the standard live suite and clarifies successful import versus conv
 preservation. Product runtime is unchanged from `230f4b3`; the 6.0.1.0 windowed suite
 on this exact candidate is underway. All 99 registered names now have historical
 invocation records; this is not 99-tool all-version verification or merge readiness.
+
+## 6.0.1 windowed: broad passes, native stall, and separate checkpoint correction
+
+The exact `20f2953` windowed run completed all 14 broad phases: 141 full-surface
+calls / 54 assertions, 24 calls / 12 independent USD effect checks, and 25 calls /
+7 articulated URDF checks. Legacy motion and the existing-physics-stage regression
+also passed. The actual Console showed 258 warnings / 63 errors; its reviewed
+pre-agent native interval contained 24 expected negative-test error lines and 61
+simulation-time warnings, with zero cycle/reentry/GetCamera/Force-callback matches.
+All 186 video frames decoded; two were viewed, with the upper arm cropped at the
+diagnostic zero pose. These scoped passes precede the following material failure.
+
+An independent agent completed 52 requests across 30 names, then its 108-step request
+did not return. The owned PID remained alive; a preinstalled faulthandler localized
+the main thread to native synchronous `SimulationManager.step` / `simulate`.
+Native debugger attachment was unavailable. The actual window retained the pre-step
+pose; no post-stall Console repaint or native cancellation was established. Managed
+graceful stop did not exit within 25 seconds; force stop terminated only that owned
+process. **The native stall remains unresolved.** Stack localization and cleanup do
+not establish a cause, recovery, or a crash.
+
+A different process using the same `20f2953` runtime reopened the same checkpoint
+and completed the equivalent step. Eight additional Stop/Play/joint/capture cycles,
+76 MCP calls, each completed 108 steps in 1.8 seconds. This is negative reproduction
+evidence, not resolution. A later independent task in that process explicitly used
+named New Stage and Quick Start, then completed 89 requests across 39 names:
+38 scoped passes, one partial and 60 uncalled tools. It advanced 480 steps in four
+seconds, observed a sample resting at 1.04 m with zero velocity, moved/returned
+Agilebot and UR joints within 0.001 rad, captured fresh sensor pixels and saved a
+new composed output. All 44 source/cache files and 261 frozen files remained
+unchanged. The process had already hosted the root's replay controls; it was not a
+pristine process at agent-task start. The new saved output's fresh-process reopening
+is pending. The video decoded 232 frames; four were reviewed. Task-native counts
+were eight warnings / zero errors, with a USD diagnostic-cap warning retained.
+
+Use the successful task's `correction-v2` ledger and addendum in the
+[agent supplement](RELEASE-ASSETS.md): the original derived ledger copied the old
+PID/port and overstated some observation scopes. Original calls and manifests remain
+unchanged. At-target DOFs came from step call 50; the agent did not read the original
+fixture's runtime joints. These corrections do not change measured task outcomes.
+
+The replay investigation independently exposed a legacy checkpoint export defect.
+Root-only export omitted a session-defined PhysicsScene type, leaving a typeless
+`/physicsScene` over with CPU/120-Hz opinions. Reopening produced an additional native
+GPU/60-Hz `/PhysicsScene`. No causal connection to the stall is established.
+Source `33982a7` preserves the root/reference checkpoint plus the composed, validated
+local PhysicsScene, retaining cache-aware asset paths and refusing unsupported
+contributions/runtime fields. It excludes other session edits, uses atomic no-clobber
+publication, and adds pre/post-reopen physics checks to the legacy verifier. It is
+not a full session or self-contained asset snapshot.
+
+A second source fix, `9c3ec98`, prevents discovery from mistaking a one-line
+`tool-failures-<pid>.log` for a bridge advertisement. Diagnostic logs remain intact.
+Both fixes were integrated as `6bc45c2`. Fresh 6.0.1 windowed qualification verified
+native and host discovery after an intentional tool failure, full legacy motion,
+and a ten-call reopen check: exactly one CPU/MBP PhysicsScene at 120 Hz before and
+after Play; 12 steps measured 0.1 seconds. Export preserved all 15 live-layer and
+14 recorded disk-file hashes and the edit target. An existing destination refused
+unchanged. An earlier candidate run used `20f2953` plus exact helper bytes and is
+identified separately, not relabeled as this combined run.
+
+Final narrow-run Console counts were 23 warnings / 23 errors; native-file counts
+were 20 warning / four error markers. Errors came from the deliberate discovery
+failure and an initial harness attempt missing its temporary destination directory.
+The corrected setup passed. Native legacy intervals added zero errors; warnings
+include schema-path, triangle-size, initialization and closed-client diagnostics.
+No general harmlessness claim is made. Temporary Console captures were hashed and
+deleted; all three owned 6.0.1 processes exited. The original stall and remaining
+release/mode/backend gates stay open.
+
+[Compact facts and 26 original-record hashes](RECENT-601W-20261102.json) distinguish
+these sources. Full sanitized records, reproduction scripts, corrected ledgers and
+reviewed agent media are in the [draft release supplements](RELEASE-ASSETS.md).
