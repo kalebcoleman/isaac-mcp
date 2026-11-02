@@ -209,6 +209,35 @@ PhysX graphs retain their documented default/cached warm-up behavior. The origin
 `166e10d` wrench-header failure and `20f2953` stepping stall remain historical evidence;
 CPU passes alone do not close native defects or qualify clean-machine/full-installer use.
 
+### CPU and package follow-up after legacy MCP error reporting (2026-11-02)
+
+At exact commit `826b84b69f04a080882c3ef5894877f389af2938` (tree
+`2fc04a2805af4fdecb94bdeac7ecf55bd1861ef0`), the full host suite passed **1,358 tests
+in 169.47 seconds**, retaining the intentional duplicate-ZIP-member warning. Focused
+gateway error-envelope, catalog, isolation, refresh and dispatch-hook checks passed
+**113 tests in 25.74 seconds**. The **MCP 1.22.0** minimum-SDK run passed **234 tests
+in 28.64 seconds**, retaining the Pydantic unresolved `lifespan` annotation warning.
+This expands the prior 216-test minimum-SDK selection with **18 error-envelope cases**;
+it is not the same test selection with a relabelled count. Durations are pytest timings;
+wrapper elapsed times remain separate. All six jobs exited zero at a clean checkout.
+
+Documentation/privacy, asset, catalog, shell-syntax and whitespace checks, wheel/sdist
+builds and `npm pack --dry-run` passed. Inspection verified the six actual-command-output
+log hashes and endings, plus the identity, package/tool and function-comparison records,
+against summary SHA-256
+`8b651d3a85e18686e155c910e7f708c4693296ae44b74e855b315221cb404af2`.
+The package/tool record lists Python 3.12.3, uv 0.12.14, Node v26.13.0 and npm 11.20.0,
+and the sizes/digests of the 119,119-byte wheel and 289,649-byte sdist. Nothing was published.
+
+Source `7cdd54fbc2a2879695b865ec38746e2d11c1b441` corrects legacy transport/bridge
+failure reporting to MCP `isError=true`, retaining the diagnostic payload and uncertainty
+about partial execution. The changed gateway functions are AST-identical to that source;
+the complete combined server retains separate project-asset routing and is not byte-identical.
+These CPU protocol checks do not qualify actual native success/error envelopes, which
+remained pending at this handoff. They do not fix the exact `2c8ce63` Newton 6.0.0.1
+headless/windowed native failures or the original `20f2953` stepping stall. Earlier native
+and CPU records retain their own identities; no clean-machine/full-installer claim follows.
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
