@@ -74,7 +74,7 @@ its non-locked simulator sync. Use `--no-sim` with the chosen registration flag 
 |---|---|---|
 | Full CPU/package checks at `d725f84cb853bf5ceb2fa3b7d13d0e002d29becf` | 1,246 host tests; 216 minimum-SDK tests; docs/privacy/assets/catalog, wheel/sdist and npm dry run passed | Intentional ZIP and Pydantic lifespan warnings retained; no native qualification from CPU checks. [Exact record](VERIFICATION.md) |
 | New isolated venv, inputs from `2fdf4044ffdaa081431c14485a88d00abe185c07` | Locked sync exited 0 in **18.13 s**; `uv pip check` passed **186 packages**; metadata checked; both input hashes unchanged | Existing Ubuntu machine and populated cache. Copied project inputs, no full `install.sh`, client registration or existing environment changes |
-| Native follow-ups using that locked venv at `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` | Committed records cover both PhysX modes, independent actual use and fresh reopening of the older agent save | Separate from the install-only record. The newer clean-agent save still needs its own fresh reopen; see the [source/mode summary](COMPATIBILITY.md#6200-physx-follow-up-2026-11-02). No full-matrix or warning-free claim |
+| Native follow-ups using that locked venv at `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` | Committed records cover both PhysX modes, independent actual use and fresh reopening of the older agent save | Separate from the install-only record. The newer clean-agent save also passed a separate later 16-call / 12-check reopen; see the [three-save follow-up](COMPATIBILITY.md#three-later-agent-save-reopens). No full-matrix or warning-free claim |
 | Existing environments used for earlier 6.2 demo runs | Completed effects retain their original source and installed stack | NumPy **2.5.4** conflicts with the installed kernel's **2.3.1** pin; not dependency-clean. No causal warning/stall inference |
 | Previously prepared 6.0/6.1 environments | Four version-specific dependency checks passed | Not clean installs from this repository's 6.2 lock; mode/source-specific native results remain separate |
 | Lab 3.0 / Sim 6.2 video checks | Scoped train/eval/play results recorded | Existing Lab environment with a private dependency overlay; not clean Lab/video installation qualification |
@@ -91,9 +91,15 @@ clean-stack task. The [committed parent/setup index](evidence/project-scene/RECE
 and [independent-task addendum](evidence/project-scene/RECENT-62-AGENT-20261102.json) now record
 51 and 15 source hashes respectively. The independent task's 92 requests / 17 checks and
 bounded eight-warning / zero-error interval are separate from the final whole-session
-24-error / 83,214-warning log. Its new composed save still needs fresh-process reopening;
-the successful reopen in the parent index is the older `2fdf404` output. Neither result
-closes the original 6.0.1 stall or the remaining matrix gates.
+24-error / 83,214-warning log. The successful reopen in the parent index is the older
+`2fdf404` output. A [later committed supplement](evidence/project-scene/RECENT-6001-20261102.json)
+records the newer clean-agent save's own fresh headless reopen at exact `c2ceb7f`:
+16 named calls, 12 passed checks, unchanged source, both articulations, supported sample
+and a new live camera. Twelve steps advanced approximately 0.1 simulation seconds at
+120 Hz; the final native log had 17 warnings and zero errors, followed by normal shutdown.
+Two runtime-owner-reviewed images have cropped UR5e framing. This validates composed USD
+and new runtime initialization, not a solver/controller checkpoint. Original task ledgers
+remain unchanged; neither reopen closes the original 6.0.1 stall or remaining matrix gates.
 
 The install-only record contains the actual commands, return codes and package metadata;
 its original scope is not rewritten by later native work. Checked packages included:

@@ -17,6 +17,7 @@ environment, results and omissions. The table preserves the historical smoke sco
 The [6.1.0.0 PhysX follow-up](#6100-physx-follow-up-2026-11-02) records later mode-specific checks.
 The [6.2.0.0 follow-up](#6200-physx-follow-up-2026-11-02) separates existing and isolated locked environments.
 The [6.0.0.0 current-runtime follow-up](#6000-physx-follow-up-2026-11-02) records broad checks, an independent task and a separate 60 Hz reopen.
+The [current 6.0.0.1 PhysX and later save-reopen results](#6001-current-runtime-physx-follow-up-2026-11-02) retain the earlier runs above as historical evidence.
 Final qualification of the combined candidate across the requested builds and modes remains pending.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
@@ -500,8 +501,9 @@ identify all 26 inspected source records. Redacted bundles and sampled video are
 the [unpublished draft release index](evidence/project-scene/RELEASE-ASSETS.md).
 These PhysX results do not qualify generic Newton tools or an installed Isaac Lab
 Newton/MJWarp pairing; those are separate scopes. They do not resolve the original `20f2953`
-6.0.1 stall or supply the still-pending fresh reopen of that build's newer independent task
-save. Remaining build/mode/backend, clean-install and final-review gates remain open.
+6.0.1 stall. That build's newer independent task save has a [separate later reopen](#three-later-agent-save-reopens),
+which does not change the original task ledger. Remaining build/mode/backend, clean-install
+and final-review gates remain open.
 
 ## 6.2.0.0 PhysX follow-up (2026-11-02)
 
@@ -620,8 +622,9 @@ All 438 frames of its 43.8-second actual-window video decoded; the child visuall
 frames 0/150/437, showing the full UR/RG2. The runtime owner separately reviewed target,
 return and final Content screenshots plus one video sample. The bounded task interval had
 eight warnings, zero errors and zero cycles; it is separate from the final whole-session log.
-**This newer clean-agent composed save still needs its own fresh-process reopen.** The older
-`2fdf404` save's successful reopen does not cover it.
+**This newer clean-agent composed save subsequently passed its own fresh-process reopen**
+at exact `c2ceb7f`; see the [later three-save follow-up](#three-later-agent-save-reopens).
+That result is separate from the older `2fdf404` save's reopen and the original task ledger.
 
 Redacted records and videos are listed in the [draft release index](evidence/project-scene/RELEASE-ASSETS.md);
 they remain unpublished and require access. The original `20f2953` / 6.0.1 native-step
@@ -714,3 +717,90 @@ The three redacted bundles are indexed in the [draft release](evidence/project-s
 and remain unpublished. The original `20f2953` / 6.0.1 native-step stall is unresolved.
 These 6.0.0.0 results do not qualify current 6.0.0.1 work, generic Newton, Lab, physical
 hardware, a clean-machine/full-installer path, or final all-version readiness.
+
+
+## 6.0.0.1 current-runtime PhysX follow-up (2026-11-02)
+
+The [committed current-run and reopen supplement](evidence/project-scene/RECENT-6001-20261102.json)
+records exact source `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`. Its SHA-256 is
+`c448a85b0459706487ae0e600e25ea5011bd1abd2bbe87c5566e32376b180505`; all 36 original
+source hashes and sizes were verified for this update. The broad runs used prepared
+**6.0.0.1** environments, build `6.0.0-rc.59+release.41464.5f2772bc.gl`, Kit
+`110.1.1+production.305458.6312fa25.gl`, with **PhysX**. These are new runs at `c2ceb7f`,
+not relabelled `4499bf7` evidence or a clean-install qualification.
+
+| Recorded scope | Headless | Windowed |
+|---|---|---|
+| Broad phases | 14 passed | 14 passed |
+| Full-surface calls / assertions | 137 / 55 | 141 / 54 |
+| Additional authored-effect calls / checks | 24 / 12 passed | 24 / 12 passed |
+| Articulated URDF calls / checks | 25 / 7 passed | 25 / 7 passed |
+| Existing-physics and legacy verifier | Passed | Passed |
+| Save assertions / preservation | 21 passed; two live layers and 18 source files unchanged | 21 passed; two live layers and 18 source files unchanged |
+| Native prefix errors / warnings | 24 / 8,586 | 24 / 43,884 |
+| Final native errors / warnings | 24 / 8,679 | 24 / 43,891, including the independent task |
+| Final cycle / simulation-time occurrences | 0 / 8,464 | 20 / 43,648 |
+
+The broad phases exercised all 39 generic tools, 23 UR5e tools and seven bridge built-ins;
+host/desktop and Lab coverage remain separate. Both processes exited normally. Final logs
+contain zero recorded reentry, `GetCamera`, Force-callback or edit-target signatures.
+The 24 error markers are retained negative tests. The cycle and simulation-time warnings
+remain recorded without a harmlessness or cause claim. Parent windowed Console samples
+showed 31,808 then 35,606 warnings and 63 errors; the independent task ended at 43,896 / 63.
+These cumulative UI counters are distinct from native counts and bounded task intervals.
+
+Runtime-owner review sampled two of 173 decoded headless motion frames and two of 186
+windowed frames. Diagnostic arm/wrist cropping limits those videos; a separate actual-window
+capture showed the full bent UR/RG2. The small save-camera views were partially framed.
+This documentation update did not repeat pixel review.
+
+The independent windowed task made **88 requests** (87 named calls and one catalog listing)
+across 40 names. All **27 predeclared checks** passed. Its ledger remains **37 scoped passes,
+three partials and 59 uncalled names**. The save partial describes the original task's lack
+of a fresh reopen. `window_type` and `window_click` remain partial: acknowledgements did not
+always produce the intended visible text or tab/filter state. An Error-only Console filter
+was not achieved; the search was cleared and Content restored, without clearing history.
+
+The 180 explicit physics steps advanced **three simulation seconds at 60 Hz**; the paused
+timeline clock was not used as step proof. The sample fell and settled on its support at
+about 0.14 m with zero velocity. Joint readbacks measured both robots reaching and returning;
+RG2 attachment motion was observed, but finger actuation was not commanded. All 237
+preexisting source/cache/product files stayed unchanged. Of 112 product files compared with
+the commit, 111 matched; the preexisting diagnostic launcher deviation remains recorded.
+
+The bounded task interval had **seven warnings, zero errors and zero cycle/time signatures**.
+A shorter native-tail tool response missed those warnings; the complete recorded interval
+controls the report. All 296 original window-video frames decoded, with four visually
+sampled. Exact-step calls used `rendered=false`: the video records screen-state transitions,
+not every physics step. These scoped passes do not erase earlier whole-session warnings.
+
+### Three later agent-save reopens
+
+Each row is a **separate fresh headless PhysX process at exact `c2ceb7f`**, with **16 named
+calls and 12 passed checks**, followed by normal managed shutdown. The saved file's hash
+remained unchanged in each run. Original task ledgers and their save partials are retained.
+
+| Saved task output | Reopen package / build / Kit | Preserved rate / 12-step simulation advance | Final native errors / warnings |
+|---|---|---|---|
+| Current `c2ceb7f` 6.0.0.1 task | 6.0.0.1 / `6.0.0-rc.59+release.41464.5f2772bc.gl` / `110.1.1+production.305458.6312fa25.gl` | 60 Hz / 0.2 s | 0 / 21 |
+| Newer `20f2953` 6.0.1 task | 6.0.1.0 / `6.0.1-rc.7+release.42383.32955d8d.gl` / `110.1.2+production.326809.f9bf0dda.gl` | 120 Hz / approximately 0.1 s | 0 / 18 |
+| Newer locked `c2ceb7f` 6.2 task | 6.2.0.0 / `6.2.0-rc.14+release.52805.02189a84.gl` / `110.4.0+feature.386251.187cf21b.gl` | 120 Hz / approximately 0.1 s | 0 / 17 |
+
+All three runs observed both articulations, the supported sample with runtime mass, composed
+camera definitions and fresh pixels from a newly registered camera. Requests for the saved
+camera's prior live ownership correctly refused. None recorded cycle/time, reentry,
+`GetCamera`, Force-callback or edit-target signatures. The runtime owner reviewed two
+320×240 images per run: the 6.0.0.1 view mostly crops Agilebot, while the newer 6.0.1 and
+6.2 views mostly crop UR5e. Joint/body/step responses establish the runtime checks;
+these images do not prove a complete workcell view.
+
+The locked 6.2 reopen uses the isolated NumPy 2.3.1 environment; it is separate from the
+older `2fdf404` save's previously recorded reopen. These tests validate composed USD and
+new runtime initialization, not restoration of solver/controller checkpoint state.
+**The original `20f2953` / 6.0.1 native-step stall remains unresolved.** A later different
+task's successful save/reopen does not resolve that failed run.
+
+Five artifacts are listed in the [unpublished draft release index](evidence/project-scene/RELEASE-ASSETS.md).
+The large windowed native log is separately compressed to respect the unchanged privacy-scan
+budget. Generic Newton, Lab native/setup qualification, clean-machine/full-installer testing
+and final review remain separate open gates; no all-tool/all-version readiness claim follows.
