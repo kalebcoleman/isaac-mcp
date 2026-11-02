@@ -28,6 +28,8 @@ The [6.0.0.1 Newton failure follow-up](#6001-newton-failures-and-separate-host-e
 records native failures in both modes, unqualified private controls and separately tested host error reporting.
 The [6.0.1.0 Newton state/rendering follow-up](#6010-newton-state-and-rendering-failures-2026-11-02)
 separates later solver/rendering failures from fresh-process partial-step error reporting.
+The [6.1.0.0 Newton contact follow-up](#6100-newton-contact-failures-and-unshipped-controls-2026-11-02)
+records a failed assembled workflow and unsuccessful private collider controls.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
 |---|---|---|
@@ -1183,3 +1185,68 @@ upload controls). No vendor or installed-environment source was modified; this i
 clean-machine/full-installer qualification. The release remains unpublished. Earlier
 PhysX, Lab and Newton results keep their own identities; the original `20f2953` windowed
 108-step stall and remaining backend/version qualification are still open.
+
+
+## 6.1.0.0 Newton contact failures and unshipped controls (2026-11-02)
+
+**The assembled Newton twin workflow failed; no reliable collider workaround was shipped.**
+The corrected [v2 contact supplement](evidence/project-scene/RECENT-NEWTON-61-CONTACTS-20261102.json)
+(SHA-256 `51859d0f5de59c1c4d61b56dec2a611911c94772352dd451f166034ecaacb2ba`)
+separates exact `ba1d4b256a011d00787fe32b2eb85cecec8f8812` from three private
+candidate processes over that base, identified by complete module hashes. Its 39 key
+records cover prepared **6.1.0.0 / headless / Newton MuJoCo Warp**, build
+`6.1.0-rc.26+release.49347.2d230af4.gl`, Kit
+`110.3.0+feature.371399.00c488ae.gl`, Newton 1.5.0, installed MuJoCo and MuJoCo Warp
+3.11.0, bundled Warp 1.16.0 and Python 3.12.3. The machine was Ubuntu 24.04.5,
+RTX 5080 (16,303 MiB), driver 580.178.04. These are not new windowed or clean-install results.
+
+On exact `ba1d4b2`, five generic suites retained 32/49/23/327/4 records and nine
+existing-PhysicsScene checks completed. The twin workflow **failed at call 144 after
+55 earlier passing predicates**: the first assembled-FMB4 120-step batch was finite,
+but the second returned `PHYSICS_STATE_INVALID` for wrist orientation; native body
+and joint arrays contained NaNs. Earlier predicates do not establish a completed workflow.
+All 176 decoded video frames were nonzero and unique (17.6 seconds); the runtime owner
+visually reviewed only frames 10 and 100, showing a lit room/bench and cropped upright
+arm. This is not a full-robot view, valid-physics proof or application-window/Console review.
+
+Private same-process controls retained a wrong-name assertion that partially edited one
+disposable collider before stopping without Play. Corrected convex-hull and motion trials
+stayed finite; a matched SDF trial failed its third 120-step batch while the hull trial
+remained finite. Blocks falling or spreading without the bench did not demonstrate a
+stable pyramid. These controls motivated a geometry-validated box adapter, but subsequent
+fresh-process tests did not qualify it:
+
+| Private process/control | Observation and limit |
+|---|---|
+| Candidate full workflow | 35 calls completed, then `ur5e_dt__load_simple_room` timed out at 300 seconds **before** object loading or the adapter ran. The SIGUSR2 stack located a Replicator timeline-trigger USD Runtime query; it did not establish cause. |
+| First floor-contact process | Initially 33 calls / 720 steps advanced six simulation seconds, with final maximum block displacement about 0.107 mm and target following. Later Stop/Play cycles scattered the pyramid despite finite poses; native tensors and Fabric agreed. |
+| Fresh repeated-cycle process | 62 calls / 2,160 steps across three Stop/Play cycles. The first two roughly retained the pyramid; the third reached about **216 mm maximum block displacement**, despite finite body/joint values. The earlier approximately 28 mm figure measured top-block height loss, not maximum displacement. |
+| Box-primitive alternative | 63 calls / 2,160 steps remained finite but scattered the stack in the first and later cycles. This was not adopted. |
+| Separated-hull alternative | Moving the assembly away from the robot still produced `PHYSICS_STATE_INVALID` on the first requested 120-step batch. This does not establish robot contact as the cause. |
+| Twin-specific Play follow-up | Eight calls ended with `EDIT_TARGET_CHANGED` in approximately 0.063 seconds on the requested 120-step call. The managed session edit-target precondition was unmet; **attempted steps or a new NaN are not established**. |
+
+The v1 derived note incorrectly classified that final refusal as `PHYSICS_STATE_INVALID`.
+The v2 correction preserves unchanged call 008 (SHA-256
+`3308de01d27518c3ebfcb4976c3f0ae32d13c4bd4f4254c4f07db86c7505a6c9`) and the
+superseded compact/archive hashes. The separated-hull failure is the distinct NaN record.
+Use v2 for interpretation; the original archive remains historical evidence.
+
+The adapter, its tests and proposed contract were **parked privately, not included in
+PR16**. Passing 106 focused CPU tests and initial finite intervals did not establish
+stable contacts. No installed/vendor code or source asset changes are claimed. Candidate
+saves were not freshly reopened in Kit; later collapsed saves are not stable-stack checkpoints.
+
+A close camera inherited a one-stage-unit near plane (one meter here), hiding the intended
+23 cm fixture. Moving the camera farther away showed scattered blocks; an environment light
+was already present, so a missing-light cause was not established. The runtime owner reviewed
+selected generic PNGs from first/third cycles and the primitive trial, not a real application
+window or Console. This observation and the separate new-camera clipping change do not
+resolve earlier ROS/Fabric black output or qualify the camera change's later native runs.
+
+All four owned PIDs were absent at handoff: three exited through guarded SIGINT; the room
+stall required guarded SIGKILL after SIGINT failed. Cleanup is not recovery. The
+[unpublished draft supplement](evidence/project-scene/RELEASE-ASSETS.md) retains 483
+individual call records, 695 original-input hashes and 692 checksums for 693 archive members,
+without geometry, media, vendor modules or native dumps. No whole-workflow, all-version,
+backend-wide or clean-machine claim follows. Earlier PhysX/Lab evidence and the original
+`20f2953` windowed stepping stall retain their separate identities and unresolved limits.
