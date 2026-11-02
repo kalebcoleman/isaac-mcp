@@ -35,6 +35,18 @@ UR5e-named variables. Lab-specific pieces and generic pieces are mixed.
 - **[verified]** `ISAAC_MCP_ASSET_CONFIG` (project approval for `assets__*` import tools,
   `mcp/isaac_mcp/project_assets.py`) is a separate mechanism from `ISAAC_MCP_ASSET_PATH`.
 
+## Update: portable setup (follow-up PR)
+
+- `run.sh` reads `ISAAC_MCP_PYTHON` (alias `UR5E_DT_PYTHON`), then `<repo>/.venv/bin/python`, then
+  auto-detects with `scripts/isaac_env.py resolve-python`. This supersedes the **[unverified]**
+  `ISAAC_MCP_PYTHON` item above.
+- New `scripts/isaac_env.py` (`find`, `resolve-python`, `init`, `where`) and
+  [WORKSPACE.md](../WORKSPACE.md): one workspace folder for the checkout, asset stores, environments,
+  projects and runs.
+- Store order gains `<workspace>/assets` when `ISAAC_MCP_WORKSPACE` is set and the folder exists,
+  before the old `~/.cache/ur5e-dt/assets` default. Nothing existing is moved; the
+  `~/.cache/isaac-mcp/assets` rename below is still open.
+
 ## Target naming
 
 | Today | Target | Notes |
