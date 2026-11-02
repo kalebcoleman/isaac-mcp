@@ -25,12 +25,31 @@ Keep its default and optional-inclusive profiles separate; the measured optional
 scene-off counts do not replace default-group guidance. The ledger explains its `O`, `C`,
 `F` and absent cells and links the unchanged historical index plus draft-access records.
 
-One explicit live gap remains in that reconciliation: normal PhysX results for the latest
-`sim__body__state`, `sim__joints__state` and `sim__simulation__step` implementation across
-five builds in both modes. CPU tests and the fresh `ba1d4b2` Newton invalid-state reporting
-fixture do not supply that positive-path evidence. Preserve the original stall, material
-Newton failures, standalone-USD versus fresh-Kit camera distinction and installation/Lab
-limits when reporting readiness; the ledger is a review map, not a merge-ready declaration.
+The [current PhysX positive-path supplement](evidence/project-scene/PHYSX-CURRENT-POSITIVE.md)
+closes the reconciliation's then-open normal `sim__body__state`, `sim__joints__state` and
+`sim__simulation__step` gap across five builds in both modes, on exact
+`0163b3f07e6b9d3f51006f8845156f664429e580`. Its
+[compact record](evidence/project-scene/RECENT-PHYSX-POSITIVE-0163-20261102.json) has SHA-256
+`6fbc9cce10e1feab8a89712ac7afd4cc84d85e2b02e696e1bae363021711c549`;
+all 67 key original record hashes and sizes were verified for this documentation update.
+The immutable 99-tool JSON above is unchanged; follow the supplement for later evidence.
+
+The **445 core calls include 100 expected errors**, with **230 assertions** covering targeting,
+refusals, finite state, measured effects/timing, reinitialization and source-file hashes.
+Successful requests advanced 3,250 steps at 120 Hz in total, not 3,250 rendered frames or a
+wall-time bound. The first 6.2 headless reader failed before Play; its corrected test recreated
+the stopped stage in the same process. Other qualified cases used fresh processes. Launch and
+desktop-schema refusals remain recorded, with no weakened guards. All ten owned PIDs exited
+normally and were confirmed absent. Five windowed Console reviews had zero errors and nonzero
+warnings; their counters are separate from final native logs. This update did not repeat pixel
+review, native execution or suites.
+
+Prepared older environments and the cached locked 6.2 setup with diagnostic launchers are
+not a clean-machine/full-installer test. Source-file preservation is not whole-root equality.
+This smaller fixture does not reproduce or resolve the original `20f2953` stall. Fresh-Kit
+camera reuse, installation/Lab limits and final review remain separate; Newton limitations
+remain experimental. Neither this targeted pass nor CPU tests certify all 99 tools on the
+current head or declare the candidate merge-ready.
 
 ## Interpreting deliberate asset failures
 
