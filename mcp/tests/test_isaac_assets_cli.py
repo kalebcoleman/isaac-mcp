@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import tarfile
 import zipfile
 from pathlib import Path
@@ -624,3 +625,156 @@ def test_names_the_pin_format_cannot_hold_are_refused(cli, capsys, tmp_path, mon
     source.write_bytes(b"x")
     code, _, err = run(cli, capsys, "add", str(source), "--as", name)
     assert code == 2 and "unsupported" in err
+
+
+# ------------------------------------------------- round-2 review regressions (PR 51)
+
+
+def test_r1_no_hard_links_never_overwrites_a_file_that_appears_meanwhile(
+    cli, capsys, tmp_path, monkeypatch
+):
+    """Hard links unavailable, and another writer creates the destination at the worst moment.
+
+    The file is planted right before the first call that could replace it (rename/replace in
+    a check-then-rename fallback) or create it (the exclusive open in the safe fallback).
+    """
+    import errno
+
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    source = tmp_path / "x.usd"
+    source.write_bytes(b"NEW")
+    planted = []
+
+    def plant_once():
+        if not planted:
+            (pack / "x.usd").write_bytes(b"OTHER WRITER")
+            planted.append(True)
+
+    def no_link(*args, **kwargs):
+        raise OSError(errno.EOPNOTSUPP, "no hard links here")
+
+    real_replace, real_rename, real_open = os.replace, os.rename, os.open
+
+    def replace(*args, **kwargs):
+        plant_once()
+        return real_replace(*args, **kwargs)
+
+    def rename(*args, **kwargs):
+        plant_once()
+        return real_rename(*args, **kwargs)
+
+    def open_(path, flags, *args, **kwargs):
+        if path == "x.usd" and flags & os.O_EXCL:
+            plant_once()
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(cli.os, "link", no_link)
+    monkeypatch.setattr(cli.os, "replace", replace)
+    monkeypatch.setattr(cli.os, "rename", rename)
+    monkeypatch.setattr(cli.os, "open", open_)
+    code, _, err = run(cli, capsys, "add", str(source))
+    assert code == 2 and "refusing to overwrite" in err
+    assert (pack / "x.usd").read_bytes() == b"OTHER WRITER"
+    assert [p.name for p in pack.iterdir() if p.name.endswith(".part")] == []
+
+
+def test_r1_no_hard_links_still_installs_a_new_file(cli, capsys, tmp_path, monkeypatch):
+    import errno
+
+    store = make_store(tmp_path, monkeypatch)
+    source = tmp_path / "x.usd"
+    source.write_bytes(b"NEW")
+
+    def no_link(*args, **kwargs):
+        raise OSError(errno.EXDEV, "cross-device")
+
+    monkeypatch.setattr(cli.os, "link", no_link)
+    assert run(cli, capsys, "add", str(source))[0] == 0
+    pack = store / "ur5e-dt"
+    assert (pack / "x.usd").read_bytes() == b"NEW"
+    assert [p.name for p in pack.iterdir() if p.name.endswith(".part")] == []
+
+
+def test_r2_extended_header_data_counts_against_the_limits(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz", format=tarfile.PAX_FORMAT) as tf:
+        info = tarfile.TarInfo("a.usd")
+        info.size = 1
+        info.pax_headers = {"comment": "x" * (16 << 20)}
+        tf.addfile(info, io.BytesIO(b"1"))
+    archive = tmp_path / "pax.tar.gz"
+    archive.write_bytes(buf.getvalue())
+    assert archive.stat().st_size < 100_000  # a small file that expands to 16 MiB of headers
+    code, _, err = run(
+        cli, capsys, "add", str(archive),
+        "--max-members", "1", "--max-file-bytes", "1", "--max-total-bytes", "1",
+    )
+    assert code == 2 and "expands past" in err
+    assert not (tmp_path / "store" / "ur5e-dt" / "a.usd").exists()
+
+
+def test_r2_zip_member_count_is_checked_before_the_directory_is_parsed(
+    cli, capsys, tmp_path, monkeypatch
+):
+    make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "many.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for i in range(20_000):
+            zf.writestr(f"f{i}.usd", b"")
+
+    def must_not_parse(*args, **kwargs):
+        raise AssertionError("ZipFile must not be constructed for an over-limit archive")
+
+    monkeypatch.setattr(cli.zipfile, "ZipFile", must_not_parse)
+    code, _, err = run(cli, capsys, "add", str(archive), "--max-members", "1")
+    assert code == 2 and "more than 1" in err
+
+
+def test_r5_a_failed_copy_leaves_no_temporary_files(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    source = tmp_path / "x.usd"
+    source.write_bytes(b"data")
+
+    def boom(*args, **kwargs):
+        raise OSError("disk exploded")
+
+    monkeypatch.setattr(cli.shutil, "copyfileobj", boom)
+    code, _, err = run(cli, capsys, "add", str(source))
+    assert code == 2
+    pack = store / "ur5e-dt"
+    assert [p.name for p in pack.iterdir()] == []
+
+
+def test_r6_a_refused_add_creates_nothing_through_a_symlinked_ancestor(
+    cli, capsys, tmp_path, monkeypatch
+):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (pack / "robot").symlink_to(outside, target_is_directory=True)
+    source = tmp_path / "src"
+    (source / "robot" / "new" / "sub").mkdir(parents=True)
+    (source / "robot" / "new" / "sub" / "asset.usd").write_bytes(b"a")
+    code, _, err = run(cli, capsys, "add", str(source))
+    assert code == 2
+    assert list(outside.iterdir()) == []  # not even the new/ and new/sub folders
+
+
+def test_the_pin_file_is_written_even_when_a_stale_temp_name_exists(
+    cli, capsys, tmp_path, monkeypatch
+):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep")
+    (pack / "SHA256SUMS.tmp").symlink_to(victim)
+    (pack / "a.usd").write_bytes(b"a")
+    assert run(cli, capsys, "pin")[0] == 0
+    assert victim.read_text() == "keep"
+    assert (pack / "SHA256SUMS").read_text().startswith(sha(b"a"))
