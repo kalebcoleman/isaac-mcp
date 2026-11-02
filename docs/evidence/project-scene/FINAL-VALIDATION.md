@@ -817,3 +817,48 @@ inside the transcript tar exceeded the unchanged cumulative privacy-scan budget;
 the failed oversized derivative was not uploaded. No guard was relaxed.
 Generic Newton qualification and the self-contained Lab environment remain in
 progress; their results are separate from the PhysX observations above.
+
+
+## Self-contained Lab 3 / Sim 6.2 follow-up
+
+Exact MCP source `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` was exercised with a
+separate freshly resolved environment: standard vendor packages and pinned official Lab
+source `e3f7d9ff1f5d7f8280de3ece9000b7117f66bcf4`, without the earlier inherited `.pth`
+overlay or changes to a user environment. The machine remained Ubuntu 24.04.5, RTX 5080,
+driver 580.178.04 and Python 3.12.3. This is Lab 3.0 / Sim 6.2.0.0 with Newton MJWarp,
+not qualification of generic Newton or another Lab/Sim pairing.
+
+All 12 current Lab tools were used in 111 workflow calls plus three cleanup calls,
+with 16 effect assertions. Two training iterations produced actual checkpoint bytes,
+metrics and TensorBoard points. The checkpoint was evaluated into a 60-frame video;
+windowed policy playback was observed and cancelled through the named tool. A separate
+94-call run covered windowed training, headless eval and play with 60-frame videos, and
+another windowed play session. The 25 Console/input/cancellation calls and seven final
+job-status calls are separate scopes. All seven owned job PIDs exited. The last cancellation
+was performed through a different host process; its metadata has no final exit code,
+but the named cancellation and subsequent `pid_alive=false` were verified.
+
+Each of three videos fully decoded 60 frames at 1280x720, 60 fps. Root visually sampled
+frames 0, 30 and 59 per clip. Windowed evaluation started with a black frame; later samples
+showed moving Cartpoles, as did all sampled headless frames. These are sampling and plumbing
+checks, not policy-quality claims. The first windowed evaluation spent about 107 seconds
+compiling renderer shaders and reached app readiness at 180.9 seconds. These measured cold
+startup times are not a guaranteed timeout or installation estimate.
+
+The final actual application Console showed 25 warnings and zero errors. Named clicks and
+repeated-character typing produced the intended tab, complete strings and cleared filter.
+That scoped success does not resolve the earlier 6.0.0.1 desktop partials. Retained stderr
+separately includes protobuf `health.proto` E/W messages, an IFactory version warning and
+MoviePy syntax warnings. Raw Console images contain private paths and are not distributed;
+original hashes and the timestamped review are retained.
+
+The refined profile and lock are included in the draft supplement, with script hashes and
+actual commands. `uv sync` completed; `uv pip check` still exits 1 for two upstream metadata
+conflicts: fsspec 2026.9.0 versus Sim's exact 2026.2.0, and urllib3 2.8.0 versus Sim's exact
+2.7.0. Lab's newer floor/security constraints were retained. The initial five-conflict result
+and three compatible corrections remain historical. No clean package-check, clean-machine,
+full-installer or independently executed `--locked` replay is claimed. A new user must use
+the included profile/lock and explicit installation paths rather than reconstructing pins
+from prose. [Compact facts and 91 original record hashes](RECENT-LAB-20261102.json) link the
+scopes; [the draft supplement](RELEASE-ASSETS.md) contains redacted records and setup inputs.
+The original `20f` simulator stall remains unresolved, and broader Newton work is separate.

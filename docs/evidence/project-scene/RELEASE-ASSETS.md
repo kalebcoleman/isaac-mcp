@@ -39,6 +39,7 @@ by marking this release draft.
 | [sim-6001w-c2ceb-native-redacted.log.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6001w-c2ceb-native-redacted.log.gz) | `bcc97a9d1d19045bda0f313a9e0b4ee8e91579286dcc5a7143c3e20b8e023ae6` | 3659855 |
 | [agent-saves-601-62-c2ceb-reopens-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-saves-601-62-c2ceb-reopens-redacted.tar.gz) | `561a39a5b6dceea04035afb1d3deb18bf3f0bc2ec53a02ee359e1fef55d2bad8` | 339949 |
 | [agent6001w-c2ceb-redacted-v1.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent6001w-c2ceb-redacted-v1.tar.gz) | `461806ed37675e2209401f8aea914d368c20a05416165124aa5664b3c25c1d8e` | 1846493 |
+| [lab3-sim62-c2ceb-selfcontained-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/lab3-sim62-c2ceb-selfcontained-redacted.tar.gz) | `c417aee1540d61f6a44aab8ec9a02dc921ff60021b8e133751bfad5f6ce24022` | 1505566 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
@@ -131,3 +132,12 @@ and save ledger, 27 effects checks, original reviewed PNGs and 296-frame video.
 The separate 6.0.1/6.2 reopen bundle closes those newer task saves' fresh-process
 checks, without changing their original ledgers or resolving the original stall.
 [Compact source identities](RECENT-6001-20261102.json) map all 36 records.
+
+
+The self-contained Lab supplement includes the exact refined resolver profile and lock,
+neutral source-script manifest, actual MCP arguments/results, seven job logs, reproduction
+harnesses and sampled videos. It contains no geometry, checkpoints or raw Console pixels.
+Its 99 members passed the unchanged nested privacy scanner. Earlier failed resolver checks
+and two invalid-group review-harness attempts remain visible. Native success does not remove
+the two retained package conflicts. [Source-identified Lab facts](RECENT-LAB-20261102.json)
+separate the main workflow, extra modes, Console/input review and final cleanup.
