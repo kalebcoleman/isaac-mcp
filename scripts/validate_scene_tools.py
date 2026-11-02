@@ -183,7 +183,8 @@ async def validate(port, output):
                 port=port,
                 gravity_before=before["world_position"],
                 gravity_after=after["world_position"],
-                observation="PhysX get_rigidbody_transformation; independent of authored USD",
+                backend=after["backend"],
+                observation=after["source"],
             )
         )
     )
