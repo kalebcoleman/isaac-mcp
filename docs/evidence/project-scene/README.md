@@ -1,9 +1,11 @@
 # Project assets and generic scene evidence
 
-**Owner-approved first slice, 2026-11-01.** PR #11 implements six asset tools and 31 generic
-scene tools. The owner chose to merge PR #10, then review/merge this slice with **isolated
-untrusted loading, authenticated remote upload, presets/manifests and remaining fork parity
-still unmet**. Those are follow-ups, not completed capabilities. No PR is merged by the agent.
+**Combined draft under validation, 2026-11-02.** PR #10 is merged. The owner subsequently
+chose one combined review PR, [#16](https://github.com/kalebcoleman/isaac-mcp/pull/16),
+containing #11–#15; all implementation PRs remain unmerged. PR #11 supplies six asset
+and 31 generic scene tools; PR #15 adds two asset workflow tools, for 39 combined.
+Isolated untrusted loading, authenticated remote upload, presets/manifests and the
+remaining fork-parity work are deferred, not completed capabilities.
 
 The trusted workflow is exercised through real MCP with original multifile USD/URDF/USDZ
 fixtures and a separately licensed real Agilebot robot. Root checks, snapshots, dependency
@@ -12,15 +14,17 @@ fails closed; no remote upload service or unrestricted fallback is advertised.
 
 ## Evidence map and scope
 
-- [Per-tool behavior](TOOL-COVERAGE.md), [release/backend results](RUNS.md),
+- [Current all-tool validation ledger](ALL-TOOLS-MATRIX.md), [99-name argument/evidence index](ALL-TOOLS-INDEX-20261102.json),
+  [recent source-identified checks](RECENT-CHECKS-20261102.json), [final validation work and failures](FINAL-VALIDATION.md).
+- [Earlier per-tool behavior](TOOL-COVERAGE.md), [release/backend results](RUNS.md),
   [compact call inventories](RUN-SUMMARIES.json), [installed package records](INSTALLATIONS.json).
 - [43-tool fork comparison](../../FORK-COMPARISON.md), [setup and schemas](../../TOOLS-SCENE.md),
   [compatibility](../../COMPATIBILITY.md), [plan and deferred gates](../../plans/ASSET-SCENE-END-TO-END.md).
 - [SHA256SUMS](SHA256SUMS) verifies the small committed evidence files.
 - Full redacted transcripts, native/CPU logs, failure history, session identities and copied
-  reproduction scripts are in the **draft `project-scene-evidence` GitHub release**.
+  reproduction scripts are in the **draft GitHub evidence release**.
   [Release asset URLs and SHA-256](RELEASE-ASSETS.md) identify each bundle. Draft assets require
-  repository access; the owner can use `gh release download project-scene-evidence`.
+  repository access; the owner can use `gh release download untagged-8a38d708b61458020a38`.
 
 Paths use `<worktree>`, `<repo>`, `<home>`, `<sim-install-…>` and `<host>` placeholders. The
 records remain observations of the actual runs, but their redacted bytes differ from originals.
@@ -31,10 +35,10 @@ omitted, including inline base64 screenshot payloads in transcripts and copied d
 application-window captures, each under 400 KB; no terminal or personal desktop content is kept.
 
 The privacy guard runs with `scripts/check_docs.py`, including nested gzip/tar/zip payloads,
-member names and metadata. Six unchanged vendored UR5e assets contain older **third-party**
-provenance paths; their exact original hashes are the sole exception because the owner forbids
-editing those assets. They contain none of the owner's requested identifiers. Any changed
-asset or new file loses that exception. Screenshot pixels require separate visual inspection.
+member names and metadata. Combined commit `5a4f710` removes six dead historical
+exemptions: the old gripper path is absent and five FMB1 files remain with different,
+clean bytes. The combined scan has no asset exemptions. This does not rewrite original
+historical run identities. Screenshot pixels require separate visual inspection.
 
 ## Revisions and actual environment
 
@@ -61,21 +65,31 @@ that previously fetched copies or GitHub caches have been erased.
 
 ## Automated review validation
 
-CPU suite: **902 passed** (one intentional duplicate-ZIP-member warning). Minimum MCP1.22.0:
-**203 passed**, retaining the upstream Pydantic `lifespan` warning. Wheel/sdist, npm dry-run,
-documentation/catalog and privacy checks pass. Real SDK tests cover stale-target details,
-scene opt-out before/after refresh, per-server state, hidden-call refusal and notifications.
-Logs and exact commands are in the compatibility bundle.
+Exact combined `ece55d130020e56e2f7f7781e0df6335d816e159` passed **1,184 host tests**
+and **216 minimum-SDK tests** (MCP 1.22.0), plus wheel/sdist, npm dry-run,
+documentation/catalog, asset and privacy checks. The intentional duplicate-ZIP and
+Pydantic lifespan warnings remain; the earlier bridge EBADF warning did not recur in
+that run after its lifecycle fix. Later fixes have their own focused checks: combined
+`230f4b3` passed 149 URDF/USD/advanced/gateway/catalog/asset tests and 16 workstation
+tests. These are not a full CPU run of that later candidate. Detailed change-specific
+records are in [final validation](FINAL-VALIDATION.md); CPU results do not replace
+cross-version live behavior or independent-agent gates.
 
 ## Measured behavior and retained failures
 
-All37 tools were called through real MCP on each of the five installed PhysX releases. Exact
+Earlier revisions called all 37 tools through real MCP on each of the five installed PhysX releases. Exact
 cases and revision differences are in RUNS.md. Each release passed a 217-capture stress sequence
 across three resolutions, timeline transitions and exact physics steps, with known LiDAR plane
 geometry and coordinate transforms. Independent actual-use tasks on all five releases imported
 both approved projects, measured fall/rest and joints, captured real images, saved output and
 checked source/sibling preservation. These tests establish the stated workflows, not every
 parameter, backend, lifetime or sensor synchronization case.
+
+A stronger independent URDF readback subsequently found that native conversion success
+could leave the physics variant unselected or invalid. The missing mass/body result,
+source fix and fresh `230f4b3` 6.0.1 headless measured-joint qualification are recorded
+in [final validation](FINAL-VALIDATION.md). Older call-success counts do not establish
+URDF physics functionality on every build.
 
 Failures are retained: session-layer physics/writeback divergence; old borrowed-GPU capture
 CUDA700/native crashes; initial snapshot quota exhaustion;6.0.0 cold first-image latency;
@@ -84,31 +98,36 @@ render handles; strict joint target tolerances and test-harness version/schema m
 Retests are identified separately. A failed strict joint tolerance is not relabeled as success
 because a command was accepted. An expected guard refusal is not working-capability evidence.
 
-Fresh-process6.0.0 reopening now loads the saved geometry and measured resting body correctly,
-and fresh sensor creation succeeds after native graph records are omitted. **Camera readout
-still returns `NOT_READY` on that reopened-stage workflow**, including extended playing warm-up
-and a separate render-tree-free diagnostic copy. New-stage camera stress and cold-first-frame
-retests pass. This remaining reopen/sensor edge is unverified functionality, not a successful
-end-to-end capture; its failures and alternatives are retained for follow-up.
+The earlier fresh-process 6.0.0.0 `NOT_READY` failure is retained in the historical records.
+It was traced to serialized native Replicator orchestration with no corresponding Python
+subscription in the new process. The export now omits recognized runtime orchestration, and
+camera capture waits for a fresh public renderer CPU transfer. Historical candidate
+`c75455d` also preserved authored ROS camera helpers while omitting their regenerable native
+writers and temporary product links. A fresh 6.0.0.0 process reopened the ROS-camera workcell,
+published real RGB/CameraInfo/TF, matched optical axes and monotonic clocks across Stop/Play,
+captured a new generic camera image and saved again. The final five-release, all-exposed-tool
+matrix remains in progress; earlier SHA results are not presented as final-head qualification.
 
 The save fix exports a private composed copy, omitting only recognized native SyntheticData
 pipelines and pack render products. User Action Graphs and sensor definitions remain, the live
-stage stays unchanged, and unknown native-pipeline content refuses publication. New sensors
-need ordinary rendered warm-up after reopening. Exports retain texture dependencies and are
+stage stays unchanged, and unknown native-pipeline content refuses publication. A default camera capture waits for bounded fresh rendering/readback after reopening;
+LiDAR still needs simulation/render warm-up. Exports retain texture dependencies and are
 **not physics/controller checkpoints**.
 
 UR5e's World constructor uses the extension async initialization path and restores the terminal
 flag before awaiting. The review runs retain warnings instead of suppressing them.6.0.1's
 fresh cleanup retest completed sensor stress and20/20 UR5e smoke after the earlier native crash.
 The final 6.2 `./verify.sh`, smoke, motion and existing `/physicsScene` checks are recorded in
-final validation. Only test-owned processes are stopped. The user checkout, other sessions and
-`exts/ur5e-dt/assets/**` remain unchanged.
+final validation. Only test-owned processes are stopped. Tests preserve the user checkout, other sessions and their source assets. Combined PR #14
+separately changes the distributable asset/cache policy, with its own license and provenance audit.
 
 Newton's qualified MuJoCo paths were separately tested on all five installations for two cycles
 of actual fall/rest, joint movement, measured step timing and pose exports. Full37-tool and
-independent-agent coverage on **every Newton backend/version is still missing**. Isaac Lab live
-training, physical hardware, other drivers/GPUs, future releases and exhaustive sensor lifetimes
-are not newly verified here. CPU tests retain Lab/bridge/gateway/managed-session regressions.
+independent-agent coverage on **every Newton backend/version is still missing**. The separate installed Lab 3 / Sim 6.2 workflow exercised all 12 Lab tools, including actual
+training, metrics, video and playback; later mode fixes have exact-byte candidate evidence.
+Neither that private video overlay nor the older Sim environments establish clean installation.
+Physical hardware, other drivers/GPUs, future releases and exhaustive sensor lifetimes remain
+unverified. CPU tests retain Lab/bridge/gateway/managed-session regressions.
 
 ## Actual application screenshots
 
