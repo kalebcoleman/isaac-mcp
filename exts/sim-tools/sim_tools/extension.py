@@ -303,13 +303,13 @@ class Extension(omni.ext.IExt):
                     )
                 return dict(status="ok", **result)
             except AssetError as e:
-                return dict(
-                    status="error",
-                    code=e.code,
-                    message=str(e),
-                    effects="Operation refused or failed. Inspect state before retrying; step/import/native API failures can have partial effects.",
+                return {
+                    "effects": "Operation refused or failed. Inspect state before retrying; step/import/native API failures can have partial effects.",
                     **e.details,
-                )
+                    "status": "error",
+                    "code": e.code,
+                    "message": str(e),
+                }
             except Exception as e:
                 if any(
                     x in str(e).lower()

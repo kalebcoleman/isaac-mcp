@@ -304,6 +304,8 @@ def handler(monkeypatch, native):
 
     def dispatch(name, args, **kw):
         target(args.pop("session_id"), args.pop("stage_id"))
+        if getattr(state, "failure", None):
+            raise state.failure
         state.calls.append((args["action"], state.frames, native.name))
         state.mode = args["action"]
         if state.mode == "stop":
@@ -313,6 +315,21 @@ def handler(monkeypatch, native):
     ext.dispatch = dispatch
     modules["omni.kit.app"].get_app = lambda: SimpleNamespace(next_update_async=update)
     return ext.handler("sim.timeline.control"), state
+
+
+@pytest.mark.anyio
+async def test_actual_handler_preserves_specific_partial_effects_and_error_identity(handler):
+    call, state = handler
+    state.failure = AssetError(
+        "VIEWPORT_FRAME_FAILED", "Native framing failed",
+        effects="Session camera edits may have occurred.",
+        camera="/World/Camera", status="ok",
+    )
+    result = await call(session_id="session", stage_id="stage", action="pause")
+    assert result == {
+        "status": "error", "code": "VIEWPORT_FRAME_FAILED", "message": "Native framing failed",
+        "effects": "Session camera edits may have occurred.", "camera": "/World/Camera",
+    }
 
 
 @pytest.mark.anyio
