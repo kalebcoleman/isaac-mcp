@@ -24,10 +24,15 @@ import os
 # installed Isaac Sim app typically holds 8766; Lab runs take 8767 by convention.
 os.environ.setdefault("ISAAC_MCP_PORT", "8767")
 # Optional: autoload your project's tool package(s), same contract as Isaac Sim:
-# os.environ.setdefault("ISAAC_MCP_TOOL_PATHS", os.path.expanduser("~/myproj/isaac"))
+# os.environ.setdefault("ISAAC_MCP_TOOL_PATHS", "<project>/isaac")
 # os.environ.setdefault("ISAAC_MCP_TOOL_MODULES", "myproj_tools")
 
-_ISAAC_MCP_EXTS = os.path.expanduser("~/Documents/omni-isaac-mcp/exts")
+# The repository's exts folder: this file lives in <repo>/mcp/examples/. Override with
+# ISAAC_MCP_EXTS if you keep the extensions elsewhere.
+_ISAAC_MCP_EXTS = os.environ.get(
+    "ISAAC_MCP_EXTS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "exts")
+)
+_ISAAC_MCP_EXTS = os.path.normpath(_ISAAC_MCP_EXTS)
 
 from isaaclab.app import AppLauncher
 

@@ -4,7 +4,7 @@
 #
 #   scripts/probe_62.sh                 # use the repository extensions
 #   scripts/probe_62.sh --no-checks     # boot + tool list + quick start only
-#   UR5E_DT_PYTHON=... scripts/probe_62.sh
+#   ISAAC_MCP_PYTHON=... scripts/probe_62.sh
 #
 # The probe never modifies the scene on disk. It kills the app on exit.
 set -u
@@ -29,13 +29,14 @@ pick_py() {
   case "$v" in 6.*) printf '%s\n' "$cand"; return 0 ;; *) return 1 ;; esac
 }
 
-if [ -n "${UR5E_DT_PYTHON:-}" ]; then
-  PY="$UR5E_DT_PYTHON"
+_PY_ENV="${ISAAC_MCP_PYTHON:-${UR5E_DT_PYTHON:-}}"
+if [ -n "$_PY_ENV" ]; then
+  PY="$_PY_ENV"
 else
   PY="$(pick_py)" || {
     echo "FAIL: no interpreter with Isaac Sim 6.x found." >&2
     echo "      Tried $ROOT/.venv." >&2
-    echo "      Run: uv sync --python 3.12   (or set UR5E_DT_PYTHON)" >&2
+    echo "      Run: uv sync --python 3.12   (or set ISAAC_MCP_PYTHON)" >&2
     exit 1
   }
 fi

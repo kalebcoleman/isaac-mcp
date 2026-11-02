@@ -255,7 +255,8 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
         output = directory / "output"
         output.mkdir(mode=0o700)
         child_env = os.environ.copy()
-        for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_PYTHON", "UR5E_DT_SHOW_PANEL", "ISAAC_MCP_HOLD_TOKEN",
+        for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_PYTHON", "ISAAC_MCP_PYTHON",
+                    "ISAAC_MCP_WORKSPACE", "UR5E_DT_SHOW_PANEL", "ISAAC_MCP_HOLD_TOKEN",
                     "ISAAC_MCP_HOLD_TOKEN_FILE"):
             child_env.pop(key, None)
         child_env.update({"UR5E_DT_PORT": str(port), "ISAAC_MCP_PORT": str(port),
@@ -264,8 +265,9 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
                           "MCP_CLIENT_OUTPUT_DIR": str(output),
                           "ISAAC_MCP_SIM_SESSION_ID": session_id,
                           "ISAAC_MCP_SIM_SESSION_DIR": str(directory)})
-        if env.get("UR5E_DT_PYTHON"):
-            child_env["UR5E_DT_PYTHON"] = env["UR5E_DT_PYTHON"]
+        for key in ("UR5E_DT_PYTHON", "ISAAC_MCP_PYTHON", "ISAAC_MCP_WORKSPACE"):
+            if env.get(key):
+                child_env[key] = env[key]
         user_config = directory / "user.config.json"
         args = ([str(launcher), "--port", str(port)] + (["--headless"] if headless else [])
                 + (["--ur5e-panel"] if show_ur5e_panel else [])

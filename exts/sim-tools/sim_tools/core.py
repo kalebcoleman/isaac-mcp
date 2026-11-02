@@ -824,10 +824,17 @@ class Scene:
         materials = self.validate_project_materials(snapshot_id, manifest_sha256)
         _, manifest = self.broker.verify(snapshot_id, manifest_sha256)
         source_root = filename.parents[len(Path(manifest["entry"]).parts) - 1]
-        # First entry of ISAAC_MCP_ASSET_PATH (the primary store), else the legacy name.
+        # Same primary store as the twin's resolver: the first entry of ISAAC_MCP_ASSET_PATH
+        # (or its legacy name), else <ISAAC_MCP_WORKSPACE>/assets when that folder exists,
+        # else the default cache.
         override = os.getenv("ISAAC_MCP_ASSET_PATH", "").strip()
         override = override.split(os.pathsep)[0].strip() if override else ""
         override = override or os.getenv("UR5E_DT_ASSET_CACHE", "").strip()
+        if not override:
+            workspace = os.getenv("ISAAC_MCP_WORKSPACE", "").strip()
+            candidate = Path(workspace).expanduser() / "assets" if workspace else None
+            if candidate is not None and candidate.is_dir():
+                override = str(candidate)
         xdg = os.getenv("XDG_CACHE_HOME", "").strip()
         cache = (
             Path(override).expanduser()

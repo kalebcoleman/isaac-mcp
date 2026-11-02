@@ -43,7 +43,7 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 DDS_CONFIG="${DDS_CONFIG:-$REPO_DIR/config/ros_dds.env}"
 DASH="python3 $SCRIPT_DIR/ur_dashboard.py --host $DASH_HOST"
 BUNDLED_URP="$REPO_DIR/config/ursim/external_control.urp"
-PROGRAM_DIR="$HOME/.ursim/e-series/$MODEL/programs"
+PROGRAM_DIR="${PROGRAM_DIR:-$HOME/.ursim/e-series/$MODEL/programs}"
 CONTAINER_URP="/ursim/programs/external_control.urp"
 
 log()  { printf '\033[0;36m[sim-bringup]\033[0m %s\n' "$*"; }
