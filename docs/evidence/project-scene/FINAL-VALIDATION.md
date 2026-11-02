@@ -16,7 +16,7 @@ and diagnostic intervention remain separate from the fresh product results.
 
 This is a chronological record: the earlier commit-specific results and failure history below
 remain historical. The combined candidate at this update is PR #16 at
-`6bc45c2977270de748b58c630c21cd03f0d74fb6`, still draft and unmerged. No original
+`d725f84cb853bf5ceb2fa3b7d13d0e002d29becf`, still draft and unmerged. No original
 implementation PR is being merged separately. The [all-tool ledger](ALL-TOOLS-MATRIX.md)
 tracks the current 90 default / 99 optional-inclusive tool surface.
 
@@ -111,7 +111,7 @@ position, old-file preservation and same-path recreation. The CPU result on `a63
 was 1,092 host tests and 216 minimum-SDK tests, plus focused/package checks. Changes through `8106771` only corrected documentation and a source comment;
 subsequent runtime fixes are recorded separately. Those runs keep their original SHAs.
 
-Current 6.2 PhysX qualification passed both headless `final62h_2729` at `2729b076`
+Earlier 6.2 PhysX qualification passed both headless `final62h_2729` at `2729b076`
 and windowed `final62w_884` at `884a8fa6`: 39 generic tools, all 23 UR5e tools,
 seven bridge built-ins, source-preserving project preparation/import, cache failure and
 repair, fresh ROS-first saved-scene reopening, 27 reopened sensor captures, 217 stress
@@ -548,3 +548,51 @@ release/mode/backend gates stay open.
 [Compact facts and 26 original-record hashes](RECENT-601W-20261102.json) distinguish
 these sources. Full sanitized records, reproduction scripts, corrected ledgers and
 reviewed agent media are in the [draft release supplements](RELEASE-ASSETS.md).
+
+Fresh Sim 6.1.0.0 PhysX qualification at exact `6bc45c2` completed all 14 broad
+phases in headless and windowed modes. The full-surface phases made 137 calls / 55
+assertions and 141 / 54 respectively, including all 23 UR5e tools and seven bridge
+built-ins; the complete phases also exercised all 39 generic tools, 27 reopened
+camera captures, 217 stress captures, simulated ROS motion and asset safeguards.
+Each mode separately passed the existing-PhysicsScene/legacy verifier, 24 calls /
+12 light/clone/URDF readback checks and 25 calls / seven articulated URDF checks.
+Each ROS save passed 21 assertions, preserving two live layers and 18 headless or
+21 windowed source-file hashes. All owned processes exited normally.
+
+The headless native review retained 6,060 simulation-time warnings; no application
+window or Console claim applies. The windowed pre-agent Console showed 270 warnings /
+63 errors, while its native prefix contained 24 error markers from negative tests,
+267 warnings and 62 simulation-time warnings. No cycle, nested-task, GetCamera,
+Force-callback or edit-target-change matches occurred in those reviewed prefixes.
+The headless/windowed videos decoded 170/191 frames; two frames from each were viewed.
+Their diagnostic zero-pose view crops the upper arm. A separate window capture showed
+the bent robot and attached RG2. These visual limits and warning counts remain distinct
+from the independent task and final shutdown log.
+
+An independent named-tool task in the 6.1 windowed process made 90 requests across
+40 names: 38 scoped passes, two partial observations and 59 uncalled tools. All 17
+measured assertions passed. Its 480 steps advanced simulation time by four seconds;
+the sample settled at 1.05 m with zero velocity, and Agilebot/UR joints reached and
+returned within 0.001 rad. Wrist/gripper relative translation drift was 5.72e-8 m.
+Three fresh images showed 144.94 pixels of sample descent. Its actual-window video
+decoded 210 frames; the UR wrist was cropped, so that video is not UR-motion proof.
+Four selected PNGs were independently viewed by the root reviewer. All 44 audited
+source/cache files and 262 frozen files remained unchanged; the recorded launcher
+instrumentation is the sole file differing from the commit. The task interval added
+six native warnings and zero errors. No blank-stage check between New Stage and
+Quick Start or isolated lighting-contribution test was claimed.
+
+A fresh headless 6.1 process using exact `d725f84` reopened that agent's composed save.
+Sixteen named MCP calls passed 12 checks: saved pose/camera composition, two runtime
+articulations, supported sample with mass, 12 steps advancing 0.1 simulation seconds,
+two fresh images, resource cleanup and unchanged saved-source bytes. The old camera
+prim correctly returned `NOT_OWNED`; a newly created live camera supplied the images.
+This is composition and runtime initialization, not solver/controller checkpoint
+restoration. Both images were viewed; the final native log had 18 warnings and zero
+errors, and the owned process exited normally.
+
+[The 6.1 compact supplement](RECENT-61-20261102.json) identifies 26 original records
+and distinguishes these code/process scopes. Its three redacted bundles and sampled
+application-window video are in the draft release. The original `20f2953` 6.0.1
+native stall remains unresolved; these passes do not establish recovery or complete
+the remaining release/mode/backend matrix.

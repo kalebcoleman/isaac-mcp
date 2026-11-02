@@ -1,12 +1,12 @@
 # All exposed tools: final validation ledger
 
 Validation remains in progress. All implementation PRs are unmerged; combined PR #16
-is a draft. The candidate at this update is `6bc45c2977270de748b58c630c21cd03f0d74fb6`.
+is a draft. The candidate at this update is `d725f84cb853bf5ceb2fa3b7d13d0e002d29becf`.
 The real MCP inventories contain **90 default tools** and **99** with
 `ISAAC_MCP_LOCAL_TOOLS=all,screen_input,sim_launch`. Disabling the generic pack
 with those optional groups selected leaves 60 tools. Every name is tracked below.
 
-The current 6.2 PhysX runs used `2729b076817e9a0672825ed7e3cc7d160fda96db`
+The earlier 6.2 PhysX runs used `2729b076817e9a0672825ed7e3cc7d160fda96db`
 (headless) and `884a8fa6f8ca7ab55e3c68874c97703e44df7b18` (windowed).
 Runtime source is unchanged between those heads and `8106771`; the later changes
 correct the agent skill and its linked reference. The recorded run SHAs are retained,
@@ -42,8 +42,13 @@ Fresh repeats and a separate successful 89-request task do not resolve that fail
 The [new supplement](RECENT-601W-20261102.json) also records independent light/clone/URDF
 effects and fresh `6bc45c2` checkpoint/discovery qualification. Use the agent bundle's
 v2 ledger/addendum; copied PID/port and overbroad observations in v1 are corrected
-without rewriting original calls. Other-build URDF fix qualification, final 6.1.0.0
-both-mode records, affected 6.2/6.0.0.0 paths and final Newton
+without rewriting original calls. Exact `6bc45c2` 6.1.0.0 headless/windowed broad
+suites, legacy verification, independent light/clone readbacks and articulated URDF
+checks passed. A named-tool agent task added 90 requests / 40 names / 17 checks;
+its 99-name ledger retains 59 uncalled names. Fresh saved-output reopening at `d725f84`
+passed 16 calls / 12 checks. [The scoped supplement](RECENT-61-20261102.json) preserves
+warnings, sampled visual limits, source hashes and the unresolved original stall.
+Other-build URDF fix qualification, affected 6.2/6.0.0.0/6.0.0.1 paths and final Newton
 coverage remain pending. All 12 Isaac Lab tools passed a real Lab 3.0 / Sim 6.2 workflow at `411d89f` (41 calls, 16 effect checks). Later mode/video fixes were tested as exact source bytes on a private `33de98d`-based candidate and integrated into `2bbeee4`; these scoped results do not establish other Lab/Sim pairings or a clean installation.
 Host/display tools need one actual-display run, plus simulator target verification.
 
@@ -53,7 +58,7 @@ unreliable recovery require fixes or an explicit unresolved limitation.
 
 | Tool | Exposure | Required scenario | Current evidence state |
 |---|---|---|---|
-| `assets__import_urdf` | default | 39-tool behavior/edge suite and recorded actual use, each Sim release | Original index: invocation only. Extra eea 6.0.1H readback found missing body/mass. Fixed230:24-call authored effect suite and25-call two-link runtime suite passed; other builds pending. |
+| `assets__import_urdf` | default | 39-tool behavior/edge suite and recorded actual use, each Sim release | Original index: invocation only. Extra eea 6.0.1H readback found missing body/mass. Fixed230:24-call authored effect suite and25-call two-link runtime suite passed. Exact6bc 6.1H/W also passed both suites; remaining builds pending. |
 | `assets__import_path` | default | Absolute approved multifile USD import; authored pose/joints, source hashes, conflict/unapproved-path refusal | 6 recorded calls; all input source hashes unchanged (4499bf7). Scope/arguments/response references: JSON index. |
 | `assets__prepare_workstation` | default | Licensed Vention project into fresh cache; repeat refusal; real Quick Start composition and source hashes | 4 recorded calls; all input source hashes unchanged (4499bf7). Scope/arguments/response references: JSON index. |
 | `assets__import_usd` | default | 39-tool behavior/edge suite and recorded actual use, each Sim release | 9 recorded calls; Imported robot world transform reads back placed0.5m (4499bf7). Scope/arguments/response references: JSON index. |

@@ -19,6 +19,10 @@ by marking this release draft.
 | [sim-601w-repeats-20f-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-601w-repeats-20f-redacted.tar.gz) | `9072b764b6f6434c867cb04ad92feac20c005277e1a844c21271f01a5de91163` | 2437143 |
 | [sim-601w-checkpoint-discovery-6bc-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-601w-checkpoint-discovery-6bc-redacted.tar.gz) | `a65d1290cc576017cfbc22788e44d17e76032906c57af5a957e89bee0cc80e35` | 727974 |
 | [agent-601w-20f-stall-and-new-task-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-601w-20f-stall-and-new-task-redacted.tar.gz) | `e09b5cc6b90ea37232dcb4f776c376a487d6768b326ef951655d2bf07e83b588` | 2134988 |
+| [sim-61h-6bc-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-61h-6bc-redacted.tar.gz) | `d13b62c74ce2be5e94f5b1b1ae3523ea92a303fabbe3264fe98f393e0bb50c17` | 1111856 |
+| [sim-61w-6bc-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-61w-6bc-redacted.tar.gz) | `5f824678a85e0a456756c3734f329e6496f31c12458a110892426e27cfd2143f` | 1073685 |
+| [agent-61w-6bc-reopen-d725-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-61w-6bc-reopen-d725-redacted.tar.gz) | `993dcfceb4a33abd4c43f1334ef3539a253b7272aea57270b450baaacbf0ef1d` | 1625685 |
+| [agent-61w-6bc-window-video.mp4](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-61w-6bc-window-video.mp4) | `8218eff6e8e4db78380b16f9b0dc01695f4fda5ad50c51123c06fbe03bc671e3` | 64813 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
@@ -56,3 +60,15 @@ explicit video sampling limits. The replay bundle retains the original checkpoin
 configuration finding; source/saved USD geometry is omitted. One unpublished combined
 bundle exceeded the normal nested privacy budget and was split; no guard limit was
 raised. [Compact facts and source hashes](RECENT-601W-20261102.json) map these runs.
+
+
+The 6.1 headless/windowed supplements contain exact `6bc45c2` broad suites,
+legacy and independent effect checks, source-preserving ROS saves, native logs and
+reproduction scripts. The agent bundle uses its audited `publication-v2` ledger:
+90 requests, 40 names, 38 scoped passes and two partial observations. It also contains
+separate fresh `d725f84` headless saved-output reopening records and reviewed PNGs.
+The small companion MP4 is the actual window recording: all 210 frames decoded;
+visual review sampled the recorded frames, and the cropped UR wrist limits its motion
+claim. Saved/source geometry is excluded. Original private hashes and distributed
+redacted hashes remain distinct. [Compact facts](RECENT-61-20261102.json) map the
+26 original records. The original 6.0.1 stall and remaining matrix are not closed.
