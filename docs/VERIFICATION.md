@@ -51,6 +51,25 @@ camera reuse, installation/Lab limits and final review remain separate; Newton l
 remain experimental. Neither this targeted pass nor CPU tests certify all 99 tools on the
 current head or declare the candidate merge-ready.
 
+
+## Bounded original-stall disposition
+
+The [bounded PhysX assessment](evidence/project-scene/PHYSX-STALL-DISPOSITION.md) is complete,
+with **non-reproduction, not a fix**, as its outcome. The
+[compact](evidence/project-scene/RECENT-PHYSX-STALL-BOUNDED-0163-20261102.json) has SHA-256
+`03abcf27844de64873a5cf52236caf3ab502e874ce1e0bfee8afd69db3533f9b`;
+all 35 key original record hashes and sizes were verified for this documentation update.
+It separates the original `20f2953` failure from two exact `0163b3f` 6.0.1.0 windowed replays,
+including retained setup/history errors, 132 total calls and 30 scoped assertions. The
+original cause remains unresolved; passing later calls do not erase it or certify readiness.
+
+For a call that stops returning, follow the [unknown-outcome guidance](TOOLS-SCENE.md)
+and the assessment's [owned-session recovery procedure](evidence/project-scene/PHYSX-STALL-DISPOSITION.md#if-an-operation-stops-returning).
+A client deadline does not cancel native execution; do not blindly replay mutations.
+Normal exit in these replays does not validate recovery of the original in-flight state.
+The workstation installation test, final review and existing camera/setup limits remain
+separate. No new native, suite or pixel review was performed for this documentation change.
+
 ## Interpreting deliberate asset failures
 
 Native regression harnesses may temporarily hide a robot asset with offline mode enabled,

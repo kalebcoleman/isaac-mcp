@@ -25,8 +25,10 @@ solver identities; this scope decision does not turn failures into passes.
   has nonfinite assembled physics and failed repeated-cycle contact controls. Narrow generic
   passes do not qualify those twin workflows. No reliable collider workaround was shipped.
 
-The original **`20f2953` / 6.0.1.0 windowed PhysX stepping stall remains unresolved** and
-requires its own disposition. PhysX evidence review, fresh-Kit reuse of the new camera
+The original **`20f2953` / 6.0.1.0 windowed PhysX stepping stall remains unexplained**.
+Its [bounded assessment and recovery guidance](evidence/project-scene/PHYSX-STALL-DISPOSITION.md)
+are complete: two current-runtime replays did not reproduce it, with no product fix or
+cause established. PhysX evidence review, fresh-Kit reuse of the new camera
 fixtures, clean-machine/full-installer coverage and Lab setup limitations remain separate.
 This is not a readiness or merge declaration. In the dated sections below, earlier references
 to remaining Newton qualification describe the investigation at that time, not a current
@@ -49,6 +51,23 @@ source-file versus whole-root preservation and separate Console/native warning c
 explicit in that record. The original `20f2953` PhysX stall is **not reproduced or resolved**
 by this smaller fixture. Fresh-Kit reuse of the new camera fixtures and setup/Lab limits
 remain separate; Newton failures remain experimental limitations outside release completion.
+
+
+The separate bounded assessment used exact `0163b3f` in two **6.0.1.0 windowed PhysX**
+processes. Successful continuations had 48 and 54 calls; retained five-call `NO_STAGE` setup
+and 25-call history/`INVALID_FRAME` records bring the total to **132 calls / 30 scoped
+assertions**. Both measured 12 steps advancing 0.2 simulation seconds, then 108 advancing
+1.8 seconds at actual **60 Hz**. The unchanged old checkpoint's authored 120 Hz opinion was
+an untyped PhysicsScene over; no rate override was applied. All 44 original asset/cache
+hashes matched, but 13 host/runtime/catalog files differ from `20f`, and the second attempt's
+prior-history sequence only approximates the original. Neither result explains the stall.
+
+Both processes exited normally within 19.1 minutes of the 35-minute budget. Console counts
+were 18/0 and 28/0 warnings/errors, separate from 15/25 final native warning lines; tracked
+major native error categories were zero. The [record](evidence/project-scene/PHYSX-STALL-DISPOSITION.md)
+retains exact ages, wall versus simulation times, cropped/sample-only visuals and preparation
+limits. Its recovery procedure discards an owned unresponsive session and verifies a fresh
+one; it does not recover unknown in-flight state. No failure was injected to validate recovery.
 
 The table records what this repository has actually exercised, not a guarantee for every machine or feature.
 The 6.0 and 6.1 probes used separate, locally resolved environments rather than this project's locked 6.2
