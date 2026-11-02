@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """rewire_husarion_rg2_usd.py — repair the Isaac-URDF-importer's orphaned-visuals output.
 
-The Isaac 5.1 URDF importer (scripts/convert_husarion_rg2_urdf.py) emits the standard 5-layer
+The Isaac 5.1 URDF importer (tools/convert_husarion_rg2_urdf.py) emits the standard 5-layer
 "asset structure" (robot.usd + configuration/{base,physics,sensor}.usd). For the husarion RG2 it
 left the geometry+materials ORPHANED: the 26 visual/collider Mesh prims and 32 Materials live in
 TOP-LEVEL sibling scopes (/visuals/<link>/<part>/Scene, /colliders/<link>/...), while each
@@ -22,7 +22,7 @@ subtree carries those origins intact (verified: post-reparent local-in-link xfor
 table exactly). So gap/depth/arc geometry (gap 0.21mm, depth 0.01mm, R=55.0) is preserved.
 
 Usage:
-    ~/env_isaaclab/bin/python scripts/rewire_husarion_rg2_usd.py \
+    <env>/bin/python tools/rewire_husarion_rg2_usd.py \
         --src exts/ur5e-dt/assets/gripper/husarion_rg2/configuration/husarion_rg2_physics.usd \
         --out exts/ur5e-dt/assets/gripper/husarion_rg2/husarion_rg2_fixed.usd
 

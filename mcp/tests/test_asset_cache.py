@@ -347,6 +347,8 @@ ASSET_ENV = (
     "ISAAC_MCP_ASSET_STRICT",
     "ISAAC_MCP_ASSET_REMOTE_ROOT",
     "ISAAC_MCP_PROJECT",
+    "ISAAC_MCP_WORKSPACE",
+    "XDG_CACHE_HOME",
     "UR5E_DT_ASSET_CACHE",
     "UR5E_DT_ASSET_ROOT",
     "UR5E_DT_OFFLINE",
@@ -775,3 +777,46 @@ def test_pin_lines_keep_unusual_but_valid_names(tmp_path):
         "binary.usd": d,
         "plain.usd": d,
     }
+
+
+# --- workspace default store -------------------------------------------------------
+
+
+def test_workspace_assets_folder_is_searched_before_the_old_default(monkeypatch, tmp_path):
+    workspace = tmp_path / "ws"
+    (workspace / "assets" / "ur5e-dt" / "x").mkdir(parents=True)
+    (workspace / "assets" / "ur5e-dt" / "x" / "one.usd").write_bytes(b"workspace")
+    home = tmp_path / "home"
+    monkeypatch.setenv("XDG_CACHE_HOME", str(home / ".cache"))
+    put(home / ".cache" / "ur5e-dt" / "assets" / "ur5e-dt" / "x" / "one.usd", b"default")
+    put(home / ".cache" / "ur5e-dt" / "assets" / "ur5e-dt" / "x" / "two.usd", b"default only")
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
+    module = load_module()
+    isolated(module, tmp_path)
+    assert module.user_stores() == [
+        (workspace / "assets").resolve(),
+        (home / ".cache" / "ur5e-dt" / "assets").resolve(),
+    ]
+    assert module.cache_dir() == (workspace / "assets").resolve()
+    assert module.resolve_path("x/one.usd").read_bytes() == b"workspace"
+    assert module.resolve_path("x/two.usd").read_bytes() == b"default only"  # old cache still works
+
+
+def test_workspace_without_an_assets_folder_changes_nothing(monkeypatch, tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
+    module = load_module()
+    assert module.workspace_store() is None
+    assert module.user_stores() == [(tmp_path / "cache" / "ur5e-dt" / "assets").resolve()]
+
+
+def test_explicit_asset_path_beats_the_workspace(monkeypatch, tmp_path):
+    workspace = tmp_path / "ws"
+    (workspace / "assets").mkdir(parents=True)
+    explicit = tmp_path / "explicit"
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(explicit))
+    module = load_module()
+    assert module.user_stores() == [explicit.resolve()]

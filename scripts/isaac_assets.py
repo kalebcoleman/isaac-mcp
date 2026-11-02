@@ -11,7 +11,7 @@ Examples::
 
     python3 scripts/isaac_assets.py where
     python3 scripts/isaac_assets.py doctor --require robots/ur5e/ur5e.usd
-    python3 scripts/isaac_assets.py add ~/Downloads/my-robot.tar.gz
+    python3 scripts/isaac_assets.py add <path>/my-robot.tar.gz
     python3 scripts/isaac_assets.py add ./bench.usd --as bench/bench.usd
     python3 scripts/isaac_assets.py pin
 

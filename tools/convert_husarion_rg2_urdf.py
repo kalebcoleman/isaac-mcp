@@ -22,8 +22,8 @@
 #    tuning post-reference); this script only bakes geometry + couplings.
 #
 # Usage:
-#   ~/env_isaaclab/bin/python scripts/convert_husarion_rg2_urdf.py \
-#       --urdf ~/Downloads/husarion_native/husarion_native_tool0.urdf \
+#   <env>/bin/python tools/convert_husarion_rg2_urdf.py \
+#       --urdf <path>/husarion_native/husarion_native_tool0.urdf \
 #       --out  /tmp/husarion_rg2.usd  [--inspect]
 
 import argparse

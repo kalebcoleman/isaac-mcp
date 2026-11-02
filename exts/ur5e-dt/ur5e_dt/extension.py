@@ -390,6 +390,34 @@ if '_viewport_pub' not in globals():
     _viewport_pub = _ViewportCameraPublisher()
 
 
+def _isaac_sim_data_file(ext_prefix: str, relative: str) -> str:
+    """Find a data file shipped inside the running Isaac Sim, or return ``""``.
+
+    Looks for ``<extscache>/<ext_prefix>-<version>/<relative>`` next to the imported
+    ``isaacsim`` package (pip installs) and under ``$ISAACSIM_PATH`` / ``$ISAAC_SIM_PATH``
+    / ``$ISAAC_PATH`` (standalone installs). The newest matching extension version wins,
+    so nothing depends on where the environment lives or which release it is.
+    """
+    import importlib.util
+
+    roots = []
+    try:
+        spec = importlib.util.find_spec("isaacsim")
+    except (ImportError, ValueError):
+        spec = None
+    for location in (spec.submodule_search_locations or []) if spec else []:
+        roots.append(os.path.join(location, "extscache"))
+    for name in ("ISAACSIM_PATH", "ISAAC_SIM_PATH", "ISAAC_PATH"):
+        base = os.environ.get(name, "").strip()
+        if base:
+            roots.extend([os.path.join(base, "extscache"), os.path.join(base, "kit", "extscache")])
+    for root in roots:
+        matches = sorted(glob.glob(os.path.join(root, f"{ext_prefix}-*", relative)))
+        if matches:
+            return matches[-1]
+    return ""
+
+
 def _local_asset(relpath):
     """Resolve an asset to a file:// or https:// URI.
 
@@ -1552,14 +1580,12 @@ class DigitalTwin(omni.ext.IExt):
 
         elif preset.startswith("HDRI:"):
             hdri_map = {
-                "HDRI: Photo Studio": os.path.expanduser(
-                    "~/env_isaaclab/lib/python3.11/site-packages/isaacsim/extscache/"
-                    "omni.kit.widget.material_preview-1.0.16/data/photo_studio_01_4k.hdr"
+                "HDRI: Photo Studio": _isaac_sim_data_file(
+                    "omni.kit.widget.material_preview", "data/photo_studio_01_4k.hdr"
                 ),
-                "HDRI: Stormy Sky": os.path.expanduser(
-                    "~/env_isaaclab/lib/python3.11/site-packages/isaacsim/extscache/"
-                    "omni.kit.tool.collect-2.2.18+8131b85d/data/test_stages/OM_55150/"
-                    "2/Assets/Skies/2022_1/Skies/Storm/approaching_storm.hdr"
+                "HDRI: Stormy Sky": _isaac_sim_data_file(
+                    "omni.kit.tool.collect",
+                    "data/test_stages/OM_55150/2/Assets/Skies/2022_1/Skies/Storm/approaching_storm.hdr",
                 ),
             }
             hdr_path = hdri_map.get(preset, "")
@@ -1569,7 +1595,10 @@ class DigitalTwin(omni.ext.IExt):
                 dome.CreateTextureFileAttr().Set(hdr_path)
                 print(f"Applied preset: {preset} — HDRI dome from {os.path.basename(hdr_path)}")
             else:
-                print(f"Warning: HDRI file not found at {hdr_path}, using plain dome instead")
+                print(
+                    f"Warning: HDRI file for {preset!r} not found in this Isaac Sim install"
+                    f"{' (' + hdr_path + ')' if hdr_path else ''}, using plain dome instead"
+                )
 
         # Sync slider to match new dome intensity
         self._sync_dome_slider_from_stage()
@@ -6579,9 +6608,9 @@ class DigitalTwin(omni.ext.IExt):
         Two backends, both ending at the same controllers/topics (joint_state_broadcaster
         -> /joint_states, scaled_joint_trajectory_controller -> FollowJointTrajectory):
           backend='fake'  (default) -> scripts/launch_ur_fake.sh — apt ur_robot_driver with
-                          mock hardware. No Docker or ~/ros2_ws. sim only.
+                          mock hardware. No Docker or ROS workspace needed. sim only.
           backend='ursim'           -> scripts/sim_bringup.sh — URSim docker + ur_bringup.
-                          Needs Docker + a ~/ros2_ws ur_bringup install. Supports mode='real'.
+                          Needs Docker + a ROS 2 workspace with ur_bringup (WS_SETUP). Supports mode='real'.
 
         Runs in the MCP client worker thread (not Kit's main loop) and touches no
         USD/OmniGraph state — it's a pure host subprocess (ros2 / docker) — so it
