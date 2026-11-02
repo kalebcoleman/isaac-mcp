@@ -41,6 +41,7 @@ by marking this release draft.
 | [agent6001w-c2ceb-redacted-v1.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent6001w-c2ceb-redacted-v1.tar.gz) | `461806ed37675e2209401f8aea914d368c20a05416165124aa5664b3c25c1d8e` | 1846493 |
 | [lab3-sim62-c2ceb-selfcontained-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/lab3-sim62-c2ceb-selfcontained-redacted.tar.gz) | `c417aee1540d61f6a44aab8ec9a02dc921ff60021b8e133751bfad5f6ce24022` | 1505566 |
 | [newton-twin62-c2-candidates-v2-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton-twin62-c2-candidates-v2-redacted.tar.gz) | `57bcdb0cfb0d58b720e84e4ef3667c2031e1c3469ea60d1557d92fb389d799b6` | 2803657 |
+| [physx-wrench62-166-candidates-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/physx-wrench62-166-candidates-redacted.tar.gz) | `b1b884ddd2017e726ed5195b541e4d2d9cad3cc5d212d9aa391f5962681d1aae` | 1354455 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
@@ -155,3 +156,13 @@ and physics scene are copied by that helper, with original two-cube geometry.
 [The compact index](RECENT-NEWTON-TWIN-62-20261102.json) separates broad candidate 9
 from candidate 10's header, fresh-reopen and known-load checks. This is not final
 integrated-head or all-version Newton qualification.
+
+
+The PhysX wrench supplement preserves exact `166e10d` broad headless checks and
+its failed windowed reopen, the unshipped session-scope experiment, and candidate
+12's known-load, fresh legacy-twin reopen and broad windowed results. Its 517
+members passed the unchanged nested privacy scanner; no geometry, raw screenshots
+or videos are distributed. [The 21-record compact index](RECENT-PHYSX-WRENCH-62-20261102.json)
+keeps original hashes, current source differences and remaining integrated gates
+explicit. The static-subtree readback excludes enumerated native pose/velocity/
+joint-state fields in diagnostic copies only; it is not whole-root preservation.

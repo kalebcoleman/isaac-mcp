@@ -23,6 +23,7 @@ fails closed; no remote upload service or unrestricted fallback is advertised.
   [current-runtime 6.0.0.0 modes, actual use and fresh reopen](RECENT-6000-20261102.json),
   [current-runtime 6.0.0.1 and three fresh agent-save reopens](RECENT-6001-20261102.json),
   [6.2 Newton twin candidate effects and failure history](RECENT-NEWTON-TWIN-62-20261102.json),
+  [PhysX reopened-wrench failure and candidate correction](RECENT-PHYSX-WRENCH-62-20261102.json),
   [final validation work and failures](FINAL-VALIDATION.md).
 - [Earlier per-tool behavior](TOOL-COVERAGE.md), [release/backend results](RUNS.md),
   [compact call inventories](RUN-SUMMARIES.json), [installed package records](INSTALLATIONS.json).
