@@ -824,3 +824,51 @@ def test_r4_a_symlinked_pack_folder_resolves_and_reports_pinned(monkeypatch, tmp
     put(actual / "custom.usd", b"tampered")
     with pytest.raises(module.AssetCorrupt):
         module.resolve_path("custom.usd")
+
+
+# --- review follow-ups (M5, M6, non-UTF-8 pin file) ----------------------------------
+
+
+def test_m5_a_symlinked_file_inside_a_pack_is_verified_by_its_own_name(monkeypatch, tmp_path):
+    outside = tmp_path / "outside.usd"
+    outside.write_bytes(b"real")
+    store = tmp_path / "store"
+    pack = store / "ur5e-dt"
+    (pack / "robots").mkdir(parents=True)
+    (pack / "robots" / "b.usd").symlink_to(outside)
+    sums(pack, **{"robots/b.usd": b"real"})
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    module = load_module()
+    isolated(module, tmp_path)
+    assert module.resolve_info("robots/b.usd")["status"] == "pinned"
+    assert module.resolve_path("robots/b.usd").name == "b.usd"
+    outside.write_bytes(b"changed")
+    with pytest.raises(module.AssetCorrupt):
+        module.resolve_path("robots/b.usd")
+
+
+def test_m6_pin_files_are_parsed_once_until_they_change(monkeypatch, tmp_path):
+    module = load_module()
+    sums(tmp_path, **{"a.usd": b"a"})
+    calls = []
+    real_read = Path.read_text
+
+    def counting_read(self, *args, **kwargs):
+        if self.name == "SHA256SUMS":
+            calls.append(self)
+        return real_read(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", counting_read)
+    for _ in range(50):
+        assert module.pins(tmp_path) == {"a.usd": hashlib.sha256(b"a").hexdigest()}
+    assert len(calls) == 1
+    sums(tmp_path, **{"a.usd": b"a", "bb.usd": b"b"})  # size changes
+    assert "bb.usd" in module.pins(tmp_path)
+    assert len(calls) == 2
+
+
+def test_a_pin_file_that_is_not_utf8_names_the_file(tmp_path):
+    module = load_module()
+    (tmp_path / "SHA256SUMS").write_bytes(b"\xff\xfe not text")
+    with pytest.raises(ValueError, match="SHA256SUMS"):
+        module.pins(tmp_path)

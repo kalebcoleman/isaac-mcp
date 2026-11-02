@@ -1106,3 +1106,169 @@ def test_m3_a_zip_member_with_an_empty_name_is_a_clean_refusal(cli, capsys, tmp_
         zf.writestr(zipfile.ZipInfo(""), b"x")
     code, _, err = run(cli, capsys, "add", str(archive))
     assert code == 2 and "Traceback" not in err and "empty name" in err
+
+
+# ------------------------------------------- review follow-ups (M2, M4, F1, F2)
+
+
+def _pax_record(key: str, value: str) -> bytes:
+    body = f" {key}={value}\n"
+    length = len(body) + 1
+    while len(f"{length}{body}") != length:
+        length += 1
+    return f"{length}{body}".encode()
+
+
+def _raw_tar(headers: list[tuple[bytes, bytes]], member: bytes = b"1") -> bytes:
+    """Concatenate extended headers of (type, data), then one regular file 'a.usd'."""
+    out = bytearray()
+    for kind, data in headers:
+        info = tarfile.TarInfo("././@PaxHeader")
+        info.type = kind
+        info.size = len(data)
+        out += info.tobuf(tarfile.USTAR_FORMAT)
+        out += data + b"\0" * (-len(data) % 512)
+    info = tarfile.TarInfo("a.usd")
+    info.size = len(member)
+    out += info.tobuf(tarfile.USTAR_FORMAT) + member + b"\0" * (-len(member) % 512)
+    out += b"\0" * 1024
+    return bytes(out)
+
+
+def _tar_entries(entries: list[tuple]) -> bytes:
+    """Build a tar from ("header", type, data) and ("file", name, data) entries."""
+    out = bytearray()
+    for entry in entries:
+        if entry[0] == "header":
+            _, kind, data = entry
+            info = tarfile.TarInfo("././@PaxHeader")
+            info.type = kind
+        else:
+            _, name, data = entry
+            info = tarfile.TarInfo(name)
+        info.size = len(data)
+        out += info.tobuf(tarfile.USTAR_FORMAT) + data + b"\0" * (-len(data) % 512)
+    return bytes(out + b"\0" * 1024)
+
+
+def test_f1_global_pax_headers_are_capped_per_archive(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    big = "x" * ((1 << 20) - 1000)  # each header just under the per-header cap
+    entries = []
+    for i in range(20):  # a global header then a file, so no chain grows long
+        entries.append(("header", tarfile.XGLTYPE, _pax_record(f"k{i}", big)))
+        entries.append(("file", f"f{i:03d}.usd", b"1"))
+    archive = tmp_path / "globals.tar"
+    archive.write_bytes(_tar_entries(entries))
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2 and "in total" in err
+
+
+def test_f2_a_long_chain_of_extended_headers_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    headers = [(tarfile.XHDTYPE, _pax_record("comment", "c")) for _ in range(400)]
+    archive = tmp_path / "chain.tar"
+    archive.write_bytes(_raw_tar(headers))
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2 and "in a row" in err and "Traceback" not in err
+
+
+def test_f2_a_short_legitimate_header_chain_still_installs(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    headers = [
+        (tarfile.XGLTYPE, _pax_record("comment", "global")),
+        (tarfile.XHDTYPE, _pax_record("comment", "local")),
+    ]
+    archive = tmp_path / "short.tar"
+    archive.write_bytes(_raw_tar(headers, member=b"ok"))
+    assert run(cli, capsys, "add", str(archive))[0] == 0
+    assert (store / "ur5e-dt" / "a.usd").read_bytes() == b"ok"
+
+
+def test_m2_zip64_with_extensible_data_is_refused_before_parsing(cli, capsys, tmp_path, monkeypatch):
+    import struct
+
+    make_store(tmp_path, monkeypatch)
+    data = _zip64_with_zeroed_legacy_fields(50)
+    eocd = data.rfind(b"PK\x05\x06")
+    loc = eocd - 20
+    rec = loc - 56
+    extensible = b"E" * 64
+    record = bytearray(data[rec:loc])
+    record[4:12] = struct.pack("<Q", 44 + len(extensible))  # record size includes extra data
+    locator = bytearray(data[loc:eocd])
+    archive = tmp_path / "ext.zip"
+    archive.write_bytes(data[:rec] + bytes(record) + extensible + bytes(locator) + data[eocd:])
+
+    def must_not_parse(*args, **kwargs):
+        raise AssertionError("ZipFile must not be constructed")
+
+    monkeypatch.setattr(cli.zipfile, "ZipFile", must_not_parse)
+    code, _, err = run(cli, capsys, "add", str(archive), "--max-members", "3")
+    assert code == 2 and "extensible data" in err
+
+
+def test_m4_a_blocked_destination_is_found_before_anything_is_copied(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    (pack / "zz").write_bytes(b"a file where a folder is needed")
+    source = tmp_path / "src"
+    (source / "zz").mkdir(parents=True)
+    (source / "aa.usd").write_bytes(b"a")
+    (source / "zz" / "b.usd").write_bytes(b"b")
+    code, _, err = run(cli, capsys, "add", str(source))
+    assert code == 2 and "is not a folder" in err
+    assert not (pack / "aa.usd").exists()  # nothing half-installed
+    assert not (pack / "SHA256SUMS").exists()
+
+
+def test_m4_a_non_utf8_member_name_is_refused_before_copying(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w", format=tarfile.GNU_FORMAT, encoding="latin-1") as tf:
+        for name in ("aa.usd", "b\xff.usd"):
+            info = tarfile.TarInfo(name)
+            info.size = 1
+            tf.addfile(info, io.BytesIO(b"1"))
+    archive = tmp_path / "latin.tar"
+    archive.write_bytes(buf.getvalue())
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2 and "UTF-8" in err and "Traceback" not in err
+    assert not (store / "ur5e-dt" / "aa.usd").exists()
+    # The store is still usable afterwards.
+    (tmp_path / "ok.usd").write_bytes(b"ok")
+    assert run(cli, capsys, "add", str(tmp_path / "ok.usd"))[0] == 0
+
+
+def test_m4_files_installed_before_a_failure_are_still_pinned(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "a.usd").write_bytes(b"a")
+    (source / "b.usd").write_bytes(b"b")
+    real_install = cli._install_file
+
+    def fail_second(src, rel, pack_dir, force):
+        if rel == "b.usd":
+            raise OSError("disk full")
+        return real_install(src, rel, pack_dir, force)
+
+    monkeypatch.setattr(cli, "_install_file", fail_second)
+    code, _, _ = run(cli, capsys, "add", str(source))
+    assert code == 2
+    pins = read_pins(store / "ur5e-dt")
+    assert pins == {"a.usd": sha(b"a")}
+
+
+def test_b1_force_does_not_half_install_when_a_folder_blocks_a_file(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    (pack / "z" / "sub").mkdir(parents=True)  # a folder where the file z goes
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "a.txt").write_bytes(b"a")
+    (source / "z").write_bytes(b"z")
+    code, _, err = run(cli, capsys, "add", str(source), "--force")
+    assert code == 2 and "is not a file" in err and "Errno" not in err
+    assert not (pack / "a.txt").exists()
