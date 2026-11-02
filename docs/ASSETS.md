@@ -254,7 +254,8 @@ means no project file, not a fallback to the walk.
 
 **`assets__prepare_workstation` wrote to a different place**
 That tool writes `workstation/vention.usd` directly under the **first** entry of
-`ISAAC_MCP_ASSET_PATH` (or, without it, `UR5E_DT_ASSET_CACHE` or the default cache), in the
+`ISAAC_MCP_ASSET_PATH` (or, without it, `UR5E_DT_ASSET_CACHE`, then `<workspace>/assets` if
+`ISAAC_MCP_WORKSPACE` is set and that folder exists, then the default cache), in the
 flat layout, not inside the `ur5e-dt` pack folder and without a pin. The resolver finds the
 flat layout, and the file shows as `unpinned` in `doctor`. Both the MCP server and the Kit it
 starts must see the same `ISAAC_MCP_ASSET_PATH`. Check with

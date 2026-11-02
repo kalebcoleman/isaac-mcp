@@ -134,7 +134,9 @@ First match wins, in this order:
 3. `<repo>/.venv/bin/python`.
 4. The active environment: `$VIRTUAL_ENV` or `$CONDA_PREFIX`.
 5. Sibling environments next to the checkout.
-6. Conda-style roots and common virtual-environment folders under your home directory.
+6. Conda-style roots and common virtual-environment folders under your home directory, then
+   project virtual environments one and two folders below it (`~/<project>/.venv`,
+   `~/<group>/<project>/.venv`; hidden folders are skipped, nothing deeper is scanned).
 7. Standalone installs: `$ISAACSIM_PATH`, `$ISAAC_SIM_PATH`, `$ISAAC_PATH`, `~/isaacsim`,
    `~/isaac-sim`, `~/.local/share/ov/pkg/isaac-sim-*`, `/opt/nvidia/isaac-sim*`,
    `/isaac-sim`.
@@ -164,7 +166,7 @@ project stores, `ISAAC_MCP_ASSET_PATH`, `<workspace>/assets` (only when
 | `ISAAC_MCP_WORKSPACE` | The workspace folder for `isaac_env.py` and the asset-store lookup. | `~/isaac-workspace` for `isaac_env.py`. The asset lookup uses `<workspace>/assets` only when this is set and the folder exists. |
 | `ISAAC_MCP_PYTHON` | Simulator interpreter for `run.sh`. Highest priority. | unset (auto-detect) |
 | `UR5E_DT_PYTHON` | Deprecated alias of `ISAAC_MCP_PYTHON`. | unset |
-| `ISAAC_SIM_PYTHON` | Lowest-priority explicit interpreter. | unset |
+| `ISAAC_SIM_PYTHON` | Lowest-priority explicit interpreter. Honoured by `scripts/isaac_env.py` auto-detection only: `run.sh` itself checks `ISAAC_MCP_PYTHON`, `UR5E_DT_PYTHON` and `<repo>/.venv` first, so an existing `.venv` wins over it. | unset |
 | `ISAACSIM_PATH`, `ISAAC_SIM_PATH`, `ISAAC_PATH` | A standalone Isaac Sim install folder to search. | unset |
 | `ISAAC_MCP_ASSET_PATH` | Asset stores, separated by `:`. Alias `UR5E_DT_ASSET_CACHE`. | `~/.cache/ur5e-dt/assets` (`$XDG_CACHE_HOME/ur5e-dt/assets` when that is set) |
 | `ISAAC_MCP_PROJECT` | A project directory, or its `isaac-mcp.json`. | walk up from the working directory |

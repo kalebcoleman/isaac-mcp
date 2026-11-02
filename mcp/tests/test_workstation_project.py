@@ -1,6 +1,7 @@
 """Trusted multi-file workstation preparation with real OpenUSD, without Kit."""
 
 import hashlib
+import os
 import json
 from pathlib import Path
 import sys
@@ -312,3 +313,35 @@ def test_existing_file_and_cache_inside_project_are_not_overwritten(
     monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(project / "cache"))
     with pytest.raises(AssetError, match="disjoint"):
         scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
+
+
+def _prepare(project, broker, scene):
+    root, rel = broker.locate(str(project / "workstation.usda"))
+    snap = broker.snapshot(root, rel)
+    return scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
+
+
+def test_prepare_writes_to_the_first_store_of_asset_path(fixture, tmp_path, monkeypatch):
+    project, legacy_cache, broker, scene = fixture
+    monkeypatch.delenv("UR5E_DT_ASSET_CACHE", raising=False)
+    first, second = tmp_path / "store-a", tmp_path / "store-b"
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", f"{first}{os.pathsep}{second}")
+    assert _prepare(project, broker, scene)["prepared"]
+    assert (first / "workstation" / "vention.usd").is_file()
+    assert not (second / "workstation").exists()
+    assert not (legacy_cache / "workstation").exists()
+
+
+def test_prepare_uses_the_workspace_assets_folder_when_nothing_else_is_set(
+    fixture, tmp_path, monkeypatch
+):
+    project, legacy_cache, broker, scene = fixture
+    monkeypatch.delenv("UR5E_DT_ASSET_CACHE", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_ASSET_PATH", raising=False)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "assets").mkdir(mode=0o700)  # the tool refuses group/world-writable stores
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
+    assert _prepare(project, broker, scene)["prepared"]
+    assert (workspace / "assets" / "workstation" / "vention.usd").is_file()
+    assert not (legacy_cache / "workstation").exists()

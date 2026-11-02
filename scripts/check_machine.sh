@@ -55,7 +55,7 @@ if (exec 3<>/dev/tcp/127.0.0.1/8766) 2>/dev/null; then warn "port 8766 is in use
 
 [ -d "$ROOT/exts/ur5e-dt" ] && ok "extensions present (exts/)" || warn "exts/ur5e-dt missing"
 export OMNI_KIT_ACCEPT_EULA=YES   # importing isaacsim otherwise blocks on the EULA prompt
-PY="${UR5E_DT_PYTHON:-$ROOT/.venv/bin/python}"
+PY="${ISAAC_MCP_PYTHON:-${UR5E_DT_PYTHON:-$ROOT/.venv/bin/python}}"
 if [ -x "$PY" ]; then
   ok ".venv present ($PY)"
   pyver=$("$PY" -c 'import sys;print("%d.%d"%sys.version_info[:2])' 2>/dev/null)

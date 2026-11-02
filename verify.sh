@@ -17,23 +17,24 @@ Asserts Isaac Sim version agreement (6.2.0.0) before running checks.
 
 Environment variables:
   UR5E_DT_PORT      Twin bridge port (default: 8766)
-  UR5E_DT_PYTHON    Python interpreter to use (default: .venv/bin/python)
+  ISAAC_MCP_PYTHON  Python interpreter to use (default: .venv/bin/python; UR5E_DT_PYTHON is a deprecated alias)
   LOG               Path to Isaac Sim app log (for [Error] line counting)
   REBUILD           Set to 1 to run rebuild stress test
 EOF
   exit 0
 fi
 
-# Pick interpreter: UR5E_DT_PYTHON or repo .venv
-if [ -n "${UR5E_DT_PYTHON:-}" ]; then
-  PY="$UR5E_DT_PYTHON"
+# Pick interpreter: ISAAC_MCP_PYTHON (or its alias UR5E_DT_PYTHON) or repo .venv
+_PY_ENV="${ISAAC_MCP_PYTHON:-${UR5E_DT_PYTHON:-}}"
+if [ -n "$_PY_ENV" ]; then
+  PY="$_PY_ENV"
 else
   PY="$ROOT/.venv/bin/python"
 fi
 
 if [ ! -x "$PY" ]; then
   echo "FAIL: interpreter $PY not found or not executable." >&2
-  echo "      Run ./install.sh first or set UR5E_DT_PYTHON." >&2
+  echo "      Run ./install.sh first or set ISAAC_MCP_PYTHON." >&2
   exit 1
 fi
 
