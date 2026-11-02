@@ -77,7 +77,8 @@ its non-locked simulator sync. Use `--no-sim` with the chosen registration flag 
 | Native follow-ups using that locked venv at `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` | Committed records cover both PhysX modes, independent actual use and fresh reopening of the older agent save | Separate from the install-only record. The newer clean-agent save also passed a separate later 16-call / 12-check reopen; see the [three-save follow-up](COMPATIBILITY.md#three-later-agent-save-reopens). No full-matrix or warning-free claim |
 | Existing environments used for earlier 6.2 demo runs | Completed effects retain their original source and installed stack | NumPy **2.5.4** conflicts with the installed kernel's **2.3.1** pin; not dependency-clean. No causal warning/stall inference |
 | Previously prepared 6.0/6.1 environments | Four version-specific dependency checks passed | Not clean installs from this repository's 6.2 lock; mode/source-specific native results remain separate |
-| Lab 3.0 / Sim 6.2 video checks | Scoped train/eval/play results recorded | Existing Lab environment with a private dependency overlay; not clean Lab/video installation qualification |
+| Historical Lab 3.0 / Sim 6.2 video checks | Scoped train/eval/play results recorded | Existing environment with a private dependency overlay; historical setup unchanged |
+| Later self-contained Lab 3.0 / Sim 6.2 environment at `c2ceb7f` | All 12 tools, training/artifacts and sampled video/mode checks | No inherited `.pth`; two dependency conflicts remain. See [inputs, commands and limits](#self-contained-lab-3-reproduction) |
 
 The inspected clean windowed native review at exact `c2ceb7f` has SHA-256
 `0a1de1d85db1c9652f3c83d15af607e047083aeca6a627c4052eed32cb63c3d3`.
@@ -123,11 +124,145 @@ Budget for download size, shader compilation and startup. The runtime owner reco
 cached sync above is not a clean-machine installation estimate. Monitor startup logs and
 bridge readiness rather than treating a quiet window or a fixed timeout as success.
 
-**Still open:** clean-machine and full-installer execution; clean Lab video dependency setup;
+**Still open:** clean-machine and full-installer execution; dependency-clean Lab setup;
 remaining affected older-build checks, generic backend qualification and final matrix review;
 the original 6.0.1 windowed native-step stall. Later passing runs do not erase that stall.
 Draft evidence attachments remain unpublished; historical invocation of all 99 tool names
 is not verification of all tools on all configurations.
+
+## Self-contained Lab 3 reproduction
+
+The [committed Lab record](evidence/project-scene/RECENT-LAB-20261102.json), SHA-256
+`62d4f86037026cedb8bf576f69baff902121b3af6102c7579822ba45e1a62273`, records MCP source
+`c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` and official Lab source
+`e3f7d9ff1f5d7f8280de3ece9000b7117f66bcf4`. All 91 original record hashes and sizes were
+verified for this documentation. This used **Lab 3.0 / Sim 6.2.0.0 / Newton MJWarp** on
+Ubuntu 24.04.5, RTX 5080, driver 580.178.04 and Python 3.12. Standard vendor packages
+and the pinned official wheel-builder supplied the runtime; matching upstream scripts
+supplied job entry points. No inherited `.pth` overlay or existing user environment was changed.
+
+The 12-tool workflow made **111 calls plus three cleanup calls (114 retained), with
+16 assertions**. A separate 94-call mode run covered windowed training, headless eval/play
+videos and windowed play; 25 desktop-review calls and seven final status calls are separately
+recorded. Real two-iteration training produced checkpoints and metrics. All seven owned
+jobs exited. One cancelled job's cross-host final exit code was unavailable in metadata;
+named cancellation and subsequent `pid_alive=false` were verified. This tests workflow
+execution, not learned-policy quality or long-run stability.
+
+Three videos decoded 60 frames each at 1280×720. Runtime-owner review sampled frames
+0/30/59 of each: windowed evaluation frame 0 was black; later samples and headless samples
+showed moving Cartpoles. Cold shader compilation took approximately 107 seconds, with
+app readiness at 180.9 seconds in that run, not a general startup bound. The final actual
+Console sample had **25 warnings / zero errors**; retained logs also contain protobuf
+`health.proto` E/W messages, IFactory and MoviePy warnings. This is not a warning-free or
+whole-log zero-error claim. Repeated-character input worked in this Lab window; earlier
+Isaac Sim desktop partials remain unchanged. No new pixel review was performed for this guide.
+
+### Dependency outcome and exact inputs
+
+The new environment resolved **284 packages**, but `uv pip check` exited **1**:
+
+| Requirement | Installed value | Retained conflict |
+|---|---|---|
+| Sim core: `fsspec==2026.2.0` | `2026.9.0` | Lab/Torch requires a newer floor |
+| Sim kernel: `urllib3==2.7.0` | `2.8.0` | Lab requires the newer security floor |
+
+The pinned upstream Lab configuration explicitly overrides these constraints. Native
+passes do not remove the metadata conflicts. Do not downgrade merely to turn the check
+green or describe this as dependency-clean. This was a new environment on an existing
+machine/cache, not a clean-machine or full `install.sh` test. Lab Newton MJWarp does not
+qualify generic Sim Newton tools or the UR twin on Newton; the original `20f2953` Sim
+stall also remains unresolved.
+
+The [draft-only reproduction bundle](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/lab3-sim62-c2ceb-selfcontained-redacted.tar.gz)
+is **not publicly available while the release remains draft**. Authorized reviewers can
+use its `setup` directory. The [release index](evidence/project-scene/RELEASE-ASSETS.md)
+records the artifact; its size is 1,505,566 bytes and SHA-256 is
+`c417aee1540d61f6a44aab8ec9a02dc921ff60021b8e133751bfad5f6ce24022`.
+
+| Bundle member | SHA-256 |
+|---|---|
+| `setup/pyproject.toml` | `3b651e833878d71e90d83280a75cbed4a50573af63801cecc543b4cac99f9544` |
+| `setup/uv.lock` | `9696c5ec756074be1ae05271c678b19d5296b5468cf997ffb181d916bf5356e2` |
+| `setup/source-root-manifest.json` | `482a181d187e662eb3e203d269eb192580a27e757f8a152024c9051a7f8fb874` |
+
+Use these inputs together. The profile pins the official Lab wheel-builder and rl-games
+source revisions, CUDA 13 Torch index, NumPy 2.3.1 and MoviePy 1.x. It retains explicit
+resolver overrides and `unsafe-best-match` selection across the configured package indexes.
+It is an evidence-specific profile, not the root Sim lock or a generic `pip install isaaclab`.
+See [prerequisites and NVIDIA licenses/EULA](LINUX-SETUP.md#platforms-and-prerequisites) before installation.
+
+### Reproduction command scope
+
+Run from the MCP checkout root. Replace the absolute paths with user-selected locations.
+`lab_profile_dir` is the reviewed bundle's extracted `setup` directory; `lab_source_dir`
+is an official Lab Git checkout containing the pinned commit. The destination must be new.
+These parameterized commands were inspected and syntax-checked, **not executed end to end**
+by the documentation owner. Stop on any failure; never reuse an existing user environment.
+
+```bash
+lab_profile_dir=/absolute/path/to/reviewed-bundle/setup
+lab_source_dir=/absolute/path/to/official-IsaacLab-checkout
+lab_repro_dir=/absolute/path/to/new-lab-reproduction
+lab_python=/absolute/path/to/python3.12
+lab_revision=e3f7d9ff1f5d7f8280de3ece9000b7117f66bcf4
+(
+  set -e
+  mkdir -m 700 "$lab_repro_dir"
+  cp "$lab_profile_dir/pyproject.toml" "$lab_profile_dir/uv.lock" "$lab_repro_dir/"
+  cd "$lab_repro_dir"
+  sha256sum --check <<'HASHES'
+3b651e833878d71e90d83280a75cbed4a50573af63801cecc543b4cac99f9544  pyproject.toml
+9696c5ec756074be1ae05271c678b19d5296b5468cf997ffb181d916bf5356e2  uv.lock
+HASHES
+)
+```
+
+The **measured preparation** used this command shape, without `--locked`:
+
+```bash
+uv sync --project "$lab_repro_dir" --python "$lab_python" --link-mode copy
+```
+
+For a proposed replay of the retained lock, use the following **instead**. That exact
+locked replay has not been independently executed; the earlier unlocked sync does not
+verify it. Record command output/exit status and verify input hashes afterward.
+
+```bash
+uv sync --locked --project "$lab_repro_dir" --python "$lab_python" --link-mode copy
+uv pip check --python "$lab_repro_dir/.venv/bin/python"
+```
+
+The retained package check exited 1 with the two conflicts above; preserve that outcome
+and investigate any additional conflicts. Inspect versions without importing Kit/CUDA:
+
+```bash
+"$lab_repro_dir/.venv/bin/python" -c 'import importlib.metadata as m; print({p: m.version(p) for p in ("isaaclab", "isaacsim", "torch", "numpy", "moviepy", "imageio-ffmpeg", "fsspec", "urllib3")})'
+```
+
+Installed wheels provide runtime/task modules, but job launch also needs the matching
+scripts. The measured setup extracted these from the clean pinned official source.
+This parameterized extraction preserves that distinction:
+
+```bash
+(
+  set -e -o pipefail
+  mkdir "$lab_repro_dir/IsaacLab"
+  git -C "$lab_source_dir" archive "$lab_revision" \
+    isaaclab.sh VERSION README.md LICENSE scripts/reinforcement_learning \
+    | tar -x -C "$lab_repro_dir/IsaacLab"
+)
+export ISAACLAB_PYTHON="$lab_repro_dir/.venv/bin/python"
+export ISAACLAB_ROOT="$lab_repro_dir/IsaacLab"
+```
+
+Check the extracted files against `setup/source-root-manifest.json`. This is not a complete
+editable Lab source installation. Put those interpreter/root values in the **MCP host/client
+environment**, then restart that connection; exporting them in an unrelated terminal does
+not reconfigure an already-running host. Call `isaaclab__install_info` to confirm selection.
+Host TensorBoard support remains a separate dependency. Coordinate exclusive GPU ownership
+before launching jobs and use the [Lab tool workflow](TOOLS-ISAACLAB.md#workflows)
+for task arguments, status, checkpoints and cancellation. A job ID alone is not completion.
 
 ## Record your own run
 

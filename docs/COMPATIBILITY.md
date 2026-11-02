@@ -629,7 +629,7 @@ That result is separate from the older `2fdf404` save's reopen and the original 
 Redacted records and videos are listed in the [draft release index](evidence/project-scene/RELEASE-ASSETS.md);
 they remain unpublished and require access. The original `20f2953` / 6.0.1 native-step
 stall is unresolved. Remaining older-build, generic Newton, clean-machine/full-installer,
-clean Lab-video and final-review gates stay open; installed backend packages and historical
+dependency-clean Lab setup and final-review gates stay open; installed backend packages and historical
 99-name invocation coverage do not establish universal tool or version support.
 
 
@@ -802,5 +802,7 @@ task's successful save/reopen does not resolve that failed run.
 
 Five artifacts are listed in the [unpublished draft release index](evidence/project-scene/RELEASE-ASSETS.md).
 The large windowed native log is separately compressed to respect the unchanged privacy-scan
-budget. Generic Newton, Lab native/setup qualification, clean-machine/full-installer testing
-and final review remain separate open gates; no all-tool/all-version readiness claim follows.
+budget. Later [Lab native/setup evidence](REPRODUCIBILITY.md#self-contained-lab-3-reproduction)
+records scoped train/eval/play results with two retained dependency conflicts. Generic Newton,
+dependency-clean Lab setup, clean-machine/full-installer testing and final review remain
+separate open gates; no all-tool/all-version readiness claim follows.

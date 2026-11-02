@@ -302,8 +302,11 @@ not silently install Lab. The host's `isaaclab` extra supplies TensorBoard metri
 not the Lab runtime. For the inspected Lab 3 video workflow, MoviePy
 `>=1.0.3,<2.0.0.dev0` and `imageio-ffmpeg` belong in the **Lab interpreter**; use that
 Lab checkout's video extra in a dedicated compatible environment. Plain headless training
-does not require those video packages. The prior video checks used a private overlay, not a
-clean video install. See [Lab versions, discovery and video modes](TOOLS-ISAACLAB.md).
+does not require those video packages. Earlier video checks used a private overlay. A later self-contained Lab 3 / Sim 6.2
+environment exercised training and video without inherited `.pth` files, but retains two
+package-metadata conflicts. See [exact reproduction inputs and limits](REPRODUCIBILITY.md#self-contained-lab-3-reproduction)
+and [Lab versions, discovery and video modes](TOOLS-ISAACLAB.md); neither is a clean-machine
+or full-installer certification.
 A successful job launch is not a completed job: inspect status and logs. Jobs normally refuse
 alongside an active Kit bridge; coordinate GPU ownership instead of bypassing the guard by default.
 

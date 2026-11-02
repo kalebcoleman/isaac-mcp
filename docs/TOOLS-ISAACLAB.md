@@ -427,6 +427,14 @@ unless that port is configured or advertised.
 
 See the [compatibility matrix](COMPATIBILITY.md) for simulator and Isaac Lab version pairings and the scope of each test.
 
+The later [self-contained Lab reproduction](REPRODUCIBILITY.md#self-contained-lab-3-reproduction)
+at exact MCP `c2ceb7f` / official Lab `e3f7d9f` exercised all 12 tools with 114 retained
+calls (111 workflow plus three cleanup) and 16 assertions. Separate mode/video and cleanup
+records preserve their own counts. It used Lab 3.0 / Sim 6.2 / Newton MJWarp without an
+inherited `.pth`, but retains two `fsspec`/`urllib3` metadata conflicts. The guide links exact
+profile/lock/script inputs and distinguishes measured sync from an unexecuted locked replay.
+It is not generic Sim Newton qualification or a clean-machine/full-installer claim.
+
 Historical verification includes:
 
 - Host suite: 421 tests passed in GitHub Actions for `66e84b4` (2026-10-30). An isolated host wheel install and
@@ -465,8 +473,8 @@ Historical verification includes:
 
 Limitations and not verified:
 
-- The latest audit did not run training (host suite + smoke only). Long runs above ~15 min or
-  above 1024 envs on the 5080 are not verified; runs longer than ~15 min are not verified.
+- The historical host/smoke audit did not run training; later native runs above did.
+  Long runs above ~15 min or above 1024 envs on the 5080 remain unverified.
 - The host server requires Python >=3.10; the verified interpreter is Python 3.12. The Lab
   install is pinned to Isaac Lab 3.0.0 / Isaac Sim 6.2.0.0.
 - Other operating systems, GPUs, Isaac Sim versions and installation layouts are not
