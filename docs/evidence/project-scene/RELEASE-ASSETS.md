@@ -40,6 +40,7 @@ by marking this release draft.
 | [agent-saves-601-62-c2ceb-reopens-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-saves-601-62-c2ceb-reopens-redacted.tar.gz) | `561a39a5b6dceea04035afb1d3deb18bf3f0bc2ec53a02ee359e1fef55d2bad8` | 339949 |
 | [agent6001w-c2ceb-redacted-v1.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent6001w-c2ceb-redacted-v1.tar.gz) | `461806ed37675e2209401f8aea914d368c20a05416165124aa5664b3c25c1d8e` | 1846493 |
 | [lab3-sim62-c2ceb-selfcontained-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/lab3-sim62-c2ceb-selfcontained-redacted.tar.gz) | `c417aee1540d61f6a44aab8ec9a02dc921ff60021b8e133751bfad5f6ce24022` | 1505566 |
+| [newton-twin62-c2-candidates-v2-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton-twin62-c2-candidates-v2-redacted.tar.gz) | `57bcdb0cfb0d58b720e84e4ef3667c2031e1c3469ea60d1557d92fb389d799b6` | 2803657 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
@@ -141,3 +142,16 @@ Its 99 members passed the unchanged nested privacy scanner. Earlier failed resol
 and two invalid-group review-harness attempts remain visible. Native success does not remove
 the two retained package conflicts. [Source-identified Lab facts](RECENT-LAB-20261102.json)
 separate the main workflow, extra modes, Console/input review and final cleanup.
+
+
+The Newton twin supplement preserves candidate 7d/8/9 failures and candidate 9/10
+observations on combined `c2ceb7f` plus identified runtime modules. Its 896 members
+passed the unchanged nested privacy scan; it contains no USD/URDF geometry,
+screenshots or videos. Original pixel/video hashes and sampled review records
+remain distinct from redacted transcript bytes. The known-load fixture recreation
+helper was added after the live run and compared in standalone USD against that
+input; it is not another native execution. Only the owned saved twin's force graph
+and physics scene are copied by that helper, with original two-cube geometry.
+[The compact index](RECENT-NEWTON-TWIN-62-20261102.json) separates broad candidate 9
+from candidate 10's header, fresh-reopen and known-load checks. This is not final
+integrated-head or all-version Newton qualification.

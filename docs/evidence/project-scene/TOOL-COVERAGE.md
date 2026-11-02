@@ -49,3 +49,13 @@ All 37 new tools below were exercised through real MCP on Isaac Sim 6.2.0.0 at i
 | `sim__controller__update` | equivalents: 26, 39 (`historical-evidence/runs/owned62-equivalents.json`) | Owned inline code replaced/recompiled while stopped; after playback marker read changes to Z=2. General file/module reload absent. |
 | `sim__joints__command` | equivalents: 31, 32 refusal (`historical-evidence/runs/owned62-equivalents.json`) | Full ordered [-0.2] target acknowledged as not-yet-achieved; after 120 steps observed value is about -0.2 rad; bad limit refused. |
 | `assets__import_urdf` | equivalents: 24 (`historical-evidence/runs/owned62-equivalents.json`) | Minimal original URDF converted/imported; active root and session/stage identity preserved. Complex mesh/package URDFs are not proven. |
+
+
+The [6.2 Newton twin supplement](RECENT-NEWTON-TWIN-62-20261102.json) adds all
+23 UR names and seven bridge built-ins on private candidate 9 in both modes,
+with measured RG2/runtime/ROS effects. Candidate 10 separately validates fresh
+saved-twin callback restoration, wrench frame/time and a known-load control.
+These are scoped native runs, not an independent agent task or all-version
+Newton certification. Integrated PhysX/older-Newton regressions remain separate;
+the subsequent `166e10d` PhysX header failure is retained in
+[final validation](FINAL-VALIDATION.md).
