@@ -26,6 +26,8 @@ that defect and candidate12's scoped correction. The later [integrated affected-
 record five-build PhysX results without relabelling the earlier full-tool evidence.
 The [6.0.0.1 Newton failure follow-up](#6001-newton-failures-and-separate-host-envelope-checks-2026-11-02)
 records native failures in both modes, unqualified private controls and separately tested host error reporting.
+The [6.0.1.0 Newton state/rendering follow-up](#6010-newton-state-and-rendering-failures-2026-11-02)
+separates later solver/rendering failures from fresh-process partial-step error reporting.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
 |---|---|---|
@@ -1109,3 +1111,75 @@ cases only. It neither fixes the 6.0.0.1 native faults nor establishes completio
 later 6.0.1.0 twin workflow. Broader Newton qualification and the original stepping-stall
 disposition remain open; historical CPU, PhysX, Lab and candidate results retain their
 own source/build/mode identities.
+
+## 6.0.1.0 Newton state and rendering failures (2026-11-02)
+
+**Default Newton twin instability and rendering failures remain unresolved.** The
+[committed state/rendering supplement](evidence/project-scene/RECENT-NEWTON-601-STATE-20261102.json)
+(SHA-256 `082fe575acf6be58f95f72bce7d05dce1fdaa526aab90f4ecf94aa6bc37bb928`)
+separates exact `826b84b69f04a080882c3ef5894877f389af2938` failures and private controls
+from fresh `ba1d4b256a011d00787fe32b2eb85cecec8f8812` reporting checks and later failures.
+Its 47 key records identify two serial **headless** processes on prepared Sim **6.0.1.0**,
+build `6.0.1-rc.7+release.42383.32955d8d.gl`, Kit
+`110.1.2+production.326809.f9bf0dda.gl`, Newton 1.2.1, installed MuJoCo 3.8.0 /
+MuJoCo Warp 3.8.0.3 and bundled Warp 1.13.0. The host was Ubuntu 24.04.5,
+RTX 5080 (16,303 MiB), driver 580.178.04. Default Newton here used **MuJoCo Warp**;
+a CPU World does not establish use of the native MuJoCo CPU solver.
+
+On `826b84b`, the five generic scripts retained 32/49/23/327/4 records, including
+expected refusals, and nine existing-PhysicsScene checks completed. The twin workflow
+invoked all 23 UR names and seven built-ins, but **failed at call 144**: a 120-step
+request returned `INVALID_POSE` after 55 earlier passing predicates. The runtime wrist
+pose and all six arm joint positions/velocities were NaN; Kit remained responsive and
+paused. All 175 decoded video frames (17.5 seconds) were numerically black, with frames
+10 and 100 visually reviewed. Sampled first/last ROS RGB buffers were also zero.
+Earlier assertions, message receipt and decodable video are not a full-workflow pass.
+
+Same-process controls did not qualify recovery or a solver workaround. After a retained
+lease refusal, an explicit Stop/Play and settled UR-only baseline passed 120 single steps
+and two 120-step batches with finite target motion. A later 91-frame UR-only video had
+nonzero pixels; one frame was visually reviewed. Unassembled FMB4 stayed finite, while
+assembled FMB4 failed. The first capacity setup failed at import without changing the
+configuration; its subsequent trial was still the default. The corrected 1024-contact /
+6144-constraint control removed overflow messages in the measured interval but still
+failed after 185.84 **wall-clock seconds**. Native MuJoCo CPU stayed finite but missed
+commanded joints by over 3.2 radians after three **simulation seconds**. A shorter Warp
+step control and four substeps also became invalid; native contact generation refused
+the planar ground mesh. These are failed private experiments, not recommended settings.
+The `826b84b` process later exited through managed SIGINT without force.
+
+Source `f55c64f`, integrated as `ba1d4b2`, improved error reporting. A fresh process
+passed **33 real MCP calls / 14 checks**: successful UR-only movement followed by an
+actual assembled-FMB4 failure after ten steps. `PHYSICS_STATE_INVALID` identified
+`/World/UR5e/wrist_3_link`, field `orientation_xyzw`, backend `newton`, phase
+`body_observation`, and a measured physics-time advance from 0.05 to 0.133333 seconds.
+The response recorded `fabric_updated=true`, `rendered=false` and no rollback/retry.
+Subsequent body/joint reads returned typed errors and another step was refused at
+preflight. This qualifies reporting of partial effects, **not valid physics or recovery**;
+see the [step error contract](TOOLS-SCENE.md).
+
+Later controls in that same `ba1d4b2` process produced nonblack robot/bench/room images
+and six 25-frame recordings. ROS-only received 131 images with a nonzero first sample.
+After adding FMB1, 90 ROS messages had zero sampled first/last buffers, the generic PNG
+was black and all frames of a 25-frame recording were black, despite finite poses for
+five bodies and finite arm joints. Read-only inspection found authored USD world scale
+`0.01` represented as unit scale in Fabric; Stop restored a visible, cropped image.
+The retained installed-source comparison documents missing scale preservation in older
+builds and its presence in 6.1/6.2. This supports the observed scale-loss defect; it does
+not establish a cause for solver NaNs, earlier heap faults or the original stepping stall.
+
+The proposed paused Fabric correction **never executed**. A later Play returned, then
+Pause lost the connection and the PID vanished; stderr reported a segmentation fault
+with the main Python frame in `SimulationApp.update`. No successful A/B, native cause,
+exit-code inference or recovery is claimed. Three later stills were visually reviewed;
+other video frames were numerically decoded. There was no headless application-window
+or Console review. Both owned PIDs were absent at handoff.
+
+The [draft evidence supplement](evidence/project-scene/RELEASE-ASSETS.md) records 768
+original hashes and 758 checksums for 759 redacted archive members; geometry, media and
+raw crash metadata are excluded. Reproduction retains the historical harness path
+substitution, prepared interpreter and private diagnostic launcher (faulthandler and
+upload controls). No vendor or installed-environment source was modified; this is not a
+clean-machine/full-installer qualification. The release remains unpublished. Earlier
+PhysX, Lab and Newton results keep their own identities; the original `20f2953` windowed
+108-step stall and remaining backend/version qualification are still open.
