@@ -156,7 +156,7 @@ async def validate(port, output):
                 code="def compute(db):\n return True\n",
             )
             before = await invoke("sim__stage__info")
-            await invoke(
+            imported_urdf = await invoke(
                 "assets__import_urdf",
                 **t,
                 root_id="fixture",
@@ -164,6 +164,18 @@ async def validate(port, output):
                 prim_path="/World/Urdf",
                 position=[-1, 0, 1],
             )
+            # Native conversion may succeed while its Physics variant composes
+            # geometry only. Verify the actual imported subtree independently.
+            assert imported_urdf["converted_physics"]["authored"]["rigid_bodies"] >= 1
+            urdf_physics = await invoke(
+                "sim__physics__inspect", **t, root="/World/Urdf", limit=100
+            )
+            assert not urdf_physics["truncated"], urdf_physics
+            assert any(n["collision"] for n in urdf_physics["nodes"]), urdf_physics
+            assert any(
+                n["rigid_body"] and n["mass_authored"] and abs(n["mass"] - 1) < 1e-6
+                for n in urdf_physics["nodes"]
+            ), urdf_physics
             after = await invoke("sim__stage__info")
             assert (
                 before["source"] == after["source"]

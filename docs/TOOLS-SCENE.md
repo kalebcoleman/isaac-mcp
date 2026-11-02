@@ -89,7 +89,8 @@ select a nonexistent `physx` variant or leave physics unselected. The tool selec
 available shared `physics` description on its generated derivative before snapshotting;
 flat output keeps its existing physics. A variant set without that shared description or
 output missing expected bodies/joints returns `URDF_PHYSICS` before scene import. Source
-URDFs, dependency files and the current stage are preserved. Authored physics is not a
+URDFs and dependency files are preserved; conversion does not switch stages or edit its
+source layers. Successful import adds the requested subtree to the session layer. Authored physics is not a
 runtime pass: initialize the intended backend and observe bodies/joints before motion.
 
 Other than discovery and stage-info, every tool requires exact `session_id` and `stage_id`
