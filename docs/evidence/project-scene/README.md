@@ -21,6 +21,7 @@ fails closed; no remote upload service or unrestricted fallback is advertised.
   [6.2 existing and isolated locked environment checks](RECENT-62-20261102.json),
   [6.2 locked-environment independent task](RECENT-62-AGENT-20261102.json),
   [current-runtime 6.0.0.0 modes, actual use and fresh reopen](RECENT-6000-20261102.json),
+  [current-runtime 6.0.0.1 and three fresh agent-save reopens](RECENT-6001-20261102.json),
   [final validation work and failures](FINAL-VALIDATION.md).
 - [Earlier per-tool behavior](TOOL-COVERAGE.md), [release/backend results](RUNS.md),
   [compact call inventories](RUN-SUMMARIES.json), [installed package records](INSTALLATIONS.json).

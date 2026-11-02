@@ -747,3 +747,73 @@ composition and runtime initialization, not a solver/controller checkpoint.
 bundles preserve all source identities, failures, measurements and review limits.
 The original 6.0.1 native stall, remaining current-build checks and broader Newton
 qualification remain open.
+
+
+## Current-runtime 6.0.0.1 and remaining agent-save reopens
+
+Exact `c2ceb7f` passed both 14-phase PhysX suites on the prepared 6.0.0.1
+installation: 137 fullsurface calls / 55 assertions headless, 141 / 54 windowed.
+Legacy motion, 24-call / 12-check authored effects, 25-call / seven-check URDF
+runtime behavior and 21 save checks also passed in each mode. The recorded two
+live layers and 18 source files stayed unchanged. The owned processes exited
+normally. These observations retain their frozen runtime identity; later combined
+documentation commits do not relabel them.
+
+Headless final native counts were 24 error markers and 8,679 warnings, including
+8,464 simulation-time warnings. Windowed final counts, after independent use,
+were 24 error markers and 43,891 warnings, including 20 cycle and 43,648 time
+warnings. The deliberate negative cases remain in the transcripts. No selected
+nested-task, GetCamera, Force-callback or edit-target-change signatures occurred.
+The actual Console showed cumulative warning/error counters and expected asset
+and quaternion refusal cases; these counters are distinct from native-file
+counts. Broad videos decoded 173 / 186 frames respectively, with two frames
+visually sampled per mode; the upright diagnostic views crop the upper arm.
+
+The independent windowed task used 88 requests (87 tool calls plus a listing).
+All 27 predeclared measured checks passed. Eight, 82 and 90 explicit steps
+advanced simulation time by 0.1333333333, 1.3666666667 and 1.5 seconds at 60 Hz.
+The sample fell from 0.622749686 m through 0.437451720 m to its support at
+0.140000001 m, with zero final velocity. Both robots reached modest targets and
+returned; the UR and Agilebot maximum target errors were about 1.10e-6 and
+2.54e-4 rad. The wrist/gripper moved about 0.184 / 0.185 m and returned within
+1.3e-7 m. All 237 audited preexisting files stayed unchanged. The source manifest
+matches 91 checks; direct commit comparison matches 111 of 112 files, with only
+the disclosed diagnostic launcher instrumentation differing.
+
+Its ledger remains **37 scoped passes, three partials and 59 uncalled names**.
+The original save partial is retained pending the separate result below.
+`window_type` and `window_click` have partial visible effects: some acknowledged
+input attempts did not produce the intended complete filter text or tab change.
+The final retained image confirms Content active and its search empty. No
+Error-only Console filtering success is inferred. The original 296-frame
+actual-window video decoded fully; four frames were visually inspected, and an
+all-frame Content-region comparison found no Console transition. Three original
+reviewed PNGs and the unmodified recording are included in the agent bundle.
+Its measured native interval added seven warnings and no errors, cycle/time,
+reentry or selected camera errors. These scopes do not erase earlier warnings.
+
+Three separate fresh headless processes then reopened distinct agent outputs:
+
+| Saved task | Fresh runtime | Named calls / checks | Measured 12-step simulation interval |
+|---|---|---|---|
+| Current 6.0.0.1 task | `c2ceb7f`, 6.0.0.1 | 16 / 12 | 0.2 s at saved 60 Hz |
+| Locked-environment 6.2 task | `c2ceb7f`, locked 6.2 | 16 / 12 | 0.1 s at saved 120 Hz |
+| Newer 6.0.1 task following the original stall | `c2ceb7f`, 6.0.1 | 16 / 12 | 0.1 s at saved 120 Hz |
+
+Each preserved saved-source bytes, observed the supported sample with real mass
+and both six-joint runtime articulations, acquired two new camera images and
+released sensor resources. A saved camera definition correctly refused live
+ownership; a new camera was required. Root inspected both rendered images per
+run, retaining their partial scene framing. All three processes exited normally,
+with respectively 21, 17 and 18 warnings and zero errors or selected severe
+signatures. These are composition/runtime initialization checks, not
+solver/controller checkpoints. They do not resolve the earlier `20f` stepping
+stall or change the original task ledgers.
+
+[The 36-record supplement](RECENT-6001-20261102.json) identifies exact originals.
+Five new draft-release assets include these records and the independent task.
+The large windowed native log is a separately hashed gzip because putting it
+inside the transcript tar exceeded the unchanged cumulative privacy-scan budget;
+the failed oversized derivative was not uploaded. No guard was relaxed.
+Generic Newton qualification and the self-contained Lab environment remain in
+progress; their results are separate from the PhysX observations above.
