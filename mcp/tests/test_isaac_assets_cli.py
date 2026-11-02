@@ -712,7 +712,8 @@ def test_r2_extended_header_data_counts_against_the_limits(cli, capsys, tmp_path
         cli, capsys, "add", str(archive),
         "--max-members", "1", "--max-file-bytes", "1", "--max-total-bytes", "1",
     )
-    assert code == 2 and "expands past" in err
+    # Refused either by the per-header cap (checked first) or by the stream bound.
+    assert code == 2 and ("extended tar header" in err or "expands past" in err)
     assert not (tmp_path / "store" / "ur5e-dt" / "a.usd").exists()
 
 
@@ -1034,3 +1035,74 @@ def test_v3_a_failed_cleanup_does_not_hide_the_original_error(cli, capsys, tmp_p
     code, _, err = run(cli, capsys, "add", str(source))
     assert code == 2
     assert "disk on fire" in err and "cleanup denied" not in err
+
+
+# ---------------------------------------------- final-review regressions (PR 51: M1, M3)
+
+
+def _tar_gz_with_pax_comment(size: int) -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz", format=tarfile.PAX_FORMAT) as tf:
+        info = tarfile.TarInfo("a.usd")
+        info.size = 1
+        info.pax_headers = {"comment": "x" * size}
+        tf.addfile(info, io.BytesIO(b"1"))
+    return buf.getvalue()
+
+
+def test_m1_an_oversized_pax_header_is_refused_before_it_is_read(cli, capsys, tmp_path, monkeypatch):
+    import tracemalloc
+
+    make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "pax.tar.gz"
+    archive.write_bytes(_tar_gz_with_pax_comment(8 << 20))  # 8 MiB header, tiny archive
+    tracemalloc.start()
+    try:
+        code, _, err = run(cli, capsys, "add", str(archive))
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert code == 2 and "extended tar header" in err
+    assert peak < 4 << 20, f"peak {peak} bytes: the header data was read into memory"
+
+
+def test_m1_an_oversized_gnu_long_name_is_refused(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w", format=tarfile.GNU_FORMAT) as tf:
+        info = tarfile.TarInfo("d/" * (600 << 10) + "a.usd")  # ~1.2 MiB name
+        info.size = 1
+        tf.addfile(info, io.BytesIO(b"1"))
+    archive = tmp_path / "long.tar"
+    archive.write_bytes(buf.getvalue())
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2 and "extended tar header" in err
+
+
+def test_m1_ordinary_pax_headers_still_work(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "pax-ok.tar.gz"
+    archive.write_bytes(_tar_gz_with_pax_comment(200))
+    assert run(cli, capsys, "add", str(archive))[0] == 0
+    assert (store / "ur5e-dt" / "a.usd").read_bytes() == b"1"
+
+
+def test_m3_a_zip_needing_a_newer_zip_version_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("a.usd", b"x")
+    # "Version needed to extract" = 6.4: local header offset 4, central offset 6.
+    archive = tmp_path / "v64.zip"
+    archive.write_bytes(_patch_zip_header_field(buf.getvalue(), 4, 6, 64))
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2 and "Traceback" not in err and "unsupported zip archive" in err
+
+
+def test_m3_a_zip_member_with_an_empty_name_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "empty-name.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr(zipfile.ZipInfo(""), b"x")
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2 and "Traceback" not in err and "empty name" in err
