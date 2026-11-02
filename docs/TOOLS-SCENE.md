@@ -79,7 +79,16 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__controller__create` | OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. |
 | `sim__controller__update` | OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required. |
 | `sim__joints__command` | Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose. |
-| `assets__import_urdf` | Convert a trusted approved relative URDF project using the installed importer, then snapshot and import its USD. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API. |
+| `assets__import_urdf` | Convert a trusted approved relative URDF project using the installed importer. Select shared `Physics=physics` on private generated output when present, then snapshot/import. Refuse missing bodies or expected revolute/prismatic joints. No source overwrite. Reject DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API. |
+
+URDF conversion returns `converted_physics`: the original and selected variant, available
+variants and bounded authored body/collision/joint/mass counts. Some bundled 6.x importers
+select a nonexistent `physx` variant or leave physics unselected. The tool selects the
+available shared `physics` description on its generated derivative before snapshotting;
+flat output keeps its existing physics. A variant set without that shared description or
+output missing expected bodies/joints returns `URDF_PHYSICS` before scene import. Source
+URDFs, dependency files and the current stage are preserved. Authored physics is not a
+runtime pass: initialize the intended backend and observe bodies/joints before motion.
 
 Other than discovery and stage-info, every tool requires exact `session_id` and `stage_id`
 from stage-info. Tokens are stale-target guards, **not authentication**. Check stage-info again

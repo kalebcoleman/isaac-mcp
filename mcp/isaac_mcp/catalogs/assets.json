@@ -309,7 +309,7 @@
       "owner_id": "generic-assets"
     },
     "assets.import_urdf": {
-      "description": "Convert a trusted approved relative URDF project using the installed importer, then snapshot and import its USD. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API.",
+      "description": "Convert a trusted approved relative URDF project using the installed importer. Select the shared Physics=physics variant on private generated output when present; refuse missing bodies or expected revolute/prismatic joints before snapshot/import. Returns authored counts, not runtime readiness. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API.",
       "parameters": {
         "session_id": {
           "type": "string",
