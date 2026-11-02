@@ -16,6 +16,7 @@ environment, results and omissions. The table preserves the historical smoke sco
 [windowed follow-ups](#6010-windowed-follow-up-2026-11-02) are recorded separately below.
 The [6.1.0.0 PhysX follow-up](#6100-physx-follow-up-2026-11-02) records later mode-specific checks.
 The [6.2.0.0 follow-up](#6200-physx-follow-up-2026-11-02) separates existing and isolated locked environments.
+The [6.0.0.0 current-runtime follow-up](#6000-physx-follow-up-2026-11-02) records broad checks, an independent task and a separate 60 Hz reopen.
 Final qualification of the combined candidate across the requested builds and modes remains pending.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
@@ -627,3 +628,89 @@ they remain unpublished and require access. The original `20f2953` / 6.0.1 nativ
 stall is unresolved. Remaining older-build, generic Newton, clean-machine/full-installer,
 clean Lab-video and final-review gates stay open; installed backend packages and historical
 99-name invocation coverage do not establish universal tool or version support.
+
+
+## 6.0.0.0 PhysX follow-up (2026-11-02)
+
+The [committed 6.0.0.0 supplement](evidence/project-scene/RECENT-6000-20261102.json)
+records fresh headless and windowed runs on exact source
+`c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`, package **6.0.0.0**, build
+`6.0.0-rc.22+release.33481.407f3ea1.gl`, Kit `110.0.0+feature.276876.4a5123f4.gl`.
+Its SHA-256 is `7ec9fcd4577cee9957602c26909467210d637c2ea357b6c505350eba19f37b07`;
+all 29 original record hashes and sizes were checked for this documentation update.
+These runs used the prepared 6.0.0.0 interpreter and PhysX, not the repository's locked
+6.2 environment or a newly qualified older-build installation recipe.
+
+| Recorded scope | Headless | Windowed |
+|---|---|---|
+| Broad phases | 14 passed | 14 passed |
+| Full-surface calls / assertions | 137 / 55 | 141 / 54 |
+| Additional authored-effect calls / checks | 24 / 12 passed | 24 / 12 passed |
+| Articulated URDF calls / checks | 25 / 7 passed | 25 / 7 passed |
+| Existing-physics and legacy verifier | Passed | Passed |
+| Save assertions / source preservation | 21 passed; two live layers and 18 source files unchanged | 21 passed; two live layers and 18 source files unchanged |
+| Reviewed native prefix errors / warnings | 38 / 243 | 24 / 241 |
+| Final native errors / warnings | 38 / 243 | 24 / 250, including the independent task |
+| Owned process exit | Normal | Normal, after the independent task |
+
+The broad phases exercised all **39 generic tools, 23 UR5e tools and seven bridge
+built-ins**. Host/desktop and Lab coverage are separate; this is not all 99 tools in
+each mode. Both final native logs contain zero recorded cycle, simulation-time,
+reentry, `GetCamera`, Force-callback or edit-target signatures. The headless error
+count includes **24 deliberate negative-test markers plus 14 native property-window
+callback traceback lines** (`save_scroll_pos` / `NoneType.scroll_y_max`). The subsequent
+measured effects passed; that does not establish harmlessness or a fix for the callback.
+
+Windowed Console observations were **246 warnings / 63 errors** after the parent suite
+and **255 / 63** at the independent task's end. These UI counters are distinct from
+native-log counts. Missing/corrupt offline robot assets and invalid quaternion inputs
+were deliberate refusals; restored-cache recovery was checked separately. They do not
+establish transactional preservation of an arbitrary existing scene on Quick Start failure.
+The independent native interval contained **nine warnings and zero errors**; all warnings
+remain retained, including interface-release and robot/gripper joint-transform warnings.
+
+The runtime owner reviewed two of **173 decoded headless** video frames and two of
+**189 decoded windowed** frames. Diagnostic arm/wrist cropping and the mostly black
+headless save-camera view limit those observations; they do not establish a complete
+workcell view. Separate parent window captures show the complete bent UR/RG2 and bench.
+The independent task's actual-window evidence has a separate review scope.
+
+### Independent task and subsequent saved-output reopen
+
+The windowed task made **87 requests** (86 named calls and one catalog listing) across
+42 names. All **19 predeclared effect checks** passed. Its original ledger remains
+**41 scoped passes, one save partial and 57 uncalled names**: a composed save was produced,
+but that independent run did not reopen it. The diagnostic launcher deviation remains
+recorded; the frozen product source identity does not mean every launch byte matches Git.
+
+Two 90-step groups advanced physics by approximately **three simulation seconds total
+at 60 Hz**, independently of the paused timeline clock. The sample settled at about
+0.14 m with zero velocity; measured joint states established UR5e and Agilebot target
+and return effects. Wrist and gripper displacement were observed; gripper fingers were
+not commanded. Fresh camera pixels changed, cached pixels matched their acquired target,
+and 230 preexisting source/cache files remained unchanged. A lowercase `/World/ur5e`
+lookup refused with `NOT_FOUND`; discovery of `/World/UR5e` recovered the task. The agent
+reference example was subsequently corrected, without a runtime change.
+
+Both raw task videos decoded completely (438 and 308 frames); seven frames were visually
+sampled. Raw recordings exposed private Console paths and are excluded from distribution.
+The evidence bundle contains three reviewed original PNGs and an explicitly cropped
+**1440×610 derivative of the 308-frame motion recording**. Before/after step observations
+are not a rendering of every physics step. These media reviews are attributed to the
+runtime owner and independent agent; this documentation update performed no new pixel review.
+
+A **separate fresh headless process**, still exact `c2ceb7f` / 6.0.0.0, reopened the task's
+saved output with **16 named calls and 12 passed checks**. The file hash stayed unchanged;
+both six-joint articulations initialized, saved transforms composed, and a new camera
+acquired images. The old camera's live-ownership request correctly refused with `NOT_OWNED`.
+Twelve steps advanced **0.2000000104 simulation seconds**, preserving the saved **60 Hz**
+rate. The final native log recorded 20 warnings, zero errors and none of the selected
+signatures above; the process exited normally. Two reviewed 320×240 images show the bench,
+UR arm and samples, with the right-side Agilebot partially cropped. This validates the
+recorded composed-scene initialization, not restoration of solver/controller checkpoint
+state, and does not rewrite the independent ledger's historical save partial.
+
+The three redacted bundles are indexed in the [draft release](evidence/project-scene/RELEASE-ASSETS.md)
+and remain unpublished. The original `20f2953` / 6.0.1 native-step stall is unresolved.
+These 6.0.0.0 results do not qualify current 6.0.0.1 work, generic Newton, Lab, physical
+hardware, a clean-machine/full-installer path, or final all-version readiness.
