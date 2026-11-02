@@ -19,6 +19,13 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 `ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
 [MCP-SERVER.md](MCP-SERVER.md).
 
+Through the host MCP server, bridge connection failures, timeouts and explicit
+`{"status":"error", ...}` results set MCP's `isError` flag. Legacy diagnostic
+text/JSON and the string-valued `structuredContent.result` remain available;
+clients must not interpret a returned error message as successful execution.
+A lost response or timeout does not establish cancellation or rollback. Inspect
+the selected simulator's identity, state and native log before retrying a mutation.
+
 ## Simulator window
 
 Plain `./run.sh` starts Isaac Sim, the bridge and the twin extension, but hides the **UR5e Digital Twin**
