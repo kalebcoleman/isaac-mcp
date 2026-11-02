@@ -12,11 +12,18 @@ PHYSICS_BACKEND="${ISAAC_MCP_PHYSICS_BACKEND:-physx}"
 SHOW_HELP=0
 EXTRA_ARGS=()
 
-# Resolve interpreter (defaults to .venv/bin/python, can be overridden by UR5E_DT_PYTHON)
-if [ -n "${UR5E_DT_PYTHON:-}" ]; then
+# Interpreter: ISAAC_MCP_PYTHON (preferred) or UR5E_DT_PYTHON (alias), else the checkout's
+# .venv, else auto-detection by scripts/isaac_env.py (resolved after argument parsing).
+PY=""
+PY_AUTODETECT=0
+if [ -n "${ISAAC_MCP_PYTHON:-}" ]; then
+  PY="$ISAAC_MCP_PYTHON"
+elif [ -n "${UR5E_DT_PYTHON:-}" ]; then
   PY="$UR5E_DT_PYTHON"
-else
+elif [ -e "$ROOT/.venv/bin/python" ]; then
   PY="$ROOT/.venv/bin/python"
+else
+  PY_AUTODETECT=1
 fi
 
 # Parse arguments
@@ -62,6 +69,23 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+if [ "$PY_AUTODETECT" = 1 ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/scripts/isaac_env.py" ]; then
+    if DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python 2>/dev/null)" && [ -n "$DETECTED" ]; then
+      PY="$DETECTED"
+      if [ "$SHOW_HELP" != 1 ]; then
+        echo "run.sh: auto-detected interpreter $PY (pin one with ISAAC_MCP_PYTHON=/path/to/python; list all with scripts/isaac_env.py find)" >&2
+      fi
+    fi
+  fi
+  [ -n "$PY" ] || PY="$ROOT/.venv/bin/python"
+fi
+
+if [ "${ISAAC_MCP_PRINT_PYTHON:-0}" = 1 ]; then
+  echo "$PY"
+  exit 0
+fi
+
 if [ "$SHOW_HELP" = 1 ]; then
   cat <<EOF
 Usage: ./run.sh [options] [-- <extra kit args>]
@@ -70,7 +94,9 @@ Launch Isaac Sim 6.2 with the Kit MCP bridge and UR5e tools.
 
 Configuration:
   Port:        $PORT (override with UR5E_DT_PORT or --port)
-  Interpreter: $PY (override with UR5E_DT_PYTHON)
+  Interpreter: $PY
+               (override with ISAAC_MCP_PYTHON; UR5E_DT_PYTHON is an alias; without either, the
+               checkout .venv is used, else scripts/isaac_env.py auto-detects an existing install)
 
 Options:
   --headless     Run without visible window (sets UR5E_DT_HEADLESS=1)
@@ -129,7 +155,8 @@ fi
 # Verify interpreter
 if [ ! -x "$PY" ]; then
   echo "FAIL: interpreter $PY not found or not executable." >&2
-  echo "      Run ./install.sh first or set UR5E_DT_PYTHON." >&2
+  echo "      Run ./install.sh first or set ISAAC_MCP_PYTHON (UR5E_DT_PYTHON also works)." >&2
+  echo "      To see what was searched: python3 scripts/isaac_env.py find (see docs/LINUX-SETUP.md)." >&2
   exit 1
 fi
 
