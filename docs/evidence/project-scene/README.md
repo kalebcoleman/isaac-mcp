@@ -216,3 +216,10 @@ responses, timestamps, pass/fail/refusal distinctions, cleanup records and sourc
 Isolated loading, authenticated remote transport and preset contracts remain this plan's work;
 non-security parity follow-ups are assigned to PR #12. Configured Claude is authorized for
 independent remote tests when that deferred workflow is resumed; no remote test success is claimed.
+
+
+The [self-contained Lab follow-up](RECENT-LAB-20261102.json) records all 12 tools,
+headless/windowed train/eval/play, decoded videos, actual Console/input review and
+owned-process cleanup at `c2ceb7f`. Its draft supplement includes the exact setup
+profile/lock and script manifest. Two upstream package conflicts, sampled-video
+limits and the distinction from generic Newton are explicit in [final validation](FINAL-VALIDATION.md).
