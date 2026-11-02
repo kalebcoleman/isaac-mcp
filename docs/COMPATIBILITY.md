@@ -10,7 +10,8 @@ environment; a clean-install recipe for those builds has not been qualified by t
 prerequisites, and what is optional, see [Linux setup by build](LINUX-SETUP.md#choose-a-simulator-build).
 See the [test details](evidence/compatibility-2026-10-31.md) and [verification guide](VERIFICATION.md) for the
 environment, results and omissions. The table preserves the historical smoke scope; newer
-[6.0.0.1 headless qualification](#6001-headless-follow-up-2026-11-01) is recorded separately below.
+[headless](#6001-headless-follow-up-2026-11-01) and
+[windowed](#6001-windowed-follow-up-2026-11-02) 6.0.0.1 observations are recorded separately below.
 Final qualification of the combined candidate across the requested builds and modes remains pending.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
@@ -210,6 +211,56 @@ at `2026-11-01T23:45:17.301641+00:00`, has SHA-256
 Its source records include the run-progress, regression, native-review, full-surface
 and camera/ROS-save summaries. The private reproduction harness, asset outputs and
 curated release index are **not yet published**; this summary is not a publicly
-reproducible bundle. Windowed final review and the complete five-build/mode matrix
-remain pending. Later documentation or bridge-lifecycle commits do not change this
+reproducible bundle. Windowed observations are recorded below; the complete five-build/mode
+matrix remains pending. Later documentation or bridge-lifecycle commits do not change this
 run's source identity or qualify their new runtime behavior.
+
+## 6.0.0.1 windowed follow-up (2026-11-02)
+
+This separate **windowed PhysX** run used exact source
+`4499bf70c5f06c37cdf928dd1f3d2c29e5abf621`, the same package/build/Kit and host stack
+as the headless record above. All 14 broad phases returned zero, covering 39 generic
+tools, 23 UR5e tools and seven bridge built-ins. The full-surface portion recorded
+141 calls and 54 effect assertions; the reopen, cold-camera and cache scopes recorded
+27 captures, 12 attempts and 23 assertions respectively. The existing-physics and
+legacy async-verifier intervals separately returned zero with no recorded error,
+reentry, cycle or simulation-time occurrences. These passes do not supersede the
+viewport source-preservation defect found afterward.
+
+Independent actual use made 93 MCP requests across 35 registered names: 34 tool-ledger
+passes, one partial result and 64 catalog names uncalled. It recorded 22 passing effect
+checks and one framing limitation. Measured robot motion, sample fall/rest and gripper
+alignment passed. The first recording decoded 70 frames but retained an occluded view;
+a later narrower framing produced a useful UR/gripper recording with 98 decoded frames.
+Only its first, middle and last frames were visually inspected. The raised/rotated
+Agilebot success does not explain an earlier 6.0.0.0 target miss.
+
+The pre-agent native review retained 24 intentional-negative error lines, 22 cycle
+occurrences and 137 simulation-time warnings; no reentry, `GetCamera` or Force callback
+occurrences were recorded. The real-window Console showed 359 warnings and 63 errors
+before independent use, and 374 warnings and 63 errors afterward. UI event totals are
+not native-log line counts. The separate agent interval had zero errors and 15 warnings;
+these scopes must not be combined into a claim of a warning-free full run.
+
+A later anonymous-camera fixture confirmed that `sim__viewport__frame` returned success
+while changing the in-memory root camera translation from `(6, 6, 6)` to approximately
+`(2, 0, 6.677923)`; the session layer was unchanged. No disk overwrite was demonstrated,
+and this defect is not an established cause of the earlier occlusion/timing limitation.
+The independent audit found 43 on-disk assets and 259 frozen source files unchanged;
+that does not establish preservation of the in-memory root layer. Its separate parent
+review qualifies the original geometry-under-station wording accordingly.
+
+Source fix `97325af8d6eaf85e5ef3c5088ff0805dd19ae65f`, integrated in `37a73583`, changes
+framing to supported session-layer camera edits, reports native failures and
+`render_complete=false`, and documents partial effects and refusals in
+[scene tools](TOOLS-SCENE.md). Fresh live qualification of that fix is pending; it does
+not retroactively change this `4499bf7` run or establish all-version readiness.
+
+Provenance: inspected `public-facts-final6001w-4499.json`, timestamp
+`2026-11-02T00:04:54.401402+00:00`, SHA-256
+`34e507ee522bee118e568c612483657ac2f3e588323a150e3db65f61cafc834b`;
+all nine referenced source-record hashes were verified. The compact handoff and parent
+review preserve the original observations. The reproduction harness, asset outputs and
+curated release index remain unpublished. This is an existing-installation, simulated
+ROS check, not physical hardware or clean-install validation; remaining builds/modes
+and the new viewport fix still need their own qualification.

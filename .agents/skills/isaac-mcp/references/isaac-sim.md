@@ -116,7 +116,13 @@ not access control.
 - Runtime state: `sim__timeline__control`, `sim__simulation__step` while paused,
   `sim__body__state`, `sim__joints__state` and `sim__joints__command` after physics is initialized.
 - Capture and sensors: `sim__camera__create` / `sim__camera__capture` (RTX), `sim__lidar__*`
-  (requires `--motion-bvh`), `sim__viewport__frame`. The default capture waits for fresh render
+  (requires `--motion-bvh`). `sim__viewport__frame` edits the active camera in the session
+  layer and changes selection, with no Kit undo entry. Its `render_complete=false` is not
+  proof of a rendered view: allow ordinary rendering, then inspect the verified application
+  window. Native failures can leave partial selection/session-camera effects; inspect before
+  retrying. A smaller geometry subtree may avoid surrounding occluders. See
+  `docs/TOOLS-SCENE.md` for unsupported contexts, camera opinions and target bounds.
+  The default capture waits for fresh render
   completions and a new renderer CPU transfer (`cpu_transfer_completed=true`);
   `wait_for_render=false` reads only the last validated tool-acquired CPU cache, with age and
   acquisition context. An empty cache returns `NOT_READY`: use a default/true capture to seed
