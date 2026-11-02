@@ -101,6 +101,31 @@ retain their measured source identities, including the separate `20f2953` window
 Later documentation-only integration does not relabel these CPU results, and the earlier
 `ece55d1` checks remain a separate historical record.
 
+### CPU and package follow-up after checkpoint and discovery fixes (2026-11-02)
+
+At exact commit `d725f84cb853bf5ceb2fa3b7d13d0e002d29becf` (tree
+`cd67cf8705f25a3e870c5cf063a8bc8149fee6d5`), the full host suite passed **1,246 tests
+in 169.89 seconds**, with only the intentional duplicate-ZIP-member warning. The
+separate **MCP 1.22.0** minimum-SDK run passed **216 tests in 27.38 seconds**, retaining
+the Pydantic unresolved `lifespan` forward-reference warning. All jobs completed
+normally with exit zero; the checkout stayed clean at the recorded identity.
+
+Documentation/privacy, asset, catalog, verifier shell-syntax and whitespace checks,
+wheel/sdist builds and `npm pack --dry-run` passed. All five logs are captured command
+output, including the static-check log; the earlier `742560d` static transcription
+remains separately identified above. Inspection confirmed each log's ending and SHA-256
+against the retained summary, whose SHA-256 is
+`1204a87cf6b8664cdccdbf30ebaa41dea1b2fec6ebe0a84688af5cceeeaffeb8`.
+The identity/summary records commands and versions: Python 3.12 test selection,
+uv 0.12.14, Node v26.13.0 and npm 11.20.0. The summary records the 118,652-byte wheel
+and 281,464-byte sdist with their digests; successful builds do not mean publication.
+
+This is a new CPU/package record, not a native simulator retest or clean-install
+qualification. Native observations retain their own source/build/mode identities.
+These passes do not resolve the earlier `20f2953` stepping stall, establish a cause
+for a concurrent native driver refusal, or qualify a pending native retry. Earlier
+full-suite records and warnings remain historical evidence.
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
