@@ -80,9 +80,12 @@ def _metadata_version(dist_info):
 def _dist_version(site, name):
     """Return (present, version) for a pip package in ``site``."""
     present, version = False, None
-    for info in sorted(glob.glob(os.path.join(glob.escape(str(site)), f"{name}-*.dist-info"))):
+    for info in glob.glob(os.path.join(glob.escape(str(site)), f"{name}-*.dist-info")):
         present = True
-        version = _metadata_version(info) or version
+        found = _metadata_version(info)
+        # Several leftover dist-info folders: keep the highest version, compared numerically.
+        if found and (version is None or (parse_version(found) or ()) > (parse_version(version) or ())):
+            version = found
     pkg = Path(site) / name
     if pkg.is_dir():
         present = True
@@ -297,9 +300,12 @@ def select(env, candidates, require=None, lab=False):
     if not pool:
         return None, "no Isaac Sim environment found (run scripts/isaac_env.py find)"
 
+    # Search order decides (first match wins), so an environment placed in the workspace
+    # or activated by the user is never overridden by a newer one found elsewhere. The
+    # version only filters (--require-version); --lab prefers environments with Isaac Lab.
     def key(c):
-        return (1 if lab and c["isaaclab"] else 0, parse_version(c["isaacsim"]) or (), -c["rule"])
-    return max(pool, key=key), None
+        return (0 if lab and c["isaaclab"] else 1, c["rule"])
+    return min(pool, key=key), None
 
 
 def _why(c, require, lab):

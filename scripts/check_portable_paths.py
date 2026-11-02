@@ -36,10 +36,15 @@ ALLOWED_HOME_DIRS = {
     "Videos",
     "ros2_ws",  # default for WS_SETUP in the ROS scripts, overridable
     ".ursim",  # URSim program data, overridable with PROGRAM_DIR
+    "isaac-workspace",  # documented default workspace, overridable with ISAAC_MCP_WORKSPACE
 }
 
 ABSOLUTE = re.compile(r"(?<![\w.])(?:/home/[A-Za-z0-9_.@-]+|/Users/[A-Za-z0-9_.@-]+|[A-Za-z]:\\\\?[A-Za-z0-9_.-]+)")
-HOME_REF = re.compile(r"(?:~|\$HOME|\$\{HOME\}|expanduser\([\"']~)/([A-Za-z0-9_.@<$-]+)")
+HOME_REF = re.compile(
+    r"(?:~|\$HOME|\$\{HOME\}|\"\$HOME\"|\"\$\{HOME\}\"|expanduser\([\"']~)/([A-Za-z0-9_.@<$-]+)"
+    r"|Path\.home\(\)\s*/\s*[\"']([A-Za-z0-9_.@-]+)"
+    r"|expanduser\(\s*[\"']~[\"']\s*\)\s*,\s*[\"']([A-Za-z0-9_.@-]+)"
+)
 SUFFIXES = (".py", ".sh")
 EXTRA_FILES = {"run.sh", "install.sh", "verify.sh"}
 # The checker's own patterns and fixtures that must name bad paths.
@@ -73,7 +78,7 @@ def scan(names: list[str]) -> list[str]:
             if ABSOLUTE.search(line):
                 problems.append(f"{name}:{number}: user-specific absolute path: {line.strip()[:110]}")
             for match in HOME_REF.finditer(line):
-                first = match.group(1)
+                first = next(g for g in match.groups() if g)
                 if first not in ALLOWED_HOME_DIRS and not first.startswith(("$", "{", "<")):
                     problems.append(
                         f"{name}:{number}: hard-coded home directory '~/{first}': {line.strip()[:110]}"

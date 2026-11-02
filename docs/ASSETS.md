@@ -36,10 +36,11 @@ For each asset the first local copy wins:
 1. **Project stores**: `asset_path` of the nearest `isaac-mcp.json`.
 2. **Repo drop-in**: `exts/ur5e-dt/assets/<relpath>` (git-ignored for licensed files).
    Used as-is; it is not hash-checked.
-3. **User stores**, in this order:
-   1. `ISAAC_MCP_ASSET_PATH` (alias `UR5E_DT_ASSET_CACHE`), a list separated by `:`.
-   2. `<workspace>/assets`, only when `ISAAC_MCP_WORKSPACE` is set and that folder exists.
-   3. The old default `~/.cache/ur5e-dt/assets` (`$XDG_CACHE_HOME/ur5e-dt/assets` when that is
+3. **User stores**: `ISAAC_MCP_ASSET_PATH` (alias `UR5E_DT_ASSET_CACHE`), a list separated by
+   `:`. When it is set it **replaces** both defaults below; when it is not set the defaults
+   are used in this order:
+   1. `<workspace>/assets`, only when `ISAAC_MCP_WORKSPACE` is set and that folder exists.
+   2. The old default `~/.cache/ur5e-dt/assets` (`$XDG_CACHE_HOME/ur5e-dt/assets` when that is
       set). It stays a default you can override; nothing existing is moved.
 4. **NVIDIA remote**: only for manifest `remote` entries (`robot/ur5e.usd`,
    `sensors/rsd455.usd`), and never in strict mode.
