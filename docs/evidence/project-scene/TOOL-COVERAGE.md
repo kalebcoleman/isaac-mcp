@@ -68,3 +68,12 @@ indexes actual full-surface arguments and MCP results; paths under
 assertion and ROS records establish the bounded effects, with callback/restoration
 checks recorded separately. Historical generic/host/Lab results keep their source
 identities; this supplement does not certify every parameter or complete Newton.
+
+The [6.0.0.1 Newton failure supplement](RECENT-NEWTON-6001-FAILURES-20261102.json)
+retains actual calls and expected-error predicates separately from working effects.
+Its generic checks completed in both modes, but the twin workflows did not.
+`load_simple_room` stalled in one fresh control; `add_objects` lost the bridge in
+the windowed run. ROS image arrival in two private controls carried all-zero
+first/last RGB buffers and is not a useful-image pass. Six later real MCP/Kit
+checks on `826b84b` verify legacy success/error envelopes and failed-file
+preservation only; they do not resolve native crashes or certify the full twin.

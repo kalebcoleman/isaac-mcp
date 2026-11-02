@@ -1056,3 +1056,78 @@ actual arguments/results; it is not a new complete 99-tool matrix. Applicable
 older Newton qualification, final evidence reconciliation and the original `20f`
 6.0.1 windowed stepping stall remain separate. Successful later runs do not explain
 that stall. PR #16 and the evidence release remain draft, unmerged and unpublished.
+
+
+## Newton 6.0.0.1 failures and separate host error reporting
+
+Exact combined `2c8ce63b33dbabf02b2216f9d512ff9a23724d9c` did not complete the
+Newton twin workflow on package 6.0.0.1 in either mode. This is a material
+functional failure, separate from passing PhysX runs and the original `20f`
+6.0.1 windowed stepping stall. [The compact index](RECENT-NEWTON-6001-FAILURES-20261102.json)
+identifies seven serial processes, 44 key records, complete runtime modules,
+package/Kit/solver identities and cleanup. The environment was Ubuntu 24.04.5,
+RTX 5080/driver 580.178.04, Newton 1.2.0, MuJoCo 3.8.0 and MuJoCo Warp 3.8.0.3;
+loaded Warp was the bundled 1.13.0. These are prepared environments, not clean
+installation qualification.
+
+Both main runs completed the five generic scripts (32/49/23/327/4 records,
+including expected refusals) and the nine-call existing-PhysicsScene scenario.
+That scoped result does not establish all tools or every configuration working.
+The headless twin run then lost Kit after successful Play call 88 and before
+the next joint observation; stderr ended with an unaligned-tcache diagnostic.
+Cause and exit signal were not established. A separately verified owned simulated
+ROS driver needed cleanup because the dead bridge could not perform it.
+
+A fresh unmodified headless control, without the generic prefix, stalled during
+`load_simple_room`. A requested Python stack localized execution to Replicator
+trigger discovery and a USD Runtime graph query, not the underlying cause.
+SIGINT did not end that process, so only the owned process was force-stopped.
+Client closure and cleanup do not establish native cancellation or recovery.
+
+The normal-thread windowed run reached `setup_camera_tf_graph` at call 39, then
+`add_objects` call 40 returned connection reset. Native stderr recorded a
+segmentation fault and invalid-pointer diagnostic. The captured main stack was
+in Newton USD physics parsing/initialization during Play; it does not identify
+which earlier operation damaged memory. The PID vanished before any root
+termination request. The subsequent failed stop call does not prove it reached
+Kit. Only the initial real blank window was reviewed; no final application window
+or Console remained available. The native-file error count excludes the fatal
+stderr stack in the separate process log.
+
+Private controls remain unqualified. Pausing around room composition passed the
+earlier location once, but its wrist-displacement predicate used a still-moving
+baseline and failed; a second process with a settled-baseline harness failed
+during object loading with another heap diagnostic. The latter native reporter
+automatically attempted a crash upload; delivery was not established. Raw dump
+and environment metadata are not distributed. Future disposable launches disable
+current and old crash uploads through process-local settings.
+
+An environment-only USD thread-limit attempt was overwritten by SimulationApp
+and ran no scene checks. A separate `limit_cpu_threads=1` bootstrap control
+observed single-thread USD work, but also changed other thread pools. It passed
+the earlier failure locations once and measured settled arm/wrist motion. RG2
+was still moving after the fixed five-second observation; a later read reached
+0.4998456 rad. Recording failed its five-second backlog bound. Those results do
+not qualify single-thread launch as a workaround. In both private motion controls
+first/last ROS RGB buffers hashed exactly to a 1280×720×3 zero buffer; receipt,
+dimensions and timestamps alone are not useful camera-output evidence. A later
+Dome-light probe followed Stop/reset and changed arm pose, so did not isolate
+illumination. The failed recording, original predicates and refused save remain.
+
+The windowed failure also exposed a separate host defect: legacy bridge failures
+had `isError=false`. Source `7cdd54f` preserves the original JSON/text and string
+output schema while marking known failures. It passed 114 focused CPU tests and
+80 selected tests on MCP SDK 1.22.0. On combined
+`826b84b69f04a080882c3ef5894877f389af2938`, six real MCP/Kit calls on
+6.0.1.0 headless Newton passed six checks: normal query success, a missing-state
+application error, invalid-upload error, preserved structured result and no file
+created by the failed upload. This is error-reporting qualification, not a native
+crash fix or completion of the twin workflow.
+
+All seven 6.0.0.1 processes exited or received owned cleanup. The 717-member
+[draft supplement](RELEASE-ASSETS.md) contains actual arguments/results, selected
+source-hashed native excerpts and reproduction harnesses; all 728 original hashes
+were rechecked, all 716 distributed member checksums verified, and the unchanged
+nested privacy guard passed. No geometry, screenshots, video or raw crash dumps
+are included. Remaining Newton modes/releases, final all-tool reconciliation
+and the unexplained native failures remain open. PR #16 stays draft and unmerged.

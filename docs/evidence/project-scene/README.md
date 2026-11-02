@@ -16,6 +16,14 @@ predicate failure, and records native writeback and visual limits. This is an
 affected-path supplement, not a relabeling of historical 99-tool or agent evidence;
 the original `20f` stall and remaining Newton checks are still open.
 
+Subsequent [6.0.0.1 Newton qualification failed](RECENT-NEWTON-6001-FAILURES-20261102.json)
+in both modes on exact `2c8ce63`. Generic scripted checks completed, but the twin
+workflow lost Kit; a separate fresh control stalled during room loading. Private
+pause/thread controls did not establish a remedy. The index preserves those
+distinctions and six later real-MCP error-envelope checks on `826b84b`, which fix
+host reporting only. [Failure details](FINAL-VALIDATION.md#newton-60001-failures-and-separate-host-error-reporting)
+and the draft bundle exclude raw crash dumps and environment metadata.
+
 The trusted workflow is exercised through real MCP with original multifile USD/URDF/USDZ
 fixtures and a separately licensed real Agilebot robot. Root checks, snapshots, dependency
 inspection, filters and managed launch are **not an OS sandbox**. Untrusted configuration
