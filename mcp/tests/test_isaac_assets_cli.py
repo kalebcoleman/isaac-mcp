@@ -733,7 +733,7 @@ def test_r2_zip_member_count_is_checked_before_the_directory_is_parsed(
     assert code == 2 and "more than 1" in err
 
 
-def test_r5_a_failed_copy_leaves_no_temporary_files(cli, capsys, tmp_path, monkeypatch):
+def test_a_failed_copy_leaves_no_temporary_files(cli, capsys, tmp_path, monkeypatch):
     store = make_store(tmp_path, monkeypatch)
     source = tmp_path / "x.usd"
     source.write_bytes(b"data")
@@ -801,3 +801,117 @@ def test_tar_extraction_closes_every_file_handle(cli, capsys, tmp_path, monkeypa
     monkeypatch.setattr("builtins.open", tracking_open)
     assert run(cli, capsys, "add", str(archive))[0] == 0
     assert opened and all(h.closed for h in opened)
+
+
+# ------------------------------------------------- round-3 review regressions (PR 51)
+
+
+def _forge_zip_counts(data: bytes, count: int) -> bytes:
+    """Rewrite both entry counts in the end-of-central-directory record."""
+    import struct
+
+    i = data.rfind(b"PK\x05\x06")
+    return data[: i + 8] + struct.pack("<HH", count, count) + data[i + 12 :]
+
+
+def test_n1_a_forged_zip_entry_count_cannot_hide_a_huge_directory(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for i in range(25_000):
+            zf.writestr(f"f{i}.usd", b"")
+    archive = tmp_path / "forged.zip"
+    archive.write_bytes(_forge_zip_counts(buf.getvalue(), 1))
+
+    def must_not_parse(*args, **kwargs):
+        raise AssertionError("ZipFile must not parse an over-limit central directory")
+
+    monkeypatch.setattr(cli.zipfile, "ZipFile", must_not_parse)
+    code, _, err = run(cli, capsys, "add", str(archive), "--max-members", "1")
+    assert code == 2 and "more than 1" in err
+
+
+def test_n1_a_zip_whose_declared_count_disagrees_with_its_records_is_refused(
+    cli, capsys, tmp_path, monkeypatch
+):
+    make_store(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for i in range(3):
+            zf.writestr(f"f{i}.usd", b"x")
+    archive = tmp_path / "lying.zip"
+    archive.write_bytes(_forge_zip_counts(buf.getvalue(), 2))
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2 and "declares 2" in err
+
+
+def test_n1_an_honest_zip_still_installs(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "ok.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("robot/a.usd", b"a")
+        zf.writestr("robot/b.usd", b"b")
+    assert run(cli, capsys, "add", str(archive))[0] == 0
+    assert (store / "ur5e-dt" / "robot" / "b.usd").read_bytes() == b"b"
+
+
+def test_n2_a_failed_publish_leaves_no_temporary_file(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    (pack / "directory.usd").mkdir(parents=True)  # cannot be replaced by a file
+    source = tmp_path / "directory.usd"
+    source.write_bytes(b"x")
+    code, _, _ = run(cli, capsys, "add", str(source), "--force")
+    assert code == 2
+    assert [p.name for p in pack.iterdir() if p.name.endswith(".part")] == []
+
+
+def test_n2_a_failed_pin_write_leaves_no_temporary_file(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    (pack / "a.usd").write_bytes(b"a")
+    (pack / "SHA256SUMS").mkdir()  # the pin file cannot be replaced
+    code, _, _ = run(cli, capsys, "pin")
+    assert code == 2
+    assert [p.name for p in pack.iterdir() if p.name.endswith(".part")] == []
+
+
+def _tar_gz_bytes() -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        info = tarfile.TarInfo("a.usd")
+        info.size = 4096
+        tf.addfile(info, io.BytesIO(b"x" * 4096))
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize(
+    "name,payload",
+    [
+        ("bad-xz.tar", b"\xfd7zXZ\x00" + b"corrupt bytes" * 50),
+        ("bad-bz2.tar", b"BZh9" + b"corrupt bytes" * 50),
+        ("truncated.tar.gz", None),
+        ("truncated.tar", None),
+        ("garbage.zip", b"PK\x03\x04 not really a zip"),
+    ],
+)
+def test_n3_corrupt_or_truncated_archives_are_clean_refusals(
+    cli, capsys, tmp_path, monkeypatch, name, payload
+):
+    make_store(tmp_path, monkeypatch)
+    if payload is None:
+        if name.endswith(".tar.gz"):
+            payload = _tar_gz_bytes()[:-40]
+        else:
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w") as tf:
+                info = tarfile.TarInfo("a.usd")
+                info.size = 4096
+                tf.addfile(info, io.BytesIO(b"x" * 4096))
+            payload = buf.getvalue()[:1000]
+    archive = tmp_path / name
+    archive.write_bytes(payload)
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2, err
+    assert "Traceback" not in err
