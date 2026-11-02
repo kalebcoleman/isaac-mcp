@@ -915,3 +915,122 @@ def test_n3_corrupt_or_truncated_archives_are_clean_refusals(
     code, _, err = run(cli, capsys, "add", str(archive))
     assert code == 2, err
     assert "Traceback" not in err
+
+
+# ------------------------------------------------- round-4 review regressions (PR 51)
+
+
+def test_v1_a_valid_offset_only_zip64_archive_installs(cli, capsys, tmp_path, monkeypatch):
+    """Python's own writer emits zip64 records when the data starts past 2 GiB."""
+    store = make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "big-offset.zip"
+    with open(archive, "wb") as fh:
+        fh.seek((1 << 31) + 1)  # sparse: no real disk is used
+        with zipfile.ZipFile(fh, "w") as zf:
+            zf.writestr("robot/a.usd", b"zip64 payload")
+    if archive.stat().st_blocks * 512 > 200 << 20:
+        pytest.skip("filesystem does not support sparse files")
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 0, err
+    assert (store / "ur5e-dt" / "robot" / "a.usd").read_bytes() == b"zip64 payload"
+
+
+def _zip64_with_zeroed_legacy_fields(entries: int) -> bytes:
+    """A zip whose true counts live only in the zip64 records; legacy fields are zero."""
+    import struct
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for i in range(entries):
+            zf.writestr(f"f{i}.usd", b"")
+    data = buf.getvalue()
+    i = data.rfind(b"PK\x05\x06")
+    cd_size, cd_offset = struct.unpack("<LL", data[i + 12 : i + 20])
+    record = b"PK\x06\x06" + struct.pack("<QHHLLQQQQ", 44, 45, 45, 0, 0, entries, entries, cd_size, cd_offset)
+    locator = b"PK\x06\x07" + struct.pack("<LQL", 0, i, 1)
+    legacy = data[i : i + 8] + struct.pack("<HHLL", 0, 0, 0, 0) + data[i + 20 :]
+    return data[:i] + record + locator + legacy
+
+
+def test_v1_zip64_records_are_used_even_when_legacy_fields_are_zero(
+    cli, capsys, tmp_path, monkeypatch
+):
+    make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "hidden.zip"
+    archive.write_bytes(_zip64_with_zeroed_legacy_fields(25_000))
+
+    def must_not_parse(*args, **kwargs):
+        raise AssertionError("ZipFile must not load an over-limit central directory")
+
+    monkeypatch.setattr(cli.zipfile, "ZipFile", must_not_parse)
+    code, _, err = run(cli, capsys, "add", str(archive), "--max-members", "1")
+    assert code == 2 and "more than 1" in err
+
+
+def test_v1_the_synthetic_zip64_archive_is_a_valid_zip(tmp_path):
+    """Guards the helper above: Python must read what the test builds."""
+    archive = tmp_path / "z.zip"
+    archive.write_bytes(_zip64_with_zeroed_legacy_fields(3))
+    with zipfile.ZipFile(archive) as zf:
+        assert len(zf.namelist()) == 3
+
+
+def _patch_zip_header_field(data: bytes, local_off: int, central_off: int, value: int) -> bytes:
+    import struct
+
+    out = bytearray(data)
+    packed = struct.pack("<H", value)
+    out[local_off : local_off + 2] = packed
+    c = bytes(out).find(b"PK\x01\x02")
+    out[c + central_off : c + central_off + 2] = packed
+    return bytes(out)
+
+
+def test_v2_an_encrypted_zip_entry_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("a.usd", b"secret")
+    archive = tmp_path / "enc.zip"
+    # General-purpose flag bit 0 = encrypted (local header offset 6, central offset 8).
+    archive.write_bytes(_patch_zip_header_field(buf.getvalue(), 6, 8, 0x1))
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2 and "Traceback" not in err and "unsupported zip entry" in err
+
+
+def test_v2_an_unsupported_zip_compression_method_is_a_clean_refusal(
+    cli, capsys, tmp_path, monkeypatch
+):
+    make_store(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("a.usd", b"data")
+    archive = tmp_path / "method.zip"
+    # Compression method field: local header offset 8, central offset 10. 99 = AES.
+    archive.write_bytes(_patch_zip_header_field(buf.getvalue(), 8, 10, 99))
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 2 and "Traceback" not in err and "unsupported zip entry" in err
+
+
+def test_v3_a_failed_cleanup_does_not_hide_the_original_error(cli, capsys, tmp_path, monkeypatch):
+    import errno
+
+    make_store(tmp_path, monkeypatch)
+    source = tmp_path / "x.usd"
+    source.write_bytes(b"x")
+
+    def failing_publish(*args, **kwargs):
+        raise OSError(errno.EIO, "disk on fire")
+
+    real_unlink = os.unlink
+
+    def failing_unlink(path, *args, **kwargs):
+        if str(path).endswith(".part"):
+            raise PermissionError(errno.EACCES, "cleanup denied")
+        return real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(cli, "_publish", failing_publish)
+    monkeypatch.setattr(cli.os, "unlink", failing_unlink)
+    code, _, err = run(cli, capsys, "add", str(source))
+    assert code == 2
+    assert "disk on fire" in err and "cleanup denied" not in err
