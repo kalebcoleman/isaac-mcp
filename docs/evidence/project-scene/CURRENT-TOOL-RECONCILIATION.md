@@ -8,7 +8,9 @@ assertions across all five H/W pairs. Its counts are separate from the census be
 Per the user's 2026-11-02 direction, PhysX is the release target; Newton remains
 experimental and needs no additional investigation for this release. Existing Newton
 failures and bounded 6.2 successes remain recorded. The original `20f` PhysX stall
-still needs a bounded reproduction/recovery disposition.
+has a [completed bounded reproduction/recovery assessment](PHYSX-STALL-DISPOSITION.md):
+two current-runtime replays did not reproduce it; its cause remains unresolved.
+This does not change the historical JSON ledger or mark the native failure fixed.
 
 All **99 names** have retained calls. This census indexes **12,073 call records across 39 source-identified cases**, with **1,583 explicit or recomputed observation links**. These are record counts, including repeated observations, expected refusals and failed workflows; they are not deduplicated dispatches, independent effect tests, or proof that 99 tools work on every backend. Original input hashes, JSON pointers, actual arguments and MCP envelopes are retained. The original [1,944-call index](ALL-TOOLS-INDEX-20261102.json) remains immutable.
 
