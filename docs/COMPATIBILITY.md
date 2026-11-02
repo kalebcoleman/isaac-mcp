@@ -4,6 +4,34 @@ The full installer is pinned to **Isaac Sim 6.2.0.0 and Python 3.12**. It does n
 compatible environment for other 6.x releases. The separate MCP host package requires Python 3.10 or newer;
 its interpreter can be different from the simulator's.
 
+## Release backend scope
+
+**PhysX is the release target. Newton remains experimental.** Completing Newton support
+across builds, or repairing its measured failures, is outside this release scope. The
+historical results below remain available with their original source, build, mode and
+solver identities; this scope decision does not turn failures into passes.
+
+- **Sim 6.2.0.0 Newton:** the [candidate9/10 records](#6200-newton-twin-candidates-2026-11-02)
+  demonstrate specific twin motion, gripper/output, saved-twin reopen and known-load wrench
+  workflows with **MuJoCo Warp on CPU**. Broad candidate9 runs and later narrow candidate10
+  checks have different source identities. They do not establish all 6.2 Newton workflows,
+  current-head qualification, native MuJoCo CPU support or generic/Lab equivalence.
+- **Earlier Newton builds:** full-twin mounting with Newton 1.0 is unsupported.
+  [6.0.0.1](#6001-newton-failures-and-separate-host-envelope-checks-2026-11-02)
+  has measured native crashes and a separate room-load stall;
+  [6.0.1.0](#6010-newton-state-and-rendering-failures-2026-11-02)
+  has nonfinite physics, black output, scale loss and a later native failure;
+  [6.1.0.0](#6100-newton-contact-failures-and-unshipped-controls-2026-11-02)
+  has nonfinite assembled physics and failed repeated-cycle contact controls. Narrow generic
+  passes do not qualify those twin workflows. No reliable collider workaround was shipped.
+
+The original **`20f2953` / 6.0.1.0 windowed PhysX stepping stall remains unresolved** and
+requires its own disposition. PhysX evidence review, fresh-Kit reuse of the new camera
+fixtures, clean-machine/full-installer coverage and Lab setup limitations remain separate.
+This is not a readiness or merge declaration. In the dated sections below, earlier references
+to remaining Newton qualification describe the investigation at that time, not a current
+release requirement. Optional Lab's Newton/MJWarp evidence also remains a separate scope.
+
 For coverage by tool, start with the [current tool/source/backend reconciliation](evidence/project-scene/CURRENT-TOOL-RECONCILIATION.md).
 It links all 99 names to their historical calls, bounded observations and remaining gaps;
 it does not certify all tools on the current head or every backend. The latest stricter
@@ -27,7 +55,7 @@ The [6.1.0.0 PhysX follow-up](#6100-physx-follow-up-2026-11-02) records later mo
 The [6.2.0.0 follow-up](#6200-physx-follow-up-2026-11-02) separates existing and isolated locked environments.
 The [6.0.0.0 current-runtime follow-up](#6000-physx-follow-up-2026-11-02) records broad checks, an independent task and a separate 60 Hz reopen.
 The [current 6.0.0.1 PhysX and later save-reopen results](#6001-current-runtime-physx-follow-up-2026-11-02) retain the earlier runs above as historical evidence.
-Final qualification of the combined candidate across the requested builds and modes remains pending.
+Final PhysX release review across the requested builds and modes remains pending.
 The [6.2 Newton twin candidate follow-up](#6200-newton-twin-candidates-2026-11-02) separates
 broad candidate runs from later narrow reopen/force checks and the historical integrated PhysX header defect.
 The [PhysX wrench follow-up](#6200-physx-wrench-correction-candidate-2026-11-02) records
@@ -652,8 +680,9 @@ That result is separate from the older `2fdf404` save's reopen and the original 
 
 Redacted records and videos are listed in the [draft release index](evidence/project-scene/RELEASE-ASSETS.md);
 they remain unpublished and require access. The original `20f2953` / 6.0.1 native-step
-stall is unresolved. Remaining older-build, generic Newton, clean-machine/full-installer,
-dependency-clean Lab setup and final-review gates stay open; installed backend packages and historical
+stall is unresolved. PhysX evidence review, clean-machine/full-installer coverage,
+dependency-clean Lab setup and final review remain separate; Newton limitations follow the
+[current experimental scope](#release-backend-scope). Installed backend packages and historical
 99-name invocation coverage do not establish universal tool or version support.
 
 
@@ -827,9 +856,10 @@ task's successful save/reopen does not resolve that failed run.
 Five artifacts are listed in the [unpublished draft release index](evidence/project-scene/RELEASE-ASSETS.md).
 The large windowed native log is separately compressed to respect the unchanged privacy-scan
 budget. Later [Lab native/setup evidence](REPRODUCIBILITY.md#self-contained-lab-3-reproduction)
-records scoped train/eval/play results with two retained dependency conflicts. Generic Newton,
-dependency-clean Lab setup, clean-machine/full-installer testing and final review remain
-separate open gates; no all-tool/all-version readiness claim follows.
+records scoped train/eval/play results with two retained dependency conflicts. Dependency-clean
+Lab setup, clean-machine/full-installer testing and final review remain separate open gates;
+Newton completion is outside the [PhysX release scope](#release-backend-scope). No all-tool/
+all-version readiness claim follows.
 
 ## 6.2.0.0 Newton twin candidates (2026-11-02)
 
@@ -903,9 +933,9 @@ are distinct observations, not proof of unchanged live robot poses or disk overw
 Newton **1.0 full-twin mounting is unsupported**; a bundled-USD parser probe disproved
 path-only weld relocation. Older backends without incoming-joint wrench output report
 unavailable, not substitute zeros; native MuJoCo CPU/VBD do not qualify from these results.
-Remaining integrated/older-build checks, generic backend qualification and clean-machine/
-full-installer testing stay separate. The original `20f2953` 6.0.1 stepping stall remains
-unresolved. The larger bundle is indexed in the [unpublished draft release](evidence/project-scene/RELEASE-ASSETS.md);
+These experimental Newton observations do not establish PhysX qualification or
+clean-machine/full-installer coverage; further Newton completion is outside the release scope.
+The original `20f2953` 6.0.1 stepping stall remains unresolved. The larger bundle is indexed in the [unpublished draft release](evidence/project-scene/RELEASE-ASSETS.md);
 these scoped results do not establish all-version readiness or public artifact availability.
 
 ## 6.2.0.0 PhysX wrench correction candidate (2026-11-02)
@@ -1052,9 +1082,9 @@ Kit processes exited; no unrelated process was stopped.
 Earlier generic, host, Lab and independent-task evidence keeps its original source identity.
 The component-equivalence manifest compares implementation bytes; it is not a rerun or
 proof of every edge case. **The original `20f2953` / 6.0.1 native-step stall remains
-unresolved.** Applicable Newton checks, final per-tool/version reconciliation and clean-machine/
-full-installer qualification remain separate. The [draft release index](evidence/project-scene/RELEASE-ASSETS.md)
-links the larger redacted transcript bundle; the release remains unpublished and PR16 unmerged.
+unresolved.** Final PhysX per-tool/version review and clean-machine/full-installer qualification
+remain separate from the [experimental Newton limitations](#release-backend-scope).
+The [draft release index](evidence/project-scene/RELEASE-ASSETS.md) links the larger redacted transcript bundle; the release remains unpublished and PR16 unmerged.
 
 ## 6.0.0.1 Newton failures and separate host-envelope checks (2026-11-02)
 

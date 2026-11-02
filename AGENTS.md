@@ -5,6 +5,13 @@ per-tool reference lives in `docs/`.
 
 ## Setup guide for agents
 
+- **PhysX is the release target. Newton is experimental.** Use PhysX for release validation;
+  do not continue Newton qualification or workaround development unless explicitly requested.
+  For a requested Newton workflow, inspect the [backend scope](docs/COMPATIBILITY.md#release-backend-scope)
+  and exact source/build/mode evidence first. Specific 6.2 successes are not general support;
+  earlier native crashes, invalid state and contact/render failures remain limitations.
+  Verify the selected engine; do not silently switch an existing scene or fall back to another
+  backend. A CPU device does not identify the solver, and Lab results do not qualify the twin.
 - Identify the requested Sim build and workflow from the context or installation; reuse their intended
   running bridge when available.
   The repository's full `./install.sh --accept-eula` creates the locked **6.2.0.0** environment;

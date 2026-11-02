@@ -37,10 +37,16 @@ lists **83 tools offline**, **90 with bridge built-ins**, or **99 with both opti
 Catalog entries remain visible offline; simulator operations need a live selected bridge.
 See the [tool tiers and filters](AGENTS.md#what-you-can-reach-by-tier).
 
+> **Release target: PhysX.** Newton is experimental; the [backend scope](docs/COMPATIBILITY.md#release-backend-scope)
+> records specific tested 6.2 workflows and older native, contact and rendering failures.
+> Completing Newton qualification is outside this release scope; these results do not establish
+> general Newton support on 6.2 or other builds.
+>
 > **Validation status:** the installer pins **6.2.0.0**. Scoped results exist for **6.0.0.0,
 > 6.0.0.1, 6.0.1.0, 6.1.0.0 and 6.2.0.0**, with source, mode and limitations recorded in the
 > [matrix](docs/COMPATIBILITY.md). The original 6.0.1 windowed native-step stall remains unresolved.
-> Final matrix review, affected older-build retests and generic Newton qualification remain open.
+> Final PhysX evidence review, the separate fresh-Kit camera-reuse gap and setup limitations
+> remain open; changing the release target does not resolve them.
 > This is a draft integration, not an all-version or clean-machine certification.
 
 ## Quick start
