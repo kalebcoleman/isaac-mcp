@@ -339,6 +339,34 @@ class _BoundedReader(io.RawIOBase):
         return len(data)
 
 
+MAX_TAR_HEADER_BYTES = 1 << 20
+_EXTENDED_HEADER_TYPES = frozenset(
+    {
+        tarfile.GNUTYPE_LONGNAME,
+        tarfile.GNUTYPE_LONGLINK,
+        tarfile.XHDTYPE,
+        tarfile.XGLTYPE,
+        tarfile.SOLARIS_XHDTYPE,
+    }
+)
+
+
+class _BoundedTarInfo(tarfile.TarInfo):
+    """Refuse a PAX or GNU long-name header that tarfile would read into memory whole.
+
+    ``tarfile`` reads such a header's data in one piece before the member it describes is
+    seen, so the stream bound alone does not limit memory. This check runs first.
+    """
+
+    def _proc_member(self, tarfile_obj):
+        if self.type in _EXTENDED_HEADER_TYPES and self.size > MAX_TAR_HEADER_BYTES:
+            raise CliError(
+                f"archive has a {self.size}-byte extended tar header; the limit is "
+                f"{MAX_TAR_HEADER_BYTES} bytes"
+            )
+        return super()._proc_member(tarfile_obj)
+
+
 def _open_tar(archive: Path, limits: Limits):
     raw = open(archive, "rb")
     magic = raw.read(6)
@@ -354,7 +382,7 @@ def _open_tar(archive: Path, limits: Limits):
     bound = limits.total_bytes + limits.members * PER_MEMBER_OVERHEAD + METADATA_ALLOWANCE
     reader = io.BufferedReader(_BoundedReader(stream, bound, also_close=(raw,)))
     try:
-        return tarfile.open(fileobj=reader, mode="r|")
+        return tarfile.open(fileobj=reader, mode="r|", tarinfo=_BoundedTarInfo)
     except BaseException:
         raw.close()
         raise
@@ -423,9 +451,14 @@ def _extract_archive(archive: Path, into: Path, limits: Limits | None = None) ->
             zf = zipfile.ZipFile(archive)
         except zipfile.BadZipFile as exc:
             raise CliError(f"not a valid zip archive: {archive} ({exc})") from exc
+        except NotImplementedError as exc:
+            # e.g. an entry that needs a newer zip version than Python supports
+            raise CliError(f"unsupported zip archive: {archive} ({exc})") from exc
         with zf:
             for info in zf.infolist():
                 limits.member(info.filename)
+                if not info.filename:
+                    raise CliError("unsafe archive member: empty name")
                 if info.is_dir():
                     if not _is_root_entry(info.filename):
                         _clean_relpath(info.filename.rstrip("/"), "archive member")
