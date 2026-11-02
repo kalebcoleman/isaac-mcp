@@ -34,12 +34,21 @@ release requirement. Optional Lab's Newton/MJWarp evidence also remains a separa
 
 For coverage by tool, start with the [current tool/source/backend reconciliation](evidence/project-scene/CURRENT-TOOL-RECONCILIATION.md).
 It links all 99 names to their historical calls, bounded observations and remaining gaps;
-it does not certify all tools on the current head or every backend. The latest stricter
-`sim__body__state`, `sim__joints__state` and `sim__simulation__step` paths still need targeted
-**normal PhysX checks on all five builds in both modes** in that recorded reconciliation.
-Earlier positive PhysX runs and the later `ba1d4b2` Newton error-reporting checks retain
-separate source identities. Original `20f2953` and Newton failures, fresh-Kit reuse of the
-new camera fixtures, and setup/Lab limitations remain open; see the ledger's linked records.
+it does not certify all tools on the current head or every backend. The later
+[current PhysX supplement](evidence/project-scene/PHYSX-CURRENT-POSITIVE.md) closes its
+then-open positive-path gap for `sim__body__state`, `sim__joints__state` and
+`sim__simulation__step` on **all five builds in headless and windowed modes**, at exact
+`0163b3f07e6b9d3f51006f8845156f664429e580`: **445 core calls, including 100 expected errors,
+and 230 scoped assertions**. This is a targeted regression, not a new full-head 99-tool pass.
+Earlier PhysX runs and `ba1d4b2` Newton error-reporting checks keep their original identities.
+
+The supplement records finite falling-body/joint effects, measured step clocks, refusal and
+Stop/Play checks; assertions also include identity and preservation, not 230 independent
+motion experiments. Prepared environments, diagnostic launchers, retained harness failures,
+source-file versus whole-root preservation and separate Console/native warning counts remain
+explicit in that record. The original `20f2953` PhysX stall is **not reproduced or resolved**
+by this smaller fixture. Fresh-Kit reuse of the new camera fixtures and setup/Lab limits
+remain separate; Newton failures remain experimental limitations outside release completion.
 
 The table records what this repository has actually exercised, not a guarantee for every machine or feature.
 The 6.0 and 6.1 probes used separate, locally resolved environments rather than this project's locked 6.2
