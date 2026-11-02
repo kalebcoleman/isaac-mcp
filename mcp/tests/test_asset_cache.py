@@ -652,3 +652,17 @@ def test_directory_assets_resolve_from_every_layer(monkeypatch, tmp_path):
     module = load_module()
     isolated(module, tmp_path)
     assert module.resolve_dir("objs") == project.resolve() / "assets" / "ur5e-dt" / "objs"
+
+
+def test_resolve_info_points_fetch_group_members_at_the_fetch_script(monkeypatch, tmp_path):
+    module = load_module()
+    fake_manifest(module, tmp_path, target="robot/test.usd")
+    data = json.loads(module.MANIFEST_PATH.read_text(encoding="utf-8"))
+    data["remote"] = {}
+    module.MANIFEST_PATH.write_text(json.dumps(data), encoding="utf-8")
+    isolated(module, tmp_path)
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path / "empty"))
+    info = module.resolve_info("robot/test.usd")
+    assert info["status"] == "missing"
+    assert "fetch_ur5e_assets.py" in info["detail"]
+    assert "no public source" not in info["detail"]

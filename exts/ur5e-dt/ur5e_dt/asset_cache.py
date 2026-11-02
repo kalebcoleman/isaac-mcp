@@ -503,6 +503,11 @@ def resolve_info(relpath: str) -> dict:
         info.update(layer="remote", status="remote", uri=remote)
     elif remote is not None:
         info["detail"] = "strict mode refuses the remote fallback"
+    elif (group := fetch_group(relpath)) is not None:
+        info["detail"] = (
+            f"not fetched yet (fetch group {group.get('id', '?')}); "
+            "run `python3 scripts/fetch_ur5e_assets.py`"
+        )
     else:
         info["detail"] = "must be supplied locally (no public source)"
     return info
