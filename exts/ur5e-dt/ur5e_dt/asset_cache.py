@@ -358,10 +358,29 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+_PINS_CACHE: dict[str, tuple[tuple[int, int, int], dict[str, str]]] = {}
+
+
 def pins(base: Path) -> dict[str, str]:
-    """Return ``{relative path: sha256}`` from ``<base>/SHA256SUMS`` (coreutils format)."""
+    """Return ``{relative path: sha256}`` from ``<base>/SHA256SUMS`` (coreutils format).
+
+    Parsed files are cached by modification time, size and inode, so repeated lookups
+    (``doctor`` over thousands of pinned files) do not re-read the file each time. The
+    returned mapping is shared: do not modify it.
+    """
+    path = base / PINS_FILE
     try:
-        text = (base / PINS_FILE).read_text(encoding="utf-8")
+        st = path.stat()
+    except OSError:
+        return {}
+    stamp = (st.st_mtime_ns, st.st_size, st.st_ino)
+    cached = _PINS_CACHE.get(str(path))
+    if cached is not None and cached[0] == stamp:
+        return cached[1]
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path} is not valid UTF-8 text ({exc})") from exc
     except OSError:
         return {}
     found: dict[str, str] = {}
@@ -374,7 +393,24 @@ def pins(base: Path) -> dict[str, str]:
         # space followed directly by the name is also accepted.
         name = line[66:] if line[65] in " *" else line[65:]
         found[name[2:] if name.startswith("./") else name] = digest.lower()
+    _PINS_CACHE[str(path)] = (stamp, found)
     return found
+
+
+def _pin_key(path: Path, base: Path) -> str | None:
+    """Return *path* relative to *base* as written in a pin file.
+
+    The lookup builds paths under *base*, so the plain relative path is used first: a
+    symlinked file inside a pack is pinned under its own name, not its target's.
+    """
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        pass
+    try:
+        return path.resolve().relative_to(base.resolve()).as_posix()
+    except ValueError:
+        return None
 
 
 def _containing_bases(path: Path) -> list[Path]:
@@ -431,7 +467,8 @@ def _check_pin(relpath: str, path: Path, base: Path, pinned: str) -> None:
 
 def _verify_member(relpath: str, path: Path, base: Path, entry: dict | None) -> None:
     """Check one stored file: its user pin if it has one, else its manifest entry."""
-    pinned = pins(base).get(path.resolve().relative_to(base).as_posix())
+    key = _pin_key(path, base)
+    pinned = pins(base).get(key) if key is not None else None
     if pinned:
         _check_pin(relpath, path, base, pinned)
     else:
@@ -455,7 +492,8 @@ def verify_local(relpath: str, path: Path, base: Path | None = None) -> None:
         base = _recover_base(relpath, path)
         if base is None:
             return
-    pinned = pins(base).get(path.resolve().relative_to(base).as_posix())
+    key = _pin_key(path, base)
+    pinned = pins(base).get(key) if key is not None else None
     if pinned:
         _check_pin(relpath, path, base, pinned)
         return
@@ -567,7 +605,7 @@ def resolve_info(relpath: str) -> dict:
             return info
         if layer == "dropin":
             info["status"] = "unpinned"
-        elif path.resolve().relative_to(base).as_posix() in pins(base):
+        elif _pin_key(path, base) in pins(base):
             info["status"] = "pinned"
         else:
             info["status"] = "ok" if expected_asset(relpath) else "unpinned"

@@ -340,6 +340,10 @@ class _BoundedReader(io.RawIOBase):
 
 
 MAX_TAR_HEADER_BYTES = 1 << 20
+# Extended headers are also capped per archive (global PAX headers persist for the whole
+# archive) and per chain (tarfile follows a chain of extended headers by recursion).
+MAX_TAR_HEADER_TOTAL_BYTES = 16 << 20
+MAX_TAR_HEADER_CHAIN = 8
 _EXTENDED_HEADER_TYPES = frozenset(
     {
         tarfile.GNUTYPE_LONGNAME,
@@ -359,11 +363,26 @@ class _BoundedTarInfo(tarfile.TarInfo):
     """
 
     def _proc_member(self, tarfile_obj):
-        if self.type in _EXTENDED_HEADER_TYPES and self.size > MAX_TAR_HEADER_BYTES:
-            raise CliError(
-                f"archive has a {self.size}-byte extended tar header; the limit is "
-                f"{MAX_TAR_HEADER_BYTES} bytes"
-            )
+        if self.type in _EXTENDED_HEADER_TYPES:
+            if self.size > MAX_TAR_HEADER_BYTES:
+                raise CliError(
+                    f"archive has a {self.size}-byte extended tar header; the limit is "
+                    f"{MAX_TAR_HEADER_BYTES} bytes"
+                )
+            total = getattr(tarfile_obj, "_isaac_header_bytes", 0) + self.size
+            chain = getattr(tarfile_obj, "_isaac_header_chain", 0) + 1
+            if total > MAX_TAR_HEADER_TOTAL_BYTES:
+                raise CliError(
+                    f"archive's extended tar headers exceed {MAX_TAR_HEADER_TOTAL_BYTES} bytes in total"
+                )
+            if chain > MAX_TAR_HEADER_CHAIN:
+                raise CliError(
+                    f"archive chains more than {MAX_TAR_HEADER_CHAIN} extended tar headers in a row"
+                )
+            tarfile_obj._isaac_header_bytes = total
+            tarfile_obj._isaac_header_chain = chain
+        else:
+            tarfile_obj._isaac_header_chain = 0
         return super()._proc_member(tarfile_obj)
 
 
@@ -414,7 +433,11 @@ def _check_zip_directory(archive: Path, limits: Limits) -> None:
         # unconditionally (not only when a legacy field is saturated).
         loc = i - 20
         rec = loc - 56
-        if loc >= 0 and rec >= 0 and tail[loc : loc + 4] == b"PK\x06\x07" and tail[rec : rec + 4] == b"PK\x06\x06":
+        if loc >= 0 and tail[loc : loc + 4] == b"PK\x06\x07":
+            if rec < 0 or tail[rec : rec + 4] != b"PK\x06\x06":
+                # zip64 "extensible data" between the record and the locator: the record's
+                # true position cannot be checked the way zipfile will read it.
+                raise CliError("unsupported zip archive: zip64 end record with extensible data")
             total = struct.unpack("<Q", tail[rec + 32 : rec + 40])[0]
             cd_size = struct.unpack("<Q", tail[rec + 40 : rec + 48])[0]
             end_pos = base + rec
@@ -685,19 +708,40 @@ def cmd_add(args) -> int:
             shown = "\n".join(f"  {pack_dir / rel}" for rel in existing[:10])
             more = f"\n  ... and {len(existing) - 10} more" if len(existing) > 10 else ""
             raise CliError(f"refusing to overwrite (use --force):\n{shown}{more}")
+        # Check every destination before copying anything, so a refusal never leaves a
+        # half-installed, unpinned store behind.
         for rel in sources:
+            try:
+                rel.encode("utf-8")
+            except UnicodeEncodeError:
+                raise CliError(f"file name is not valid UTF-8: {rel!r}") from None
             target = pack_dir / rel
             if target.is_symlink() or _inside_repo(target.parent):
                 raise CliError(f"refusing unsafe destination: {target}")
+            for parent in PurePosixPath(rel).parents:
+                if str(parent) == ".":
+                    continue
+                folder = pack_dir / parent
+                if folder.is_symlink() or (folder.exists() and not folder.is_dir()):
+                    raise CliError(
+                        f"refusing destination: {folder} exists and is not a folder "
+                        f"(needed for {rel})"
+                    )
 
         pack_dir.mkdir(parents=True, exist_ok=True)
         pins = dict(asset_cache.pins(pack_dir))
-        for rel in sorted(sources):
-            _install_file(sources[rel], rel, pack_dir, args.force)
-            digest = sha256(pack_dir / rel)
-            pins[rel] = digest
-            print(f"added {rel}  sha256:{digest[:12]}")
-        _write_pins(pack_dir, pins)
+        installed = 0
+        try:
+            for rel in sorted(sources):
+                _install_file(sources[rel], rel, pack_dir, args.force)
+                digest = sha256(pack_dir / rel)
+                pins[rel] = digest
+                installed += 1
+                print(f"added {rel}  sha256:{digest[:12]}")
+        finally:
+            # Pin whatever was installed, even if a later file failed.
+            if installed:
+                _write_pins(pack_dir, pins)
     finally:
         if scratch is not None:
             shutil.rmtree(scratch, ignore_errors=True)
