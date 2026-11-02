@@ -217,6 +217,12 @@ def _interp_rules(env, home, repo):
     for d in HOME_VENV_DIRS:
         for p in sorted(glob.glob(os.path.join(glob.escape(str(home / d)), "*", "bin", "python"))):
             yield "home-venvs", p
+    # Project-level virtualenvs one and two folders below the home directory
+    # (``~/<project>/.venv``, ``~/<group>/<project>/.venv``). Hidden folders are skipped by
+    # glob, and only the interpreter path is probed; nothing is executed.
+    for pattern in (("*", ".venv"), ("*", "*", ".venv")):
+        for p in sorted(glob.glob(os.path.join(glob.escape(str(home)), *pattern, "bin", "python"))):
+            yield "project-venv", p
 
 
 def _standalone_rules(env, home, system_roots):
@@ -354,7 +360,7 @@ def cmd_init(args, env, repo=REPO):
     try:
         ws.mkdir(parents=True, exist_ok=True)
         for name in WORKSPACE_DIRS:
-            (ws / name).mkdir(exist_ok=True)
+            (ws / name).mkdir(mode=0o755, exist_ok=True)
         readme = ws / "README.md"
         if not readme.exists():
             readme.write_text(README, encoding="utf-8")

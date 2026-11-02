@@ -6,7 +6,7 @@ set -u
 # Discovery is unreliable across Isaac versions; the twin bridge port is fixed.
 export UR5E_DT_PORT="${UR5E_DT_PORT:-${ISAAC_MCP_PORT:-8766}}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PY="${UR5E_DT_PYTHON:-$ROOT/.venv/bin/python}"
+PY="${ISAAC_MCP_PYTHON:-${UR5E_DT_PYTHON:-$ROOT/.venv/bin/python}}"
 BRIDGE="$ROOT/mcp"
 export_reference_if_missing() {
   [ -f "$ROOT/checkpoints/$(python3 -c "import json;print(json.load(open('$ROOT/checkpoints/ur5e-dt-workstation-person-view-portable.json'))['checkpoint'])")" ] || run_check export_reference

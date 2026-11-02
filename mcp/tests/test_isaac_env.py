@@ -314,6 +314,18 @@ def test_init_creates_layout_idempotent_and_never_overwrites(world):
     assert (target / "README.md").read_text() == "mine" and (target / "assets" / "keep.txt").exists()
 
 
+def test_init_does_not_create_group_writable_folders(world):
+    """assets__prepare_workstation refuses a store that group/others can write to."""
+    old = os.umask(0o002)
+    try:
+        target = world.tmp / "umask-ws"
+        assert run_cli(world, "init", "--workspace", str(target)).returncode == 0
+    finally:
+        os.umask(old)
+    for d in ("assets", "envs", "projects", "runs"):
+        assert (target / d).stat().st_mode & 0o022 == 0, d
+
+
 def test_init_default_workspace_uses_env_then_home(world):
     r = run_cli(world, "init")
     assert r.returncode == 0 and (world.home / "isaac-workspace" / "runs").is_dir()
@@ -397,3 +409,24 @@ def test_run_sh_without_python3_still_reports(world):
                        env=e, cwd=str(world.tmp))
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip().endswith(".venv/bin/python")
+
+
+def test_project_venvs_one_and_two_levels_below_home_are_found(world):
+    one = make_env(world.home / "myproject" / ".venv", sim="6.2.0.0")
+    two = make_env(world.home / "group" / "robot" / ".venv", sim="6.1.0.0", lab="3.0.0")
+    cands = find(world)
+    assert sorted(c["path"] for c in cands) == sorted([str(one), str(two)])
+    assert set(sources(cands)) == {"project-venv"}
+
+
+def test_hidden_folders_and_deeper_venvs_are_not_scanned(world):
+    make_env(world.home / ".cache" / "x" / ".venv", sim="6.2.0.0")
+    make_env(world.home / "a" / "b" / "c" / ".venv", sim="6.2.0.0")
+    assert find(world) == []
+
+
+def test_project_venv_rule_ranks_below_the_conventional_rules(world):
+    make_env(world.home / "proj" / ".venv", sim="6.2.0.0")
+    repo_env = make_env(world.repo / ".venv", sim="6.2.0.0")
+    first = find(world)[0]
+    assert first["path"] == str(repo_env) and first["source"] == "repo-venv"

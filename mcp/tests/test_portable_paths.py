@@ -27,12 +27,18 @@ def write(root: Path, name: str, text: str) -> str:
     return name
 
 
+# Built from parts so this file itself contains no private-looking absolute path.
+HOME_DIR = "/" + "home"
+USERS_DIR = "/" + "Users"
+DRIVE = "C" + ":"
+
+
 @pytest.mark.parametrize(
     "line",
     [
-        'ROOT = "/home/someone/projects/isaac"',
-        'ROOT = "/Users/someone/isaac"',
-        'ROOT = r"C:\\isaac-sim"',
+        f'ROOT = "{HOME_DIR}/someone/projects/isaac"',
+        f'ROOT = "{USERS_DIR}/someone/isaac"',
+        f'ROOT = r"{DRIVE}\\isaac-sim"',
         'p = os.path.expanduser("~/Documents/isaac")',
         'PY="$HOME/envs/sim/bin/python"',
         "python ~/env_isaaclab/bin/python run.py",
@@ -54,7 +60,7 @@ def test_user_specific_paths_are_flagged(checker, tmp_path, line):
         'x = "$HOME/$DIR/file"',
         'p = "/opt/ros/humble/setup.bash"',
         'PATH = "/usr/local/sbin:/usr/local/bin:/usr/bin"',
-        'p = "/home/someone/x"  # portable-ok: test fixture',
+        f'p = "{HOME_DIR}/someone/x"  # portable-ok: test fixture',
     ],
 )
 def test_standard_locations_and_marked_exceptions_pass(checker, tmp_path, line):
