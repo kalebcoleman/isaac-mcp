@@ -775,3 +775,52 @@ def test_pin_lines_keep_unusual_but_valid_names(tmp_path):
         "binary.usd": d,
         "plain.usd": d,
     }
+
+
+# --- round-2 review regressions (PR 51) -------------------------------------------
+
+
+def test_r3_verify_local_without_a_base_uses_the_pin_of_the_folder_the_lookup_chose(
+    monkeypatch, tmp_path
+):
+    outer = tmp_path / "S"
+    inner = outer / "nested"
+    put(inner / "custom.usd", b"edited")
+    sums(outer, **{"nested/custom.usd": b"original"})  # stale pin in the outer store
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", f"{outer}{os.pathsep}{inner}")
+    module = load_module()
+    isolated(module, tmp_path)
+    with pytest.raises(module.AssetCorrupt):
+        module.resolve_path("nested/custom.usd")
+    with pytest.raises(module.AssetCorrupt):
+        module.verify_local("nested/custom.usd", module.find_local("nested/custom.usd"))
+
+
+def test_r3_ambiguous_containing_folders_must_all_agree(monkeypatch, tmp_path):
+    outer = tmp_path / "S"
+    inner = outer / "nested"
+    put(inner / "custom.usd", b"edited")
+    sums(outer, **{"nested/custom.usd": b"original"})
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", f"{outer}{os.pathsep}{inner}")
+    module = load_module()
+    isolated(module, tmp_path)
+    # A path that no logical name leads to: the outer pin still has to be honoured.
+    with pytest.raises(module.AssetCorrupt):
+        module.verify_local("something/else.usd", inner / "custom.usd")
+
+
+def test_r4_a_symlinked_pack_folder_resolves_and_reports_pinned(monkeypatch, tmp_path):
+    actual = tmp_path / "actual-pack"
+    put(actual / "custom.usd", b"mine")
+    sums(actual, **{"custom.usd": b"mine"})
+    store = tmp_path / "store"
+    store.mkdir()
+    (store / "ur5e-dt").symlink_to(actual, target_is_directory=True)
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    module = load_module()
+    isolated(module, tmp_path)
+    assert module.resolve_path("custom.usd").read_bytes() == b"mine"
+    assert module.resolve_info("custom.usd")["status"] == "pinned"
+    put(actual / "custom.usd", b"tampered")
+    with pytest.raises(module.AssetCorrupt):
+        module.resolve_path("custom.usd")
