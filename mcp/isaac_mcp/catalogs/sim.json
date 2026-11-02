@@ -1895,7 +1895,7 @@
       "owner_id": "generic-sim"
     },
     "sim.camera.create": {
-      "description": "Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Needs rendered frames; width/height capped at 1024.",
+      "description": "Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Near/far clipping is 0.01/1000 meters, converted to stage units and returned. Needs rendered frames; width/height capped at 1024.",
       "parameters": {
         "session_id": {
           "type": "string",

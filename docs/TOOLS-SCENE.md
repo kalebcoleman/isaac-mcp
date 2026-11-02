@@ -71,7 +71,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__joints__drive` | Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. |
 | `sim__joints__state` | Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. |
 | `sim__simulation__step` | Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. |
-| `sim__camera__create` | Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Needs rendered frames; width/height capped at 1024. |
+| `sim__camera__create` | Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Near/far clipping is 0.01/1000 meters, converted to stage units and returned. Needs rendered frames; width/height capped at 1024. |
 | `sim__camera__capture` | Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for the first render completion, four further frames AND a matching renderer CPU transfer; no stale annotator fallback. Frame-number baseline is the first completion observed after the request, so an immediately created camera needs no caller-side warm-up. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. |
 | `sim__lidar__create` | Create generic RTX LiDAR while stopped using qualified installed 6.x APIs. Requires a session launched with enable_motion_bvh=true (run.sh --motion-bvh). No hardware preset promise. At most eight sensors; delete an exact owned sensor path to release resources. |
 | `sim__lidar__read` | Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. |
@@ -202,6 +202,14 @@ successful image/scan output does not establish that the rejected native connect
 The earlier experimental
 CameraSensor path crashed in native CUDA; asking it for a CPU result at retrieval was
 insufficient. Cameras do not require `isaacsim.sensors.experimental.rtx`.
+New cameras use near/far clipping distances of 1 cm and 1 km, converted using
+the stage's `metersPerUnit`. This avoids the USD fallback near plane of one
+stage unit hiding nearby objects in meter-based scenes. Creation returns
+`clipping_range_m` and `clipping_range_stage_units`; invalid or unrepresentable
+stage units refuse before a camera or render product is created. Existing and
+reopened cameras retain their authored clipping settings. Position and target
+coordinates still use stage units; image content also depends on aim, lighting
+and scene visibility.
 LiDAR uses the installed `IsaacSensorCreateRtxLidar` command and Cartesian CPU annotator,
 including the older 6.0.0.0 API. The full build, running Kit and loaded extensions must match
 a qualified stack; missing/conflicting identity and unknown builds fail before native creation.

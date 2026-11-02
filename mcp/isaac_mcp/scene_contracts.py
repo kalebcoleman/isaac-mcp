@@ -313,7 +313,7 @@ add(
 )
 add(
     "sim.camera.create",
-    "Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Needs rendered frames; width/height capped at 1024.",
+    "Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Near/far clipping is 0.01/1000 meters, converted to stage units and returned. Needs rendered frames; width/height capped at 1024.",
     dict(
         **TARGET,
         path=field("string", "New camera path."),

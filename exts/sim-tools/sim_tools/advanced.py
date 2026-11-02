@@ -732,6 +732,9 @@ class Advanced:
                 adapter=sensor["adapter"],
                 release=sensor["release"],
                 build=sensor["build"],
+                **({"clipping_range_m": [0.01, 1000.0],
+                    "clipping_range_stage_units": sensor["clipping_range_stage_units"]}
+                   if kind == "camera" else {}),
                 note="Needs ordinary rendered warm-up; no implicit Play. Direct owned-sensor deletion releases render resources.",
             )
         if name in ("sim.camera.capture", "sim.lidar.read"):
