@@ -793,7 +793,7 @@
       "owner_id": "generic-sim"
     },
     "sim.viewport.frame": {
-      "description": "Select and frame an existing prim in the active viewport. Does not change the scene; capture the verified app window using screenshot.",
+      "description": "Select and frame visible geometry in the selected stage's active viewport. Edits the active camera in the session layer, preserving source layers and the prior edit target; no Kit undo entry. Refuses mismatched contexts, look-through targets, unsafe session-sublayer camera opinions and empty bounds. Does not wait for rendered pixels or prove visibility; allow ordinary render updates, then capture the verified app window using screenshot. Select a smaller subtree if surrounding geometry occludes it.",
       "parameters": {
         "session_id": {
           "type": "string",

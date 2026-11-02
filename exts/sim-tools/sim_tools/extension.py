@@ -493,23 +493,15 @@ class Extension(omni.ext.IExt):
                 effects="Timeline request issued; physics readiness unknown.",
             )
         if name == "sim.viewport.frame":
-            s.prim(stage, a["path"])
             from omni.kit.viewport.utility import (
                 get_active_viewport,
                 frame_viewport_selection,
             )
-            from isaac_mcp.project_assets import refuse
+            from omni.kit.undo import disabled
+            from .viewport import frame
 
-            viewport = get_active_viewport()
-            if viewport is None:
-                refuse("NO_VIEWPORT", "No active viewport in this Kit.")
-            omni.usd.get_context().get_selection().set_selected_prim_paths(
-                [a["path"]], False
-            )
-            frame_viewport_selection(viewport)
-            return dict(
-                selected_path=a["path"],
-                camera=str(viewport.camera_path),
-                capture="Use screenshot with this application PID/window ID.",
+            return frame(
+                s, stage, a["path"], omni.usd.get_context(), get_active_viewport(),
+                frame_viewport_selection, disabled,
             )
         return self.advanced.execute(name, stage, a, camera_frame=camera_frame)
