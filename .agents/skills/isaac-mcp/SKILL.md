@@ -135,7 +135,12 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   returns acknowledgment, not the achieved pose.
 - **Sensors and capture:** `sim__camera__create` then `sim__camera__capture` (RTX, PNG in the
   configured output root); `sim__lidar__*` needs Kit launched with `--motion-bvh`.
-  `sim__viewport__frame` selects and frames an existing prim in the active viewport.
+  `sim__viewport__frame` selects visible geometry and edits the active camera in the session
+  layer; it is a scene edit, with no Kit undo entry. `render_complete=false` means allow
+  ordinary rendering before inspecting the verified application window. A native failure can
+  leave selection or session-camera changes; inspect before retrying. Prefer a smaller subtree
+  when surrounding geometry occludes the target. See `docs/TOOLS-SCENE.md` for context,
+  look-through, session-sublayer and bounds refusals.
   By default `sim__camera__capture` waits for fresh render completions and a new renderer CPU
   transfer (`cpu_transfer_completed=true`). `wait_for_render=false` writes the last validated
   tool-acquired CPU frame, with cache age and acquisition context; it requests no new render
