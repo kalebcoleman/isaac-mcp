@@ -62,7 +62,15 @@ across 40 names and passed 17 measured checks. Its separate ledger contains
 [task addendum](RECENT-62-AGENT-20261102.json) records actual arguments/results
 in the linked bundle, measured motion, source preservation and sampled media;
 it is not an all-99 pass or a fresh reopening of that newer saved output.
-Affected 6.0.0.0/6.0.0.1 paths and final Newton coverage remain pending.
+Current `c2ceb7f` 6.0.0.0 PhysX requalification subsequently passed both 14-phase
+suites (137/55 headless, 141/54 windowed), legacy/effect/URDF/save checks and a
+fresh independent task: 87 requests, 19 predeclared effect checks, 41 scoped-pass
+tools, one save partial and 57 uncalled names. A separate fresh process then
+reopened that save and passed 16 calls / 12 checks, retaining its 60 Hz scene rate.
+[The compact supplement](RECENT-6000-20261102.json) preserves the independent
+ledger's original partial status, the later reopen, headless native property-window
+callback error and video cropping/privacy limits. Current 6.0.0.1 completion and
+final Newton coverage remain pending.
 All 12 Isaac Lab tools passed a real Lab 3.0 / Sim 6.2 workflow at `411d89f` (41 calls, 16 effect checks). Later mode/video fixes were tested as exact source bytes on a private `33de98d`-based candidate and integrated into `2bbeee4`; these scoped results do not establish other Lab/Sim pairings or a clean installation.
 Host/display tools need one actual-display run, plus simulator target verification.
 

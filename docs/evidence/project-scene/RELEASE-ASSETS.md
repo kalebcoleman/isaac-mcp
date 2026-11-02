@@ -32,6 +32,10 @@ by marking this release draft.
 | [agent62w-c2ceb-clean-evidence-v2.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent62w-c2ceb-clean-evidence-v2.tar.gz) | `e6cb470ebab6921cf5f205bdc490edafa6af2f5643a980b37880a4c84603ae69` | 2179254 |
 | [agent-62w-c2ceb-clean-full-ur-video.mp4](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-62w-c2ceb-clean-full-ur-video.mp4) | `8589aa39015a3787345cc508fa275b76b16e0d865fb086721feaa714602c4c75` | 165202 |
 
+| [sim-6000h-c2ceb-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6000h-c2ceb-redacted.tar.gz) | `a726f92cc08756edd00cea00e65e7e722cc13b89948d0f1bdf592c21ded34acc` | 1058942 |
+| [sim-6000w-c2ceb-reopen-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-6000w-c2ceb-reopen-redacted.tar.gz) | `68c06168fa44022c8fb8e16b98e09a607b07efdb1dcc20918756b2461fceae5b` | 1557682 |
+| [agent6000w-c2ceb-redacted-v1.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent6000w-c2ceb-redacted-v1.tar.gz) | `4ff5cde47f12c392e71947e0bb2150b541852c426294f7a7c43cb350ea6d59b2` | 1085393 |
+
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
 `omitted-artifacts` records hashes of intentionally excluded binary/source files. Final-head
@@ -104,3 +108,13 @@ isolated locked NumPy 2.3.1 environment; it does not replace the earlier 2fdf me
 or establish a full clean-machine installation. The clean agent's own save has
 not yet been reopened. [Its compact addendum](RECENT-62-AGENT-20261102.json) records
 the evidence, partial light/focus observations and separate final shutdown.
+
+The current-runtime 6.0.0.0 supplements preserve exact `c2ceb7f` both-mode broad
+runs and the later fresh headless reopen of the independent agent's composed
+save. The headless property-window callback traceback remains, distinct from
+intentional negative tests. The independent bundle contains 87 requests and its
+unchanged scoped ledger; the later 16-call / 12-check reopen is in the windowed
+parent/reopen bundle. Raw agent videos and private Console pixels are excluded.
+Its labeled 1440-by-610 video is a privacy crop of the actual motion recording,
+with 308 frames decoded and four sampled; three original reviewed PNGs are also
+included. [Compact facts](RECENT-6000-20261102.json) identify 29 source records.
