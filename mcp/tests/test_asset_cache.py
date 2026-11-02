@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import pytest
 
@@ -57,7 +58,7 @@ def test_bundled_asset_resolves_to_file_uri():
     module = load_module()
     uri = module.resolve_uri("gripper/QuickChanger.usd")
     assert uri.startswith("file://")
-    assert Path(uri.removeprefix("file://")).is_file()
+    assert Path(unquote(urlparse(uri).path)).is_file()
 
 
 def test_bundled_directory_resolves():
