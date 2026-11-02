@@ -11,7 +11,8 @@ prerequisites, and what is optional, see [Linux setup by build](LINUX-SETUP.md#c
 See the [test details](evidence/compatibility-2026-10-31.md) and [verification guide](VERIFICATION.md) for the
 environment, results and omissions. The table preserves the historical smoke scope; newer
 [headless](#6001-headless-follow-up-2026-11-01) and
-[windowed](#6001-windowed-follow-up-2026-11-02) 6.0.0.1 observations are recorded separately below.
+[windowed](#6001-windowed-follow-up-2026-11-02) 6.0.0.1 observations and the
+[6.0.1.0 headless follow-up](#6010-headless-follow-up-2026-11-02) are recorded separately below.
 Final qualification of the combined candidate across the requested builds and modes remains pending.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
@@ -209,10 +210,11 @@ Provenance: the inspected compact handoff `public-facts-final6001h-4499.json`, r
 at `2026-11-01T23:45:17.301641+00:00`, has SHA-256
 `b061066f47fb3122c681fb31dfa527930f7dc877887147f0e5a1e10bcc7698da`.
 Its source records include the run-progress, regression, native-review, full-surface
-and camera/ROS-save summaries. The private reproduction harness, asset outputs and
-curated release index are **not yet published**; this summary is not a publicly
-reproducible bundle. Windowed observations are recorded below; the complete five-build/mode
-matrix remains pending. Later documentation or bridge-lifecycle commits do not change this
+and camera/ROS-save summaries. Redacted records and configurable harnesses are now
+listed in the committed [draft release index](evidence/project-scene/RELEASE-ASSETS.md).
+The release remains unpublished and source assets are excluded; these attachments
+are not a clean-install reproduction bundle. Windowed observations are recorded below;
+the complete five-build/mode matrix remains pending. Later documentation or bridge-lifecycle commits do not change this
 run's source identity or qualify their new runtime behavior.
 
 ## 6.0.0.1 windowed follow-up (2026-11-02)
@@ -261,10 +263,11 @@ Provenance: inspected `public-facts-final6001w-4499.json`, timestamp
 `2026-11-02T00:04:54.401402+00:00`, SHA-256
 `34e507ee522bee118e568c612483657ac2f3e588323a150e3db65f61cafc834b`;
 all nine referenced source-record hashes were verified. The compact handoff and parent
-review preserve the original observations. The reproduction harness, asset outputs and
-curated release index remain unpublished. This is an existing-installation, simulated
-ROS check, not physical hardware or clean-install validation; remaining builds/modes
-still need their own qualification. The viewport follow-up below is limited to 6.0.0.1 windowed.
+review preserve the original observations. The committed
+[draft release index](evidence/project-scene/RELEASE-ASSETS.md) lists the redacted records
+and configurable harnesses; the release remains unpublished and source assets are excluded.
+This is an existing-installation, simulated ROS check, not physical hardware or
+clean-install validation; remaining builds/modes still need their own qualification. The viewport follow-up below is limited to 6.0.0.1 windowed.
 
 ### Viewport preservation and typed-error retest
 
@@ -295,6 +298,57 @@ harmlessness or all-socket-races claim follows from those observations.
 The inspected records are `summary.json`, `visual-review.json` and `console-review.json`
 from the private `frame6001w_eea-viewport` run. The original summary's pending visual
 status remains unchanged; the later timestamped review supplies the visual observation.
-Reproduction publication remains pending. This qualifies the tested viewport cases on
+The redacted viewport supplement is indexed in the
+[draft release assets](evidence/project-scene/RELEASE-ASSETS.md); public release and
+clean-install reproduction remain pending. This qualifies the tested viewport cases on
 this exact build/mode/source only, not other releases, a new full-surface run, clean
 installation or completion of the remaining matrix.
+
+## 6.0.1.0 headless follow-up (2026-11-02)
+
+At exact **`eea18c823f5e462763297951039771f80467e450`**, the 6.0.1.0 headless
+PhysX run completed all 14 broad phases, including 137 full-surface calls / 55
+assertions, 27 reopened sensor captures, cold/cache checks and separate legacy-motion
+and existing-physics-scene regressions. The initial reopen used a scene saved on
+6.0.0.1; it was a cross-build check. A later save passed 21 assertions with matching
+source/live-layer hashes, but its enclosing harness unexpectedly exited 143 afterward.
+A fresh client observed a ready process and successfully stopped the timeline. The
+harness anomaly remains unresolved; it does not establish a native crash.
+
+The runtime owner's native review retained 24 expected negative-test error lines and
+18,020 simulation-time warnings, with zero cycle, reentry, `GetCamera` or Force-callback
+matches. All 173 video frames decoded; only frames 10 and 160 were visually sampled,
+with upper-arm/wrist cropping at the diagnostic zero pose. There was no desktop Console
+review in this headless run. These observations do not establish warning harmlessness.
+
+Subsequent independent USD/physics readback exposed a real URDF defect despite a
+successful import response: the generated interface selected nonexistent `Physics=physx`
+when its defined variants were `none` and `physics`, leaving no rigid body or mass.
+Source fix `beb4cfa` selects and validates shared physics on a private generated derivative;
+conversion preserves stage identity and source layers, while successful import adds the
+requested session subtree. The [scene-tool contract](TOOLS-SCENE.md) distinguishes
+authored physics from runtime readiness.
+
+The fresh fix qualification used exact **`230f4b3f58e294ee3f0474b6d61a857edd965022`**,
+package **6.0.1.0**, build `6.0.1-rc.7+release.42383.32955d8d.gl`, Kit
+`110.1.2+production.326809.f9bf0dda.gl`, **headless PhysX** in an existing installation.
+It passed two separate scopes:
+
+- **24 MCP calls / 12 checks:** independent saved-USD reads verified the single-link
+  body's 1 kg mass, collision, 0.2 × 0.3 × 0.4 geometry and requested placement.
+  Light creation/modification and simple-leaf clone edits preserved their sources.
+  These light checks measured authored values, not rendered illumination.
+- **25 MCP calls / 7 checks:** a two-link articulated fixture measured 0.199782684 rad
+  for a 0.2 rad target, 0.5 kg runtime arm mass, changed body orientation and two
+  120-step intervals of one second each, with joint-limit refusals. The initial harness
+  failed parsing an expected error prefix; that failed attempt remains separate from
+  the corrected retry. Scoped native error/cycle/time/reentry/`GetCamera`/Force-callback
+  counts were zero; this is not a headless visual qualification.
+
+[Compact source records and hashes](evidence/project-scene/RECENT-CHECKS-20261102.json)
+and the [validation narrative](evidence/project-scene/FINAL-VALIDATION.md) preserve
+these separate observations. The redacted supplement is listed in the
+[draft release index](evidence/project-scene/RELEASE-ASSETS.md), with source assets excluded.
+The fix is qualified only for these 6.0.1.0 headless PhysX fixtures; windowed, other-build,
+Newton and clean-install claims require their own evidence. Historical invocation records
+for all 99 names do not establish 99-tool all-version verification or final readiness.
