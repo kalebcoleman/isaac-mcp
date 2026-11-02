@@ -5,7 +5,9 @@ URL, annotator, extension or code. Native creation may have partial effects;
 cleanup is attempted and reported, never disguised as a successful creation.
 """
 
-from pxr import UsdGeom
+import math
+
+from pxr import Gf, UsdGeom
 from isaac_mcp.project_assets import refuse
 from .runtime import require_sensor_api
 
@@ -99,7 +101,22 @@ def dispose(sensor, stage_closing=False):
     return errors
 
 
+def camera_clipping_range(stage):
+    """Use physical distances; USD's fallback near plane is one stage unit."""
+    units = UsdGeom.GetStageMetersPerUnit(stage)
+    if not math.isfinite(units) or units <= 0:
+        refuse("INVALID_STAGE_UNITS", "Camera creation needs finite positive metersPerUnit; stage units were not changed.")
+    near, far = 0.01 / units, 1000.0 / units
+    if not all(math.isfinite(v) and 0 < v <= 3.4028234663852886e38 for v in (near, far)):
+        refuse("INVALID_STAGE_UNITS", "Camera clipping distances cannot be represented in this stage's units.")
+    clipping = Gf.Vec2f(near, far)
+    if not 0 < clipping[0] < clipping[1]:
+        refuse("INVALID_STAGE_UNITS", "Camera clipping distances underflow in this stage's units.")
+    return clipping
+
+
 def create(stage, path, kind, width=640, height=480):
+    clipping = camera_clipping_range(stage) if kind == "camera" else None
     rep, identity = require_sensor_api(lidar=kind == "lidar")
     if kind == "lidar":
         import carb.settings
@@ -123,6 +140,9 @@ def create(stage, path, kind, width=640, height=480):
             camera.CreateVerticalApertureAttr(
                 camera.GetHorizontalApertureAttr().Get() * height / width
             )
+            if not camera.CreateClippingRangeAttr().Set(clipping):
+                refuse("SENSOR_CREATE_FAILED", "Could not author camera clipping range.")
+            sensor["clipping_range_stage_units"] = list(clipping)
             sensor["resolution"] = (height, width)
         else:
             # This supported command exists before experimental.rtx was shipped.
