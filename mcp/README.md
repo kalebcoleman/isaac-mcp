@@ -19,6 +19,9 @@ Both commands install `isaac-mcp`. The installer also creates an `~/.local/bin/f
 viewport recorder when that path does not already contain an unrelated file; a direct `uv tool install` does
 not create that shim. For the pinned Sim installation and EULA requirements, follow [Linux setup](../docs/LINUX-SETUP.md).
 
+Where things live (checkout, asset stores, Sim environments, auto-detection of an existing
+install): [docs/WORKSPACE.md](../docs/WORKSPACE.md). Linux x86_64 only.
+
 Client configs: from the `isaac-mcp` repository root run
 `./install.sh --no-sim --claude` for Claude Code and Claude Desktop. Details:
 [docs/MCP-SERVER.md](../docs/MCP-SERVER.md).
@@ -122,7 +125,7 @@ namespace and either exposes one entrypoint (copy `examples/demo_tools/`) or
 none at all ([declared toolsets](docs/tool-authoring.md#declared-toolsets)):
 
 ```python
-# ~/myproj/isaac/myproj_tools/__init__.py
+# <workspace>/projects/myproj/isaac/myproj_tools/__init__.py
 MCP_NAMESPACE = "robot_demo"                       # defaults to the module name
 DOORWAY_ADMISSION = 1                              # the admission contract, docs/protocol.md
 
@@ -137,12 +140,12 @@ def register(registrar):                   # receives an owner-bound registrar
 Register it persistently (once per project):
 
 ```bash
-python3 scripts/install.py add-project --path ~/myproj/isaac --module myproj_tools
+python3 scripts/install.py add-project --path <workspace>/projects/myproj/isaac --module myproj_tools
 ```
 
 Next launch, the bridge advertises `robot_demo.spawn_robot`; the panel grows a `robot_demo`
 section; agents see it after `refresh_tools`. Per-launch override instead of
-persistence: `ISAAC_MCP_TOOL_PATHS=~/myproj/isaac ISAAC_MCP_TOOL_MODULES=myproj_tools`.
+persistence: `ISAAC_MCP_TOOL_PATHS=<workspace>/projects/myproj/isaac ISAAC_MCP_TOOL_MODULES=myproj_tools`.
 
 > **One registration, three surfaces.** A registered tool isn't just an agent
 > verb: the control panel renders it as a clickable widget automatically, and
