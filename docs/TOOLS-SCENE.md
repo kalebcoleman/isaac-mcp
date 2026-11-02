@@ -123,8 +123,8 @@ the resulting prim or viewport before assuming physics is ready.
 For a workstation, after the same one-time trusted-root approval, call
 `assets__prepare_workstation` with the exact `session_id` and `stage_id` from `sim__stage__info`
 and `source_path` set to the absolute USD path under that root. The tool writes a private project
-copy and wrapper to `workstation/vention.usd` under `UR5E_DT_ASSET_CACHE` (or the twin's default
-XDG cache), and reports the destination and dependency checks. It does **not** load the scene:
+copy and wrapper to `workstation/vention.usd` under the first store of `ISAAC_MCP_ASSET_PATH` (deprecated alias
+`UR5E_DT_ASSET_CACHE`, or the twin's default XDG cache), and reports the destination and dependency checks. It does **not** load the scene:
 call `ur5e_dt__load_workstation` or the appropriate workstation quick-start, then inspect
 `/World/Vention`. The twin and selected Kit must use the same cache. The resolver introduced in
 PR #14 prefers a bundled/operator drop-in over the cache; remove neither automatically and check

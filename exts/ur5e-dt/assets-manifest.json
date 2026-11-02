@@ -2,7 +2,7 @@
   "version": 1,
   "description": "Assets used by the UR5e twin. Only entries under 'bundled' are redistributed with the repository; 'fetch' entries are downloaded from NVIDIA's public asset root into UR5E_DT_ASSET_CACHE, and 'manual' entries must be supplied by the operator. See docs/provenance/ASSETS.md.",
   "asset_root": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1",
-  "cache_env": "UR5E_DT_ASSET_CACHE",
+  "cache_env": "ISAAC_MCP_ASSET_PATH",
   "remote": {
     "robot/ur5e.usd": "Isaac/Robots/UniversalRobots/ur5e/ur5e.usd",
     "sensors/rsd455.usd": "Isaac/Sensors/Intel/RealSense/rsd455.usd"
@@ -121,7 +121,7 @@
       "licence": "Vention Terms of Use",
       "redistributable": false,
       "reason": "The Vention MachineBuilder export has no public download and may not be redistributed.",
-      "hint": "Export your own Vention assembly and place it at <cache>/workstation/vention.usd (with any collected materials beside it), or set UR5E_DT_ASSET_CACHE to a folder containing it. The twin builds a simple placeholder bench when it is absent."
+      "hint": "Export your own Vention assembly and add it with `python3 scripts/isaac_assets.py add <file-or-archive>` (it lands at <store>/ur5e-dt/workstation/vention.usd with any collected materials beside it), or put the folder that contains it on ISAAC_MCP_ASSET_PATH (UR5E_DT_ASSET_CACHE is a deprecated alias). The twin builds a simple placeholder bench when it is absent."
     }
   ],
   "bundled": [
