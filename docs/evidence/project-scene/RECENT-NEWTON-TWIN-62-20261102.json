@@ -1,0 +1,276 @@
+{
+  "schema": 1,
+  "recorded_utc": "2026-11-02T07:21:56.430870+00:00",
+  "source_commit": "1e9f194979b2f3ecf4654d88c8439a14a9a55062",
+  "private_candidate_base": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+  "identity": "candidate10 complete runtime modules match the committed source diff applied to combined c2. Candidate9 lacks only the later Newton frame_id callback assignment; do not relabel its observations.",
+  "machine": {
+    "os": "Ubuntu24.04.5",
+    "kernel": "7.0.0-38-generic",
+    "gpu": "RTX5080 16303MiB",
+    "driver": "580.178.04"
+  },
+  "runtime": {
+    "sim_package": "6.2.0.0",
+    "sim_build": "6.2.0-rc.14+release.52805.02189a84.gl",
+    "kit": "110.4.0+feature.386251.187cf21b.gl",
+    "python": "3.12.3",
+    "newton": "1.6.1",
+    "mujoco": "3.12.0",
+    "mujoco_warp": "3.12.0",
+    "warp": "1.17.0",
+    "engine": "newton",
+    "solver": "MuJoCo Warp",
+    "device": "cpu",
+    "rate_hz": 120
+  },
+  "cpu": {
+    "focused": 166,
+    "seconds": 16.95,
+    "scope": "world/physics/catalog regression tests; not the final combined full suite"
+  },
+  "candidate9": {
+    "headless_broad_requests": 138,
+    "headless_broad_assertions": 56,
+    "windowed_broad_requests": 142,
+    "windowed_broad_assertions": 55,
+    "ur_names_called": 23,
+    "bridge_builtin_names_called": 7,
+    "headless_output_calls": 31,
+    "windowed_output_calls": 32,
+    "output_checks_each": 23,
+    "headless_video_decoded": 264,
+    "headless_video_sampled": [
+      0,
+      132,
+      263
+    ],
+    "windowed_video_decoded": 265,
+    "windowed_video_sampled": [
+      0,
+      132,
+      264
+    ],
+    "video_limits": "Bases cropped in close views. Windowed frame0 retains previous person view; subsequent samples use requested camera. Fullsurface W video193decoded/2sampled crops wrist. No all-frame visual or visual-physics claim."
+  },
+  "candidate10": {
+    "reopen_calls_each": 10,
+    "reopen_checks_each": 16,
+    "modes": [
+      "headless",
+      "windowed"
+    ],
+    "effects": "Two actual ROS gripper commands across Stop/Play, nonempty advancing tool0 wrench headers, source/root/robot/graph/physics/edit-target preservation in both narrow intervals.",
+    "known_load_calls": 6,
+    "known_load_checks": 8,
+    "mass_kg": 2,
+    "tool_frame_rotation_y_degrees": 90,
+    "tool_offset_m": [
+      0.1,
+      0,
+      0
+    ],
+    "expected_wrench": [
+      -19.62,
+      0,
+      0,
+      0,
+      1.962,
+      0
+    ],
+    "measured_wrench": [
+      -19.62000083923339,
+      0,
+      -6.715640184238785e-07,
+      0,
+      1.9620000839233407,
+      0
+    ]
+  },
+  "native_scopes": {
+    "candidate9H": {
+      "errors": 6,
+      "warnings": 14264,
+      "time_warnings": 14092,
+      "illegal_cycles": 0
+    },
+    "candidate9W": {
+      "errors": 8,
+      "warnings": 47,
+      "time_warnings": 5,
+      "illegal_cycles": 0,
+      "console_warnings": 50,
+      "console_errors": 18
+    },
+    "candidate10H": {
+      "errors": 0,
+      "warnings": 17
+    },
+    "candidate10W": {
+      "errors": 0,
+      "warnings": 17,
+      "console_warnings": 19,
+      "console_errors": 0
+    },
+    "known_load": {
+      "errors": 0,
+      "warnings": 12
+    }
+  },
+  "retained_failures": [
+    "Original Newton default CUDA/legacy CPU gain reset mismatch; no implicit engine fallback.",
+    "Candidate7d saved twin Play returned success while tensors/callbacks were unavailable. Rendering did not establish physics.",
+    "Candidate8 root normalization changed robot transforms. Candidate9 scoped session normalization removed robot/graph/physics subtree changes but a whole-root assertion still failed on native viewport metadata.",
+    "Candidate9 W final inspection omitted persistent=True; separate completion retained. Reviewing its ROS then exposed empty frame_id despite otherwise valid values/timestamps. Candidate10 fixes and freshly tests frame_id.",
+    "Candidate9 headless recorder started before cold physics initialization returned a >5s lag error with one frame; after-warmup recording succeeded. Earlier camera creation while paused was correctly refused.",
+    "Generic stepping after legacy UR Play without managed generic edit target refused; explicit Stop/genericPlay/Pause recovered, with360steps advancing3 simulation seconds. No guard was weakened.",
+    "The original20f6.0.1windowed108-step native stall remains unresolved; these Newton checks do not explain it."
+  ],
+  "remaining": [
+    "Exact integrated-head affected PhysX and older Newton headless/windowed regression is separate and pending at this handoff.",
+    "Newton1.0 full twin mount unsupported: bundled USD25.11 parser probe disproved path-only relocation. Generic/standalone Newton coverage is separate.",
+    "Older Newton packages without native incoming-joint force output report unavailable; no zero substitute. Native MuJoCo CPU/VBD unsupported for this output.",
+    "Only stationary two-body gravity/offset/rotation known-load control here; no physical sensor calibration, contact-force or loop-equality sensor claim.",
+    "No clean-machine/full-installer or all-future-version qualification. Draft evidence release remains unpublished."
+  ],
+  "records": [
+    {
+      "label": "source-identity",
+      "path": ".work/compat-followup/newton-candidate10-commit-identity.json",
+      "sha256": "b4c5b841329c113060ad6bbfcc320d324e92f85bbfc8255484b4f42d325f14b5",
+      "bytes": 798
+    },
+    {
+      "label": "cpu166",
+      "path": ".work/compat-followup/newton-candidate10-focused-full.log",
+      "sha256": "cb0e451c3a0127d81120b718eb2fc59e4c017b31175b8875a71bdb1c7194f5b0",
+      "bytes": 261
+    },
+    {
+      "label": "failed-reopen7d",
+      "path": ".work/compat-followup/newton62w_reopen_candidate7db-control/review.json",
+      "sha256": "427fd887b51c5db78098a61e530ab6a9b261812f49f95009f3ee3049b3e2decb",
+      "bytes": 3020
+    },
+    {
+      "label": "failed-root8",
+      "path": ".work/compat-followup/newton62w_twin_candidate8-reopen-live/checks.json",
+      "sha256": "966d1bf8be0aa8e76bf09a0d40bbe43c69e1de5d46eec6a97cd418a11e8a6411",
+      "bytes": 14113
+    },
+    {
+      "label": "failed-root9",
+      "path": ".work/compat-followup/newton62h_reopen_candidate9-reopen-live/checks.json",
+      "sha256": "18bec5a4b29532e886f5799e70ff1da16ab51f032a080ae55a5c667bce3778ee",
+      "bytes": 14124
+    },
+    {
+      "label": "scoped-robot-root9",
+      "path": ".work/compat-followup/newton62h_reopen_candidate9-subtrees/call-003.json",
+      "sha256": "fdec77f4441043a883f605d27f99c7bcaf8e832e2f19ab7d77824a9d53c63bd3",
+      "bytes": 3607
+    },
+    {
+      "label": "broad9H",
+      "path": ".work/compat-followup/newton62h_reopen_candidate9-fullsurface/summary.json",
+      "sha256": "894dabeafdee3be61ae1da55a83cf95cc290f1554d7f279825691c799bc26ac1",
+      "bytes": 2538
+    },
+    {
+      "label": "broad9W",
+      "path": ".work/compat-followup/newton62w_twin_candidate9-fullsurface/summary.json",
+      "sha256": "d466b352e6645f323b8e2ebc55e1792429ccec2de283b5431a03f9e56fcdbd39",
+      "bytes": 2583
+    },
+    {
+      "label": "output9H",
+      "path": ".work/compat-followup/newton62h_reopen_candidate9-outputs-continued-after-warmup/summary.json",
+      "sha256": "c84452558259accd876a7a0fd5216286fe3dfca2fe41676b679ec287db9df37b",
+      "bytes": 31401
+    },
+    {
+      "label": "output9W",
+      "path": ".work/compat-followup/newton62w_twin_candidate9-outputs-review/summary.json",
+      "sha256": "c52672292c3809fd79a9ea0c785da8b73ef5e5a5226fac577966e07e552fc2a2",
+      "bytes": 31372
+    },
+    {
+      "label": "cold-recording-failure",
+      "path": ".work/compat-followup/newton62h_reopen_candidate9-outputs-reviewv2/calls.json",
+      "sha256": "2573d86ec5de4535d9b5d05dd1a660c05456ae2fca605be1e59875b07a25fe0c",
+      "bytes": 54982
+    },
+    {
+      "label": "reopen9W-completion",
+      "path": ".work/compat-followup/newton62w_twin_candidate9-reopen-finish/summary.json",
+      "sha256": "1915ed894f1b5eef7ce6655232934b9ebcf0cfdb022965dcbd42860472b09da7",
+      "bytes": 9031
+    },
+    {
+      "label": "reopen9W-frame-failure",
+      "path": ".work/compat-followup/newton62w_twin_candidate9-reopen-live/frame-id-finding.json",
+      "sha256": "f8ec257852de22383e191ca501204f46c353d2c21cd9e1975ab15427298fb8e3",
+      "bytes": 512
+    },
+    {
+      "label": "reopen10H",
+      "path": ".work/compat-followup/newton62h_reopen_candidate10-reopen-live/summary.json",
+      "sha256": "12199c1c8ad4b851f5fec921311d05e01c23578655e2b8e8baafbadcc6d13198",
+      "bytes": 11976
+    },
+    {
+      "label": "reopen10W",
+      "path": ".work/compat-followup/newton62w_reopen_candidate10-reopen-live/summary.json",
+      "sha256": "f4d3d393847cc0f47342f48316e85c8982bd3c919916cb341024c3c374cb6bda",
+      "bytes": 11967
+    },
+    {
+      "label": "known-load",
+      "path": ".work/compat-followup/newton62h_known_force_candidate10-known-wrench/summary.json",
+      "sha256": "2a9ba86dd4cce8a489b0486c27df2983fdad26857f6477ac2c4dde4f699f8400",
+      "bytes": 9935
+    },
+    {
+      "label": "visual9H",
+      "path": ".work/compat-followup/newton62h_reopen_candidate9-outputs-continued-after-warmup/video-review/review.json",
+      "sha256": "0fe70be9090aae98fe3cc3ce577b3a13f7e65cec8b806ec035c8fde80cc64339",
+      "bytes": 1489
+    },
+    {
+      "label": "visual9W",
+      "path": ".work/compat-followup/newton62w_twin_candidate9-fullsurface/native-visual-review.json",
+      "sha256": "36211c6bc1101a3999ea75ae764ac1b5a888c4be160de7e8766355fbb678845f",
+      "bytes": 1802
+    },
+    {
+      "label": "visual10W",
+      "path": ".work/compat-followup/newton62w_reopen_candidate10-reopen-live/native-visual-review.json",
+      "sha256": "d4355621db6f82a20c90c8d46bf9eb2c292b9766969f4599705280ad36a67820",
+      "bytes": 1335
+    },
+    {
+      "label": "newton62w_twin_candidate9-shutdown",
+      "path": ".work/runs/newton62w_twin_candidate9/shutdown-log-review.json",
+      "sha256": "6b0c4990129951e64c275c3e6f71e5faebf5f8c8cbd3db9667207247876a3722",
+      "bytes": 499
+    },
+    {
+      "label": "newton62h_reopen_candidate10-shutdown",
+      "path": ".work/runs/newton62h_reopen_candidate10/shutdown-log-review-final.json",
+      "sha256": "c9d8bff698482a26f9d04b6c7589c596d54abc1bb73674055279268c4c6ec78e",
+      "bytes": 506
+    },
+    {
+      "label": "newton62w_reopen_candidate10-shutdown",
+      "path": ".work/runs/newton62w_reopen_candidate10/shutdown-log-review-final.json",
+      "sha256": "4d3abf7fcdedceb17538512883ff8bbac23fc581a6ab7482db55f3556b6e55e3",
+      "bytes": 506
+    },
+    {
+      "label": "newton62h_known_force_candidate10-shutdown",
+      "path": ".work/runs/newton62h_known_force_candidate10/shutdown-log-review-final.json",
+      "sha256": "8bf233ca17b55442d73d5a1378a9919bfec63915ceafcac9963c01aa088b503e",
+      "bytes": 501
+    }
+  ]
+}

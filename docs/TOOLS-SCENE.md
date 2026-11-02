@@ -1,0 +1,412 @@
+# Project USD and generic scene tools
+
+**Implementation preview; end-to-end acceptance incomplete.** Thirty-nine catalogued tools implement
+trusted local/shared-mount projects and explicit scene operations. Untrusted isolation, authenticated
+remote upload and named presets are **unavailable**, not silently substituted. Bounded USDZ support is available only in the trusted-project profile.
+See [evidence](evidence/project-scene/README.md) for actual tests and missing gates.
+The earlier [design](GENERIC-SIM-TOOLS.md) is broader than this implementation.
+
+## One-time approval
+
+The user runs this outside the model-facing tool interface, with the host package installed:
+
+```bash
+python -m isaac_mcp.project_assets --config /absolute/private/approval.json \
+  --root-id project --root /absolute/project/assets \
+  --staging /absolute/private/staging --trust-project
+```
+
+Set `ISAAC_MCP_ASSET_CONFIG=/absolute/private/approval.json` in **both** the MCP host and
+Kit launch environments, then restart them. `run.sh` enables `sim-tools` and retains all UR5e
+behavior. Direct Kit users enable `sim-tools` beside `isaac.mcp.bridge` from this checkout.
+No manifest or hand-written Python is needed. Approval is explicit configuration, not a universal
+MCP approval dialog. No tool can grant roots. Launching outside the project works because paths
+are absolute. Default configuration grants no roots. Existing approval files are never overwritten
+by the helper; the user can edit `roots` to add narrowly scoped, nonoverlapping folders.
+
+Only use this for files and dependencies the user trusts with the OS account's permissions.
+The raw bridge remains powerful and unauthenticated: keep it on a trusted local interface.
+The broker is a same-user stdio service, **not** a remote multi-user service. An agent path
+is not evidence of a Kit mount. Host and Kit must share the configured staging location; the
+receiver verifies snapshot hashes before parsing. A shared mount must be deliberately configured.
+A missing/different mount produces an error, never an implicit transfer via `put_file`.
+
+## Tools
+
+All names below remain discoverable offline by default, subject to existing namespace filters.
+Set `ISAAC_MCP_SCENE_TOOLS=0` on the host server and restart that MCP connection to hide
+all 39 generic tools, including live bridge discovery. This per-server preference preserves
+UR5e, Isaac Lab, desktop and managed-session tools; it is not an enforcement boundary.
+`ISAAC_MCP_LOCAL_TOOLS` does not select these catalogued tools. `assets__roots` and
+`assets__scan` and `assets__search` execute in the host broker even without Kit. Other tools explain an absent
+bridge/extension. Existing `sim__launch/list/status/stop` remain separate optional process tools.
+
+| Tool | Contract |
+|---|---|
+| `assets__roots` | List launch-approved project roots and capability refusals. Filename access only; trusted projects are NOT sandboxed. |
+| `assets__scan` | Bounded filename-only USD discovery on the MCP host. No USD parser. Results are untrusted data. |
+| `assets__info` | Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. |
+| `assets__import_usd` | Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes. |
+| `assets__prepare_workstation` | Take an absolute USD path under an already approved trusted root, validate its bounded snapshot in the selected Kit, and prepare a private workstation cache without overwriting. Returns `loaded:false`; call `ur5e_dt__load_workstation` and inspect `/World/Vention` to verify. |
+| `assets__import_path` | Import an approved trusted project's USD by absolute path, preserving the source and relative project layout. Requires the selected session/stage, a free prim path and matching stage units/up-axis. |
+| `sim__stage__info` | Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations. |
+| `sim__stage__tree` | Bounded stage hierarchy including inactive prims. Text is untrusted data. |
+| `sim__prim__get` | Read local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown. |
+| `sim__prim__find` | Bounded literal path substring/type search (not regex). Includes inactive prims. |
+| `sim__prim__create` | Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. |
+| `sim__prim__set_transform` | Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation. |
+| `sim__physics__inspect` | Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. |
+| `sim__body__state` | Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. |
+| `sim__timeline__control` | Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. |
+| `sim__stage__save` | Export a flattened copy, including session edits, to a new basename in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. ROS camera render handles require the explicit export option described below. |
+| `sim__viewport__frame` | Select visible geometry and frame the active camera using session-layer edits; source layers and the previous edit target are preserved. No Kit undo entry. Refuses mismatched viewport contexts, look-through targets, unsafe session-sublayer camera opinions, empty bounds and subtrees above 10,000 composed prims. Reports the camera transform and `render_complete=false`: allow ordinary rendering, then capture the verified application window. Framing a smaller subtree can avoid surrounding occluders. Native failures can leave selection/session-camera changes; inspect before retrying. |
+| `assets__search` | Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. |
+| `sim__prim__delete` | Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused. |
+| `sim__prim__clone` | Clone a pack-created simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations. |
+| `sim__stage__clear_owned` | Remove only pack-created non-sensor, non-articulated subtrees, preserving other scene content. Explicit stopped target and confirm required. Returns removed/refused lists. |
+| `sim__light__create` | Create a SphereLight, DistantLight or DomeLight without asset-valued textures. Pose in stage units, orientation wxyz. |
+| `sim__light__modify` | Change intensity/color of a pack-owned light on a stopped timeline. |
+| `sim__material__create` | Create a UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs. |
+| `sim__material__apply` | Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. |
+| `sim__physics__configure` | Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch. |
+| `sim__joints__inspect` | Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim. |
+| `sim__joints__drive` | Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. |
+| `sim__joints__state` | Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. |
+| `sim__simulation__step` | Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. |
+| `sim__camera__create` | Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Near/far clipping is 0.01/1000 meters, converted to stage units and returned. Needs rendered frames; width/height capped at 1024. |
+| `sim__camera__capture` | Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for the first render completion, four further frames AND a matching renderer CPU transfer; no stale annotator fallback. Frame-number baseline is the first completion observed after the request, so an immediately created camera needs no caller-side warm-up. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. |
+| `sim__lidar__create` | Create generic RTX LiDAR while stopped using qualified installed 6.x APIs. Requires a session launched with enable_motion_bvh=true (run.sh --motion-bvh). No hardware preset promise. At most eight sensors; delete an exact owned sensor path to release resources. |
+| `sim__lidar__read` | Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. |
+| `sim__logs__tail` | Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs. |
+| `sim__controller__create` | OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. |
+| `sim__controller__update` | OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required. |
+| `sim__joints__command` | Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose. |
+| `assets__import_urdf` | Convert a trusted approved relative URDF project using the installed importer. Select shared `Physics=physics` on private generated output when present, then snapshot/import. Refuse missing bodies or expected revolute/prismatic joints. No source overwrite. Reject DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API. |
+
+URDF conversion returns `converted_physics`: the original and selected variant, available
+variants and bounded authored body/collision/joint/mass counts. Some bundled 6.x importers
+select a nonexistent `physx` variant or leave physics unselected. The tool selects the
+available shared `physics` description on its generated derivative before snapshotting;
+flat output keeps its existing physics. A variant set without that shared description or
+output missing expected bodies/joints returns `URDF_PHYSICS` before scene import. Source
+URDFs and dependency files are preserved; conversion does not switch stages or edit its
+source layers. Successful import adds the requested subtree to the session layer. Authored physics is not a
+runtime pass: initialize the intended backend and observe bodies/joints before motion.
+
+Other than discovery and stage-info, every tool requires exact `session_id` and `stage_id`
+from stage-info. Tokens are stale-target guards, **not authentication**. Check stage-info again
+after selecting/restarting Kit. Asset preparation checks the destination before copying files.
+Public asset schemas accept approved root IDs/relative paths or an absolute path under an approved
+root; broker snapshot parameters are internal.
+Errors from these tools set MCP `isError`; legacy tools retain their prior result envelopes.
+Connection/timeout failures after dispatch have unknown outcomes: inspect before retrying.
+
+If a simulation call stops returning, stop dependent mutations; a client timeout
+cannot preempt a synchronous native call. Preserve the request, endpoint, PID and
+logs, and use bounded read-only health checks. For an owned managed session, the
+opt-in `sim__status` / `sim__stop` tools verify its identity; forced stop can lose
+unsaved state and does not recover unknown in-flight effects. Restart from a known
+saved input in a new verified session instead of replaying the pending mutation.
+The [bounded PhysX stall assessment](evidence/project-scene/PHYSX-STALL-DISPOSITION.md)
+records two current-runtime non-reproductions and the still-unexplained original
+6.0.1 windowed stall. Passing later steps are not a fix for that historical failure.
+
+### Project USD and the UR5e workstation
+
+For an ordinary object or robot, call `assets__roots`, then `sim__stage__info`, and pass the
+absolute USD path to `assets__import_path` (or use the approved root ID and relative path with
+`assets__import_usd`). The broker copies the bounded
+approved project with relative layout intact. Kit checks the snapshot's USD layers, material
+and texture dependencies and returns the created prim path, units and dependency counts. Inspect
+the resulting prim or viewport before assuming physics is ready.
+
+For a workstation, after the same one-time trusted-root approval, call
+`assets__prepare_workstation` with the exact `session_id` and `stage_id` from `sim__stage__info`
+and `source_path` set to the absolute USD path under that root. The tool writes a private project
+copy and wrapper to `workstation/vention.usd` under `UR5E_DT_ASSET_CACHE` (or the twin's default
+XDG cache), and reports the destination and dependency checks. It does **not** load the scene:
+call `ur5e_dt__load_workstation` or the appropriate workstation quick-start, then inspect
+`/World/Vention`. The twin and selected Kit must use the same cache. The resolver introduced in
+PR #14 prefers a bundled/operator drop-in over the cache; remove neither automatically and check
+which one the twin actually used. Existing workstation files are never replaced. The cache must
+be outside the repository and disjoint from approved roots and staging.
+
+The user is responsible for trusting and having rights to the asset. Existing USD checks refuse
+missing or outside-snapshot dependencies, URLs and unsupported paths; native USD parsing can
+invoke installed resolvers before the check and this trusted workflow is not network isolation.
+Absolute authored references are not rewritten into the snapshot. USD dependency inspection may
+not identify every custom resolver, plugin, or directory-valued dependency. The path-based workflows
+also check literal MDL texture, light-profile and BSDF-measurement paths and MaterialX
+filename/include references. They refuse custom MDL modules, MDL/MaterialX inside USDZ,
+MaterialX fileprefix, certain nested materials, network/absolute paths and non-literal or tiled
+resource expressions they cannot validate. These checks cover common dependencies, not every
+possible material or plugin: inspect the loaded asset and its renderer output. A success result
+does not certify visual fidelity, physics readiness, or complete detection of arbitrary resources.
+The tool copies the entire bounded approved project, not only the reported dependencies, and is
+not an untrusted-USD sandbox. Keep the cache and snapshots while scenes still reference them.
+
+The import and workstation workflows were exercised in both windowed and headless sessions
+on installed Isaac Sim `6.0.0.0`, `6.0.0.1`, `6.0.1.0`, `6.1.0.0` and `6.2.0.0` on one
+Linux/NVIDIA machine. These tests cover the documented sample projects, not every USD or future
+release. See the [live test matrix and known camera issue](evidence/project-usd-workstation/README.md).
+
+Pose coordinates use **stage units**, `orientation=[w,x,y,z]` must be a finite unit quaternion,
+and `frame` is `local` or `world`. World transforms use the parent's inverse matrix; singular
+parents are refused. Source and target units/up-axis must match. No automatic normalization.
+Authored edits require a **stopped** timeline (paused physics is also refused). Saving a composed copy also permits paused physics; playing saves refuse. Physics state
+observations do not establish joint stability, robot fidelity or hardware behavior.
+
+Edits go to the session layer, never source layers or source project files. Imports use a wrapper
+so asset-authored transforms survive. Parents must exist. Failure after an application exception
+reports unknown effects, and failed creations/imports attempt to remove their new session-layer
+prim. Deletion/clear only touch pack-owned session-layer subtrees; sensors/articulations are protected.
+No generic attribute setter or arbitrary asset-valued entry point is provided. Reloading the pack loses pack ownership and invalidates its session token.
+
+## Bounds and security limits
+
+Approved-root reads use descriptor-relative no-follow opens, inode/change checks, and reject
+symlinks/special files, traversal, URLs, controls and replacement races detected during copying.
+Filename scans count all entries, not only USDs. They fail explicitly on budget exhaustion rather
+than claiming a complete partial result. Pagination is a fresh scan, not a stable filesystem snapshot.
+
+Snapshot limits: 64 MiB/file, 256 MiB/project, 1,000 files, 10,000 entries, eight path components,
+15-second enumeration budget, 16 retained snapshots/staging directory plus at most one
+bounded temporary copy under the staging lock. Identical project/entry manifests reuse an
+existing snapshot only after all its contents are verified again; changed projects consume
+another slot. Existing snapshots are never evicted while a stage or saved output may use them.
+The complete bounded
+project is copied with relative layout intact. Hashes are checked on the Kit side. Source files
+may change later without changing loaded copies. Files are private/read-only but the same OS user
+can modify them: hashes and permissions are **not immutable OS isolation**. Do not expose this
+configuration to hostile writers. Snapshots are retained because loaded/saved scenes may reference
+textures in them; clean staging only after all consumers and exported scenes are no longer needed.
+Quota exhaustion is explicit; there is no unsafe automatic deletion of live dependencies.
+
+The trusted native `UsdUtils.ComputeAllDependencies` inspection can itself invoke resolvers/parsers.
+It reports missing/outside-snapshot dependencies and rejects those imports. The sole external
+exception is the exact installed Kit `OmniPBR.mdl` module; its path/hash/source are returned.
+Archive-bearing inputs must pass the bounded trusted USDZ checks below; unsupported ZIP formats are refused before native parsing. This is **not** a
+pre-parser sandbox or proof of exhaustive plugin behavior. Known OmniGraph prims are refused,
+but the importer makes no claim that all executable asset content is detected or disabled.
+No untrusted USD is parsed by this workflow; an isolated profile config is refused entirely, including MCP server startup (no raw tools are exposed by such a failed server). No isolated Kit endpoint is created.
+There is no verified whole-lifetime isolated GPU Kit deployment or protected untrusted endpoint.
+
+Scene traversal is capped at 10,000 visits; tree/physics responses at 200 nodes and the generic
+bridge response at 64 KiB. `prim.get` omits arbitrary attribute/custom-data contents and expensive
+recursive bounds. Native USD composition itself is not resource-isolated in this trusted profile.
+
+Save flattens the **composed active state**: inactive prims and unselected variants are omitted.
+It is not a lossless authoring-layer archive. Textures can retain snapshot paths. Output publishing
+uses no-replace hard links; existing files and symlinks are not overwritten. The configured output
+directory should be private to the OS user. Defaults are process-specific under the temporary directory.
+
+## Sensors, physics and trusted controllers
+
+A pending Replicator render/writer Stop can outlast the timeline's first stopped frame.
+An explicit Stop uses the loaded orchestrator's documented asynchronous completion API
+when its status remains STOPPING. This finalizes writers, restores capture settings and
+clears pending schedules; it is a mutation. In the 6.0.0.1 reopen failure, passive status
+observation never completed after the dispatcher reset to zero with old capture times.
+The adapter guards each continuation against stage, timeline and native-operation changes,
+awaits cancellation, and allows six ordinary updates for the installed delayed settings
+restoration. It does not launch an independent completion task or reissue Play.
+The five-second timeout is cooperative: synchronous native calls cannot be preempted,
+and native callbacks or detached tasks are not a complete ownership/lifetime fence.
+A failed/interrupted Stop can have partial effects; inspect the selected stage and timeline.
+
+Play only passively observes a pending Stop and observes STOPPED across another ordinary
+update; it never calls the mutating completion API. `TIMELINE_BUSY` means completion or
+observation did not settle; `TIMELINE_INTERRUPTED` reports a changed operation or requested
+state that was not retained. Retry explicitly after inspecting state. Native API absence
+is `TIMELINE_API_UNAVAILABLE`; a scene without loaded Replicator needs no Replicator wait.
+Pausing an already stopped timeline remains an observed no-op.
+
+Runtime APIs use PhysX or the qualified Newton adapter described below. Generic Play temporarily selects the session edit target
+so native physics writeback can override session-authored spawn poses. Stop restores the prior
+edit target after the normal application frame, including Stop requested through the UR5e
+tools or application UI. A subsequent Play, stage change or extension shutdown cancels
+pending restoration; a layer deliberately selected by the user is preserved.
+External edit-target changes cause exact stepping
+to refuse, and Stop does not overwrite a target chosen by another editor. First generic Play on
+an externally running timeline requires an explicit Stop. This fixes the independently observed
+case where PhysX moved a body but stronger session poses left its image at spawn. `sim__simulation__step` accepts an initialized **paused**
+timeline and 1–120 physics steps; it checks measured simulation-time delta and returns selected
+body poses/DOF observations. It does not render, pump nested application updates, or claim that
+changing an authored USD transform moved an active simulated body. Angular runtime values and
+drive targets use radians; USD authored joint diagnostics and angular drive gains use degrees.
+
+Invalid observed body poses, velocities or joint values return `PHYSICS_STATE_INVALID`
+with the backend, path and field. This reports bad runtime data, not a malformed caller
+pose. A step failure after the native call starts includes a `step` object with the
+requested count, timestep, observed before/after physics times (after may be `null`),
+measured/expected delta, failure phase and Fabric-update state. A matching clock delta
+does not prove valid physics. Other native exceptions return `STEP_FAILED`; existing GPU fault
+quarantine remains `DEVICE_ERROR`. There is no rollback, reset or automatic retry.
+Inspect the solver diagnostics before continuing. A preflight refusal does not claim
+that steps were attempted. These error-reporting safeguards do not repair native solver
+instability or establish support for every contact/solver configuration.
+
+RTX cameras use UsdGeom, an owned Replicator render product and an on-demand renderer
+CPU readback. They attach no RGB annotator. Removing that redundant branch passed an initial
+6.2 headless coexistence control, but later fresh camera-only and LiDAR-only controls still
+reproduced paused native ROS RGB writer cycle warnings. That issue remains unresolved;
+successful image/scan output does not establish that the rejected native connections are harmless.
+The earlier experimental
+CameraSensor path crashed in native CUDA; asking it for a CPU result at retrieval was
+insufficient. Cameras do not require `isaacsim.sensors.experimental.rtx`.
+New cameras use near/far clipping distances of 1 cm and 1 km, converted using
+the stage's `metersPerUnit`. This avoids the USD fallback near plane of one
+stage unit hiding nearby objects in meter-based scenes. Creation returns
+`clipping_range_m` and `clipping_range_stage_units`; invalid or unrepresentable
+stage units refuse before a camera or render product is created. Existing and
+reopened cameras retain their authored clipping settings. Position and target
+coordinates still use stage units; image content also depends on aim, lighting
+and scene visibility.
+LiDAR uses the installed `IsaacSensorCreateRtxLidar` command and Cartesian CPU annotator,
+including the older 6.0.0.0 API. The full build, running Kit and loaded extensions must match
+a qualified stack; missing/conflicting identity and unknown builds fail before native creation.
+`sim__stage__info.runtime` reports the actual package, full VERSION, Kit, extension, Warp,
+solver and adapter information. Adding a release requires qualification evidence and a data
+entry in `sim_versions.py`, not a major-version guess.
+
+Launch a new LiDAR session with `sim__launch(enable_motion_bvh=true)` or `run.sh --motion-bvh`.
+This renderer setting is explicit because it consumes resources and affects the whole process.
+Create sensors stopped, explicitly play for warm-up, then pause to read completed output.
+Camera capture normally waits up to five seconds for four matching Hydra drawable events
+and a new renderer-managed CPU pixel transfer (`hydra-renderer-cpu-v1`). Advancing render
+counters alone did not prevent a stale Replicator pointer after paused physics steps on
+6.0.0.1. The default now bypasses that cached pointer, bounds and copies the callback buffer,
+and returns `cpu_transfer_completed=true`. Timeout/stage change returns no image; a pending
+native transfer prevents another request until completion. It does not step the Replicator
+orchestrator or change timeline state. `wait_for_render=false` writes a PNG from the last
+validated **tool-acquired** CPU frame, without queuing rendering, a transfer or an annotator.
+It returns `NOT_READY` until a default/true capture has seeded the cache. Ordinary Play does
+not seed or refresh it. This replaces the previous continuously updated Replicator-buffer
+semantics. The response reports cache age and the acquisition's render/timeline observations
+separately from this call; observed render numbers are not an exact callback-image ID.
+Cached pixels may predate Stop/reset, pose edits or physics steps. A failed waiting capture
+still fails; only an explicit nonwaiting call may reuse an older valid frame. Cache commit
+occurs after final acquisition validation, before PNG publication: an output filename conflict
+can therefore leave a new valid cached acquisition while reporting file failure.
+Each camera retains one read-only RGBA8 frame, discarded on sensor/stage teardown and never
+reused by a new sensor at the same path. Eight 1024×1024 caches retain at most 32 MiB of pixel
+data; converter lists, in-flight transfers and PNG/RGB copies are additional memory.
+LiDAR acquisition is unchanged and defaults to the latest
+completed scan: its acquisition clock requires Play, and requesting a fresh render while
+paused returns `SENSOR_PAUSED`. Scan tick rate matches scan rate; accumulation is enabled.
+Render completion is **not** an atomic physics/sensor snapshot or proof of a fresh rotating
+scan. Camera sizes are 64–1024 pixels per side, at most eight live sensors; LiDAR returns at
+most 256 finite nonzero XYZ points with sensor-to-world matrix, in meters.
+
+`STALE_TARGET` includes `current_target` with the current session/stage IDs, PID, layer
+identifier, default prim, units and up-axis. Review that identity and resend the chosen IDs
+explicitly. A refused call never silently switches targets or performs the requested edit.
+
+Delete an exact owned sensor path while stopped to detach its annotator and release its
+render product. Clear/subtree deletion still protects sensors. Cleanup is bound to the
+original stage and creation layers; foreign composition opinions cause a partial-cleanup
+error instead of cross-layer deletion. Stage closing and extension shutdown release resources.
+If an editor or another extension removes the sensor's USD prim, its registered resources
+remain protected: creation at that same path returns `CONFLICT` rather than overwriting
+the cleanup record. Use a new stage to release those resources before reusing the path.
+Reported CUDA illegal-address errors latch `device_error`: runtime/sensor operations refuse
+until process restart. A native crash may bypass that guard. Inspect, save when possible,
+Stop, and restart only the owned disposable process. See the compatibility follow-up evidence
+for measured outcomes and retained earlier failures; no indefinite lifetime guarantee is made.
+
+Managed launches can select `physics_backend="newton"` (default `"physx"`); an unavailable
+requested engine fails instead of falling back. Newton uses its tensor adapter, explicit
+paused solver steps and Fabric publication; it does not report authored USD as runtime pose.
+The older three releases need a scoped internal playing-flag adapter, restored even on error.
+Direct Newton steps invalidate captured CUDA graphs to avoid stale dt/state buffers.
+Newton requires meter stages and a qualified extension/library stack. Paused saves copy up to
+256 runtime rigid-body poses into a private flattened export; the live/source USD stays unchanged.
+This is a pose snapshot, not a solver checkpoint. Runtime mass/COM velocities are optional via
+`sim__body__state(include_dynamics=true)`. Angular velocities are radians/s; mass includes kg
+conversion. Validation is scoped to the recorded Newton/MuJoCo and PhysX configurations.
+
+Controller tools execute arbitrary Python through ScriptNode and require the user's launch-time
+`ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`. That explicitly enables Kit's ScriptNode consent setting;
+it is not OS isolation. By default both tools return `SCRIPT_DISABLED`. The graph topology is
+fixed to playback tick → inline ScriptNode; update recompiles owned code while stopped.
+Controller USD edits must respect layer strength (for pack-authored geometry, use its session
+layer). General graph topology and file/module hot-reload are not implemented. Existing trusted
+`run_python` is unchanged, and is never used as a substitute in the capability mapping.
+
+URDF conversion requires the installed 6.x importer API. Relative mesh filenames must be in
+the approved snapshot; package URLs, absolute paths, DTDs and entities are refused. Conversion
+writes service-owned derived files; the active root/session layers are compared before and after
+conversion. The result passes the same USD dependency and units checks. Unsupported importer
+APIs fail explicitly. See [fork comparison](FORK-COMPARISON.md) for each narrower capability.
+
+## Reproduce
+
+```bash
+python scripts/make_scene_fixture.py /absolute/new-fixture
+# Approve new-fixture above, launch a disposable Sim on a free port, then:
+python scripts/scene_mcp_client.py --port 18861 assets__roots '{}'
+python scripts/scene_mcp_client.py --port 18861 sim__stage__info '{}'
+python scripts/validate_scene_tools.py --port 18861 --output /absolute/transcript.json
+```
+
+The validator expects the approved root ID `fixture`; it changes the selected disposable stage.
+It uses a real stdio MCP client/server and never `run_python`. CPU OpenUSD tests require the
+`scene-test` extra; they do not test live PhysX/Kit. See evidence for precise scope.
+
+## USDZ trusted-project subset
+
+The broker validates stored, unencrypted, 64-byte-aligned USDZ containers before native USD
+parsing. It checks central/local headers, CRCs, hashes, types, duplicate/case-folded names,
+relative member paths, counts and sizes without extracting files. The default member must be
+USD. Nested archives, ZIP64, compression, descriptors, links, traversal and unknown member
+types refuse. Common multi-file USD plus texture packages retain their package paths;
+resolved package members must belong to the verified manifest. This is a bounded supported
+subset of USDZ, **not OS isolation**. Native resolver/plugins still run with the trusted
+process's permissions. Retain verified staging snapshots while referenced/saved outputs use them.
+
+Saved copies omit recognized process-bound Replicator `/Orchestrator` graphs, SyntheticData
+pipelines and pack-owned render products; their
+native graph/CPU handles cannot be reopened as USD. Recognized ROS camera writers are omitted
+only when a preserved camera helper with the same topic/frame and an authored render-product
+source can regenerate them. Camera and LiDAR definitions, materials and user Action Graphs
+remain. The result lists `omitted_runtime_render_paths`. Unknown content
+inside a native pipeline or `/Orchestrator`, or a preserved controller connected to omitted
+runtime state (including relationship targets), returns `SAVE_UNSUPPORTED` before publication;
+the live stage is unchanged.
+Create fresh sensors after reopening; a saved scene is not a running sensor or physics checkpoint.
+
+The earlier 6.0.0.0 reopened-camera `NOT_READY` failure was traced to a serialized
+Replicator orchestration graph suppressing recreation of its Python update subscription.
+New exports omit that recognized graph; fresh-process windowed and headless MCP reopen,
+body-state/step and camera checks pass. Previously exported files can retain obsolete native
+state: re-export a trusted scene through the corrected save tool into a new file, then reopen
+that copy. No runtime patch, implicit stage reset or private Replicator lifecycle call is used.
+See the compatibility evidence for the retained failure history and tested scope.
+
+A camera graph can create a `viewportHandle` that identifies a texture in the current
+process. Serializing that integer can prevent ROS camera publishers from rebuilding after
+restart. `sim__stage__save` refuses such affected saves by default and lists the properties.
+An agent exporting that scene can explicitly choose `reset_camera_render_handles=true`.
+This removes only validated, session-only handles associated with recognized native camera
+producers/helpers from the **new copy**, and returns `omitted_runtime_render_properties`.
+It preserves the camera, render product, render settings, other attributes, live layers and
+source files. The choice authorizes this export normalization; it does not prove who authored
+an attribute. Root/cross-layer opinions, ambiguous products, handle dependencies, incomplete
+composition or unavailable/mismatched native bindings still refuse with `SAVE_UNSUPPORTED`.
+Binding validation reads the already-retained texture objects through a bounded adapter for
+inspected Replicator cache layouts. It does not call create/attach APIs or pruning getters.
+An unfamiliar layout refuses. It never passes a USD integer to the native factory lookup:
+that lookup crashed during 6.2 live qualification; its handle contract was not established.
+Pause before saving an active scene; saving while playing remains refused. After Stop a
+native texture may have been torn down, so inspect a refusal rather than assuming it is live.
+
+The legacy `scripts/checks/export_reference.py` and `export_checkpoint.py` have a narrower
+contract: a root-layer reference copy plus the composed **local PhysicsScene** definition.
+Other session edits are excluded. They retain cache-relative asset references and refuse
+ambiguous/reference-derived physics definitions, unsupported scene properties and retained
+process-bound render state. They do not normalize camera handles. Publication never overwrites
+an existing file, including a timestamp collision. The UR5e verifier checks the known fixture's
+single CPU/MBP/120 Hz scene before export and after reopen, and its initialized timestep after
+motion; it stops before motion if the reopened physics configuration differs. The exporter
+preserves the source rate rather than forcing every scene to 120 Hz. Use the generic save tool
+for its composed snapshot contract above.

@@ -42,6 +42,13 @@ This repository consolidates two previously submodule-managed codebases into a s
 
 - **`isaac-sim-mcp`:** MIT License. A copy of the upstream license is archived at `docs/provenance/isaac-sim-mcp-LICENSE`.
 - **`omni-kit-mcp`:** **Upstream has no LICENSE file.** The repository was published publicly on GitHub without an explicit license file. Users and redistributors should note that upstream `inbarajaldrin/omni-kit-mcp` omits an explicit license grant.
+- **Bundled assets:** not all of `exts/ur5e-dt/assets/` may be redistributed. The NVIDIA robot,
+  sensor and material files, the Vention bench and the Poliigon oak textures must stay out of a
+  public repository; the Husarion gripper files (Apache-2.0) and the FMB objects (CC BY 4.0) may
+  ship with notices. Per-group evidence, sizes and the fetch-on-demand plan are in
+  [`provenance/ASSETS.md`](provenance/ASSETS.md). The extension resolves them through
+  `exts/ur5e-dt/ur5e_dt/asset_cache.py` and `exts/ur5e-dt/assets-manifest.json`;
+  `scripts/fetch_ur5e_assets.py` populates the operator cache.
 
 ---
 
@@ -63,3 +70,23 @@ All components now live directly in this repository:
 - Git submodules (`.gitmodules` and `.git/modules/external`) have been eliminated entirely.
 - Clones are self-contained and require no recursive submodule flags or external git network operations.
 - Edits to host tools (`mcp/`) or Kit extensions (`exts/`) are tracked in the root repository history.
+
+## Project scene implementation references
+
+The new `sim-tools` pack and project broker are independently authored; no code was copied from
+whats2000/isaacsim-mcp-server (`bfcd2111a9a98657ea87ba3be8564ea19c1a89e6`, MIT),
+omni-mcp/isaac-sim-mcp (`949c4886be6e9091ceac8be4272207471b2d3d80`, MIT), or
+dcc-mcp/dcc-mcp-openusd (`84595bde4f2dc87ab953688ff5a3123bcec9e88c`, MIT).
+Their public sources and licenses were inspected as references. The comparison includes source-derived
+signatures and descriptions from whats2000; its notice is retained in `docs/provenance/whats2000-LICENSE`. Work-r-labs/robots
+(`ab6aa489855256de07ba46c7b45887fdbc42b607`, root MIT) was evaluated, but individual asset
+provenance was not sufficiently established for the candidate and it was not imported or redistributed.
+This does not resolve the separate omni-kit-mcp permission question above.
+
+The live non-UR5e fixture was Agilebot GBT-C5A at
+[`33281110dd75017fcb821ef4a7316960c0702e18`](https://github.com/sh-agilebot/agilebot_isaac_usd_assets/tree/33281110dd75017fcb821ef4a7316960c0702e18/gbt-c5a).
+Its BSD-3-Clause license and repository THIRD_PARTY_LICENSES identify the robot as original
+Agilebot work and state that former third-party gripper/camera integrations were removed.
+Only the selected robot folder was imported. Robot files are not bundled; screenshots are attributed
+in the evidence. The license notice is retained in `docs/provenance/agilebot-LICENSE`.
+The generated multifile regression fixture is original CC0 data, not third-party robot geometry.

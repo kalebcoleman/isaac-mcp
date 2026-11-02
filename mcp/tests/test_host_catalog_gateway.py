@@ -35,13 +35,17 @@ _spec = importlib.util.spec_from_file_location("gen_host_catalog", ROOT / "scrip
 generator = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(generator)
 
-PROXIES = {gw._mcp_name(canonical): canonical for canonical in host_catalog.catalog_tool_names()}
+PROXIES = {gw._mcp_name(canonical): canonical for canonical in host_catalog.catalog_tool_names() if canonical.startswith("ur5e_dt.")}
 PLAY = "ur5e_dt__play_scene"
 
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch, tmp_path):
     """No ambient bridge, filter or policy; capture dirs in tmp; and no way to spawn a process."""
+    # This regression module exercises the existing UR5e-only bridge/catalog surface.
+    # The full multi-catalog surface is covered in test_scene_gateway.py.
+    full_catalog = host_catalog.load_catalog()
+    monkeypatch.setattr(host_catalog, "load_catalog", lambda: __import__("copy").deepcopy({k:v for k,v in full_catalog.items() if k.startswith("ur5e_dt.")}))
     for var in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_PORT", "UR5E_DT_PORT",
                 "ISAAC_MCP_HOST", lt.ENV_VAR):
         monkeypatch.delenv(var, raising=False)
@@ -210,7 +214,7 @@ def test_every_tool_is_listed_with_no_bridge_and_matches_the_registry_schema():
                 assert enum_of(properties[f["name"]]) == f["enum"], (name, f["name"])
     assert listed[PLAY].inputSchema.get("properties", {}) == {}
     assert enum_of(listed["ur5e_dt__assemble_objects"].inputSchema["properties"]["assembly"]) == [
-        "fmb1", "fmb2", "fmb3"]
+        "fmb1", "fmb2", "fmb3", "fmb4", "jenga", "fmb_jenga"]
     assert gw.offline_tools(server) == sorted(PROXIES.values())
     assert live_twin_tools(server) == []              # the roster of live bridge tools stays empty
 
@@ -286,7 +290,7 @@ def test_refused_retry_does_not_claim_the_first_attempt_never_ran(monkeypatch):
     client = gw.BridgeClient(port=8766)
     attempts = []
 
-    def connect():
+    def connect(timeout=None):
         attempts.append("connect")
         if len(attempts) > 1:
             raise ConnectionRefusedError("bridge stopped after the first request")
@@ -788,4 +792,27 @@ def test_the_wheel_config_ships_the_whole_package_directory():
         assert not {"exclude", "only-include", "only-packages"} & set(target)
     from importlib import resources
     packaged = resources.files("isaac_mcp").joinpath(host_catalog.CATALOG_DIR)
-    assert [entry.name for entry in packaged.iterdir() if entry.name.endswith(".json")] == ["ur5e_dt.json"]
+    assert sorted(entry.name for entry in packaged.iterdir() if entry.name.endswith(".json")) == ["assets.json", "sim.json", "ur5e_dt.json"]
+
+
+
+@pytest.mark.parametrize("name", ["add_objects", "assemble_objects"])
+@pytest.mark.parametrize("assembly", ["fmb4", "jenga", "fmb_jenga"])
+def test_jenga_is_accepted_by_real_mcp_schema_and_forwarded(monkeypatch, name, assembly):
+    """Regression: the handler supported Jenga while Pydantic rejected it."""
+    with LiveBridge() as live:
+        attach_twin(live)
+        server = build({"ISAAC_MCP_PORT": str(live.port)})
+
+        async def exercise(client):
+            listed = await tools(client)
+            schema = listed["ur5e_dt__" + name].inputSchema["properties"]["assembly"]
+            assert assembly in enum_of(schema)
+            response = await client.call_tool("ur5e_dt__" + name, {"assembly": assembly})
+            assert not response.isError, response
+            data = json.loads(response.content[0].text)
+            assert data == {"handler": name, "args": {"assembly": assembly}}
+            refused = await client.call_tool("ur5e_dt__" + name, {"assembly": "unknown-assembly"})
+            assert refused.isError
+
+        run(server, exercise)

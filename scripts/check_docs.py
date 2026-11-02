@@ -52,7 +52,11 @@ def expected_tools():
             | tool_decorators(ROOT / "mcp/isaac_mcp/server.py")
             | tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")
             | tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py") | builtins)
+    import sys
+    sys.path.insert(0, str(ROOT / "mcp"))
+    from isaac_mcp.scene_contracts import REGISTRY
     return {
+        "docs/TOOLS-SCENE.md": {name.replace(".","__") for name in REGISTRY},
         "docs/TOOLS-UR5E.md": {"ur5e_dt__" + name for name in registry},
         "docs/TOOLS-ISAACLAB.md": tool_decorators(ROOT / "mcp/isaac_mcp/isaaclab/tools.py"),
         "docs/TOOLS-HOST.md": host,
@@ -65,7 +69,7 @@ def tier_counts():
     builtins = bridge_builtins()
     host_only = (tool_decorators(ROOT / "mcp/isaac_mcp/screen.py")
                  | tool_decorators(ROOT / "mcp/isaac_mcp/server.py"))
-    return {"host": len(host_only),
+    return {"generic": len(expected["docs/TOOLS-SCENE.md"]), "host": len(host_only),
             "desktop_input": len(tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")),
             "sim_sessions": len(tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py")),
             "isaaclab": len(expected["docs/TOOLS-ISAACLAB.md"]),
@@ -74,7 +78,7 @@ def tier_counts():
 
 TIER_ROWS = {"host": "Host gateway", "desktop_input": "Desktop input (optional)",
              "sim_sessions": "Simulator sessions (optional)", "isaaclab": "Isaac Lab", "builtins": "Bridge built-ins",
-             "ur5e": "UR5e twin"}
+             "ur5e": "UR5e twin", "generic": "Generic scene and assets"}
 
 
 def check_agent_guide(errors, text=None, counts=None):
@@ -95,12 +99,12 @@ def check_agent_guide(errors, text=None, counts=None):
                           f"{actual[tier]}")
     expected = {
         "exactly N tools (host + Isaac Lab + twin catalog subtotal)":
-            (r"exactly (\d+) tools", actual["host"] + actual["isaaclab"] + actual["ur5e"]),
+            (r"exactly (\d+) tools", actual["host"] + actual["isaaclab"] + actual["ur5e"] + actual["generic"]),
         "The other N tools (bridge built-ins subtotal)":
             (r"The other (\d+) tools", actual["builtins"]),
         "there are N tools in total":
             (r"there are (\d+) tools in total",
-             sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e"))),
+             sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic"))),
         "groups add N more (optional subtotal)":
             (r"groups add (\d+) more", actual["desktop_input"] + actual["sim_sessions"]),
     }
@@ -113,10 +117,50 @@ def check_agent_guide(errors, text=None, counts=None):
             errors.append(f"{where}: '{description}' says {found[0]}, the code has {value}")
 
 
+SKILLS_DIR = ROOT / ".agents" / "skills"
+
+
+def scene_catalog_tools():
+    """Return the sim/assets packs' MCP names when their catalogs are present."""
+    result = {}
+    for prefix, filename in (("sim__", "sim.json"), ("assets__", "assets.json")):
+        path = ROOT / "mcp" / "isaac_mcp" / "catalogs" / filename
+        if not path.is_file():
+            continue
+        tools = json.loads(path.read_text()).get("tools", {})
+        result[prefix] = {name.replace(".", "__") for name in tools}
+    return result
+
+
+def check_skill_tool_names(errors, expected=None, files=None):
+    """Every registered tool name a skill mentions must exist in the registry."""
+    expected = expected or expected_tools()
+    registered = {"isaaclab__": expected["docs/TOOLS-ISAACLAB.md"],
+                  "ur5e_dt__": expected["docs/TOOLS-UR5E.md"]}
+    scene = scene_catalog_tools()
+    if "sim__" in scene:
+        registered["sim__"] = {
+            name for name in expected.get("docs/TOOLS-HOST.md", set())
+            if name.startswith("sim__")
+        } | scene["sim__"]
+    if "assets__" in scene:
+        registered["assets__"] = scene["assets__"]
+    for path in files if files is not None else sorted(SKILLS_DIR.rglob("*.md")):
+        text = path.read_text()
+        for prefix, names in registered.items():
+            # A trailing `*` marks a family (`ur5e_dt__quick_start*`): it must prefix a real tool.
+            for name, star in re.findall(r"\b(" + prefix + r"[a-z][a-z0-9_]*)(\*?)", text):
+                if name in names or (star and any(n.startswith(name) for n in names)):
+                    continue
+                errors.append(f"{path.relative_to(ROOT)}: names not in registry: {name}{star}")
+
+
 def main():
-    errors = []
+    from check_private_paths import check_tracked
+
+    errors = check_tracked(ROOT)
     files = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md")),
-             *sorted((ROOT / "mcp/docs").glob("*.md"))]
+             *sorted((ROOT / "mcp/docs").glob("*.md")), *sorted(SKILLS_DIR.rglob("*.md"))]
     for path in files:
         text = path.read_text()
         for link in re.findall(r"\]\(([^)]+)\)", text):
@@ -142,12 +186,14 @@ def main():
             stale = sorted(found - expected)
             if stale:
                 errors.append(f"{filename}: names not in registry: {', '.join(stale)}")
+    check_skill_tool_names(errors)
     check_agent_guide(errors)
     for error in errors:
         print(f"FAIL: {error}")
     if errors:
         return 1
-    print(f"Documentation checks passed ({len(files)} files; links, JSON, registered tool names and guide counts).")
+    print(f"Documentation checks passed ({len(files)} files; links, JSON, registered tool names, "
+          "skill tool names and guide counts).")
     return 0
 
 

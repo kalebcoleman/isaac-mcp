@@ -28,12 +28,9 @@ def Xform "Root"
                     uniform token info:implementationSource = "sourceAsset"
                     uniform asset info:mdl:sourceAsset = @OmniPBR.mdl@
                     uniform token info:mdl:sourceAsset:subIdentifier = "OmniPBR"
-                    asset inputs:diffuse_texture = @./materials/oak/Poliigon_WoodVeneerOak_7760_BaseColor.jpg@
-                    asset inputs:normalmap_texture = @./materials/oak/Poliigon_WoodVeneerOak_7760_Normal.jpg@
-                    bool inputs:project_uvw = 1
-                    asset inputs:reflectionroughness_texture = @./materials/oak/Poliigon_WoodVeneerOak_7760_Roughness.jpg@
-                    float2 inputs:texture_scale = (30, 30)
-                    bool inputs:world_or_object = 0
+                    color3f inputs:diffuse_color_constant = (0.42, 0.26, 0.15)
+                    float inputs:reflection_roughness_constant = 0.6
+                    bool inputs:project_uvw = 0
                     token outputs:out
                 }
 

@@ -1,0 +1,3574 @@
+{
+  "created_utc": "2026-11-02T04:40:25.031862+00:00",
+  "source_sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+  "scope": "Current runtime6.0.0.1 PhysX both modes, independent task and separate fresh composed-save reopen. Prepared interpreter; no clean installation, otherbackend or allconfig claim.",
+  "broad": {
+    "headless": {
+      "sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+      "session": {
+        "id": "84e46c8201a74c5594ade14c1b609e4b",
+        "pid": 2612461,
+        "port": 18926,
+        "ros_domain": 175,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793591969.6175034,
+        "log": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/sim.log",
+        "output_dir": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/output",
+        "user_config": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15200,
+          "ram_available_mib": 52673
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "phases": [
+        {
+          "name": "launch",
+          "returncode": 0,
+          "wall_seconds": 0.6528255939483643
+        },
+        {
+          "name": "ready",
+          "returncode": 0,
+          "wall_seconds": 15.883789539337158
+        },
+        {
+          "name": "reopen-ros-first",
+          "returncode": 0,
+          "wall_seconds": 16.05773162841797
+        },
+        {
+          "name": "stop-before-reopen-sensors",
+          "returncode": 0,
+          "wall_seconds": 0.8227066993713379
+        },
+        {
+          "name": "reopen-sensors",
+          "returncode": 0,
+          "wall_seconds": 9.725933313369751
+        },
+        {
+          "name": "lease-fix",
+          "returncode": 0,
+          "wall_seconds": 2.0292561054229736
+        },
+        {
+          "name": "project15",
+          "returncode": 0,
+          "wall_seconds": 6.4053709506988525
+        },
+        {
+          "name": "asset-failures",
+          "returncode": 0,
+          "wall_seconds": 13.852028369903564
+        },
+        {
+          "name": "inventory",
+          "returncode": 0,
+          "wall_seconds": 1.5191986560821533
+        },
+        {
+          "name": "immediate",
+          "returncode": 0,
+          "wall_seconds": 3.6222054958343506
+        },
+        {
+          "name": "camera-cache",
+          "returncode": 0,
+          "wall_seconds": 2.7411484718322754
+        },
+        {
+          "name": "reset",
+          "returncode": 0,
+          "wall_seconds": 1.1221020221710205
+        },
+        {
+          "name": "suite",
+          "returncode": 0,
+          "wall_seconds": 69.1778633594513
+        },
+        {
+          "name": "fullsurface",
+          "returncode": 0,
+          "wall_seconds": 70.61758494377136
+        }
+      ],
+      "fullsurface": {
+        "calls": 137,
+        "assertions": 55,
+        "tools": [
+          "get_file",
+          "list_bridges",
+          "list_windows",
+          "put_file",
+          "refresh_tools",
+          "reload_tools",
+          "run_python",
+          "sim__body__state",
+          "sim__joints__command",
+          "sim__joints__state",
+          "sim__list",
+          "sim__prim__find",
+          "sim__prim__get",
+          "sim__simulation__step",
+          "sim__stage__info",
+          "sim__stage__tree",
+          "sim__status",
+          "sim__timeline__control",
+          "stat_file",
+          "status",
+          "ur5e_dt__add_objects",
+          "ur5e_dt__assemble_objects",
+          "ur5e_dt__delete_objects",
+          "ur5e_dt__get_recording_status",
+          "ur5e_dt__load_simple_room",
+          "ur5e_dt__load_workstation",
+          "ur5e_dt__new_stage",
+          "ur5e_dt__play_scene",
+          "ur5e_dt__quick_start",
+          "ur5e_dt__quick_start_with_workstation",
+          "ur5e_dt__quick_start_with_workstation_and_simple_room",
+          "ur5e_dt__randomize_object_poses",
+          "ur5e_dt__randomize_single_object",
+          "ur5e_dt__restore_scene_state",
+          "ur5e_dt__save_scene_state",
+          "ur5e_dt__set_object_pose",
+          "ur5e_dt__setup_camera_tf_graph",
+          "ur5e_dt__setup_pose_publisher",
+          "ur5e_dt__start_recording",
+          "ur5e_dt__start_ros_driver",
+          "ur5e_dt__stop_recording",
+          "ur5e_dt__stop_scene",
+          "ur5e_dt__sync_real_poses",
+          "use_bridge"
+        ]
+      },
+      "first_attempt": null,
+      "effect_checks": [
+        "selected process",
+        "URDF separate subtree and physics reports complete",
+        "light create independently reopened USD type/intensity/color",
+        "clone pre-delete USD content equals source",
+        "source material collision and dimensions preserved",
+        "URDF imported authored mass and collisions",
+        "URDF imported geometry and requested wrapper placement",
+        "light modify independently reopened intensity/color",
+        "clone changed independently while source preserved",
+        "source root and original edit target preserved",
+        "session owns edits and stage remains selected",
+        "input URDF unchanged"
+      ],
+      "urdf_checks": [
+        "native generated physics selected and two bodies composed",
+        "runtime joint and mass read, no USD fallback",
+        "120 steps measured exactly one second",
+        "120 steps measured exactly one second",
+        "joint achieved requested target",
+        "runtime body orientation changed",
+        "stage identity and input preserved"
+      ],
+      "regression": [
+        {
+          "label": "existing-physics",
+          "command": [
+            "<worktree>/.work/host/bin/python",
+            "<worktree>/.work/compat-followup/existing_physics_scene.py",
+            "18926",
+            "<worktree>/.work/compat-followup/current6001h_c2ceb-existing-physics.json"
+          ],
+          "returncode": 0,
+          "seconds": 7.726135492324829,
+          "native_start": 21228980,
+          "native_end": 21766115,
+          "native_sha256": "35bcf4bcf0bd79b6ebe6c1debcf44400803ffe0acbaa5ca4fd2c6bef8e7a3d4e",
+          "counts": {
+            "[Error]": 0,
+            "Cannot enter into task": 0,
+            "Task was destroyed": 0,
+            "Force callback": 0,
+            "GetCamera": 0,
+            "Illegal cycle connection": 0,
+            "getSimulationTimeMonotonicAtTime": 0,
+            "Edit target changed": 0
+          }
+        },
+        {
+          "label": "legacy-async",
+          "command": [
+            "bash",
+            "<worktree>/.work/integration/c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a/scripts/verify_ur5e_dt.sh"
+          ],
+          "returncode": 0,
+          "seconds": 27.092843532562256,
+          "native_start": 21766115,
+          "native_end": 23664539,
+          "native_sha256": "53d320c8ca56936d6678690094040467895d735c67b65402f64b9c677706e7dd",
+          "counts": {
+            "[Error]": 0,
+            "Cannot enter into task": 0,
+            "Task was destroyed": 0,
+            "Force callback": 0,
+            "GetCamera": 0,
+            "Illegal cycle connection": 0,
+            "getSimulationTimeMonotonicAtTime": 0,
+            "Edit target changed": 0
+          }
+        }
+      ],
+      "save": {
+        "checks": 21,
+        "layers": 2,
+        "source_files": 18,
+        "recorded_hashes_unchanged": true,
+        "file": {
+          "status": "ok",
+          "file": "<worktree>/.work/runs/current6001h_c2ceb/saved/ros-camera-review.usda",
+          "bytes": 365134228,
+          "flattened": true,
+          "stage_switched": false,
+          "runtime_pose_count": 0,
+          "omitted_runtime_render_paths": [
+            "/Orchestrator",
+            "/Render/OmniverseKit/HydraTextures/IsaacMCP_1f92db6ba8e34e11ac26e985372a9a6c",
+            "/Render/OmniverseKit/HydraTextures/Replicator/PostRender/SDGPipeline",
+            "/Render/PostProcess/SDGPipeline"
+          ],
+          "omitted_runtime_render_properties": [
+            "/Render/OmniverseKit/HydraTextures/Replicator.viewportHandle"
+          ],
+          "snapshot": "composed USD",
+          "checkpoint": false,
+          "dependencies": "Texture files may still reference retained snapshots; do not clean those while using saved scenes."
+        },
+        "sha256": "71c1498c0e8514c5e7f45888ee5c981758ca06269bed7c0ca8be3d4e92c3d944",
+        "scope": "Composed USD export, not a solver/controller checkpoint."
+      },
+      "review": {
+        "utc": "2026-11-02T04:06:55.714760+00:00",
+        "code_sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+        "session": {
+          "id": "84e46c8201a74c5594ade14c1b609e4b",
+          "pid": 2612461,
+          "port": 18926,
+          "ros_domain": 175,
+          "headless": true,
+          "show_ur5e_panel_on_start": false,
+          "enable_motion_bvh": true,
+          "physics_backend": "physx",
+          "started_at": 1793591969.6175034,
+          "log": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/sim.log",
+          "output_dir": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/output",
+          "user_config": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/user.config.json",
+          "initial_resources": {
+            "gpu_total_mib": 16303,
+            "gpu_free_mib": 15200,
+            "ram_available_mib": 52673
+          },
+          "state": "starting",
+          "note": "Use sim__status to confirm bridge readiness."
+        },
+        "native_prefix_bytes": 34687420,
+        "native_prefix_sha256": "0d8241c13b0cdbedabef2bc0fde3dd030e31eb6efdc204dfac09af280853b0f2",
+        "native_counts": {
+          "[Error]": 24,
+          "[Warning]": 8586,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 8371,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "console": "Not applicable: headless has no application-window Console.",
+        "images_reviewed": {
+          ".work/compat-followup/current6001h_c2ceb-fullsurface/review-frame-10.png": "182a43e88e8bf746aa722f4a91ca7263e25bc4c6f425d4ace950401e6659d31f",
+          ".work/compat-followup/current6001h_c2ceb-fullsurface/review-frame-100.png": "e92b5345c0019eb39530957052c87ccb772324148460806e78171636b62e22c4",
+          ".work/runs/current6001h_c2ceb/saved/save-review-camera.png": "6902426862b43b71d72723a10472ae316a3f4655a9eebc3a2f132a1eca061e8f"
+        },
+        "video": {
+          "path": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/output/videos/current6001h_c2ceb-motion.mp4",
+          "sha256": "5cb8dca7bdd4bca54385f18aacd52dade81b96a94ff3376288134e9e66fd9ed5",
+          "probe": {
+            "width": 1280,
+            "height": 720,
+            "nb_read_frames": 173,
+            "fps": 10.0,
+            "duration": 17.3,
+            "decoder": "imageio-ffmpeg 7.0.2-static"
+          },
+          "selected_frames": [
+            "<worktree>/.work/compat-followup/current6001h_c2ceb-fullsurface/review-frame-10.png",
+            "<worktree>/.work/compat-followup/current6001h_c2ceb-fullsurface/review-frame-100.png"
+          ]
+        },
+        "visual_scope": "Two of173 decoded motion-video frames reviewed, diagnostic upright arm upper segment/wrist cropped; elbow changes visible. Separate320x240save image is partially framed. Appearance is not physical proof.",
+        "save": {
+          "checks": 21,
+          "layers": 2,
+          "sources": 18,
+          "unchanged": true
+        },
+        "scope": "Exactc2 Sim6.0.0.1 PhysX headless14phases/fullsurface137calls55assertions; regression/effects24/12/URDF25/7/save21 passed. No original20fstall or allbackend resolution."
+      },
+      "shutdown": {
+        "utc": "2026-11-02T04:07:30.207878+00:00",
+        "code_sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+        "session": {
+          "id": "84e46c8201a74c5594ade14c1b609e4b",
+          "pid": 2612461,
+          "port": 18926,
+          "ros_domain": 175,
+          "headless": true,
+          "show_ur5e_panel_on_start": false,
+          "enable_motion_bvh": true,
+          "physics_backend": "physx",
+          "started_at": 1793591969.6175034,
+          "log": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/sim.log",
+          "output_dir": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/output",
+          "user_config": "<worktree>/.work/sessions/84e46c8201a74c5594ade14c1b609e4b/user.config.json",
+          "initial_resources": {
+            "gpu_total_mib": 16303,
+            "gpu_free_mib": 15200,
+            "ram_available_mib": 52673
+          },
+          "state": "starting",
+          "note": "Use sim__status to confirm bridge readiness."
+        },
+        "owned_pid_exited": true,
+        "normal_stop": true,
+        "native_log_bytes": 34793363,
+        "native_log_sha256": "f5ec717b9e632ad5469ac02d12d5644c04a2b36a2ed01e4a91a10808fff12c3e",
+        "native_counts": {
+          "[Error]": 24,
+          "[Warning]": 8679,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 8464,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "scope": "Final native log after14phases and regression/effect/URDF/save checks, normal managedSIGINT exit. Earlier prefix/Console scopes remain separate."
+      },
+      "scope": "All 39 generic, 23 UR5e and seven bridge built-ins across the broad phases. Host/desktop and Lab qualifications are separate; not all 99 tools per mode."
+    },
+    "windowed": {
+      "sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+      "session": {
+        "id": "83158cfeeae74a44a2e926fc527a642c",
+        "pid": 2618738,
+        "port": 18927,
+        "ros_domain": 176,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793592450.8700268,
+        "log": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/sim.log",
+        "output_dir": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/output",
+        "user_config": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15194,
+          "ram_available_mib": 52056
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "phases": [
+        {
+          "name": "launch",
+          "returncode": 0,
+          "wall_seconds": 0.6102895736694336
+        },
+        {
+          "name": "ready",
+          "returncode": 0,
+          "wall_seconds": 14.457794904708862
+        },
+        {
+          "name": "reopen-ros-first",
+          "returncode": 0,
+          "wall_seconds": 16.368067026138306
+        },
+        {
+          "name": "stop-before-reopen-sensors",
+          "returncode": 0,
+          "wall_seconds": 0.8491368293762207
+        },
+        {
+          "name": "reopen-sensors",
+          "returncode": 0,
+          "wall_seconds": 9.891419172286987
+        },
+        {
+          "name": "lease-fix",
+          "returncode": 0,
+          "wall_seconds": 2.2885329723358154
+        },
+        {
+          "name": "project15",
+          "returncode": 0,
+          "wall_seconds": 6.75131893157959
+        },
+        {
+          "name": "asset-failures",
+          "returncode": 0,
+          "wall_seconds": 15.387388229370117
+        },
+        {
+          "name": "inventory",
+          "returncode": 0,
+          "wall_seconds": 1.6559197902679443
+        },
+        {
+          "name": "immediate",
+          "returncode": 0,
+          "wall_seconds": 4.002831220626831
+        },
+        {
+          "name": "camera-cache",
+          "returncode": 0,
+          "wall_seconds": 2.9428112506866455
+        },
+        {
+          "name": "reset",
+          "returncode": 0,
+          "wall_seconds": 1.3556592464447021
+        },
+        {
+          "name": "suite",
+          "returncode": 0,
+          "wall_seconds": 70.45023345947266
+        },
+        {
+          "name": "fullsurface",
+          "returncode": 0,
+          "wall_seconds": 88.63254714012146
+        }
+      ],
+      "fullsurface": {
+        "calls": 141,
+        "assertions": 54,
+        "tools": [
+          "get_file",
+          "list_bridges",
+          "list_windows",
+          "put_file",
+          "refresh_tools",
+          "reload_tools",
+          "run_python",
+          "screenshot",
+          "sim__body__state",
+          "sim__joints__command",
+          "sim__joints__state",
+          "sim__list",
+          "sim__prim__find",
+          "sim__prim__get",
+          "sim__simulation__step",
+          "sim__stage__info",
+          "sim__stage__tree",
+          "sim__status",
+          "sim__timeline__control",
+          "stat_file",
+          "status",
+          "ur5e_dt__add_objects",
+          "ur5e_dt__assemble_objects",
+          "ur5e_dt__delete_objects",
+          "ur5e_dt__get_recording_status",
+          "ur5e_dt__load_simple_room",
+          "ur5e_dt__load_workstation",
+          "ur5e_dt__new_stage",
+          "ur5e_dt__play_scene",
+          "ur5e_dt__quick_start",
+          "ur5e_dt__quick_start_with_workstation",
+          "ur5e_dt__quick_start_with_workstation_and_simple_room",
+          "ur5e_dt__randomize_object_poses",
+          "ur5e_dt__randomize_single_object",
+          "ur5e_dt__restore_scene_state",
+          "ur5e_dt__save_scene_state",
+          "ur5e_dt__set_object_pose",
+          "ur5e_dt__setup_camera_tf_graph",
+          "ur5e_dt__setup_pose_publisher",
+          "ur5e_dt__start_recording",
+          "ur5e_dt__start_ros_driver",
+          "ur5e_dt__stop_recording",
+          "ur5e_dt__stop_scene",
+          "ur5e_dt__sync_real_poses",
+          "use_bridge"
+        ]
+      },
+      "first_attempt": null,
+      "effect_checks": [
+        "selected process",
+        "URDF separate subtree and physics reports complete",
+        "light create independently reopened USD type/intensity/color",
+        "clone pre-delete USD content equals source",
+        "source material collision and dimensions preserved",
+        "URDF imported authored mass and collisions",
+        "URDF imported geometry and requested wrapper placement",
+        "light modify independently reopened intensity/color",
+        "clone changed independently while source preserved",
+        "source root and original edit target preserved",
+        "session owns edits and stage remains selected",
+        "input URDF unchanged"
+      ],
+      "urdf_checks": [
+        "native generated physics selected and two bodies composed",
+        "runtime joint and mass read, no USD fallback",
+        "120 steps measured exactly one second",
+        "120 steps measured exactly one second",
+        "joint achieved requested target",
+        "runtime body orientation changed",
+        "stage identity and input preserved"
+      ],
+      "regression": [
+        {
+          "label": "existing-physics",
+          "command": [
+            "<worktree>/.work/host/bin/python",
+            "<worktree>/.work/compat-followup/existing_physics_scene.py",
+            "18927",
+            "<worktree>/.work/compat-followup/current6001w_c2ceb-existing-physics.json"
+          ],
+          "returncode": 0,
+          "seconds": 7.652708292007446,
+          "native_start": 19196197,
+          "native_end": 19789214,
+          "native_sha256": "6b1cfd666d0807de22b833619131290f90d0ed0933f780a05b22c1b51c852bfd",
+          "counts": {
+            "[Error]": 0,
+            "Cannot enter into task": 0,
+            "Task was destroyed": 0,
+            "Force callback": 0,
+            "GetCamera": 0,
+            "Illegal cycle connection": 0,
+            "getSimulationTimeMonotonicAtTime": 0,
+            "Edit target changed": 0
+          }
+        },
+        {
+          "label": "legacy-async",
+          "command": [
+            "bash",
+            "<worktree>/.work/integration/c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a/scripts/verify_ur5e_dt.sh"
+          ],
+          "returncode": 0,
+          "seconds": 27.24652862548828,
+          "native_start": 19789214,
+          "native_end": 22194928,
+          "native_sha256": "def6c278183293297518b0cb40fb4d010586b01fc04fd71115290bc2087a3aea",
+          "counts": {
+            "[Error]": 0,
+            "Cannot enter into task": 0,
+            "Task was destroyed": 0,
+            "Force callback": 0,
+            "GetCamera": 0,
+            "Illegal cycle connection": 0,
+            "getSimulationTimeMonotonicAtTime": 0,
+            "Edit target changed": 0
+          }
+        }
+      ],
+      "save": {
+        "checks": 21,
+        "layers": 2,
+        "source_files": 18,
+        "recorded_hashes_unchanged": true,
+        "file": {
+          "status": "ok",
+          "file": "<worktree>/.work/runs/current6001w_c2ceb/saved/ros-camera-review.usda",
+          "bytes": 365134219,
+          "flattened": true,
+          "stage_switched": false,
+          "runtime_pose_count": 0,
+          "omitted_runtime_render_paths": [
+            "/Orchestrator",
+            "/Render/OmniverseKit/HydraTextures/IsaacMCP_123d76faf0e14c08adf1f94cfae08185",
+            "/Render/OmniverseKit/HydraTextures/Replicator/PostRender/SDGPipeline",
+            "/Render/PostProcess/SDGPipeline"
+          ],
+          "omitted_runtime_render_properties": [
+            "/Render/OmniverseKit/HydraTextures/Replicator.viewportHandle"
+          ],
+          "snapshot": "composed USD",
+          "checkpoint": false,
+          "dependencies": "Texture files may still reference retained snapshots; do not clean those while using saved scenes."
+        },
+        "sha256": "6200708e3ec3a4b2353e939737b53ec402f7792d22163e4f4f26157cf7df271f",
+        "scope": "Composed USD export, not a solver/controller checkpoint."
+      },
+      "review": {
+        "utc": "2026-11-02T04:17:44.044671+00:00",
+        "code_sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+        "session": {
+          "id": "83158cfeeae74a44a2e926fc527a642c",
+          "pid": 2618738,
+          "port": 18927,
+          "ros_domain": 176,
+          "headless": false,
+          "show_ur5e_panel_on_start": false,
+          "enable_motion_bvh": true,
+          "physics_backend": "physx",
+          "started_at": 1793592450.8700268,
+          "log": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/sim.log",
+          "output_dir": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/output",
+          "user_config": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/user.config.json",
+          "initial_resources": {
+            "gpu_total_mib": 16303,
+            "gpu_free_mib": 15194,
+            "ram_available_mib": 52056
+          },
+          "state": "starting",
+          "note": "Use sim__status to confirm bridge readiness."
+        },
+        "native_prefix_bytes": 75634150,
+        "native_prefix_sha256": "cb90942502ef798c8d1cbadca52b822f839c20dcd4a151a5f3aee99d951d54c2",
+        "native_counts": {
+          "[Error]": 24,
+          "[Warning]": 43884,
+          "Illegal cycle connection": 20,
+          "getSimulationTimeMonotonicAtTime": 43648,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "console": {
+          "window_id": 41943053,
+          "pid": 2618738,
+          "width": 1440,
+          "height": 900,
+          "warning_samples": [
+            31808,
+            35606
+          ],
+          "errors": 63,
+          "observed": "Error search displays expected missing/corrupt robot and invalid quaternion error tests, malformedSdf negative warning and closed-client BrokenPipe/EBADF warnings. These are cumulative UI rows, distinct from native count markers. Search cleared and Content visibly restored in screen042.",
+          "input_caveats": "First click request lacked required expected dimensions and was refused. Subsequent first tab click did not visibly activateConsole; a Content search was cleared, second tab click visibly activatedConsole. No UI success inferred from click result alone."
+        },
+        "images_reviewed": {
+          ".work/compat-followup/current6001w_c2ceb-fullsurface/review-frame-10.png": "e5dcc19daf99df3a43f25235e0e727327110ae7bfb0ebbaec10849cfe2b1b45b",
+          ".work/compat-followup/current6001w_c2ceb-fullsurface/review-frame-100.png": "22325c8b86ba179f754adeb15a5b476ef0cfc6945c45125bbfda7bff33d7ca7a",
+          ".work/compat-followup/current6001w_c2ceb-fullsurface/window-140.png": "d0b0af50355ee4cc8e77b87518fe6ddd12cc146263c8fff14fef856778c21e02",
+          ".work/runs/current6001w_c2ceb/saved/save-review-camera.png": "ac700ae9bcec11e3f165f3bb96de500446f1258ca800335d452d7cdc4fffd9f2"
+        },
+        "video": {
+          "path": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/output/videos/current6001w_c2ceb-motion.mp4",
+          "sha256": "a636bbf02952295e850e40c7555a71ede5f41bbcdb6b7d74289097831c659571",
+          "probe": {
+            "width": 1280,
+            "height": 720,
+            "nb_read_frames": 186,
+            "fps": 10.0,
+            "duration": 18.6,
+            "decoder": "imageio-ffmpeg 7.0.2-static"
+          },
+          "selected_frames": [
+            "<worktree>/.work/compat-followup/current6001w_c2ceb-fullsurface/review-frame-10.png",
+            "<worktree>/.work/compat-followup/current6001w_c2ceb-fullsurface/review-frame-100.png"
+          ]
+        },
+        "visual_scope": "Two of186 decoded motion frames visually reviewed: upright diagnostic pose upper-arm/wrist cropped; no completeURmotion claim from these samples. Separate window140 shows full bentUR/RG2;320x240save capture partly framed.",
+        "save": {
+          "checks": 21,
+          "layers": 2,
+          "sources": 18,
+          "unchanged": true
+        },
+        "scope": "Exactc2 Sim6.0.0.1 windowed PhysX14phases/fullsurface141calls54assertions andregression/effects24/12/URDF25/7/save21 passed. Before independentuse. Nativewarnings retained; no original20fstall resolution.",
+        "images_pending_review": [
+          "<worktree>/.work/runs/current6001w_c2ceb/saved/save-review-camera.png"
+        ]
+      },
+      "shutdown": {
+        "utc": "2026-11-02T04:32:19.974029+00:00",
+        "sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+        "session": {
+          "id": "83158cfeeae74a44a2e926fc527a642c",
+          "pid": 2618738,
+          "port": 18927,
+          "ros_domain": 176,
+          "headless": false,
+          "show_ur5e_panel_on_start": false,
+          "enable_motion_bvh": true,
+          "physics_backend": "physx",
+          "started_at": 1793592450.8700268,
+          "log": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/sim.log",
+          "output_dir": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/output",
+          "user_config": "<worktree>/.work/sessions/83158cfeeae74a44a2e926fc527a642c/user.config.json",
+          "initial_resources": {
+            "gpu_total_mib": 16303,
+            "gpu_free_mib": 15194,
+            "ram_available_mib": 52056
+          },
+          "state": "starting",
+          "note": "Use sim__status to confirm bridge readiness."
+        },
+        "pid_exists": false,
+        "native_log": {
+          "file": ".work/runs/current6001w_c2ceb/kit-native.log",
+          "bytes": 172885761,
+          "sha256": "8d8f8e0a1c6de9e934dc40a6c5cc4a395c9b9d737a05826b13733ed4f6a68d66"
+        },
+        "counts": {
+          "Error": 24,
+          "Warning": 43891,
+          "illegal_cycle": 20,
+          "time_warning": 43648,
+          "nested_task": 0,
+          "get_camera": 0,
+          "force": 0,
+          "edit_target": 0
+        },
+        "stop": {
+          "tool": "sim__stop",
+          "arguments": {
+            "session_id": "83158cfeeae74a44a2e926fc527a642c",
+            "expected_pid": 2618738,
+            "confirm_discard": true,
+            "force": false
+          },
+          "response": {
+            "meta": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "{\n  \"id\": \"83158cfeeae74a44a2e926fc527a642c\",\n  \"pid\": 2618738,\n  \"state\": \"stop_requested\",\n  \"signal\": \"SIGINT\",\n  \"scope\": \"process_group\"\n}",
+                "annotations": null,
+                "meta": null
+              }
+            ],
+            "structuredContent": null,
+            "isError": false
+          }
+        },
+        "note": "Final post-shutdown full native counts; independent child interval and parent-prefix/UI Console counters remain separately scoped."
+      },
+      "scope": "All 39 generic, 23 UR5e and seven bridge built-ins across the broad phases. Host/desktop and Lab qualifications are separate; not all 99 tools per mode."
+    }
+  },
+  "independent": {
+    "summary": {
+      "scope": "Independent real MCP-client workcell task on installed Isaac Sim 6.0.0.1, PhysX, frozen c2ceb product snapshot. This agent made no product, vendor, environment or tracked-file edits.",
+      "result": "All 27 predeclared measured effect checks passed. Composed USD save succeeded and was hashed; fresh-process reopen is outside this run. Two desktop input tools retain partial outcomes.",
+      "code_commit": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "kit": "110.1.1+production.305458.6312fa25.gl",
+        "physics": "physx",
+        "pid": 2618738,
+        "port": 18927,
+        "managed_session_id": "83158cfeeae74a44a2e926fc527a642c",
+        "ros_domain": 176,
+        "window_id": 41943053,
+        "window_size": [
+          1440,
+          900
+        ],
+        "session_id": "7db357335fc346eb92063f45e0ae745e",
+        "stage_id": "934bc187495c4510a3434e67f7967729",
+        "stage_source": "anon:0x8053e1c0:World18.usd",
+        "stage_prim_count": 2088
+      },
+      "ownership": {
+        "accepted_before_first_call": true,
+        "release_reference": "Explicit parent handoff immediately after the native interval closed at 2026-11-02T04:28:28.983288Z. Parent acknowledged ownership before CPU curation.",
+        "client_exited_cleanly": true,
+        "recorders_stopped": true,
+        "recorder_stop_call": 61,
+        "last_named_timeline_state": "paused",
+        "pause_call": 63,
+        "last_stage_info_call": 65,
+        "last_window_capture_call": 88,
+        "no_gpu_desktop_native_calls_after_release": true
+      },
+      "task": "Find and import approved real Agilebot and original multifile fixture beside UR5e workstation; color sample, drop onto support; command modest targets and return with actual joint/body observations and measured exact steps; capture fresh sensor images and actual window video; save separately without modifying approved sources.",
+      "assets": {
+        "agilebot": {
+          "root_id": "agilebot",
+          "relative_path": "gbt-c5a.usd",
+          "wrapper": "/World/Agilebot",
+          "asset_path": "/World/Agilebot/Asset",
+          "position": [
+            0.55,
+            0.2,
+            0
+          ],
+          "dependency_layers": 5,
+          "dependency_assets": 4,
+          "approval": "Existing audited BSD-3-Clause asset approval; no new download or trust grant."
+        },
+        "original_fixture": {
+          "root_id": "fixture",
+          "relative_path": "robot.usda",
+          "wrapper": "/World/OriginalFixture",
+          "position": [
+            0.55,
+            -0.35,
+            0
+          ],
+          "session_wrapper_scale": [
+            0.2,
+            0.2,
+            0.2
+          ],
+          "dependency_layers": 2,
+          "dependency_assets": 1,
+          "approval": "Existing original CC0 multifile fixture."
+        },
+        "workstation": {
+          "prim": "/World/Vention",
+          "path": "<worktree>/.work/final-caches/current6001w_c2ceb/workstation/vention.usd",
+          "observed_native_load_utc": "2026-11-02T04:20:29Z",
+          "sha256": "48433e1bc00caffc88ef8d6ac83dc8549bfec578a802f7ea037a496002242a49"
+        },
+        "new_downloads_or_approvals": false
+      },
+      "measurement_summary": {
+        "checks_passed": 27,
+        "checks_total": 27,
+        "explicit_steps": 180,
+        "step_groups": [
+          8,
+          82,
+          90
+        ],
+        "measured_deltas_s": [
+          0.13333333333333336,
+          1.3666666666666667,
+          1.5000000000000002
+        ],
+        "measured_total_s": 3.0000000000000004,
+        "dt_s": 0.016666666666666666,
+        "timeline_clock_s": 0.03333333333333333,
+        "timeline_not_step_proof": true,
+        "initialization": "Separate Play/pause initialized physics; before exact-step groups the measured physics time was 0.06666666666666667 s.",
+        "sample_z_before_midfall_settled_m": [
+          0.6227496862411499,
+          0.43745172023773193,
+          0.14000000059604645
+        ],
+        "sample_drop_m": 0.48274968564510345,
+        "sample_settled_linear_velocity": [
+          0,
+          0,
+          0
+        ],
+        "sample_settled_angular_velocity": [
+          0,
+          0,
+          0
+        ],
+        "sample_return_position_drift_m": 0.0,
+        "support_top_m": 0.1,
+        "sample_edge_m": 0.08,
+        "robot_targets": {
+          "ur_path": "/World/UR5e/root_joint",
+          "ur_target": [
+            0.2,
+            -0.15,
+            0.15,
+            0.1,
+            0,
+            0
+          ],
+          "agile_path": "/World/Agilebot/Asset/root_joint",
+          "agile_target": [
+            0.2,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "return_targets": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "declared_utc": "2026-11-02T04:21:26.863026+00:00"
+        },
+        "joint_tolerance_rad": 0.03,
+        "max_joint_errors_rad": {
+          "target_ur_max_joint_error_rad": 1.0967254638616364e-06,
+          "target_agile_max_joint_error_rad": 0.0002538367407396436,
+          "return_ur_max_joint_error_rad": 4.835272449099648e-08,
+          "return_agile_max_joint_error_rad": 7.180327520472929e-05
+        },
+        "wrist_displacement_m": 0.1843444809710363,
+        "gripper_base_displacement_m": 0.1854231836293421,
+        "attachment_distance_range_m": 2.9540916411770896e-05,
+        "gripper_fingers_commanded": false,
+        "gains_changed": false
+      },
+      "sensor_images": {
+        "fresh_cpu_transfer_calls": [
+          36,
+          49,
+          52,
+          59
+        ],
+        "all_reported_new_cpu_transfer": true,
+        "cache_call": 58,
+        "cache_equals_target_png_bytes": true,
+        "cache_age_s": 14.596165768976789,
+        "cache_requested_after_return_motion": true,
+        "cache_not_current_state_proof": true,
+        "fresh_visible_pixel_changes": {
+          "before_to_falling": {
+            "mean_absolute_channel_delta": 1.5697430555555556,
+            "changed_pixels_fraction": 0.16494375,
+            "changed_pixels_gt10_fraction": 0.028504166666666667,
+            "byte_equal": false
+          },
+          "before_to_target": {
+            "mean_absolute_channel_delta": 1.8263868055555557,
+            "changed_pixels_fraction": 0.1707875,
+            "changed_pixels_gt10_fraction": 0.03524375,
+            "byte_equal": false
+          },
+          "target_to_return": {
+            "mean_absolute_channel_delta": 1.5864472222222221,
+            "changed_pixels_fraction": 0.16731041666666666,
+            "changed_pixels_gt10_fraction": 0.03154166666666667,
+            "byte_equal": false
+          },
+          "target_to_cache": {
+            "mean_absolute_channel_delta": 0.0,
+            "changed_pixels_fraction": 0.0,
+            "changed_pixels_gt10_fraction": 0.0,
+            "byte_equal": true
+          }
+        },
+        "visual_review": "Fresh falling, target and return images show full UR5e/RG2 and Agilebot from a second viewpoint. Lower workstation legs are partly cropped in 800x600 sensors; the actual-window view includes the full bench."
+      },
+      "coverage": {
+        "catalog_count": 99,
+        "requests": 88,
+        "tool_calls": 87,
+        "catalog_list_requests": 1,
+        "unique_tool_names_called": 40,
+        "outcomes": {
+          "uncalled": 59,
+          "scoped_pass": 37,
+          "partial": 3
+        },
+        "mcp_error_call_ids": [],
+        "why_more_than75_requests": "88 requests included catalog discovery, full two-articulation and wrist/gripper effect checks, midfall/final captures, real-window recording, and additional Console input-effect verification/recovery. This was a bounded natural task, not all99 invocation."
+      },
+      "native_interval": {
+        "utc": "2026-11-02T04:28:28.983288+00:00",
+        "start_offset": 97659224,
+        "end_offset": 149290107,
+        "interval_bytes": 51630883,
+        "interval_sha256": "ed3f24ee6011ecb0e6cb0f16f27b4dc3a972802b38d95594b8c048fedb9818e6",
+        "prefix_sha256": "610a0f11178049db9b3f53722ef481a286d34cee8b7c9e21f3650184883bd558",
+        "counts": {
+          "[Error]": 0,
+          "[Warning]": 7,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "interval_closed_before_parent_shutdown": true
+      },
+      "native_prefix": {
+        "utc": "2026-11-02T04:20:06.756577+00:00",
+        "log": "<worktree>/.work/runs/current6001w_c2ceb/kit-native.log",
+        "bytes": 97659224,
+        "sha256": "610a0f11178049db9b3f53722ef481a286d34cee8b7c9e21f3650184883bd558",
+        "counts": {
+          "[Error]": 24,
+          "[Warning]": 43884,
+          "Illegal cycle connection": 20,
+          "getSimulationTimeMonotonicAtTime": 43648,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        }
+      },
+      "warning_review": {
+        "triangle_mesh_size": 4,
+        "already_released_hydratexture_interface": 2,
+        "disjoint_robot_gripper_joint_transforms": 1,
+        "all_retained": true,
+        "not_classified_harmless": true,
+        "interpretation": "Measured effects passed in this bounded new-stage run despite these warnings. Earlier cumulative warnings and separate version/stage failures remain recorded; this does not establish general simulator stability."
+      },
+      "console_review": {
+        "end_counts": {
+          "warnings": 43896,
+          "errors": 63
+        },
+        "inspected_console_calls": [
+          68,
+          72,
+          75,
+          83,
+          85
+        ],
+        "warning_history_visible": true,
+        "error_only_filter_verified": false,
+        "text_entry": "Call71 acknowledged Error; screenshot72 showed only E. Ctrl+A/BackSpace was followed by visually empty search at75.",
+        "tab_filter_attempts": "Single tab click79 did not activate Console; screenshot81 showed Content. Click82 followed by a delay produced Console83. Warning counter click84 did not visibly remove warning rows in85. Further speculative clicking stopped.",
+        "final_console_search_empty_verified": 83,
+        "final_content_restored_verified": 88,
+        "history_not_cleared": true,
+        "partial_tools": [
+          "window_type",
+          "window_click"
+        ],
+        "warning_and_error_counts_are_console_cumulative_not_native_interval": true
+      },
+      "source_integrity": {
+        "checked_utc": "2026-11-02T04:30:08.637915+00:00",
+        "groups": {
+          "fixture": {
+            "before_count": 6,
+            "after_count": 6,
+            "changed": [],
+            "added": []
+          },
+          "agilebot": {
+            "before_count": 8,
+            "after_count": 8,
+            "changed": [],
+            "added": []
+          },
+          "package": {
+            "before_count": 4,
+            "after_count": 4,
+            "changed": [],
+            "added": []
+          },
+          "workstation": {
+            "before_count": 5,
+            "after_count": 5,
+            "changed": [],
+            "added": []
+          },
+          "staging": {
+            "before_count": 81,
+            "after_count": 81,
+            "changed": [],
+            "added": []
+          },
+          "product": {
+            "before_count": 112,
+            "after_count": 112,
+            "changed": [],
+            "added": []
+          },
+          "UR5E_DT_ASSET_CACHE": {
+            "before_count": 21,
+            "after_count": 21,
+            "changed": [],
+            "added": []
+          }
+        },
+        "all_preexisting_unchanged": true,
+        "total_preexisting_files": 237,
+        "frozen_manifest_checked": 91,
+        "frozen_manifest_mismatches": [],
+        "frozen_manifest_all_match": true,
+        "commit_comparison": {
+          "commit": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+          "files_checked": 112,
+          "exact_matches": 111,
+          "differences": [
+            "scripts/run_ur5e_dt.py"
+          ],
+          "absent_in_commit": [],
+          "all_nonlauncher_files_match": true
+        },
+        "save": {
+          "path": ".work/runs/current6001w_c2ceb/saved/agent6001-composed-workcell.usda",
+          "bytes": 370425594,
+          "sha256": "a13348a6dde78862faf9b4e5e66eef4f9766210d447f49a45a0c47414276f98a",
+          "checkpoint": false,
+          "hash_verified_after_release": true
+        }
+      },
+      "launcher_exception": "Only scripts/run_ur5e_dt.py differs from c2 commit bytes; preexisting faulthandler SIGUSR2/native log diagnostics/boot-open instrumentation was unchanged throughout. Full diff retained separately.",
+      "save": {
+        "path": ".work/runs/current6001w_c2ceb/saved/agent6001-composed-workcell.usda",
+        "bytes": 370425594,
+        "sha256": "a13348a6dde78862faf9b4e5e66eef4f9766210d447f49a45a0c47414276f98a",
+        "checkpoint": false,
+        "hash_verified_after_release": true
+      },
+      "recording": {
+        "original_path": "<home>/Videos/screen-mcp/screen-20261101-212212-303.mp4",
+        "sha256": "fbd9501c3bac6bb9cdee434d40241b0e6cd348634aa1eca07d2ec1c53bbae1a8",
+        "bytes": 184152,
+        "width": 1440,
+        "height": 900,
+        "decoded_frames": 296,
+        "fps": 12,
+        "duration_s": 24.666666666666668,
+        "unique_pixel_frames": 289,
+        "all_frames_decoded_cpu": true,
+        "decoder": "ffmpeg 7.0.2-static; hwaccel none; single decode thread",
+        "bottom_content_region_unique_hashes": 22,
+        "visual_samples": [
+          {
+            "index": 0,
+            "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb/video-review/frame-0000.png",
+            "sha256": "3bf1a03050f40f9d21fb7276de72e3655b616f3a4574e0a249a9cf5586465cbe"
+          },
+          {
+            "index": 60,
+            "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb/video-review/frame-0060.png",
+            "sha256": "3f1568d1aa2296e2f003e1aec5528b29b54630b1ef6df5e463babb7a9c2bbfd0"
+          },
+          {
+            "index": 150,
+            "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb/video-review/frame-0150.png",
+            "sha256": "e85bed75a0e4198c1debc38f7147cc954fe1c2debc2469e80eacf23e71c82f53"
+          },
+          {
+            "index": 295,
+            "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb/video-review/frame-0295.png",
+            "sha256": "c585fcef00e3d539ead378bed3e2bebaa229f0ad3db99c1eaed05e9536658bff"
+          }
+        ],
+        "publish_raw": true,
+        "visually_reviewed_frames": 4,
+        "visual_review_indices": [
+          0,
+          60,
+          150,
+          295
+        ],
+        "visual_review": "All four sampled full-window frames show Content active with no private path text; full UR5e/RG2 and Agilebot visible. Frame 0 shows sample suspended; 60 midfall and partial joint movement; 150 settled and target pose; 295 settled and returned robot poses. No audio. Decode all296 is not a claim of manual review of all frames.",
+        "recording_scope": "Exact-step calls report rendered=false. Video shows actual screen-state changes; it does not render every one of the 180 physics steps.",
+        "pixel_edits": false
+      },
+      "recording_privacy_check": {
+        "scope": "Offline full-video check of Content/Console region against visually reviewed frame0; not manual review of every frame.",
+        "region_xywh": [
+          0,
+          615,
+          1004,
+          250
+        ],
+        "frames_checked": 296,
+        "max_mean_absolute_channel_delta": 0.37943691899070386,
+        "max_pixel_fraction_gt10": 0.001904382470119522,
+        "max_pixel_fraction_gt32": 1.593625498007968e-05,
+        "max_channel_delta": 34
+      },
+      "publishable_original_pngs": [
+        {
+          "file": "workcell-final-original.png",
+          "bytes": 239341,
+          "sha256": "7c10d2ca6fb39a3a09d900003c8404ce6c556352a58a0edc0737c2ab6b7b7494",
+          "visually_reviewed": true,
+          "pixel_edits_or_resampling": false
+        },
+        {
+          "file": "sensor-falling-original.png",
+          "bytes": 182945,
+          "sha256": "68d2edd15591694cc6ce317032af9623f446f58778426d92caea4b910fb26490",
+          "visually_reviewed": true,
+          "pixel_edits_or_resampling": false
+        },
+        {
+          "file": "sensor-target-original.png",
+          "bytes": 183856,
+          "sha256": "e8ce5e86535c851cacda2cc2a39ed27edf71bb388add52435eef302e2acc647b",
+          "visually_reviewed": true,
+          "pixel_edits_or_resampling": false
+        }
+      ],
+      "limitations": [
+        "Only installed Isaac Sim 6.0.0.1 PhysX is covered, not clean-install, other versions, Newton or all backends.",
+        "The separately observed original 6.0.1 native 108-step stall remains unresolved elsewhere; the current version is 6.0.0.1.",
+        "59 catalog tools are uncalled. Scoped pass applies only to observed parameters/effects; desktop click/type outcomes are partial.",
+        "The save is composed USD with checkpoint=false and runtime_pose_count=0, without an independent fresh-process reopen in this run.",
+        "Native tail log tool returned no warnings in its bounded tail even though the complete recorded interval has seven; the whole byte interval controls this report.",
+        "Exact-step calls used rendered=false; video shows actual screen-state transitions, not one frame per physics step.",
+        "Console warning history/counters were inspected; an Error-only filtered display was not achieved."
+      ]
+    },
+    "measurements": {
+      "declared_criteria": "criteria.json and motion-targets.json, written before effects",
+      "checks": [
+        {
+          "name": "falling_step_timing_error_s",
+          "actual": 2.7755575615628914e-17,
+          "comparison": "<=",
+          "limit": 1e-05,
+          "passed": true
+        },
+        {
+          "name": "target_step_timing_error_s",
+          "actual": 0.0,
+          "comparison": "<=",
+          "limit": 1e-05,
+          "passed": true
+        },
+        {
+          "name": "return_step_timing_error_s",
+          "actual": 2.220446049250313e-16,
+          "comparison": "<=",
+          "limit": 1e-05,
+          "passed": true
+        },
+        {
+          "name": "target_ur_max_joint_error_rad",
+          "actual": 1.0967254638616364e-06,
+          "comparison": "<=",
+          "limit": 0.03,
+          "passed": true
+        },
+        {
+          "name": "target_agile_max_joint_error_rad",
+          "actual": 0.0002538367407396436,
+          "comparison": "<=",
+          "limit": 0.03,
+          "passed": true
+        },
+        {
+          "name": "return_ur_max_joint_error_rad",
+          "actual": 4.835272449099648e-08,
+          "comparison": "<=",
+          "limit": 0.03,
+          "passed": true
+        },
+        {
+          "name": "return_agile_max_joint_error_rad",
+          "actual": 7.180327520472929e-05,
+          "comparison": "<=",
+          "limit": 0.03,
+          "passed": true
+        },
+        {
+          "name": "ur_max_command_delta_rad",
+          "actual": 0.1999999993217345,
+          "comparison": "<=",
+          "limit": 0.35,
+          "passed": true
+        },
+        {
+          "name": "agile_max_command_delta_rad",
+          "actual": 0.20000000001704557,
+          "comparison": "<=",
+          "limit": 0.35,
+          "passed": true
+        },
+        {
+          "name": "measured_fall_m",
+          "actual": 0.48274968564510345,
+          "comparison": ">=",
+          "limit": 0.2,
+          "passed": true
+        },
+        {
+          "name": "sample_support_vertical_gap_abs_m",
+          "actual": 5.9604643443123e-10,
+          "comparison": "<=",
+          "limit": 0.015,
+          "passed": true
+        },
+        {
+          "name": "settled_linear_speed_m_s",
+          "actual": 0.0,
+          "comparison": "<=",
+          "limit": 0.03,
+          "passed": true
+        },
+        {
+          "name": "settled_angular_speed_rad_s",
+          "actual": 0.0,
+          "comparison": "<=",
+          "limit": 0.03,
+          "passed": true
+        },
+        {
+          "name": "post_return_sample_position_drift_m",
+          "actual": 0.0,
+          "comparison": "<=",
+          "limit": 0.001,
+          "passed": true
+        },
+        {
+          "name": "wrist_target_displacement_m",
+          "actual": 0.1843444809710363,
+          "comparison": ">=",
+          "limit": 0.02,
+          "passed": true
+        },
+        {
+          "name": "wrist_return_error_m",
+          "actual": 1.2644054553268208e-07,
+          "comparison": "<=",
+          "limit": 0.015,
+          "passed": true
+        },
+        {
+          "name": "gripper_base_target_displacement_m",
+          "actual": 0.1854231836293421,
+          "comparison": ">=",
+          "limit": 0.02,
+          "passed": true
+        },
+        {
+          "name": "gripper_base_return_error_m",
+          "actual": 1.2377834115800373e-07,
+          "comparison": "<=",
+          "limit": 0.015,
+          "passed": true
+        },
+        {
+          "name": "attachment_distance_range_m",
+          "actual": 2.9540916411770896e-05,
+          "comparison": "<=",
+          "limit": 0.001,
+          "passed": true
+        },
+        {
+          "name": "before_to_falling_visible_pixel_delta",
+          "actual": 0.16494375,
+          "comparison": ">=",
+          "limit": 0.001,
+          "passed": true
+        },
+        {
+          "name": "before_to_target_visible_pixel_delta",
+          "actual": 0.1707875,
+          "comparison": ">=",
+          "limit": 0.001,
+          "passed": true
+        },
+        {
+          "name": "target_to_return_visible_pixel_delta",
+          "actual": 0.16731041666666666,
+          "comparison": ">=",
+          "limit": 0.001,
+          "passed": true
+        },
+        {
+          "name": "cache_exact_target_image_reuse",
+          "actual": true,
+          "comparison": "==",
+          "limit": true,
+          "passed": true
+        },
+        {
+          "name": "before_new_cpu_transfer",
+          "actual": true,
+          "comparison": "==",
+          "limit": true,
+          "passed": true
+        },
+        {
+          "name": "falling_new_cpu_transfer",
+          "actual": true,
+          "comparison": "==",
+          "limit": true,
+          "passed": true
+        },
+        {
+          "name": "target_new_cpu_transfer",
+          "actual": true,
+          "comparison": "==",
+          "limit": true,
+          "passed": true
+        },
+        {
+          "name": "return_new_cpu_transfer",
+          "actual": true,
+          "comparison": "==",
+          "limit": true,
+          "passed": true
+        }
+      ],
+      "all_pass": true,
+      "pass_count": 27,
+      "explicit_steps": 180,
+      "step_groups": [
+        8,
+        82,
+        90
+      ],
+      "measured_deltas_s": [
+        0.13333333333333336,
+        1.3666666666666667,
+        1.5000000000000002
+      ],
+      "physics_elapsed_s": 3.0000000000000004,
+      "paused_timeline_time_s": 0.03333333333333333,
+      "before_runtime_sample": {
+        "status": "ok",
+        "path": "/World/OrangeSample",
+        "world_position": [
+          -0.3499999940395355,
+          -0.44999998807907104,
+          0.6227496862411499
+        ],
+        "orientation_wxyz": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "units": "stage units",
+        "source": "PhysX get_rigidbody_transformation",
+        "backend": "physx",
+        "time_s": 0.03333333333333333,
+        "physics_time_s": 0.06666666666666667,
+        "dynamics": {
+          "linear_velocity": [
+            0.0,
+            0.0,
+            -0.6540000438690186
+          ],
+          "angular_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linear_units": "stage units/second, world frame at center of mass",
+          "angular_units": "radians/second, world frame",
+          "mass": 0.5120000243186951,
+          "mass_kg": 0.5120000243186951,
+          "source": "physx rigid-body tensor view"
+        }
+      },
+      "midfall_observation": {
+        "status": "ok",
+        "steps": 8,
+        "physics_dt": 0.016666666666666666,
+        "physics_time_before": 0.06666666666666667,
+        "physics_time_after": 0.2,
+        "measured_delta": 0.13333333333333336,
+        "expected_delta": 0.13333333333333333,
+        "timeline_time": 0.03333333333333333,
+        "bodies": [
+          {
+            "path": "/World/OrangeSample",
+            "world_position": [
+              -0.3499999940395355,
+              -0.44999998807907104,
+              0.43745172023773193
+            ],
+            "orientation_wxyz": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 0.2
+          },
+          {
+            "path": "/World/UR5e/wrist_3_link",
+            "world_position": [
+              -0.7669601440429688,
+              -0.343496173620224,
+              0.11127366870641708
+            ],
+            "orientation_wxyz": [
+              -0.7031567692756653,
+              -0.7066872715950012,
+              -0.02438271977007389,
+              -0.07462777942419052
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 0.2
+          },
+          {
+            "path": "/World/RG2_Gripper/rg2_base_link",
+            "world_position": [
+              -0.7649136781692505,
+              -0.35925227403640747,
+              0.11101899296045303
+            ],
+            "orientation_wxyz": [
+              -0.7524539828300476,
+              -0.03206974267959595,
+              0.0183895081281662,
+              0.6576066017150879
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 0.2
+          }
+        ],
+        "articulations": [
+          {
+            "path": "/World/UR5e/root_joint",
+            "positions": [
+              0.14026163518428802,
+              -0.11185147613286972,
+              0.10985445231199265,
+              0.07324502617120743,
+              3.5867051337845623e-05,
+              -4.652017651096685e-07
+            ],
+            "velocities": [
+              0.6665626764297485,
+              -0.40286335349082947,
+              0.39565619826316833,
+              0.2442806214094162,
+              0.011123097501695156,
+              -0.04642104730010033
+            ],
+            "names": [
+              "shoulder_pan_joint",
+              "shoulder_lift_joint",
+              "elbow_joint",
+              "wrist_1_joint",
+              "wrist_2_joint",
+              "wrist_3_joint"
+            ],
+            "source": "physx tensor view",
+            "backend": "physx",
+            "units": "angular radians, prismatic stage units"
+          },
+          {
+            "path": "/World/Agilebot/Asset/root_joint",
+            "positions": [
+              0.11301444470882416,
+              -0.00046103523345664144,
+              -4.030176636860006e-09,
+              -3.0389767147198654e-08,
+              4.438378908844243e-08,
+              0.00028922560159116983
+            ],
+            "velocities": [
+              0.9998401999473572,
+              0.008636415004730225,
+              1.6170492926903535e-06,
+              1.3484132068697363e-05,
+              -1.6966943803709e-05,
+              -0.12233403325080872
+            ],
+            "names": [
+              "joint1",
+              "joint2",
+              "joint3",
+              "joint4",
+              "joint5",
+              "joint6"
+            ],
+            "source": "physx tensor view",
+            "backend": "physx",
+            "units": "angular radians, prismatic stage units"
+          }
+        ],
+        "backend": "physx",
+        "fabric_updated": false,
+        "rendered": false
+      },
+      "settled_runtime_sample": {
+        "status": "ok",
+        "path": "/World/OrangeSample",
+        "world_position": [
+          -0.3500001132488251,
+          -0.4500001072883606,
+          0.14000000059604645
+        ],
+        "orientation_wxyz": [
+          1.0,
+          6.273625672292837e-07,
+          -6.173374913487351e-07,
+          -5.463493657487106e-09
+        ],
+        "units": "stage units",
+        "source": "PhysX get_rigidbody_transformation",
+        "backend": "physx",
+        "time_s": 0.03333333333333333,
+        "physics_time_s": 1.5666666666666667,
+        "dynamics": {
+          "linear_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "angular_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linear_units": "stage units/second, world frame at center of mass",
+          "angular_units": "radians/second, world frame",
+          "mass": 0.5120000243186951,
+          "mass_kg": 0.5120000243186951,
+          "source": "physx rigid-body tensor view"
+        }
+      },
+      "return_runtime_sample": {
+        "status": "ok",
+        "path": "/World/OrangeSample",
+        "world_position": [
+          -0.3500001132488251,
+          -0.4500001072883606,
+          0.14000000059604645
+        ],
+        "orientation_wxyz": [
+          1.0,
+          6.273625672292837e-07,
+          -6.173374913487351e-07,
+          -5.463493657487106e-09
+        ],
+        "units": "stage units",
+        "source": "PhysX get_rigidbody_transformation",
+        "backend": "physx",
+        "time_s": 0.03333333333333333,
+        "physics_time_s": 3.066666666666667,
+        "dynamics": {
+          "linear_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "angular_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linear_units": "stage units/second, world frame at center of mass",
+          "angular_units": "radians/second, world frame",
+          "mass": 0.5120000243186951,
+          "mass_kg": 0.5120000243186951,
+          "source": "physx rigid-body tensor view"
+        }
+      },
+      "target_observation": {
+        "status": "ok",
+        "steps": 82,
+        "physics_dt": 0.016666666666666666,
+        "physics_time_before": 0.2,
+        "physics_time_after": 1.5666666666666667,
+        "measured_delta": 1.3666666666666667,
+        "expected_delta": 1.3666666666666667,
+        "timeline_time": 0.03333333333333333,
+        "bodies": [
+          {
+            "path": "/World/OrangeSample",
+            "world_position": [
+              -0.3500001132488251,
+              -0.4500001072883606,
+              0.14000000059604645
+            ],
+            "orientation_wxyz": [
+              1.0,
+              6.273625672292837e-07,
+              -6.173374913487351e-07,
+              -5.463493657487106e-09
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 1.5666666666666667
+          },
+          {
+            "path": "/World/UR5e/wrist_3_link",
+            "world_position": [
+              -0.7402088046073914,
+              -0.3876841366291046,
+              0.12680907547473907
+            ],
+            "orientation_wxyz": [
+              -0.6991667747497559,
+              -0.7062231302261353,
+              -0.03534044697880745,
+              -0.10566829144954681
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 1.5666666666666667
+          },
+          {
+            "path": "/World/RG2_Gripper/rg2_base_link",
+            "world_position": [
+              -0.73704594373703,
+              -0.40328678488731384,
+              0.12680907547473907
+            ],
+            "orientation_wxyz": [
+              -0.773199200630188,
+              -0.038692276924848557,
+              0.03163566812872887,
+              0.6321908235549927
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 1.5666666666666667
+          }
+        ],
+        "articulations": [
+          {
+            "path": "/World/UR5e/root_joint",
+            "positions": [
+              0.19999918341636658,
+              -0.14999906718730927,
+              0.14999890327453613,
+              0.09999995678663254,
+              -9.125996069947462e-10,
+              -2.7767817559198882e-11
+            ],
+            "velocities": [
+              4.5795268306392245e-06,
+              -7.371937499556225e-06,
+              1.0295021638739854e-05,
+              2.031049461947987e-08,
+              1.4637975027653738e-06,
+              1.0366310561948922e-05
+            ],
+            "names": [
+              "shoulder_pan_joint",
+              "shoulder_lift_joint",
+              "elbow_joint",
+              "wrist_1_joint",
+              "wrist_2_joint",
+              "wrist_3_joint"
+            ],
+            "source": "physx tensor view",
+            "backend": "physx",
+            "units": "angular radians, prismatic stage units"
+          },
+          {
+            "path": "/World/Agilebot/Asset/root_joint",
+            "positions": [
+              0.20000001788139343,
+              -1.95802185771754e-05,
+              -2.025918490744516e-07,
+              -3.4294663464606856e-07,
+              -4.843062697545975e-07,
+              -0.0002538367407396436
+            ],
+            "velocities": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "names": [
+              "joint1",
+              "joint2",
+              "joint3",
+              "joint4",
+              "joint5",
+              "joint6"
+            ],
+            "source": "physx tensor view",
+            "backend": "physx",
+            "units": "angular radians, prismatic stage units"
+          }
+        ],
+        "backend": "physx",
+        "fabric_updated": false,
+        "rendered": false
+      },
+      "return_observation": {
+        "status": "ok",
+        "steps": 90,
+        "physics_dt": 0.016666666666666666,
+        "physics_time_before": 1.5666666666666667,
+        "physics_time_after": 3.066666666666667,
+        "measured_delta": 1.5000000000000002,
+        "expected_delta": 1.5,
+        "timeline_time": 0.03333333333333333,
+        "bodies": [
+          {
+            "path": "/World/OrangeSample",
+            "world_position": [
+              -0.3500001132488251,
+              -0.4500001072883606,
+              0.14000000059604645
+            ],
+            "orientation_wxyz": [
+              1.0,
+              6.273625672292837e-07,
+              -6.173374913487351e-07,
+              -5.463493657487106e-09
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 3.066666666666667
+          },
+          {
+            "path": "/World/UR5e/wrist_3_link",
+            "world_position": [
+              -0.8172000646591187,
+              -0.23290018737316132,
+              0.0628000944852829
+            ],
+            "orientation_wxyz": [
+              -0.7071068286895752,
+              -0.7071068286895752,
+              -3.2775727021316925e-08,
+              3.5343667548204394e-08
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 3.066666666666667
+          },
+          {
+            "path": "/World/RG2_Gripper/rg2_base_link",
+            "world_position": [
+              -0.8172000050544739,
+              -0.2488202154636383,
+              0.0628000870347023
+            ],
+            "orientation_wxyz": [
+              -0.7071065902709961,
+              -1.9037628362639225e-07,
+              -2.9333622819649463e-07,
+              0.7071070671081543
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 3.066666666666667
+          }
+        ],
+        "articulations": [
+          {
+            "path": "/World/UR5e/root_joint",
+            "positions": [
+              -7.886316488736611e-09,
+              -1.4034507778148964e-08,
+              4.835272449099648e-08,
+              -1.6230250921012157e-08,
+              7.689187064841008e-09,
+              1.3099912821168402e-10
+            ],
+            "velocities": [
+              1.7279553503612988e-06,
+              -2.990323366702796e-07,
+              -4.4904638230036653e-07,
+              -3.689568302434054e-06,
+              5.308792424330022e-06,
+              -1.9008548406418413e-05
+            ],
+            "names": [
+              "shoulder_pan_joint",
+              "shoulder_lift_joint",
+              "elbow_joint",
+              "wrist_1_joint",
+              "wrist_2_joint",
+              "wrist_3_joint"
+            ],
+            "source": "physx tensor view",
+            "backend": "physx",
+            "units": "angular radians, prismatic stage units"
+          },
+          {
+            "path": "/World/Agilebot/Asset/root_joint",
+            "positions": [
+              -2.8829273190922322e-08,
+              7.180327520472929e-05,
+              7.556703849331825e-07,
+              1.3650693517774926e-06,
+              1.638155481487047e-06,
+              -5.5865228205220774e-05
+            ],
+            "velocities": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "names": [
+              "joint1",
+              "joint2",
+              "joint3",
+              "joint4",
+              "joint5",
+              "joint6"
+            ],
+            "source": "physx tensor view",
+            "backend": "physx",
+            "units": "angular radians, prismatic stage units"
+          }
+        ],
+        "backend": "physx",
+        "fabric_updated": false,
+        "rendered": false
+      },
+      "initial_joint_states": {
+        "ur": {
+          "status": "ok",
+          "path": "/World/UR5e/root_joint",
+          "positions": [
+            6.782654993209292e-10,
+            -4.677687570620037e-09,
+            -7.523694556255123e-09,
+            -3.205883913892649e-08,
+            4.030249467490421e-09,
+            -2.952309924308949e-11
+          ],
+          "velocities": [
+            -2.6011168330342116e-08,
+            -1.032689624480554e-06,
+            3.556078809197061e-08,
+            8.620494327260531e-07,
+            -1.158414306701161e-05,
+            1.4517412637360394e-05
+          ],
+          "names": [
+            "shoulder_pan_joint",
+            "shoulder_lift_joint",
+            "elbow_joint",
+            "wrist_1_joint",
+            "wrist_2_joint",
+            "wrist_3_joint"
+          ],
+          "source": "physx tensor view",
+          "backend": "physx",
+          "units": "angular radians, prismatic stage units"
+        },
+        "agile": {
+          "status": "ok",
+          "path": "/World/Agilebot/Asset/root_joint",
+          "positions": [
+            -1.7045555938954848e-11,
+            -0.0004296907573007047,
+            -3.6398453140407128e-09,
+            -2.841154156385528e-08,
+            3.7694981358527e-08,
+            0.00026527210138738155
+          ],
+          "velocities": [
+            7.474672436558194e-09,
+            0.011091426946222782,
+            2.2554413590114564e-06,
+            1.9976474504801445e-05,
+            -2.606899943202734e-05,
+            -0.18473172187805176
+          ],
+          "names": [
+            "joint1",
+            "joint2",
+            "joint3",
+            "joint4",
+            "joint5",
+            "joint6"
+          ],
+          "source": "physx tensor view",
+          "backend": "physx",
+          "units": "angular radians, prismatic stage units"
+        }
+      },
+      "attachment_distances_m": {
+        "falling": 0.01589048717417854,
+        "target": 0.01591999753626433,
+        "return": 0.015920028090590312,
+        "initial": 0.015920028090590312
+      },
+      "image_comparisons": {
+        "before_to_falling": {
+          "mean_absolute_channel_delta": 1.5697430555555556,
+          "changed_pixels_fraction": 0.16494375,
+          "changed_pixels_gt10_fraction": 0.028504166666666667,
+          "byte_equal": false
+        },
+        "before_to_target": {
+          "mean_absolute_channel_delta": 1.8263868055555557,
+          "changed_pixels_fraction": 0.1707875,
+          "changed_pixels_gt10_fraction": 0.03524375,
+          "byte_equal": false
+        },
+        "target_to_return": {
+          "mean_absolute_channel_delta": 1.5864472222222221,
+          "changed_pixels_fraction": 0.16731041666666666,
+          "changed_pixels_gt10_fraction": 0.03154166666666667,
+          "byte_equal": false
+        },
+        "target_to_cache": {
+          "mean_absolute_channel_delta": 0.0,
+          "changed_pixels_fraction": 0.0,
+          "changed_pixels_gt10_fraction": 0.0,
+          "byte_equal": true
+        }
+      },
+      "captures": {
+        "before": {
+          "status": "ok",
+          "file": "<worktree>/.work/runs/current6001w_c2ceb/saved/agent6001-overview-before.png",
+          "width": 800,
+          "height": 600,
+          "sha256": "d8ef54941b08e6b6fe467a0fb3906b72ea075a7d133de09f73c0b8d5da7e456e",
+          "source": "Hydra renderer CPU callback (owned copy)",
+          "adapter": "hydra-renderer-cpu-v1",
+          "freshness": "new render and CPU transfer completed",
+          "render_observation": {
+            "waited": true,
+            "render_product": "/Render/OmniverseKit/HydraTextures/IsaacMCP_fb530bce5b4546a3927c5293198d04a9",
+            "frame_number_before": 251088,
+            "frame_number_after": 251098,
+            "frame_baseline": "first completed render observed after this request",
+            "completed_frames_observed": 4,
+            "cpu_transfer_completed": true,
+            "wait_seconds": 0.06290050700772554,
+            "meaning": "CPU pixels transferred from this product after the requested render completions; not an atomic physics/sensor snapshot",
+            "acquisition_context_before": {
+              "timeline_time_s": 0.0,
+              "timeline_state": "stopped"
+            },
+            "acquisition_context_after": {
+              "timeline_time_s": 0.0,
+              "timeline_state": "stopped"
+            },
+            "timeline_time_before": 0.0,
+            "timeline_time_after": 0.0
+          }
+        },
+        "falling": {
+          "status": "ok",
+          "file": "<worktree>/.work/runs/current6001w_c2ceb/saved/agent6001-overview-falling.png",
+          "width": 800,
+          "height": 600,
+          "sha256": "68d2edd15591694cc6ce317032af9623f446f58778426d92caea4b910fb26490",
+          "source": "Hydra renderer CPU callback (owned copy)",
+          "adapter": "hydra-renderer-cpu-v1",
+          "freshness": "new render and CPU transfer completed",
+          "render_observation": {
+            "waited": true,
+            "render_product": "/Render/OmniverseKit/HydraTextures/IsaacMCP_fb530bce5b4546a3927c5293198d04a9",
+            "frame_number_before": 266820,
+            "frame_number_after": 266828,
+            "frame_baseline": "first completed render observed after this request",
+            "completed_frames_observed": 4,
+            "cpu_transfer_completed": true,
+            "wait_seconds": 0.08138113599852659,
+            "meaning": "CPU pixels transferred from this product after the requested render completions; not an atomic physics/sensor snapshot",
+            "acquisition_context_before": {
+              "timeline_time_s": 0.03333333333333333,
+              "timeline_state": "paused"
+            },
+            "acquisition_context_after": {
+              "timeline_time_s": 0.03333333333333333,
+              "timeline_state": "paused"
+            },
+            "timeline_time_before": 0.03333333333333333,
+            "timeline_time_after": 0.03333333333333333
+          }
+        },
+        "target": {
+          "status": "ok",
+          "file": "<worktree>/.work/runs/current6001w_c2ceb/saved/agent6001-overview-target.png",
+          "width": 800,
+          "height": 600,
+          "sha256": "e8ce5e86535c851cacda2cc2a39ed27edf71bb388add52435eef302e2acc647b",
+          "source": "Hydra renderer CPU callback (owned copy)",
+          "adapter": "hydra-renderer-cpu-v1",
+          "freshness": "new render and CPU transfer completed",
+          "render_observation": {
+            "waited": true,
+            "render_product": "/Render/OmniverseKit/HydraTextures/IsaacMCP_fb530bce5b4546a3927c5293198d04a9",
+            "frame_number_before": 269530,
+            "frame_number_after": 269538,
+            "frame_baseline": "first completed render observed after this request",
+            "completed_frames_observed": 4,
+            "cpu_transfer_completed": true,
+            "wait_seconds": 0.13977622700622305,
+            "meaning": "CPU pixels transferred from this product after the requested render completions; not an atomic physics/sensor snapshot",
+            "acquisition_context_before": {
+              "timeline_time_s": 0.03333333333333333,
+              "timeline_state": "paused"
+            },
+            "acquisition_context_after": {
+              "timeline_time_s": 0.03333333333333333,
+              "timeline_state": "paused"
+            },
+            "timeline_time_before": 0.03333333333333333,
+            "timeline_time_after": 0.03333333333333333
+          }
+        },
+        "cache": {
+          "status": "ok",
+          "file": "<worktree>/.work/runs/current6001w_c2ceb/saved/agent6001-overview-cache.png",
+          "width": 800,
+          "height": 600,
+          "sha256": "e8ce5e86535c851cacda2cc2a39ed27edf71bb388add52435eef302e2acc647b",
+          "source": "Cached owned CPU pixels from the last validated tool acquisition",
+          "adapter": "hydra-renderer-cpu-v1",
+          "freshness": "cached acquisition; may predate Stop/reset, pose edits or physics steps",
+          "render_observation": {
+            "waited": false,
+            "render_product": "/Render/OmniverseKit/HydraTextures/IsaacMCP_fb530bce5b4546a3927c5293198d04a9",
+            "cpu_transfer_completed": false,
+            "cache_age_seconds": 14.596165768976789,
+            "acquisition": {
+              "waited": true,
+              "render_product": "/Render/OmniverseKit/HydraTextures/IsaacMCP_fb530bce5b4546a3927c5293198d04a9",
+              "frame_number_before": 269530,
+              "frame_number_after": 269538,
+              "frame_baseline": "first completed render observed after this request",
+              "completed_frames_observed": 4,
+              "cpu_transfer_completed": true,
+              "wait_seconds": 0.13977622700622305,
+              "meaning": "CPU pixels transferred from this product after the requested render completions; not an atomic physics/sensor snapshot",
+              "acquisition_context_before": {
+                "timeline_time_s": 0.03333333333333333,
+                "timeline_state": "paused"
+              },
+              "acquisition_context_after": {
+                "timeline_time_s": 0.03333333333333333,
+                "timeline_state": "paused"
+              }
+            },
+            "meaning": "Last validated tool acquisition; may predate Stop/reset, pose edits or physics steps. No new render or CPU transfer requested. PNG encoding and file I/O still occur.",
+            "timeline_time_before": 0.03333333333333333,
+            "timeline_time_after": 0.03333333333333333
+          }
+        },
+        "return": {
+          "status": "ok",
+          "file": "<worktree>/.work/runs/current6001w_c2ceb/saved/agent6001-overview-return.png",
+          "width": 800,
+          "height": 600,
+          "sha256": "6f5840f8cb581f3e4717657b4efbd8e8e186732c9506fb056a8e424714465918",
+          "source": "Hydra renderer CPU callback (owned copy)",
+          "adapter": "hydra-renderer-cpu-v1",
+          "freshness": "new render and CPU transfer completed",
+          "render_observation": {
+            "waited": true,
+            "render_product": "/Render/OmniverseKit/HydraTextures/IsaacMCP_fb530bce5b4546a3927c5293198d04a9",
+            "frame_number_before": 273962,
+            "frame_number_after": 273970,
+            "frame_baseline": "first completed render observed after this request",
+            "completed_frames_observed": 4,
+            "cpu_transfer_completed": true,
+            "wait_seconds": 0.14003765099914744,
+            "meaning": "CPU pixels transferred from this product after the requested render completions; not an atomic physics/sensor snapshot",
+            "acquisition_context_before": {
+              "timeline_time_s": 0.03333333333333333,
+              "timeline_state": "paused"
+            },
+            "acquisition_context_after": {
+              "timeline_time_s": 0.03333333333333333,
+              "timeline_state": "paused"
+            },
+            "timeline_time_before": 0.03333333333333333,
+            "timeline_time_after": 0.03333333333333333
+          }
+        }
+      }
+    },
+    "ledger_counts": {
+      "catalog_count": 99,
+      "requests": 88,
+      "tool_calls": 87,
+      "catalog_list_requests": 1,
+      "unique_tool_names_called": 40,
+      "outcomes": {
+        "uncalled": 59,
+        "scoped_pass": 37,
+        "partial": 3
+      },
+      "mcp_error_call_ids": [],
+      "no_run_python": true,
+      "no_internal_or_direct_bridge_api": true,
+      "no_product_edits": true,
+      "why_more_than75_requests": "88 requests included catalog discovery, full two-articulation and wrist/gripper effect checks, midfall/final captures, real-window recording, and additional Console input-effect verification/recovery. This was a bounded natural task, not all99 invocation."
+    },
+    "integrity": {
+      "checked_utc": "2026-11-02T04:30:08.637915+00:00",
+      "groups": {
+        "fixture": {
+          "before_count": 6,
+          "after_count": 6,
+          "changed": [],
+          "added": []
+        },
+        "agilebot": {
+          "before_count": 8,
+          "after_count": 8,
+          "changed": [],
+          "added": []
+        },
+        "package": {
+          "before_count": 4,
+          "after_count": 4,
+          "changed": [],
+          "added": []
+        },
+        "workstation": {
+          "before_count": 5,
+          "after_count": 5,
+          "changed": [],
+          "added": []
+        },
+        "staging": {
+          "before_count": 81,
+          "after_count": 81,
+          "changed": [],
+          "added": []
+        },
+        "product": {
+          "before_count": 112,
+          "after_count": 112,
+          "changed": [],
+          "added": []
+        },
+        "UR5E_DT_ASSET_CACHE": {
+          "before_count": 21,
+          "after_count": 21,
+          "changed": [],
+          "added": []
+        }
+      },
+      "all_preexisting_unchanged": true,
+      "total_preexisting_files": 237,
+      "frozen_manifest_checked": 91,
+      "frozen_manifest_mismatches": [],
+      "frozen_manifest_all_match": true,
+      "commit_comparison": {
+        "commit": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+        "files_checked": 112,
+        "exact_matches": 111,
+        "differences": [
+          "scripts/run_ur5e_dt.py"
+        ],
+        "absent_in_commit": [],
+        "all_nonlauncher_files_match": true
+      },
+      "save": {
+        "path": ".work/runs/current6001w_c2ceb/saved/agent6001-composed-workcell.usda",
+        "bytes": 370425594,
+        "sha256": "a13348a6dde78862faf9b4e5e66eef4f9766210d447f49a45a0c47414276f98a",
+        "checkpoint": false,
+        "hash_verified_after_release": true
+      }
+    },
+    "native_interval": {
+      "utc": "2026-11-02T04:28:28.983288+00:00",
+      "start_offset": 97659224,
+      "end_offset": 149290107,
+      "interval_bytes": 51630883,
+      "interval_sha256": "ed3f24ee6011ecb0e6cb0f16f27b4dc3a972802b38d95594b8c048fedb9818e6",
+      "prefix_sha256": "610a0f11178049db9b3f53722ef481a286d34cee8b7c9e21f3650184883bd558",
+      "counts": {
+        "[Error]": 0,
+        "[Warning]": 7,
+        "Illegal cycle connection": 0,
+        "getSimulationTimeMonotonicAtTime": 0,
+        "Cannot enter into task": 0,
+        "GetCamera": 0,
+        "Force callback": 0,
+        "Edit target changed": 0
+      },
+      "interval_closed_before_parent_shutdown": true
+    },
+    "root_review": {
+      "utc": "2026-11-02T04:32:08.988152+00:00",
+      "source_sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+      "files": [
+        {
+          "file": ".work/compat-followup/agent6001w-c2ceb/images/085-0.png",
+          "sha256": "44f6c80afbb24ab2f2aa747350913905578b6490f2d89cb3431882c9369620aa"
+        },
+        {
+          "file": ".work/compat-followup/agent6001w-c2ceb/images/088-0.png",
+          "sha256": "7c10d2ca6fb39a3a09d900003c8404ce6c556352a58a0edc0737c2ab6b7b7494"
+        }
+      ],
+      "review": "Root inspected original 085 Console and 088 Content screenshots. Both show the complete bent UR5e and wrist gripper on the selected bench, plus Agilebot. Console visibly includes historical simulation-time and triangle-mesh/disjoint-joint/released-Hydra warnings; the warning toggle was not proven disabled. Content is active and search empty in 088. No private filesystem path visible in these two reviewed images. UI dispatch acknowledgement does not establish Error-only filter success. No new captures or native actions taken for this review."
+    }
+  },
+  "fresh_agent_reopen": {
+    "summary": {
+      "sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+      "session": {
+        "id": "b4d43296ff304d1fba3cafc601bf19f8",
+        "pid": 2634730,
+        "port": 18931,
+        "ros_domain": 180,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793593951.3707402,
+        "log": "<worktree>/.work/sessions/b4d43296ff304d1fba3cafc601bf19f8/sim.log",
+        "output_dir": "<worktree>/.work/sessions/b4d43296ff304d1fba3cafc601bf19f8/output",
+        "user_config": "<worktree>/.work/sessions/b4d43296ff304d1fba3cafc601bf19f8/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15204,
+          "ram_available_mib": 53328
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "target": {
+        "session_id": "c3c77b71d82b471fa0e8c37485ea874c",
+        "stage_id": "261c28f8bf704b808e9c503f4eca7410"
+      },
+      "source": "<worktree>/.work/runs/current6001w_c2ceb/saved/agent6001-composed-workcell.usda",
+      "source_sha256": "a13348a6dde78862faf9b4e5e66eef4f9766210d447f49a45a0c47414276f98a",
+      "calls": 16,
+      "checks": 12,
+      "capture_files": [
+        "<worktree>/.work/runs/agentreopen6001h_c2ceb/saved/agent-reopened-before.png",
+        "<worktree>/.work/runs/agentreopen6001h_c2ceb/saved/agent-reopened-after.png"
+      ],
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "scope": "Reopened composition and new live camera/runtime observation, not solver/controller-state checkpoint. Original camera remains authored; its prior live ownership correctly refuses."
+    },
+    "checks": [
+      {
+        "name": "fresh process starts stopped with no registered sensors",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "saved sample authored position preserved",
+        "passed": true,
+        "details": [
+          -0.3500001132488251,
+          -0.4500001072883606,
+          0.14000000059604645
+        ]
+      },
+      {
+        "name": "saved camera definition composed",
+        "passed": true,
+        "details": "Camera"
+      },
+      {
+        "name": "live sensor ownership not fabricated from saved prim",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "fresh reopened scene camera pixels",
+        "passed": true,
+        "details": {
+          "sha256": "38ebc946962212f23bf415e196b7081278cc708d78779214ed359ba6dfec0c2b",
+          "std": 70.98102733892941
+        }
+      },
+      {
+        "name": "saved sample initializes at support",
+        "passed": true,
+        "details": {
+          "status": "ok",
+          "path": "/World/OrangeSample",
+          "world_position": [
+            -0.3500002920627594,
+            -0.45000025629997253,
+            0.13999994099140167
+          ],
+          "orientation_wxyz": [
+            1.0,
+            1.003891384243616e-06,
+            -9.848541822066181e-07,
+            9.91777771019997e-10
+          ],
+          "units": "stage units",
+          "source": "PhysX get_rigidbody_transformation",
+          "backend": "physx",
+          "time_s": 0.03333333333333333,
+          "physics_time_s": 0.06666666666666667,
+          "dynamics": {
+            "linear_velocity": [
+              0.00020053658226970583,
+              6.951959221623838e-05,
+              -3.535676296451129e-05
+            ],
+            "angular_velocity": [
+              0.0008832562016323209,
+              0.0012167184613645077,
+              -3.049760744033847e-05
+            ],
+            "linear_units": "stage units/second, world frame at center of mass",
+            "angular_units": "radians/second, world frame",
+            "mass": 0.5120000243186951,
+            "mass_kg": 0.5120000243186951,
+            "source": "physx rigid-body tensor view"
+          }
+        }
+      },
+      {
+        "name": "twelve steps advance configured physics time",
+        "passed": true,
+        "details": {
+          "expected_dt": 0.016666666666666666,
+          "measured_delta": 0.2,
+          "backend": "physx"
+        }
+      },
+      {
+        "name": "both runtime articulations observed",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "saved sample remains supported with real mass",
+        "passed": true,
+        "details": {
+          "status": "ok",
+          "path": "/World/OrangeSample",
+          "world_position": [
+            -0.3500002920627594,
+            -0.45000025629997253,
+            0.13999994099140167
+          ],
+          "orientation_wxyz": [
+            1.0,
+            1.0015310181188397e-06,
+            -9.839625363383675e-07,
+            -1.939312355148104e-08
+          ],
+          "units": "stage units",
+          "source": "PhysX get_rigidbody_transformation",
+          "backend": "physx",
+          "time_s": 0.03333333333333333,
+          "physics_time_s": 0.26666666666666666,
+          "dynamics": {
+            "linear_velocity": [
+              0.00020081354887224734,
+              6.890120130265132e-05,
+              -3.575995287974365e-05
+            ],
+            "angular_velocity": [
+              0.0008967338944785297,
+              0.0012053330428898335,
+              -3.088729499722831e-05
+            ],
+            "linear_units": "stage units/second, world frame at center of mass",
+            "angular_units": "radians/second, world frame",
+            "mass": 0.5120000243186951,
+            "mass_kg": 0.5120000243186951,
+            "source": "physx rigid-body tensor view"
+          }
+        }
+      },
+      {
+        "name": "post-step fresh render completes",
+        "passed": true,
+        "details": "29173056b529326e4c9ade4fcd4af0945620303631cb83fa5320eade29742bf4"
+      },
+      {
+        "name": "sensor resources released",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "saved source bytes preserved",
+        "passed": true,
+        "details": null
+      }
+    ],
+    "review": {
+      "utc": "2026-11-02T04:33:44.687352+00:00",
+      "sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+      "session": {
+        "id": "b4d43296ff304d1fba3cafc601bf19f8",
+        "pid": 2634730,
+        "port": 18931,
+        "ros_domain": 180,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793593951.3707402,
+        "log": "<worktree>/.work/sessions/b4d43296ff304d1fba3cafc601bf19f8/sim.log",
+        "output_dir": "<worktree>/.work/sessions/b4d43296ff304d1fba3cafc601bf19f8/output",
+        "user_config": "<worktree>/.work/sessions/b4d43296ff304d1fba3cafc601bf19f8/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15204,
+          "ram_available_mib": 53328
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "checks": 12,
+      "all_checks_passed": true,
+      "visual_review": "Root inspected both 320x240 named-camera images: UR5e and attached wrist gripper, bench, white support and orange sample visible. Agilebot at the far right is mostly outside this crop. No private text visible. Physics/support/timing are established by independent body/joint/step responses, not these still images.",
+      "reviewed_images": [
+        {
+          "file": "<worktree>/.work/runs/agentreopen6001h_c2ceb/saved/agent-reopened-before.png",
+          "bytes": 49745,
+          "sha256": "38ebc946962212f23bf415e196b7081278cc708d78779214ed359ba6dfec0c2b"
+        },
+        {
+          "file": "<worktree>/.work/runs/agentreopen6001h_c2ceb/saved/agent-reopened-after.png",
+          "bytes": 49656,
+          "sha256": "29173056b529326e4c9ade4fcd4af0945620303631cb83fa5320eade29742bf4"
+        }
+      ],
+      "owned_pid_exited": true,
+      "normal_stop": {
+        "tool": "sim__stop",
+        "arguments": {
+          "session_id": "b4d43296ff304d1fba3cafc601bf19f8",
+          "expected_pid": 2634730,
+          "confirm_discard": true,
+          "force": false
+        },
+        "response": {
+          "meta": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"id\": \"b4d43296ff304d1fba3cafc601bf19f8\",\n  \"pid\": 2634730,\n  \"state\": \"stop_requested\",\n  \"signal\": \"SIGINT\",\n  \"scope\": \"process_group\"\n}",
+              "annotations": null,
+              "meta": null
+            }
+          ],
+          "structuredContent": null,
+          "isError": false
+        }
+      },
+      "native_log": {
+        "file": "<worktree>/.work/runs/agentreopen6001h_c2ceb/kit-native.log",
+        "bytes": 2795312,
+        "sha256": "af2d998c9fdba816a146492c50cd08fe8232b89c3f3afa76ff975610cddab401"
+      },
+      "native_counts": {
+        "[Error]": 0,
+        "[Warning]": 21,
+        "Illegal cycle connection": 0,
+        "getSimulationTimeMonotonicAtTime": 0,
+        "Cannot enter into task": 0,
+        "GetCamera": 0,
+        "Force callback": 0,
+        "Edit target changed": 0
+      },
+      "scope": "Fresh-process saved composition, new registered camera and runtime observations. Not a solver/controller checkpoint. Original task evidence remains unchanged."
+    }
+  },
+  "limitations": [
+    "Whole-run simulation-time and windowed cycle warnings are retained separately from independent task interval; no general harmlessness claim.",
+    "Original20f/6.0.1 native stall remains unresolved.",
+    "Independent296frame original windowvideo decoded in full; four frames visually reviewed and Content-region stability measured. Parent broad videos use only stated sample review and have cropping.",
+    "Independent original save partial remains unchanged in its ledger; subsequent fresh-process result is separate.",
+    "Desktop window_type/window_click remain partial in the independent ledger: sent acknowledgements did not always produce intended visible text/tab effects.",
+    "No isolated loading, authenticated remote upload or presets implementation."
+  ],
+  "separate_remaining_agent_reopens": {
+    "newer601": {
+      "summary": {
+        "sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+        "session": {
+          "id": "08e2f962764847c7964089660f1e5caf",
+          "pid": 2636564,
+          "port": 18929,
+          "ros_domain": 178,
+          "headless": true,
+          "show_ur5e_panel_on_start": false,
+          "enable_motion_bvh": true,
+          "physics_backend": "physx",
+          "started_at": 1793594094.2685096,
+          "log": "<worktree>/.work/sessions/08e2f962764847c7964089660f1e5caf/sim.log",
+          "output_dir": "<worktree>/.work/sessions/08e2f962764847c7964089660f1e5caf/output",
+          "user_config": "<worktree>/.work/sessions/08e2f962764847c7964089660f1e5caf/user.config.json",
+          "initial_resources": {
+            "gpu_total_mib": 16303,
+            "gpu_free_mib": 15180,
+            "ram_available_mib": 52790
+          },
+          "state": "starting",
+          "note": "Use sim__status to confirm bridge readiness."
+        },
+        "target": {
+          "session_id": "80ec000fbda34f519cc29a1d90ba006c",
+          "stage_id": "9b4dce3937444d55bb9077a403262d52"
+        },
+        "source": "<worktree>/.work/runs/repro601w_20f/saved/agent601fresh-paused.usda",
+        "source_sha256": "d3b2dfd112f22fe5fb6a4fe9a122dc5802b716fa55d8bc08b3b4a2fa9e528324",
+        "calls": 16,
+        "checks": 12,
+        "capture_files": [
+          "<worktree>/.work/runs/agentreopen601h_c2ceb/saved/agent-reopened-before.png",
+          "<worktree>/.work/runs/agentreopen601h_c2ceb/saved/agent-reopened-after.png"
+        ],
+        "runtime": {
+          "release": "6.0.1.0",
+          "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+          "reported_core": "6.0.1",
+          "identity_source": "package and VERSION",
+          "packages": {
+            "isaacsim": "6.0.1.0",
+            "isaacsim-kernel": "6.0.1.0",
+            "isaacsim-core": "6.0.1.0",
+            "isaacsim-sensor": "6.0.1.0",
+            "isaacsim-replicator": "6.0.1.0"
+          },
+          "version_files": {
+            "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+          },
+          "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+          "extensions": {
+            "omni.replicator.core": {
+              "id": "omni.replicator.core-1.13.27",
+              "version": "1.13.27",
+              "enabled": true
+            },
+            "omni.kit.hydra_texture": {
+              "id": "omni.kit.hydra_texture-1.6.0",
+              "version": "1.6.0",
+              "enabled": true
+            },
+            "omni.kit.renderer.capture": {
+              "id": "omni.kit.renderer.capture-2.0.1",
+              "version": "2.0.1",
+              "enabled": true
+            },
+            "omni.syntheticdata": {
+              "id": "omni.syntheticdata-0.6.15",
+              "version": "0.6.15",
+              "enabled": true
+            },
+            "isaacsim.sensors.rtx": {
+              "id": "isaacsim.sensors.rtx-15.17.1",
+              "version": "15.17.1",
+              "enabled": true
+            },
+            "isaacsim.sensors.experimental.rtx": {
+              "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+              "version": "1.4.6",
+              "enabled": true
+            },
+            "isaacsim.core.simulation_manager": {
+              "id": "isaacsim.core.simulation_manager-1.15.6",
+              "version": "1.15.6",
+              "enabled": true
+            },
+            "isaacsim.physics.newton": {
+              "enabled": false
+            },
+            "isaacsim.physics.newton.tensors": {
+              "enabled": false
+            },
+            "omni.warp.core": {
+              "id": "omni.warp.core-1.13.0",
+              "version": "1.13.0",
+              "enabled": true
+            }
+          },
+          "qualified_build": true,
+          "issues": [],
+          "physics_engine": "physx",
+          "physics_adapter": "physx-simulation-manager-v1",
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "physics_packages": {
+            "newton": {
+              "installed_version": "1.2.1",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            },
+            "mujoco": {
+              "installed_version": "3.8.0",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            },
+            "mujoco_warp": {
+              "installed_version": "3.8.0.3",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            }
+          },
+          "warp": {
+            "version": "1.13.0",
+            "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+          }
+        },
+        "scope": "Reopened composition and new live camera/runtime observation, not solver/controller-state checkpoint. Original camera remains authored; its prior live ownership correctly refuses."
+      },
+      "checks": [
+        {
+          "name": "fresh process starts stopped with no registered sensors",
+          "passed": true,
+          "details": null
+        },
+        {
+          "name": "saved sample authored position preserved",
+          "passed": true,
+          "details": [
+            2.3999998569488525,
+            -0.9000000357627869,
+            1.0399999618530273
+          ]
+        },
+        {
+          "name": "saved camera definition composed",
+          "passed": true,
+          "details": "Camera"
+        },
+        {
+          "name": "live sensor ownership not fabricated from saved prim",
+          "passed": true,
+          "details": null
+        },
+        {
+          "name": "fresh reopened scene camera pixels",
+          "passed": true,
+          "details": {
+            "sha256": "326f85e16de8b247c970e6dfe00d2937a37054e477a8be627b5f86c6cfbab233",
+            "std": 51.10992217380556
+          }
+        },
+        {
+          "name": "saved sample initializes at support",
+          "passed": true,
+          "details": {
+            "status": "ok",
+            "path": "/World/Fresh601Cell/Sample",
+            "world_position": [
+              2.4000000953674316,
+              -0.9000000953674316,
+              1.0400002002716064
+            ],
+            "orientation_wxyz": [
+              1.0,
+              2.7254347401139967e-07,
+              -2.170362165543338e-07,
+              -7.430378978767749e-09
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 0.05,
+            "dynamics": {
+              "linear_velocity": [
+                9.941012831404805e-05,
+                3.7788544432260096e-05,
+                -1.8362934497417882e-05
+              ],
+              "angular_velocity": [
+                0.00040302591514773667,
+                0.0005726381787098944,
+                -1.4881416973366868e-05
+              ],
+              "linear_units": "stage units/second, world frame at center of mass",
+              "angular_units": "radians/second, world frame",
+              "mass": 0.5120000243186951,
+              "mass_kg": 0.5120000243186951,
+              "source": "physx rigid-body tensor view"
+            }
+          }
+        },
+        {
+          "name": "twelve steps advance configured physics time",
+          "passed": true,
+          "details": {
+            "expected_dt": 0.008333333333333333,
+            "measured_delta": 0.09999999999999999,
+            "backend": "physx"
+          }
+        },
+        {
+          "name": "both runtime articulations observed",
+          "passed": true,
+          "details": null
+        },
+        {
+          "name": "saved sample remains supported with real mass",
+          "passed": true,
+          "details": {
+            "status": "ok",
+            "path": "/World/Fresh601Cell/Sample",
+            "world_position": [
+              2.4000003337860107,
+              -0.9000000953674316,
+              1.0399999618530273
+            ],
+            "orientation_wxyz": [
+              1.0,
+              -1.2532936466413958e-07,
+              1.5155698918078997e-07,
+              -3.2747713429870373e-09
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 0.15,
+            "dynamics": {
+              "linear_velocity": [
+                2.739172850851901e-05,
+                5.55345686734654e-05,
+                -1.8765193090075627e-05
+              ],
+              "angular_velocity": [
+                -0.0004870727425441146,
+                0.0005679806345142424,
+                1.6644540664856322e-05
+              ],
+              "linear_units": "stage units/second, world frame at center of mass",
+              "angular_units": "radians/second, world frame",
+              "mass": 0.5120000243186951,
+              "mass_kg": 0.5120000243186951,
+              "source": "physx rigid-body tensor view"
+            }
+          }
+        },
+        {
+          "name": "post-step fresh render completes",
+          "passed": true,
+          "details": "25428c6bd2e846de17eabaa55066e7661b34d612492b00384a14f202d9205cfc"
+        },
+        {
+          "name": "sensor resources released",
+          "passed": true,
+          "details": null
+        },
+        {
+          "name": "saved source bytes preserved",
+          "passed": true,
+          "details": null
+        }
+      ],
+      "review": {
+        "utc": "2026-11-02T04:36:09.405099+00:00",
+        "sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+        "session": {
+          "id": "08e2f962764847c7964089660f1e5caf",
+          "pid": 2636564,
+          "port": 18929,
+          "ros_domain": 178,
+          "headless": true,
+          "show_ur5e_panel_on_start": false,
+          "enable_motion_bvh": true,
+          "physics_backend": "physx",
+          "started_at": 1793594094.2685096,
+          "log": "<worktree>/.work/sessions/08e2f962764847c7964089660f1e5caf/sim.log",
+          "output_dir": "<worktree>/.work/sessions/08e2f962764847c7964089660f1e5caf/output",
+          "user_config": "<worktree>/.work/sessions/08e2f962764847c7964089660f1e5caf/user.config.json",
+          "initial_resources": {
+            "gpu_total_mib": 16303,
+            "gpu_free_mib": 15180,
+            "ram_available_mib": 52790
+          },
+          "state": "starting",
+          "note": "Use sim__status to confirm bridge readiness."
+        },
+        "checks": 12,
+        "all_checks_passed": true,
+        "visual_review": "Root inspected both 320x240 images: red sample on support, colored fixture and Agilebot visible; UR5e/bench mostly outside left crop. No private text. This new task save reopened successfully; that does not resolve the earlier independent 20f native-step stall.",
+        "reviewed_images": [
+          {
+            "file": "<worktree>/.work/runs/agentreopen601h_c2ceb/saved/agent-reopened-before.png",
+            "bytes": 49171,
+            "sha256": "326f85e16de8b247c970e6dfe00d2937a37054e477a8be627b5f86c6cfbab233"
+          },
+          {
+            "file": "<worktree>/.work/runs/agentreopen601h_c2ceb/saved/agent-reopened-after.png",
+            "bytes": 57347,
+            "sha256": "25428c6bd2e846de17eabaa55066e7661b34d612492b00384a14f202d9205cfc"
+          }
+        ],
+        "owned_pid_exited": true,
+        "normal_stop": {
+          "tool": "sim__stop",
+          "arguments": {
+            "session_id": "08e2f962764847c7964089660f1e5caf",
+            "expected_pid": 2636564,
+            "confirm_discard": true,
+            "force": false
+          },
+          "response": {
+            "meta": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "{\n  \"id\": \"08e2f962764847c7964089660f1e5caf\",\n  \"pid\": 2636564,\n  \"state\": \"stop_requested\",\n  \"signal\": \"SIGINT\",\n  \"scope\": \"process_group\"\n}",
+                "annotations": null,
+                "meta": null
+              }
+            ],
+            "structuredContent": null,
+            "isError": false
+          }
+        },
+        "native_log": {
+          "file": "<worktree>/.work/runs/agentreopen601h_c2ceb/kit-native.log",
+          "bytes": 3038137,
+          "sha256": "f033b20f58d67e2757bbe79b8e553eaed5aefb229a5b0c255020e913ef21edc7"
+        },
+        "native_counts": {
+          "[Error]": 0,
+          "[Warning]": 18,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "scope": "Fresh-process saved composition, new registered camera and runtime observations. Not a solver/controller checkpoint. Original task evidence remains unchanged."
+      }
+    },
+    "clean62": {
+      "summary": {
+        "sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+        "session": {
+          "id": "09443b07325a439a84f8d25a1fd8a23c",
+          "pid": 2635680,
+          "port": 18930,
+          "ros_domain": 179,
+          "headless": true,
+          "show_ur5e_panel_on_start": false,
+          "enable_motion_bvh": true,
+          "physics_backend": "physx",
+          "started_at": 1793594025.2827916,
+          "log": "<worktree>/.work/sessions/09443b07325a439a84f8d25a1fd8a23c/sim.log",
+          "output_dir": "<worktree>/.work/sessions/09443b07325a439a84f8d25a1fd8a23c/output",
+          "user_config": "<worktree>/.work/sessions/09443b07325a439a84f8d25a1fd8a23c/user.config.json",
+          "initial_resources": {
+            "gpu_total_mib": 16303,
+            "gpu_free_mib": 15199,
+            "ram_available_mib": 53071
+          },
+          "state": "starting",
+          "note": "Use sim__status to confirm bridge readiness."
+        },
+        "target": {
+          "session_id": "f1e6f90222944d12bf0ebeb5a557f4d1",
+          "stage_id": "d40228e297674aa69c0dc1c3e5d87647"
+        },
+        "source": "<worktree>/.work/runs/clean62w_c2ceb/saved/agent-clean62-paused.usda",
+        "source_sha256": "750163874cbbcce850dca77f534782d52c1bbd1431777cd1d7c290b681e8cbd4",
+        "calls": 16,
+        "checks": 12,
+        "capture_files": [
+          "<worktree>/.work/runs/agentcleanreopen62h_c2ceb/saved/agent-reopened-before.png",
+          "<worktree>/.work/runs/agentcleanreopen62h_c2ceb/saved/agent-reopened-after.png"
+        ],
+        "runtime": {
+          "release": "6.2.0.0",
+          "build": "6.2.0-rc.14+release.52805.02189a84.gl",
+          "reported_core": "6.2.0",
+          "identity_source": "package and VERSION",
+          "packages": {
+            "isaacsim": "6.2.0.0",
+            "isaacsim-kernel": "6.2.0.0",
+            "isaacsim-core": "6.2.0.0",
+            "isaacsim-sensor": "6.2.0.0",
+            "isaacsim-replicator": "6.2.0.0"
+          },
+          "version_files": {
+            "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/VERSION": "6.2.0-rc.14+release.52805.02189a84.gl"
+          },
+          "kit_build": "110.4.0+feature.386251.187cf21b.gl",
+          "extensions": {
+            "omni.replicator.core": {
+              "id": "omni.replicator.core-1.13.38",
+              "version": "1.13.38",
+              "enabled": true
+            },
+            "omni.kit.hydra_texture": {
+              "id": "omni.kit.hydra_texture-1.6.2",
+              "version": "1.6.2",
+              "enabled": true
+            },
+            "omni.kit.renderer.capture": {
+              "id": "omni.kit.renderer.capture-2.0.2",
+              "version": "2.0.2",
+              "enabled": true
+            },
+            "omni.syntheticdata": {
+              "id": "omni.syntheticdata-0.6.17",
+              "version": "0.6.17",
+              "enabled": true
+            },
+            "isaacsim.sensors.rtx": {
+              "id": "isaacsim.sensors.rtx-15.17.5",
+              "version": "15.17.5",
+              "enabled": true
+            },
+            "isaacsim.sensors.experimental.rtx": {
+              "id": "isaacsim.sensors.experimental.rtx-2.0.1",
+              "version": "2.0.1",
+              "enabled": true
+            },
+            "isaacsim.core.simulation_manager": {
+              "id": "isaacsim.core.simulation_manager-1.17.4",
+              "version": "1.17.4",
+              "enabled": true
+            },
+            "isaacsim.physics.newton": {
+              "enabled": false
+            },
+            "isaacsim.physics.newton.tensors": {
+              "enabled": false
+            },
+            "omni.warp.core": {
+              "id": "omni.warp.core-1.17.0",
+              "version": "1.17.0",
+              "enabled": true
+            }
+          },
+          "qualified_build": true,
+          "issues": [],
+          "physics_engine": "physx",
+          "physics_adapter": "physx-simulation-manager-v1",
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "physics_packages": {
+            "newton": {
+              "installed_version": "1.6.1",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            },
+            "mujoco": {
+              "installed_version": "3.12.0",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            },
+            "mujoco_warp": {
+              "installed_version": "3.12.0",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            }
+          },
+          "warp": {
+            "version": "1.17.0",
+            "module": "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.17.0+lx64/warp/__init__.py"
+          }
+        },
+        "scope": "Reopened composition and new live camera/runtime observation, not solver/controller-state checkpoint. Original camera remains authored; its prior live ownership correctly refuses."
+      },
+      "checks": [
+        {
+          "name": "fresh process starts stopped with no registered sensors",
+          "passed": true,
+          "details": null
+        },
+        {
+          "name": "saved sample authored position preserved",
+          "passed": true,
+          "details": [
+            1.850000262260437,
+            -0.8500000238418579,
+            0.8299999833106995
+          ]
+        },
+        {
+          "name": "saved camera definition composed",
+          "passed": true,
+          "details": "Camera"
+        },
+        {
+          "name": "live sensor ownership not fabricated from saved prim",
+          "passed": true,
+          "details": null
+        },
+        {
+          "name": "fresh reopened scene camera pixels",
+          "passed": true,
+          "details": {
+            "sha256": "78b4bab3938631d61b23d4da368762687e0748d063719685b1e45527d65e094a",
+            "std": 58.430179020420994
+          }
+        },
+        {
+          "name": "saved sample initializes at support",
+          "passed": true,
+          "details": {
+            "status": "ok",
+            "path": "/World/CleanDemo62/Geometry/Sample",
+            "world_position": [
+              1.8500006198883057,
+              -0.8500001430511475,
+              0.8299999833106995
+            ],
+            "orientation_wxyz": [
+              1.0,
+              3.383768785170105e-07,
+              -3.98848555960285e-07,
+              3.2305154107348244e-09
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 0.05,
+            "dynamics": {
+              "linear_velocity": [
+                1.1316560630802996e-05,
+                -9.998684618039988e-07,
+                -1.347372199234087e-05
+              ],
+              "angular_velocity": [
+                0.000999727752059698,
+                -0.0007640187977813184,
+                -5.366875484469347e-06
+              ],
+              "linear_units": "stage units/second, world frame at center of mass",
+              "angular_units": "radians/second, world frame",
+              "mass": 0.2160000056028366,
+              "mass_kg": 0.2160000056028366,
+              "source": "physx rigid-body tensor view"
+            }
+          }
+        },
+        {
+          "name": "twelve steps advance configured physics time",
+          "passed": true,
+          "details": {
+            "expected_dt": 0.008333333333333333,
+            "measured_delta": 0.09999999999999999,
+            "backend": "physx"
+          }
+        },
+        {
+          "name": "both runtime articulations observed",
+          "passed": true,
+          "details": null
+        },
+        {
+          "name": "saved sample remains supported with real mass",
+          "passed": true,
+          "details": {
+            "status": "ok",
+            "path": "/World/CleanDemo62/Geometry/Sample",
+            "world_position": [
+              1.8500001430511475,
+              -0.8500000238418579,
+              0.8299999833106995
+            ],
+            "orientation_wxyz": [
+              1.0,
+              3.256632226111833e-07,
+              -3.0741509249310184e-07,
+              -1.0373857328715985e-08
+            ],
+            "units": "stage units",
+            "source": "PhysX get_rigidbody_transformation",
+            "backend": "physx",
+            "time_s": 0.03333333333333333,
+            "physics_time_s": 0.15,
+            "dynamics": {
+              "linear_velocity": [
+                0.00010019872570410371,
+                3.547799133230001e-05,
+                -1.7429689251002856e-05
+              ],
+              "angular_velocity": [
+                0.0005727963871322572,
+                0.0008218015427701175,
+                -1.9950153728132136e-05
+              ],
+              "linear_units": "stage units/second, world frame at center of mass",
+              "angular_units": "radians/second, world frame",
+              "mass": 0.2160000056028366,
+              "mass_kg": 0.2160000056028366,
+              "source": "physx rigid-body tensor view"
+            }
+          }
+        },
+        {
+          "name": "post-step fresh render completes",
+          "passed": true,
+          "details": "5c82605b75efd78fd0f6c1f77fb96745cfd3dcb1750218f1fb321485cec696f5"
+        },
+        {
+          "name": "sensor resources released",
+          "passed": true,
+          "details": null
+        },
+        {
+          "name": "saved source bytes preserved",
+          "passed": true,
+          "details": null
+        }
+      ],
+      "review": {
+        "utc": "2026-11-02T04:34:53.648862+00:00",
+        "sha": "c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a",
+        "session": {
+          "id": "09443b07325a439a84f8d25a1fd8a23c",
+          "pid": 2635680,
+          "port": 18930,
+          "ros_domain": 179,
+          "headless": true,
+          "show_ur5e_panel_on_start": false,
+          "enable_motion_bvh": true,
+          "physics_backend": "physx",
+          "started_at": 1793594025.2827916,
+          "log": "<worktree>/.work/sessions/09443b07325a439a84f8d25a1fd8a23c/sim.log",
+          "output_dir": "<worktree>/.work/sessions/09443b07325a439a84f8d25a1fd8a23c/output",
+          "user_config": "<worktree>/.work/sessions/09443b07325a439a84f8d25a1fd8a23c/user.config.json",
+          "initial_resources": {
+            "gpu_total_mib": 16303,
+            "gpu_free_mib": 15199,
+            "ram_available_mib": 53071
+          },
+          "state": "starting",
+          "note": "Use sim__status to confirm bridge readiness."
+        },
+        "checks": 12,
+        "all_checks_passed": true,
+        "visual_review": "Root inspected before/after 320x240 rendered images: red sample on gray support, colored fixture and Agilebot visible; UR5e at far left mostly cropped. No private text. Both pixels acquired in fresh process; support, 120 Hz timing and both articulations established by independent runtime responses.",
+        "reviewed_images": [
+          {
+            "file": "<worktree>/.work/runs/agentcleanreopen62h_c2ceb/saved/agent-reopened-before.png",
+            "bytes": 75525,
+            "sha256": "78b4bab3938631d61b23d4da368762687e0748d063719685b1e45527d65e094a"
+          },
+          {
+            "file": "<worktree>/.work/runs/agentcleanreopen62h_c2ceb/saved/agent-reopened-after.png",
+            "bytes": 65368,
+            "sha256": "5c82605b75efd78fd0f6c1f77fb96745cfd3dcb1750218f1fb321485cec696f5"
+          }
+        ],
+        "owned_pid_exited": true,
+        "normal_stop": {
+          "tool": "sim__stop",
+          "arguments": {
+            "session_id": "09443b07325a439a84f8d25a1fd8a23c",
+            "expected_pid": 2635680,
+            "confirm_discard": true,
+            "force": false
+          },
+          "response": {
+            "meta": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "{\n  \"id\": \"09443b07325a439a84f8d25a1fd8a23c\",\n  \"pid\": 2635680,\n  \"state\": \"stop_requested\",\n  \"signal\": \"SIGINT\",\n  \"scope\": \"process_group\"\n}",
+                "annotations": null,
+                "meta": null
+              }
+            ],
+            "structuredContent": null,
+            "isError": false
+          }
+        },
+        "native_log": {
+          "file": "<worktree>/.work/runs/agentcleanreopen62h_c2ceb/kit-native.log",
+          "bytes": 1481323,
+          "sha256": "33fe2ba19af934d41933a0723ac1bb66a4001e340273a10588cd91d2f952c004"
+        },
+        "native_counts": {
+          "[Error]": 0,
+          "[Warning]": 17,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "scope": "Fresh-process saved composition, new registered camera and runtime observations. Not a solver/controller checkpoint. Original task evidence remains unchanged."
+      }
+    }
+  },
+  "source_records": {
+    "current6001h_c2ceb_phases": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-run-progress.json",
+      "sha256": "4a667fc0ecfe0a483fb0386d894d8bde11f80af9dd1bd302f2d27222f258c4e2",
+      "bytes": 32921
+    },
+    "current6001h_c2ceb_fullsurface": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-fullsurface/summary.json",
+      "sha256": "004d95af084a1add86873135cb737bdd845908708d8f11b657fe20196448efe7",
+      "bytes": 2549
+    },
+    "current6001h_c2ceb_regression": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-regression-summary.json",
+      "sha256": "866bd75ce3cdc7307e5edf4058371015eb6935425bbe34751568d05c1f066736",
+      "bytes": 2725
+    },
+    "current6001h_c2ceb_effects": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-effect-links/summary.json",
+      "sha256": "ce9e5bf9e1baf61e19975c6e582deebf7851e72f57d1da7153e4cae01914b822",
+      "bytes": 20053
+    },
+    "current6001h_c2ceb_urdf": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-urdf-runtime/summary.json",
+      "sha256": "36ca2e041228941e4d5ebe0cf03542ea9e383435153f4df24ffa378bccdbec72",
+      "bytes": 9804
+    },
+    "current6001h_c2ceb_save": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-camera-ros-save/summary.json",
+      "sha256": "3d1e71e3de8bef7c262ea01bed50ed86b801cce02096fe5e1cabc9badb501450",
+      "bytes": 2073
+    },
+    "current6001h_c2ceb_save_checks": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-camera-ros-save/checks.json",
+      "sha256": "f8fdc319f2bdc773457d70fadcb6c512e53c9a09947d02ba178bb44d90de31b3",
+      "bytes": 3427
+    },
+    "current6001h_c2ceb_save_preservation": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-camera-ros-save/preservation.json",
+      "sha256": "f998b03ab82387ac09d71ab42f764ecf9f289f073c271a8150a16bd93dbaab99",
+      "bytes": 9079
+    },
+    "current6001h_c2ceb_review": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-native-review.json",
+      "sha256": "08a2446e9eaa0927ad58a6d84b55cc23bad9c0f34e737fec9bfc16a48100cc05",
+      "bytes": 3245
+    },
+    "current6001h_c2ceb_shutdown": {
+      "path": "<worktree>/.work/compat-followup/current6001h_c2ceb-shutdown-review.json",
+      "sha256": "73e9e6d605df2de4d938153eb90153dfc23abdb358c655d984f0884f1a0e5161",
+      "bytes": 1628
+    },
+    "current6001w_c2ceb_phases": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-run-progress.json",
+      "sha256": "0673f6ef579f48eeec53b9f40778b22e227161624a64341d8df9978d5be7c2cc",
+      "bytes": 32835
+    },
+    "current6001w_c2ceb_fullsurface": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-fullsurface/summary.json",
+      "sha256": "d7b14db6a01ad0ce3afc41018be1cd027b3d903ba5792b62d553575d35ef73b6",
+      "bytes": 2595
+    },
+    "current6001w_c2ceb_regression": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-regression-summary.json",
+      "sha256": "833d9340419fc15342ea4e7fccdef1833dd6cef304a91eaf7fad15d6fd3f9a7a",
+      "bytes": 2725
+    },
+    "current6001w_c2ceb_effects": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-effect-links/summary.json",
+      "sha256": "11a8aad7d4994d28f3d2aeb46e9623b950ccb3f0256f9481075b2a42da98428a",
+      "bytes": 20054
+    },
+    "current6001w_c2ceb_urdf": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-urdf-runtime/summary.json",
+      "sha256": "7c87090beeddd177322f47964d0b3c6585b099b949ee0f2d36225e254fa27c30",
+      "bytes": 9806
+    },
+    "current6001w_c2ceb_save": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-camera-ros-save/summary.json",
+      "sha256": "5a6e91815e6ebf1a2e3a4cfa0ae39a315cf321be1eae68411ae79d00bed9b7e9",
+      "bytes": 2074
+    },
+    "current6001w_c2ceb_save_checks": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-camera-ros-save/checks.json",
+      "sha256": "3deeed59726f9dcb7221e66c6fe6536e446969338a0b4fac58a6e6221ffa49e0",
+      "bytes": 3429
+    },
+    "current6001w_c2ceb_save_preservation": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-camera-ros-save/preservation.json",
+      "sha256": "50cfeca883a664cefdd695f93fe07ab356e225d4ce9c9fb2611a16dc88cd3f82",
+      "bytes": 9079
+    },
+    "current6001w_c2ceb_review": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-native-review.json",
+      "sha256": "841ccb00ca9e040beb193fa5b3b9568d4deec8b1c2123e13b7687830a1da2fd7",
+      "bytes": 4300
+    },
+    "current6001w_c2ceb_shutdown": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-shutdown-review.json",
+      "sha256": "c55a1ffe25ae79a0ebc9e84dd32cfd5dcf9fa8113b3457ebaf9a3a201a4b734f",
+      "bytes": 2204
+    },
+    "independent_summary": {
+      "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb/summary.json",
+      "sha256": "3c3c307000339b427e70fa1e1c230d8a7e2b81a134db780e25b98e95ecdc3803",
+      "bytes": 16577
+    },
+    "independent_measurements": {
+      "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb/measurements.json",
+      "sha256": "f647f5fb5da525737f118f2da54f89c653d8a9d3470e415ecb5cabe8fdf6c91e",
+      "bytes": 28878
+    },
+    "independent_ledger": {
+      "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb/tool-coverage.json",
+      "sha256": "fecad45bb4e312bd07a365fc1006429241d8d1ef9a4f269a90f5826e6e72993e",
+      "bytes": 24328
+    },
+    "independent_integrity": {
+      "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb/integrity.json",
+      "sha256": "a74fe07613a60b49e0d23d192f5c0ffae3c97c7bd774189361dd5f9067665714",
+      "bytes": 1599
+    },
+    "independent_native_interval": {
+      "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb/native-interval.json",
+      "sha256": "6ca373be475337df094eb15e1253adcacbffb1f7e62cfb1122f0db6b23ce70a7",
+      "bytes": 601
+    },
+    "independent_root_review": {
+      "path": "<worktree>/.work/compat-followup/agent6001w-c2ceb-root-visual-review.json",
+      "sha256": "c1f8bea9a948aa08d3fe720827919e072aee51d6ea81672921cabd4a1fced720",
+      "bytes": 1024
+    },
+    "fresh_agent_reopen": {
+      "path": "<worktree>/.work/compat-followup/agentreopen6001h_c2ceb-agent-reopen/summary.json",
+      "sha256": "01985ee4d3ec046cc06b74252898ff341a6fed23dd61c31a7675b8ef1f717fb7",
+      "bytes": 4735
+    },
+    "fresh_agent_reopen_checks": {
+      "path": "<worktree>/.work/compat-followup/agentreopen6001h_c2ceb-agent-reopen/checks.json",
+      "sha256": "05f84415734b17fd328d2ae562991a48186bad275361ce4025d846618334e378",
+      "bytes": 3775
+    },
+    "fresh_agent_reopen_review": {
+      "path": "<worktree>/.work/compat-followup/agentreopen6001h_c2ceb-agent-reopen/review.json",
+      "sha256": "73ce7ca2fbd883fd4c2e00c7cf2cc1548b0b72573238bca4097b4c3966acde4a",
+      "bytes": 3317
+    },
+    "newer601_reopen": {
+      "path": "<worktree>/.work/compat-followup/agentreopen601h_c2ceb-agent-reopen/summary.json",
+      "sha256": "145b890ddac0243884fd32b4e18001d9d89974ddb6805fea2007721b6b4d1b9f",
+      "bytes": 4640
+    },
+    "newer601_reopen_checks": {
+      "path": "<worktree>/.work/compat-followup/agentreopen601h_c2ceb-agent-reopen/checks.json",
+      "sha256": "321aa955c060803159f90bff2044c8a12066ca9cdcf2a7dff6874feda84e397f",
+      "bytes": 3775
+    },
+    "newer601_reopen_review": {
+      "path": "<worktree>/.work/compat-followup/agentreopen601h_c2ceb-agent-reopen/review.json",
+      "sha256": "353d8ab3c5cea460dc601dfba3873f66156696f8fba174ab1af8993972b105fb",
+      "bytes": 3261
+    },
+    "clean62_reopen": {
+      "path": "<worktree>/.work/compat-followup/agentcleanreopen62h_c2ceb-agent-reopen/summary.json",
+      "sha256": "3034980a8c99fb8cf4e89625ff53e69d288fd2488ed487c13df068b07d411cb0",
+      "bytes": 4786
+    },
+    "clean62_reopen_checks": {
+      "path": "<worktree>/.work/compat-followup/agentcleanreopen62h_c2ceb-agent-reopen/checks.json",
+      "sha256": "0ed5560f6b6674cd926d967b9236a77a38dfbcbe7e34f3159af3c885f96dee64",
+      "bytes": 3788
+    },
+    "clean62_reopen_review": {
+      "path": "<worktree>/.work/compat-followup/agentcleanreopen62h_c2ceb-agent-reopen/review.json",
+      "sha256": "ace11fa3c3faf4c8393fdcfa7e145af7ff2dfd005185aa5a51abc2ce11a284ef",
+      "bytes": 3311
+    },
+    "windowed_save_visual_followup": {
+      "path": "<worktree>/.work/compat-followup/current6001w_c2ceb-save-visual-followup.json",
+      "sha256": "6074ee1213dec78d567228faec89f20ef6c4d54aafb723294eb2e880e1849e7f",
+      "bytes": 487
+    }
+  }
+}

@@ -19,18 +19,249 @@ configuration, not a claim that every Ubuntu, driver, simulator or hardware comb
 published tested driver can differ; consult the requirements link above.
 See [compatibility](COMPATIBILITY.md) for tested simulator releases and their individual limitations.
 
-From the repository root:
+## Which environment does what
+
+| Environment | Required for | Selection |
+|---|---|---|
+| Host Python **3.10+** | MCP connection, tool discovery, desktop capture, Lab job management | `isaac-mcp` installed by `uv tool`; independent of Sim |
+| Sim Python **3.12** | Kit, rendering, physics, bridge and scene/UR tools | Checkout `.venv` by default, or explicit `UR5E_DT_PYTHON` |
+| Optional Isaac Lab | Training, evaluation and play | Existing `ISAACLAB_PYTHON` and `ISAACLAB_ROOT`; select a compatible Sim/Lab version pairing |
+| Optional system ROS | External ROS nodes and the UR mock driver | Matching system ROS distribution, separate from Sim's bundled bridge |
+
+No personal environment name or directory layout is required. Keep existing installations where they are.
+A callable offline catalog proxy still needs its runtime prerequisites to execute.
+
+## New pinned 6.2 installation
+
+Use a **new dedicated checkout** and run every command below from its root. Install
+[uv](https://docs.astral.sh/uv/getting-started/installation/) first, and ensure Git and your NVIDIA
+driver are available. Read NVIDIA's [requirements](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/requirements.html)
+and EULA before accepting it. The repository installer checks Ubuntu, architecture, GPU,
+driver and free space; its 40 GB floor is not a promise that every asset/cache workload fits.
 
 ```bash
-scripts/check_machine.sh
+git clone --branch integration/final-review-11-15 https://github.com/kalebcoleman/isaac-mcp.git
+cd isaac-mcp
+uv --version
+nvidia-smi
 ./install.sh --accept-eula
-./run.sh
+export PATH="$HOME/.local/bin:$PATH"
+uv pip check --python .venv/bin/python
+.venv/bin/python -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
 ```
 
-`./install.sh` uses `uv` to create the Python 3.12 simulator environment and install the host server. It does not
-install Isaac Lab or the system ROS driver. Use `./install.sh --no-sim` to install only the host server; `run.sh`
-requires a separate Sim environment. `run.sh --headless` omits the visible simulator window. The checker also warns
-about an absent simulator environment when it has not yet been installed.
+This branch is the current draft integration, not a released stable tag. Record its exact
+`git rev-parse HEAD` for reproducibility. Expect Sim **6.2.0.0** and Python **3.12**.
+Stop and inspect any dependency-check failure before treating the environment as ready.
+
+The convenience installer:
+
+- Runs **`uv sync --python 3.12` in the current directory**. It may update the lock/environment;
+  it does not enforce `--locked` and does not use `UR5E_DT_PYTHON` as its install target.
+- Runs `uv tool install --force --editable` for the host with the `isaaclab` metrics extra.
+  This replaces the user's existing `isaac-mcp` tool and ties it to this checkout. Keep the checkout.
+- Creates or refreshes its `~/.local/bin/ffmpeg` shim, preserving unrelated files/symlinks.
+- Changes client configuration **only** when requested with registration flags.
+  `--claude-code` replaces the user-scope `isaac` entry and removes the legacy `twin` entry;
+  `--claude-desktop` updates an existing Desktop config with a backup. `--claude` requests both.
+  `--print-opencode` prints configuration without writing it. Missing clients/configs can be skipped;
+  inspect installer output and use the [manual client guide](MCP-SERVER.md#4-client-configuration).
+- Does not install system ROS, Isaac Lab or private workstation assets.
+
+For a lock-preserving alternative, follow [locked setup](REPRODUCIBILITY.md#locked-simulator-setup).
+The full installer has not been qualified from a clean machine. Its commands and parser have
+been inspected; the recorded fresh-venv experiment used a separate locked sync, not `install.sh`.
+
+### Start the simulator
+
+From the same checkout root, after accepting the EULA:
+
+```bash
+./run.sh --port 8766
+```
+
+Use an unused port. A live bridge may already exist: inspect it before starting another process.
+The launcher enables the bridge, generic scene tools, UR5e tools and NVIDIA's bundled ROS bridge;
+it keeps the UR panel hidden unless `--ur5e-panel` is supplied. Its default backend is **PhysX**.
+The optional Newton flag is not a compatibility promise; see the [matrix](COMPATIBILITY.md).
+
+For a windowless GPU session, use `./run.sh --headless --port 8766` instead. Headless Sim still
+requires the NVIDIA runtime and can render sensors, but has no application window for desktop
+capture/input. Windowed tools were exercised on X11/XWayland; native Wayland is not qualified.
+Keep the launch terminal available for startup errors. First startup can take minutes for shader
+and extension preparation; wait for bridge readiness and `app_ready=true`, not a fixed sleep.
+See [startup expectations and recorded scopes](REPRODUCIBILITY.md#what-has-actually-been-verified).
+
+`scripts/check_machine.sh` is an optional **6.2-specific** preflight. If a Sim interpreter exists,
+it imports the runtime and may execute a Torch CUDA kernel. It is not a CPU-only check and should
+not be run against an older build or alongside someone else's GPU job as a generic diagnostic.
+
+## Connect and check without changing the scene
+
+Leave the simulator running; use a second terminal from the same checkout root for terminal checks or registration.
+
+Configure the host as a **stdio MCP server** using the [client guide](MCP-SERVER.md#4-client-configuration),
+then reconnect the client. The server command is `isaac-mcp`, not the simulator Python.
+`./install.sh --no-sim --claude-code --port 8766` is the explicit Claude Code registration shortcut;
+it also replaces the host tool and handles the shim as described above.
+
+In the MCP client, call `refresh_tools`, select the intended endpoint with `use_bridge` if needed,
+then `status` and `sim__stage__info` with empty arguments. Verify PID, port, build, stage identity
+and readiness before any editing, reset or playback. If the client does not honor tool-list change
+notifications, reconnect it. No bridge, missing extension or missing Lab installation is a failure
+or unavailable capability, not a successful simulation operation.
+
+For the equivalent read-only terminal check, use the repository's standard-library client:
+
+```bash
+# From checkout root; no Sim imports and no host-package installation needed for this CLI.
+python3 mcp/isaac_mcp/client.py --list-bridges
+# Set these to the intended endpoint from that listing, not an arbitrary visible window.
+BRIDGE_HOST=127.0.0.1
+BRIDGE_PORT=8766
+python3 mcp/isaac_mcp/client.py status --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
+python3 mcp/isaac_mcp/client.py sim.stage.info '{}' --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
+```
+
+The direct bridge CLI uses **`sim.stage.info`**; the MCP name is **`sim__stage__info`**.
+`--list-bridges` returns `[]` and exit 2 when no bridge is advertised. With several bridges,
+automatic selection refuses; explicitly choose the host/port you intend. These commands do not
+build the demo or start physics. Once identity is confirmed, use the [agent workflow](../AGENTS.md)
+and [scene reference](TOOLS-SCENE.md) for your actual task.
+
+## Choose a simulator build
+
+**Existing Sim:** install only the host, inspect your interpreter, then select it explicitly.
+Replace the example path with your own compatible installation. Do not rename, relocate,
+reinstall or symlink an environment just to match this guide.
+
+```bash
+# From checkout root; this replaces only the user-level host tool and may create its ffmpeg shim.
+./install.sh --no-sim
+ISAAC_SIM_PYTHON=/absolute/path/to/sim-env/bin/python
+"$ISAAC_SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
+uv pip check --python "$ISAAC_SIM_PYTHON"
+UR5E_DT_PYTHON="$ISAAC_SIM_PYTHON" ./run.sh --port 8766
+```
+
+`run.sh` does not search arbitrary installations: without the override it uses this checkout's
+`.venv/bin/python`. A vendor installation still needs compatible dependencies for these extensions.
+A plain Python `import omni` failure outside Kit does not prove the installation is broken.
+
+| Requested build | Installation path | Qualification |
+|---|---|---|
+| **6.2.0.0** | New pinned checkout above, locked alternative, or explicit existing interpreter | Per-source/mode results in the matrix; inspect dependency conflicts in existing environments |
+| **6.0.0.0, 6.0.0.1, 6.0.1.0, 6.1.0.0** | Separately prepared compatible Python 3.12 environment; explicit `UR5E_DT_PYTHON` | Scoped historical and follow-up results, not clean-install recipes or latest-fix certification for every mode |
+| Other/future builds | No tested setup recipe here | Unverified |
+
+Consult NVIDIA's version-specific [6.0 install guide](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/installation/install_python.html)
+or [6.0.1 guide](https://docs.isaacsim.omniverse.nvidia.com/6.0.1/installation/install_python.html)
+when obtaining older builds. **Do not run the root 6.2 sync in those environments.**
+The [compatibility record](COMPATIBILITY.md) is authoritative for measured scope: later save,
+viewport and URDF follow-ups have superseded some early pending checks, while the original
+6.0.1 windowed native-step stall and remaining matrix gates remain open.
+
+## Prepare the UR5e and sensor assets
+
+The host connection and `sim__stage__info` do not require a robot or workstation. A UR5e
+Quick Start does need the NVIDIA robot USD and its dependencies. The NVIDIA UR5e and
+RealSense D455 files are **not bundled** in this repository; redistributable gripper and
+object assets remain bundled with their notices. `install.sh` installs packages, not these
+cached models. Downloading models does not replace the MCP server or require downloading
+again on every launch.
+
+From the checkout root, before starting the UR workflow, prepare the operator cache:
+
+```bash
+python3 scripts/fetch_ur5e_assets.py
+python3 scripts/fetch_ur5e_assets.py --check
+```
+
+The first command downloads missing/mismatched manifest files from the configured NVIDIA
+asset root and skips already valid files. The second reads the cache only: exit 0 means all
+manifest fetch entries match size/SHA-256; exit 1 reports missing or mismatched entries.
+It checks neither the manual Vention bench nor native rendering/physics readiness.
+Do not repair or replace a cache while another simulator or user is relying on its files.
+
+The assets remain subject to NVIDIA's applicable terms; see [asset notices](provenance/ASSETS.md)
+and [vendoring](VENDORING.md). The fetcher has **no `--accept-eula` flag or interactive EULA
+acceptance step**. The installer's `--accept-eula` controls simulator setup; it is not an
+asset-redistribution license. Obtain the necessary permission before downloading or copying.
+
+### Cache location and supported options
+
+The default is `$XDG_CACHE_HOME/ur5e-dt/assets` when `XDG_CACHE_HOME` is set, otherwise
+`~/.cache/ur5e-dt/assets`. `UR5E_DT_ASSET_CACHE` overrides it. Use the same cache in the
+fetcher's environment and the selected **Kit process**; setting it only in the MCP client
+cannot change an already-running Kit process's environment.
+
+```bash
+# Choose your own writable cache, outside Git; prepare it before launching a new session.
+export UR5E_DT_ASSET_CACHE=/absolute/path/to/ur5e-assets
+python3 scripts/fetch_ur5e_assets.py --check
+# If preparation is needed and authorized, fetch into this same cache:
+python3 scripts/fetch_ur5e_assets.py
+python3 scripts/fetch_ur5e_assets.py --check
+# After a successful check, launch the intended new session using local assets only:
+UR5E_DT_OFFLINE=1 ./run.sh --port 8766
+```
+
+The initial check may return 1 on a new cache; that is a missing-asset result, not success.
+All options can be inspected without fetching: `python3 scripts/fetch_ur5e_assets.py --help`.
+
+| Option | Scope |
+|---|---|
+| `--cache-dir PATH` | Overrides the destination for this invocation only; select the same directory through `UR5E_DT_ASSET_CACHE` when launching Kit |
+| `--asset-root URL_OR_DIRECTORY` | Overrides the source for this invocation; an existing local mirror must have the manifest's source-relative layout. `UR5E_DT_ASSET_ROOT` is the environment equivalent |
+| `--check` | Verifies existing cache bytes only; no download or repair |
+| `--force` | Re-fetches/copies even matching files; intentional replacement, not a normal startup requirement |
+
+The [manifest](../exts/ur5e-dt/assets-manifest.json) pins the **Isaac asset-library 5.1**
+paths and byte hashes. That asset generation is separate from the selected **Sim 6.2**
+package version; do not substitute an arbitrary asset-library version. The sensor cache
+preserves its source-relative MDL/texture layout. Keep the whole fetched group intact,
+rather than moving only `rsd455.usd` into a different folder.
+
+### Local reuse, remote fallback and failures
+
+Resolution prefers a local file under `exts/ur5e-dt/assets`, then the operator cache, then
+an allowed configured NVIDIA URL for supported robot/sensor entries. Operator drop-ins
+under the repository asset directory are not manifest-verified; keep private files out of Git.
+Cached manifest entries **and their fetch-group dependencies** are verified before use.
+Valid local files are reused. Missing/corrupt group members refuse instead of silently
+bypassing verification with a network URL.
+
+If no local top-level asset exists and offline mode is disabled, the resolver can give Kit
+the configured remote URI. This is not the same as populating and verifying the operator
+cache; it requires network access and does not prove the remote load succeeded. Prefer
+explicit prefetch plus `--check` when preparing an offline or repeatable run.
+
+`UR5E_DT_OFFLINE=1` disables this twin resolver's remote fallback. With the robot absent,
+Quick Start returns **`Asset not available offline: robot/ur5e.usd`** and preparation guidance.
+That is a real failed operation; it must not be counted as a loaded robot. Offline mode does
+not firewall Kit, arbitrary USD references or other extensions, and it does not prevent an
+explicit fetcher invocation from downloading. For a fully offline preparation, use a local mirror.
+
+The **Vention bench is separate**: no public download is configured. Supply an approved
+licensed workstation project through [workstation preparation](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation),
+or use the twin's placeholder bench when the manual asset is absent. A placeholder does not
+replace the mandatory UR robot asset. Basic connection and generic scene work require neither.
+
+## Troubleshooting the first connection
+
+| Symptom | Check and next step |
+|---|---|
+| `isaac-mcp` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
+| Interpreter missing | Select a compatible `UR5E_DT_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
+| `uv pip check` fails | Record exact versions and conflicts. Use a new isolated locked environment for comparison; do not infer a native failure's cause from metadata alone |
+| 83 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
+| Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
+| Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
+| Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
+| `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
+| `SAVE_UNSUPPORTED` | Inspect returned properties/retry guidance; pause and follow the explicit normalization contract in [scene tools](TOOLS-SCENE.md) |
+| `TIMELINE_BUSY` or a call stops responding | Preserve logs and identity; do not repeatedly replay Play or assume a client timeout cancels native work. See the known stall in [compatibility](COMPATIBILITY.md) |
+| No display / screenshot fails | Use the actual X11/XWayland display for window tools, or headless sensor capture; neither creates a desktop session |
 
 ## Python imports and libraries
 
@@ -43,14 +274,55 @@ installer handles the dependencies below; they should not be mixed into a system
 | Host MCP server | Python 3.10 or newer; `mcp`, `mss`, `PIL` (Pillow), `Xlib` (python-xlib), `imageio_ffmpeg` | `./install.sh` or `./install.sh --no-sim` installs the host package and its dependencies. Screen capture requires an accessible graphical display; window selection/raising uses X11/XWayland. |
 | Host Isaac Lab metrics | `tensorboard` | `./install.sh` installs the host with the `isaaclab` extra. If installing the host separately, use the `[isaaclab]` extra for metrics. |
 | Isaac Sim and twin | Python 3.12; `isaacsim`, `omni`, `carb`, `pxr`, `numpy`, `scipy`, `yaml` (PyYAML), plus project dependencies including `matplotlib`, `torch` and `torchvision` | The root environment is synced by `./install.sh`; Sim supplies its Kit/USD modules. Many Kit imports are available only after Kit starts, not from an arbitrary Python interpreter. PyYAML reads an optional camera configuration. |
-| Simulator ROS bridge | `rclpy`, `sensor_msgs`, `tf2_msgs` and default message types | Supplied by the enabled Isaac Sim ROS 2 bridge. Custom ROS interfaces need a workspace built for Sim's Python 3.12; see [NVIDIA's ROS setup](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_ros.html). |
+| Simulator renderer and camera runtime | `omni.hydratexture` and `omni.kit.hydra_texture` inside Kit | Bundled NVIDIA extension in the inspected Sim installs; enabled/resolved as part of the Kit runtime where needed. `.pyi` files are type descriptions, not a separate user installation. Do not install an unrelated `omni` package or copy vendor files. |
+| Simulator ROS bridge | `rclpy`, `sensor_msgs`, `tf2_msgs` and default message types inside Kit | Supplied by the enabled Isaac Sim ROS 2 bridge; the repository launcher enables it. Custom ROS interfaces need a workspace built for Sim's Python 3.12; see [NVIDIA's ROS setup](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_ros.html). |
 | Isaac Lab jobs | Isaac Lab 3.0, its Python environment, compatible Isaac Sim, task modules and the selected training library | Install Isaac Lab separately. An activated environment or a checkout-local `.venv` can be discovered; use `ISAACLAB_PYTHON` and `ISAACLAB_ROOT` to select another installation. See [Isaac Lab tools](TOOLS-ISAACLAB.md). |
 | External ROS driver | System ROS `ros2`, UR driver, controller CLI, and Cyclone DDS | Install the matching ROS distribution and packages below. The launcher sources the system ROS setup itself. |
 
 For recordings, `install.sh` supplies an `ffmpeg` shim backed by the host's `imageio-ffmpeg` package, unless an
-existing `~/.local/bin/ffmpeg` is present. A working system `ffmpeg` can also be used. Host screen tools have no
-mouse or keyboard control by default; the X11 input tools can be explicitly enabled as described in
+existing `~/.local/bin/ffmpeg` is present. A working system `ffmpeg` can also be used. A windowed workflow needs
+an accessible display; host window and input controls were tested with X11/XWayland, not native Wayland.
+A headless Sim can still render sensor output but has no visible window to click or capture. Host screen tools have
+no mouse or keyboard control by default; the X11 input tools can be explicitly enabled as described in
 [host tools](TOOLS-HOST.md#optional-desktop-input).
+
+If a Kit module or renderer extension appears missing, first check the selected Sim interpreter and the
+running Kit extension manager/startup log. Do not try to fix a Kit import by installing `omni` or `.pyi` files
+into the host Python. The supplied launcher requests `isaac.mcp.bridge`, `sim-tools`, `ur5e-dt` and
+`isaacsim.ros2.bridge`; the UR5e panel is optional. After connecting the correct bridge, `status` and
+`sim__stage__info` help verify the running process and build; listing catalog tools by itself does not.
+
+## Optional Lab, desktop controls and project assets
+
+**Isaac Lab** is a separate installation with its own version pairing and interpreter. Set
+`ISAACLAB_PYTHON=/absolute/path/to/lab-env/bin/python` and
+`ISAACLAB_ROOT=/absolute/path/to/IsaacLab` in the host/client environment, then call
+`isaaclab__install_info` before launching jobs. Invalid explicit paths fail discovery; they do
+not silently install Lab. The host's `isaaclab` extra supplies TensorBoard metrics support,
+not the Lab runtime. For the inspected Lab 3 video workflow, MoviePy
+`>=1.0.3,<2.0.0.dev0` and `imageio-ffmpeg` belong in the **Lab interpreter**; use that
+Lab checkout's video extra in a dedicated compatible environment. Plain headless training
+does not require those video packages. Earlier video checks used a private overlay. A later self-contained Lab 3 / Sim 6.2
+environment exercised training and video without inherited `.pth` files, but retains two
+package-metadata conflicts. See [exact reproduction inputs and limits](REPRODUCIBILITY.md#self-contained-lab-3-reproduction)
+and [Lab versions, discovery and video modes](TOOLS-ISAACLAB.md); neither is a clean-machine
+or full-installer certification.
+A successful job launch is not a completed job: inspect status and logs. Jobs normally refuse
+alongside an active Kit bridge; coordinate GPU ownership instead of bypassing the guard by default.
+
+**Desktop input and managed sessions** are opt-in host groups. Set
+`ISAAC_MCP_LOCAL_TOOLS=all,screen_input,sim_launch` in the client server environment only
+when both are needed. Desktop input acts on a shared X11 session; verify window/PID first.
+Managed launches require resource checks and distinct endpoints. See [host tools](TOOLS-HOST.md).
+
+**Your project assets** need an explicitly approved trusted folder and a host/Kit-accessible
+staging/cache location. Approval can include a bounded project copy, not just one USD file.
+Loading native assets is not sandboxed. `assets__prepare_workstation` prepares a private cache
+from the operator's approved workstation USD; it does not load the scene or overwrite an
+existing cached asset. Vention-specific routing is separate from generic project import.
+No private workstation or personal asset is required for the initial read-only connection check.
+Follow [project setup and exact tool parameters](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation)
+and [asset license notices](provenance/ASSETS.md).
 
 ## Optional UR5e mock ROS driver
 

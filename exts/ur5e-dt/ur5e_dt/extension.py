@@ -22,9 +22,22 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # The bridge extension owns the process-wide socket; the twin owns only its
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
+from .graph_compat import ensure_fixed_graph
+from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_uri
+from .object_pose import read_local_pose, set_local_pose
+from .robot_visuals import prepare_robot_visuals
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
 from .tf_compat import use_legacy_transform_publisher
+from .world_compat import initialized_twin_world, paused_scene_edit, twin_play_edit
+from .physics_compat import (
+    selected_engine, require_newton_mount_support,
+    configure_newton_rate, configure_newton_mount,
+    subscribe_physics_step, close_physics_step,
+    configure_newton_gripper, runtime_link_matrix,
+    prepare_newton_tensors, prepare_newton_wrench, wrench_capability,
+    tool_wrench, physics_stamp, prepare_saved_twin_runtime,
+)
 
 
 def _use_legacy_tf_publisher(og):
@@ -378,19 +391,18 @@ if '_viewport_pub' not in globals():
 
 
 def _local_asset(relpath):
-    """Resolve a local asset path under exts/ur5e-dt/assets/ as a file:// URI."""
-    full = os.path.join(_assets_dir, relpath)
-    if not os.path.exists(full):
-        raise FileNotFoundError(f"Asset not found: {full}")
-    return "file://" + os.path.abspath(full)
+    """Resolve an asset to a file:// or https:// URI.
+
+    Bundled assets win, then the operator cache, then the pinned NVIDIA asset
+    root for entries the manifest allows.  See ``asset_cache`` and
+    ``docs/provenance/ASSETS.md``.
+    """
+    return resolve_uri(relpath)
 
 
 def _local_asset_dir(relpath):
     """Resolve a local asset directory path (no file:// prefix, for os.listdir)."""
-    full = os.path.join(_assets_dir, relpath)
-    if not os.path.isdir(full):
-        raise FileNotFoundError(f"Asset directory not found: {full}")
-    return full
+    return str(resolve_dir(relpath))
 
 
 # Assembly definitions: each entry pairs a local objects folder with its assembly JSON
@@ -436,7 +448,7 @@ MCP_TOOL_REGISTRY = {
     # NOTE: run_python is provided by the isaac.mcp.bridge bridge as a
     # built-in verb — do not re-declare it here.
     "play_scene": {
-        "description": "Start/resume the simulation timeline in Isaac Sim.",
+        "description": "Start/resume the simulation timeline. Restores the saved twin's Python ROS callbacks; Newton twin playback uses CPU and needs a stopped stage before first initialization. Does not rebuild saved graphs or switch physics engines.",
         "parameters": {}
     },
     "stop_scene": {
@@ -452,8 +464,8 @@ MCP_TOOL_REGISTRY = {
         "parameters": {
             "assembly": {
                 "type": "string",
-                "enum": ["fmb1", "fmb2", "fmb3"],
-                "description": "Which assembly configuration to use"
+                "enum": ["fmb1", "fmb2", "fmb3", "fmb4", "jenga", "fmb_jenga"],
+                "description": "Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
             }
         }
     },
@@ -493,8 +505,8 @@ MCP_TOOL_REGISTRY = {
         "parameters": {
             "assembly": {
                 "type": "string",
-                "enum": ["fmb1", "fmb2", "fmb3"],
-                "description": "Which assembly folder to load objects from"
+                "enum": ["fmb1", "fmb2", "fmb3", "fmb4", "jenga", "fmb_jenga"],
+                "description": "Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
             }
         }
     },
@@ -535,7 +547,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "quick_start": {
-        "description": "One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Use after new_stage to rebuild the scene from scratch.",
+        "description": "One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
         "parameters": {}
     },
     "start_recording": {
@@ -564,7 +576,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "load_workstation": {
-        "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the bundled vention.usd at /World/Vention and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
+        "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
         "parameters": {}
     },
     "quick_start_with_workstation": {
@@ -1173,6 +1185,11 @@ class DigitalTwin(omni.ext.IExt):
         """Handle stage lifecycle events. On OPENED (new/load), clean up World singleton."""
         import omni.usd
         if event.type == int(omni.usd.StageEventType.OPENED):
+            # Callback handles belong to the previous stage. Do not write a
+            # force gate here: OPENED already refers to the replacement stage.
+            self._stop_gripper_physics()
+            self._stop_physics_callback('_force_physx_sub', '_effort_articulation',
+                                        '_force_publish_active', '_force_warmup')
             # Clear extension instance references to old stage objects
             for attr in ['_ur5e_view', '_articulation', '_gripper_articulation',
                          '_force_articulation', '_gripper_pub_node', '_force_pub_node']:
@@ -1192,7 +1209,9 @@ class DigitalTwin(omni.ext.IExt):
                     world = World.instance()
                     if world is not None:
                         world.clear_all_callbacks()
-                        world.clear()
+                        # OPENED already refers to the new stage. Never clear
+                        # its USD or synchronously pump Kit from this callback.
+                        world.scene.clear(registry_only=True)
                 except Exception as e:
                     # World.clear() can fail on a stage that is already gone; the singleton must still be dropped.
                     print(f"[ur5e-dt] World.clear skipped on stage event: {e}")
@@ -1373,8 +1392,7 @@ class DigitalTwin(omni.ext.IExt):
             self._sys_log_vstack.clear()
 
     def _resubscribe_physics_callbacks(self):
-        """Re-subscribe physics callbacks for graphs that survived a hot-reload."""
-        import omni.physx
+        """Bind runtime callbacks to existing graphs, without rebuilding USD."""
 
         stage = omni.usd.get_context().get_stage()
         if stage is None:
@@ -1383,13 +1401,16 @@ class DigitalTwin(omni.ext.IExt):
         # Gripper action graph (joint actuator: Float64 target_sub -> rg2_gripper_joint)
         gripper_graph = "/Graph/ActionGraph_RG2"
         if stage.GetPrimAtPath(gripper_graph):
+            self._stop_gripper_physics()
             self._gripper_graph_path = gripper_graph
             self._gripper_sub_attr_path = f"{gripper_graph}/target_sub.outputs:data"
             self._gripper_state_name_attr = f"{gripper_graph}/state_pub.inputs:name"
             self._gripper_state_pos_attr = f"{gripper_graph}/state_pub.inputs:position"
+            self._gripper_pad_attr = f"{gripper_graph}/pad_pub.inputs:data"
+            self._pad_local = None
             self._gripper_articulation = None
             self._gripper_act_dof_idx = None
-            self._gripper_physx_sub = omni.physx.get_physx_interface().subscribe_physics_step_events(
+            self._gripper_physx_sub = subscribe_physics_step(
                 self._on_physics_step_gripper
             )
             self._gripper_publish_active = True
@@ -1398,14 +1419,28 @@ class DigitalTwin(omni.ext.IExt):
         # Force publisher action graph
         force_graph = "/Graph/ActionGraph_UR5e_ForcePublish"
         if stage.GetPrimAtPath(force_graph):
+            self._stop_physics_callback('_force_physx_sub', '_effort_articulation',
+                                        '_force_publish_active', '_force_warmup')
             self._force_graph_path = force_graph
+            self._force_publish_status = dict(wrench_capability(), status="warming_up")
+            newton_force = selected_engine() == "newton"
+            if newton_force:
+                if not stage.GetPrimAtPath(force_graph + "/valid"):
+                    self._force_publish_status.update(available=False, status="unavailable",
+                        reason="Saved Newton force graph lacks a validity gate; rebuild on a new twin stage")
+                    return
+            self._set_force_gate(False, required=newton_force)
+            if not self._force_publish_status["available"]:
+                self._force_publish_status["status"] = "unavailable"
+                return
             # Recover the publisher OG node handle from the existing graph
             pub_prim = stage.GetPrimAtPath(f"{force_graph}/publisher")
             if pub_prim:
                 self._force_pub_node = og.get_node_by_path(f"{force_graph}/publisher")
-            self._force_physx_sub = omni.physx.get_physx_interface().subscribe_physics_step_events(
+            self._force_physx_sub = subscribe_physics_step(
                 self._on_physics_step_force
             )
+            self._force_publish_active = True
             print(f"[HotReload] Re-subscribed force publisher physics callback for {force_graph}")
 
     def _on_assembly_changed(self, model):
@@ -2504,15 +2539,13 @@ class DigitalTwin(omni.ext.IExt):
         await self._wait_for_stage()
         stage = omni.usd.get_context().get_stage()
 
-        # Only initialize simulation context if physics scene doesn't exist yet
-        physics_scene_prim = stage.GetPrimAtPath("/physicsScene")
-        if not physics_scene_prim or not physics_scene_prim.IsValid():
-            world = World()
-            await world.initialize_simulation_context_async()
-            print("Initialized simulation context and physics scene")
-        else:
-            world = World()
-            print("Physics scene already exists, skipping initialization")
+        # World() otherwise takes the standalone synchronous path under
+        # SimulationApp and pumps app.update inside this async MCP task.
+        if World.instance() is None:
+            prepare_newton_tensors()
+            prepare_newton_wrench()
+        world = await initialized_twin_world(World)
+        print("Simulation context initialized")
 
         # Check for ground plane on stage and add if missing
         ground_prim = stage.GetPrimAtPath("/World/defaultGroundPlane")
@@ -2558,21 +2591,72 @@ class DigitalTwin(omni.ext.IExt):
             physx_scene_api.CreateEnableGPUDynamicsAttr().Set(False)
             physx_scene_api.CreateTimeStepsPerSecondAttr().Set(getattr(self, '_time_steps_per_second', 120))
             physx_scene_api.CreateEnableCCDAttr().Set(False)
-            print(f"GPU dynamics disabled, timeStepsPerSecond={getattr(self, '_time_steps_per_second', 120)}, CCD disabled on /physicsScene")
+            engine = selected_engine()
+            configure_newton_rate(physics_scene_prim, getattr(self, '_time_steps_per_second', 120), engine)
+            print(f"Twin scene uses {engine} on CPU at {getattr(self, '_time_steps_per_second', 120)} Hz; PhysX GPU dynamics/CCD flags disabled")
         else:
             print("Warning: /physicsScene not found")
 
         print("Scene loaded successfully.")
 
+    def _build_placeholder_workstation(self, stage, parent_path):
+        """Build a simple bench when the licensed Vention export is not installed.
+
+        The real bench is visual context only. This placeholder keeps the same
+        top-at-z=0 contract and ``/World/Vention`` path so the rest of the scene
+        and the ROS pose parity are unchanged.
+        """
+        from pxr import Gf, UsdGeom
+
+        bench_path = parent_path + "/Bench"
+        UsdGeom.Xform.Define(stage, bench_path)
+
+        def box(name, size, center):
+            cube = UsdGeom.Cube.Define(stage, f"{bench_path}/{name}")
+            cube.GetSizeAttr().Set(1.0)
+            xform = UsdGeom.Xformable(cube)
+            xform.ClearXformOpOrder()
+            xform.AddTranslateOp().Set(Gf.Vec3d(*center))
+            xform.AddScaleOp().Set(Gf.Vec3f(*size))
+
+        box("Top", (1.4, 0.9, 0.04), (0.0, 0.0, -0.02))
+        box("Shelf", (1.3, 0.8, 0.02), (0.0, 0.0, -0.55))
+        for index, (x, y) in enumerate(
+            ((-0.62, -0.38), (0.62, -0.38), (-0.62, 0.38), (0.62, 0.38))
+        ):
+            box(f"Leg{index}", (0.06, 0.06, 0.86), (x, y, -0.47))
+
+        parent = stage.GetPrimAtPath(parent_path)
+        xform = UsdGeom.Xform(parent)
+        xform.ClearXformOpOrder()
+        xform.AddTranslateOp().Set(
+            Gf.Vec3d(WORKSTATION_XY[0], WORKSTATION_XY[1], 0.0)
+        )
+
+        ground = stage.GetPrimAtPath("/World/defaultGroundPlane")
+        if ground and ground.IsValid():
+            UsdGeom.Imageable(ground).MakeInvisible()
+            print("Default ground plane visual hidden (z=0 collision retained).")
+        print(f"Placeholder workstation built at {parent_path} (top at z=0).")
+
     async def load_workstation(self):
+        # Large-reference composition must complete outside active physics;
+        # otherwise older Motion BVH renderers can fault on the following Stop.
+        async with paused_scene_edit(
+            self._timeline, omni.kit.app.get_app(), omni.usd.get_context().get_stage
+        ):
+            await self._load_workstation()
+
+    async def _load_workstation(self):
         """Load the Vention workstation bench under the robot (additive, visual-only).
 
-        References the bundled vention.usd at /World/Vention and places it so the
+        References the operator-supplied or cached vention.usd at /World/Vention
+        (or builds a placeholder bench) and places it so the
         tabletop TOP surface is exactly at z=0 — coincident with the work plane where
         the robot base (ROBOT_BASE_Z=0.0) and objects already sit. The robot is NOT
         moved and ROBOT_BASE_Z is NOT changed, so ROS pose parity is untouched. The
         bench has no colliders; the default ground plane's z=0 collision is retained
-        and only its visual is hidden. Safe to call while the sim is playing.
+        and only its visual is hidden. The wrapper pauses and restores playback.
         """
         import time
         import omni.kit.app
@@ -2596,7 +2680,17 @@ class DigitalTwin(omni.ext.IExt):
         #  wrapper sidesteps that gotcha entirely — all our transform lives on the parent.)
         UsdGeom.Xform.Define(stage, parent_path)
 
-        asset_path = _local_asset(WORKSTATION_USD)
+        try:
+            asset_path = _local_asset(WORKSTATION_USD)
+        except AssetMissing:
+            self._build_placeholder_workstation(stage, parent_path)
+            print(
+                "Vention workstation asset not installed; using a placeholder bench. "
+                f"Place a licensed vention.usd under {cache_dir() / 'workstation'} "
+                "to use the real model."
+            )
+            return
+
         add_reference_to_stage(usd_path=asset_path, prim_path=bench_path)
 
         # Wait for the referenced bench prim to compose.
@@ -2863,6 +2957,8 @@ class DigitalTwin(omni.ext.IExt):
         import numpy as np
         from pxr import Gf, Sdf, UsdGeom
 
+        require_newton_mount_support(selected_engine())
+
         print("=== Quick Start ===")
 
         # 1. Load scene
@@ -3055,10 +3151,12 @@ class DigitalTwin(omni.ext.IExt):
         world = World.instance()
         if world is None:
             print("World not initialized. Creating simulation context for existing stage...")
-            world = World()
-            await world.initialize_simulation_context_async()
-            # Note: Not adding ground plane here - assumes existing scene has one or user doesn't want it
-            print("Simulation context initialized.")
+        if World.instance() is None:
+            prepare_newton_tensors()
+            prepare_newton_wrench()
+        world = await initialized_twin_world(World)
+        # No ground plane here: preserve the user's existing stage.
+        print("Simulation context initialized.")
 
         # 2. Add the USD asset
         add_reference_to_stage(usd_path=asset_path, prim_path=prim_path)
@@ -3073,6 +3171,24 @@ class DigitalTwin(omni.ext.IExt):
             time.sleep(0.1)
         else:
             raise RuntimeError(f"Failed to load prim at {prim_path}")
+
+        # Resolve the renderer's instance transform issue before physics starts.
+        expanded_visuals = prepare_robot_visuals(stage, prim_path)
+        if expanded_visuals:
+            print(f"Expanded {len(expanded_visuals)} UR5e visual instances for runtime rendering.")
+
+        # NVIDIA's published UR5e asset has no tool0 frame; the twin's ROS-facing
+        # copy did. Recreate it so downstream tools and TF consumers see the same
+        # flange contract whether the robot came from the cache or the asset root.
+        tool0_path = f"{prim_path}/wrist_3_link/flange/tool0"
+        if not stage.GetPrimAtPath(tool0_path).IsValid():
+            tool0 = UsdGeom.Xform.Define(stage, tool0_path)
+            tool0.ClearXformOpOrder()
+            tool0.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0))
+            tool0.AddOrientOp(UsdGeom.XformOp.PrecisionDouble).Set(
+                Gf.Quatd(0.5, 0.5, 0.5, 0.5)
+            )
+            print(f"Added tool0 frame at {tool0_path}")
 
         # 4. Apply translation and orientation
         xform = UsdGeom.Xform(prim)
@@ -3140,13 +3256,13 @@ class DigitalTwin(omni.ext.IExt):
                 joint_names=list(joint_names),
             )
         except Exception as exc:  # pragma: no cover - older view without set_gains
-            print(f"Warning: could not push the drive gains into PhysX ({type(exc).__name__}: {exc})")
+            print(f"Warning: could not push the drive gains into the selected physics engine ({type(exc).__name__}: {exc})")
 
         self._verify_drive_gains(prim_path, joint_names)
         print("UR5e robot loaded successfully!")
 
     def _verify_drive_gains(self, prim_path: str, joint_names: list) -> None:
-        """Read the gains PhysX is actually using and say so on the console.
+        """Read the gains the selected engine is using and report them.
 
         The simulation, not the USD, decides how the joints behave, so a mismatch
         between the configured drive and the solver's gains has to be visible:
@@ -3160,7 +3276,7 @@ class DigitalTwin(omni.ext.IExt):
             kps = np.asarray(kps).reshape(-1)
             kds = np.asarray(kds).reshape(-1)
         except Exception as exc:  # pragma: no cover - physics view may be absent
-            print(f"Warning: could not read the PhysX drive gains ({type(exc).__name__}: {exc})")
+            print(f"Warning: could not read the runtime drive gains ({type(exc).__name__}: {exc})")
             return
         bad = [
             (name, float(kps[i]), float(kds[i]))
@@ -3170,13 +3286,13 @@ class DigitalTwin(omni.ext.IExt):
         if bad:
             for name, kp, kd in bad:
                 print(
-                    f"Warning: {name} drive in PhysX is stiffness={kp:.3f}, damping={kd:.3f} "
+                    f"Warning: {name} runtime drive is stiffness={kp:.3f}, damping={kd:.3f} "
                     f"but the USD drive says {self._ur5e_stiffness}/{self._ur5e_damping} "
                     f"(= {expected_kps:.3f}/{expected_kds:.3f} N*m/rad)"
                 )
         else:
             print(
-                f"Drive gains in PhysX match the USD drive: {expected_kps:.3f} N*m/rad, "
+                f"Runtime drive gains match the USD drive: {expected_kps:.3f} N*m/rad, "
                 f"{expected_kds:.3f} N*m*s/rad on {len(joint_names)} arm joints"
             )
 
@@ -3317,18 +3433,14 @@ class DigitalTwin(omni.ext.IExt):
             print("Error: RG2 gripper not found at /World/RG2_Gripper. Import and attach gripper first.")
             return
 
-        # Clean up any previous physics callback
-        self._stop_gripper_physics()
 
         graph_path = "/Graph/ActionGraph_RG2"
         keys = og.Controller.Keys
 
         stage = omni.usd.get_context().get_stage()
-        if stage.GetPrimAtPath(graph_path):
-            stage.RemovePrim(graph_path)
 
-        (graph, nodes, _, _) = og.Controller.edit(
-            {"graph_path": graph_path, "evaluator_name": "execution"},
+        (graph, nodes, _, _) = ensure_fixed_graph(
+            stage, og, {"graph_path": graph_path, "evaluator_name": "execution"},
             {
                 keys.CREATE_NODES: [
                     ("tick", "omni.graph.action.OnPlaybackTick"),
@@ -3362,6 +3474,8 @@ class DigitalTwin(omni.ext.IExt):
             }
         )
 
+        self._stop_gripper_physics()
+
         # Store attribute paths for the physics callback (Float64 target → rg2_gripper_joint;
         # callback fills the JointState name[]/position[] on state_pub each step).
         self._gripper_graph_path = graph_path
@@ -3374,7 +3488,7 @@ class DigitalTwin(omni.ext.IExt):
         self._gripper_act_dof_idx = None
 
         # Subscribe to physics step events — joint target applied at physics rate
-        self._gripper_physx_sub = omni.physx.get_physx_interface().subscribe_physics_step_events(
+        self._gripper_physx_sub = subscribe_physics_step(
             self._on_physics_step_gripper
         )
         self._gripper_publish_active = True
@@ -3463,6 +3577,8 @@ class DigitalTwin(omni.ext.IExt):
             p = stage.GetPrimAtPath(f"{base}/{link}")
             if not (p and p.IsValid()):
                 return None
+            if selected_engine() == "newton":
+                return runtime_link_matrix(self._gripper_articulation, link)
             return UsdGeom.Xformable(p).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
         xL, xR = link_xform(lL), link_xform(lR)
         if xL is None or xR is None:
@@ -3483,7 +3599,16 @@ class DigitalTwin(omni.ext.IExt):
                              if pr.GetTypeName() == "Mesh"), None)
                 if mesh is None:
                     return None
-                mw = UsdGeom.Xformable(mesh).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                if selected_engine() == "newton":
+                    # Mesh authoring is static relative to its rigid link. USD
+                    # world poses do not follow Newton's Fabric runtime poses.
+                    relative, reset = UsdGeom.XformCache().ComputeRelativeTransform(
+                        mesh.GetPrim(), stage.GetPrimAtPath(f"{base}/{link}"))
+                    if reset:
+                        raise RuntimeError("Pad mesh resets its transform stack")
+                    mw = relative * xf
+                else:
+                    mw = UsdGeom.Xformable(mesh).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
                 best_w, best_p = None, None
                 for p in mesh.GetPointsAttr().Get():
                     w = Gf.Vec3d(mw.Transform(Gf.Vec3d(p)))
@@ -3505,6 +3630,7 @@ class DigitalTwin(omni.ext.IExt):
     def _stop_physics_callback(self, sub_attr, artic_attr, active_attr, warmup_attr):
         """Stop a physics callback and clean up its resources."""
         if hasattr(self, sub_attr) and getattr(self, sub_attr) is not None:
+            close_physics_step(getattr(self, sub_attr))
             setattr(self, sub_attr, None)
         if hasattr(self, artic_attr):
             setattr(self, artic_attr, None)
@@ -3553,10 +3679,10 @@ class DigitalTwin(omni.ext.IExt):
     def setup_force_publish_action_graph(self):
         """Setup force publishing as geometry_msgs/WrenchStamped on /force_torque_sensor_broadcaster/wrench_sim.
 
-        Uses a physics step callback to read measured joint forces at physics rate
-        (~60 Hz). Uses get_measured_joint_forces() which returns 6-DOF spatial forces
-        [Fx, Fy, Fz, Tx, Ty, Tz] per joint. Publishes full wrench from the UR5e wrist joint,
-        matching the real robot's force_torque_sensor_broadcaster message format.
+        Uses a physics step callback to read the native incoming-joint force
+        [Fx, Fy, Fz, Tx, Ty, Tz] at the named wrist. Publishes the transformed
+        tool0 wrench with simulation time, using the real robot's
+        force_torque_sensor_broadcaster message format.
         """
         import omni.physx
 
@@ -3570,6 +3696,12 @@ class DigitalTwin(omni.ext.IExt):
         # Clean up any previous physics callback
         self._stop_force_publish()
 
+        capability = wrench_capability()
+        self._force_publish_status = dict(capability, status="warming_up")
+        if not capability["available"]:
+            self._force_publish_status["status"] = "unavailable"
+            print(f"Force publisher unavailable: {capability['reason']}; no zero-wrench publisher created")
+            return
         # Check that UR5e prim exists in the scene (may survive hot-reload even if Python state is lost)
         stage_check = omni.usd.get_context().get_stage()
         if not stage_check.GetPrimAtPath("/World/UR5e"):
@@ -3588,26 +3720,27 @@ class DigitalTwin(omni.ext.IExt):
         graph_path = "/Graph/ActionGraph_UR5e_ForcePublish"
         keys = og.Controller.Keys
         stage = omni.usd.get_context().get_stage()
-        if stage.GetPrimAtPath(graph_path):
-            stage.RemovePrim(graph_path)
 
         # Create OmniGraph with OnPlaybackTick for ROS2 publisher execution
-        (graph, nodes, _, _) = og.Controller.edit(
-            {"graph_path": graph_path, "evaluator_name": "execution"},
+        (graph, nodes, _, _) = ensure_fixed_graph(
+            stage, og, {"graph_path": graph_path, "evaluator_name": "execution"},
             {
                 keys.CREATE_NODES: [
                     ("tick", "omni.graph.action.OnPlaybackTick"),
                     ("context", "isaacsim.ros2.bridge.ROS2Context"),
-                    ("publisher", "isaacsim.ros2.bridge.ROS2Publisher")
+                    ("publisher", "isaacsim.ros2.bridge.ROS2Publisher"),
+                    ("valid", "omni.graph.action.Branch"),
                 ],
                 keys.SET_VALUES: [
                     ("publisher.inputs:messageName", "WrenchStamped"),
                     ("publisher.inputs:messagePackage", "geometry_msgs"),
                     ("publisher.inputs:topicName", "force_torque_sensor_broadcaster/wrench_sim"),
+                    ("valid.inputs:condition", False),
                 ],
                 keys.CONNECT: [
-                    ("tick.outputs:tick", "publisher.inputs:execIn"),
                     ("context.outputs:context", "publisher.inputs:context"),
+                    ("tick.outputs:tick", "valid.inputs:execIn"),
+                    ("valid.outputs:execTrue", "publisher.inputs:execIn"),
                 ]
             }
         )
@@ -3623,7 +3756,7 @@ class DigitalTwin(omni.ext.IExt):
         og.Controller.attribute("inputs:header:frame_id", self._force_pub_node).set("tool0")
 
         # Physics callback reads joint forces at physics rate and updates the attributes
-        self._force_physx_sub = omni.physx.get_physx_interface().subscribe_physics_step_events(
+        self._force_physx_sub = subscribe_physics_step(
             self._on_physics_step_force
         )
 
@@ -3632,19 +3765,23 @@ class DigitalTwin(omni.ext.IExt):
         print(f"UR5e Force Publisher created at {graph_path}")
         print("Publishing geometry_msgs/WrenchStamped to topic: /force_torque_sensor_broadcaster/wrench_sim")
         print("Full 6-DOF wrench (Fx, Fy, Fz, Tx, Ty, Tz) from UR5e wrist joint")
-        print("Joint forces read at physics rate (~60 Hz)")
+        print("Joint forces read at the configured physics rate")
 
     def _on_physics_step_force(self, dt):
         """Physics step callback - read joint forces and update OmniGraph WrenchStamped attributes.
 
-        Uses get_measured_joint_forces() which returns 6-DOF spatial forces
-        [Fx, Fy, Fz, Tx, Ty, Tz] per joint. Publishes full wrench from the last joint
-        (wrist joint) as geometry_msgs/WrenchStamped.
+        Reads the named wrist's native incoming-joint wrench and transforms it
+        to tool0 before publishing, with the observed simulation timestamp.
         """
         if self._force_pub_node is None:
             # Cleared by a stage OPENED event; the publisher graph is gone until it is rebuilt.
             return
+        newton_force = selected_engine() == "newton"
         try:
+            # New graphs gate both engines until a complete valid sample. Old
+            # PhysX saved graphs without this node remain readable; do not
+            # rebuild their authored graph merely to restore Python callbacks.
+            self._set_force_gate(False, required=newton_force)
             artic = self._lazy_init_articulation(
                 '_effort_articulation', '/World/UR5e',
                 'force_pub_ctrl', '_force_warmup')
@@ -3656,24 +3793,42 @@ class DigitalTwin(omni.ext.IExt):
             if getattr(artic, '_physics_view', None) is None:
                 return
 
-            # get_measured_joint_forces returns shape (num_articulations, num_joints, 6)
-            # where 6 = [Fx, Fy, Fz, Tx, Ty, Tz]
-            forces = self._effort_articulation.get_measured_joint_forces()
-            if forces is not None and len(forces) > 0:
-                # Use last joint (wrist joint) - full 6-DOF wrench
-                wrist = forces[0][-1]
-                node = self._force_pub_node
-                og.Controller.attribute("inputs:wrench:force:x", node).set(float(wrist[0]))
-                og.Controller.attribute("inputs:wrench:force:y", node).set(float(wrist[1]))
-                og.Controller.attribute("inputs:wrench:force:z", node).set(float(wrist[2]))
-                og.Controller.attribute("inputs:wrench:torque:x", node).set(float(wrist[3]))
-                og.Controller.attribute("inputs:wrench:torque:y", node).set(float(wrist[4]))
-                og.Controller.attribute("inputs:wrench:torque:z", node).set(float(wrist[5]))
+            wrist = tool_wrench(artic, omni.usd.get_context().get_stage())
+            from isaacsim.core.simulation_manager import SimulationManager
+            sec, nanosec = physics_stamp(float(SimulationManager.get_simulation_time()))
+            node = self._force_pub_node
+            og.Controller.attribute("inputs:wrench:force:x", node).set(float(wrist[0]))
+            og.Controller.attribute("inputs:wrench:force:y", node).set(float(wrist[1]))
+            og.Controller.attribute("inputs:wrench:force:z", node).set(float(wrist[2]))
+            og.Controller.attribute("inputs:wrench:torque:x", node).set(float(wrist[3]))
+            og.Controller.attribute("inputs:wrench:torque:y", node).set(float(wrist[4]))
+            og.Controller.attribute("inputs:wrench:torque:z", node).set(float(wrist[5]))
+            # Dynamic ROS fields are process state on both engines; saved
+            # graphs can reopen with an empty frame and a zero timestamp.
+            og.Controller.attribute("inputs:header:frame_id", node).set("tool0")
+            og.Controller.attribute("inputs:header:stamp:sec", node).set(sec)
+            og.Controller.attribute("inputs:header:stamp:nanosec", node).set(nanosec)
+            self._set_force_gate(True, required=newton_force)
+            self._force_publish_status = dict(wrench_capability(), status="ready")
+            self._force_last_error = None
         except Exception as e:
-            print(f"[Force callback] {e}")
+            self._force_publish_status = dict(available=False, status="unavailable", reason=str(e))
+            if str(e) != getattr(self, "_force_last_error", None):
+                print(f"[Force callback] {e}; publisher unavailable until a valid runtime observation")
+                self._force_last_error = str(e)
+
+    def _set_force_gate(self, value, required=False):
+        stage = omni.usd.get_context().get_stage()
+        path = "/Graph/ActionGraph_UR5e_ForcePublish/valid"
+        if stage is None or not stage.GetPrimAtPath(path):
+            if required:
+                raise RuntimeError("Force publisher has no validity gate; rebuild its graph")
+            return
+        og.Controller.attribute(path + ".inputs:condition").set(value)
 
     def _stop_force_publish(self):
         """Stop the physics-rate force publisher and clean up resources."""
+        self._set_force_gate(False)
         self._stop_physics_callback('_force_physx_sub', '_effort_articulation',
                                     '_force_publish_active', '_force_warmup')
 
@@ -3740,12 +3895,13 @@ class DigitalTwin(omni.ext.IExt):
             drive.CreateStiffnessAttr().Set(RG2_ACT_STIFFNESS)
             drive.CreateDampingAttr().Set(RG2_ACT_DAMPING)
             drive.CreateMaxForceAttr().Set(RG2_ACT_MAXFORCE)
+            configure_newton_gripper(act_prim, selected_engine())
             act_pj = PhysxSchema.PhysxJointAPI.Get(stage, act_prim.GetPath()) or \
                 PhysxSchema.PhysxJointAPI.Apply(act_prim)
             (act_pj.GetMaxJointVelocityAttr() or act_pj.CreateMaxJointVelocityAttr()).Set(
                 float(RG2_MAX_JOINT_VEL))
-            print(f"Actuated {RG2_ACT_JOINT}: stiffness={RG2_ACT_STIFFNESS} "
-                  f"damping={RG2_ACT_DAMPING} maxForce={RG2_ACT_MAXFORCE} "
+            print(f"Actuated {RG2_ACT_JOINT}: stiffness={drive.GetStiffnessAttr().Get()} "
+                  f"damping={drive.GetDampingAttr().Get()} maxForce={RG2_ACT_MAXFORCE} "
                   f"maxJointVel={RG2_MAX_JOINT_VEL}")
         else:
             print(f"Warning: actuated joint not found at {act_path}")
@@ -3844,6 +4000,9 @@ class DigitalTwin(omni.ext.IExt):
         from pxr import Usd, Sdf, UsdGeom, Gf
         import math
 
+        engine = selected_engine()
+        require_newton_mount_support(engine)
+
         stage = omni.usd.get_context().get_stage()
         rg2_root = "/World/RG2_Gripper"
         rg2_tool0 = f"{rg2_root}/{RG2_ART_ROOT_REL}"      # husarion articulation root = flange frame
@@ -3908,7 +4067,7 @@ class DigitalTwin(omni.ext.IExt):
             print("Error: QuickChanger quick_changer_link not found — import_adapter failed.")
             return
 
-        # THREE-OWNER structural chain (arm | adapter | gripper), matching prismatic pm_scene/
+        # PhysX structural chain (arm | adapter | gripper), matching prismatic pm_scene/
         # load_gripper.py (_attach_adapter_to_ur5e + _attach_rg2_to_adapter). The Quick-Changer is a
         # FREE rigid body welded IN SERIES between the two articulations (both joints
         # excludeFromArticulation=True) and is the STRUCTURAL owner of the 15.92mm standoff — NOT a
@@ -3930,17 +4089,10 @@ class DigitalTwin(omni.ext.IExt):
         joint_prim.CreateAttribute("physics:localRot0", Sdf.ValueTypeNames.Quatf, custom=True).Set(F_rot)
         joint_prim.CreateAttribute("physics:localRot1", Sdf.ValueTypeNames.Quatf, custom=True).Set(Gf.Quatf(1, 0, 0, 0))
 
-        # === SINGLE-ARTICULATION structural chain: UR5e -> QC (adapter) -> RG2 (gripper) (2026-07-02) ===
-        # The Quick-Changer is a STRUCTURAL adapter and the gripper attaches to the ADAPTER, not the arm.
-        # The old design made UR5e and RG2 SEPARATE articulations bridged by MAXIMAL-coordinate welds with
-        # the free QC between; the weld to the gripper's own (zero-mass) articulation root was compliant
-        # and the whole gripper body drifted ~4mm along the approach under the finger-drive reaction
-        # (flange->rg2_base 19.82 OPEN vs 15.62 CLOSED). Fix (the documented Isaac way — Robot Assembler /
-        # articulation-stability guide: avoid maximal-coord joints bridging separate articulations / large
-        # mass ratios): merge everything into ONE articulation. Both coupling joints are REDUCED-COORDINATE
-        # (excludeFromArticulation=FALSE) and we remove the gripper's OWN ArticulationRootAPI, so the chain
-        # wrist_3 -> QC -> rg2_base -> hand -> fingers is a single rigid articulation tree (rigid by
-        # construction; the finger mimic sub-tree moves rigidly with the coupler).
+        # Keep the RG2 articulation separate for its named joint controller.
+        # The PhysX chain uses two maximal-coordinate welds. Newton instead
+        # includes QC in the arm tree and uses an inter-tree equality weld for
+        # RG2; configure_newton_mount applies that adapter below.
         off = Gf.Matrix4d(1.0); off.SetTranslateOnly(Gf.Vec3d(STANDOFF_M, 0, 0))
         rg2_base_target = off * flange_l2w
 
@@ -3964,7 +4116,10 @@ class DigitalTwin(omni.ext.IExt):
         # weld1: wrist_3 -> QC (at the flange). weld2: QC -> rg2_base (+15.92 along +X = the adapter face).
         _weld(joint_path, wrist3_path, qc_link_path, F_pos, F_rot)
         _weld(adapter_joint_path, qc_link_path, rg2_tool0, Gf.Vec3f(STANDOFF_M, 0, 0), Gf.Quatf(1, 0, 0, 0))
-        print("3-owner mount: wrist_3 -> [QC adapter] -> rg2_base (maximal-coord welds; separate articulations).")
+        configure_newton_mount(
+            stage.GetPrimAtPath(joint_path), stage.GetPrimAtPath(adapter_joint_path), engine
+        )
+        print(f"Mount configured for {engine}: wrist_3 -> QuickChanger -> RG2; arm and gripper remain separate articulations.")
 
         # Pre-seat QC at the flange and rg2_base at flange+15.92 (joints only hold; no play-time snap).
         qc_link_local = UsdGeom.Xformable(qc_link_prim).GetLocalTransformation()
@@ -4082,6 +4237,18 @@ class DigitalTwin(omni.ext.IExt):
             print(f"ActionGraph already exists at {graph_path}, skipping creation.")
             return
 
+        # Native camera TF publishers already convert USD camera axes to ROS
+        # optical axes. Override only the ROS name so it matches the existing
+        # image/CameraInfo frame without adding a second rotation. Both native
+        # TF adapters honor isaac:nameOverride. Keep the sensor asset untouched.
+        from pxr import Sdf
+        stage.GetPrimAtPath(CAMERA_PRIM).CreateAttribute(
+            "isaac:nameOverride", Sdf.ValueTypeNames.String
+        ).Set("camera_link")
+
+        # Camera annotators and TF use the same monotonic simulation clock,
+        # including after Stop/Play. Mixing reset-on-stop images with a
+        # non-resetting TF clock leaves messages hundreds of seconds apart.
         print(f"Creating ActionGraph: {graph_path}")
         print(f"Camera: {CAMERA_PRIM}")
         print(f"Resolution: {IMAGE_WIDTH}x{IMAGE_HEIGHT}")
@@ -4119,11 +4286,11 @@ class DigitalTwin(omni.ext.IExt):
                     ("RenderProduct.inputs:height", IMAGE_HEIGHT),
                     ("CameraInfoPublish.inputs:topicName", "camera_info"),
                     ("CameraInfoPublish.inputs:frameId", "camera_link"),
-                    ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", True),
+                    ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", False),
                     ("RGBPublish.inputs:topicName", ROS2_TOPIC),
                     ("RGBPublish.inputs:type", "rgb"),
                     ("RGBPublish.inputs:frameId", "camera_link"),
-                    ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
+                    ("RGBPublish.inputs:resetSimulationTimeOnStop", False),
                     ("TFPublish.inputs:topicName", "tf_cam"),
                     (f"{tf_target}.inputs:targetPrims", CAMERA_PRIM),
                     (f"{tf_target}.inputs:parentPrim", "/World"),
@@ -4416,11 +4583,11 @@ class DigitalTwin(omni.ext.IExt):
                         ("RenderProduct.inputs:height", height),
                         ("CameraInfoPublish.inputs:topicName", "camera_info"),
                         ("CameraInfoPublish.inputs:frameId", "camera_link"),
-                        ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", True),
+                        ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", False),
                         ("RGBPublish.inputs:topicName", topic),
                         ("RGBPublish.inputs:type", "rgb"),
                         ("RGBPublish.inputs:frameId", "camera_link"),
-                        ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
+                        ("RGBPublish.inputs:resetSimulationTimeOnStop", False),
                     ],
                     keys.CONNECT: [
                         ("OnPlaybackTick.outputs:tick", "RunOnce.inputs:execIn"),
@@ -4565,26 +4732,8 @@ class DigitalTwin(omni.ext.IExt):
         raise RuntimeError("Could not place all objects without violating min_sep; reduce density.")
 
     def _set_obj_prim_pose(self, prim_path, position, quat_wxyz):
-        import omni.kit.commands
-        # Handle both Gf.Vec3d and tuple/list positions
-        if isinstance(position, Gf.Vec3d):
-            pos_value = position
-        else:
-            pos_value = Gf.Vec3d(*position)
-        
-        # Set orientation first, then translate (matches assemble_objects order)
-        omni.kit.commands.execute(
-            "ChangeProperty",
-            prop_path=f"{prim_path}.xformOp:orient",
-            value=Gf.Quatf(*quat_wxyz),
-            prev=None,
-        )
-        omni.kit.commands.execute(
-            "ChangeProperty",
-            prop_path=f"{prim_path}.xformOp:translate",
-            value=pos_value,
-            prev=None,
-        )
+        stage = omni.usd.get_context().get_stage()
+        set_local_pose(stage.GetPrimAtPath(prim_path), position, quat_wxyz)
 
     def assemble_objects(self, folder_path="/World/Objects"):
         """Assemble objects based on JSON assembly data, positioned relative to the current board pose."""
@@ -4638,20 +4787,8 @@ class DigitalTwin(omni.ext.IExt):
                 base_world_pos[2] + position['z']
             )
 
-            # Use quaternion directly from assembly data (w, x, y, z for Gf.Quatf)
-            q = rotation['quaternion']
-            orient_quat = Gf.Quatf(float(q['w']), float(q['x']), float(q['y']), float(q['z']))
-
-            # Set orientation first, then translate into position
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{prim_path}.xformOp:orient",
-                value=orient_quat,
-                prev=None)
-
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{prim_path}.xformOp:translate",
-                value=assembly_pos,
-                prev=None)
+            q = rotation["quaternion"]
+            self._set_obj_prim_pose(prim_path, assembly_pos, [q[k] for k in "wxyz"])
 
             assembled += 1
 
@@ -4690,16 +4827,7 @@ class DigitalTwin(omni.ext.IExt):
 
             pos = Gf.Vec3d(x_position, self._y_offset, self._z_offset)
 
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{child_path}.xformOp:translate",
-                value=pos,
-                prev=None)
-
-            # Reset orientation to identity quaternion (same op type as randomize uses)
-            omni.kit.commands.execute('ChangeProperty',
-                prop_path=f"{child_path}.xformOp:orient",
-                value=Gf.Quatf(1, 0, 0, 0),
-                prev=None)
+            self._set_obj_prim_pose(child_path, pos, [1, 0, 0, 0])
 
             count += 1
 
@@ -5208,28 +5336,11 @@ class DigitalTwin(omni.ext.IExt):
         return poses
 
     def _restore_object_poses(self, poses, folder_path="/World/Objects"):
-        """Write back a snapshot produced by _save_all_object_poses.
-
-        Uses two-step ChangeProperty (orient first, then translate) consistent
-        with assemble_objects.
-        """
+        """Restore active local TRS poses produced by _save_all_object_poses."""
         for name, pose_data in poses.items():
             body_path = self._get_prim_path(name, folder_path)
-            stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(body_path)
-            if not prim or not prim.IsValid():
-                continue
-            quat = pose_data.get("quaternion", {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0})
-            pos = pose_data.get("position", {"x": 0.0, "y": 0.0, "z": 0.0})
-            omni.kit.commands.execute("ChangeProperty",
-                                     prop_path=f"{body_path}.xformOp:orient",
-                                     value=Gf.Quatf(float(quat["w"]), float(quat["x"]),
-                                                    float(quat["y"]), float(quat["z"])),
-                                     prev=None)
-            omni.kit.commands.execute("ChangeProperty",
-                                     prop_path=f"{body_path}.xformOp:translate",
-                                     value=Gf.Vec3d(pos["x"], pos["y"], pos["z"]),
-                                     prev=None)
+            if not self._write_prim_pose(body_path, pose_data):
+                raise RuntimeError(f"Failed to restore {body_path}; earlier objects may be restored")
 
     def hide_object(self, object_name, folder_path="/World/Objects"):
         """Hide an object: save its reference path + pose, then delete the prim.
@@ -5767,28 +5878,56 @@ class DigitalTwin(omni.ext.IExt):
             import omni.timeline
 
             timeline = omni.timeline.get_timeline_interface()
-            timeline.play()
-            # 5.1: wait for PhysX warmup after play so cooking completes before any
-            # subsequent stage mutation (setup_pose_publisher / randomize) runs.
-            # Replaying a scene with the heavier fmb2/fmb3 bodies otherwise wedges
-            # the kit main thread mid-cook. See SKILL.md 5.1 warmup addendum.
-            try:
-                from isaacsim.core.simulation_manager import SimulationManager
-                for _ in range(900):  # up to ~15s at 60Hz
-                    await asyncio.sleep(1.0 / 60.0)
-                    if not SimulationManager._warmup_needed:
-                        break
-            except Exception:
-                await asyncio.sleep(3.0)
+            stage = omni.usd.get_context().get_stage()
+            twin = stage is not None and (
+                stage.GetPrimAtPath("/Graph/ActionGraph_RG2") or
+                stage.GetPrimAtPath("/Graph/ActionGraph_UR5e_ForcePublish"))
+            from contextlib import nullcontext
+            scope = (twin_play_edit(stage, omni.usd.get_context().get_stage)
+                     if twin and selected_engine() == "newton" else nullcontext(lambda: None))
+            with scope as validate:
+                if twin:
+                    if (selected_engine() == "newton"
+                            and stage.GetPrimAtPath("/Graph/ActionGraph_UR5e_ForcePublish")
+                            and not stage.GetPrimAtPath("/Graph/ActionGraph_UR5e_ForcePublish/valid")):
+                        raise RuntimeError("Saved Newton force graph has no validity gate. Use a new stage and Quick Start; existing graph was not rebuilt")
+                    prepare_saved_twin_runtime(stage, timeline)
+                    self._resubscribe_physics_callbacks()
+                timeline.play()
+                # 5.1: wait for PhysX warmup after play so cooking completes before any
+                # subsequent stage mutation (setup_pose_publisher / randomize) runs.
+                # Replaying a scene with the heavier fmb2/fmb3 bodies otherwise wedges
+                # the kit main thread mid-cook. See SKILL.md 5.1 warmup addendum.
+                try:
+                    from isaacsim.core.simulation_manager import SimulationManager
+                    for _ in range(900):  # up to ~15s at 60Hz
+                        await asyncio.sleep(1.0 / 60.0)
+                        validate()
+                        if omni.usd.get_context().get_stage() != stage:
+                            raise RuntimeError("Stage changed during Play; inspect the current stage")
+                        if not SimulationManager._warmup_needed:
+                            break
+                    if SimulationManager._warmup_needed:
+                        raise RuntimeError("Physics warm-up did not complete; inspect native errors before retrying")
+                    if (twin and selected_engine() == "newton"
+                            and SimulationManager.get_physics_simulation_view() is None):
+                        raise RuntimeError("Newton tensor view is unavailable after Play; inspect native errors")
+                except ImportError:
+                    await asyncio.sleep(3.0)
+                    validate()
+                if omni.usd.get_context().get_stage() != stage or not timeline.is_playing():
+                    raise RuntimeError("Requested Play was not retained on the selected stage")
             return {
                 "status": "success",
-                "message": "Simulation started"
+                "message": "Simulation started",
+                "force_publisher": getattr(self, "_force_publish_status", None) if twin else None,
             }
         except Exception as e:
             traceback.print_exc()
             return {
                 "status": "error",
-                "message": f"Failed to start simulation: {str(e)}"
+                "message": f"Failed to start simulation: {str(e)}",
+                "effects": "Runtime initialization or Play may have partially applied; inspect the selected stage, timeline and native log before retrying"
             }
 
     def _cmd_stop_scene(self) -> Dict[str, Any]:
@@ -5842,91 +5981,24 @@ class DigitalTwin(omni.ext.IExt):
             self._output_dir = os.path.abspath(output_dir)
 
     def _read_prim_pose(self, prim_path: str) -> Dict[str, Any]:
-        """Helper method to read pose (position, quaternion, scale) from a prim."""
+        """Read the composed local TRS pose, including Euler-rotation assets."""
         try:
-            from pxr import UsdGeom, Gf
-
             stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(prim_path)
-
-            if not prim.IsValid():
-                return None
-
-            translate_attr = prim.GetAttribute("xformOp:translate")
-            orient_attr = prim.GetAttribute("xformOp:orient")
-            scale_attr = prim.GetAttribute("xformOp:scale")
-
-            position = {"x": 0.0, "y": 0.0, "z": 0.0}
-            quaternion = {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}  # Identity quaternion
-            scale = {"x": 1.0, "y": 1.0, "z": 1.0}
-
-            if translate_attr.IsValid():
-                translate_value = translate_attr.Get()
-                if translate_value:
-                    position = {
-                        "x": float(translate_value[0]),
-                        "y": float(translate_value[1]),
-                        "z": float(translate_value[2])
-                    }
-
-            if orient_attr.IsValid():
-                orient_value = orient_attr.Get()
-                if orient_value:
-                    quaternion = {
-                        "w": float(orient_value.GetReal()),
-                        "x": float(orient_value.GetImaginary()[0]),
-                        "y": float(orient_value.GetImaginary()[1]),
-                        "z": float(orient_value.GetImaginary()[2])
-                    }
-
-            if scale_attr.IsValid():
-                scale_value = scale_attr.Get()
-                if scale_value:
-                    scale = {
-                        "x": float(scale_value[0]),
-                        "y": float(scale_value[1]),
-                        "z": float(scale_value[2])
-                    }
-
-            return {
-                "position": position,
-                "quaternion": quaternion,
-                "scale": scale
-            }
+            return read_local_pose(stage.GetPrimAtPath(prim_path))
         except Exception as e:
             carb.log_error(f"Error reading pose for {prim_path}: {e}")
             return None
 
     def _write_prim_pose(self, prim_path: str, pose_data: Dict[str, Any]) -> bool:
-        """Helper method to write pose (position, quaternion, scale) to a prim."""
+        """Restore an active local TRS pose without changing referenced source files."""
         try:
-            from pxr import Gf
-
             pos = pose_data.get("position", {"x": 0.0, "y": 0.0, "z": 0.0})
             quat = pose_data.get("quaternion", {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0})
             scale = pose_data.get("scale", {"x": 1.0, "y": 1.0, "z": 1.0})
-
             stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(prim_path)
-            if not prim.IsValid():
-                carb.log_error(f"Prim not found: {prim_path}")
-                return False
-
-            # Set attributes directly instead of using ChangeProperty command
-            # This avoids stale property reference issues in async context
-            translate_attr = prim.GetAttribute("xformOp:translate")
-            if translate_attr:
-                translate_attr.Set(Gf.Vec3d(pos["x"], pos["y"], pos["z"]))
-
-            orient_attr = prim.GetAttribute("xformOp:orient")
-            if orient_attr:
-                quat_gf = Gf.Quatf(quat["w"], quat["x"], quat["y"], quat["z"])
-                orient_attr.Set(quat_gf)
-
-            scale_attr = prim.GetAttribute("xformOp:scale")
-            if scale_attr:
-                scale_attr.Set(Gf.Vec3d(scale["x"], scale["y"], scale["z"]))
-
+            set_local_pose(stage.GetPrimAtPath(prim_path),
+                           [pos[k] for k in "xyz"], [quat[k] for k in "wxyz"],
+                           [scale[k] for k in "xyz"])
             return True
         except Exception as e:
             carb.log_error(f"Error writing pose for {prim_path}: {e}")
@@ -6177,7 +6249,7 @@ class DigitalTwin(omni.ext.IExt):
         """MCP handler for adding objects to the scene.
 
         Args:
-            assembly: Which assembly to load (fmb1, fmb2, fmb3)
+            assembly: Which assembly to load (fmb1 through fmb4; jenga/fmb_jenga alias fmb4)
 
         Returns:
             Dictionary with execution result.
@@ -6302,8 +6374,10 @@ class DigitalTwin(omni.ext.IExt):
 
             # Stop simulation
             timeline = omni.timeline.get_timeline_interface()
-            if timeline.is_playing():
+            if not timeline.is_stopped():
                 timeline.stop()
+            app = omni.kit.app.get_app()
+            await app.next_update_async()
 
             # Clear Python-side caches
             if self._mcp is not None:
@@ -6324,7 +6398,10 @@ class DigitalTwin(omni.ext.IExt):
             if world is not None:
                 try:
                     world.clear_all_callbacks()
-                    world.clear()
+                    # The entire stage is about to close. World.clear() calls
+                    # synchronous clear_stage()/app.update() and can dispatch a
+                    # viewport redraw while its selected camera is being deleted.
+                    world.scene.clear(registry_only=True)
                 except Exception as e:
                     print(f"[new_stage] World.clear warning: {e}")
                 try:
@@ -6333,7 +6410,7 @@ class DigitalTwin(omni.ext.IExt):
                     print(f"[new_stage] clear_instance warning: {e}")
 
             # Open a fresh stage
-            omni.usd.get_context().new_stage()
+            await omni.usd.get_context().new_stage_async()
 
             # Let Kit process the stage teardown
             app = omni.kit.app.get_app()
@@ -6372,7 +6449,8 @@ class DigitalTwin(omni.ext.IExt):
             await self.quick_start()
             return {
                 "status": "success",
-                "message": "Quick start complete: scene loaded with UR5e, RG2 gripper, workspace camera, and simulation running."
+                "message": "Quick start complete: scene loaded with UR5e, RG2 gripper, workspace camera, and simulation running.",
+                "force_publisher": getattr(self, "_force_publish_status", {"status": "not_configured"}),
             }
         except Exception as e:
             carb.log_error(f"Error in quick_start: {e}")
@@ -6426,7 +6504,8 @@ class DigitalTwin(omni.ext.IExt):
             await self.quick_start_with_workstation()
             return {
                 "status": "success",
-                "message": "Quick start complete with the Vention workstation loaded."
+                "message": "Quick start complete with the Vention workstation loaded.",
+                "force_publisher": getattr(self, "_force_publish_status", {"status": "not_configured"}),
             }
         except Exception as e:
             carb.log_error(f"Error in quick_start_with_workstation: {e}")
@@ -6460,7 +6539,8 @@ class DigitalTwin(omni.ext.IExt):
             await self.quick_start_with_workstation_and_simple_room()
             return {
                 "status": "success",
-                "message": "Quick start complete with the Vention workstation and Simple Room loaded."
+                "message": "Quick start complete with the Vention workstation and Simple Room loaded.",
+                "force_publisher": getattr(self, "_force_publish_status", {"status": "not_configured"}),
             }
         except Exception as e:
             carb.log_error(f"Error in quick_start_with_workstation_and_simple_room: {e}")

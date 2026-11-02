@@ -422,14 +422,14 @@ def test_start_sweeps_stale_portfiles(tmp_path, monkeypatch):
     stale = rt / f"{dead_pid}-9999.json"
     stale.write_text(json.dumps({"pid": dead_pid, "port": 9999, "host": "127.0.0.1"}))
     junk = rt / "not-json.json"
-    junk.write_text("{broken")                   # unparseable -> also swept
+    junk.write_text("{broken")                   # unrelated file is not an advertisement
 
     bridge = make_bridge()
     bridge.start(0, host="127.0.0.1")
     try:
         assert not stale.exists()                # dead advertisement swept
-        assert not junk.exists()
-        live = list(rt.glob("*.json"))
+        assert junk.read_text() == "{broken"
+        live = list(rt.glob("[0-9]*-[0-9]*.json"))
         assert len(live) == 1                    # exactly our own remains
         assert json.loads(live[0].read_text())["pid"] == os.getpid()
     finally:

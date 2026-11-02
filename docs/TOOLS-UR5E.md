@@ -19,6 +19,13 @@ The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 `ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
 [MCP-SERVER.md](MCP-SERVER.md).
 
+Through the host MCP server, bridge connection failures, timeouts and explicit
+`{"status":"error", ...}` results set MCP's `isError` flag. Legacy diagnostic
+text/JSON and the string-valued `structuredContent.result` remain available;
+clients must not interpret a returned error message as successful execution.
+A lost response or timeout does not establish cancellation or rollback. Inspect
+the selected simulator's identity, state and native log before retrying a mutation.
+
 ## Simulator window
 
 Plain `./run.sh` starts Isaac Sim, the bridge and the twin extension, but hides the **UR5e Digital Twin**
@@ -51,6 +58,51 @@ recording, have MCP tools in the reference below. The buttons and tools are inte
 they are not a one-to-one list. Host screen tools can inspect and capture simulator windows, but
 optional X11 mouse and keyboard tools can be enabled separately as described in
 [host tools](TOOLS-HOST.md#optional-desktop-input). Not every panel control has a dedicated MCP equivalent.
+
+Quick Start constructs the twin's simulation World on the **CPU**, retaining the
+selected physics engine. This makes the twin's existing CPU scene policy explicit
+for Newton too: its default CUDA device is incompatible with the legacy
+articulation reset's CPU gain arrays in the inspected 6.2 build. An already
+initialized non-CPU World is refused without changing its device; use a separate
+disposable stage/session for the twin. Quick Start does not reset a stage on its
+own. Generic tools retain their own selected device and backend; this does not
+establish that every legacy twin operation works on Newton. See the measured
+[compatibility matrix](COMPATIBILITY.md) for qualified workflows.
+
+The Newton twin adapter preserves separate UR5e and RG2 articulations. The
+QuickChanger joins the arm's tree; a MuJoCo equality weld attaches the RG2.
+Newton 1.0's USD importer cannot reliably resolve this separate-articulation
+attachment, so complete Quick Start refuses before assembly on that importer.
+Moving the joint to another USD path does not fix its parser behavior. Generic
+Newton tools and standalone robots have separate coverage; there is no implicit
+fallback to PhysX.
+
+Newton uses force-drive gains of 30 N·m/rad and 8 N·m·s/rad for the actuated RG2
+joint, retaining its 1 N·m cap and five mimic constraints. These are explicit
+controller gains, not a unit conversion of the PhysX acceleration drive.
+Pad-gap observations use runtime link poses, since Newton's Fabric poses need
+not appear in authored USD transforms. PhysX retains its original controller.
+
+On a backend providing the opt-in incoming-joint-wrench output, the twin enables
+that output before physics initialization and publishes the named wrist's
+tree-parent wrench at the `tool0` origin and orientation, with physics-time ROS
+timestamps. It does not assume that the last link is the wrist. The output is
+not a separate sensor for the RG2 loop-closing equality constraint. The inspected
+6.2 backend supports this output for MuJoCo Warp and XPBD; native MuJoCo CPU and
+VBD do not. A CPU *device* does not select the native MuJoCo CPU solver. Actual
+qualification is narrower than API availability; consult the matrix. Older
+backends lacking this output, or an already initialized scene with the output
+disabled, report `force_publisher.available: false` and its reason instead of
+publishing placeholder zero wrenches. No active solver is rebuilt to enable it.
+
+PhysX and Newton both select the named `wrist_3_link`, transform its incoming
+joint force and moment into `tool0`, and restore that frame name and the observed
+physics timestamp on every valid sample. This corrects the legacy PhysX publisher's
+last-row assumption and zero/empty headers after reopening. Fresh graphs gate
+publication until a complete sample is available. Legacy PhysX graphs without a
+validity gate remain unchanged when reopened and can publish default or cached
+values before a valid callback; use a new disposable twin stage to create the
+guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 
 ## Parameter conventions
 
@@ -102,7 +154,26 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 - Parameters: none.
 - Async: yes.
 - Purpose: start/resume the simulation timeline.
-- Side effects: sets timeline playing; waits for PhysX warm-up (up to ~15 s at 60 Hz) before returning so cooking completes.
+- Side effects: sets timeline playing and waits for physics warm-up. Failure to
+  complete warm-up, a changed stage or a Play request that is not retained returns
+  an error; initialization or playback can already have partial effects.
+- For saved twin graphs, restores the process-local gripper and force callbacks
+  without recreating the USD graphs. Newton's first initialization requires a
+  stopped meter/Z-up stage, enables the installed tensor provider and uses the
+  twin's CPU policy. An active model or existing World on another device is refused.
+  Native initial transform normalization is scoped to the session layer, with the
+  caller's edit target restored unless an external editor changed it. This does
+  not promise byte-identical in-memory root layers: native viewport/render
+  metadata can change during opening or playback. Source files are not saved by
+  this operation. PhysX's normal USD writeback can also update in-memory body poses,
+  velocities and joint state during playback; the scoped Newton initialization
+  policy is not a claim of PhysX root-layer byte preservation. A legacy
+  Newton force graph without a validity gate is refused; use a new disposable
+  stage and Quick Start to build the current graph.
+- `force_publisher` reports the runtime wrench capability/readiness when a twin
+  graph is present. Simulation Play alone does not prove wrench delivery; inspect
+  the reason and actual ROS output. Generic Play has its own physics/edit-target
+  contract and does not restore these twin-specific Python callbacks.
 - Example: `{"tool": "ur5e_dt__play_scene", "arguments": {}}`
 
 ### `ur5e_dt__stop_scene`
@@ -123,6 +194,12 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
   `camera_width` and `camera_height` to override it; the former project-specific location is no longer read implicitly.
 - Preconditions: UR5e must be loaded (e.g. after `quick_start_with_workstation`); otherwise returns an error.
 - Side effects: creates `/World/rsd455` (if absent) and `/Graph/ActionGraph_Camera`.
+- RGB and CameraInfo use the `camera_link` optical frame. The native TF publisher converts
+  USD camera axes to ROS optical axes; the camera's `isaac:nameOverride` makes its `/tf_cam`
+  child frame match those image headers. Subscribe/remap `/tf_cam` when using TF consumers.
+- Image, CameraInfo and TF timestamps use monotonic simulation time across Stop/Play.
+  The ROS camera helpers regenerate their native session render pipeline on playback;
+  saved output retains the authored Action Graph and camera definition.
 - Example: `{}`
 
 ### `ur5e_dt__assemble_objects`
@@ -132,7 +209,7 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`. |
+  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`, `fmb4`, `jenga`, `fmb_jenga`; the last two alias `fmb4` (six Jenga blocks). |
 - Purpose: assemble objects into a configuration from an assembly JSON, positioning components relative to the current board pose.
 - Side effects: mutates object poses in `/World/Objects`; requires objects already added.
 - Example: `{"assembly": "fmb1"}`
@@ -190,7 +267,7 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`. |
+  | `assembly` | string | no | `"fmb1"` | MCP schema enum: `fmb1`, `fmb2`, `fmb3`, `fmb4`, `jenga`, `fmb_jenga`; the last two alias `fmb4` (six Jenga blocks). |
 - Purpose: add objects to the scene from a predefined assembly folder.
 - Side effects: loads USD references, rebuilds PhysX views (stops then plays the timeline), waits for collider cooking (up to ~30 s). Returns `folder_path`.
 - Example: `{"assembly": "fmb1"}`
@@ -276,6 +353,10 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 - Side effects: spawns ffmpeg; non-blocking. Requires ffmpeg and a usable viewport.
 - Frames are paced to the requested output rate against elapsed time; short gaps repeat the latest frame. If capture
   falls more than five seconds behind or no frame arrives, recording reports an error instead of claiming success.
+- Complete physics warm-up before recording. A measured cold Newton initialization
+  exceeded the five-second capture-lag limit; restarting recording after warm-up
+  succeeded. A camera switch can retain an initial frame from the previous view;
+  inspect the output before using it as evidence of a particular camera.
 - Example: `{"file_name": "run.mp4", "fps": 30}`
 
 ### `ur5e_dt__stop_recording`
@@ -295,11 +376,16 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 
 ### `ur5e_dt__load_workstation`
 
+When playing, workstation composition temporarily pauses physics and drains ordinary
+render updates before restoring playback. This avoids the observed 6.0.0.1 Motion BVH
+crash when an immediate Stop followed a live bench import. A paused/stopped timeline
+stays in that state; a replacement stage or concurrent Stop is never resumed.
+
 - Bridge: `ur5e_dt.load_workstation`
 - Parameters: none.
 - Async: yes.
-- Purpose: load the Vention workstation bench as visual context under the robot (tabletop top at z=0). Additive; cleared by `new_stage`.
-- Side effects: references `workstation/vention.usd` at `/World/Vention`; hides the default ground-plane visual (collider retained). Visual-only, no colliders; does not move the robot.
+- Purpose: load the Vention workstation bench as visual context under the robot (tabletop top at z=0). Additive; cleared by `new_stage`. Uses an operator-supplied or cached `workstation/vention.usd`; builds a simple placeholder bench when it is not installed.
+- Side effects: references the bench at `/World/Vention`; hides the default ground-plane visual (collider retained). Visual-only, no colliders; does not move the robot.
 - Example: `{}`
 
 ### `ur5e_dt__quick_start_with_workstation`
@@ -346,7 +432,11 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 
 ## Typical safe simulation workflow
 
-1. **Connect**: ensure the twin bridge is up on `8766`; call `status` and refresh the MCP client tool list; the bridge CLI also supports `list_tools`.
+1. **Connect**: call `refresh_tools`, discover bridges and select the intended endpoint
+   with `use_bridge`; verify its PID and port with `status` before changing a scene.
+   `8766` is only the default. If discovery tools are filtered, use
+   `python -m isaac_mcp.client --list-bridges`, then probe the explicit host and port
+   as described in [the agent guide](../AGENTS.md#getting-the-full-surface).
 2. **Fresh stage (optional)**: `ur5e_dt__new_stage` to free memory, then rebuild.
 3. **Build scene**: `ur5e_dt__quick_start_with_workstation` (or `quick_start` / `quick_start_with_workstation_and_simple_room`).
 4. **Camera ROS (optional)**: `ur5e_dt__setup_camera_tf_graph` after UR5e is loaded.
@@ -366,3 +456,7 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 - Default randomization limits are fixed and not exposed via MCP (see `randomize_object_poses` / `randomize_single_object`).
 
 These tools require a running compatible Kit process and, for the twin, the simulator resources described in the README. The examples do not start training.
+
+Repeated Quick Start reuses matching fixed gripper/force graphs, including graphs composed
+from another USD layer or a reopened stage. Conflicting graph contracts are refused and
+preserved rather than removed from source layers.

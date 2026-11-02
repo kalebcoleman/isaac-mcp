@@ -1,93 +1,153 @@
 # isaac-mcp
 
-An MCP server that lets an LLM client drive **Isaac Sim 6.2** and **Isaac Lab 3.0**:
-it talks to a running Kit app over a local bridge, and it can also see the desktop (screenshots and screen
-recordings). Not tied to any one project.
+**Give your AI agent eyes and tools inside NVIDIA Isaac Sim.** Inspect and build USD scenes,
+work with robot joints and physics, capture sensors, and run repeatable simulation workflows
+through the Model Context Protocol.
 
-Built on Aldrin Inbaraj's [`omni-kit-mcp`](https://github.com/inbarajaldrin/omni-kit-mcp) and
-[`isaac-sim-mcp`](https://github.com/inbarajaldrin/isaac-sim-mcp), with a screen-capture tool pack added.
-The latter is MIT-licensed; upstream `omni-kit-mcp` publishes no license file. See
-[`docs/VENDORING.md`](docs/VENDORING.md).
+[![CI](docs/media/badges/ci.svg)](https://github.com/kalebcoleman/isaac-mcp/actions/workflows/ci.yml)
+[![Source version 0.2.0](docs/media/badges/version.svg)](mcp/pyproject.toml)
+[![Isaac Sim scoped tests](docs/media/badges/sim.svg)](docs/COMPATIBILITY.md)
+[![Host Python 3.10+, Sim Python 3.12](docs/media/badges/python.svg)](docs/LINUX-SETUP.md#which-environment-does-what)
+[![Setup guide](docs/media/badges/docs.svg)](docs/LINUX-SETUP.md)
+[![License and asset notices](docs/media/badges/license.svg)](docs/VENDORING.md)
 
-## Layout
+[Quick start](#quick-start) · [Setup guide](docs/LINUX-SETUP.md) ·
+[Reproduce a run](docs/REPRODUCIBILITY.md) · [Compatibility](docs/COMPATIBILITY.md) · [Agent guide](AGENTS.md)
 
-| Path | What it is |
-|---|---|
-| `mcp/` | Host MCP server (`isaac-mcp`): stdio server, Kit bridge client, screen tools. Pure Python, no Isaac dependency. |
-| `exts/isaac.mcp.bridge/` | Kit extension: the socket bridge and tool registry inside Kit. |
-| `exts/isaac.mcp.panel/` | Kit extension: registry inspector UI. |
-| `exts/ur5e-dt/` | Tool pack: the UR5e digital-twin tools (23 `ur5e_dt.*`) and their assets. One pack among others to come. |
-| `mcp/isaac_mcp/isaaclab/` | Isaac Lab 3.0 tool pack: 12 host-side `isaaclab__*` tools (install info, task list, train/eval/play jobs, run status/tail/cancel, checkpoints, TensorBoard metrics). See [`docs/ISAACLAB-TOOLS.md`](docs/ISAACLAB-TOOLS.md). |
-| `npm/` | Optional `npx` launcher (runs the Python server through `uvx`). |
-| `scripts/`, `run.sh`, `verify.sh`, `install.sh` | Launch, check and install helpers (Ubuntu 22.04/24.04, Python 3.12). |
+[![Actual Isaac Sim window showing the complete UR5e arm and attached RG2 gripper at a commanded target, with the stage hierarchy visible](docs/media/ur5e-target.png)](docs/media/README.md)
 
-This standalone repository contains the **MCP server, bridge, tools and the `ur5e-dt` extension**.
-It can be used independently by projects that need Isaac Sim or Isaac Lab tools.
+*Real MCP-driven target-and-return workflow: Isaac Sim **6.2.0.0**, windowed PhysX,
+source **2fdf404**. Original application capture; [return view and provenance](docs/media/README.md), or
+[42.9-second video — draft access only](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-62w-2fdf-full-ur-video.mp4).
+This run used an existing installation with a documented NumPy dependency mismatch; it is not the clean locked setup.*
+
+## What you can do
+
+- **Work with your own scenes.** Inspect USD hierarchies, author primitives and materials,
+  import trusted USD/URDF projects, inspect joints, step physics, and save composed scenes.
+- **See the result.** Acquire fresh camera frames, inspect the actual application window,
+  and record simulation workflows. Headless rendering and desktop capture are separate paths.
+- **Operate the UR5e digital twin.** Build the workstation, use simulated ROS streams,
+  inspect the arm and attached gripper, and exercise motion with measured feedback.
+- **Run optional Isaac Lab jobs.** Discover an existing Lab installation, launch training,
+  evaluation or play, and inspect metrics and checkpoints in its own environment.
+
+There are **39 generic scene/asset tools, 23 UR5e tools and 12 Lab tools**. Default discovery
+lists **83 tools offline**, **90 with bridge built-ins**, or **99 with both optional groups**.
+Catalog entries remain visible offline; simulator operations need a live selected bridge.
+See the [tool tiers and filters](AGENTS.md#what-you-can-reach-by-tier).
+
+> **Release target: PhysX.** Newton is experimental; the [backend scope](docs/COMPATIBILITY.md#release-backend-scope)
+> records specific tested 6.2 workflows and older native, contact and rendering failures.
+> Completing Newton qualification is outside this release scope; these results do not establish
+> general Newton support on 6.2 or other builds.
+>
+> **Validation status:** the installer pins **6.2.0.0**. Scoped results exist for **6.0.0.0,
+> 6.0.0.1, 6.0.1.0, 6.1.0.0 and 6.2.0.0**, with source, mode and limitations recorded in the
+> [matrix](docs/COMPATIBILITY.md). The original 6.0.1 windowed native-step stall remains unexplained:
+> [two bounded replays did not reproduce it](docs/evidence/project-scene/PHYSX-STALL-DISPOSITION.md).
+> The assessment and recovery guidance are complete; this is **not a stall fix**.
+> Final PhysX evidence review, the separate fresh-Kit camera-reuse gap and setup limitations
+> remain open; changing the release target does not resolve them.
+> This is a draft integration, not an all-version or clean-machine certification.
 
 ## Quick start
 
+**New Linux installation:** Ubuntu 24.04 or 22.04 x86_64, a compatible NVIDIA GPU/driver,
+[uv](https://docs.astral.sh/uv/getting-started/installation/), Git, internet access and at least
+40 GB free. Read the [prerequisites and installation effects](docs/LINUX-SETUP.md#new-pinned-62-installation)
+before running. Windowed use also needs a working display.
+
 ```bash
-./install.sh --accept-eula        # uv env with Isaac Sim 6.2.0.0 + the isaac-mcp CLI
-scripts/check_machine.sh          # OS, GPU/driver, disk, network, display, port checks (must pass)
-./run.sh                          # Kit, MCP bridge and UR5e tools; panel hidden by default
-# Or run ./run.sh --ur5e-panel   # Show the UR5e panel as a docked tab
-./verify.sh                       # In another terminal, check a running UR5e session
+git clone --branch integration/final-review-11-15 https://github.com/kalebcoleman/isaac-mcp.git
+cd isaac-mcp
+# All commands below run from this checkout root.
+./install.sh --accept-eula
+export PATH="$HOME/.local/bin:$PATH"
+uv pip check --python .venv/bin/python
+./run.sh --port 8766
 ```
 
-Host server only (no Isaac Sim): `./install.sh --no-sim`, or `uv tool install "./mcp"`.
-For Linux prerequisites, Python imports, Isaac Lab, and optional ROS driver installation, see
-[`docs/LINUX-SETUP.md`](docs/LINUX-SETUP.md).
+`--accept-eula` accepts NVIDIA's EULA. The installer creates/updates `.venv`, replaces the
+user-level editable host tool, and may install an ffmpeg shim. It uses `uv sync`, **not
+`uv sync --locked`**. For an exact-source locked installation, use the separate
+[reproducible setup](docs/REPRODUCIBILITY.md#locked-simulator-setup). Neither path installs Isaac Lab or system ROS.
 
-The launcher, verifier and 6.2 probe use the repository's `.venv` or the interpreter set by
-`UR5E_DT_PYTHON`. They no longer search an implicit project-specific environment.
+**Already have Sim?** Keep your environment and select its interpreter with `UR5E_DT_PYTHON`;
+follow [existing installations and older builds](docs/LINUX-SETUP.md#choose-a-simulator-build).
+Do not sync the 6.2 lock into an older Sim or Lab environment. `--headless` removes the window,
+not the GPU requirement. First startup may spend minutes preparing shaders and extensions.
 
-### install.sh options
+### Connect your agent
 
-`./install.sh [options]` is idempotent. Besides `--accept-eula` (acknowledge the NVIDIA Omniverse EULA, sets
-`OMNI_KIT_ACCEPT_EULA=YES`):
+Leave the simulator running. Use a second terminal from the same checkout root for the commands below.
 
-- `--no-sim` — skip the ~20 GB Isaac Sim environment sync (host MCP server only)
-- `--claude`, `--claude-code`, `--claude-desktop` — register the server (name `isaac`) in the Claude Code / Desktop configs
-- `--print-opencode` — print an OpenCode config snippet
-- `--port N` — bridge port written into the client configs (default 8766)
-- `--isaaclab-python PATH`, `--isaaclab-root PATH` — Isaac Lab venv python and checkout; written into the client
-  configs as `ISAACLAB_PYTHON` / `ISAACLAB_ROOT` so the `isaaclab__*` tools find the install (default: the same env
-  vars, if already set)
+Register `isaac-mcp` as a **stdio** server using your client's
+[configuration instructions](docs/MCP-SERVER.md#4-client-configuration).
+For Claude Code, the installer can register it explicitly:
 
-The `isaaclab__*` tools discover an activated Isaac Lab environment or a checkout-local `.venv`;
-`ISAACLAB_PYTHON` / `ISAACLAB_ROOT` select an explicit installation when needed
-(see [`docs/ISAACLAB-TOOLS.md`](docs/ISAACLAB-TOOLS.md)).
-For simulator connection, window inspection, and agent workflow, see
-[`docs/MCP-SERVER.md`](docs/MCP-SERVER.md#agent-workflow).
-Optional X11 mouse/keyboard input and managed parallel simulator launches are explicitly enabled
-per MCP server; see [host tools](docs/TOOLS-HOST.md#optional-desktop-input) for setup and safeguards.
+```bash
+# Host-only operation; also replaces the user-level host tool.
+./install.sh --no-sim --claude-code --port 8766
+```
 
-### Notes
+Other clients, including Codex and OpenCode, use the manual configurations in that guide.
+Installation alone does not register a client. Reconnect the client after changing its configuration.
 
-- Ports: 8766 = shared bridge (`run.sh` default; `--port N` or `UR5E_DT_PORT` to change); 8767 = Isaac Lab bridge by
-  convention (`mcp/examples/isaaclab_bridge_launch.py`).
-- GPU: for training on a 16 GB card, begin with one GPU job and keep `num_envs` small; a running Kit app plus a training job
-  contend for VRAM.
-- `scripts/catch_hang.sh` loops boot + `quick_start_with_workstation` to hunt a rare first-call hang flake; on a
-  hang it saves evidence under `/tmp/isaac-mcp-hang/`.
+Start with this read-only request:
 
-## Status
+> Refresh the Isaac tools, select my intended bridge if more than one is available, and
+> verify its PID, port and build with status. Call sim__stage__info and report the stage
+> identity, units and readiness. Do not create, reset or play a scene yet.
 
-Work in progress. The [project status and roadmap](docs/ROADMAP.md) records completed work, tested configurations,
-limitations and next steps. The current twin workflow is verified on Isaac Sim 6.2; broader version and platform
-support is a goal, not yet a blanket compatibility claim. See the [compatibility matrix](docs/COMPATIBILITY.md)
-for tested releases, installation pins, and known limitations.
+The [terminal connection check](docs/LINUX-SETUP.md#connect-and-check-without-changing-the-scene)
+provides the same first inspection without an agent. A successful tool listing alone does not prove Sim is running.
 
-## Documentation
+### Before building the UR5e demo
 
-- [Agent guide](AGENTS.md) — which tools exist in which tier, and how to reach all of them.
-- [Linux setup](docs/LINUX-SETUP.md) — OS, driver, Python, Isaac Lab and optional ROS requirements.
-- [Compatibility](docs/COMPATIBILITY.md) — simulator and Lab versions, tested workflows, and limitations.
-- [UR5e tools](docs/TOOLS-UR5E.md) — all twin tools, arguments and example calls.
-- [Host and bridge tools](docs/TOOLS-HOST.md) — connection management, desktop capture and bridge built-ins.
-- [Isaac Lab tools](docs/TOOLS-ISAACLAB.md) — task discovery, job management, checkpoints and metrics.
-- [Server setup and agent workflow](docs/MCP-SERVER.md) and [architecture](docs/ARCHITECTURE.md).
-- [Isaac Lab implementation notes](docs/ISAACLAB-TOOLS.md) and [generic Sim tools design](docs/GENERIC-SIM-TOOLS.md)
-  (the latter is a proposal, not an implemented pack).
-- [Vendoring](docs/VENDORING.md) and [publishing checklist](docs/PUBLISHING.md).
-- [Verification guide](docs/VERIFICATION.md) — host checks, live UR5e baseline and their limits.
+The read-only connection check needs no robot or bench. **UR5e Quick Start needs the NVIDIA
+robot asset**; it is kept in an operator cache rather than bundled in this repository.
+For predictable local reuse, prepare the robot and RealSense sensor files before the demo:
+
+```bash
+# From checkout root, before the UR workflow; requires network and applicable asset terms.
+python3 scripts/fetch_ur5e_assets.py
+python3 scripts/fetch_ur5e_assets.py --check
+```
+
+Valid cached files are reused, not downloaded on every launch. The fetcher does not obtain the
+private Vention bench; that is a separate operator-supplied asset, with a placeholder available
+when absent. See [cache selection, offline mode and asset terms](docs/LINUX-SETUP.md#prepare-the-ur5e-and-sensor-assets)
+before using an existing shared cache or a custom location. `install.sh` does not run this fetcher.
+
+## Add only the workflows you need
+
+| Workflow | Start here |
+|---|---|
+| External ROS mock driver or ROS clients | [System ROS versus the bundled Sim bridge](docs/LINUX-SETUP.md#optional-ur5e-mock-ros-driver) |
+| Isaac Lab training, evaluation and video | [Lab discovery, versions and video dependencies](docs/TOOLS-ISAACLAB.md) |
+| Mouse/keyboard input or managed Sim sessions | [Opt-in host tools](docs/TOOLS-HOST.md) |
+| Your USD project or private workstation assets | [Trusted project roots and asset preparation](docs/TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation) |
+| Repeatable checks and issue reports | [Reproducibility](docs/REPRODUCIBILITY.md) · [Verification](docs/VERIFICATION.md) |
+
+Trusted asset loading is not OS-sandboxed. Approve the project folder and cache scope first;
+private Vention/NVIDIA assets are not supplied by cloning this repository. A generic scene
+inspection does not require that workstation. Save restrictions, render-handle handling and
+legacy checkpoint scope are documented in the [scene reference](docs/TOOLS-SCENE.md).
+
+## Reference and development
+
+[Host tools](docs/TOOLS-HOST.md) · [Scene and assets](docs/TOOLS-SCENE.md) ·
+[UR5e tools](docs/TOOLS-UR5E.md) · [Lab tools](docs/TOOLS-ISAACLAB.md) ·
+[Architecture](docs/ARCHITECTURE.md) · [Agent skill](docs/AGENT-SKILLS.md) · [Roadmap](docs/ROADMAP.md)
+
+The host lives in `mcp/`; Kit extensions live in `exts/`; setup and validation helpers live
+in `scripts/`. See [CPU checks and contributing validation](docs/VERIFICATION.md#host-checks).
+The badges link to source, setup and validation scope; they are not live pass indicators.
+The CI link opens the CPU workflow, which does not establish GPU or native compatibility.
+
+Built on Aldrin Inbaraj's [omni-kit-mcp](https://github.com/inbarajaldrin/omni-kit-mcp) and
+[isaac-sim-mcp](https://github.com/inbarajaldrin/isaac-sim-mcp). The latter carries an MIT license;
+the former has no upstream license file. Component and asset terms differ: read
+[VENDORING](docs/VENDORING.md) and [asset notices](docs/provenance/ASSETS.md) before redistribution.
+NVIDIA's installed runtime packages remain subject to their own terms.

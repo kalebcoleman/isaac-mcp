@@ -1,0 +1,1429 @@
+{
+  "created_utc": "2026-11-02T02:07:13.198896+00:00",
+  "scope": "Source-identified Sim6.1 H/W PhysX qualification plus independent actual use and fresh saved-output reopening. No all-version, Newton, clean-install or original20f stall resolution claim.",
+  "identity": {
+    "sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+    "pid": 2512989,
+    "port": 18917,
+    "ros_domain": 227,
+    "managed_id": "9aa97668914b4e5f8f2dcba685c39624",
+    "session_id": "12a636b77097429da011dd53714f7d43",
+    "stage_id": "e6db5aa2597b445a835c5b0dc058eef7",
+    "window_id": 46137357,
+    "window_client_size": [
+      1440,
+      900
+    ],
+    "release": "6.1.0.0",
+    "backend": "physx",
+    "build": "6.1.0-rc.26+release.49347.2d230af4.gl",
+    "kit_build": "110.3.0+feature.371399.00c488ae.gl",
+    "host_python": "3.12.3",
+    "host_mcp_sdk": "1.30.0",
+    "kit_python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "protocol": "2025-11-25",
+    "os": "Ubuntu24.04.5LTS",
+    "gpu": "NVIDIA GeForce RTX5080 16GiB",
+    "driver": "580.178.04",
+    "hardware_source": "Native Kit startup log plus current /etc/os-release; no GPU operation issued after release."
+  },
+  "broad": {
+    "headless": {
+      "sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+      "session": {
+        "id": "b55dd4cd058c4f159abe9b837970e5fc",
+        "pid": 2508434,
+        "port": 18916,
+        "ros_domain": 226,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793582902.8542376,
+        "log": "<worktree>/.work/sessions/b55dd4cd058c4f159abe9b837970e5fc/sim.log",
+        "output_dir": "<worktree>/.work/sessions/b55dd4cd058c4f159abe9b837970e5fc/output",
+        "user_config": "<worktree>/.work/sessions/b55dd4cd058c4f159abe9b837970e5fc/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15073,
+          "ram_available_mib": 51322
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "phases": [
+        {
+          "name": "launch",
+          "returncode": 0,
+          "wall_seconds": 0.6238493919372559
+        },
+        {
+          "name": "ready",
+          "returncode": 0,
+          "wall_seconds": 16.8766667842865
+        },
+        {
+          "name": "reopen-ros-first",
+          "returncode": 0,
+          "wall_seconds": 16.118602991104126
+        },
+        {
+          "name": "stop-before-reopen-sensors",
+          "returncode": 0,
+          "wall_seconds": 0.9408841133117676
+        },
+        {
+          "name": "reopen-sensors",
+          "returncode": 0,
+          "wall_seconds": 10.687870502471924
+        },
+        {
+          "name": "lease-fix",
+          "returncode": 0,
+          "wall_seconds": 1.686518907546997
+        },
+        {
+          "name": "project15",
+          "returncode": 0,
+          "wall_seconds": 5.678715705871582
+        },
+        {
+          "name": "asset-failures",
+          "returncode": 0,
+          "wall_seconds": 10.1499924659729
+        },
+        {
+          "name": "inventory",
+          "returncode": 0,
+          "wall_seconds": 1.546281337738037
+        },
+        {
+          "name": "immediate",
+          "returncode": 0,
+          "wall_seconds": 3.0640437602996826
+        },
+        {
+          "name": "camera-cache",
+          "returncode": 0,
+          "wall_seconds": 2.604539155960083
+        },
+        {
+          "name": "reset",
+          "returncode": 0,
+          "wall_seconds": 1.0507049560546875
+        },
+        {
+          "name": "suite",
+          "returncode": 0,
+          "wall_seconds": 72.15108323097229
+        },
+        {
+          "name": "fullsurface",
+          "returncode": 0,
+          "wall_seconds": 82.48106026649475
+        }
+      ],
+      "fullsurface": {
+        "calls": 137,
+        "assertions": 55,
+        "tools": [
+          "get_file",
+          "list_bridges",
+          "list_windows",
+          "put_file",
+          "refresh_tools",
+          "reload_tools",
+          "run_python",
+          "sim__body__state",
+          "sim__joints__command",
+          "sim__joints__state",
+          "sim__list",
+          "sim__prim__find",
+          "sim__prim__get",
+          "sim__simulation__step",
+          "sim__stage__info",
+          "sim__stage__tree",
+          "sim__status",
+          "sim__timeline__control",
+          "stat_file",
+          "status",
+          "ur5e_dt__add_objects",
+          "ur5e_dt__assemble_objects",
+          "ur5e_dt__delete_objects",
+          "ur5e_dt__get_recording_status",
+          "ur5e_dt__load_simple_room",
+          "ur5e_dt__load_workstation",
+          "ur5e_dt__new_stage",
+          "ur5e_dt__play_scene",
+          "ur5e_dt__quick_start",
+          "ur5e_dt__quick_start_with_workstation",
+          "ur5e_dt__quick_start_with_workstation_and_simple_room",
+          "ur5e_dt__randomize_object_poses",
+          "ur5e_dt__randomize_single_object",
+          "ur5e_dt__restore_scene_state",
+          "ur5e_dt__save_scene_state",
+          "ur5e_dt__set_object_pose",
+          "ur5e_dt__setup_camera_tf_graph",
+          "ur5e_dt__setup_pose_publisher",
+          "ur5e_dt__start_recording",
+          "ur5e_dt__start_ros_driver",
+          "ur5e_dt__stop_recording",
+          "ur5e_dt__stop_scene",
+          "ur5e_dt__sync_real_poses",
+          "use_bridge"
+        ]
+      },
+      "scope": "39 generic across broad phases, all23UR5e and7bridge built-ins; host/desktop and Lab covered separately. Not all99 per Sim mode.",
+      "effect_links": {
+        "calls": 24,
+        "checks": [
+          "selected process",
+          "URDF separate subtree and physics reports complete",
+          "light create independently reopened USD type/intensity/color",
+          "clone pre-delete USD content equals source",
+          "source material collision and dimensions preserved",
+          "URDF imported authored mass and collisions",
+          "URDF imported geometry and requested wrapper placement",
+          "light modify independently reopened intensity/color",
+          "clone changed independently while source preserved",
+          "source root and original edit target preserved",
+          "session owns edits and stage remains selected",
+          "input URDF unchanged"
+        ]
+      },
+      "urdf_runtime": {
+        "calls": 25,
+        "checks": [
+          "native generated physics selected and two bodies composed",
+          "runtime joint and mass read, no USD fallback",
+          "120 steps measured exactly one second",
+          "120 steps measured exactly one second",
+          "joint achieved requested target",
+          "runtime body orientation changed",
+          "stage identity and input preserved"
+        ]
+      },
+      "regression": [
+        {
+          "label": "existing-physics",
+          "command": [
+            "<worktree>/.work/host/bin/python",
+            "<worktree>/.work/compat-followup/existing_physics_scene.py",
+            "18916",
+            "<worktree>/.work/compat-followup/final61h_6bc-existing-physics.json"
+          ],
+          "returncode": 0,
+          "seconds": 6.705518484115601,
+          "native_start": 4618264,
+          "native_end": 5102869,
+          "native_sha256": "7c342fa3ef6ae563021c126be5bd3b87c45847f452edc4acbca02a71cb5ffcee",
+          "counts": {
+            "[Error]": 0,
+            "Cannot enter into task": 0,
+            "Task was destroyed": 0,
+            "Force callback": 0,
+            "GetCamera": 0,
+            "Illegal cycle connection": 0,
+            "getSimulationTimeMonotonicAtTime": 0,
+            "Edit target changed": 0
+          }
+        },
+        {
+          "label": "legacy-async",
+          "command": [
+            "bash",
+            "<worktree>/.work/integration/6bc45c2977270de748b58c630c21cd03f0d74fb6/scripts/verify_ur5e_dt.sh"
+          ],
+          "returncode": 0,
+          "seconds": 29.173885583877563,
+          "native_start": 5102869,
+          "native_end": 5985837,
+          "native_sha256": "cb2bdd89bfbf7b7b4af71b0471e8dfb61564f2ae05a8c7f2f74e820b3a60854b",
+          "counts": {
+            "[Error]": 0,
+            "Cannot enter into task": 0,
+            "Task was destroyed": 0,
+            "Force callback": 0,
+            "GetCamera": 0,
+            "Illegal cycle connection": 0,
+            "getSimulationTimeMonotonicAtTime": 0,
+            "Edit target changed": 0
+          }
+        }
+      ],
+      "save": {
+        "checks": 21,
+        "layers": 2,
+        "source_files": 18,
+        "all_recorded_hashes_unchanged": true,
+        "saved": {
+          "status": "ok",
+          "file": "<worktree>/.work/runs/final61h_6bc/saved/ros-camera-review.usda",
+          "bytes": 365134431,
+          "flattened": true,
+          "stage_switched": false,
+          "runtime_pose_count": 0,
+          "omitted_runtime_render_paths": [
+            "/Orchestrator",
+            "/Render/OmniverseKit/HydraTextures/IsaacMCP_feecd9507ebc4ab78c9637a6fae0e6a2",
+            "/Render/OmniverseKit/HydraTextures/Replicator/PostRender/SDGPipeline",
+            "/Render/PostProcess/SDGPipeline"
+          ],
+          "omitted_runtime_render_properties": [
+            "/Render/OmniverseKit/HydraTextures/Replicator.viewportHandle"
+          ],
+          "snapshot": "composed USD",
+          "checkpoint": false,
+          "dependencies": "Texture files may still reference retained snapshots; do not clean those while using saved scenes."
+        },
+        "saved_sha256": "f6400e9de54ddb7587c25222fabeb115e847323c682d69e76d691f238ec357c2",
+        "scope": "H rebuilt controlled workcell; W save followed independent task without resetting its stage. These are composed USD exports, not solver/controller checkpoints."
+      },
+      "review": {
+        "code_sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+        "reviewed_utc": "2026-11-02T01:34:53.031797+00:00",
+        "mode": "headless",
+        "console": "No application window in headless mode; native log reviewed. No windowed/Console screenshot claim.",
+        "native_prefix_bytes": 8576700,
+        "native_prefix_sha256": "246f633307ddf6d243779309d7ed0911cba2edb44fbd9b077ea56fa172499b05",
+        "native_counts": {
+          "[Error]": 24,
+          "[Warning]": 6326,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 6060,
+          "Cannot enter into task": 0,
+          "Task was destroyed": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "video": {
+          "width": 1280,
+          "height": 720,
+          "nb_read_frames": 170,
+          "fps": 10.0,
+          "duration": 17.0,
+          "decoder": "imageio-ffmpeg 7.0.2-static"
+        },
+        "images_reviewed": [
+          {
+            "path": ".work/compat-followup/final61h_6bc-fullsurface/review-frame-10.png",
+            "sha256": "145bcf8da2d02f2eb618acbb02574b373a1902f0e4674197d0218a32089a47a9"
+          },
+          {
+            "path": ".work/compat-followup/final61h_6bc-fullsurface/review-frame-100.png",
+            "sha256": "8a4a11a24ced4c841a448d2d736a0de8767ecf31423cb68f2c7045082fb38757"
+          },
+          {
+            "path": ".work/compat-followup/final61h_6bc-fullsurface/ros-gripper-camera.png",
+            "sha256": "ba66cbbee3705ae9f626349fb333b6d6a4174cbe0d58bc15956c2f19d484428e"
+          }
+        ],
+        "visual_observation": "Two of170 decoded video frames reviewed. Diagnostic zero-pose upper arm/wrist extends outside framing; small upper-arm change visible. ROS wrist-camera image is nonblank with gripper fingers at bottom. These images do not replace numeric joint/body/ROS checks.",
+        "limitations": [
+          "Original20f 6.0.1 stall remains unresolved.",
+          "No new independent agent task in this headless process.",
+          "No assertion that native warnings are generally harmless."
+        ]
+      },
+      "shutdown": {
+        "sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+        "utc": "2026-11-02T02:06:06.340091+00:00",
+        "pid": 2508434,
+        "owned_pid_exited": true,
+        "final_native_bytes": 8586484,
+        "final_native_sha256": "68fd66acd71b6efc8bad6cbd352e2ef463e0040ec1729cce08d4cfbaff51528c",
+        "counts": {
+          "[Error]": 24,
+          "[Warning]": 6353,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 6087,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "scope": "Final native log including shutdown; original timestamped sampled visual review remains separate. Headless run, no application-window Console claim."
+      }
+    },
+    "windowed": {
+      "sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+      "session": {
+        "id": "9aa97668914b4e5f8f2dcba685c39624",
+        "pid": 2512989,
+        "port": 18917,
+        "ros_domain": 227,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793583312.4590037,
+        "log": "<worktree>/.work/sessions/9aa97668914b4e5f8f2dcba685c39624/sim.log",
+        "output_dir": "<worktree>/.work/sessions/9aa97668914b4e5f8f2dcba685c39624/output",
+        "user_config": "<worktree>/.work/sessions/9aa97668914b4e5f8f2dcba685c39624/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15131,
+          "ram_available_mib": 50556
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "phases": [
+        {
+          "name": "launch",
+          "returncode": 0,
+          "wall_seconds": 0.6377232074737549
+        },
+        {
+          "name": "ready",
+          "returncode": 0,
+          "wall_seconds": 13.769194602966309
+        },
+        {
+          "name": "reopen-ros-first",
+          "returncode": 0,
+          "wall_seconds": 16.092443227767944
+        },
+        {
+          "name": "stop-before-reopen-sensors",
+          "returncode": 0,
+          "wall_seconds": 0.8120930194854736
+        },
+        {
+          "name": "reopen-sensors",
+          "returncode": 0,
+          "wall_seconds": 10.515539407730103
+        },
+        {
+          "name": "lease-fix",
+          "returncode": 0,
+          "wall_seconds": 2.022404193878174
+        },
+        {
+          "name": "project15",
+          "returncode": 0,
+          "wall_seconds": 6.434172868728638
+        },
+        {
+          "name": "asset-failures",
+          "returncode": 0,
+          "wall_seconds": 10.885534286499023
+        },
+        {
+          "name": "inventory",
+          "returncode": 0,
+          "wall_seconds": 1.6858701705932617
+        },
+        {
+          "name": "immediate",
+          "returncode": 0,
+          "wall_seconds": 3.5550618171691895
+        },
+        {
+          "name": "camera-cache",
+          "returncode": 0,
+          "wall_seconds": 2.65514874458313
+        },
+        {
+          "name": "reset",
+          "returncode": 0,
+          "wall_seconds": 1.0277361869812012
+        },
+        {
+          "name": "suite",
+          "returncode": 0,
+          "wall_seconds": 69.94222259521484
+        },
+        {
+          "name": "fullsurface",
+          "returncode": 0,
+          "wall_seconds": 71.95958137512207
+        }
+      ],
+      "fullsurface": {
+        "calls": 141,
+        "assertions": 54,
+        "tools": [
+          "get_file",
+          "list_bridges",
+          "list_windows",
+          "put_file",
+          "refresh_tools",
+          "reload_tools",
+          "run_python",
+          "screenshot",
+          "sim__body__state",
+          "sim__joints__command",
+          "sim__joints__state",
+          "sim__list",
+          "sim__prim__find",
+          "sim__prim__get",
+          "sim__simulation__step",
+          "sim__stage__info",
+          "sim__stage__tree",
+          "sim__status",
+          "sim__timeline__control",
+          "stat_file",
+          "status",
+          "ur5e_dt__add_objects",
+          "ur5e_dt__assemble_objects",
+          "ur5e_dt__delete_objects",
+          "ur5e_dt__get_recording_status",
+          "ur5e_dt__load_simple_room",
+          "ur5e_dt__load_workstation",
+          "ur5e_dt__new_stage",
+          "ur5e_dt__play_scene",
+          "ur5e_dt__quick_start",
+          "ur5e_dt__quick_start_with_workstation",
+          "ur5e_dt__quick_start_with_workstation_and_simple_room",
+          "ur5e_dt__randomize_object_poses",
+          "ur5e_dt__randomize_single_object",
+          "ur5e_dt__restore_scene_state",
+          "ur5e_dt__save_scene_state",
+          "ur5e_dt__set_object_pose",
+          "ur5e_dt__setup_camera_tf_graph",
+          "ur5e_dt__setup_pose_publisher",
+          "ur5e_dt__start_recording",
+          "ur5e_dt__start_ros_driver",
+          "ur5e_dt__stop_recording",
+          "ur5e_dt__stop_scene",
+          "ur5e_dt__sync_real_poses",
+          "use_bridge"
+        ]
+      },
+      "scope": "39 generic across broad phases, all23UR5e and7bridge built-ins; host/desktop and Lab covered separately. Not all99 per Sim mode.",
+      "effect_links": {
+        "calls": 24,
+        "checks": [
+          "selected process",
+          "URDF separate subtree and physics reports complete",
+          "light create independently reopened USD type/intensity/color",
+          "clone pre-delete USD content equals source",
+          "source material collision and dimensions preserved",
+          "URDF imported authored mass and collisions",
+          "URDF imported geometry and requested wrapper placement",
+          "light modify independently reopened intensity/color",
+          "clone changed independently while source preserved",
+          "source root and original edit target preserved",
+          "session owns edits and stage remains selected",
+          "input URDF unchanged"
+        ]
+      },
+      "urdf_runtime": {
+        "calls": 25,
+        "checks": [
+          "native generated physics selected and two bodies composed",
+          "runtime joint and mass read, no USD fallback",
+          "120 steps measured exactly one second",
+          "120 steps measured exactly one second",
+          "joint achieved requested target",
+          "runtime body orientation changed",
+          "stage identity and input preserved"
+        ]
+      },
+      "regression": [
+        {
+          "label": "existing-physics",
+          "command": [
+            "<worktree>/.work/host/bin/python",
+            "<worktree>/.work/compat-followup/existing_physics_scene.py",
+            "18917",
+            "<worktree>/.work/compat-followup/final61w_6bc-existing-physics.json"
+          ],
+          "returncode": 0,
+          "seconds": 6.559658050537109,
+          "native_start": 4601625,
+          "native_end": 5086397,
+          "native_sha256": "39cedd2e7859f8038b315c1e21f5f38e9ae10e1bc08b32a8e746c0ab2170d29a",
+          "counts": {
+            "[Error]": 0,
+            "Cannot enter into task": 0,
+            "Task was destroyed": 0,
+            "Force callback": 0,
+            "GetCamera": 0,
+            "Illegal cycle connection": 0,
+            "getSimulationTimeMonotonicAtTime": 0,
+            "Edit target changed": 0
+          }
+        },
+        {
+          "label": "legacy-async",
+          "command": [
+            "bash",
+            "<worktree>/.work/integration/6bc45c2977270de748b58c630c21cd03f0d74fb6/scripts/verify_ur5e_dt.sh"
+          ],
+          "returncode": 0,
+          "seconds": 27.234728813171387,
+          "native_start": 5086397,
+          "native_end": 5969208,
+          "native_sha256": "ca8bbaea42ebe50253652861f2bd2219d7ef45d8b3c219dcc71a6f82757ff4e7",
+          "counts": {
+            "[Error]": 0,
+            "Cannot enter into task": 0,
+            "Task was destroyed": 0,
+            "Force callback": 0,
+            "GetCamera": 0,
+            "Illegal cycle connection": 0,
+            "getSimulationTimeMonotonicAtTime": 0,
+            "Edit target changed": 0
+          }
+        }
+      ],
+      "save": {
+        "checks": 21,
+        "layers": 2,
+        "source_files": 21,
+        "all_recorded_hashes_unchanged": true,
+        "saved": {
+          "status": "ok",
+          "file": "<worktree>/.work/runs/final61w_6bc/saved/ros-camera-review.usda",
+          "bytes": 384525386,
+          "flattened": true,
+          "stage_switched": false,
+          "runtime_pose_count": 0,
+          "omitted_runtime_render_paths": [
+            "/Orchestrator",
+            "/Render/OmniverseKit/HydraTextures/IsaacMCP_0564a5d0eca24de1a6e8d2bffb137f39",
+            "/Render/OmniverseKit/HydraTextures/IsaacMCP_9858120dac614411ab6376d4c4c3344e",
+            "/Render/OmniverseKit/HydraTextures/Replicator/PostRender/SDGPipeline",
+            "/Render/PostProcess/SDGPipeline"
+          ],
+          "omitted_runtime_render_properties": [
+            "/Render/OmniverseKit/HydraTextures/Replicator.viewportHandle"
+          ],
+          "snapshot": "composed USD",
+          "checkpoint": false,
+          "dependencies": "Texture files may still reference retained snapshots; do not clean those while using saved scenes."
+        },
+        "saved_sha256": "5bd6fdaa03abc07d324a7d02fbb54d2133756a55d9428d1243e51cda1c9225fe",
+        "scope": "H rebuilt controlled workcell; W save followed independent task without resetting its stage. These are composed USD exports, not solver/controller checkpoints."
+      },
+      "review": {
+        "code_sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+        "reviewed_utc": "2026-11-02T01:44:13.892217+00:00",
+        "session": {
+          "pid": 2512989,
+          "port": 18917,
+          "ros_domain": 227,
+          "headless": false
+        },
+        "window_id": 46137357,
+        "native_prefix_bytes": 6012483,
+        "native_prefix_sha256": "e8f8fde6797a6c498d75c8c31c7a786f8510e97b9ae4a7be7a4b166b99fc4b7f",
+        "native_counts": {
+          "[Error]": 24,
+          "[Warning]": 267,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 62,
+          "Cannot enter into task": 0,
+          "Task was destroyed": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "console": {
+          "warnings": 270,
+          "errors": 63,
+          "inspection": "Viewed actual Console overview and Error search. Visible intentional offline-missing/corrupt-cache and invalid quaternion errors, plus closed-client warnings. History not cleared; search cleared and Content restored."
+        },
+        "images_reviewed": [
+          {
+            "file": "<worktree>/.work/compat-followup/final61w_6bc-fullsurface/window-010.png",
+            "sha256": "2e5d0589c91344a3c38e0fd2fb1c6fd96bdbc17a9b1efef11625ce810a95b6c9"
+          },
+          {
+            "file": "<worktree>/.work/compat-followup/final61w_6bc-fullsurface/window-140.png",
+            "sha256": "00faa18df3f40b81a1318f3b988cec7ed622849dd94bd1197f507013a7419588"
+          },
+          {
+            "file": "<worktree>/.work/compat-followup/final61w_6bc-fullsurface/review-frame-10.png",
+            "sha256": "a79faef417e0b4b3e4b15447f8e7702e617e6cb9b36604f39e7bddd7398785e5"
+          },
+          {
+            "file": "<worktree>/.work/compat-followup/final61w_6bc-fullsurface/review-frame-100.png",
+            "sha256": "481cd4875c09b0496ae8b19e878fe0bac286554c639cc930731ff7bd505e177c"
+          }
+        ],
+        "video": {
+          "width": 1280,
+          "height": 720,
+          "nb_read_frames": 191,
+          "fps": 10.0,
+          "duration": 19.1,
+          "decoder": "imageio-ffmpeg 7.0.2-static"
+        },
+        "visual_scope": "Initial selected window has test-stage tree; final fullsurface selected window has bent UR5e and attached RG2. Two of191decoded video frames viewed; diagnostic zero-pose crops upper arm, visible small upper-arm change. No full video-frame or physical-hardware claim.",
+        "temporary_console_capture_cleanup": [
+          {
+            "path": "<home>/Pictures/screen-mcp/screen-20261101-184343-196.png",
+            "sha256": "14d4af6fc83063dba1f4eeed7aa984ad29fcc78258104bdc50e1d9bc51629f43",
+            "bytes": 152172,
+            "deleted": true
+          },
+          {
+            "path": "<worktree>/.work/compat-followup/final61w_6bc-console/screen-019.png",
+            "sha256": "14d4af6fc83063dba1f4eeed7aa984ad29fcc78258104bdc50e1d9bc51629f43",
+            "bytes": 152172,
+            "deleted": true
+          },
+          {
+            "path": "<home>/Pictures/screen-mcp/screen-20261101-184320-286.png",
+            "sha256": "4b745bf9c17401e8c9471c09676540048a77557b791ce8ac40b4bec45bc99eb5",
+            "bytes": 180274,
+            "deleted": true
+          },
+          {
+            "path": "<home>/Pictures/screen-mcp/screen-20261101-184253-622.png",
+            "sha256": "23660639d91516db7fa5354415dd870f61fda0094892df497c91cf40c277bac8",
+            "bytes": 197332,
+            "deleted": true
+          },
+          {
+            "path": "<worktree>/.work/compat-followup/final61w_6bc-console/screen-004.png",
+            "sha256": "5197a00f4a4c9c415c794a3f29565aaeb04db8d3c79d970d4b3e435c5b50a901",
+            "bytes": 151997,
+            "deleted": true
+          },
+          {
+            "path": "<worktree>/.work/compat-followup/final61w_6bc-console/screen-008.png",
+            "sha256": "23660639d91516db7fa5354415dd870f61fda0094892df497c91cf40c277bac8",
+            "bytes": 197332,
+            "deleted": true
+          },
+          {
+            "path": "<worktree>/.work/compat-followup/final61w_6bc-console/screen-013.png",
+            "sha256": "4b745bf9c17401e8c9471c09676540048a77557b791ce8ac40b4bec45bc99eb5",
+            "bytes": 180274,
+            "deleted": true
+          },
+          {
+            "path": "<home>/Pictures/screen-mcp/screen-20261101-184155-480.png",
+            "sha256": "5197a00f4a4c9c415c794a3f29565aaeb04db8d3c79d970d4b3e435c5b50a901",
+            "bytes": 151997,
+            "deleted": true
+          }
+        ],
+        "scope": "Pre-independent-agent and pre-save interval; broad plus legacy and URDF effect checks, not final process lifetime."
+      },
+      "shutdown": {
+        "sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+        "utc": "2026-11-02T01:58:23.544663+00:00",
+        "final_native_bytes": 6511329,
+        "final_native_sha256": "a0b094dd54a80a8f27d45f9c9562a8ef2c8c1a9bf9eacc669ddb79d7a0c9f2eb",
+        "counts": {
+          "[Error]": 24,
+          "[Warning]": 383,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 62,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "later_delta_counts": {
+          "[Error]": 0,
+          "[Warning]": 116,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0
+        },
+        "scope": "Post-reviewed-prefix includes independent task and separate ROS save continuation plus shutdown. Agent has its own narrower native interval. No final UI Console claim after ROS save continuation.",
+        "owned_pid_exited": true
+      }
+    }
+  },
+  "independent_agent": {
+    "identity": {
+      "sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+      "pid": 2512989,
+      "port": 18917,
+      "ros_domain": 227,
+      "managed_id": "9aa97668914b4e5f8f2dcba685c39624",
+      "session_id": "12a636b77097429da011dd53714f7d43",
+      "stage_id": "e6db5aa2597b445a835c5b0dc058eef7",
+      "window_id": 46137357,
+      "window_client_size": [
+        1440,
+        900
+      ],
+      "release": "6.1.0.0",
+      "backend": "physx",
+      "build": "6.1.0-rc.26+release.49347.2d230af4.gl",
+      "kit_build": "110.3.0+feature.371399.00c488ae.gl",
+      "host_python": "3.12.3",
+      "host_mcp_sdk": "1.30.0",
+      "kit_python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+      "protocol": "2025-11-25",
+      "os": "Ubuntu24.04.5LTS",
+      "gpu": "NVIDIA GeForce RTX5080 16GiB",
+      "driver": "580.178.04",
+      "hardware_source": "Native Kit startup log plus current /etc/os-release; no GPU operation issued after release."
+    },
+    "timing": {
+      "request_indices": [
+        50,
+        53,
+        54,
+        68,
+        69
+      ],
+      "steps": [
+        12,
+        108,
+        120,
+        120,
+        120
+      ],
+      "total_steps": 480,
+      "dt_s": [
+        0.008333333333333333,
+        0.008333333333333333,
+        0.008333333333333333,
+        0.008333333333333333,
+        0.008333333333333333
+      ],
+      "measured_deltas": [
+        0.1,
+        0.9000000000000001,
+        0.9999999999999998,
+        1.0,
+        1.0
+      ],
+      "summed_measured_delta_s": 4.0,
+      "physics_start_s": 0.03333333333333333,
+      "physics_end_s": 4.033333333333333,
+      "timeline_time_s": 0.016666666666666666,
+      "note": "The initial Play/Pause advances physics before controlled steps; fixed-step physics time is distinct from paused timeline time."
+    },
+    "joints": {
+      "units": "radians",
+      "position_tolerance_rad": 0.001,
+      "agilebot": {
+        "targets": [
+          0.1,
+          -0.04,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "measured_at_target": [
+          0.1000000461935997,
+          -0.039953604340553284,
+          2.3582623498441535e-07,
+          6.46233786483208e-07,
+          1.2926702765980735e-06,
+          0.00014018837828189135
+        ],
+        "max_target_error": 0.00014018837828189135,
+        "return_target": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "measured_return": [
+          -5.518959955708169e-09,
+          4.651282506529242e-05,
+          2.3584439645674138e-07,
+          6.460620625148294e-07,
+          1.2846472827732214e-06,
+          0.00011918875679839402
+        ],
+        "max_return_error": 0.00011918875679839402,
+        "target_state_request": 56,
+        "return_state_request": 70,
+        "drive_changes": false
+      },
+      "ur5e": {
+        "targets": [
+          0.06,
+          -0.1,
+          0.1,
+          0.0,
+          0.0,
+          0.04
+        ],
+        "measured_at_target": [
+          0.059999819844961166,
+          -0.0999990776181221,
+          0.09999889135360718,
+          8.243407734198627e-09,
+          -2.090222883666115e-09,
+          0.0399993397295475
+        ],
+        "max_target_error": 1.1086463928278167e-06,
+        "return_target": [
+          -6.993340573302476e-09,
+          6.30591578953954e-09,
+          -6.038924915685584e-09,
+          -3.6119217838859186e-08,
+          8.194415812567968e-09,
+          -1.5347693949063768e-10
+        ],
+        "measured_return": [
+          -5.597393215595048e-09,
+          6.005372643613782e-09,
+          -5.871025443582312e-09,
+          -3.575137696998354e-08,
+          8.121957328910412e-09,
+          -6.856505641028576e-11
+        ],
+        "max_return_error": 1.3959473577074277e-09,
+        "target_state_request": 57,
+        "return_state_request": 71
+      }
+    },
+    "gripper": {
+      "request_pairs": [
+        [
+          40,
+          41
+        ],
+        [
+          63,
+          64
+        ]
+      ],
+      "wrist_translation_m": 0.06675611796260048,
+      "gripper_translation_m": 0.06699275603589752,
+      "relative_position_before": [
+        5.959134467816973e-08,
+        7.450587246118912e-09,
+        0.01592002809047704
+      ],
+      "relative_position_after": [
+        3.503683174263441e-09,
+        -7.581638355319553e-10,
+        0.015920020585150282
+      ],
+      "relative_position_delta_m": 5.717988542320094e-08,
+      "relative_orientation_delta_rad": 9.367605236471805e-07,
+      "relative_position_tolerance_m": 0.0001,
+      "relative_orientation_tolerance_rad": 0.001,
+      "scope": "Measured wrist and gripper base motion at baseline and settled target. No gripper opening commanded; no physical robot or ROS driver used. Final delayed window frame shows connected gripper, but task video crops the UR wrist."
+    },
+    "saved": {
+      "path": ".work/runs/final61w_6bc/saved/agent61-demo-paused.usda",
+      "bytes": 370435791,
+      "sha256": "2cc25cd84d0556110c18f51f74209b9eff4b07bf721f565f113a90cfa19bd498"
+    },
+    "source_audit": {
+      "source_cache_files": 44,
+      "frozen_files": 262,
+      "assets_unchanged": true,
+      "frozen_unchanged": true,
+      "commit_matching_files": 261,
+      "deviation": "Only scripts/run_ur5e_dt.py differs: faulthandler SIGUSR2, explicit native log/USD diagnostics, and launch-time open of parent saved scene. Full diff retained. Independent task explicitly new_stage then quick_start_with_workstation; extension and host files match the commit."
+    },
+    "checks": [
+      {
+        "name": "runtime_480_steps_exact_4s",
+        "pass": true
+      },
+      {
+        "name": "falling_observed_runtime",
+        "pass": true
+      },
+      {
+        "name": "sample_rests_known_surface",
+        "pass": true
+      },
+      {
+        "name": "agilebot_target",
+        "pass": true
+      },
+      {
+        "name": "agilebot_return",
+        "pass": true
+      },
+      {
+        "name": "ur_target",
+        "pass": true
+      },
+      {
+        "name": "ur_return",
+        "pass": true
+      },
+      {
+        "name": "gripper_follows",
+        "pass": true
+      },
+      {
+        "name": "fresh_sensor3",
+        "pass": true
+      },
+      {
+        "name": "sensor_magenta_moves_down",
+        "pass": true
+      },
+      {
+        "name": "video_all210_frames_decoded",
+        "pass": true
+      },
+      {
+        "name": "bench_transform_preserved",
+        "pass": true
+      },
+      {
+        "name": "sources_preserved",
+        "pass": true
+      },
+      {
+        "name": "frozen_code_preserved",
+        "pass": true
+      },
+      {
+        "name": "saved_composed_copy_exists",
+        "pass": true
+      },
+      {
+        "name": "paused_same_stage_after_save",
+        "pass": true
+      },
+      {
+        "name": "no_task_native_errors",
+        "pass": true
+      }
+    ],
+    "limitations": [
+      "This actual-use task does not exercise all99tools; uncalled names remain explicit in the ledger.",
+      "Authored fixture joints inspected, but fixture runtime DOFs were not read or commanded. Runtime joint results belong only to Agilebot and UR5e.",
+      "First immediate screenshot after UR viewport framing still showed the prior view; a later ordinary-update screenshot showed requested UR view. No timing guarantee or atomic sensor/physics frame.",
+      "Camera frame crops upper edge of original fixture but shows complete sample fall and Agilebot.",
+      "Saved result is composed USD with checkpoint=false and retained snapshot dependencies; parent performs fresh-process reopening.",
+      "Native warnings remain observations without harmlessness or source-cause inference; earlier6.0.1stall is not closed by this6.1run.",
+      "Trusted project approvals are not OS isolation; remote upload, untrusted isolation and presets remain disabled."
+    ],
+    "sample": {
+      "path": "/World/Demo61/Geometry/Sample",
+      "expected_rest_z": 1.05,
+      "rest_height_error_m": 4.768371586472142e-08,
+      "baseline_to_rest_delta_m": 0.3931870460510254,
+      "rest_stable_later_steps": true,
+      "height_tolerance_m": 0.0001,
+      "positions_z": [
+        1.4431869983673096,
+        1.3573486804962158,
+        1.0499999523162842
+      ]
+    },
+    "sensor_downward_centroid_shift_px": 144.9437810367234,
+    "video": {
+      "file": "<home>/Videos/screen-mcp/screen-20261101-185102-443.mp4",
+      "sha256": "8218eff6e8e4db78380b16f9b0dc01695f4fda5ad50c51123c06fbe03bc671e3",
+      "bytes": 64813,
+      "decoded_frames": 210,
+      "reported_duration_s": 21.0,
+      "fps": 10,
+      "width": 960,
+      "height": 600,
+      "decode_exit_code": 0,
+      "sampled_frame_indices": [
+        0,
+        80,
+        209
+      ],
+      "pixel_motion_scope": "Demo station and magenta sample visible; existing UR wrist lies outside left frame. Controlled steps are shown at discrete ordinary rendered updates, not smooth real-time playback."
+    },
+    "native": {
+      "start": 6012483,
+      "end": 6462878,
+      "bytes": 450395,
+      "sha256": "22e2286b47102fedd681c2031a718f3e83a21b99cd5a49e8a36ee23e7b10d2a0",
+      "cycles": 0,
+      "time_warnings": 0,
+      "captured_utc": "2026-11-02T01:53:53.024697+00:00",
+      "warning_count": 6,
+      "error_count": 0
+    },
+    "ledger_counts": {
+      "pass": 38,
+      "uncalled": 59,
+      "partial": 2
+    }
+  },
+  "agent_ledger_counts": {
+    "registered": 99,
+    "requests": 90,
+    "named_requests": 89,
+    "sdk_list_tools_requests": 1,
+    "unique_named_called": 40,
+    "pass": 38,
+    "uncalled": 59,
+    "partial": 2
+  },
+  "root_visual_review": {
+    "reviewed_utc": "2026-11-02T02:06:06.333332+00:00",
+    "reviewer": "Root runtime owner",
+    "source_sha": "6bc45c2977270de748b58c630c21cd03f0d74fb6",
+    "files": {
+      "sensor-before.png": {
+        "sha256": "234fe324534629ef0db335f72a73027ce8b186620073e2e17dd3c84a9bde5ba7",
+        "bytes": 227814
+      },
+      "sensor-rest.png": {
+        "sha256": "378a01e59c0e1fffcd22aa91bac745b7c79aa081baa50df62a5ffcf7a0a98dd2",
+        "bytes": 276310
+      },
+      "demo-window.png": {
+        "sha256": "d9342c46dce9bf5b2e4ec7db638cede38739d67cdd919f11f9e399339c841e21",
+        "bytes": 310724
+      },
+      "ur-window.png": {
+        "sha256": "5eb227ca32781d448ba3e4c5b4cd639d587a68eff85ac0e9f4a8e77b9246f2f7",
+        "bytes": 288961
+      }
+    },
+    "observed": "Before/rest sensor images show magenta sample descending from arm height onto the support. Demo application window shows the adjacent robot/fixture/platform; UR is partly cropped in that view. Separate UR application window shows connected RG2 at wrist and bench. No private home/worktree/hostname text visible in these four selected images.",
+    "limits": "Four exact PNGs independently viewed. Video full decode and sampled review remain child-attributed; not every recorded frame visually reviewed. Images alone do not establish runtime physics; paired MCP measurements provide that evidence. Original20f stall remains unresolved."
+  },
+  "fresh_saved_output_reopen": {
+    "sha": "d725f84cb853bf5ceb2fa3b7d13d0e002d29becf",
+    "session": {
+      "id": "24864b3dd2c74bd28dffe88f69a7fb8f",
+      "pid": 2529075,
+      "port": 18918,
+      "ros_domain": 228,
+      "headless": true,
+      "show_ur5e_panel_on_start": false,
+      "enable_motion_bvh": true,
+      "physics_backend": "physx",
+      "started_at": 1793584652.7336855,
+      "log": "<worktree>/.work/sessions/24864b3dd2c74bd28dffe88f69a7fb8f/sim.log",
+      "output_dir": "<worktree>/.work/sessions/24864b3dd2c74bd28dffe88f69a7fb8f/output",
+      "user_config": "<worktree>/.work/sessions/24864b3dd2c74bd28dffe88f69a7fb8f/user.config.json",
+      "initial_resources": {
+        "gpu_total_mib": 16303,
+        "gpu_free_mib": 15213,
+        "ram_available_mib": 52631
+      },
+      "state": "starting",
+      "note": "Use sim__status to confirm bridge readiness."
+    },
+    "target": {
+      "session_id": "4bc269f60aa8498f8d53346970037140",
+      "stage_id": "40a3484641614942b185054f92e097aa"
+    },
+    "source": "<worktree>/.work/runs/final61w_6bc/saved/agent61-demo-paused.usda",
+    "source_sha256": "2cc25cd84d0556110c18f51f74209b9eff4b07bf721f565f113a90cfa19bd498",
+    "calls": 16,
+    "checks": [
+      {
+        "name": "fresh process starts stopped with no registered sensors",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "saved sample authored position preserved",
+        "passed": true,
+        "details": [
+          2.34999942779541,
+          -0.8999999761581421,
+          1.0499999523162842
+        ]
+      },
+      {
+        "name": "saved camera definition composed",
+        "passed": true,
+        "details": "Camera"
+      },
+      {
+        "name": "live sensor ownership not fabricated from saved prim",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "fresh reopened scene camera pixels",
+        "passed": true,
+        "details": {
+          "sha256": "6ef530bed4d0b890b649bc2405c2aa29216b64cee491c10f918b405f363d6784",
+          "std": 51.31737033554116
+        }
+      },
+      {
+        "name": "saved sample initializes at support",
+        "passed": true,
+        "details": {
+          "status": "ok",
+          "path": "/World/Demo61/Geometry/Sample",
+          "world_position": [
+            2.34999942779541,
+            -0.8999999165534973,
+            1.0499999523162842
+          ],
+          "orientation_wxyz": [
+            1.0,
+            2.0903082997847378e-07,
+            -2.378691874582728e-07,
+            5.475662145926208e-09
+          ],
+          "units": "stage units",
+          "source": "PhysX get_rigidbody_transformation",
+          "backend": "physx",
+          "time_s": 0.03333333333333333,
+          "physics_time_s": 0.05,
+          "dynamics": {
+            "linear_velocity": [
+              1.1868296496686526e-05,
+              -2.1996156647219323e-06,
+              -1.2783333659172058e-05
+            ],
+            "angular_velocity": [
+              0.0006045275367796421,
+              -0.0004295254766475409,
+              -3.213642685295781e-06
+            ],
+            "linear_units": "stage units/second, world frame at center of mass",
+            "angular_units": "radians/second, world frame",
+            "mass": 1.0,
+            "mass_kg": 1.0,
+            "source": "physx rigid-body tensor view"
+          }
+        }
+      },
+      {
+        "name": "twelve steps advance one tenth simulation second",
+        "passed": true,
+        "details": 0.09999999999999999
+      },
+      {
+        "name": "both runtime articulations observed",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "saved sample remains supported with real mass",
+        "passed": true,
+        "details": {
+          "status": "ok",
+          "path": "/World/Demo61/Geometry/Sample",
+          "world_position": [
+            2.349999189376831,
+            -0.8999999761581421,
+            1.0499999523162842
+          ],
+          "orientation_wxyz": [
+            1.0,
+            2.0680045054177754e-07,
+            -2.3468945187232748e-07,
+            7.632273479885043e-09
+          ],
+          "units": "stage units",
+          "source": "PhysX get_rigidbody_transformation",
+          "backend": "physx",
+          "time_s": 0.03333333333333333,
+          "physics_time_s": 0.15,
+          "dynamics": {
+            "linear_velocity": [
+              9.267225323128514e-06,
+              -2.8586900953087024e-06,
+              -1.3734214007854462e-05
+            ],
+            "angular_velocity": [
+              0.0006100876489654183,
+              -0.000472220650408417,
+              -3.2302175441145664e-06
+            ],
+            "linear_units": "stage units/second, world frame at center of mass",
+            "angular_units": "radians/second, world frame",
+            "mass": 1.0,
+            "mass_kg": 1.0,
+            "source": "physx rigid-body tensor view"
+          }
+        }
+      },
+      {
+        "name": "post-step fresh render completes",
+        "passed": true,
+        "details": "2e736ef73835526c39fdb85f1f3210756c8b4814d179c023e0d23d2d5a134e41"
+      },
+      {
+        "name": "sensor resources released",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "saved source bytes preserved",
+        "passed": true,
+        "details": null
+      }
+    ],
+    "review": {
+      "utc": "2026-11-02T02:04:34.895695+00:00",
+      "sha": "d725f84cb853bf5ceb2fa3b7d13d0e002d29becf",
+      "pid": 2529075,
+      "headless": true,
+      "owned_pid_exited": true,
+      "native_log": {
+        "bytes": 1339612,
+        "sha256": "332317eda625e25d653913a92a07199d8c8f71ea0e2cbe35070ca577ba422644",
+        "counts": {
+          "[Error]": 0,
+          "[Warning]": 18,
+          "Illegal cycle connection": 0,
+          "getSimulationTimeMonotonicAtTime": 0,
+          "Cannot enter into task": 0,
+          "GetCamera": 0,
+          "Force callback": 0,
+          "Edit target changed": 0
+        },
+        "error_lines": []
+      },
+      "images": {
+        ".work/runs/agentreopen61h_d725/saved/agent-reopened-after.png": {
+          "sha256": "2e736ef73835526c39fdb85f1f3210756c8b4814d179c023e0d23d2d5a134e41",
+          "bytes": 45343
+        },
+        ".work/runs/agentreopen61h_d725/saved/agent-reopened-before.png": {
+          "sha256": "6ef530bed4d0b890b649bc2405c2aa29216b64cee491c10f918b405f363d6784",
+          "bytes": 46024
+        }
+      },
+      "visual_review": "Both 320x240 fresh camera PNGs viewed: magenta sample rests on white support, connected robot and scene geometry visible; no blank output. This is sensor-output review, not an application-window screenshot or Console review.",
+      "scope": "Fresh Sim 6.1 headless reopening of exact6bc agent save on exactd725 product. Sixteen named MCP calls, twelve asserted checks; old sensor registry refusal distinguished from new camera render. Composition/runtime initialization observed, not controller/solver-state restoration."
+    },
+    "scope": "Reopened composition and new live camera/runtime observation, not solver/controller-state checkpoint. Original camera remains authored; its prior live ownership correctly refuses."
+  },
+  "remaining": [
+    "Original6.0.1windowed20f native step stall unresolved; successful6.1 runs do not establish cause or recovery.",
+    "Remaining final build/mode/backend matrix and independently reviewed current-tool coverage not complete.",
+    "Some native warnings remain; UI Console totals differ from native log counts and negative tests are retained.",
+    "Window/video visual review is sampled as documented, not every decoded frame.",
+    "No clean native/Lab video installation claim; isolation, remote upload and presets remain deferred."
+  ],
+  "source_records": {
+    "headless_phases": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-run-progress.json",
+      "sha256": "9c616ce2be549c9adda9b0f442b6d9696b2146f923a8485e02485fde2c02dc3f",
+      "bytes": 32946
+    },
+    "headless_fullsurface": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-fullsurface/summary.json",
+      "sha256": "d9ab269dfb9e3d72ab9bc9b9b5dfb4bb6be0ebe949d0b8c577654123e7a94f82",
+      "bytes": 2549
+    },
+    "headless_regression": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-regression-summary.json",
+      "sha256": "e4cfb27bc06b19b0ab2e767925a1a2bf3be2f38376d31de485d505ca6aea27fc",
+      "bytes": 2715
+    },
+    "headless_effect_links": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-effect-links/summary.json",
+      "sha256": "4cc7c61de46efcd7b51fdae51a5bb8acde416ba7ad9e32b3ba5bf8c14b94dfe6",
+      "bytes": 19941
+    },
+    "headless_urdf_runtime": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-urdf-runtime/summary.json",
+      "sha256": "1d42751fc2e3266812db497bdfbb874a975aa5e0f6076953ec43043e8daf6ee4",
+      "bytes": 9703
+    },
+    "headless_ros_save": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-camera-ros-save/summary.json",
+      "sha256": "07a07fddd94ed825732f95a7a8a4acf021be3bf8c36a7c3feb51bb394eb6518b",
+      "bytes": 2067
+    },
+    "headless_save_checks": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-camera-ros-save/checks.json",
+      "sha256": "93f7bd9ede2e963acb81545d10166504a8a970023313d38d5641843db4c19f5f",
+      "bytes": 3428
+    },
+    "headless_save_preservation": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-camera-ros-save/preservation.json",
+      "sha256": "5748a51a8e64b9836872eca590acbdd2e01db9706309277717913de2fb9ec16e",
+      "bytes": 8879
+    },
+    "headless_visual_native_review": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-native-review.json",
+      "sha256": "4536113390319c1ac452a057215aca7b8029b506a64ca2d1ca00a6a322db299c",
+      "bytes": 1892
+    },
+    "headless_shutdown": {
+      "path": "<worktree>/.work/compat-followup/final61h_6bc-shutdown-review.json",
+      "sha256": "e6feb28e6be921813dfb0a1cdaa842920c8ec99137b8dc680eac0e51b30910a0",
+      "bytes": 684
+    },
+    "windowed_phases": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-run-progress.json",
+      "sha256": "feaa454b9a539f66592d7f5677111ba062704f5da415a559ab05e981c30fc06c",
+      "bytes": 31572
+    },
+    "windowed_fullsurface": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-fullsurface/summary.json",
+      "sha256": "60789e6005a674b17c5fe1db34eef8a4556a1fcdd9be0b680c48b495ab0bfa2e",
+      "bytes": 2595
+    },
+    "windowed_regression": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-regression-summary.json",
+      "sha256": "89829067507c26c55076e97a686657315eb6d1622306ddb995482d5ceb6b2be6",
+      "bytes": 2716
+    },
+    "windowed_effect_links": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-effect-links/summary.json",
+      "sha256": "9b7f272b2fb317a79d3da30267947d1d839c42257180c27daece48c64bec7ffb",
+      "bytes": 19942
+    },
+    "windowed_urdf_runtime": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-urdf-runtime/summary.json",
+      "sha256": "f0e4ca0b7169f9fa9da7c8201575964bce8ca87c6ef5fb0577aaf9b5be43671b",
+      "bytes": 9780
+    },
+    "windowed_ros_save": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-camera-ros-save/summary.json",
+      "sha256": "b870057df2ab7f801a8870e0415cea33f120e09de8d53f40cbd110117c4542f0",
+      "bytes": 2154
+    },
+    "windowed_save_checks": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-camera-ros-save/checks.json",
+      "sha256": "c380e5e3daa3a97be077727d1a746e1e7d564d49d06cd6920a1f7172d70d98e6",
+      "bytes": 3428
+    },
+    "windowed_save_preservation": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-camera-ros-save/preservation.json",
+      "sha256": "a25a01680e7c21a42ee9118da4e2c84b9ab913272a95bed1b9394d14786b3461",
+      "bytes": 10181
+    },
+    "windowed_visual_native_review": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-native-review.json",
+      "sha256": "604f83c9af0d00ca54b8a9dc7837eb7e9d89dc774f158807491ca8965c154e66",
+      "bytes": 4608
+    },
+    "windowed_shutdown": {
+      "path": "<worktree>/.work/compat-followup/final61w_6bc-shutdown-review.json",
+      "sha256": "8552f9a9c0f63a8327160c19bf5b990ed45d18f373d08718df7bb13ef51bc39c",
+      "bytes": 858
+    },
+    "agent_summary": {
+      "path": "<worktree>/.work/compat-followup/agent61w-6bc/publication-v2/summary.json",
+      "sha256": "47bbe5cf39ff4f48ac8d911a9eb57dc58dc998dfc0eea3282e1b83b4c2176834",
+      "bytes": 8816
+    },
+    "agent_all99_ledger": {
+      "path": "<worktree>/.work/compat-followup/agent61w-6bc/publication-v2/all99-tool-ledger.json",
+      "sha256": "295b11e0df4237eeb444fc8f4ddd48ff79998a5fba51e7bcf36b0cf00494fc3b",
+      "bytes": 197108
+    },
+    "agent_root_visual_review": {
+      "path": "<worktree>/.work/compat-followup/agent61w-6bc/root-visual-review-20261102.json",
+      "sha256": "c13d604bc19a5d57c16c78923fb085090de39984b6ea794404f34b6601a16f35",
+      "bytes": 1371
+    },
+    "fresh_reopen": {
+      "path": "<worktree>/.work/compat-followup/agentreopen61h_d725-agent-reopen/summary.json",
+      "sha256": "6980bca0659ebda9ffaa79618d62bb14d154c178968c64fe850631fb7cfa4ce4",
+      "bytes": 4631
+    },
+    "fresh_reopen_checks": {
+      "path": "<worktree>/.work/compat-followup/agentreopen61h_d725-agent-reopen/checks.json",
+      "sha256": "b4d12ade30b5e3ff53933a797ee961c8331b189f2051a322585b3162026671c3",
+      "bytes": 3620
+    },
+    "fresh_reopen_visual_native": {
+      "path": "<worktree>/.work/compat-followup/agentreopen61h_d725-agent-reopen/review.json",
+      "sha256": "68c942711c2d474fa8cd01b0f694a6921c9c84fc5af0ab36b2d2b3b582955a5d",
+      "bytes": 1503
+    }
+  }
+}

@@ -3,7 +3,7 @@
   "namespace": "ur5e_dt",
   "tools": {
     "ur5e_dt.play_scene": {
-      "description": "Start/resume the simulation timeline in Isaac Sim.",
+      "description": "Start/resume the simulation timeline. Restores the saved twin's Python ROS callbacks; Newton twin playback uses CPU and needs a stopped stage before first initialization. Does not rebuild saved graphs or switch physics engines.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
@@ -31,9 +31,12 @@
           "enum": [
             "fmb1",
             "fmb2",
-            "fmb3"
+            "fmb3",
+            "fmb4",
+            "jenga",
+            "fmb_jenga"
           ],
-          "description": "Which assembly configuration to use"
+          "description": "Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
         }
       },
       "fields": [
@@ -43,12 +46,15 @@
           "enum": [
             "fmb1",
             "fmb2",
-            "fmb3"
+            "fmb3",
+            "fmb4",
+            "jenga",
+            "fmb_jenga"
           ],
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Which assembly configuration to use"
+          "description": "Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
         }
       ],
       "namespace": "ur5e_dt",
@@ -135,9 +141,12 @@
           "enum": [
             "fmb1",
             "fmb2",
-            "fmb3"
+            "fmb3",
+            "fmb4",
+            "jenga",
+            "fmb_jenga"
           ],
-          "description": "Which assembly folder to load objects from"
+          "description": "Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
         }
       },
       "fields": [
@@ -147,12 +156,15 @@
           "enum": [
             "fmb1",
             "fmb2",
-            "fmb3"
+            "fmb3",
+            "fmb4",
+            "jenga",
+            "fmb_jenga"
           ],
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Which assembly folder to load objects from"
+          "description": "Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
         }
       ],
       "namespace": "ur5e_dt",
@@ -258,7 +270,7 @@
       "owner_id": "ur5e-dt"
     },
     "ur5e_dt.quick_start": {
-      "description": "One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Use after new_stage to rebuild the scene from scratch.",
+      "description": "One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
@@ -327,7 +339,7 @@
       "owner_id": "ur5e-dt"
     },
     "ur5e_dt.load_workstation": {
-      "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the bundled vention.usd at /World/Vention and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
+      "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",

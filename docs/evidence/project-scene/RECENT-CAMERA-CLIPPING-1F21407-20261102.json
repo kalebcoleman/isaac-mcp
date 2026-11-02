@@ -1,0 +1,3105 @@
+{
+  "schema_version": 1,
+  "prepared_at": "2026-11-02T13:28:26.109012+00:00",
+  "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+  "tree": "c8b73b8a4a441978dee7a94d9d9bfb3472d7c717",
+  "scope": "Focused new-camera clipping qualification on five installed package builds, both modes; PhysX-selected anonymous fixtures with no simulation steps. Not a new broad-tool or Newton qualification.",
+  "machine": {
+    "utc": "2026-11-02T13:23:15.446911+00:00",
+    "uname": {
+      "system": "Linux",
+      "node": "<host>",
+      "release": "7.0.0-38-generic",
+      "version": "#38~24.04.4-Ubuntu SMP PREEMPT_DYNAMIC Mon Sep 14 16:37:11 UTC 2",
+      "machine": "x86_64",
+      "processor": "x86_64"
+    },
+    "os_release": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n",
+    "gpu": "NVIDIA GeForce RTX 5080, 580.178.04, 16303 MiB, 12980 MiB\n",
+    "scope": "Machine observation during serial camera matrix; resources are snapshots, not capacity guarantees."
+  },
+  "cases": [
+    {
+      "tag": "camera6000h_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "headless",
+      "session": {
+        "id": "0a724b3a96f34e4abb9531ba63ad614c",
+        "pid": 2926852,
+        "port": 18979,
+        "ros_domain": 225,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793624643.9605007,
+        "log": "<worktree>/.work/sessions/0a724b3a96f34e4abb9531ba63ad614c/sim.log",
+        "output_dir": "<worktree>/.work/sessions/0a724b3a96f34e4abb9531ba63ad614c/output",
+        "user_config": "<worktree>/.work/sessions/0a724b3a96f34e4abb9531ba63ad614c/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15157,
+          "ram_available_mib": 52217
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.0.0",
+        "build": "6.0.0-rc.22+release.33481.407f3ea1.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.0",
+          "isaacsim-kernel": "6.0.0.0",
+          "isaacsim-core": "6.0.0.0",
+          "isaacsim-sensor": "6.0.0.0",
+          "isaacsim-replicator": "6.0.0.0"
+        },
+        "version_files": {
+          "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.22+release.33481.407f3ea1.gl"
+        },
+        "kit_build": "110.0.0+feature.276876.4a5123f4.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.4",
+            "version": "1.13.4",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.14.1",
+            "version": "15.14.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "enabled": false
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.0.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.5.0.2",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.12.0",
+          "module": "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.12.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera6000h_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 2981,
+            "sha256": "ef2b406704e80be49774fa7a9ea7ffec743f5fc845f4f46899cc6cdbdcf7b2c9"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 723,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000h_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 28043,
+            "sha256": "6459af46be23bd8f094b613072da0ba3a03006097a2634ecff458308b2be837b"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6358,
+          "green_pixels": 6363,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000h_1f21407/saved/clip-m-clipped.png",
+            "bytes": 44174,
+            "sha256": "98dcbc1ef59f9a9f59c2657a4e556424798ad7b72b414a741d3d89ee2ace3c36"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6386,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000h_1f21407/saved/clip-m-restored.png",
+            "bytes": 11849,
+            "sha256": "50b55ab3caf9ae572a95d78d2b4c946ae2a4b082c0e17177356c84e89f12f563"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6412,
+          "green_pixels": 6407,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000h_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 4189,
+            "sha256": "f94a283fc8db9bf3aaa9f2778ddfabae70c018dc0de4fbb76d87da1c50321bd2"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 725,
+          "green_pixels": 724,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000h_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 28337,
+            "sha256": "6ee00b781b755a9d20176f634fbfd244105752fc5b1689f6f0475053b3192786"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6359,
+          "green_pixels": 6359,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000h_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 25667,
+            "sha256": "c569bf64c8325eaa24158f46e410ab4c8a641b46dfd2a34805b2a5ee9baa6dbe"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6369,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000h_1f21407/saved/clip-cm-restored.png",
+            "bytes": 29340,
+            "sha256": "e0df551a3140a341b06a8a485519e66841dd685c2dff14796db9cf6c9634ae07"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6415,
+          "green_pixels": 6376,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2926852,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T13:04:18.433737+00:00",
+        "log": ".work/runs/camera6000h_1f21407/kit-native.log",
+        "bytes": 1397211,
+        "sha256": "39d14f26b3ed719fd2ecc60653fca279648c366bf584e1e71a9230b0941730b6",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 13,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "camera6000w_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "windowed",
+      "session": {
+        "id": "09202f9d14d94afcaf79ed094d4c6f6e",
+        "pid": 2939069,
+        "port": 18984,
+        "ros_domain": 230,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793625866.8174853,
+        "log": "<worktree>/.work/sessions/09202f9d14d94afcaf79ed094d4c6f6e/sim.log",
+        "output_dir": "<worktree>/.work/sessions/09202f9d14d94afcaf79ed094d4c6f6e/output",
+        "user_config": "<worktree>/.work/sessions/09202f9d14d94afcaf79ed094d4c6f6e/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15132,
+          "ram_available_mib": 51352
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.0.0",
+        "build": "6.0.0-rc.22+release.33481.407f3ea1.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.0",
+          "isaacsim-kernel": "6.0.0.0",
+          "isaacsim-core": "6.0.0.0",
+          "isaacsim-sensor": "6.0.0.0",
+          "isaacsim-replicator": "6.0.0.0"
+        },
+        "version_files": {
+          "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.22+release.33481.407f3ea1.gl"
+        },
+        "kit_build": "110.0.0+feature.276876.4a5123f4.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.4",
+            "version": "1.13.4",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.14.1",
+            "version": "15.14.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "enabled": false
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.12.0",
+            "version": "1.12.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.0.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.5.0.2",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.12.0",
+          "module": "<sim-install-6000>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.12.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera6000w_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 3002,
+            "sha256": "dc472d1a17f537b668c05d1cce50d54dbfb880c1facbffb655a7c7913c57fc15"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 723,
+          "green_pixels": 723,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000w_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 27930,
+            "sha256": "2a32234b45e69818301c0333f921ec7781a2bb14271eac3ba9777777a48e956d"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6360,
+          "green_pixels": 6363,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000w_1f21407/saved/clip-m-clipped.png",
+            "bytes": 42274,
+            "sha256": "68cf1ef62ca9f5f4922c9e0bb14a3cd296da1d97c2d77a7c1cbbdcb7a6199b16"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6384,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000w_1f21407/saved/clip-m-restored.png",
+            "bytes": 11669,
+            "sha256": "38e05a522f9186abc57656d95aaac1fb3a27365e0cecdb78338dad7f379b21ff"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6417,
+          "green_pixels": 6405,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000w_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 4354,
+            "sha256": "d8504dca151eaf71412b08036fed36617be1fb251dd90f414196b57f83f04de1"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 724,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000w_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 28275,
+            "sha256": "29409f3b9af6da0643b639231c30fd872198e5a33a0dd95ace3a88c900d966d3"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6359,
+          "green_pixels": 6360,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000w_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 24925,
+            "sha256": "017e3734128537347f8f092a1c5cde452a3f9dc1c8a0e27b2a122b9953333718"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6375,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6000w_1f21407/saved/clip-cm-restored.png",
+            "bytes": 28525,
+            "sha256": "ba2dc3aa17488aaec2d61f540f34d1d832e5c7b0359b155b4d339fcefda5a1b0"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6409,
+          "green_pixels": 6380,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2939069,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T13:28:25.065605+00:00",
+        "log": ".work/runs/camera6000w_1f21407/kit-native.log",
+        "bytes": 1401947,
+        "sha256": "5899696e472911d4f5853a63c61284201da8e69c73fb92896f845684159f4128",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 15,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "reviewed_at": "2026-11-02T13:28:24.020085+00:00",
+        "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2939069,
+        "window_id": 41943051,
+        "width": 1440,
+        "height": 900,
+        "screens": [
+          {
+            "file": ".work/compat-followup/camera6000w_1f21407-console/screen-003.png",
+            "sha256": "b68b0a702220c04fa40263f9a8b03d5bb09357190b8e41e2181668b44e3f8ddc",
+            "bytes": 145765,
+            "scope": "Before fixture: empty actual Kit viewport/grid.",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera6000w_1f21407-console/screen-006.png",
+            "sha256": "91d0c2eef3121c976858ba03ead2e5c9c35ed70ad05ac21c3d45f0800c942e9b",
+            "bytes": 192385,
+            "scope": "After named viewport frame: entire red cube selected and visible; stage shows geometry/materials/light and both cameras.",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera6000w_1f21407-console/screen-010.png",
+            "sha256": "48a7b8da3f1f425c37323f52d154518abc70741e83e3e1204d44c78075dbe0bd",
+            "bytes": 221740,
+            "scope": "Actual Console after positive effects; sampled native warnings retained.",
+            "console_warnings": 15,
+            "console_errors": 0
+          },
+          {
+            "file": ".work/compat-followup/camera6000w_1f21407-console/screen-013.png",
+            "sha256": "b3183844e0ea91eff807c2658d5664b775064d79eea3aaeb1cf67705a7e57a7e",
+            "bytes": 189617,
+            "scope": "Actual Console after invalid-unit refusal; new empty World stage.",
+            "console_warnings": 17,
+            "console_errors": 0
+          }
+        ],
+        "limits": [
+          "Four sampled actual application-window images inspected, not every frame. Rendered camera pixel tests are separate and their cubes are partly clipped horizontally.",
+          "UI counters and final whole-native-log counts are separate scopes. Warnings retained; no blanket harmlessness claim.",
+          "Fixture stages anonymous/disposable; no physics, UR/ROS or prior Newton-fault resolution claimed."
+        ]
+      }
+    },
+    {
+      "tag": "camera6001h_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "headless",
+      "session": {
+        "id": "f003754fede94326be2af6f72b142d03",
+        "pid": 2926323,
+        "port": 18978,
+        "ros_domain": 224,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793624627.0240157,
+        "log": "<worktree>/.work/sessions/f003754fede94326be2af6f72b142d03/sim.log",
+        "output_dir": "<worktree>/.work/sessions/f003754fede94326be2af6f72b142d03/output",
+        "user_config": "<worktree>/.work/sessions/f003754fede94326be2af6f72b142d03/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15158,
+          "ram_available_mib": 52020
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera6001h_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 2893,
+            "sha256": "20243a67a1888308589517cb9342534d53eeee0927952eb39c8e9c584f6495e0"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 723,
+          "green_pixels": 721,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001h_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 14119,
+            "sha256": "f4527b70e03b46be3af68440d6a5c6af76294187df5f60002c77f9a6c33ff516"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6422,
+          "green_pixels": 6407,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001h_1f21407/saved/clip-m-clipped.png",
+            "bytes": 10556,
+            "sha256": "baad31d6297eb29ef5767bb28c43d30a85cda4bd6f007262edcf7d746590d204"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6411,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001h_1f21407/saved/clip-m-restored.png",
+            "bytes": 11507,
+            "sha256": "7988f901444d5dfeaa1482519a626b7d57ff2f14709fe5bfc2c78c8835badb45"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6397,
+          "green_pixels": 6398,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001h_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 2854,
+            "sha256": "719d5fe31b72a920a70230f6e11ba90ae56da0ee85dbf8dd279a660e7f1a94f5"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 719,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001h_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 15531,
+            "sha256": "33b293d494c4e4b618c1a3637487840ca1289b6f0a5894388dbe4d4f143787b2"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6425,
+          "green_pixels": 6411,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001h_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 28258,
+            "sha256": "0b5901deee7b664a16cac393a2d3c63ea1d34f5da2f96a8acdac2be916a7e9d5"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6403,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001h_1f21407/saved/clip-cm-restored.png",
+            "bytes": 10817,
+            "sha256": "26471bd2da1adbb3b5d281aa0afe91d1b18206dd662f696837592a6bb94b2816"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6489,
+          "green_pixels": 6381,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2926323,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T13:04:03.616829+00:00",
+        "log": ".work/runs/camera6001h_1f21407/kit-native.log",
+        "bytes": 1827131,
+        "sha256": "4495e9654a4c4293b1bf91b5b958890288d4b4daf33294391a6d497ce15bb0fe",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 15,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "camera6001w_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "windowed",
+      "session": {
+        "id": "744ed68ebe994dd3bff88d9af1304066",
+        "pid": 2937678,
+        "port": 18983,
+        "ros_domain": 229,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793625762.2806656,
+        "log": "<worktree>/.work/sessions/744ed68ebe994dd3bff88d9af1304066/sim.log",
+        "output_dir": "<worktree>/.work/sessions/744ed68ebe994dd3bff88d9af1304066/output",
+        "user_config": "<worktree>/.work/sessions/744ed68ebe994dd3bff88d9af1304066/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15111,
+          "ram_available_mib": 52001
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera6001w_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 2956,
+            "sha256": "0044e35c8d0e6e9daedbaa590a2214bf27988a185272edb908952a6472748781"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 723,
+          "green_pixels": 721,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001w_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 14181,
+            "sha256": "8fd610c767b5caa61d143d49c5f778544ee2267be0127a386b9bf4acc2d4aad4"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6425,
+          "green_pixels": 6425,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001w_1f21407/saved/clip-m-clipped.png",
+            "bytes": 8906,
+            "sha256": "c5de0d8aed424c3d22f2581baa3447e6b8b15d2308c64ad552cfb295904e75b0"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6415,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001w_1f21407/saved/clip-m-restored.png",
+            "bytes": 10955,
+            "sha256": "ade51dfaf9b4abc999908ed41dd77692d9b1d20140478ef7dbe642ed81028a24"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6498,
+          "green_pixels": 6397,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001w_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 2852,
+            "sha256": "ee14b00a560ecdcd5ff0cfbf868aedbc86b6132469f5b67180a593ad725ea984"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 720,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001w_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 15532,
+            "sha256": "97c82d7882dc23a869342575a47680548d35c0c9b0cdd9fedbe1a8262d63149e"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6425,
+          "green_pixels": 6418,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001w_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 28672,
+            "sha256": "6b7e174037032fda6afa6ed8de94ef67ccaa3bb558f9a923ca40b202110e1b65"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6385,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera6001w_1f21407/saved/clip-cm-restored.png",
+            "bytes": 11048,
+            "sha256": "033cd4c97cc7e89c483cb4d9d44db3cad3877a772766c74f115dca87151b670e"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6493,
+          "green_pixels": 6374,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2937678,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T13:24:26.431705+00:00",
+        "log": ".work/runs/camera6001w_1f21407/kit-native.log",
+        "bytes": 15906990,
+        "sha256": "8bc6071631f4f1d99dd98ebce0a667541bdc96c5656787010f4e9ec74168fc05",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 18,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "reviewed_at": "2026-11-02T13:24:25.289486+00:00",
+        "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2937678,
+        "window_id": 41943053,
+        "width": 1440,
+        "height": 900,
+        "screens": [
+          {
+            "file": ".work/compat-followup/camera6001w_1f21407-console/screen-003.png",
+            "sha256": "2228e4eff5226ca57f16d32738dec09eadf723da3b6b67ce55eb0a706d80836b",
+            "bytes": 146536,
+            "scope": "Before fixture: empty actual Kit viewport/grid.",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera6001w_1f21407-console/screen-006.png",
+            "sha256": "9dc93ba8a49a1ab4f7da325b21250e23630ed31190ac9fa4d94f24edcc2bf569",
+            "bytes": 129259,
+            "scope": "After named viewport frame: entire red cube selected and visible; stage shows geometry/materials/light and both cameras.",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera6001w_1f21407-console/screen-010.png",
+            "sha256": "baa9789a0005e0c4d78abbb1ff628d575996575e20906c9ba03a7f3d899a9b9d",
+            "bytes": 163158,
+            "scope": "Actual Console after positive effects; sampled native warnings retained.",
+            "console_warnings": 19,
+            "console_errors": 0
+          },
+          {
+            "file": ".work/compat-followup/camera6001w_1f21407-console/screen-013.png",
+            "sha256": "9789d701e35d4f2f4df88c1b033d39f12dc5f3c7233dc0c2c8aad76ed08e1e88",
+            "bytes": 191843,
+            "scope": "Actual Console after invalid-unit refusal; new empty World stage.",
+            "console_warnings": 21,
+            "console_errors": 0
+          }
+        ],
+        "limits": [
+          "Four sampled actual application-window images inspected, not every frame. Rendered camera pixel tests are separate and their cubes are partly clipped horizontally.",
+          "UI counters and final whole-native-log counts are separate scopes. Warnings retained; no blanket harmlessness claim.",
+          "Fixture stages anonymous/disposable; no physics, UR/ROS or prior Newton-fault resolution claimed."
+        ]
+      }
+    },
+    {
+      "tag": "camera601h_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "headless",
+      "session": {
+        "id": "59a7b036de394dd59ae315073353fbc6",
+        "pid": 2925883,
+        "port": 18977,
+        "ros_domain": 223,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793624615.126703,
+        "log": "<worktree>/.work/sessions/59a7b036de394dd59ae315073353fbc6/sim.log",
+        "output_dir": "<worktree>/.work/sessions/59a7b036de394dd59ae315073353fbc6/output",
+        "user_config": "<worktree>/.work/sessions/59a7b036de394dd59ae315073353fbc6/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15148,
+          "ram_available_mib": 52389
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.1.0",
+        "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+        "reported_core": "6.0.1",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.1.0",
+          "isaacsim-kernel": "6.0.1.0",
+          "isaacsim-core": "6.0.1.0",
+          "isaacsim-sensor": "6.0.1.0",
+          "isaacsim-replicator": "6.0.1.0"
+        },
+        "version_files": {
+          "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+        },
+        "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.27",
+            "version": "1.13.27",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.1",
+            "version": "15.17.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+            "version": "1.4.6",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.6",
+            "version": "1.15.6",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera601h_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 2953,
+            "sha256": "f0b2cac5ecab5eee4955a4214f3bf07f615001b039187e95cf1e6b6721ff663c"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 723,
+          "green_pixels": 721,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601h_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 13962,
+            "sha256": "f49a19d0d7c43eae45c37cd8d50fefaa9896063ef0d1763f62ba6710543f7efc"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6425,
+          "green_pixels": 6422,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601h_1f21407/saved/clip-m-clipped.png",
+            "bytes": 9234,
+            "sha256": "8b335e97e96b4c21bd8bda18bda4f1bb1e4bf1616873fbf01a7c12c77beeef1c"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6408,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601h_1f21407/saved/clip-m-restored.png",
+            "bytes": 10920,
+            "sha256": "a507318538a975175af53c3d647245859101e5e73d561e0892277c9d6711c2bb"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6496,
+          "green_pixels": 6398,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601h_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 2865,
+            "sha256": "e6ec615147a80574b4ca8237d0525c1b6767c5eb14bda72a5c5e8710faa4df22"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 720,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601h_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 15456,
+            "sha256": "8b437b9d6595837ab3a8f2b664f98a5a07259409e8195597e88010bbe0f7344b"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6424,
+          "green_pixels": 6399,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601h_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 28468,
+            "sha256": "0e30b690d02c89ee476187d963447ba29aa26e3f7afd14e37d47aecc1d5324c4"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6376,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601h_1f21407/saved/clip-cm-restored.png",
+            "bytes": 11016,
+            "sha256": "f90f8c021a72c29e159613ad561802bab52cfea7f2a01755512f57fe41814024"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6491,
+          "green_pixels": 6369,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2925883,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T13:03:46.680240+00:00",
+        "log": ".work/runs/camera601h_1f21407/kit-native.log",
+        "bytes": 1788016,
+        "sha256": "3b730eb93abe45d5d1010be46fb405ffc5e1fb6a6d1ccca4bc3f78c33118a48d",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 12,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "camera601w_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "windowed",
+      "session": {
+        "id": "11231586e75d45fb8ce0a31027481f33",
+        "pid": 2936078,
+        "port": 18982,
+        "ros_domain": 228,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793625653.124382,
+        "log": "<worktree>/.work/sessions/11231586e75d45fb8ce0a31027481f33/sim.log",
+        "output_dir": "<worktree>/.work/sessions/11231586e75d45fb8ce0a31027481f33/output",
+        "user_config": "<worktree>/.work/sessions/11231586e75d45fb8ce0a31027481f33/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15118,
+          "ram_available_mib": 52191
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.0.1.0",
+        "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+        "reported_core": "6.0.1",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.1.0",
+          "isaacsim-kernel": "6.0.1.0",
+          "isaacsim-core": "6.0.1.0",
+          "isaacsim-sensor": "6.0.1.0",
+          "isaacsim-replicator": "6.0.1.0"
+        },
+        "version_files": {
+          "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+        },
+        "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.27",
+            "version": "1.13.27",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.1",
+            "version": "15.17.1",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+            "version": "1.4.6",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.6",
+            "version": "1.15.6",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera601w_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 2932,
+            "sha256": "bd809dacaad6ddabc962aa0b2ff77f81f4e3b2294ebe5ad3c3929382797e6e97"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 723,
+          "green_pixels": 721,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601w_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 14081,
+            "sha256": "714be4b2a5c7c9ac63795909f7ce2d22494f2fd320eccf18ed198c52a132922b"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6425,
+          "green_pixels": 6421,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601w_1f21407/saved/clip-m-clipped.png",
+            "bytes": 9172,
+            "sha256": "8baf72fdf64aa3292bfeb007a7aa3dec2c37dd29c75a66ef94e22665c4c211cf"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6401,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601w_1f21407/saved/clip-m-restored.png",
+            "bytes": 11063,
+            "sha256": "78907289ca8a7c18e819a4e2e5cb35de50cd0eae85184675c3831b02ce699296"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6496,
+          "green_pixels": 6380,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601w_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 2901,
+            "sha256": "9db48d44a6271b8f14ce831cb19940719e071f159527c559d70cf567d4dd0db5"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 721,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601w_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 15524,
+            "sha256": "2ec8d6fbbfa9260a09278707236817d3fca396d1e5ea2ee16cab7d80df506b9c"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6425,
+          "green_pixels": 6415,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601w_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 28388,
+            "sha256": "cca3197c3ea31e5b0b86ea1b5d6cec98a5d41ca208b6d7346bb66023fbf952e2"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6397,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera601w_1f21407/saved/clip-cm-restored.png",
+            "bytes": 10984,
+            "sha256": "0e9f960f47de82f3efd29f59b5b8feed72825505ad65e56abebde903fa4a6295"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6493,
+          "green_pixels": 6385,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2936078,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T13:22:41.896202+00:00",
+        "log": ".work/runs/camera601w_1f21407/kit-native.log",
+        "bytes": 18002758,
+        "sha256": "919674a7198a84cdec0b3c30adb414ba2bb45b19834bef7d7e34519bbd20f303",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 15,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "reviewed_at": "2026-11-02T13:22:40.761785+00:00",
+        "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2936078,
+        "window_id": 41943053,
+        "width": 1440,
+        "height": 900,
+        "screens": [
+          {
+            "file": ".work/compat-followup/camera601w_1f21407-console/screen-003.png",
+            "sha256": "2228e4eff5226ca57f16d32738dec09eadf723da3b6b67ce55eb0a706d80836b",
+            "bytes": 146536,
+            "scope": "Before fixture: empty actual Kit viewport/grid.",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera601w_1f21407-console/screen-006.png",
+            "sha256": "807f9cf5f115d2c7b7b54ffd03aee7dcead838ea048d5c74136cc4d2323aa46e",
+            "bytes": 129920,
+            "scope": "After named viewport frame: entire red cube selected and visible; stage shows geometry/materials/light and both cameras.",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera601w_1f21407-console/screen-010.png",
+            "sha256": "c3728e6ec06d6cadeb06ca13ca00e7901333d34bec140dda5305ae468907e4e7",
+            "bytes": 213719,
+            "scope": "Actual Console after positive effects; sampled native warnings retained.",
+            "console_warnings": 15,
+            "console_errors": 0
+          },
+          {
+            "file": ".work/compat-followup/camera601w_1f21407-console/screen-013.png",
+            "sha256": "9fbe898e59cbf1908e926491225cd655f05271003926e56eb61804acdc8c674d",
+            "bytes": 193140,
+            "scope": "Actual Console after invalid-unit refusal; new empty World stage.",
+            "console_warnings": 17,
+            "console_errors": 0
+          }
+        ],
+        "limits": [
+          "Four sampled actual application-window images inspected, not every frame. Rendered camera pixel tests are separate and their cubes are partly clipped horizontally.",
+          "UI counters and final whole-native-log counts are separate scopes. Warnings retained; no blanket harmlessness claim.",
+          "Fixture stages anonymous/disposable; no physics, UR/ROS or prior Newton-fault resolution claimed."
+        ]
+      }
+    },
+    {
+      "tag": "camera61h_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "headless",
+      "session": {
+        "id": "789e67d6170245a98e2bde5482df9e7f",
+        "pid": 2922902,
+        "port": 18976,
+        "ros_domain": 222,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793624351.7379751,
+        "log": "<worktree>/.work/sessions/789e67d6170245a98e2bde5482df9e7f/sim.log",
+        "output_dir": "<worktree>/.work/sessions/789e67d6170245a98e2bde5482df9e7f/output",
+        "user_config": "<worktree>/.work/sessions/789e67d6170245a98e2bde5482df9e7f/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15158,
+          "ram_available_mib": 52360
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.1.0.0",
+        "build": "6.1.0-rc.26+release.49347.2d230af4.gl",
+        "reported_core": "6.1.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.1.0.0",
+          "isaacsim-kernel": "6.1.0.0",
+          "isaacsim-core": "6.1.0.0",
+          "isaacsim-sensor": "6.1.0.0",
+          "isaacsim-replicator": "6.1.0.0"
+        },
+        "version_files": {
+          "<sim-install-61>/lib/python3.12/site-packages/isaacsim/VERSION": "6.1.0-rc.26+release.49347.2d230af4.gl"
+        },
+        "kit_build": "110.3.0+feature.371399.00c488ae.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.36",
+            "version": "1.13.36",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.2",
+            "version": "1.6.2",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.9.0",
+            "version": "1.9.0",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.1",
+            "version": "1.17.1",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.16.0",
+            "version": "1.16.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.16.0",
+          "module": "<sim-install-61>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.16.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera61h_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 4043,
+            "sha256": "d43624e35bf54a4215731ba595fdee17e5541af64603803be68e19ef3b69c53c"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 722,
+          "green_pixels": 674,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61h_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 80404,
+            "sha256": "1c0aa1bcf8b103d79bb2f7af078a02693adff7865e133aa553681e3ba49195b4"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6426,
+          "green_pixels": 6426,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61h_1f21407/saved/clip-m-clipped.png",
+            "bytes": 14895,
+            "sha256": "a144ceace2fd848e33ef6e6127f41d7088e2bc6b90cf419587375810fe4dfd89"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6425,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61h_1f21407/saved/clip-m-restored.png",
+            "bytes": 79883,
+            "sha256": "092a51e4119dc58f2e0b07aa3045ea27f306dee08b29d4f64231085c67d89fa5"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6489,
+          "green_pixels": 6405,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61h_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 3759,
+            "sha256": "b9c174cc13e55d8480f44c5a6a0afe5347fdbc2a6b0c19ce78e7e5d9d0d4fa2a"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 684,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61h_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 50999,
+            "sha256": "5df4a27174198c529001501f51e4c23d53353920dd04b0f0ba1fddc1c89daec2"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6417,
+          "green_pixels": 6386,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61h_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 16294,
+            "sha256": "cea7070134d676e527913604171ca5c5a435aed76265d3f9aaba8423464fbd8e"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6422,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61h_1f21407/saved/clip-cm-restored.png",
+            "bytes": 80954,
+            "sha256": "9aa353f4bc575b5fbca7b295b2fc28ccfe125085f608d2b3f832ac2d5ddc74da"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6494,
+          "green_pixels": 6356,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2922902,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T13:03:34.754407+00:00",
+        "log": ".work/runs/camera61h_1f21407/kit-native.log",
+        "bytes": 1472243,
+        "sha256": "62dba50d371c0a16a4fedadc7b2ebc11b818ec8f0021afa1c7aad56718a7d8f6",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 12,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "camera61w_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "windowed",
+      "session": {
+        "id": "d0c49dae200b44af90702f0937e4d6c8",
+        "pid": 2934729,
+        "port": 18981,
+        "ros_domain": 227,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793625552.6800954,
+        "log": "<worktree>/.work/sessions/d0c49dae200b44af90702f0937e4d6c8/sim.log",
+        "output_dir": "<worktree>/.work/sessions/d0c49dae200b44af90702f0937e4d6c8/output",
+        "user_config": "<worktree>/.work/sessions/d0c49dae200b44af90702f0937e4d6c8/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15127,
+          "ram_available_mib": 52243
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.1.0.0",
+        "build": "6.1.0-rc.26+release.49347.2d230af4.gl",
+        "reported_core": "6.1.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.1.0.0",
+          "isaacsim-kernel": "6.1.0.0",
+          "isaacsim-core": "6.1.0.0",
+          "isaacsim-sensor": "6.1.0.0",
+          "isaacsim-replicator": "6.1.0.0"
+        },
+        "version_files": {
+          "<sim-install-61>/lib/python3.12/site-packages/isaacsim/VERSION": "6.1.0-rc.26+release.49347.2d230af4.gl"
+        },
+        "kit_build": "110.3.0+feature.371399.00c488ae.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.36",
+            "version": "1.13.36",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.2",
+            "version": "1.6.2",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.9.0",
+            "version": "1.9.0",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.1",
+            "version": "1.17.1",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.16.0",
+            "version": "1.16.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.5.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.11.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.16.0",
+          "module": "<sim-install-61>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.16.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera61w_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 3713,
+            "sha256": "dddafdd1d5fc0bedcf6a58718418a9f77c01f4340ccc1fe6d6027125eb63e5f9"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 723,
+          "green_pixels": 695,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61w_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 80290,
+            "sha256": "dc5514b9b2992a72d814d8a8d4b4688c2e728ca060daa7c29c4bac30a4bd046f"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6426,
+          "green_pixels": 6428,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61w_1f21407/saved/clip-m-clipped.png",
+            "bytes": 14105,
+            "sha256": "7d3722901ed8aa33c6644fe7355340372e27aa85aeca8c52cd0e2d778f384deb"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6424,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61w_1f21407/saved/clip-m-restored.png",
+            "bytes": 80597,
+            "sha256": "3d237de6845787cbc29336225920f65c35cfce6aeb667efbbde3d5838ffd2fe7"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6481,
+          "green_pixels": 6398,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61w_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 3732,
+            "sha256": "982041b1b1920a2e6b4f362505e9943f5bc3b396800248816d4caa99849b5057"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 696,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61w_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 68323,
+            "sha256": "6d0396c4951d42ee6016c39bcc6f72be700a088434bd4d7d747dd1db9aa2357f"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6425,
+          "green_pixels": 6401,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61w_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 16229,
+            "sha256": "f478c465698cc2398bc4724b1e102fc82c2e86014ee9feffe9e6ef22ce44c47f"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6421,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera61w_1f21407/saved/clip-cm-restored.png",
+            "bytes": 29690,
+            "sha256": "b5b6e9ae89e034b1b76c2a8f6648b6a0465d50e7fcc28593cfb8b03244028bc1"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6355,
+          "green_pixels": 6412,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2934729,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T13:20:52.754872+00:00",
+        "log": ".work/runs/camera61w_1f21407/kit-native.log",
+        "bytes": 1477703,
+        "sha256": "a3239e2fa29f6254ff32f3d9c722e016a52362df196a8f141b4234e7d5a06f5e",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 14,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "reviewed_at": "2026-11-02T13:20:51.635878+00:00",
+        "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2934729,
+        "window_id": 41943053,
+        "width": 1440,
+        "height": 900,
+        "screens": [
+          {
+            "file": ".work/compat-followup/camera61w_1f21407-console/screen-003.png",
+            "sha256": "9bb1c5402b0b7a8bdfbd6f511e486ce5b999a1553425395803a6bb3b1a1fdc2b",
+            "bytes": 150255,
+            "scope": "Before fixture: empty actual Kit viewport/grid.",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera61w_1f21407-console/screen-006.png",
+            "sha256": "bc5cf71cfd6dcc920f1d6fd0b897b9b36a4a991bbb6bbcb6da7b7aa163038559",
+            "bytes": 232953,
+            "scope": "After named viewport frame: entire red cube selected and visible; stage shows geometry/materials/light and both cameras.",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera61w_1f21407-console/screen-010.png",
+            "sha256": "6c68b3824d1010670006cf9c1d572c659c3e8dba9f5aa0bcbee7e230080102f0",
+            "bytes": 274368,
+            "scope": "Actual Console after positive effects; sampled native warnings retained.",
+            "console_warnings": 13,
+            "console_errors": 0
+          },
+          {
+            "file": ".work/compat-followup/camera61w_1f21407-console/screen-013.png",
+            "sha256": "0f91b5b807af9a3bf8fa98ebb1517912c4c52f599cc959bdcca63c57f0d65b81",
+            "bytes": 193602,
+            "scope": "Actual Console after invalid-unit refusal; new empty World stage.",
+            "console_warnings": 15,
+            "console_errors": 0
+          }
+        ],
+        "limits": [
+          "Four sampled actual application-window images inspected, not every frame. Rendered camera pixel tests are separate and their cubes are partly clipped horizontally.",
+          "UI counters and final whole-native-log counts are separate scopes. Warnings retained; no blanket harmlessness claim.",
+          "Fixture stages anonymous/disposable; no physics, UR/ROS or prior Newton-fault resolution claimed."
+        ]
+      }
+    },
+    {
+      "tag": "camera62h_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "headless",
+      "session": {
+        "id": "ef69738aecd442e898f2b9729a7f0958",
+        "pid": 2916856,
+        "port": 18975,
+        "ros_domain": 221,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793623394.464225,
+        "log": "<worktree>/.work/sessions/ef69738aecd442e898f2b9729a7f0958/sim.log",
+        "output_dir": "<worktree>/.work/sessions/ef69738aecd442e898f2b9729a7f0958/output",
+        "user_config": "<worktree>/.work/sessions/ef69738aecd442e898f2b9729a7f0958/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15136,
+          "ram_available_mib": 52316
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.2.0.0",
+        "build": "6.2.0-rc.14+release.52805.02189a84.gl",
+        "reported_core": "6.2.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.2.0.0",
+          "isaacsim-kernel": "6.2.0.0",
+          "isaacsim-core": "6.2.0.0",
+          "isaacsim-sensor": "6.2.0.0",
+          "isaacsim-replicator": "6.2.0.0"
+        },
+        "version_files": {
+          "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/VERSION": "6.2.0-rc.14+release.52805.02189a84.gl"
+        },
+        "kit_build": "110.4.0+feature.386251.187cf21b.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.38",
+            "version": "1.13.38",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.2",
+            "version": "1.6.2",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.2",
+            "version": "2.0.2",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.4",
+            "version": "1.17.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.17.0",
+            "version": "1.17.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.6.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.17.0",
+          "module": "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.17.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera62h_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 4302,
+            "sha256": "8ba8f4e181003675fcb6e1ae6e72e4580eb6be12146783b6d7bde830ce69342a"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 675,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62h_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 64348,
+            "sha256": "559bc6de14ab2fa31fee373915383bb3e3524e607d45323d5e0046a73cbb9fe4"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6413,
+          "green_pixels": 6353,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62h_1f21407/saved/clip-m-clipped.png",
+            "bytes": 10063,
+            "sha256": "3afa5aaafab666cd0f092d21b9ba408e008962345a8dfae96e68bc8e98161180"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6423,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62h_1f21407/saved/clip-m-restored.png",
+            "bytes": 82362,
+            "sha256": "ce7fb47e5d00e2598b4c034d46b2bf1d0f110d0ed2d41d96574b10f80e6043e0"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6356,
+          "green_pixels": 6384,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62h_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 3972,
+            "sha256": "49d10cf0c33f6bbc6cb3b88512375ad237b41deb980537b7a2a626f73412aa1a"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 685,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62h_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 67386,
+            "sha256": "6d645e27b75c52947927204e9cce469c56515db38dbb6e19258efc7a590769ad"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6425,
+          "green_pixels": 6420,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62h_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 14941,
+            "sha256": "dee69f06a7c87732aaa84db112c93b435ad11bfd2a60e270473383dbb621406e"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6408,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62h_1f21407/saved/clip-cm-restored.png",
+            "bytes": 80611,
+            "sha256": "8bf3f1b2de9042d0ce34cffe4a1ab362bf6430fecfc8090ff9aeec417bf60a6e"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6493,
+          "green_pixels": 6387,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2916856,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T12:57:08.724698+00:00",
+        "log": ".work/runs/camera62h_1f21407/kit-native.log",
+        "bytes": 1613241,
+        "sha256": "385172937b255326af8f53a286de4183842e90fbe4b0ed117d3a156abf046519",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 13,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": null
+    },
+    {
+      "tag": "camera62w_1f21407",
+      "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+      "mode": "windowed",
+      "session": {
+        "id": "8ab5b23dd890432b9c49cbc6370ece2b",
+        "pid": 2927657,
+        "port": 18980,
+        "ros_domain": 226,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793624720.5494432,
+        "log": "<worktree>/.work/sessions/8ab5b23dd890432b9c49cbc6370ece2b/sim.log",
+        "output_dir": "<worktree>/.work/sessions/8ab5b23dd890432b9c49cbc6370ece2b/output",
+        "user_config": "<worktree>/.work/sessions/8ab5b23dd890432b9c49cbc6370ece2b/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15158,
+          "ram_available_mib": 52378
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "runtime": {
+        "release": "6.2.0.0",
+        "build": "6.2.0-rc.14+release.52805.02189a84.gl",
+        "reported_core": "6.2.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.2.0.0",
+          "isaacsim-kernel": "6.2.0.0",
+          "isaacsim-core": "6.2.0.0",
+          "isaacsim-sensor": "6.2.0.0",
+          "isaacsim-replicator": "6.2.0.0"
+        },
+        "version_files": {
+          "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/VERSION": "6.2.0-rc.14+release.52805.02189a84.gl"
+        },
+        "kit_build": "110.4.0+feature.386251.187cf21b.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.38",
+            "version": "1.13.38",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.2",
+            "version": "1.6.2",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.2",
+            "version": "2.0.2",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.17",
+            "version": "0.6.17",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.5",
+            "version": "15.17.5",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.17.4",
+            "version": "1.17.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "enabled": false
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.17.0",
+            "version": "1.17.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "physx",
+        "physics_adapter": "physx-simulation-manager-v1",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.6.1",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.12.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.17.0",
+          "module": "<worktree>/.work/clean-setup62-2fdf/.venv/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.17.0+lx64/warp/__init__.py"
+        }
+      },
+      "product_files_compared": 65,
+      "product_module_hashes": {
+        "exts/sim-tools/sim_tools/sensors.py": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2",
+        "exts/sim-tools/sim_tools/advanced.py": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd",
+        "mcp/isaac_mcp/server.py": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      },
+      "core_mcp_calls": 50,
+      "positive_calls": 42,
+      "negative_control_calls": 8,
+      "predicates": 91,
+      "all_predicates_pass": true,
+      "camera_images": [
+        {
+          "file": {
+            "path": ".work/runs/camera62w_1f21407/saved/clip-m-visible-128.png",
+            "bytes": 4392,
+            "sha256": "7367ef41e821bec361c92a4150e02a2624ce2d4f8e4516596ca8e82492fdf524"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 675,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62w_1f21407/saved/clip-m-visible-384.png",
+            "bytes": 70320,
+            "sha256": "4708c25bd16c6541ad99b1622c5788faaee80a31d14dc9e0c06827acdd9549b9"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6426,
+          "green_pixels": 6429,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62w_1f21407/saved/clip-m-clipped.png",
+            "bytes": 11907,
+            "sha256": "9881aee287407ba4675c8030633c77ab452140489264246e8d67f905a45f695e"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6424,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62w_1f21407/saved/clip-m-restored.png",
+            "bytes": 78145,
+            "sha256": "de7bc2e1897d13374aa5f7ac67716849d534d78324894639fdd285fe28b40357"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6498,
+          "green_pixels": 6372,
+          "stage_units_m": 1.0,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62w_1f21407/saved/clip-cm-visible-128.png",
+            "bytes": 3748,
+            "sha256": "c58f592bc91e8d3ef5114a83aa3ab83d5d00b1158009741bfe45932fd8171fd0"
+          },
+          "width": 128,
+          "height": 128,
+          "red_pixels": 724,
+          "green_pixels": 696,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62w_1f21407/saved/clip-cm-visible-384.png",
+            "bytes": 67998,
+            "sha256": "c9532e8d80eea4f8690dd65a73421c9f8ceba23140a654242589914236b4c22d"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6425,
+          "green_pixels": 6409,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62w_1f21407/saved/clip-cm-clipped.png",
+            "bytes": 15075,
+            "sha256": "7dc331f14dd15ec8c162785dbc191474f16e0c9ef029c099bc1ad19d813ec756"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 0,
+          "green_pixels": 6418,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        },
+        {
+          "file": {
+            "path": ".work/runs/camera62w_1f21407/saved/clip-cm-restored.png",
+            "bytes": 81382,
+            "sha256": "78c374a91291a6619d7e8bb6975acc5d56b4d97f1314cacacc2a437787cb2709"
+          },
+          "width": 384,
+          "height": 384,
+          "red_pixels": 6496,
+          "green_pixels": 6380,
+          "stage_units_m": 0.01,
+          "scope": "Color/depth effect test; cubes horizontally cropped by fixture framing, not a full-object or application-window image."
+        }
+      ],
+      "native": {
+        "source": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2927657,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T13:18:50.655297+00:00",
+        "log": ".work/runs/camera62w_1f21407/kit-native.log",
+        "bytes": 1618528,
+        "sha256": "21ad66afa985bb0a3f6b79dbe01033173f2a14a261b6f2f2e49fd90ad7955903",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 15,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "reviewed_at": "2026-11-02T13:18:49.628442+00:00",
+        "source_sha": "1f21407eacd02aa1387aa4348611aa60b7848a06",
+        "pid": 2927657,
+        "window_id": 41943053,
+        "width": 1440,
+        "height": 900,
+        "screens": [
+          {
+            "file": ".work/compat-followup/camera62w_1f21407-console/screen-003.png",
+            "sha256": "405df7e17fd0e80e9b9ab7b726d7fdaec2884816314207270cc62ac03d5ba71f",
+            "bytes": 150251,
+            "scope": "Before fixture: empty actual Kit viewport; reviewed earlier in this run",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera62w_1f21407-console/screen-006.png",
+            "sha256": "062d387e44e65ce0122447086230286145288ad791d24a6c7d366e3302297d8e",
+            "bytes": 262816,
+            "scope": "After named viewport frame: full red cube visible; fixture properties and stage visible; reviewed earlier in this run",
+            "console_warnings": null,
+            "console_errors": null
+          },
+          {
+            "file": ".work/compat-followup/camera62w_1f21407-console/screen-013.png",
+            "sha256": "8ceaf3bf40895e3d8f5e25f39015b5fdf3acd6579faf59217f31772ca9af7749",
+            "bytes": 292471,
+            "scope": "Actual Console after positive effects; reviewed earlier in this run",
+            "console_warnings": 17,
+            "console_errors": 0
+          },
+          {
+            "file": ".work/compat-followup/camera62w_1f21407-console/screen-016.png",
+            "sha256": "cd2095fce5632e9bf185d9436607c1a530debdcce7d56683dcfe0b64775df88a",
+            "bytes": 193541,
+            "scope": "Actual Console after invalid-unit refusal: empty new stage, 19 warnings and 0 errors; visible native Hydra interface already released and prior cm-unit notices",
+            "console_warnings": 19,
+            "console_errors": 0
+          }
+        ],
+        "limits": [
+          "Only these sampled application-window images reviewed; rendered camera file pixel tests are separate.",
+          "Initial optional click was rejected by MCP schema for missing expected dimensions, before input; corrected guarded click succeeded.",
+          "Warning counts are observed UI counters; no blanket harmlessness claim, no physics/ROS or prior Newton-fault resolution."
+        ]
+      }
+    }
+  ],
+  "totals": {
+    "cases": 10,
+    "core_mcp_calls": 500,
+    "predicates": 910,
+    "predicate_scope": "420 successful-result checks plus 490 count/metadata/pixel/hash/saved-USD/invalid-input predicates, not 910 independent physics effects.",
+    "named_cameras": 40,
+    "captures": 80
+  },
+  "effects": [
+    "New cameras report physical near/far .01m/1000m and corresponding meter/centimeter stage values.",
+    "128x128 and384x384 actual RTX images show red and green fixtures23cm away; moving red inside1cm clips it while green remains, and restoring it restores red pixels.",
+    "PNG dimensions/hash match returned metadata. Both saved stages per run independently reopen with standalone OpenUSD and preserve both clipping ranges.",
+    "Deliberate metersPerUnit=0 returns INVALID_STAGE_UNITS without creating camera prim or changing root, restoring original edit target."
+  ],
+  "limitations": [
+    "Successful native RenderProduct/settings allocation changes anonymous root-layer text; no whole-root-preservation claim. Camera/geometry pack edits are session-authored. No user source files are involved.",
+    "Saved USDs were inspected in standalone OpenUSD, not fresh Kit camera-reuse qualification. Existing or reopened cameras are not silently changed by the creation fix.",
+    "RGB fixture cubes are horizontally cropped at image edges. Actual application viewport framing shows an entire red cube, a separate sampled visual. No physical movement claim.",
+    "Five windowed actual Console reviews retained, with warning counters separate from final whole-native logs. No warning suppression or blanket harmlessness claim.",
+    "First headless batch harness reported a stop/PID timing failure after 6.1 effects passed; later PID absence was established, and v2 uses bounded wait. First 6.2 desktop click omitted required dimensions and was refused by schema before input; corrected guarded click succeeded.",
+    "Prepared older installs and previously scoped locked6.2 install, diagnostic crash-upload-disabled bootstrap; not full installer/clean-machine qualification.",
+    "Does not resolve Newton6001 crashes, Newton601/61 NaN or collapsed-contact controls, ROS/Fabric black images, or original20f108-step stall. No independent agent task was newly performed for this focused fixture.",
+    "All ten owned PIDs absent following managed SIGINT; no force stop or unrelated-session intervention in this matrix. PR16/release remain draft and unmerged/unpublished."
+  ],
+  "reviewed_media": [
+    {
+      "name": "reviewed-images/window-before.png",
+      "original_path": ".work/compat-followup/camera62w_1f21407-console/screen-003.png",
+      "bytes": 150251,
+      "sha256": "405df7e17fd0e80e9b9ab7b726d7fdaec2884816314207270cc62ac03d5ba71f"
+    },
+    {
+      "name": "reviewed-images/window-after.png",
+      "original_path": ".work/compat-followup/camera62w_1f21407-console/screen-006.png",
+      "bytes": 262816,
+      "sha256": "062d387e44e65ce0122447086230286145288ad791d24a6c7d366e3302297d8e"
+    },
+    {
+      "name": "reviewed-images/camera-visible.png",
+      "original_path": ".work/runs/camera62h_1f21407/saved/clip-m-visible-384.png",
+      "bytes": 64348,
+      "sha256": "559bc6de14ab2fa31fee373915383bb3e3524e607d45323d5e0046a73cbb9fe4"
+    },
+    {
+      "name": "reviewed-images/camera-near-clipped.png",
+      "original_path": ".work/runs/camera62h_1f21407/saved/clip-m-clipped.png",
+      "bytes": 10063,
+      "sha256": "3afa5aaafab666cd0f092d21b9ba408e008962345a8dfae96e68bc8e98161180"
+    }
+  ],
+  "records": [
+    {
+      "label": "camera6000h_1f21407-qualification",
+      "path": ".work/compat-followup/camera6000h_1f21407/qualification-summary.json",
+      "sha256": "7ee752e4dfe94dcdb591206f039ab995b72dc190c060f06ab1651cf346e1e877",
+      "bytes": 24208
+    },
+    {
+      "label": "camera6000h_1f21407-shutdown",
+      "path": ".work/runs/camera6000h_1f21407/shutdown-log-review-final.json",
+      "sha256": "e977a901017a446af9277d66e266870b4f1834cfa415e09bc79dbf06bb8f2481",
+      "bytes": 646
+    },
+    {
+      "label": "camera6000h_1f21407-source",
+      "path": ".work/runs/camera6000h_1f21407/source-hashes.json",
+      "sha256": "231b9ceb199f0f7bdf5ca5cce6357c9379566172375608412ad4c1e2f9018a81",
+      "bytes": 9919
+    },
+    {
+      "label": "camera6000w_1f21407-qualification",
+      "path": ".work/compat-followup/camera6000w_1f21407/qualification-summary.json",
+      "sha256": "e1c4bd5e75ff06a216789a52abc9ebb4893fdccd2e1ac228e7c4b34ac915cba5",
+      "bytes": 24209
+    },
+    {
+      "label": "camera6000w_1f21407-shutdown",
+      "path": ".work/runs/camera6000w_1f21407/shutdown-log-review-final.json",
+      "sha256": "34d08bcccbb7a3a092fbc20f73ed5cbc353fe3cf4cb87bb6d42d1a98e14fdc5e",
+      "bytes": 646
+    },
+    {
+      "label": "camera6000w_1f21407-source",
+      "path": ".work/runs/camera6000w_1f21407/source-hashes.json",
+      "sha256": "b68209cde40844656550d2631fe42890e308b2f91775b337ce8409ef87496bd2",
+      "bytes": 9919
+    },
+    {
+      "label": "camera6000w_1f21407-visual",
+      "path": ".work/compat-followup/camera6000w_1f21407-console/visual-review.json",
+      "sha256": "2980d8dddb3452ee679baa7b90658d5292b2b18548c91a310e745649435faf3d",
+      "bytes": 2051
+    },
+    {
+      "label": "camera6001h_1f21407-qualification",
+      "path": ".work/compat-followup/camera6001h_1f21407/qualification-summary.json",
+      "sha256": "ead3d734a42beccffe2f83f7e0b96ba8702abf701932c6c782cce24e68920c27",
+      "bytes": 24208
+    },
+    {
+      "label": "camera6001h_1f21407-shutdown",
+      "path": ".work/runs/camera6001h_1f21407/shutdown-log-review-final.json",
+      "sha256": "6efe8bd93c66a87af29cac86aba02657e163ad6f7c2397ff97e40895a553a96d",
+      "bytes": 646
+    },
+    {
+      "label": "camera6001h_1f21407-source",
+      "path": ".work/runs/camera6001h_1f21407/source-hashes.json",
+      "sha256": "cb4cd144fc5a21bdcf22e7c82904a1bfef3891955708fe898fedfea1ee252cb5",
+      "bytes": 9919
+    },
+    {
+      "label": "camera6001w_1f21407-qualification",
+      "path": ".work/compat-followup/camera6001w_1f21407/qualification-summary.json",
+      "sha256": "686d857d35dab9e2be21c1591682e62c08a31a0b86235a7d3f518137d00cf509",
+      "bytes": 24208
+    },
+    {
+      "label": "camera6001w_1f21407-shutdown",
+      "path": ".work/runs/camera6001w_1f21407/shutdown-log-review-final.json",
+      "sha256": "9ddf9caf07e0c6a3a6c69f7644cb07ca68a8111bcf9f3d0e023568ddc4be7861",
+      "bytes": 647
+    },
+    {
+      "label": "camera6001w_1f21407-source",
+      "path": ".work/runs/camera6001w_1f21407/source-hashes.json",
+      "sha256": "82d75a205f9e4a2de86994f253923c1fcf936be6e6bd0ff11995eda11ae86520",
+      "bytes": 9919
+    },
+    {
+      "label": "camera6001w_1f21407-visual",
+      "path": ".work/compat-followup/camera6001w_1f21407-console/visual-review.json",
+      "sha256": "47f394d0a7f6186b3018a7f344cc40a716d7321c5731e605f2d8359680946da4",
+      "bytes": 2051
+    },
+    {
+      "label": "camera601h_1f21407-qualification",
+      "path": ".work/compat-followup/camera601h_1f21407/qualification-summary.json",
+      "sha256": "34a092c9faa843647a99d91c9d0c58c9b5262a37c6b75d57abc4350c4693ab95",
+      "bytes": 24145
+    },
+    {
+      "label": "camera601h_1f21407-shutdown",
+      "path": ".work/runs/camera601h_1f21407/shutdown-log-review-final.json",
+      "sha256": "1d76689713c57bce4b54570cd7dc5558a0c96ba804944186d031b35e578e5d51",
+      "bytes": 645
+    },
+    {
+      "label": "camera601h_1f21407-source",
+      "path": ".work/runs/camera601h_1f21407/source-hashes.json",
+      "sha256": "ac65c8d8980155a99cad89bdd9de5e7a8bf978cb954b8b48f3c4a96d330fa79f",
+      "bytes": 9919
+    },
+    {
+      "label": "camera601w_1f21407-qualification",
+      "path": ".work/compat-followup/camera601w_1f21407/qualification-summary.json",
+      "sha256": "af18b0d66205a7385309c20d7fefb1b2447336aae38d1a1467b0ce1b4d3c66f8",
+      "bytes": 24146
+    },
+    {
+      "label": "camera601w_1f21407-shutdown",
+      "path": ".work/runs/camera601w_1f21407/shutdown-log-review-final.json",
+      "sha256": "9db6c9075ec76d48a5a181d77a23b4aa23b7a8eeaeabbb149fd7df2d717e7ad8",
+      "bytes": 646
+    },
+    {
+      "label": "camera601w_1f21407-source",
+      "path": ".work/runs/camera601w_1f21407/source-hashes.json",
+      "sha256": "b00eb3bcc21fcf7b10ab500f73179bde5fdac18898fca1ecfff61f4ab0ae3e80",
+      "bytes": 9919
+    },
+    {
+      "label": "camera601w_1f21407-visual",
+      "path": ".work/compat-followup/camera601w_1f21407-console/visual-review.json",
+      "sha256": "ee9b9aa93272abfa90a9e842c61f4f28d422b8b109c5ea0c6fddd13efddcda65",
+      "bytes": 2047
+    },
+    {
+      "label": "camera61h_1f21407-qualification",
+      "path": ".work/compat-followup/camera61h_1f21407/qualification-summary.json",
+      "sha256": "f404fb222a15658a556a9e22558e84dbfb4c45de906beb3433921abe410e5096",
+      "bytes": 24088
+    },
+    {
+      "label": "camera61h_1f21407-shutdown",
+      "path": ".work/runs/camera61h_1f21407/shutdown-log-review-final.json",
+      "sha256": "1358d86b50708d3ad63fecd926f3dc1dc8e505ac558c34c14489f16f59f110a0",
+      "bytes": 644
+    },
+    {
+      "label": "camera61h_1f21407-source",
+      "path": ".work/runs/camera61h_1f21407/source-hashes.json",
+      "sha256": "98cf558ad16b818c908e3485b8ae0f9a41b7a15138f2e50b159e5e2226513785",
+      "bytes": 9919
+    },
+    {
+      "label": "camera61w_1f21407-qualification",
+      "path": ".work/compat-followup/camera61w_1f21407/qualification-summary.json",
+      "sha256": "ab0b3b8c409b8265dbbb601ff6bdbb7e45ad7636dfb9457096b1a370bb6972b2",
+      "bytes": 24089
+    },
+    {
+      "label": "camera61w_1f21407-shutdown",
+      "path": ".work/runs/camera61w_1f21407/shutdown-log-review-final.json",
+      "sha256": "8832fe17b51fc2c92f1aa844c824a533661c40555ff257689746715f43a04ab5",
+      "bytes": 644
+    },
+    {
+      "label": "camera61w_1f21407-source",
+      "path": ".work/runs/camera61w_1f21407/source-hashes.json",
+      "sha256": "612871928613181f49e2b99727bd9baf7a8e5c519e933c193d5213c7da0c7653",
+      "bytes": 9919
+    },
+    {
+      "label": "camera61w_1f21407-visual",
+      "path": ".work/compat-followup/camera61w_1f21407-console/visual-review.json",
+      "sha256": "3d9cdc3776490166539ced8d66430d7a835ba798b3840595be462fe639af8394",
+      "bytes": 2043
+    },
+    {
+      "label": "camera62h_1f21407-qualification",
+      "path": ".work/compat-followup/camera62h_1f21407/qualification-summary.json",
+      "sha256": "79e8e9d4066e650ce74fae3fd4a434a04e9e18c54ce640a912d1b7f4dd3d2b9a",
+      "bytes": 24087
+    },
+    {
+      "label": "camera62h_1f21407-shutdown",
+      "path": ".work/runs/camera62h_1f21407/shutdown-log-review-final.json",
+      "sha256": "bf051c6860cb335d77ee07d93b90e6e3d0128cc547b0a18185e4940f346f6b9e",
+      "bytes": 644
+    },
+    {
+      "label": "camera62h_1f21407-source",
+      "path": ".work/runs/camera62h_1f21407/source-hashes.json",
+      "sha256": "8802f8f6d5f61af1e751baa3976211633c518ccd5691a14d0f75e734f597ae8e",
+      "bytes": 9919
+    },
+    {
+      "label": "camera62w_1f21407-qualification",
+      "path": ".work/compat-followup/camera62w_1f21407/qualification-summary.json",
+      "sha256": "b18e130637a494caa8bcf57b0700ce4d84f0c778b7afe3353d6f90e1f6b3bb6d",
+      "bytes": 24089
+    },
+    {
+      "label": "camera62w_1f21407-shutdown",
+      "path": ".work/runs/camera62w_1f21407/shutdown-log-review-final.json",
+      "sha256": "fa492ec7627ff2ec9792b4e1f075db99728e93794163ff8bdfcb043a5d3e21da",
+      "bytes": 644
+    },
+    {
+      "label": "camera62w_1f21407-source",
+      "path": ".work/runs/camera62w_1f21407/source-hashes.json",
+      "sha256": "611bcedc0536839c4bc2324564b3fce9f66a795baf38e04071faefc82c7292a3",
+      "bytes": 9919
+    },
+    {
+      "label": "camera62w_1f21407-visual",
+      "path": ".work/compat-followup/camera62w_1f21407-console/visual-review.json",
+      "sha256": "dd7a544f5b74a5e9b185e532f10c06f7243bc8d4a7533e0324ba03ef1f996a6c",
+      "bytes": 2129
+    },
+    {
+      "label": "camera-clipping-source-identity.json",
+      "path": ".work/compat-followup/camera-clipping-source-identity.json",
+      "sha256": "19aef116a24d3a6bae78cf57356f8709acb3f56c67ae787678f22e6a140bed16",
+      "bytes": 1991
+    },
+    {
+      "label": "camera-clipping-machine.json",
+      "path": ".work/compat-followup/camera-clipping-machine.json",
+      "sha256": "13d47bdf664001513acd6d91a7f0973c436b3c65093c4528a53930c5bed5795a",
+      "bytes": 917
+    },
+    {
+      "label": "camera-clipping-host-packages.json",
+      "path": ".work/compat-followup/camera-clipping-host-packages.json",
+      "sha256": "a6fd58651674a4f2b95067ca791fa86a5c63a6d4047bcad5ce553b476d8d2873",
+      "bytes": 250
+    },
+    {
+      "label": "camera-headless-matrix-attempt1-review.json",
+      "path": ".work/compat-followup/camera-headless-matrix-attempt1-review.json",
+      "sha256": "105dfd32ac9a175a47d0d1feec41b41e2010f86313cc6c6f667aa05fccf1cbdf",
+      "bytes": 383
+    }
+  ]
+}

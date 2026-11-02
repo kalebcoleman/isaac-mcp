@@ -424,6 +424,52 @@ def test_accepted_sockets_carry_a_send_only_timeout(served):
     assert connection.sock.gettimeout() is None, "recv stays blocking: an idle client is not closed"
 
 
+def test_stop_before_accept_worker_first_instruction_is_clean(monkeypatch):
+    """Force the observed shutdown race instead of depending on thread timing."""
+    entered, resume = threading.Event(), threading.Event()
+    errors, listeners = [], []
+    original = McpBridge._accept_loop
+
+    def delayed(self, listener):
+        listeners.append(listener)
+        entered.set()
+        assert resume.wait(5)
+        original(self, listener)
+
+    monkeypatch.setattr(McpBridge, "_accept_loop", delayed)
+    monkeypatch.setattr(threading, "excepthook", lambda args: errors.append(args.exc_value))
+    bridge = McpBridge(schedule_coroutine=lambda coro: coro.close())
+    bridge.start(0, host="127.0.0.1")
+    assert entered.wait(5)
+    assert listeners[0].gettimeout() == 1.0
+    worker = bridge._server_thread
+    stopper = threading.Thread(target=bridge.stop)
+    stopper.start()
+    assert until(lambda: bridge._socket is None)
+    resume.set()
+    stopper.join(5)
+    worker.join(5)
+    assert not stopper.is_alive() and not worker.is_alive() and not errors
+    assert not bridge._connections
+
+
+def test_old_accept_worker_cannot_use_restarted_listener(monkeypatch):
+    bridge = McpBridge(schedule_coroutine=lambda coro: coro.close())
+    old = socket.socket()
+    replacement = socket.socket()
+    try:
+        old.close()
+        bridge._socket = replacement
+        bridge._running = True
+        # A closed old listener would raise if used; the current listener must
+        # not be touched either. No blocking accept is allowed for the old epoch.
+        bridge._accept_loop(old)
+        assert bridge._socket is replacement and not bridge._connections
+    finally:
+        bridge._running = False
+        replacement.close()
+
+
 # ------------------------------------------------------------------ a caller that has gone
 class _HostlessSocket:
     def __init__(self):

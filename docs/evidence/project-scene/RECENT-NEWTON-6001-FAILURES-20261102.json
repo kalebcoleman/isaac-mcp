@@ -1,0 +1,1259 @@
+{
+  "schema": 1,
+  "recorded_utc": "2026-11-02T10:03:11.299298+00:00",
+  "source": "2c8ce63b33dbabf02b2216f9d512ff9a23724d9c",
+  "tree": "77fc20b42b97eebdb0aa04273bb7ef5281bd3001",
+  "environment": {
+    "os": "Ubuntu24.04.5",
+    "gpu": "RTX5080 16303MiB",
+    "driver": "580.178.04",
+    "release": "6.0.0.1",
+    "newton": "1.2.0",
+    "mujoco": "3.8.0",
+    "mujoco_warp": "3.8.0.3",
+    "loaded_warp": "1.13.0"
+  },
+  "scope": "Failed integrated Newton twin qualification plus explicitly separate private controls. Generic scripted passes include expected refusals; not all99 coverage, all-backend support or native fault remediation.",
+  "runs": [
+    {
+      "tag": "newton6001h_2c8ce63",
+      "base_source": "2c8ce63b33dbabf02b2216f9d512ff9a23724d9c",
+      "private_runtime_candidate": false,
+      "private_cpu_config": null,
+      "modules": {
+        "exts/ur5e-dt/ur5e_dt/extension.py": "2845f41597194c3be52b41ff21b7686705b3fd34e0b0ffa5de5c532bc2206266",
+        "exts/ur5e-dt/ur5e_dt/world_compat.py": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8",
+        "exts/ur5e-dt/ur5e_dt/physics_compat.py": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438"
+      },
+      "session": {
+        "id": "ae3cd7c6565a4abba1691190c05fb173",
+        "pid": 2808273,
+        "port": 18962,
+        "ros_domain": 208,
+        "headless": true,
+        "physics_backend": "newton",
+        "enable_motion_bvh": true,
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15021,
+          "ram_available_mib": 51677
+        }
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "id": "isaacsim.physics.newton-0.7.14",
+            "version": "0.7.14",
+            "enabled": true
+          },
+          "isaacsim.physics.newton.tensors": {
+            "id": "isaacsim.physics.newton.tensors-0.1.7",
+            "version": "0.1.7",
+            "enabled": true
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "newton",
+        "physics_adapter": "newton-direct-step-fabric-v1",
+        "newton": {
+          "initialized": false,
+          "solver": "mujoco",
+          "update_fabric": true,
+          "use_cuda_graph": true
+        },
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/mujoco/__init__.py",
+            "loaded_version": "3.8.0"
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/mujoco_warp/__init__.py",
+            "loaded_version": "3.8.0.3"
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "generic": {
+        "tools": {
+          "records": 32,
+          "error_results": 7,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        },
+        "equivalents": {
+          "records": 49,
+          "error_results": 5,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        },
+        "edges": {
+          "records": 23,
+          "error_results": 12,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        },
+        "sensors": {
+          "records": 327,
+          "error_results": 0,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        },
+        "clear": {
+          "records": 4,
+          "error_results": 1,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        }
+      },
+      "retained_fullsurface_calls": 90,
+      "recorded_predicates": 30,
+      "passed_predicates": 30,
+      "failed_predicates": [],
+      "result": "FAIL: after successful call88 Play, Kit disappeared before call89 joint observation; malloc unaligned-tcache diagnostic. Native cause/exit signal unknown. Bridge cleanup could not run; separately identity-checked owned simulated driver cleanup succeeded.",
+      "pid_absent": true
+    },
+    {
+      "tag": "newton6001h_fullonly_2c8",
+      "base_source": "2c8ce63b33dbabf02b2216f9d512ff9a23724d9c",
+      "private_runtime_candidate": false,
+      "private_cpu_config": null,
+      "modules": {
+        "exts/ur5e-dt/ur5e_dt/extension.py": "2845f41597194c3be52b41ff21b7686705b3fd34e0b0ffa5de5c532bc2206266",
+        "exts/ur5e-dt/ur5e_dt/world_compat.py": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8",
+        "exts/ur5e-dt/ur5e_dt/physics_compat.py": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438"
+      },
+      "session": {
+        "id": "499e8508e5594809b98fa92a36bce5e5",
+        "pid": 2811681,
+        "port": 18963,
+        "ros_domain": 209,
+        "headless": true,
+        "physics_backend": "newton",
+        "enable_motion_bvh": true,
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15034,
+          "ram_available_mib": 51756
+        }
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "id": "isaacsim.physics.newton-0.7.14",
+            "version": "0.7.14",
+            "enabled": true
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "newton",
+        "physics_adapter": "newton-direct-step-fabric-v1",
+        "newton": {
+          "initialized": false,
+          "solver": "mujoco",
+          "update_fabric": true,
+          "use_cuda_graph": true
+        },
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "generic": {},
+      "retained_fullsurface_calls": 35,
+      "recorded_predicates": 14,
+      "passed_predicates": 14,
+      "failed_predicates": [],
+      "result": "FAIL: fresh unmodified full-surface control stalled in load_simple_room. SIGUSR2 Python stack in Replicator trigger discovery / USD Runtime graph query is execution localization, not cause. SIGINT did not exit; owned force-stop is cleanup, not recovery.",
+      "pid_absent": true
+    },
+    {
+      "tag": "newton6001h_roompause_c1",
+      "base_source": "2c8ce63b33dbabf02b2216f9d512ff9a23724d9c",
+      "private_runtime_candidate": true,
+      "private_cpu_config": null,
+      "modules": {
+        "exts/ur5e-dt/ur5e_dt/extension.py": "bbdea97348b15efa651f3c43e2bb3de0e4efafe74c0c2966b8c54435aa30828f",
+        "exts/ur5e-dt/ur5e_dt/world_compat.py": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8",
+        "exts/ur5e-dt/ur5e_dt/physics_compat.py": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438"
+      },
+      "session": {
+        "id": "abae75412577456784b2ec5bf72ffa4d",
+        "pid": 2814774,
+        "port": 18964,
+        "ros_domain": 210,
+        "headless": true,
+        "physics_backend": "newton",
+        "enable_motion_bvh": true,
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15057,
+          "ram_available_mib": 51828
+        }
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "id": "isaacsim.physics.newton-0.7.14",
+            "version": "0.7.14",
+            "enabled": true
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "newton",
+        "physics_adapter": "newton-direct-step-fabric-v1",
+        "newton": {
+          "initialized": false,
+          "solver": "mujoco",
+          "update_fabric": true,
+          "use_cuda_graph": true
+        },
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "generic": {},
+      "retained_fullsurface_calls": 97,
+      "recorded_predicates": 40,
+      "passed_predicates": 39,
+      "failed_predicates": [
+        "Newton runtime wrist moves with arm"
+      ],
+      "result": "UNQUALIFIED private room-pause candidate. Passed earlier room/add/play locations once, then wrist displacement predicate failed: baseline was still moving (shoulder-lift velocity .910102 rad/s). ROS RGB first/last buffers were zero; arrival/dimensions alone do not verify useful images. Clean managed stop.",
+      "pid_absent": true
+    },
+    {
+      "tag": "newton6001h_roompause_c2",
+      "base_source": "2c8ce63b33dbabf02b2216f9d512ff9a23724d9c",
+      "private_runtime_candidate": true,
+      "private_cpu_config": null,
+      "modules": {
+        "exts/ur5e-dt/ur5e_dt/extension.py": "bbdea97348b15efa651f3c43e2bb3de0e4efafe74c0c2966b8c54435aa30828f",
+        "exts/ur5e-dt/ur5e_dt/world_compat.py": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8",
+        "exts/ur5e-dt/ur5e_dt/physics_compat.py": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438"
+      },
+      "session": {
+        "id": "462cb62c3e5848fd834db2cb23d0dade",
+        "pid": 2817406,
+        "port": 18965,
+        "ros_domain": 211,
+        "headless": true,
+        "physics_backend": "newton",
+        "enable_motion_bvh": true,
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15059,
+          "ram_available_mib": 51806
+        }
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "id": "isaacsim.physics.newton-0.7.14",
+            "version": "0.7.14",
+            "enabled": true
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "newton",
+        "physics_adapter": "newton-direct-step-fabric-v1",
+        "newton": {
+          "initialized": false,
+          "solver": "mujoco",
+          "update_fabric": true,
+          "use_cuda_graph": true
+        },
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "generic": {},
+      "retained_fullsurface_calls": 38,
+      "recorded_predicates": 15,
+      "passed_predicates": 15,
+      "failed_predicates": [],
+      "result": "FAIL: same private room-pause candidate, with settled arm baseline harness. Pending add_objects; malloc diagnostic and captured main stack in Newton LoadUsdPhysicsFromRange / initialization / on_play. SIGINT did not exit; owned force-stop. Native crash reporter attempted upload automatically; delivery not established. No raw dump/metadata distributed. Future launches disabled current and old dump uploads.",
+      "pid_absent": true
+    },
+    {
+      "tag": "newton6001h_usdserial_2c8",
+      "base_source": "2c8ce63b33dbabf02b2216f9d512ff9a23724d9c",
+      "private_runtime_candidate": false,
+      "private_cpu_config": null,
+      "modules": {
+        "exts/ur5e-dt/ur5e_dt/extension.py": "2845f41597194c3be52b41ff21b7686705b3fd34e0b0ffa5de5c532bc2206266",
+        "exts/ur5e-dt/ur5e_dt/world_compat.py": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8",
+        "exts/ur5e-dt/ur5e_dt/physics_compat.py": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438"
+      },
+      "session": {
+        "id": "4ddffe55874a4ed38cf29bac15ab0703",
+        "pid": 2821241,
+        "port": 18966,
+        "ros_domain": 212,
+        "headless": true,
+        "physics_backend": "newton",
+        "enable_motion_bvh": true,
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15059,
+          "ram_available_mib": 51865
+        }
+      },
+      "runtime": null,
+      "generic": {},
+      "retained_fullsurface_calls": 0,
+      "recorded_predicates": 0,
+      "passed_predicates": 0,
+      "failed_predicates": [],
+      "result": "INEFFECTIVE CONTROL: requested PXR_WORK_THREAD_LIMIT=1 was overwritten by SimulationApp. Observed Work concurrency16 and environment16. No scene workflow run; clean managed stop.",
+      "pid_absent": true
+    },
+    {
+      "tag": "newton6001h_cpu1_2c8",
+      "base_source": "2c8ce63b33dbabf02b2216f9d512ff9a23724d9c",
+      "private_runtime_candidate": false,
+      "private_cpu_config": "limit_cpu_threads=1",
+      "modules": {
+        "exts/ur5e-dt/ur5e_dt/extension.py": "2845f41597194c3be52b41ff21b7686705b3fd34e0b0ffa5de5c532bc2206266",
+        "exts/ur5e-dt/ur5e_dt/world_compat.py": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8",
+        "exts/ur5e-dt/ur5e_dt/physics_compat.py": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438"
+      },
+      "session": {
+        "id": "02ad2316a2af477a87064ffd5dce0b05",
+        "pid": 2822448,
+        "port": 18967,
+        "ros_domain": 213,
+        "headless": true,
+        "physics_backend": "newton",
+        "enable_motion_bvh": true,
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15049,
+          "ram_available_mib": 51655
+        }
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "id": "isaacsim.physics.newton-0.7.14",
+            "version": "0.7.14",
+            "enabled": true
+          },
+          "isaacsim.physics.newton.tensors": {
+            "enabled": false
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "newton",
+        "physics_adapter": "newton-direct-step-fabric-v1",
+        "newton": {
+          "initialized": false,
+          "solver": "mujoco",
+          "update_fabric": true,
+          "use_cuda_graph": true
+        },
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": false,
+            "module": null,
+            "loaded_version": null
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "generic": {},
+      "retained_fullsurface_calls": 111,
+      "recorded_predicates": 44,
+      "passed_predicates": 43,
+      "failed_predicates": [
+        "RG2 joint reaches simulated command"
+      ],
+      "result": "UNQUALIFIED CPU-thread1 bootstrap control. Work concurrency1 observed; also changes Carb/TBB/OpenBLAS, not USD alone. Passed prior failure locations and measured settled arm/wrist motion once. RG2 had not reached .5 after fixed five wall seconds; later separate read .4998456 with near-zero velocity. Recorder failed >5-second backlog. Observed RGB zero; post-reset Dome control changed arm pose and does not isolate lighting. Save while playing refused. Clean stop, not a qualified workaround.",
+      "pid_absent": true
+    },
+    {
+      "tag": "newton6001w_2c8ce63",
+      "base_source": "2c8ce63b33dbabf02b2216f9d512ff9a23724d9c",
+      "private_runtime_candidate": false,
+      "private_cpu_config": null,
+      "modules": {
+        "exts/ur5e-dt/ur5e_dt/extension.py": "2845f41597194c3be52b41ff21b7686705b3fd34e0b0ffa5de5c532bc2206266",
+        "exts/ur5e-dt/ur5e_dt/world_compat.py": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8",
+        "exts/ur5e-dt/ur5e_dt/physics_compat.py": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438"
+      },
+      "session": {
+        "id": "58f38948cc004f908e84c6b9710fbd9d",
+        "pid": 2825736,
+        "port": 18968,
+        "ros_domain": 214,
+        "headless": false,
+        "physics_backend": "newton",
+        "enable_motion_bvh": true,
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15057,
+          "ram_available_mib": 51801
+        }
+      },
+      "runtime": {
+        "release": "6.0.0.1",
+        "build": "6.0.0-rc.59+release.41464.5f2772bc.gl",
+        "reported_core": "6.0.0",
+        "identity_source": "package and VERSION",
+        "packages": {
+          "isaacsim": "6.0.0.1",
+          "isaacsim-kernel": "6.0.0.1",
+          "isaacsim-core": "6.0.0.1",
+          "isaacsim-sensor": "6.0.0.1",
+          "isaacsim-replicator": "6.0.0.1"
+        },
+        "version_files": {
+          "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.0-rc.59+release.41464.5f2772bc.gl"
+        },
+        "kit_build": "110.1.1+production.305458.6312fa25.gl",
+        "extensions": {
+          "omni.replicator.core": {
+            "id": "omni.replicator.core-1.13.25",
+            "version": "1.13.25",
+            "enabled": true
+          },
+          "omni.kit.hydra_texture": {
+            "id": "omni.kit.hydra_texture-1.6.0",
+            "version": "1.6.0",
+            "enabled": true
+          },
+          "omni.kit.renderer.capture": {
+            "id": "omni.kit.renderer.capture-2.0.1",
+            "version": "2.0.1",
+            "enabled": true
+          },
+          "omni.syntheticdata": {
+            "id": "omni.syntheticdata-0.6.15",
+            "version": "0.6.15",
+            "enabled": true
+          },
+          "isaacsim.sensors.rtx": {
+            "id": "isaacsim.sensors.rtx-15.17.0",
+            "version": "15.17.0",
+            "enabled": true
+          },
+          "isaacsim.sensors.experimental.rtx": {
+            "id": "isaacsim.sensors.experimental.rtx-1.4.3",
+            "version": "1.4.3",
+            "enabled": true
+          },
+          "isaacsim.core.simulation_manager": {
+            "id": "isaacsim.core.simulation_manager-1.15.4",
+            "version": "1.15.4",
+            "enabled": true
+          },
+          "isaacsim.physics.newton": {
+            "id": "isaacsim.physics.newton-0.7.14",
+            "version": "0.7.14",
+            "enabled": true
+          },
+          "isaacsim.physics.newton.tensors": {
+            "id": "isaacsim.physics.newton.tensors-0.1.7",
+            "version": "0.1.7",
+            "enabled": true
+          },
+          "omni.warp.core": {
+            "id": "omni.warp.core-1.13.0",
+            "version": "1.13.0",
+            "enabled": true
+          }
+        },
+        "qualified_build": true,
+        "issues": [],
+        "physics_engine": "newton",
+        "physics_adapter": "newton-direct-step-fabric-v1",
+        "newton": {
+          "initialized": false,
+          "solver": "mujoco",
+          "update_fabric": true,
+          "use_cuda_graph": true
+        },
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "physics_packages": {
+          "newton": {
+            "installed_version": "1.2.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/newton/__init__.py",
+            "loaded_version": "1.2.0"
+          },
+          "mujoco": {
+            "installed_version": "3.8.0",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/mujoco/__init__.py",
+            "loaded_version": "3.8.0"
+          },
+          "mujoco_warp": {
+            "installed_version": "3.8.0.3",
+            "loaded": true,
+            "module": "<sim-install-6001>/lib/python3.12/site-packages/mujoco_warp/__init__.py",
+            "loaded_version": "3.8.0.3"
+          }
+        },
+        "warp": {
+          "version": "1.13.0",
+          "module": "<sim-install-6001>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+        }
+      },
+      "generic": {
+        "tools": {
+          "records": 32,
+          "error_results": 7,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        },
+        "equivalents": {
+          "records": 49,
+          "error_results": 5,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        },
+        "edges": {
+          "records": 23,
+          "error_results": 12,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        },
+        "sensors": {
+          "records": 327,
+          "error_results": 0,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        },
+        "clear": {
+          "records": 4,
+          "error_results": 1,
+          "scope": "Passing scripted predicates include expected refusals; not all tools or every parameter working."
+        }
+      },
+      "retained_fullsurface_calls": 42,
+      "recorded_predicates": 14,
+      "passed_predicates": 14,
+      "failed_predicates": [],
+      "result": "FAIL: exact2c runtime, normal thread budget, windowed. Generic five suites and existing PhysicsScene checks completed. Last success39; add_objects40 connection reset, incorrectly isError=false. Follow-up41 stop unreachable and42 stage_info unavailable do not show a Stop reached Kit. Native stderr SIGSEGV/free invalid pointer, main stack Newton parser/on_play. Native PID vanished before root cleanup; no simulated driver started. Only initial actual blank window reviewed; no post-fault Console/window available.",
+      "pid_absent": true
+    }
+  ],
+  "rgb_observations": [
+    {
+      "run": "newton6001h_roompause_c1",
+      "record": ".work/compat-followup/newton6001h_roompause_c1-fullsurface/ros-observe.json",
+      "sha256": "85d4c034ceed1faeb202a82585cc2e8743a3ac85ce52f44cfcb5e884329a0ec2",
+      "count": 86,
+      "first_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "last_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "first_last_equal_zero": true
+    },
+    {
+      "run": "newton6001h_roompause_c1",
+      "record": ".work/compat-followup/newton6001h_roompause_c1-fullsurface/ros-trajectory.json",
+      "sha256": "df6226ff32cb78260ce463fab7dfc7b164dd44c958dc073baad1235cdf322fef",
+      "count": 115,
+      "first_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "last_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "first_last_equal_zero": true
+    },
+    {
+      "run": "newton6001h_cpu1_2c8",
+      "record": ".work/compat-followup/newton6001h_cpu1_2c8-fullsurface/ros-gripper.json",
+      "sha256": "0dd5d3474c8c86d82c2462083bfe1cfdd61ba97a89e850de97ddd55277c42b08",
+      "count": 1,
+      "first_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "last_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "first_last_equal_zero": true
+    },
+    {
+      "run": "newton6001h_cpu1_2c8",
+      "record": ".work/compat-followup/newton6001h_cpu1_2c8-fullsurface/ros-observe.json",
+      "sha256": "9aeb2c876cf587a079a2f9d793b56d486d10bb448045d350986d4e9a15e73aa2",
+      "count": 3,
+      "first_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "last_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "first_last_equal_zero": true
+    },
+    {
+      "run": "newton6001h_cpu1_2c8",
+      "record": ".work/compat-followup/newton6001h_cpu1_2c8-fullsurface/ros-trajectory.json",
+      "sha256": "cd159d041df45a1c868e174864288c3e5eac9341dd969de4e473bcd520282c94",
+      "count": 10,
+      "first_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "last_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+      "first_last_equal_zero": true
+    }
+  ],
+  "zero_rgb_sha256": "822e3a311bc34185394aeb709bb83310f1243089b95cdadc218eee179b1d6f78",
+  "host_followup": {
+    "source": "7cdd54fbc2a2879695b865ec38746e2d11c1b441",
+    "scope": "Legacy bridge error envelopes only, not native crash fix.",
+    "focused_pass": 114,
+    "min_sdk_1_22_pass": 80,
+    "native_qualification": {
+      "source": "826b84b69f04a080882c3ef5894877f389af2938",
+      "release": "6.0.1.0",
+      "mode": "headless",
+      "backend": "Newton",
+      "calls": 6,
+      "checks": 6,
+      "scope": "Success, application error, builtin error and failed-file preservation; not crash remediation or full twin workflow."
+    }
+  },
+  "corrections": [
+    "Windowed shutdown-log-review generic text says managed stop; this process instead exited natively before any managed-stop request. Native-file counts exclude fatal stderr in sim.log.",
+    "Initial room-control diagnostic-interruption prediction is not established; retained corrected review distinguishes client failure from termination.",
+    "Failed wrist displacement baseline was still moving; later harness waits for finite settled states. One CPU-thread1 run later reached the gripper target, but its original fixed-time failure and recorder/image failures remain.",
+    "No black RGB pass: dimensions, message count and stamps do not establish useful scene images. Post-reset Dome test changed arm pose."
+  ],
+  "remaining": [
+    "Native heap faults and room-load stall remain unexplained. No claim they share a cause with the original20f6.0.1windowed stepping stall.",
+    "Private room-pause and CPU-thread1 candidates are not shipped or qualified workarounds; concurrency1 also changes other thread pools.",
+    "Default/native runtime unchanged by host7cdd; six live error-envelope checks are separate from the remaining Newton release/mode queue.",
+    "No final Console after windowed process loss. Initial window hash identifies a private blank-window capture, not an effect proof.",
+    "Raw minidumps/environment metadata/full crash logs and all geometry/media omitted. C2 native reporter attempted an automatic upload; delivery unknown. Later disposable processes disable current/old crash uploads locally.",
+    "All seven owned Kit PIDs absent and owned fake-driver cleanup recorded. No unrelated process stopped. PR16 stays draft/unmerged."
+  ],
+  "records": [
+    {
+      "label": "newton6001h_2c8ce63-tools",
+      "path": ".work/compat-followup/newton6001h_2c8ce63-tools.json",
+      "sha256": "04857ef25c3e0bd155f369a3cb555dc55fac7a34b166e1d89661836fea947fd1",
+      "bytes": 40432
+    },
+    {
+      "label": "newton6001h_2c8ce63-equivalents",
+      "path": ".work/compat-followup/newton6001h_2c8ce63-equivalents.json",
+      "sha256": "6c7f0e96c74df3704d2245c7b375632e188ef1982a2e512e14f93673c2be10e0",
+      "bytes": 86986
+    },
+    {
+      "label": "newton6001h_2c8ce63-edges",
+      "path": ".work/compat-followup/newton6001h_2c8ce63-edges.json",
+      "sha256": "4a66ecaa29ba44b957fa49768cd7fe95525524d6b27891fe891ec5269fb7c617",
+      "bytes": 27607
+    },
+    {
+      "label": "newton6001h_2c8ce63-sensors",
+      "path": ".work/compat-followup/newton6001h_2c8ce63-sensors.json",
+      "sha256": "65181291390a39de9365e1eb70f544565d56c0a2b9c18a4a03da1508972f17ea",
+      "bytes": 607809
+    },
+    {
+      "label": "newton6001h_2c8ce63-clear",
+      "path": ".work/compat-followup/newton6001h_2c8ce63-clear.json",
+      "sha256": "5fc8288673d02f93bfa2ac3a8f11bca55eaa2057c695a73d31d7e90b1cd96b08",
+      "bytes": 19700
+    },
+    {
+      "label": "newton6001h_2c8ce63-session",
+      "path": ".work/runs/newton6001h_2c8ce63/session.json",
+      "sha256": "e2d8e91fb1edd5e5ff702fe6c9697892dc0446a09a6728255bc91ed603e6e9c7",
+      "bytes": 880
+    },
+    {
+      "label": "newton6001h_2c8ce63-source-hashes",
+      "path": ".work/runs/newton6001h_2c8ce63/source-hashes.json",
+      "sha256": "e7f262143a0dc5dfaf1b30b3e4a1586833f5c74e53fb93397a47527504361aae",
+      "bytes": 9919
+    },
+    {
+      "label": "newton6001h_2c8ce63-assertions.json",
+      "path": ".work/compat-followup/newton6001h_2c8ce63-fullsurface/assertions.json",
+      "sha256": "2b0bd0cd722a31b911e71e94f97caf0e32f49999ad7dfc3d830223c6daadb856",
+      "bytes": 39655
+    },
+    {
+      "label": "newton6001h_2c8ce63-failure.txt",
+      "path": ".work/compat-followup/newton6001h_2c8ce63-fullsurface/failure.txt",
+      "sha256": "d6be59765776bb1ee8ac5fdb3f3d1b7fe40f7930b08fae4ed0c2bc12ffa9d6d1",
+      "bytes": 4319
+    },
+    {
+      "label": "newton6001h_fullonly_2c8-session",
+      "path": ".work/runs/newton6001h_fullonly_2c8/session.json",
+      "sha256": "b09b57e824e4650ea1ba587d585f1fdb0a60966c0735d6f6219f4a91b85fd522",
+      "bytes": 880
+    },
+    {
+      "label": "newton6001h_fullonly_2c8-source-hashes",
+      "path": ".work/runs/newton6001h_fullonly_2c8/source-hashes.json",
+      "sha256": "774a68715c0aae31293bf5e5c65d01dcdf7d8892854c12ffa6493e899a2f3643",
+      "bytes": 9919
+    },
+    {
+      "label": "newton6001h_fullonly_2c8-assertions.json",
+      "path": ".work/compat-followup/newton6001h_fullonly_2c8-fullsurface/assertions.json",
+      "sha256": "c22a68e9257b6713a7b3592c2acffea9a5ba38ea27a9422a55c3c58169f980c2",
+      "bytes": 37669
+    },
+    {
+      "label": "newton6001h_fullonly_2c8-failure.txt",
+      "path": ".work/compat-followup/newton6001h_fullonly_2c8-fullsurface/failure.txt",
+      "sha256": "e2aed1c93bfeb709a2161b7a67046debbff3fc63dfd560f37859b6ab4ef50e1b",
+      "bytes": 2623
+    },
+    {
+      "label": "newton6001h_roompause_c1-session",
+      "path": ".work/runs/newton6001h_roompause_c1/session.json",
+      "sha256": "7f88b0f6385f5a74ad460b748d0295149c7fc7e76b3091d2af7468c774aa89f0",
+      "bytes": 879
+    },
+    {
+      "label": "newton6001h_roompause_c1-source-hashes",
+      "path": ".work/runs/newton6001h_roompause_c1/source-hashes.json",
+      "sha256": "7fe0352abdeb16c2bff62bbf11c6d9530a5a3fc5fc77512aaaad617708aca2a0",
+      "bytes": 9919
+    },
+    {
+      "label": "newton6001h_roompause_c1-assertions.json",
+      "path": ".work/compat-followup/newton6001h_roompause_c1-fullsurface/assertions.json",
+      "sha256": "870a278e1f4362470258a1084f45e69e63538a8a2f95759f32b4fa779aa85e77",
+      "bytes": 42577
+    },
+    {
+      "label": "newton6001h_roompause_c1-failure.txt",
+      "path": ".work/compat-followup/newton6001h_roompause_c1-fullsurface/failure.txt",
+      "sha256": "c5c0784daf584afd5ad9cde1f14537b4fc152cac509bd6416288ac24757b0d03",
+      "bytes": 4430
+    },
+    {
+      "label": "newton6001h_roompause_c2-session",
+      "path": ".work/runs/newton6001h_roompause_c2/session.json",
+      "sha256": "98d2d9ca9d02dbe326744bf686ee004bf9db053e43d94aeb7003d72d5de97558",
+      "bytes": 880
+    },
+    {
+      "label": "newton6001h_roompause_c2-source-hashes",
+      "path": ".work/runs/newton6001h_roompause_c2/source-hashes.json",
+      "sha256": "b7fa278462511052827e5ea2beeb24513a637a1e91b03b4b498c579758c7d738",
+      "bytes": 9919
+    },
+    {
+      "label": "newton6001h_roompause_c2-assertions.json",
+      "path": ".work/compat-followup/newton6001h_roompause_c2-fullsurface/assertions.json",
+      "sha256": "8059e6f751cbb38fb778ff010608e1b0cbcbb6e8ad6e1f1e6e7820a9a7fe09aa",
+      "bytes": 37767
+    },
+    {
+      "label": "newton6001h_roompause_c2-failure.txt",
+      "path": ".work/compat-followup/newton6001h_roompause_c2-fullsurface/failure.txt",
+      "sha256": "a4394d74bad4f3c358abfd246482580fb11b6cb1a9d808728aae82e0eb844dbc",
+      "bytes": 2639
+    },
+    {
+      "label": "newton6001h_usdserial_2c8-session",
+      "path": ".work/runs/newton6001h_usdserial_2c8/session.json",
+      "sha256": "743c84b3687b20af912620fce50b9e8836b11e88ce624f54809f98dc24b65bb9",
+      "bytes": 880
+    },
+    {
+      "label": "newton6001h_usdserial_2c8-source-hashes",
+      "path": ".work/runs/newton6001h_usdserial_2c8/source-hashes.json",
+      "sha256": "76b0f6815ce2de040ec8cd28f456e3979223afeca92005be26a9d68df932365d",
+      "bytes": 9919
+    },
+    {
+      "label": "newton6001h_cpu1_2c8-session",
+      "path": ".work/runs/newton6001h_cpu1_2c8/session.json",
+      "sha256": "91fb7abb7c46fa7f7e2fe7064af7ec1a34f37b68b1b223337cbfe2961e470b67",
+      "bytes": 879
+    },
+    {
+      "label": "newton6001h_cpu1_2c8-source-hashes",
+      "path": ".work/runs/newton6001h_cpu1_2c8/source-hashes.json",
+      "sha256": "dafb6613f82142d4d74cee6a9990df9a569bb34c6c5417d3c84ecf40f416e8d6",
+      "bytes": 9919
+    },
+    {
+      "label": "newton6001h_cpu1_2c8-assertions.json",
+      "path": ".work/compat-followup/newton6001h_cpu1_2c8-fullsurface/assertions.json",
+      "sha256": "ea54e9cb80a0d0947e0aea5fd8f7acaef4aec4ba6db26c7d72f86c4c4d3a4da3",
+      "bytes": 47741
+    },
+    {
+      "label": "newton6001h_cpu1_2c8-failure.txt",
+      "path": ".work/compat-followup/newton6001h_cpu1_2c8-fullsurface/failure.txt",
+      "sha256": "c37ed1917933050bfe455d47e71c4eb015f54d389ec72d654b2f77e3fd4d76b7",
+      "bytes": 3958
+    },
+    {
+      "label": "newton6001w_2c8ce63-tools",
+      "path": ".work/compat-followup/newton6001w_2c8ce63-tools.json",
+      "sha256": "fb63e32ea177d8a99e9b0695e8a9eb2ceeeaecbd71f469e7dd36502ab0df5157",
+      "bytes": 40432
+    },
+    {
+      "label": "newton6001w_2c8ce63-equivalents",
+      "path": ".work/compat-followup/newton6001w_2c8ce63-equivalents.json",
+      "sha256": "4348fa319d536b6db4701376fb2f637f8304b1549739bd9f5131bce3c8eb4701",
+      "bytes": 87001
+    },
+    {
+      "label": "newton6001w_2c8ce63-edges",
+      "path": ".work/compat-followup/newton6001w_2c8ce63-edges.json",
+      "sha256": "eb0bc34e37f7197719b1f8b47c43b606b7c1d8d294e229f6e095b03571f45fb8",
+      "bytes": 27606
+    },
+    {
+      "label": "newton6001w_2c8ce63-sensors",
+      "path": ".work/compat-followup/newton6001w_2c8ce63-sensors.json",
+      "sha256": "caefd6222bbb32d01d5bdea07061f3cfb662888b073f40834d89b6c94a46eb47",
+      "bytes": 608358
+    },
+    {
+      "label": "newton6001w_2c8ce63-clear",
+      "path": ".work/compat-followup/newton6001w_2c8ce63-clear.json",
+      "sha256": "62fdc15b56775360dc3dce4c292a66a1c5db985c20602e319a378bcecb3886bf",
+      "bytes": 19700
+    },
+    {
+      "label": "newton6001w_2c8ce63-session",
+      "path": ".work/runs/newton6001w_2c8ce63/session.json",
+      "sha256": "3a000f71d0ed82e48230b45a7ccb3cfac072de2f1ea90db137d5923546bfa129",
+      "bytes": 881
+    },
+    {
+      "label": "newton6001w_2c8ce63-source-hashes",
+      "path": ".work/runs/newton6001w_2c8ce63/source-hashes.json",
+      "sha256": "59369a9b2bf45ee727e70cb5049fb9c9d900a129ab7da34024f66c9f032a45dc",
+      "bytes": 9919
+    },
+    {
+      "label": "newton6001w_2c8ce63-assertions.json",
+      "path": ".work/compat-followup/newton6001w_2c8ce63-fullsurface/assertions.json",
+      "sha256": "70441c61eda03d923594bf1aee320c99c6e19a31d624767238b06318eec862c1",
+      "bytes": 37634
+    },
+    {
+      "label": "newton6001w_2c8ce63-failure.txt",
+      "path": ".work/compat-followup/newton6001w_2c8ce63-fullsurface/failure.txt",
+      "sha256": "82c6ed2c6e79e0e10ea8efcfb4583c04ad3a2422ba0bc012f8f688e1c49dc257",
+      "bytes": 4241
+    },
+    {
+      "label": "newton6001h_2c8ce63-crash-review-summary.json",
+      "path": ".work/compat-followup/newton6001h_2c8ce63-crash-review/summary.json",
+      "sha256": "4962249e227d98422f3f549bcebeb86daca33da68578604e06682fb2ffa7e4cf",
+      "bytes": 1706
+    },
+    {
+      "label": "compat-followup-newton6001h_fullonly_2c8-final-review.json",
+      "path": ".work/compat-followup/newton6001h_fullonly_2c8-final-review.json",
+      "sha256": "367bcc12d878882b6c285c084fa11f1dae1f2290691111a771dedea359ca6b02",
+      "bytes": 1846
+    },
+    {
+      "label": "newton6001h_roompause_c2-crash-review-summary.json",
+      "path": ".work/compat-followup/newton6001h_roompause_c2-crash-review/summary.json",
+      "sha256": "e9668653311ad9e1a997c3e2700873d1c12b842104a9cf610904f2ce7d346509",
+      "bytes": 3543
+    },
+    {
+      "label": "newton6001h_cpu1_2c8-control-summary.json",
+      "path": ".work/runs/newton6001h_cpu1_2c8/control-summary.json",
+      "sha256": "e33700ac2c69b155f6a95ae583d67cb64e5566fe621f2ed14b4f51c4150e38ed",
+      "bytes": 2895
+    },
+    {
+      "label": "newton6001w_2c8ce63-crash-review-summary.json",
+      "path": ".work/compat-followup/newton6001w_2c8ce63-crash-review/summary.json",
+      "sha256": "b8582d9a604ea308791a2734d86b9a1653139c092c3b099c2bd14449257ce092",
+      "bytes": 6221
+    },
+    {
+      "label": "newton6001w_2c8ce63-review-before-review.json",
+      "path": ".work/compat-followup/newton6001w_2c8ce63-review/before-review.json",
+      "sha256": "35a0270322eb6e075805fa17cf8b9f3e77455892c8af06f1387ebd65de392531",
+      "bytes": 465
+    },
+    {
+      "label": "host-error-envelope-source",
+      "path": ".work/compat-followup/gateway-error-envelope-source.json",
+      "sha256": "34706cc8aec314612316cfd461ff1819d8cde3736cf8ca823443bb1d9867700c",
+      "bytes": 1455
+    },
+    {
+      "label": "host-live-826-summary",
+      "path": ".work/compat-followup/newton601h_826b84b-envelope/summary.json",
+      "sha256": "8df5b0953a33c1a8e2c380b58d1c152c9b0e9e6d8f91f274dc205b36bad5a881",
+      "bytes": 1491
+    }
+  ]
+}

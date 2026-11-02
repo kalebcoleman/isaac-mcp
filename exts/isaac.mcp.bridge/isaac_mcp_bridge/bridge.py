@@ -27,6 +27,7 @@ import hmac
 import inspect
 import json
 import os
+import re
 import socket
 import struct
 import sys
@@ -907,8 +908,12 @@ class McpBridge:
                 self._bind_host = host
                 self._started_at = time.time()
             self._socket.listen(socket.SOMAXCONN)
+            # Configure before publishing the worker: stop() may close the
+            # listener before that worker gets its first time slice.
+            self._socket.settimeout(1.0)
             self._server_thread = threading.Thread(
-                target=self._accept_loop, name="isaac.mcp.bridge-accept", daemon=True)
+                target=self._accept_loop, args=(self._socket,),
+                name="isaac.mcp.bridge-accept", daemon=True)
             self._server_thread.start()
             _write_portfile(host, port)
             _log_info(f"[isaac.mcp.bridge] serving on {host}:{port}")
@@ -952,11 +957,12 @@ class McpBridge:
             _remove_portfile(self._port)
         _log_info("[isaac.mcp.bridge] server stopped")
 
-    def _accept_loop(self) -> None:
-        self._socket.settimeout(1.0)
-        while self._running:
+    def _accept_loop(self, listener) -> None:
+        # Keep this generation's listener. A late old worker must never accept
+        # from a replacement socket after a stop/start cycle.
+        while self._running and self._socket is listener:
             try:
-                sock, address = self._socket.accept()
+                sock, address = listener.accept()
             except socket.timeout:
                 continue
             except OSError:
@@ -974,9 +980,12 @@ class McpBridge:
                 target=self._serve_client, args=(conn,),
                 name=f"isaac.mcp.bridge-client-{conn.connection_id}", daemon=True)
             with self._lock:
+                if not self._running or self._socket is not listener:
+                    sock.close()
+                    break
                 self._connections[conn.connection_id] = conn
+                conn.thread.start()
             _log_info(f"[isaac.mcp.bridge] client {conn.connection_id} connected from {address}")
-            conn.thread.start()
 
     def _serve_client(self, conn: _ClientConnection) -> None:
         """One client's read loop. Every failure path is scoped to this
@@ -1762,6 +1771,25 @@ def _portfile_path(port: int) -> str:
     return os.path.join(_runtime_dir(), f"{os.getpid()}-{port}.json")
 
 
+def _is_portfile_name(name: str) -> bool:
+    return re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*\.json", name) is not None
+
+
+def _valid_portfile(name: str, info) -> bool:
+    """Advertisements, not diagnostic logs sharing this directory.
+
+    Kept in sync with the stdlib-only, independently deployable client by tests.
+    This validates discovery data; it is not authentication of a process.
+    """
+    return (isinstance(info, dict) and _is_portfile_name(name)
+            and type(info.get("pid")) is int and info["pid"] > 0
+            and type(info.get("port")) is int and 1 <= info["port"] <= 65535
+            and name == f"{info['pid']}-{info['port']}.json"
+            and isinstance(info.get("host", "127.0.0.1"), str)
+            and bool(info.get("host", "127.0.0.1").strip())
+            and "\0" not in info.get("host", "127.0.0.1"))
+
+
 #: Where a failing call's frames are written, beside the portfiles this process already owns.
 #: `ISAAC_MCP_LOG_DIR` lets a cell point it at that run's own state directory, so a run's
 #: failures land with the rest of its evidence; unset, the doorway's runtime dir is used, because
@@ -1899,11 +1927,15 @@ def _sweep_stale_portfiles() -> None:
     except OSError:
         return
     for name in names:
+        if not _is_portfile_name(name):
+            continue
         path = os.path.join(_runtime_dir(), name)
         try:
             with open(path) as f:
-                pid = int(json.load(f)["pid"])
-            os.kill(pid, 0)
+                info = json.load(f)
+            if not _valid_portfile(name, info):
+                continue
+            os.kill(info["pid"], 0)
         except (OSError, ValueError, KeyError):
             try:
                 os.unlink(path)

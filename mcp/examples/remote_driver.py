@@ -46,7 +46,7 @@ from isaac_mcp.client import BridgeClient, call
 HOST = "100.97.45.92"                      # the box's tailnet IP (or None on-box)
 PORT = 8766                                # the installed bridge port
 LOCAL_ROOT = pathlib.Path(__file__).parent # holding <package>/ and assets/
-REMOTE_ROOT = "/home/user/myproject"       # where the box keeps them
+REMOTE_ROOT = "/srv/myproject"       # where the box keeps them
 PACKAGE = "demo_tools"                     # the tool package to push + load
 
 

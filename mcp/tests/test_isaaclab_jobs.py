@@ -31,6 +31,56 @@ def make_fake_python(tmp_path: Path) -> Path:
     return p
 
 
+@pytest.mark.parametrize('tool', ['train', 'eval_', 'play'])
+@pytest.mark.parametrize('headless,extras,visualizer', [
+    (True, [], 'none'), (True, ['--video'], 'kit'),
+    (True, ['--video_length=60'], 'none'), (False, ['--video'], 'kit'),
+])
+def test_job_display_choice_is_child_local_and_video_keeps_renderer(
+        tmp_path, monkeypatch, tool, headless, extras, visualizer):
+    import json
+
+    root = tmp_path / 'lab'
+    root.mkdir()
+    checkpoint = root / 'model.pt'
+    checkpoint.write_bytes(b'fixture')
+    fake_py = make_fake_python(tmp_path)
+    fake_py.write_text('#!/usr/bin/env python3\nimport json,os,sys\n'
+                       'print(json.dumps({"headless":os.environ.get("HEADLESS"), "argv":sys.argv[1:]}))\n')
+    monkeypatch.setenv('HEADLESS', '0' if headless else '1')
+    args = dict(python=str(fake_py), root=str(root), task='T', headless=headless,
+                extra_args=extras, allow_concurrent_gpu=True)
+    if tool != 'train':
+        args['checkpoint'] = str(checkpoint)
+    result = getattr(jobs, tool)(**args)
+    assert wait_for_status(result['job_id'], 'succeeded') == 'succeeded'
+    payload = json.loads(jobs.runs_tail(result['job_id'])['lines'][-1])
+    assert payload['headless'] == ('1' if headless else '0')
+    assert payload['argv'][payload['argv'].index('--viz') + 1] == visualizer
+    assert os.environ['HEADLESS'] == ('0' if headless else '1')
+
+
+@pytest.mark.parametrize('headless', [False, True])
+@pytest.mark.parametrize('override', ['--viz=kit', '--visualizer=none', '--viz=newton_gl'])
+def test_explicit_visualizer_is_forwarded_once(tmp_path, monkeypatch, headless, override):
+    captured = {}
+    monkeypatch.setattr(jobs, '_start_job', lambda *a, **kw: captured.update(argv=a[4], **kw) or captured)
+    result = jobs.train(python='python', root=tmp_path, task='T', headless=headless, extra_args=[override])
+    assert result['argv'].count(override) == 1
+    assert '--viz' not in result['argv']
+    assert result['headless'] is headless
+
+
+@pytest.mark.parametrize('extras', [
+    ['--viz'], ['--visualizer='], ['--viz=kit', '--visualizer=none'],
+    ['--video', '--viz=none'], ['--video', '--visualizer=none'],
+])
+def test_ambiguous_or_incompatible_visualizer_is_refused_before_launch(monkeypatch, extras):
+    monkeypatch.setattr(jobs, '_start_job', lambda *a, **kw: pytest.fail('must not launch'))
+    with pytest.raises(ValueError, match='visualizer|viz'):
+        jobs.train(python='python', root='lab', task='T', extra_args=extras)
+
+
 @pytest.fixture(autouse=True)
 def isolated_jobs(tmp_path, monkeypatch):
     jd = tmp_path / "jobs"
@@ -376,3 +426,120 @@ def test_run_dir_from_log_reads_the_absolute_experiment_dir(tmp_path):
     log.write_text("no such line\n")
     assert jobs._run_dir_from_log(log) is None
     assert jobs._run_dir_from_log(tmp_path / "missing.log") is None
+
+
+def test_lab3_separate_root_and_name_with_spaces_and_terminal_colors(tmp_path):
+    log = tmp_path / "stdout.log"
+    log.write_text(
+        "[INFO] Logging experiment in directory: /old/root\n"
+        "\x1b[32m[INFO] Logging experiment in directory: /x/my runs/cartpole\x1b[0m\n"
+        "Exact experiment name requested from command line: 2026-11-01_trial one\n"
+    )
+    assert jobs._run_dir_from_log(log) == "/x/my runs/cartpole/2026-11-01_trial one"
+
+
+@pytest.mark.parametrize("name", ["..", ".", "../outside", "nested/run", "nested\\run", "bad\x00name"])
+def test_relative_experiment_name_cannot_escape_announced_root(tmp_path, name):
+    log = tmp_path / "stdout.log"
+    log.write_text("[INFO] Logging experiment in directory: /x/logs\n"
+                   f"Exact experiment name requested from command line: {name}\n")
+    assert jobs._run_dir_from_log(log) is None
+
+
+def test_basename_requires_an_earlier_root_and_bounded_header(tmp_path):
+    log = tmp_path / "stdout.log"
+    text = "Exact experiment name requested from command line: trial\n"
+    log.write_text(text + "[INFO] Logging experiment in directory: /later/root\n")
+    assert jobs._run_dir_from_log(log) is None
+    log.write_text("x" * 131072 + "\n[INFO] Logging experiment in directory: /x/logs\n" + text)
+    assert jobs._run_dir_from_log(log) is None
+
+
+def test_status_finds_checkpoint_in_lab3_resolved_run_directory(tmp_path):
+    job_id = "20261101-153515-Cartpole"
+    jd = jobs.jobs_dir() / job_id
+    jd.mkdir(parents=True)
+    experiment_root = tmp_path / "logs" / "rsl_rl" / "cartpole"
+    experiment = experiment_root / "2026-11-01_15-35-17"
+    experiment.mkdir(parents=True)
+    checkpoint = experiment / "model_1.pt"
+    checkpoint.write_bytes(b"test checkpoint")
+    (jd / "stdout.log").write_text(
+        f"[INFO] Logging experiment in directory: {experiment_root}\n"
+        f"Exact experiment name requested from command line: {experiment.name}\n"
+    )
+    jobs._write_job(jd, {"status": "succeeded", "exit_code": 0,
+                         "run_dir": str(jd), "log_dir": str(jd)})
+    result = jobs.runs_status(job_id)
+    assert result["run_dir"] == str(experiment)
+    assert result["latest_checkpoint"] == str(checkpoint.resolve())
+    assert result["state"] == "succeeded"
+
+
+def test_job_readers_see_complete_record_during_publication(monkeypatch):
+    import concurrent.futures
+    import threading
+
+    job_id = "20261101-153515-atomic"
+    jd = jobs.jobs_dir() / job_id
+    jd.mkdir(parents=True)
+    before = {"status": "succeeded", "exit_code": 0, "generation": "old"}
+    after = {**before, "generation": "new", "details": "complete " * 1000}
+    jobs._write_job(jd, before)
+    ready, release = threading.Event(), threading.Event()
+    replace = jobs.os.replace
+
+    def held_replace(source, target):
+        assert Path(source).parent == jd and Path(source).name.startswith(".job-")
+        assert Path(target) == jd / "job.json"
+        ready.set()
+        assert release.wait(5), "reader did not release publication"
+        replace(source, target)
+
+    monkeypatch.setattr(jobs.os, "replace", held_replace)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        def publish():
+            with jobs._jobs_lock:
+                jobs._write_job(jd, after)
+        future = executor.submit(publish)
+        try:
+            assert ready.wait(5), "writer never reached publication"
+            assert jobs._read_job(jd) == before
+            assert jobs.runs_status(job_id)["state"] == "succeeded"
+            assert jobs.runs_cancel(job_id)["cancelled"] is False
+        finally:
+            release.set()
+        future.result(timeout=5)
+    assert jobs._read_job(jd) == after
+    assert not list(jd.glob(".job-*.tmp"))
+
+
+@pytest.mark.parametrize("failure", ["replace", "fsync"])
+def test_failed_metadata_publication_preserves_old_record_and_cleans_temp(monkeypatch, failure):
+    jd = jobs.jobs_dir() / "20261101-153515-failed-publish"
+    jd.mkdir(parents=True)
+    before = {"status": "succeeded", "exit_code": 0}
+    jobs._write_job(jd, before)
+    original = (jd / "job.json").read_bytes()
+
+    def fail(*args):
+        raise OSError("simulated publication failure")
+
+    monkeypatch.setattr(jobs.os, failure, fail)
+    with pytest.raises(OSError, match="publication failure"):
+        jobs._write_job(jd, {"status": "cancelled"})
+    assert (jd / "job.json").read_bytes() == original
+    assert not list(jd.glob(".job-*.tmp"))
+
+
+def test_atomic_job_write_does_not_follow_existing_destination_symlink(tmp_path):
+    jd = jobs.jobs_dir() / "20261101-153515-symlink"
+    jd.mkdir(parents=True)
+    other = tmp_path / "unrelated"
+    other.write_text("preserve this file")
+    (jd / "job.json").symlink_to(other)
+    record = {"status": "succeeded"}
+    jobs._write_job(jd, record)
+    assert other.read_text() == "preserve this file"
+    assert not (jd / "job.json").is_symlink()
+    assert jobs._read_job(jd) == record

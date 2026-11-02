@@ -8,12 +8,15 @@ Chosen Isaac Lab entry scripts and flags (relative to the resolved
 ``isaaclab_root``):
   * train:  scripts/reinforcement_learning/train.py
       flags: --task, --num_envs, --max_iterations, --seed, --checkpoint,
-             --device (launcher), --headless (launcher), plus validated extra_args
+             --device (launcher), --viz none|kit, plus validated extra_args
   * eval:   scripts/reinforcement_learning/play.py  (Isaac Lab has no separate
             eval entrypoint; play.py with --checkpoint is the eval path)
       flags: --task, --checkpoint, --num_envs, --rl_library, --viz none|kit (no --headless flag in Isaac Lab 3; picks the RL backend with --rl_library, else the task default; no per-backend --num_episodes)
   * play:   scripts/reinforcement_learning/play.py
-      flags: --task, --checkpoint, --num_envs, --headless (only when true)
+      flags: --task, --checkpoint, --num_envs, --viz none|kit
+
+Headless video needs a renderer, not ``--viz none``. It selects Kit with the
+documented child-only ``HEADLESS=1`` setting; normal headless jobs use no visualizer.
 
 Jobs are launched with ``shell=False`` and an explicit argv list, with
 ``start_new_session=True`` so the whole process group can be signalled.
@@ -27,6 +30,7 @@ import re
 import signal
 import subprocess
 import threading
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -105,6 +109,23 @@ def _validate_extra_args(extra_args) -> list[str]:
     return list(out)
 
 
+def _visualizer_args(headless: bool, extras: list[str]) -> list[str]:
+    # Lab 3 rejects --video with --viz none. HEADLESS in the child environment
+    # keeps the selected Kit renderer windowless, including for configured tasks.
+    explicit = [arg for arg in extras if arg.split('=', 1)[0] in ('--viz', '--visualizer')]
+    if len(explicit) > 1:
+        raise ValueError('supply only one explicit --viz= or --visualizer= override')
+    if explicit:
+        if '=' not in explicit[0] or not explicit[0].split('=', 1)[1]:
+            raise ValueError('extra_args visualizer override must use --viz=VALUE or --visualizer=VALUE')
+        if explicit[0].split('=', 1)[1] == 'none' and '--video' in extras:
+            raise ValueError('--video requires a capture-capable visualizer; remove the explicit --viz=none override')
+        # Preserve the existing explicit override, once, without a conflicting
+        # generated argument. Other backends retain their own Lab configuration.
+        return []
+    return ["--viz", "none" if headless and "--video" not in extras else "kit"]
+
+
 def _under(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(root.resolve())
@@ -155,7 +176,24 @@ def _read_job(job_dir: Path) -> dict[str, Any] | None:
 
 
 def _write_job(job_dir: Path, data: dict[str, Any]) -> None:
-    (job_dir / "job.json").write_text(json.dumps(data, indent=2, default=str))
+    # Status/cancel readers do not all hold the watcher lock. Publish one whole
+    # JSON snapshot so they see the previous or next record, never truncation.
+    payload = json.dumps(data, indent=2, default=str)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=job_dir,
+            prefix=".job-", suffix=".tmp", delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, job_dir / "job.json")
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _update_job(job_dir: Path, **fields: Any) -> dict[str, Any]:
@@ -317,18 +355,38 @@ def _latest_checkpoint(run_dir: Any) -> str | None:
 
 
 _SAVED_CKPT_RE = re.compile(r"saving checkpoint '([^']+)'")
-_EXPERIMENT_DIR_RE = re.compile(r"Exact experiment name requested from command line:\s*(/\S+)")
+_EXPERIMENT_DIR_RE = re.compile(r"^Exact experiment name requested from command line:[ \t]*([^\r\n]+)$", re.MULTILINE)
+_EXPERIMENT_ROOT_RE = re.compile(r"^(?:\[INFO\]:?[ \t]*)?Logging experiment in directory:[ \t]*(/[^\r\n]+)$", re.MULTILINE)
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def _run_dir_from_log(log_path: Path) -> str | None:
-    """Isaac Lab prints the absolute experiment dir near the top of the log before any checkpoint exists."""
+    """Read the bounded log header, including Lab 3's separate root/name lines."""
     try:
         with log_path.open("rb") as f:
             head = f.read(131072).decode("utf-8", errors="replace")
     except OSError:
         return None
+    head = _ANSI_RE.sub("", head)
     m = _EXPERIMENT_DIR_RE.search(head)
-    return m.group(1) if m else None
+    if not m:
+        return None
+    name = m.group(1).strip()
+    if not name or any(ord(c) < 32 for c in name):
+        return None
+    if Path(name).is_absolute():
+        return name  # Earlier libraries print the complete path on this line.
+    # A basename belongs to the most recently announced experiment root. Never
+    # treat arbitrary relative paths or traversal from stdout as a directory.
+    if name in {".", ".."} or "/" in name or "\\" in name:
+        return None
+    roots = list(_EXPERIMENT_ROOT_RE.finditer(head[:m.start()]))
+    if not roots:
+        return None
+    root = roots[-1].group(1).strip()
+    if any(ord(c) < 32 for c in root):
+        return None
+    return str(Path(root) / name)
 
 
 def _checkpoint_from_log(log_path: Path) -> str | None:
@@ -443,6 +501,7 @@ def _start_job_locked(
     extra_validated: list[str] | None = None,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
+    headless: bool | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     if not allow_concurrent:
@@ -475,6 +534,10 @@ def _start_job_locked(
     stdout_f = open(stdout_path, "wb")
     stderr_f = open(stderr_path, "wb")
     env = _child_env(root_path, device)
+    if headless is not None:
+        # A tool's explicit display choice wins over an inherited shell setting.
+        # Do not mutate os.environ or another job's launch configuration.
+        env["HEADLESS"] = "1" if headless else "0"
     if task_modules:
         env["ISAACLAB_TASK_MODULES"] = ",".join(task_modules)
         env["PYTHONPATH"] = os.pathsep.join(task_paths + [env["PYTHONPATH"]])
@@ -551,12 +614,12 @@ def train(
         argv += ["--checkpoint", ckpt]
     if device is not None:
         argv += ["--device", str(device)]
-    # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
-    argv += ["--viz", "none" if headless else "kit"]
+    argv += _visualizer_args(headless, extras)
     argv += extras
     return _start_job(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+        headless=headless,
     )
 
 
@@ -584,11 +647,11 @@ def eval_(
         argv += ["--rl_library", lib]
     if num_envs is not None:
         argv += ["--num_envs", str(num_envs)]
-    # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
-    argv += ["--viz", "none" if headless else "kit"]
+    argv += _visualizer_args(headless, extras)
     argv += extras
     return _start_job(python, root, "eval", task, argv, timeout_s=timeout_s,
-                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
+                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+                      headless=headless)
 
 
 def play(
@@ -613,11 +676,11 @@ def play(
     argv: list[str] = ["--task", task, "--checkpoint", ckpt, "--num_envs", str(num_envs)]
     if lib:
         argv += ["--rl_library", lib]
-    # Isaac Lab 3 has no --headless flag: select the visualizer explicitly ("none" = headless).
-    argv += ["--viz", "none" if headless else "kit"]
+    argv += _visualizer_args(headless, extras)
     argv += extras
     return _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
-                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
+                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+                      headless=headless)
 
 
 def runs_list(state: str | None = None) -> dict[str, Any]:
@@ -682,6 +745,7 @@ def runs_status(job_id: str) -> dict[str, Any]:
         logged = _run_dir_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
         if logged and Path(logged).exists():
             run_dir = logged
+            ckpt = _latest_checkpoint(run_dir)
     if ckpt and not _latest_checkpoint(run_dir):
         # the experiment dir (parent of nn/ for rl_games) is the run dir tools like metrics_summary want
         p = Path(ckpt).parent

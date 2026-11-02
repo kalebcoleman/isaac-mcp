@@ -3,6 +3,51 @@
 Start here if you are an AI agent working in or with this repository. It is a map; the
 per-tool reference lives in `docs/`.
 
+## Setup guide for agents
+
+- **PhysX is the release target. Newton is experimental.** Use PhysX for release validation;
+  do not continue Newton qualification or workaround development unless explicitly requested.
+  For a requested Newton workflow, inspect the [backend scope](docs/COMPATIBILITY.md#release-backend-scope)
+  and exact source/build/mode evidence first. Specific 6.2 successes are not general support;
+  earlier native crashes, invalid state and contact/render failures remain limitations.
+  Verify the selected engine; do not silently switch an existing scene or fall back to another
+  backend. A CPU device does not identify the solver, and Lab results do not qualify the twin.
+- Identify the requested Sim build and workflow from the context or installation; reuse their intended
+  running bridge when available.
+  The repository's full `./install.sh --accept-eula` creates the locked **6.2.0.0** environment;
+  it is not a selector for older builds. For an existing compatible 6.0/6.1 interpreter, use
+  [build selection and checks](docs/LINUX-SETUP.md#choose-a-simulator-build). Follow the user's
+  authorization for starting GPU work and avoid replacing an existing environment.
+- Read [Linux prerequisites](docs/LINUX-SETUP.md) and the [compatibility matrix](docs/COMPATIBILITY.md)
+  before recommending packages. The host, Sim, external system ROS, and Isaac Lab can use different
+  environments. Install external ROS or Isaac Lab only when the requested workflow needs them.
+  The supplied launcher enables NVIDIA's bundled ROS bridge; that does not install system ROS.
+- NVIDIA supplies the `omni.kit.hydra_texture` extension with the inspected Sim installations.
+  `omni.hydratexture` `.pyi` files describe its API; do not tell users to pip-install stubs or `omni`
+  as a separate fix. Kit modules normally become available inside the running app.
+- Client setup is in [MCP-SERVER.md](docs/MCP-SERVER.md#4-client-configuration). After connection,
+  use `refresh_tools`, select the intended bridge if needed, verify PID/port, and start scene work
+  with `sim__stage__info`. Offline tool listings do not prove a running or compatible simulator.
+  `scripts/check_machine.sh` is a **6.2-specific** preflight and can run a real CUDA kernel; use the
+  version-specific checks for earlier builds. `./verify.sh` changes the UR5e scene and is 6.2-specific.
+
+When saving a scene with native ROS camera render handles, `sim__stage__save` defaults to
+`reset_camera_render_handles=false`. An affected save refuses with `SAVE_UNSUPPORTED`, exact
+`properties` and `retry_with`. After inspecting that response, explicitly retry with the flag set
+to `true` only if normalization of those runtime fields in the exported copy is intended. The
+result reports `omitted_runtime_render_properties`; cameras and source/live layers remain intact.
+The flag does not bypass ambiguous, authored, dependent or unavailable-binding refusals, prove
+property authorship, or repair an already-stale opened file. Pause before saving and verify the
+new file in a fresh process. See [save limitations](docs/TOOLS-SCENE.md).
+
+When a physics read or step returns `PHYSICS_STATE_INVALID`, inspect its backend, path and
+field: this is invalid observed runtime data, not a request to rewrite the caller's pose.
+A step error can include partial execution and before/after clock diagnostics; the after
+clock may be unavailable. Do not count elapsed simulation time as valid physics or blindly
+retry the step. No rollback or automatic retry is provided. Inspect solver diagnostics and
+the [step error contract](docs/TOOLS-SCENE.md) before continuing; `DEVICE_ERROR` quarantine
+still applies to GPU faults. Successful error reporting does not establish solver recovery.
+
 ## What you can reach, by tier
 
 An MCP client only shows the tools it has been told about. Most of this project's surface
@@ -17,10 +62,11 @@ configured filters.
 | Simulator sessions (optional) | 4 (`sim__*`) | only when `sim_launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
 | Isaac Lab (`isaaclab__*`) | 12 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | a Kit bridge is reachable; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
+| Generic scene and assets | 39 (`assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body and viewport) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots/scan/search run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
 | UR5e twin (`ur5e_dt__*`) | 23 | listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, a client that lists exactly 44 tools can see the
-host, Isaac Lab and UR5e catalog tiers, but not the bridge built-ins. That does not prove that no
+With default groups and no namespace filter, a client that lists exactly 83 tools can see the
+host, Isaac Lab, generic and UR5e catalog tiers, but not the bridge built-ins. That does not prove that no
 bridge exists. The possible causes are:
 
 - no Kit bridge is running;
@@ -34,9 +80,21 @@ bridge exists. The possible causes are:
   the server starts, so restart the MCP connection after starting Kit.
 
 The other 7 tools (bridge built-ins) require discovery from a reachable bridge. With the standard
-groups and bridge built-ins visible there are 51 tools in total. The optional desktop input and
-simulator session groups add 9 more. `docs/GENERIC-SIM-TOOLS.md` describes a `sim.*` pack that is
-a design only and is not built, so do not look for those tools.
+groups and bridge built-ins visible there are 90 tools in total. The optional desktop input and
+simulator session groups add 9 more. The initial generic tools are documented in `docs/TOOLS-SCENE.md`; the broader
+`docs/GENERIC-SIM-TOOLS.md` design includes capabilities not yet implemented. Untrusted
+loading and remote upload remain disabled; bounded trusted USDZ packages are supported.
+
+Set `ISAAC_MCP_SCENE_TOOLS=0` in the MCP server environment to hide the entire generic
+scene/asset pack, both offline and after bridge refresh. It is read once per server startup.
+With otherwise standard settings this restores 44 offline tools and 51 with bridge built-ins.
+The 23 UR5e tools, Isaac Lab, desktop tools and optional managed `sim__launch/list/status/stop`
+tools retain their existing rules. This discovery preference is not a security boundary.
+
+Camera capture defaults to a fresh bounded renderer CPU readback. With
+`wait_for_render=false`, it writes the last validated tool-acquired image and reports its
+age; ordinary Play does not populate this cache. An unseeded camera returns `NOT_READY`.
+Cached pixels can predate Stop/reset or scene edits. See [TOOLS-SCENE.md](docs/TOOLS-SCENE.md).
 
 ## Getting the full surface
 
@@ -79,8 +137,21 @@ card.
 
 Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER.md).
 
+The `isaac-mcp` Agent Skill (`.agents/skills/isaac-mcp/`, linked from `.claude/skills/`) turns
+these rules into a step-by-step workflow and routes Isaac Lab and Isaac Sim domain questions to
+NVIDIA's official skills; Claude Code, Codex and OpenCode load it automatically in this checkout.
+See [docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md).
+
 ## Handle with care
 
+- Project USD tools require an explicitly user-approved trusted root and shared host/Kit staging;
+  copying includes the entire bounded project. Native USD parsers and resolvers are not sandboxed
+  or network-isolated. Common layers, MDL resources and MaterialX references are checked, but
+  arbitrary plugins, custom resolvers and procedural materials cannot be verified exhaustively.
+  Known missing or unsupported resources are errors; a successful import is not proof of visual
+  fidelity or physics readiness. Check units/up-axis and inspect the resulting prim and viewport.
+  Workstation preparation does not load the scene or replace an existing cached asset; see
+  [project USD setup and limitations](docs/TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation).
 - `run_python` executes Python inside Kit, and `put_file` / `get_file` / `stat_file` touch the
   filesystem. Verify the target PID and port (`status`, or the CLI check above) before
   scene-changing calls.
@@ -104,12 +175,20 @@ Setup details and the agent workflow are in [docs/MCP-SERVER.md](docs/MCP-SERVER
 - Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). The job
   inspection and Python probe tools can have side effects and are not in `readonly`;
   `screenshot` writes files and returns desktop pixels. Annotations are hints, not enforcement.
-  Bridge tools are not annotated.
+  Generic scene/asset tools carry conservative host annotations; legacy bridge tools are unchanged.
 
 ## Changing tools
 
 Every registered tool must be documented in its `docs/TOOLS-*.md` page, and the counts above
-(each tier's Tools cell, the 44 and 7 subtotals and the 51 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
+(each tier's Tools cell, the 83 and 7 subtotals and the 90 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
 CI along with the host test suite (`pytest -q` from `mcp/`, see `.github/workflows/ci.yml`).
 After changing the twin tool registry, run `python3 scripts/gen_host_catalog.py --write` and commit the
 updated snapshot; `--check` and the host tests detect drift.
+
+Evidence must use neutral `<repo>`, `<worktree>`, `<home>` and `<sim-install>` placeholders.
+`check_docs.py` also scans tracked bytes and nested gzip/tar/zip members for private home and
+worktree paths; it fails closed on unreadable/oversized archives. All tracked files, including
+assets and evidence, are scanned without legacy hash exemptions.
+Review screenshot pixels separately; the byte scanner cannot recognize text inside images.
+Keep large redacted transcripts and reproduction bundles in the draft evidence release, with
+URL and SHA-256 in the evidence index. Keep only compact summaries and a few images <=400 KB in Git.

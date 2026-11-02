@@ -92,7 +92,8 @@ authorization and with GPU capacity available. On a single GPU, a running Kit ap
 training job can contend for GPU memory. This pack does not evict or stop a sim; it only
 refuses to start (see [Concurrency guards](#concurrency-guards)) unless the caller passes the
 override flags. `headless=true` is the default for `train`/`eval` to avoid a second
-renderer; `play` defaults to `headless=false` and opens a window. No actual training run is
+renderer for ordinary jobs; adding `--video` requires rendering even headlessly.
+`play` defaults to `headless=false` and opens a window. No actual training run is
 required or performed by this documentation.
 
 ### Environment variables (summary)
@@ -146,7 +147,8 @@ required or performed by this documentation.
 - Parameters: none.
 - Returns: `{python, isaaclab_version, isaacsim_version, isaaclab_root, venv}` on success;
   `{"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}` (or a probe error)
-  on failure.
+  on failure. A successful probe can still return null version fields if distributions are absent;
+  it does not establish task import, renderer or training readiness.
 - Example call shape: `{"tool": "isaaclab__install_info", "arguments": {}}`
 
 ### `isaaclab__envs_list`
@@ -171,7 +173,7 @@ required or performed by this documentation.
   | `max_iterations` | integer | no | `null` | |
   | `seed` | integer | no | `null` | |
   | `device` | string | no | `null` | Sets `CUDA_VISIBLE_DEVICES` when not `cpu`. |
-  | `headless` | boolean | no | `true` | `true` → `--viz none`; `false` → `--viz kit`. |
+  | `headless` | boolean | no | `true` | No window. Normally `--viz none`; `--video` selects Kit with child-only `HEADLESS=1`. `false` selects Kit with `HEADLESS=0`. |
   | `checkpoint` | string | no | `null` | Path to resume from (must be under allowed roots). |
   | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. |
   | `extra_args` | array[string] | no | `null` | Validated flags/Hydra overrides. |
@@ -236,7 +238,7 @@ required or performed by this documentation.
   | `job_id` | string | yes | — | Validated id. |
 - Returns:
   `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, log_dir, pid}`
-  plus `window: {id, title, width, height}` when the job is live and owns a window. `last_log_lines` is the last 20 lines of `stdout.log`. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log).
+  plus `window: {id, title, width, height}` when the job is live and owns a window. `last_log_lines` is the last 20 lines of `stdout.log`. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
 - Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10"}`
 
 ### `isaaclab__runs_tail`
@@ -425,6 +427,14 @@ unless that port is configured or advertised.
 
 See the [compatibility matrix](COMPATIBILITY.md) for simulator and Isaac Lab version pairings and the scope of each test.
 
+The later [self-contained Lab reproduction](REPRODUCIBILITY.md#self-contained-lab-3-reproduction)
+at exact MCP `c2ceb7f` / official Lab `e3f7d9f` exercised all 12 tools with 114 retained
+calls (111 workflow plus three cleanup) and 16 assertions. Separate mode/video and cleanup
+records preserve their own counts. It used Lab 3.0 / Sim 6.2 / Newton MJWarp without an
+inherited `.pth`, but retains two `fsspec`/`urllib3` metadata conflicts. The guide links exact
+profile/lock/script inputs and distinguishes measured sync from an unexecuted locked replay.
+It is not generic Sim Newton qualification or a clean-machine/full-installer claim.
+
 Historical verification includes:
 
 - Host suite: 421 tests passed in GitHub Actions for `66e84b4` (2026-10-30). An isolated host wheel install and
@@ -439,7 +449,22 @@ Historical verification includes:
   environment".
 - Job guards (job-vs-job, Kit-bridge, release after cancel) behaved as documented on the
   RTX 5080 (2026-10-30); four bugs were fixed in that pass.
-- Isaac Lab 3 has no `--headless` flag: headless jobs pass `--viz none`, windowed `--viz kit`.
+- Isaac Lab 3 has no `--headless` flag. Ordinary headless jobs pass `--viz none`.
+  With `extra_args=["--video", "--video_length=60"]`, headless jobs use `--viz kit`
+  and child-only `HEADLESS=1` so the renderer can produce frames without a window.
+  Windowed jobs select Kit and `HEADLESS=0`. These settings do not change the host
+  environment or another job. One explicit `--viz=VALUE` or `--visualizer=VALUE`
+  extra argument overrides the generated selection and is forwarded once, with a
+  response hint. Non-Kit visualizers retain their own Lab display configuration.
+  Duplicate/missing visualizer values and explicit `--viz=none` with `--video`
+  are refused before launch; other invalid backend choices fail in the job log.
+- Lab's optional video dependencies belong in the **Lab interpreter**, not just
+  the MCP host. The inspected Lab 3 launcher requires MoviePy 1.x
+  (`moviepy>=1.0.3,<2.0.0.dev0`) and `imageio-ffmpeg` for `--video`. They are not
+  required for plain headless training. Use the Lab checkout's documented `video`
+  extra or install these into a separate Lab environment; `install.sh --no-sim`
+  does not install or repair that environment. A job can start successfully and
+  later fail for a missing dependency; inspect `runs_status` and `runs_tail`.
   The RL backend is chosen with `--rl_library` (else the task default); `--num_episodes` was
   dropped because only the rlinf backend has it. `extra_args` accepts flags and Hydra
   overrides; rl_games needs `minibatch_size` to divide `num_envs * 24`.
@@ -448,8 +473,8 @@ Historical verification includes:
 
 Limitations and not verified:
 
-- The latest audit did not run training (host suite + smoke only). Long runs above ~15 min or
-  above 1024 envs on the 5080 are not verified; runs longer than ~15 min are not verified.
+- The historical host/smoke audit did not run training; later native runs above did.
+  Long runs above ~15 min or above 1024 envs on the 5080 remain unverified.
 - The host server requires Python >=3.10; the verified interpreter is Python 3.12. The Lab
   install is pinned to Isaac Lab 3.0.0 / Isaac Sim 6.2.0.0.
 - Other operating systems, GPUs, Isaac Sim versions and installation layouts are not

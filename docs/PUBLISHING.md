@@ -11,8 +11,12 @@ Not published yet. Names `isaac-mcp` on PyPI and npm were both unclaimed on 2026
 2. Decide the version in `mcp/pyproject.toml` and `npm/package.json` (keep them equal).
 3. Check `docs/VENDORING.md` and the LICENSE files: the package contains Aldrin Inbaraj's MIT code. The upstream
    `omni-kit-mcp` has no LICENSE file; consider asking `inbarajaldrin` to confirm before a public release.
-4. Fill in `project.urls` (repository, issues) in `mcp/pyproject.toml` once the repo is public.
-5. Make the GitHub repo public (it is private now) if the PyPI/npm pages should link to it.
+4. Verify the bundled-asset cleanup with `python3 scripts/check_assets.py`. The NVIDIA robot,
+   sensor and material files, the Vention bench, the unused Kawasaki/RG2 scene and the Poliigon oak
+   textures must not be in the public tree or its history. The Apache-2.0 and CC BY 4.0 notices are
+   in `THIRD-PARTY-NOTICES.md`; see [`provenance/ASSETS.md`](provenance/ASSETS.md) for the audit.
+5. Fill in `project.urls` (repository, issues) in `mcp/pyproject.toml` once the repo is public.
+6. Make the GitHub repo public (it is private now) if the PyPI/npm pages should link to it.
 
 ## PyPI (Python host server)
 ```bash
