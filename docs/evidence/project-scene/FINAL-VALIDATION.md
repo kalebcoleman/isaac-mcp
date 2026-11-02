@@ -925,3 +925,58 @@ the bundled USD parser disproved a path-only weld relocation. Older backends
 without a native wrench output report unavailable. Generic Newton coverage,
 clean-machine/full-installer qualification and the original `20f` 6.0.1 stepping
 stall remain separate, unresolved gates.
+
+
+## PhysX saved-twin wrench correction after integrated 166
+
+Exact integrated `166e10db31cc2e24fad66b204c00301c1281bfae` passed a nine-call
+existing-`/physicsScene` check and the 6.2 headless 137-call/55-assertion surface
+suite, including all 23 UR tools and seven built-ins. Its fresh windowed saved-twin
+reopen then exposed a distinct functional defect: 686 real wrench messages had
+zero timestamps and empty frame names while the RG2 actually followed its command.
+The Console showed 31 warnings and zero errors, demonstrating why Console counts
+alone cannot establish correct tool behavior.
+
+Source `7454f4466788d8acef7e3d8e900dd021c7d7c167` applies the named-wrist,
+`tool0` frame/origin and physics-time conversion to PhysX too. New force graphs
+are gated until a valid sample; reopening a legacy ungated PhysX graph preserves
+that graph and its documented warm-up limitation. Candidate 12 on combined 166
+has identical physics-helper bytes. The committed extension additionally corrects
+one setup docstring and rate diagnostic string; its native observations remain
+candidate results, not exact combined-head qualification.
+
+A headless original 2 kg known-load test completed six named MCP calls/eight checks.
+Actual ROS force/torque was approximately
+`[-19.62000465, 0, -0.00000067, 0, 1.96200047, 0]` N/N·m in the rotated and offset
+`tool0` frame, matching the stated gravity load. A separate fresh windowed legacy
+twin reopen passed ten calls/16 checks, including two actual ROS gripper commands
+across Stop/Play and advancing, nonempty wrench headers. The same process then
+completed all 23 UR names/seven built-ins in 141 requests/54 assertions and saved
+a newly gated graph. Fresh reopening of that new save on the final integration
+remains a separate next check.
+
+Source files, graphs, physics opinions and the caller's edit target were preserved
+in the narrow reopen interval. Native PhysX updated in-memory rigid-body poses,
+velocities and joint state. Whole-root and robot-subtree byte equality were false.
+A diagnostic experiment that scoped initial PhysX Play to the session layer did
+not prevent later writeback and was not shipped. The final diagnostic compares
+remaining authored robot/object opinions after excluding only the enumerated
+runtime fields in anonymous copies; that comparison passed. This does not extend
+Newton's scoped initialization result into a PhysX root-preservation guarantee.
+
+The final candidate windowed Console showed 154 warnings/11 errors; filtering
+`quaternion` displayed the intentional invalid-quaternion error. Its native log
+separately had six error lines in that traceback, 151 warnings and one simulation-
+time warning, with no illegal cycle or force-callback error. There is no claim
+that every Console entry was individually sampled. The known-load process had
+zero errors/11 warnings. All owned processes exited. The 166 headless video decoded
+169 frames and the candidate windowed video 191; only frames 10 and 100 from each
+were visually reviewed, with the wrist cropped. The final actual app window showed
+the full bent arm and gripper. No visual-only physics claim follows.
+
+The source's 171 focused world/physics/catalog tests passed in 16.96 seconds.
+[Compact source identities and 21 original hashes](RECENT-PHYSX-WRENCH-62-20261102.json)
+and the [draft bundle](RELEASE-ASSETS.md) retain the initial failure, diagnostic
+experiment and exact candidate scopes. The final integrated affected-release/mode
+queue, generic/older Newton coverage and original `20f` stepping stall remain
+separate; this is not all-version completion or merge readiness.
