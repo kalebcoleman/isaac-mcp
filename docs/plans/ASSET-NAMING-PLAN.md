@@ -28,9 +28,10 @@ UR5e-named variables. Lab-specific pieces and generic pieces are mixed.
   `verify.sh` falls back to it. `run.sh` itself still reads `UR5E_DT_PORT` for its own port.
 - **[unverified]** `ISAAC_MCP_PYTHON`: I found no reader in the code. `UR5E_DT_PYTHON` is read
   by `run.sh` and `verify.sh`. The alias needs to be added, not just documented.
-- **[verified]** `exts/sim-tools/sim_tools/core.py` (`assets__prepare_workstation`) still reads only
-  `UR5E_DT_ASSET_CACHE` and writes `workstation/vention.usd` flat under it. It does not
-  use `ISAAC_MCP_ASSET_PATH` or the pack folder.
+- **[verified]** `exts/sim-tools/sim_tools/core.py` (`assets__prepare_workstation`) reads the first
+  entry of `ISAAC_MCP_ASSET_PATH` (falling back to `UR5E_DT_ASSET_CACHE`) and writes
+  `workstation/vention.usd` flat under it. It does not yet write into the pack folder or pin
+  the file.
 - **[verified]** `ISAAC_MCP_ASSET_CONFIG` (project approval for `assets__*` import tools,
   `mcp/isaac_mcp/project_assets.py`) is a separate mechanism from `ISAAC_MCP_ASSET_PATH`.
 
@@ -62,7 +63,7 @@ Isaac Lab tools. The UR5e twin becomes the first pack, `ur5e-dt`.
 ## Staged migration (each step a small PR)
 
 1. **Resolver, project file, CLI, docs** *(this PR)*.
-2. `sim-tools` `prepare_workstation` honours `ISAAC_MCP_ASSET_PATH` and writes into the pack folder.
+2. `sim-tools` `prepare_workstation` writes into the pack folder and records a pin (it already honours `ISAAC_MCP_ASSET_PATH`).
 3. `run.sh`, `verify.sh`, installer: read `ISAAC_MCP_PORT` / `ISAAC_MCP_PYTHON` first; keep `UR5E_DT_*` with a warning.
 4. Move the generic parts of `asset_cache.py` into a core module; the pack passes its name and manifest.
 5. Default store `~/.cache/isaac-mcp/assets`, old path as fallback.

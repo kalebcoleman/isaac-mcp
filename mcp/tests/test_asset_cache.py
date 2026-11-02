@@ -666,3 +666,112 @@ def test_resolve_info_points_fetch_group_members_at_the_fetch_script(monkeypatch
     assert info["status"] == "missing"
     assert "fetch_ur5e_assets.py" in info["detail"]
     assert "no public source" not in info["detail"]
+
+
+# --- review regressions (PR 51) -------------------------------------------------
+
+
+def test_nested_stores_use_the_pin_file_of_the_folder_that_holds_the_asset(monkeypatch, tmp_path):
+    outer = tmp_path / "A"
+    inner = outer / "nested"
+    pack = inner / "ur5e-dt"
+    put(pack / "custom.usd", b"original")
+    sums(pack, **{"custom.usd": b"original"})
+    put(pack / "custom.usd", b"edited after pinning")
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", f"{outer}{os.pathsep}{inner}")
+    module = load_module()
+    isolated(module, tmp_path)
+    assert module.resolve_info("custom.usd")["status"] == "corrupt"
+    with pytest.raises(module.AssetCorrupt):
+        module.resolve_path("custom.usd")
+
+
+def grouped_manifest(module, tmp_path, files: dict[str, tuple[bytes, str | None]]):
+    """Write a manifest with one fetch group: target -> (content, cache_path)."""
+    entries = []
+    for target, (content, cache_path) in files.items():
+        entry = {
+            "target": target,
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "size": len(content),
+        }
+        if cache_path:
+            entry["cache_path"] = cache_path
+        entries.append(entry)
+    path = tmp_path / "assets-manifest.json"
+    path.write_text(
+        json.dumps(
+            {"version": 1, "asset_root": "https://example.invalid", "remote": {}, "fetch": [{"id": "g", "files": entries}]}
+        ),
+        encoding="utf-8",
+    )
+    module.MANIFEST_PATH = path
+
+
+def test_manifest_asset_at_its_logical_name_is_rejected_unless_pinned(monkeypatch, tmp_path):
+    module = load_module()
+    grouped_manifest(
+        module,
+        tmp_path,
+        {
+            "sensors/test.usda": (b"root", "sensors/rs/test.usda"),
+            "Isaac/dep.usda": (b"dep", None),
+        },
+    )
+    isolated(module, tmp_path)
+    store = tmp_path / "store"
+    put(store / "Isaac" / "dep.usda", b"dep")
+    put(store / "sensors" / "test.usda", b"root")  # wrong place: relative refs would break
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    with pytest.raises(module.AssetMissing):
+        module.resolve_path("sensors/test.usda")
+    # The canonical layout resolves.
+    put(store / "sensors" / "rs" / "test.usda", b"root")
+    assert module.resolve_path("sensors/test.usda") == store.resolve() / "sensors" / "rs" / "test.usda"
+
+
+def test_user_pinned_logical_name_is_accepted_for_manifest_assets(monkeypatch, tmp_path):
+    module = load_module()
+    grouped_manifest(module, tmp_path, {"sensors/test.usda": (b"root", "sensors/rs/test.usda")})
+    isolated(module, tmp_path)
+    store = tmp_path / "store"
+    put(store / "ur5e-dt" / "sensors" / "test.usda", b"mine")
+    sums(store / "ur5e-dt", **{"sensors/test.usda": b"mine"})
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    assert module.resolve_info("sensors/test.usda")["status"] == "pinned"
+
+
+def test_a_pinned_group_member_does_not_condemn_the_root(monkeypatch, tmp_path):
+    module = load_module()
+    grouped_manifest(
+        module,
+        tmp_path,
+        {"robot/root.usd": (b"root", None), "robot/configuration/sub.usd": (b"nvidia sub", None)},
+    )
+    isolated(module, tmp_path)
+    store = tmp_path / "store"
+    put(store / "ur5e-dt" / "robot" / "root.usd", b"root")
+    put(store / "ur5e-dt" / "robot" / "configuration" / "sub.usd", b"lab-modified sub")
+    sums(store / "ur5e-dt", **{"robot/configuration/sub.usd": b"lab-modified sub"})
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    assert module.resolve_path("robot/root.usd").name == "root.usd"
+    assert module.resolve_info("robot/configuration/sub.usd")["status"] == "pinned"
+    # A stale pin on the member is still caught when the root is resolved.
+    put(store / "ur5e-dt" / "robot" / "configuration" / "sub.usd", b"changed again")
+    with pytest.raises(module.AssetCorrupt, match="SHA256SUMS"):
+        module.resolve_path("robot/root.usd")
+
+
+def test_pin_lines_keep_unusual_but_valid_names(tmp_path):
+    module = load_module()
+    d = hashlib.sha256(b"x").hexdigest()
+    (tmp_path / "SHA256SUMS").write_text(
+        f"{d}  *star.usd\n{d}   spaced.usd\n{d} *binary.usd\n{d}  plain.usd\r\n",
+        encoding="utf-8",
+    )
+    assert module.pins(tmp_path) == {
+        "*star.usd": d,
+        " spaced.usd": d,
+        "binary.usd": d,
+        "plain.usd": d,
+    }

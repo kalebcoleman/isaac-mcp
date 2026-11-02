@@ -95,7 +95,15 @@ This is the same format as `sha256sum` writes. Rules:
 
 - A pinned file is checked against its pin only. The NVIDIA manifest hash is ignored.
 - A file with no pin that the manifest tracks is checked against the manifest, with the
-  rest of its fetch group.
+  rest of its fetch group. Each other member of that group is checked against its own pin if
+  it has one, so you can modify and pin one sublayer without pinning the root file.
+- A file the manifest tracks (the NVIDIA robot and sensor) must sit at its canonical layout
+  in the store, because USD resolves its sublayers by relative path. A copy at the plain
+  logical name (for example `sensors/rsd455.usd` when the manifest places it deeper) is
+  accepted only if you pinned it.
+- When stores are nested, the pins of the folder that actually holds the file decide.
+- A name must not start or end with whitespace or contain control characters, because the
+  pin file cannot represent it. `add` and `pin` refuse or skip such names.
 - If a pinned file changes, you get `AssetCorrupt`. Restore it, or run `pin` if the
   change is intended.
 
@@ -141,9 +149,9 @@ python3 scripts/isaac_assets.py pin --store ~/lab-assets --pack ur5e-dt
 
 | Command | What it does |
 |---|---|
-| `where [--json]` | Prints stores, project file, strict flag and remote root. |
+| `where [--json]` | Prints stores, project file, strict flag and any deprecated variable names in use. |
 | `doctor [--json] [--require RELPATH] [--local-only]` | Resolves each known asset and reports `layer`, `status`, `path`, `sha256`. Exit 1 on a corrupt asset, a `--require` asset that is not local, or any remote asset with `--local-only`. |
-| `add SRC [--store DIR] [--pack NAME] [--as RELPATH] [--force]` | Copies a file, directory or archive into `<store>/<pack>/`. Extracts archives safely. Refuses a store inside the repo checkout. Merges hashes into `<store>/<pack>/SHA256SUMS`. |
+| `add SRC [--store DIR] [--pack NAME] [--as RELPATH] [--force] [--max-members N] [--max-file-bytes N] [--max-total-bytes N]` | Copies a file, directory or archive into `<store>/<pack>/`. Extracts archives safely and refuses archives that expand past the limits (defaults: 20000 members, 8 GiB per file, 16 GiB in total). Writes through a private temporary file and never overwrites without `--force`. Refuses a store inside the repo checkout. Merges hashes into `<store>/<pack>/SHA256SUMS`. |
 | `pin [--store DIR] [--pack NAME]` | Records the current hashes of the pack's files as pins. |
 
 `doctor` statuses: `ok` (matches the manifest), `pinned` (matches your pin), `unpinned`
@@ -236,7 +244,9 @@ Run `isaac_assets.py where` from the same directory Kit started in. Check
 means no project file, not a fallback to the walk.
 
 **`assets__prepare_workstation` wrote to a different place**
-That tool still chooses its destination from `UR5E_DT_ASSET_CACHE` or the default cache
-(`workstation/vention.usd` directly under it), not from `ISAAC_MCP_ASSET_PATH`. The
-resolver does find that flat layout, but only if that cache is one of its stores. Check
-with `doctor --require workstation/vention.usd`.
+That tool writes `workstation/vention.usd` directly under the **first** entry of
+`ISAAC_MCP_ASSET_PATH` (or, without it, `UR5E_DT_ASSET_CACHE` or the default cache), in the
+flat layout, not inside the `ur5e-dt` pack folder and without a pin. The resolver finds the
+flat layout, and the file shows as `unpinned` in `doctor`. Both the MCP server and the Kit it
+starts must see the same `ISAAC_MCP_ASSET_PATH`. Check with
+`doctor --require workstation/vention.usd`.

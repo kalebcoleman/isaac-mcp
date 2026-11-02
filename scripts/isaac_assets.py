@@ -216,7 +216,18 @@ def _clean_relpath(raw: str, what: str) -> str:
     parts = [p for p in posix.parts if p != "."]
     if not parts or ".." in parts:
         raise CliError(f"unsafe {what} (empty or contains '..'): {raw!r}")
+    for part in parts:
+        if part != part.strip() or any(ord(c) < 32 or ord(c) == 127 for c in part):
+            raise CliError(
+                f"unsupported {what}: names must not start or end with whitespace "
+                f"or contain control characters: {raw!r}"
+            )
     return "/".join(parts)
+
+
+def _is_root_entry(name: str) -> bool:
+    """True for the archive's own root directory entry (``.``, ``./`` or empty)."""
+    return all(part in ("", ".") for part in PurePosixPath(name).parts)
 
 
 def _pack_dir(store_arg: str | None, pack: str) -> tuple[Path, Path]:
@@ -240,14 +251,54 @@ def _is_archive(path: Path) -> bool:
     return path.is_file() and path.name.lower().endswith(ARCHIVE_SUFFIXES)
 
 
-def _copy_stream(src, dest: Path) -> None:
+DEFAULT_MAX_MEMBERS = 20_000
+DEFAULT_MAX_FILE_BYTES = 8 << 30
+DEFAULT_MAX_TOTAL_BYTES = 16 << 30
+
+
+class Limits:
+    """Bounds on archive extraction, enforced on the bytes actually written."""
+
+    def __init__(self, members: int, file_bytes: int, total_bytes: int):
+        self.members, self.file_bytes, self.total_bytes = members, file_bytes, total_bytes
+        self.count = 0
+        self.total = 0
+
+    def member(self, name: str) -> None:
+        self.count += 1
+        if self.count > self.members:
+            raise CliError(
+                f"archive has more than {self.members} members (stopped at {name!r}); "
+                "raise --max-members if this is expected"
+            )
+
+    def chunk(self, name: str, file_total: int, size: int) -> None:
+        self.total += size
+        if file_total > self.file_bytes:
+            raise CliError(
+                f"archive member {name!r} expands past {self.file_bytes} bytes; "
+                "raise --max-file-bytes if this is expected"
+            )
+        if self.total > self.total_bytes:
+            raise CliError(
+                f"archive expands past {self.total_bytes} bytes in total; "
+                "raise --max-total-bytes if this is expected"
+            )
+
+
+def _copy_stream(src, dest: Path, limits: Limits, name: str) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
     with dest.open("wb") as out:
-        shutil.copyfileobj(src, out, 1 << 20)
+        while chunk := src.read(1 << 20):
+            written += len(chunk)
+            limits.chunk(name, written, len(chunk))
+            out.write(chunk)
 
 
-def _extract_archive(archive: Path, into: Path) -> None:
+def _extract_archive(archive: Path, into: Path, limits: Limits | None = None) -> None:
     """Extract regular files only, validating every member; owners are not kept."""
+    limits = limits or Limits(DEFAULT_MAX_MEMBERS, DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_TOTAL_BYTES)
     names: set[str] = set()
     if archive.name.lower().endswith(".zip"):
         try:
@@ -256,8 +307,10 @@ def _extract_archive(archive: Path, into: Path) -> None:
             raise CliError(f"not a valid zip archive: {archive} ({exc})") from exc
         with zf:
             for info in zf.infolist():
+                limits.member(info.filename)
                 if info.is_dir():
-                    _clean_relpath(info.filename.rstrip("/"), "archive member")
+                    if not _is_root_entry(info.filename):
+                        _clean_relpath(info.filename.rstrip("/"), "archive member")
                     continue
                 mode = info.external_attr >> 16
                 if mode and (mode & 0o170000) not in (0, 0o100000):
@@ -267,7 +320,7 @@ def _extract_archive(archive: Path, into: Path) -> None:
                     raise CliError(f"duplicate archive member: {rel}")
                 names.add(rel)
                 with zf.open(info) as src:
-                    _copy_stream(src, into / rel)
+                    _copy_stream(src, into / rel, limits, rel)
         return
     try:
         tf = tarfile.open(archive, "r:*")
@@ -275,8 +328,10 @@ def _extract_archive(archive: Path, into: Path) -> None:
         raise CliError(f"not a valid tar archive: {archive} ({exc})") from exc
     with tf:
         for member in tf:
+            limits.member(member.name)
             if member.isdir():
-                _clean_relpath(member.name.rstrip("/"), "archive member")
+                if not _is_root_entry(member.name):
+                    _clean_relpath(member.name.rstrip("/"), "archive member")
                 continue
             if not member.isreg():
                 kind = (
@@ -294,7 +349,7 @@ def _extract_archive(archive: Path, into: Path) -> None:
             src = tf.extractfile(member)
             assert src is not None
             with src:
-                _copy_stream(src, into / rel)
+                _copy_stream(src, into / rel, limits, rel)
 
 
 def _walk_directory(root: Path) -> dict[str, Path]:
@@ -313,12 +368,68 @@ def _walk_directory(root: Path) -> dict[str, Path]:
     return found
 
 
+def _default_mode() -> int:
+    """Permission bits a plain file would get (mkstemp creates 0600)."""
+    umask = os.umask(0)
+    os.umask(umask)
+    return 0o666 & ~umask
+
+
+def _temp_beside(target: Path) -> tuple[int, Path]:
+    """Create a unique, exclusively-opened temp file in *target*'s directory."""
+    fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.", suffix=".part")
+    os.chmod(name, _default_mode())
+    return fd, Path(name)
+
+
+def _publish(tmp: Path, target: Path, force: bool) -> None:
+    """Move *tmp* to *target*; without ``force`` never replace anything that exists."""
+    if force:
+        os.replace(tmp, target)
+        return
+    try:
+        os.link(tmp, target)
+    except FileExistsError:
+        tmp.unlink(missing_ok=True)
+        raise CliError(f"refusing to overwrite (use --force): {target}") from None
+    except OSError:
+        # Filesystem without hard links: fall back to a check followed by a rename.
+        if target.exists() or target.is_symlink():
+            tmp.unlink(missing_ok=True)
+            raise CliError(f"refusing to overwrite (use --force): {target}") from None
+        os.replace(tmp, target)
+        return
+    tmp.unlink(missing_ok=True)
+
+
+def _install_file(src: Path, target: Path, pack_dir: Path, force: bool) -> None:
+    """Copy *src* to *target* without following symlinks planted under the pack folder."""
+    parent = target.parent
+    while parent != pack_dir:
+        if parent.is_symlink():
+            raise CliError(f"refusing destination under a symlinked directory: {parent}")
+        if parent == parent.parent:
+            raise CliError(f"destination escapes the pack folder: {target}")
+        parent = parent.parent
+    fd, tmp = _temp_beside(target)
+    try:
+        with os.fdopen(fd, "wb") as out, src.open("rb") as handle:
+            shutil.copyfileobj(handle, out, 1 << 20)
+        _publish(tmp, target, force)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def _write_pins(pack_dir: Path, entries: dict[str, str]) -> None:
     lines = [f"{digest}  {name}\n" for name, digest in sorted(entries.items())]
     target = pack_dir / asset_cache.PINS_FILE
-    tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text("".join(lines), encoding="utf-8")
-    os.replace(tmp, target)
+    fd, tmp = _temp_beside(target)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as out:
+            out.write("".join(lines))
+        os.replace(tmp, target)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def cmd_add(args) -> int:
@@ -335,7 +446,11 @@ def cmd_add(args) -> int:
             if args.as_:
                 raise CliError("--as applies to a single file, not an archive")
             scratch = Path(tempfile.mkdtemp(prefix="isaac-assets-"))
-            _extract_archive(src, scratch)
+            _extract_archive(
+                src,
+                scratch,
+                Limits(args.max_members, args.max_file_bytes, args.max_total_bytes),
+            )
             sources = _walk_directory(scratch)
         elif src.is_dir():
             if args.as_:
@@ -368,9 +483,7 @@ def cmd_add(args) -> int:
         for rel in sorted(sources):
             target = pack_dir / rel
             target.parent.mkdir(parents=True, exist_ok=True)
-            tmp = target.with_name(target.name + ".part")
-            shutil.copyfile(sources[rel], tmp)
-            os.replace(tmp, target)
+            _install_file(sources[rel], target, pack_dir, args.force)
             digest = sha256(target)
             pins[rel] = digest
             print(f"added {rel}  sha256:{digest[:12]}")
@@ -394,7 +507,12 @@ def cmd_pin(args) -> int:
             rel = path.relative_to(pack_dir).as_posix()
             if rel == asset_cache.PINS_FILE:
                 continue
-            if path.is_symlink() or "\n" in rel or "\r" in rel:
+            if path.is_symlink():
+                skipped += 1
+                continue
+            try:
+                _clean_relpath(rel, "file name")
+            except CliError:
                 skipped += 1
                 continue
             entries[rel] = sha256(path)
@@ -433,6 +551,24 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--pack", default=asset_cache.PACK, help="pack folder (default: %(default)s)")
     add.add_argument("--as", dest="as_", metavar="RELPATH", help="relative path for a single file")
     add.add_argument("--force", action="store_true", help="overwrite existing files")
+    add.add_argument(
+        "--max-members",
+        type=int,
+        default=DEFAULT_MAX_MEMBERS,
+        help="archive member limit (default: %(default)s)",
+    )
+    add.add_argument(
+        "--max-file-bytes",
+        type=int,
+        default=DEFAULT_MAX_FILE_BYTES,
+        help="expanded size limit per archive member (default: %(default)s)",
+    )
+    add.add_argument(
+        "--max-total-bytes",
+        type=int,
+        default=DEFAULT_MAX_TOTAL_BYTES,
+        help="expanded size limit for the whole archive (default: %(default)s)",
+    )
     add.set_defaults(func=cmd_add)
 
     pin = sub.add_parser("pin", help="regenerate SHA256SUMS for a pack folder")

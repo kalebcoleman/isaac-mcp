@@ -74,6 +74,7 @@ PROJECT_FILE = "isaac-mcp.json"
 PINS_FILE = "SHA256SUMS"
 
 _TRUE = {"1", "true", "yes", "on"}
+_HEX = frozenset("0123456789abcdefABCDEF")
 _WARNED: set[str] = set()
 
 
@@ -270,8 +271,13 @@ def _locate(relpath: str) -> tuple[Path, str, Path] | None:
     for base, layer in _search_bases():
         names = [relpath]
         if layer != "dropin":
-            relative = _cache_relative(relpath)
-            names = [relative.as_posix()] + ([relpath] if relative.as_posix() != relpath else [])
+            # A manifest-tracked asset must sit at its canonical layout, because its
+            # sublayers use relative references. A file at the logical name is only
+            # accepted when the user pinned it.
+            canonical = _cache_relative(relpath).as_posix()
+            names = [canonical]
+            if canonical != relpath and pins(base).get(relpath):
+                names.append(relpath)
         for name in names:
             candidate = base / name
             if candidate.is_file():
@@ -288,14 +294,16 @@ def find_local(relpath: str) -> Path | None:
 def _store_base(path: Path) -> Path | None:
     """Return the store folder that holds *path*, or None for a drop-in or stray file."""
     resolved = path.resolve()
+    best: Path | None = None
     for store in stores():
         for base in _bases(store):
             try:
                 resolved.relative_to(base)
             except ValueError:
                 continue
-            return base
-    return None
+            if best is None or len(base.parts) > len(best.parts):
+                best = base
+    return best
 
 
 def _from_cache(path: Path) -> bool:
@@ -353,16 +361,44 @@ def pins(base: Path) -> dict[str, str]:
     except OSError:
         return {}
     found: dict[str, str] = {}
-    for line in text.splitlines():
-        parts = line.strip().split(None, 1)
-        if len(parts) != 2 or len(parts[0]) != 64:
+    for line in text.split("\n"):
+        line = line.rstrip("\r")
+        digest = line[:64]
+        if len(line) < 66 or line[64] != " " or any(c not in _HEX for c in digest):
             continue
-        name = parts[1].lstrip("*").strip()
-        found[name[2:] if name.startswith("./") else name] = parts[0].lower()
+        # "<hash> <mode><name>": mode is " " (text) or "*" (binary); a single
+        # space followed directly by the name is also accepted.
+        name = line[66:] if line[65] in " *" else line[65:]
+        found[name[2:] if name.startswith("./") else name] = digest.lower()
     return found
 
 
-def verify_local(relpath: str, path: Path) -> None:
+def _check_pin(relpath: str, path: Path, base: Path, pinned: str) -> None:
+    actual = _sha256(path)
+    if actual != pinned:
+        raise AssetCorrupt(
+            relpath,
+            path,
+            pinned,
+            actual,
+            f"sha256 mismatch with {base / PINS_FILE}",
+            fix=(
+                "Restore the file, or run `python3 scripts/isaac_assets.py pin` "
+                "if the change is intended."
+            ),
+        )
+
+
+def _verify_member(relpath: str, path: Path, base: Path, entry: dict | None) -> None:
+    """Check one stored file: its user pin if it has one, else its manifest entry."""
+    pinned = pins(base).get(path.resolve().relative_to(base).as_posix())
+    if pinned:
+        _check_pin(relpath, path, base, pinned)
+    else:
+        _verify_entry(relpath, path, entry)
+
+
+def verify_local(relpath: str, path: Path, base: Path | None = None) -> None:
     """Check a stored file against its user pin or the manifest before use.
 
     Drop-ins under ``exts/ur5e-dt/assets`` are the operator's own copies and are
@@ -370,26 +406,17 @@ def verify_local(relpath: str, path: Path) -> None:
     ``SHA256SUMS`` is checked against that pin only.  Any other stored file
     that the manifest tracks is checked, with every other file of the same
     fetch group, because USD loads the group's sublayers from the store without
-    asking this module.
+    asking this module.  Each group member is checked against its own user pin
+    when it has one, so editing one sublayer and pinning it does not condemn the
+    root file.  *base* is the store folder the lookup chose; it defaults to the
+    most specific store folder that contains *path*.
     """
-    base = _store_base(path)
+    base = base if base is not None else _store_base(path)
     if base is None:
         return
     pinned = pins(base).get(path.resolve().relative_to(base).as_posix())
     if pinned:
-        actual = _sha256(path)
-        if actual != pinned:
-            raise AssetCorrupt(
-                relpath,
-                path,
-                pinned,
-                actual,
-                f"sha256 mismatch with {base / PINS_FILE}",
-                fix=(
-                    "Restore the file, or run `python3 scripts/isaac_assets.py pin` "
-                    "if the change is intended."
-                ),
-            )
+        _check_pin(relpath, path, base, pinned)
         return
     group = fetch_group(relpath)
     if group is None:
@@ -401,8 +428,14 @@ def verify_local(relpath: str, path: Path) -> None:
         sibling = cached_path(target, base)
         if not sibling.is_file():
             raise AssetMissing(target, offline=offline())
-        _verify_entry(target, sibling, entry)
+        _verify_member(target, sibling, base, entry)
     _verify_entry(relpath, path, expected_asset(relpath))
+
+
+def _verify_located(relpath: str, found: tuple[Path, str, Path]) -> None:
+    path, layer, base = found
+    if layer != "dropin":
+        verify_local(relpath, path, base)
 
 
 def _verify_entry(relpath: str, path: Path, entry: dict | None) -> None:
@@ -444,10 +477,10 @@ def resolve_uri(relpath: str) -> str:
     be fetched, and :class:`AssetCorrupt` when a stored file no longer matches
     its recorded hash.
     """
-    local = find_local(relpath)
-    if local is not None:
-        verify_local(relpath, local)
-        return local.as_uri()
+    found = _locate(relpath)
+    if found is not None:
+        _verify_located(relpath, found)
+        return found[0].as_uri()
     remote = remote_uri(relpath)
     if remote is not None and not offline():
         return remote
@@ -456,12 +489,12 @@ def resolve_uri(relpath: str) -> str:
 
 def resolve_path(relpath: str) -> Path:
     """Resolve an asset to a local path, raising :class:`AssetMissing` otherwise."""
-    local = find_local(relpath)
-    if local is None:
+    found = _locate(relpath)
+    if found is None:
         remote = remote_uri(relpath)
         raise AssetMissing(relpath, offline=remote is not None and offline())
-    verify_local(relpath, local)
-    return local
+    _verify_located(relpath, found)
+    return found[0]
 
 
 def resolve_dir(relpath: str) -> Path:
@@ -487,7 +520,7 @@ def resolve_info(relpath: str) -> dict:
         path, layer, base = found
         info.update(layer=layer, path=str(path), sha256=_sha256(path))
         try:
-            verify_local(relpath, path)
+            _verify_located(relpath, found)
         except (AssetCorrupt, AssetMissing) as exc:
             info.update(status="corrupt", detail=str(exc))
             return info

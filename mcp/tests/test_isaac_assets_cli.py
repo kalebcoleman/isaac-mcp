@@ -494,3 +494,133 @@ def test_legacy_asset_cache_env_still_works(cli, capsys, tmp_path, monkeypatch):
     assert code == 0
     info = {a["relpath"]: a for a in json.loads(out)["assets"]}["custom/arm.usd"]
     assert info["status"] == "pinned"
+
+
+# --------------------------------------------------------- review regressions (PR 51)
+
+
+def tar_bytes(members: list[tuple[str, bytes | None]]) -> bytes:
+    """Build a tar; ``None`` content makes a directory entry."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        for name, data in members:
+            info = tarfile.TarInfo(name)
+            if data is None:
+                info.type = tarfile.DIRTYPE
+                info.mode = 0o755
+                tf.addfile(info)
+            else:
+                info.size = len(data)
+                tf.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def test_add_does_not_follow_a_planted_part_symlink(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    victim = tmp_path / "checkout" / "tracked.txt"
+    victim.parent.mkdir()
+    victim.write_text("do not touch")
+    (pack / "x.usd.part").symlink_to(victim)
+    source = tmp_path / "x.usd"
+    source.write_bytes(b"asset bytes")
+    code, _, err = run(cli, capsys, "add", str(source))
+    assert code == 0, err
+    assert victim.read_text() == "do not touch"
+    assert not (pack / "x.usd").is_symlink()
+    assert (pack / "x.usd").read_bytes() == b"asset bytes"
+    assert (pack / "x.usd.part").is_symlink()  # untouched: the tool uses its own temp name
+
+
+def test_add_leaves_an_unrelated_part_file_alone(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    (pack / "x.usd.part").write_bytes(b"someone else's")
+    source = tmp_path / "x.usd"
+    source.write_bytes(b"asset")
+    assert run(cli, capsys, "add", str(source))[0] == 0
+    assert (pack / "x.usd.part").read_bytes() == b"someone else's"
+    assert sorted(p.name for p in pack.iterdir() if p.name.startswith(".")) == []
+
+
+def test_add_refuses_a_dangling_symlink_destination_without_writing_through_it(
+    cli, capsys, tmp_path, monkeypatch
+):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    elsewhere = tmp_path / "elsewhere.bin"
+    (pack / "x.usd").symlink_to(elsewhere)
+    source = tmp_path / "x.usd"
+    source.write_bytes(b"asset")
+    code, _, err = run(cli, capsys, "add", str(source))
+    assert code == 2
+    assert not elsewhere.exists()
+
+
+def test_add_refuses_a_symlinked_subdirectory_in_the_pack(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (pack / "robot").symlink_to(outside, target_is_directory=True)
+    source = tmp_path / "src"
+    (source / "robot").mkdir(parents=True)
+    (source / "robot" / "a.usd").write_bytes(b"a")
+    code, _, err = run(cli, capsys, "add", str(source))
+    assert code == 2
+    assert list(outside.iterdir()) == []
+
+
+def test_archive_total_size_limit_is_enforced_on_written_bytes(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "bomb.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("big.bin", b"\0" * (4 << 20))
+    code, _, err = run(cli, capsys, "add", str(archive), "--max-total-bytes", str(1 << 20))
+    assert code == 2
+    assert "expands past" in err
+    assert not (tmp_path / "store" / "ur5e-dt" / "big.bin").exists()
+
+
+def test_archive_per_file_and_member_limits(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "many.tar"
+    archive.write_bytes(tar_bytes([(f"f{i}.usd", b"x" * 10) for i in range(5)]))
+    code, _, err = run(cli, capsys, "add", str(archive), "--max-members", "3")
+    assert code == 2 and "more than 3 members" in err
+    code, _, err = run(cli, capsys, "add", str(archive), "--max-file-bytes", "5")
+    assert code == 2 and "--max-file-bytes" in err
+    assert run(cli, capsys, "add", str(archive))[0] == 0
+
+
+def test_archive_with_a_dot_root_entry_is_accepted(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "dot.tar"
+    archive.write_bytes(tar_bytes([(".", None), ("./robot", None), ("./robot/a.usd", b"a")]))
+    code, _, err = run(cli, capsys, "add", str(archive))
+    assert code == 0, err
+    assert (store / "ur5e-dt" / "robot" / "a.usd").read_bytes() == b"a"
+
+
+def test_star_prefixed_names_round_trip_and_are_verified(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    source = tmp_path / "src.usd"
+    source.write_bytes(b"original")
+    assert run(cli, capsys, "add", str(source), "--as", "*custom.usd")[0] == 0
+    cache = cli.asset_cache
+    assert cache.resolve_info("*custom.usd")["status"] == "pinned"
+    (store / "ur5e-dt" / "*custom.usd").write_bytes(b"tampered")
+    assert cache.resolve_info("*custom.usd")["status"] == "corrupt"
+
+
+@pytest.mark.parametrize("name", [" lead.usd", "trail.usd ", "tab\tname.usd"])
+def test_names_the_pin_format_cannot_hold_are_refused(cli, capsys, tmp_path, monkeypatch, name):
+    make_store(tmp_path, monkeypatch)
+    source = tmp_path / "src.usd"
+    source.write_bytes(b"x")
+    code, _, err = run(cli, capsys, "add", str(source), "--as", name)
+    assert code == 2 and "unsupported" in err
