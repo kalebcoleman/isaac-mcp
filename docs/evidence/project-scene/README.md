@@ -250,3 +250,10 @@ headless/windowed train/eval/play, decoded videos, actual Console/input review a
 owned-process cleanup at `c2ceb7f`. Its draft supplement includes the exact setup
 profile/lock and script manifest. Two upstream package conflicts, sampled-video
 limits and the distinction from generic Newton are explicit in [final validation](FINAL-VALIDATION.md).
+
+
+The [6.1 Newton contact follow-up](RECENT-NEWTON-61-CONTACTS-20261102.json)
+records the production failure and unshipped collider controls, including a
+fresh repeated-cycle assembly failure. See [final validation](FINAL-VALIDATION.md#newton-61-contact-failures-and-unshipped-collider-controls)
+for the separate room timeout, visual limits and guarded cleanup; no solver fix
+or broad Newton support is claimed.

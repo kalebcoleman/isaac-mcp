@@ -7,6 +7,7 @@ by marking this release draft.
 
 | Asset URL | SHA-256 | Bytes |
 |---|---|---:|
+| [newton61-contact-controls-ba1-box1-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton61-contact-controls-ba1-box1-redacted.tar.gz) | `c450357b3f0ffc657ecaf42fb6394b76648624a9b408aa10e687729ce303d3f6` | 664073 |
 | [compatibility-followup-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/compatibility-followup-redacted.tar.gz) | `d0e2020a8d360735f73652d4e54d9f706f02df9d4d45371ce0c4f8d41ff8fe88` | 4668085 |
 | [historical-evidence-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/historical-evidence-redacted.tar.gz) | `205b5d9bad4074d6f7d053d40231f07fa1dcb3dcdb154a2578926ea1d119d2bb` | 1089241 |
 | [omitted-artifacts.json](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/omitted-artifacts.json) | `e0227a3860e5641896e745da8f5f14ebdf2d892c9ce2f1ca9bde3be96b84ee2e` | 15357 |

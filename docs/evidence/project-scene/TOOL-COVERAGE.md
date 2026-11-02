@@ -88,3 +88,12 @@ became black with finite poses and lost Fabric scale; a later native crash
 preceded the proposed correction. No camera, solver-recovery or backend-wide
 pass is inferred from the error-reporting checks. Per-tool references in the
 draft supplement preserve all actual arguments/results and source identities.
+
+
+The [6.1 Newton contact supplement](RECENT-NEWTON-61-CONTACTS-20261102.json)
+retains the `ba1d4b2` call-144 invalid-state failure after 55 earlier predicates,
+plus the separate pre-adapter room timeout and private collider controls. The
+fresh repeated floor test lost the assembly on cycle three despite finite
+observations; another step returned an explicit NaN error. The adapter was not
+shipped. Named tool responses, time advancement, and successful image/save calls
+are not counted as stable-contact, solver-recovery, or complete twin passes.

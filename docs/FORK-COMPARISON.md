@@ -48,6 +48,8 @@ live verification. `Partial` identifies a real parameter/behavior gap, not an al
 No raw Python/manual UI action is counted as a substitute for any dedicated tool below (except
 `execute_script`, whose purpose is explicitly arbitrary Python execution).
 
+The [6.1 Newton contact evidence](evidence/project-scene/RECENT-NEWTON-61-CONTACTS-20261102.json) retains a further assembled-body invalid-state failure and failed private collider controls. No collider workaround was shipped; the fresh repeated test scattered the stack despite finite states. These are material limits on the measured backend, not parity or recovery evidence.
+
 | Fork tool / task | Our registered tool(s) | Parameter, behavior and usability difference | Implementation status | Live exercise and evidence |
 |---|---|---|---|---|
 | [`import_urdf`](https://github.com/whats2000/isaacsim-mcp-server/blob/bfcd2111a9a98657ea87ba3be8564ea19c1a89e6/isaac_mcp/tools/assets.py) — Import a robot from a URDF file into the scene. | assets__import_urdf | Approved snapshot; relative dependencies; DTD/entities/package:// refused. Validate/select shared physics on private generated output, then normal USD pipeline. | Implemented subset; current fix partly qualified | [Retained missing-physics failure and230f4b3 6.0.1H authored/runtime test](evidence/project-scene/FINAL-VALIDATION.md); other-build fix qualification pending |
