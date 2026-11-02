@@ -20,7 +20,8 @@ def setup(monkeypatch, tmp_path):
     run.write_text("#!/bin/sh\nexit 0\n")
     run.chmod(0o755)
     env = {"ISAAC_MCP_SIM_ROOT": str(root), "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "sessions"),
-           "UR5E_DT_PYTHON": "/configured/sim-python"}
+           "UR5E_DT_PYTHON": "/configured/sim-python", "ISAAC_MCP_PYTHON": "/configured/new-python",
+           "ISAAC_MCP_WORKSPACE": "/configured/workspace"}
     monkeypatch.setattr(sim.client, "discover_bridges", lambda: [])
     monkeypatch.setattr(sim, "_boot_id", lambda: "test-boot")
     monkeypatch.setattr(sim, "_lab_pids", lambda env: set())
@@ -85,6 +86,8 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     assert child["ISAAC_MCP_SIM_SESSION_ID"] == result["id"]
     assert child["ISAAC_MCP_SIM_SESSION_DIR"] == str(Path(result["log"]).parent)
     assert child["UR5E_DT_PYTHON"] == "/configured/sim-python"
+    assert child["ISAAC_MCP_PYTHON"] == "/configured/new-python"
+    assert child["ISAAC_MCP_WORKSPACE"] == "/configured/workspace"
     assert child["ISAAC_MCP_PHYSICS_BACKEND"] == "physx"
     assert result["physics_backend"] == "physx"
     assert "PYTHONPATH" not in child and "ISAAC_MCP_HOLD_TOKEN" not in child
@@ -148,7 +151,11 @@ def test_relative_sessions_directory_is_shared_with_simulator(setup, monkeypatch
 
 def test_explicit_server_settings_do_not_inherit_an_unselected_sim_interpreter(setup, monkeypatch):
     setup.pop("UR5E_DT_PYTHON")
+    setup.pop("ISAAC_MCP_PYTHON")
+    setup.pop("ISAAC_MCP_WORKSPACE")
     monkeypatch.setenv("UR5E_DT_PYTHON", "/other/server/python")
+    monkeypatch.setenv("ISAAC_MCP_PYTHON", "/other/server/python2")
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", "/other/ws")
     captured = {}
 
     def popen(args, **kwargs):
@@ -160,6 +167,7 @@ def test_explicit_server_settings_do_not_inherit_an_unselected_sim_interpreter(s
     monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
     sim._launch(setup, 18766, 197, False, False)
     assert "UR5E_DT_PYTHON" not in captured["env"]
+    assert "ISAAC_MCP_PYTHON" not in captured["env"] and "ISAAC_MCP_WORKSPACE" not in captured["env"]
 
 
 def test_failed_identity_check_stops_child_instead_of_waiting_indefinitely(setup, monkeypatch):
