@@ -14,6 +14,7 @@ environment, results and omissions. The table preserves the historical smoke sco
 [windowed](#6001-windowed-follow-up-2026-11-02) 6.0.0.1 observations and the
 [6.0.1.0 headless](#6010-headless-follow-up-2026-11-02) and
 [windowed follow-ups](#6010-windowed-follow-up-2026-11-02) are recorded separately below.
+The [6.1.0.0 PhysX follow-up](#6100-physx-follow-up-2026-11-02) records later mode-specific checks.
 Final qualification of the combined candidate across the requested builds and modes remains pending.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
@@ -422,7 +423,9 @@ qualified the integrated checkpoint and discovery fixes:
   include closed-client responses and schema/setup messages; no blanket harmlessness
   claim follows. This process exited normally; temporary Console captures were deleted.
 
-Provenance: inspected `601w-handoff-6bc.json`, timestamp `2026-11-02T01:35:53.527027+00:00`,
+Provenance: the [committed compact record](evidence/project-scene/RECENT-601W-20261102.json)
+is byte-identical to inspected `601w-handoff-6bc.json`, timestamp
+`2026-11-02T01:35:53.527027+00:00`,
 SHA-256 `3adcec65eefc272f3acf087fb3bcfa0daf411625e83a785a1bead7da0a28d4b2`;
 all 26 original source-record hashes matched. The separately inspected v2 ledger SHA-256 is
 `23fc86b4a366a01565361e138edb32b7e08ac34b0237903c5ee1ffc07dc4a710`, with addendum
@@ -431,3 +434,69 @@ Redacted reproduction supplements remain in the unpublished draft evidence relea
 publication curation is ongoing. These narrow integrated checks do not constitute a
 new broad all-tool run, clean-install qualification, other-build support or closure of
 the unresolved `20f2953` actual-use failure.
+
+## 6.1.0.0 PhysX follow-up (2026-11-02)
+
+These checks used package **6.1.0.0**, build `6.1.0-rc.26+release.49347.2d230af4.gl`,
+Kit `110.3.0+feature.371399.00c488ae.gl`, Ubuntu 24.04.5 / RTX 5080 / driver 580.178.04
+and existing installations. Broad headless and windowed runs used exact
+**`6bc45c2977270de748b58c630c21cd03f0d74fb6`**. Each completed 14 phases covering the
+39 generic tools, 23 UR5e tools and seven bridge built-ins; this is not all 99 names
+in each simulator mode.
+
+| Scope | Headless | Windowed |
+|---|---|---|
+| Full-surface portion | 137 calls / 55 assertions | 141 calls / 54 assertions |
+| Independent authored USD effects | 24 calls / 12 checks | 24 calls / 12 checks |
+| Articulated URDF runtime checks | 25 calls / 7 checks | 25 calls / 7 checks |
+| Save/source preservation | 21 checks; two layers / 18 source files unchanged | 21 checks; two layers / 21 source files unchanged |
+| Final native log, including shutdown | 24 error / 6,353 warning lines, including 6,087 simulation-time occurrences | 24 error / 383 warning lines, including 62 simulation-time occurrences |
+
+The native errors were attributed to deliberate missing/corrupt-asset and invalid-quaternion
+tests. Legacy and existing-physics regressions separately returned zero with no recorded
+error/reentry/cycle/time occurrences in their intervals. Final logs had zero cycle, reentry,
+`GetCamera`, Force-callback and edit-target-change matches. Both processes exited; these
+observations do not establish that all warnings are harmless. The earlier headless visual
+review sampled a shorter log with 6,060 simulation-time occurrences; it is not the final
+shutdown count. The windowed Console review showed 270 warnings and 63 errors before
+independent use/save continuation. UI totals are not native-line counts, and no final
+Console review after that continuation is claimed.
+
+The runtime owner viewed two frames from each fully decoded broad recording (170 headless,
+191 windowed frames), with diagnostic zero-pose upper-arm/wrist cropping retained. Headless
+sensor/video review is not an application-window or Console check.
+
+A separate windowed actual-use task at the same `6bc45c2` product source recorded **90
+requests across 40 names: 38 scoped passes, two partial results and 59 uncalled names**.
+Seventeen checks included sample fall/rest, Agilebot and UR5e target/return measurements,
+gripper following, fresh camera capture, source preservation and a composed USD save.
+The partial observations are the light's isolated contribution and standalone stage clearing
+before Quick Start. Fixture runtime joints were not measured; robot results belong to
+Agilebot and UR5e. The retained source audit found 261 commit-matching files and one launcher
+with diagnostic instrumentation and launch-time saved-scene loading; host/extension files
+matched the commit. The task explicitly created a new stage and ran Quick Start.
+
+Its 480 measured steps advanced **four seconds of simulation time**. The native task interval
+had zero errors and six warnings. All 210 video frames decoded, with three frames sampled;
+UR motion lay outside that recording's view. The runtime owner separately reviewed four
+selected sensor/window PNGs. An immediate screenshot after framing still showed the prior
+view; a later ordinary-update screenshot showed the requested view. No atomic render/physics
+frame or framing-latency guarantee follows.
+
+The resulting agent save was reopened in a **fresh 6.1.0.0 headless PhysX process** at exact
+**`d725f84cb853bf5ceb2fa3b7d13d0e002d29becf`**. Sixteen named calls / 12 checks verified
+source-byte preservation, sample support/mass, both robot articulations and a new camera's
+pixels before/after 12 steps advancing 0.1 simulation seconds. The old saved camera remained
+authored, but its previous live sensor ownership correctly refused reuse. The native review
+recorded zero errors and 18 warnings; the process exited. Two sensor PNGs were visually
+reviewed by the runtime owner, not application-window captures. This establishes composed
+USD reopening and new runtime initialization, not solver/controller-state restoration.
+
+[Compact records and source hashes](evidence/project-scene/RECENT-61-20261102.json)
+(SHA-256 `222e15ccaace02b89e91095c0640e0ee953ebee74cbfaf5bd669ff08080334e5`)
+identify all 26 inspected source records. Redacted bundles and sampled video are listed in
+the [unpublished draft release index](evidence/project-scene/RELEASE-ASSETS.md).
+These PhysX results do not qualify generic Newton tools or an installed Isaac Lab
+Newton/MJWarp pairing; those are separate scopes. They do not resolve the original `20f2953`
+6.0.1 stall or supply the still-pending fresh reopen of that build's newer independent task
+save. Remaining build/mode/backend, clean-install and final-review gates remain open.
