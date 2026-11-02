@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="130" height="22" role="img" aria-label="license: see notices">
+  <title>license: see notices</title>
+  <rect width="130" height="22" rx="4" fill="#62666c"/>
+  <path d="M4 0H50V22H4Q0 22 0 18V4Q0 0 4 0Z" fill="#343a40"/>
+  <g fill="white" text-anchor="middle" font-family="DejaVu Sans,Verdana,sans-serif" font-size="11">
+    <text x="25.0" y="15">license</text>
+    <text x="90.0" y="15">see notices</text>
+  </g>
+</svg>
