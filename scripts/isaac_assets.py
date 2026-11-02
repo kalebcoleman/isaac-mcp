@@ -312,8 +312,16 @@ PER_MEMBER_OVERHEAD = 3 * 512
 class _BoundedReader(io.RawIOBase):
     """Read-only wrapper that fails once more than *limit* bytes have been read."""
 
-    def __init__(self, raw, limit: int):
+    def __init__(self, raw, limit: int, also_close=()):
         self._raw, self._limit, self._count = raw, limit, 0
+        self._also_close = tuple(also_close)
+
+    def close(self) -> None:
+        try:
+            for handle in (self._raw, *self._also_close):
+                handle.close()
+        finally:
+            super().close()
 
     def readable(self) -> bool:
         return True
@@ -343,7 +351,7 @@ def _open_tar(archive: Path, limits: Limits):
     else:
         stream = raw
     bound = limits.total_bytes + limits.members * PER_MEMBER_OVERHEAD + METADATA_ALLOWANCE
-    reader = io.BufferedReader(_BoundedReader(stream, bound))
+    reader = io.BufferedReader(_BoundedReader(stream, bound, also_close=(raw,)))
     try:
         return tarfile.open(fileobj=reader, mode="r|")
     except BaseException:

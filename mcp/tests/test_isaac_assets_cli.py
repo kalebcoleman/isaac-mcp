@@ -778,3 +778,26 @@ def test_the_pin_file_is_written_even_when_a_stale_temp_name_exists(
     assert run(cli, capsys, "pin")[0] == 0
     assert victim.read_text() == "keep"
     assert (pack / "SHA256SUMS").read_text().startswith(sha(b"a"))
+
+
+def test_tar_extraction_closes_every_file_handle(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    archive = tmp_path / "a.tar.gz"
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        info = tarfile.TarInfo("a.usd")
+        info.size = 1
+        tf.addfile(info, io.BytesIO(b"1"))
+    archive.write_bytes(buf.getvalue())
+    opened = []
+    real_open = open
+
+    def tracking_open(path, mode="r", *args, **kwargs):
+        handle = real_open(path, mode, *args, **kwargs)
+        if str(path) == str(archive):
+            opened.append(handle)
+        return handle
+
+    monkeypatch.setattr("builtins.open", tracking_open)
+    assert run(cli, capsys, "add", str(archive))[0] == 0
+    assert opened and all(h.closed for h in opened)
