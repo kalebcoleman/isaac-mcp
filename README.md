@@ -59,6 +59,7 @@ See the [tool tiers and filters](AGENTS.md#what-you-can-reach-by-tier).
 before running. Windowed use also needs a working display.
 
 ```bash
+# Suggested location: <workspace>/isaac-mcp (see docs/WORKSPACE.md)
 git clone --branch integration/final-review-11-15 https://github.com/kalebcoleman/isaac-mcp.git
 cd isaac-mcp
 # All commands below run from this checkout root.
@@ -73,7 +74,11 @@ user-level editable host tool, and may install an ffmpeg shim. It uses `uv sync`
 `uv sync --locked`**. For an exact-source locked installation, use the separate
 [reproducible setup](docs/REPRODUCIBILITY.md#locked-simulator-setup). Neither path installs Isaac Lab or system ROS.
 
-**Already have Sim?** Keep your environment and select its interpreter with `UR5E_DT_PYTHON`;
+**Workspace.** Keep the checkout, asset stores and Sim environments in one folder; see
+[docs/WORKSPACE.md](docs/WORKSPACE.md). Linux x86_64 only (a Windows `C:` install cannot be used).
+
+**Already have Sim?** Keep your environment. `run.sh` finds it automatically
+(`python3 scripts/isaac_env.py find` lists what it can see), or select it with `ISAAC_MCP_PYTHON`;
 follow [existing installations and older builds](docs/LINUX-SETUP.md#choose-a-simulator-build).
 Do not sync the 6.2 lock into an older Sim or Lab environment. `--headless` removes the window,
 not the GPU requirement. First startup may spend minutes preparing shaders and extensions.
