@@ -24,6 +24,8 @@ broad candidate runs from later narrow reopen/force checks and the historical in
 The [PhysX wrench follow-up](#6200-physx-wrench-correction-candidate-2026-11-02) records
 that defect and candidate12's scoped correction. The later [integrated affected-path checks](#integrated-affected-physx-paths-across-five-builds-2026-11-02)
 record five-build PhysX results without relabelling the earlier full-tool evidence.
+The [6.0.0.1 Newton failure follow-up](#6001-newton-failures-and-separate-host-envelope-checks-2026-11-02)
+records native failures in both modes, unqualified private controls and separately tested host error reporting.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
 |---|---|---|
@@ -142,7 +144,9 @@ Runtime observations use the selected engine, with no PhysX/USD substitution. Ne
 qualified only for the recorded stacks and meter stages, with scoped MuJoCo evidence.
 The [per-release matrix](evidence/project-scene/RUNS.md) records all37 tools on each installed
 PhysX release, independent agents, repeated captures, known failures and later retests. Newton trials
-are not a claim that every backend/asset/edge case passed.
+are not a claim that every backend/asset/edge case passed. Later
+[6.0.0.1 twin failures](#6001-newton-failures-and-separate-host-envelope-checks-2026-11-02)
+remain open despite those earlier generic checks.
 
 The follow-up also removes synchronous World initialization/clear calls from the twin's async
 workflow. A visible 6.1 reset/rebuild smoke passed 20/20 without the previously reproduced
@@ -1036,3 +1040,72 @@ proof of every edge case. **The original `20f2953` / 6.0.1 native-step stall rem
 unresolved.** Applicable Newton checks, final per-tool/version reconciliation and clean-machine/
 full-installer qualification remain separate. The [draft release index](evidence/project-scene/RELEASE-ASSETS.md)
 links the larger redacted transcript bundle; the release remains unpublished and PR16 unmerged.
+
+## 6.0.0.1 Newton failures and separate host-envelope checks (2026-11-02)
+
+**The Newton twin workflow failed in both headless and windowed qualification on exact
+`2c8ce63b33dbabf02b2216f9d512ff9a23724d9c`.** The
+[committed failure supplement](evidence/project-scene/RECENT-NEWTON-6001-FAILURES-20261102.json)
+(SHA-256 `d9863bdd51b12fbf0b53fcb08a132712ca6c0b036dbbe5374858a3ed300dc68a`)
+separates the unchanged runtime from private room-pause and CPU-thread controls. Its 44 key
+source records identify the retained runs; the curated evidence reports 728 original hashes.
+The larger redacted bundle is indexed in [release assets](evidence/project-scene/RELEASE-ASSETS.md)
+and remains attached to an **unpublished draft release**.
+
+The tested 6.0.0.1 stack was Ubuntu 24.04.5, RTX 5080 (16,303 MiB), driver 580.178.04,
+Newton 1.2.0, MuJoCo 3.8.0, MuJoCo Warp 3.8.0.3 and loaded Warp 1.13.0. These failures
+are separate from the completed PhysX checks on that build and the original `20f2953`
+6.0.1.0 windowed stepping stall; a common cause has not been established.
+
+- **Headless, unchanged runtime:** the five generic suites and existing-PhysicsScene
+  checks completed first. Generic tools/equivalents/edges/sensors/clear retained
+  32/49/23/327/4 records respectively; passing scripted predicates include expected
+  refusals and do not establish every tool/parameter combination. Full-surface call 88
+  (UR Play) returned success, then Kit disappeared before call 89's joint observation.
+  The process log ended with `malloc(): unaligned tcache chunk detected`; native cause
+  and exit signal were not established. Separate identity-checked simulated-driver
+  cleanup succeeded after the bridge was no longer reachable.
+- **Fresh headless full-surface-only control, unchanged runtime:** `load_simple_room`
+  stalled. The captured Python stack localized execution to Replicator trigger discovery
+  and a USD Runtime graph query; it does not identify the cause. SIGINT did not exit the
+  process; the owned force-stop was cleanup, not recovery.
+- **Windowed, unchanged runtime and normal thread budget:** the same five generic suites
+  and nine existing-PhysicsScene calls completed. Full-surface call 39 was the last
+  success; `add_objects` at call 40 returned a connection reset, followed by unreachable
+  Stop and unavailable stage-info calls. Those failures do not prove a Stop reached Kit.
+  Fatal stderr recorded a segmentation fault / invalid-pointer free, with the main stack
+  in Newton's `LoadUsdPhysicsFromRange` / initialization / `on_play` path. This is execution
+  localization, not root cause. The PID disappeared before managed cleanup; only an
+  initial blank window was reviewed, with no final window or Console available.
+
+The **private controls are not shipped fixes or qualified workarounds**. A room-pause
+candidate passed earlier failure locations once, but its wrist-displacement comparison
+used a moving baseline and its sampled first/last RGB buffers were zero. A second run
+with the same candidate bytes and a settled-baseline harness failed during `add_objects`,
+with a malloc diagnostic and Newton USD-parser/initialization stack. An environment-only
+worker-limit attempt was ineffective (observed concurrency remained 16); the later
+one-thread bootstrap control also changed Carb/TBB/OpenBLAS, not USD alone. It passed
+previous failure locations and measured arm motion, but missed the fixed five-wall-second
+RG2 predicate, returned zero RGB samples and failed recording with more than five seconds
+of backlog. A later settled gripper read does not erase those failures. Message arrival,
+dimensions and timestamps alone do not establish useful images; the post-reset lighting
+control also changed arm pose and did not isolate lighting as a cause.
+
+The supplement's correction takes precedence over generic shutdown-review wording:
+the windowed process exited natively before a managed-stop request. Native-file counts
+exclude fatal stderr in the separate process log. All seven owned Kit PIDs were later
+absent and owned-driver cleanup was recorded. The curated bundle omits raw dumps,
+environment metadata, full crash logs, geometry and media. A private control's crash
+reporter attempted an automatic upload, with delivery unconfirmed; later disposable
+processes disabled current and old dump uploads locally. No raw dump is published here.
+
+A **separate host reporting fix**, source `7cdd54f`, integrated as
+`826b84b69f04a080882c3ef5894877f389af2938`, corrects the earlier legacy
+`isError=false` on actual errors. On **6.0.1.0 headless / Newton**, six real MCP calls
+passed six checks: selected Kit identity, a successful query without the error bit,
+application-error JSON and structured-string preservation with `isError=true`, a native
+builtin error, and no file created by the failed upload. This qualifies those envelope
+cases only. It neither fixes the 6.0.0.1 native faults nor establishes completion of the
+later 6.0.1.0 twin workflow. Broader Newton qualification and the original stepping-stall
+disposition remain open; historical CPU, PhysX, Lab and candidate results retain their
+own source/build/mode identities.
