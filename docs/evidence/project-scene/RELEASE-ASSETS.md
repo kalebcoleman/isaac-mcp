@@ -44,6 +44,7 @@ by marking this release draft.
 | [physx-wrench62-166-candidates-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/physx-wrench62-166-candidates-redacted.tar.gz) | `b1b884ddd2017e726ed5195b541e4d2d9cad3cc5d212d9aa391f5962681d1aae` | 1354455 |
 | [affected-physx-five-builds-2c8-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/affected-physx-five-builds-2c8-redacted.tar.gz) | `d7996dc94648c15ea28d86b646f1fa0f8a66c08311e4a8f44e6e5421c4b431e3` | 5661671 |
 | [newton6001-failures-controls-2c8-v3-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton6001-failures-controls-2c8-v3-redacted.tar.gz) | `a9f793289db4fff06ef5f2fa03d1a599813facd3380c6d8f4b20fc84409496ab` | 944056 |
+| [newton601-state-rendering-826-ba1-v2-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton601-state-rendering-826-ba1-v2-redacted.tar.gz) | `d46256f08da6716c9ab7981d7588d5ee9339765bc12dfdbefdb9d1c631a8b142` | 562356 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.

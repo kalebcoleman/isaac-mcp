@@ -24,6 +24,14 @@ distinctions and six later real-MCP error-envelope checks on `826b84b`, which fi
 host reporting only. [Failure details](FINAL-VALIDATION.md#newton-60001-failures-and-separate-host-error-reporting)
 and the draft bundle exclude raw crash dumps and environment metadata.
 
+The [6.0.1 Newton state/rendering supplement](RECENT-NEWTON-601-STATE-20261102.json)
+retains the later `826b84b` NaN/black-image failure and private solver controls.
+Fresh `ba1d4b2` passed 33 calls/14 checks of improved runtime-error and partial-step
+reporting, then later rendering controls exposed body scale loss and ended in a
+native Play/Pause segmentation fault. Error reporting is qualified; Newton
+stability is not. [Details](FINAL-VALIDATION.md#newton-601-state-rendering-and-reporting-qualification)
+separate the unexecuted Fabric correction, sampled visuals and exact sources.
+
 The trusted workflow is exercised through real MCP with original multifile USD/URDF/USDZ
 fixtures and a separately licensed real Agilebot robot. Root checks, snapshots, dependency
 inspection, filters and managed launch are **not an OS sandbox**. Untrusted configuration

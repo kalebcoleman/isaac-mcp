@@ -1,0 +1,554 @@
+{
+  "schema": 1,
+  "recorded_utc": "2026-11-02T11:16:15.235478+00:00",
+  "sessions": [
+    {
+      "tag": "newton601h_826b84b",
+      "source": "826b84b69f04a080882c3ef5894877f389af2938",
+      "modules": {
+        "exts/ur5e-dt/ur5e_dt/extension.py": "2845f41597194c3be52b41ff21b7686705b3fd34e0b0ffa5de5c532bc2206266",
+        "exts/ur5e-dt/ur5e_dt/physics_compat.py": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438",
+        "exts/ur5e-dt/ur5e_dt/world_compat.py": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8",
+        "exts/sim-tools/sim_tools/advanced.py": "dc124c7c238651ad339d89c6bada1c4d6c64ce02ece07db9d3367f9e5d0ac8b2",
+        "exts/sim-tools/sim_tools/physics.py": "0d1bbeebe8bd1a42bf601d13d98f28bbdefae7f90b1f343edb5811c54cdc4dd5"
+      },
+      "session": {
+        "id": "b234b1fc8b1f42afaef6fcbb4e3da42e",
+        "pid": 2839216,
+        "port": 18969,
+        "ros_domain": 215,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "newton",
+        "started_at": 1793613590.345003,
+        "log": "<worktree>/.work/sessions/b234b1fc8b1f42afaef6fcbb4e3da42e/sim.log",
+        "output_dir": "<worktree>/.work/sessions/b234b1fc8b1f42afaef6fcbb4e3da42e/output",
+        "user_config": "<worktree>/.work/sessions/b234b1fc8b1f42afaef6fcbb4e3da42e/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15025,
+          "ram_available_mib": 51539
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "pid_absent": true,
+      "bootstrap": "Private launcher enables faulthandler and disables crash dump uploads; recorded bootstrap is distinct from product runtime. No vendor or installed environment source edits."
+    },
+    {
+      "tag": "newton601h_ba1d4b2",
+      "source": "ba1d4b256a011d00787fe32b2eb85cecec8f8812",
+      "modules": {
+        "exts/ur5e-dt/ur5e_dt/extension.py": "2845f41597194c3be52b41ff21b7686705b3fd34e0b0ffa5de5c532bc2206266",
+        "exts/ur5e-dt/ur5e_dt/physics_compat.py": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438",
+        "exts/ur5e-dt/ur5e_dt/world_compat.py": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8",
+        "exts/sim-tools/sim_tools/advanced.py": "33d339a68bb3de4e6d19b2da1f7c15251994cb35a0d6946c6e0f4927e54889d3",
+        "exts/sim-tools/sim_tools/physics.py": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83"
+      },
+      "session": {
+        "id": "7073179ba1e340209ce8d8b0d228c94c",
+        "pid": 2865490,
+        "port": 18970,
+        "ros_domain": 216,
+        "headless": true,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "newton",
+        "started_at": 1793616462.2814577,
+        "log": "<worktree>/.work/sessions/7073179ba1e340209ce8d8b0d228c94c/sim.log",
+        "output_dir": "<worktree>/.work/sessions/7073179ba1e340209ce8d8b0d228c94c/output",
+        "user_config": "<worktree>/.work/sessions/7073179ba1e340209ce8d8b0d228c94c/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15138,
+          "ram_available_mib": 51986
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "pid_absent": true,
+      "bootstrap": "Private launcher enables faulthandler and disables crash dump uploads; recorded bootstrap is distinct from product runtime. No vendor or installed environment source edits."
+    }
+  ],
+  "runtime": {
+    "release": "6.0.1.0",
+    "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+    "reported_core": "6.0.1",
+    "identity_source": "package and VERSION",
+    "packages": {
+      "isaacsim": "6.0.1.0",
+      "isaacsim-kernel": "6.0.1.0",
+      "isaacsim-core": "6.0.1.0",
+      "isaacsim-sensor": "6.0.1.0",
+      "isaacsim-replicator": "6.0.1.0"
+    },
+    "version_files": {
+      "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+    },
+    "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+    "extensions": {
+      "omni.replicator.core": {
+        "id": "omni.replicator.core-1.13.27",
+        "version": "1.13.27",
+        "enabled": true
+      },
+      "omni.kit.hydra_texture": {
+        "id": "omni.kit.hydra_texture-1.6.0",
+        "version": "1.6.0",
+        "enabled": true
+      },
+      "omni.kit.renderer.capture": {
+        "id": "omni.kit.renderer.capture-2.0.1",
+        "version": "2.0.1",
+        "enabled": true
+      },
+      "omni.syntheticdata": {
+        "id": "omni.syntheticdata-0.6.15",
+        "version": "0.6.15",
+        "enabled": true
+      },
+      "isaacsim.sensors.rtx": {
+        "id": "isaacsim.sensors.rtx-15.17.1",
+        "version": "15.17.1",
+        "enabled": true
+      },
+      "isaacsim.sensors.experimental.rtx": {
+        "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+        "version": "1.4.6",
+        "enabled": true
+      },
+      "isaacsim.core.simulation_manager": {
+        "id": "isaacsim.core.simulation_manager-1.15.6",
+        "version": "1.15.6",
+        "enabled": true
+      },
+      "isaacsim.physics.newton": {
+        "id": "isaacsim.physics.newton-0.8.1",
+        "version": "0.8.1",
+        "enabled": true
+      },
+      "isaacsim.physics.newton.tensors": {
+        "enabled": false
+      },
+      "omni.warp.core": {
+        "id": "omni.warp.core-1.13.0",
+        "version": "1.13.0",
+        "enabled": true
+      }
+    },
+    "qualified_build": true,
+    "issues": [],
+    "physics_engine": "newton",
+    "physics_adapter": "newton-direct-step-fabric-v1",
+    "newton": {
+      "initialized": false,
+      "solver": "mujoco",
+      "update_fabric": true,
+      "use_cuda_graph": true
+    },
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "physics_packages": {
+      "newton": {
+        "installed_version": "1.2.1",
+        "loaded": true,
+        "module": "<sim-install-601>/lib/python3.12/site-packages/newton/__init__.py",
+        "loaded_version": "1.2.1"
+      },
+      "mujoco": {
+        "installed_version": "3.8.0",
+        "loaded": false,
+        "module": null,
+        "loaded_version": null
+      },
+      "mujoco_warp": {
+        "installed_version": "3.8.0.3",
+        "loaded": false,
+        "module": null,
+        "loaded_version": null
+      }
+    },
+    "warp": {
+      "version": "1.13.0",
+      "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+    }
+  },
+  "environment": {
+    "os": "Ubuntu24.04.5",
+    "gpu": "RTX5080 16303MiB",
+    "driver": "580.178.04",
+    "scope": "Prepared existing 6.0.1.0 interpreter, Linux headless only; not a clean install or real application-window qualification."
+  },
+  "original_826": {
+    "generic_records": {
+      "tools": 32,
+      "equivalents": 49,
+      "edges": 23,
+      "sensors": 327,
+      "clear": 4
+    },
+    "existing_physics_checks": 9,
+    "fullsurface_calls": 144,
+    "recorded_predicates": 55,
+    "passed_predicates": 55,
+    "fullsurface_outcome": "FAIL after the 55 recorded passing predicates: requested120-step call144 returned INVALID_POSE. Kit remained responsive and paused; all observed wrist pose and six arm joint q/qd values were NaN. Authored USD values are not runtime proof.",
+    "video": "175 frames/17.5 seconds decoded; EVERY RGB component zero. Frames10/100 visually reviewed black. Not a video pass.",
+    "ros_rgb": [
+      {
+        "record": ".work/compat-followup/newton601h_826b84b-fullsurface/ros-gripper.json",
+        "count": 75,
+        "first_last_zero": true
+      },
+      {
+        "record": ".work/compat-followup/newton601h_826b84b-fullsurface/ros-observe.json",
+        "count": 80,
+        "first_last_zero": true
+      },
+      {
+        "record": ".work/compat-followup/newton601h_826b84b-fullsurface/ros-trajectory.json",
+        "count": 95,
+        "first_last_zero": true
+      }
+    ],
+    "controls": [
+      "Same-process UR-only reset: after initial lease-guarded attempt, explicit Stop/Play + settled baseline gave120 finite single steps and two finite120-step batches with measured target motion. One later UR-only video91frames had nonzero pixels; ONE sampled frame reviewed.",
+      "FMB4 unassembled120-step control finite; assembled default120-step control failed. Native contact overflow observed. This is a correlation/control, not a root-cause proof.",
+      "First capacity setup import failed: no config change. Its following trial was DEFAULT, not increased capacity. Corrected acquire_stage().cfg control1024contacts/6144constraints still failed after185.84 wall seconds, with0 overflow messages in the recorded interval.",
+      "Private native MuJoCo CPU alternative stayed finite but commanded joint targets missed by more than3.2radians after3simulation seconds. Not a reliable fallback. Stored control arrays matched requested targets; cause unknown.",
+      "Private Warp10-step, substeps4 controls still produced invalid runtime state. Native MuJoCo contacts initialization refused the planar ground mesh. No shared environment/vendor edits or qualified solver workaround."
+    ],
+    "cleanup": "Normal owned managed SIGINT stop, no force; both PID and exact source are recorded. Whole-run native/stderr counts include all controls and expected negatives."
+  },
+  "reporting_ba1": {
+    "source": "ba1d4b256a011d00787fe32b2eb85cecec8f8812",
+    "calls": 33,
+    "checks": 14,
+    "all_checks_pass": true,
+    "native_failure": {
+      "effects": "Stepping was attempted and may have changed runtime state. No rollback or automatic retry was performed; inspect solver diagnostics before continuing.",
+      "path": "/World/UR5e/wrist_3_link",
+      "field": "orientation_xyzw",
+      "backend": "newton",
+      "step": {
+        "requested_steps": 10,
+        "physics_dt": 0.008333333333333333,
+        "physics_time_before": 0.05,
+        "physics_time_after": 0.13333333333333333,
+        "measured_delta": 0.08333333333333333,
+        "expected_delta": 0.08333333333333333,
+        "phase": "body_observation",
+        "backend": "newton",
+        "fabric_updated": true,
+        "rendered": false
+      },
+      "status": "error",
+      "code": "PHYSICS_STATE_INVALID",
+      "message": "newton returned invalid orientation_xyzw for /World/UR5e/wrist_3_link: Expected 4 finite numbers with magnitude <=1e8."
+    },
+    "scope": "Fresh process, default Newton MJWarp config. Successful UR-only movement and actual assembled-FMB4 failure reporting qualified. This is NOT a solver-instability remediation or complete twin/backend pass."
+  },
+  "rendering_ba1": {
+    "calls_by_control": {
+      "person_and_room": 34,
+      "workspace": 17,
+      "ROS_then_FMB1": 20,
+      "five_body_state_readback": 13,
+      "Fabric_read_then_Stop": 5
+    },
+    "observation": "Before FMB1, person/workspace generic images and six25-frame recordings nonblack. Native ROS-only131messages, sampled first RGB nonzero. Add FMB1 ->90ROS messages with zero sampled first/last, generic PNG allzero, explicit workspace25-frame recording ALLzero. Five body poses and arm joints finite; native Fabric world matrices have unit basis where USD has .01scale. Stop restores a visible cropped PNG.",
+    "source_findings": "Installed6000/6001/601 Fabric writer lacks body scale preservation;61/62 contain it. NVIDIA6.1 release notes explicitly describe this fix. Static source plus observed matrices support the scale-loss diagnosis; no general causal link to NaNs, older heap failures or20fstall claimed.",
+    "intervention": "Proposed one-time paused runtime correction NEVER executed. Next Play returned; Pause reset connection and PID vanished. Stderr reports SIGSEGV with app.update main frame. No successful recovery, native-cause or exit-code inference.",
+    "visual": "Three later stills actually reviewed: one person-view frame, one workspace frame, and cropped320x180 after-Stop generic image. Other video frames decoded numerically. No headless Console or real application-window screenshot claim."
+  },
+  "remaining": [
+    "Default6.0.1 Newton assembled-body instability, scale-loss rendering and later native SIGSEGV remain material failures. Product reporting improvement does not repair them.",
+    "Same-process diagnostic controls do not prove fresh-process recovery or broad support. Failed imports/guards and unexecuted intervention remain visible.",
+    "All5 PhysX affected-path evidence, earlier Newton versions and Lab pairing retain their separate sources; this is not all99/allversion/backend qualification.",
+    "Original20f6.0.1windowed108-step stall remains unexplained. No relation to these faults established.",
+    "Both owned Kit PIDs absent. No unrelated process, vendor source, cache or user asset changed. PR16/release stay draft, unpublished and unmerged."
+  ],
+  "records": [
+    {
+      "label": "newton601h_826b84b-session",
+      "path": ".work/runs/newton601h_826b84b/session.json",
+      "sha256": "5bed0d6dd9acae39216aa859eea18b58021df19f33bf54b99e8b6e41eb303014",
+      "bytes": 879
+    },
+    {
+      "label": "newton601h_826b84b-source-hashes",
+      "path": ".work/runs/newton601h_826b84b/source-hashes.json",
+      "sha256": "483fd8da00c775b005d57b5f464f3168de07f431f8b08f131b458432a4036a73",
+      "bytes": 9919
+    },
+    {
+      "label": "newton601h_ba1d4b2-session",
+      "path": ".work/runs/newton601h_ba1d4b2/session.json",
+      "sha256": "bb88afd1e241e46b52ee7e4e9171cf6a3a977ba2cd0db5c87fa416cc3032c415",
+      "bytes": 880
+    },
+    {
+      "label": "newton601h_ba1d4b2-source-hashes",
+      "path": ".work/runs/newton601h_ba1d4b2/source-hashes.json",
+      "sha256": "78083bbbd76413fd8b63e5d7c8ec55faa772d2b57866e8df2bf3cff4694fe644",
+      "bytes": 9919
+    },
+    {
+      "label": "newton601h_826b84b-newton-progress.json",
+      "path": ".work/compat-followup/newton601h_826b84b-newton-progress.json",
+      "sha256": "f4aa1b7dcc8cdfd8084fe435f2fcacad8800d32e415e7af3d55e344fa197673e",
+      "bytes": 3409
+    },
+    {
+      "label": "newton601h_826b84b-existing-physics.json",
+      "path": ".work/compat-followup/newton601h_826b84b-existing-physics.json",
+      "sha256": "beb1603320e7024a0ffe3fad29798ef4bf789b23ac93e4fdd722a203b9e1fe43",
+      "bytes": 73831
+    },
+    {
+      "label": "newton601h_826b84b-fullsurface/assertions.json",
+      "path": ".work/compat-followup/newton601h_826b84b-fullsurface/assertions.json",
+      "sha256": "4b1e9e94e96945b848ee5e23dbb675e362e0b6b796d53cfe698ba10dca9be8ad",
+      "bytes": 49895
+    },
+    {
+      "label": "newton601h_826b84b-fullsurface/failure.txt",
+      "path": ".work/compat-followup/newton601h_826b84b-fullsurface/failure.txt",
+      "sha256": "180c184f97d1f6fb7412f44503d386f68d3400d30f8aa233d22ad669fa36c446",
+      "bytes": 4031
+    },
+    {
+      "label": "newton601h_826b84b-fullsurface/calls/144.json",
+      "path": ".work/compat-followup/newton601h_826b84b-fullsurface/calls/144.json",
+      "sha256": "77038b44fce5166fbb092b0578322d12512ef4a97326a0ffc8e66116bb2364e2",
+      "bytes": 920
+    },
+    {
+      "label": "newton601h_826b84b-fullsurface/video-visual-review.json",
+      "path": ".work/compat-followup/newton601h_826b84b-fullsurface/video-visual-review.json",
+      "sha256": "87c72ae4adbffea481f24ebefc3bd015fcb2df555f26e9263f57f34a7c46658a",
+      "bytes": 682
+    },
+    {
+      "label": "newton601h_826b84b-nonfinite/call-005.json",
+      "path": ".work/compat-followup/newton601h_826b84b-nonfinite/call-005.json",
+      "sha256": "2244ebfcc68e1edd78ef5da82caf26ce82fb9b842d71b2ebebfefb3a7b39a87e",
+      "bytes": 26102
+    },
+    {
+      "label": "newton601h_826b84b-joint-step-control-v2/summary.json",
+      "path": ".work/compat-followup/newton601h_826b84b-joint-step-control-v2/summary.json",
+      "sha256": "967d9aafb1336d6f57811364f061e89ddf434cd260fca20ef098d2318c9cdf03",
+      "bytes": 2630
+    },
+    {
+      "label": "newton601h_826b84b-record-stop/visual-review.json",
+      "path": ".work/compat-followup/newton601h_826b84b-record-stop/visual-review.json",
+      "sha256": "7cfb313a747f3475587f11db0e72f8f0d52a6844ccd7b6d57d43313d85346087",
+      "bytes": 905
+    },
+    {
+      "label": "newton601h_826b84b-record-stop/pixel-summary.json",
+      "path": ".work/compat-followup/newton601h_826b84b-record-stop/pixel-summary.json",
+      "sha256": "54ddfbe0cd0e68586d88297bcf01a1d8addc95a66edb7563cd7e950b6daa6c83",
+      "bytes": 261
+    },
+    {
+      "label": "newton601h_826b84b-fmb4-assembled/call-007.json",
+      "path": ".work/compat-followup/newton601h_826b84b-fmb4-assembled/call-007.json",
+      "sha256": "36cc4f8cc21c501b540ff59fbdd8ff3d33cdf3650d1bb0f0ca216e4b34315845",
+      "bytes": 977
+    },
+    {
+      "label": "newton601h_826b84b-capacity-setup-correction.json",
+      "path": ".work/compat-followup/newton601h_826b84b-capacity-setup-correction.json",
+      "sha256": "05807e1e75c582fb1ac8dc3d2dc4a70fa63f8155e7e4b858942b81fb13e8d4f0",
+      "bytes": 654
+    },
+    {
+      "label": "newton601h_826b84b-capacity-v2/summary.json",
+      "path": ".work/compat-followup/newton601h_826b84b-capacity-v2/summary.json",
+      "sha256": "83be026633c154c247ef425985ffc4b653d8d05c98f4044e40619b99f86fc17d",
+      "bytes": 648
+    },
+    {
+      "label": "newton601h_826b84b-nativecpu/call-017.json",
+      "path": ".work/compat-followup/newton601h_826b84b-nativecpu/call-017.json",
+      "sha256": "0f8b42e767a751a2ba2a36916f847a0d0176a6b003697f720ef5cf4adcaa98e0",
+      "bytes": 1197
+    },
+    {
+      "label": "newton601h_826b84b-nativecpu-motion/call-006.json",
+      "path": ".work/compat-followup/newton601h_826b84b-nativecpu-motion/call-006.json",
+      "sha256": "6b1541b84d0de21f86cc27e85f7004944d9943d5b10811dba8d457c5962eabb4",
+      "bytes": 5345
+    },
+    {
+      "label": "newton601h_826b84b-warp10/call-016.json",
+      "path": ".work/compat-followup/newton601h_826b84b-warp10/call-016.json",
+      "sha256": "ed839e1d5c2cab5e61465e0fd769e884ba1ee83deff5d29b6666eb832f8cdef0",
+      "bytes": 977
+    },
+    {
+      "label": "newton601h_826b84b-substeps4/call-014.json",
+      "path": ".work/compat-followup/newton601h_826b84b-substeps4/call-014.json",
+      "sha256": "c703d5cd36f30b498c96fb2d51d0e78fe21ae5577cb57f2835dd8cf659861dd4",
+      "bytes": 818
+    },
+    {
+      "label": "newton601h_826b84b-mjcontacts/call-006.json",
+      "path": ".work/compat-followup/newton601h_826b84b-mjcontacts/call-006.json",
+      "sha256": "0a3b38e746ca1042884de4ccbb73d55592ad038de5b18db6cff6476f5471b357",
+      "bytes": 5018
+    },
+    {
+      "label": "newton601h_ba1d4b2-physics-errors/summary.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-physics-errors/summary.json",
+      "sha256": "647cd01963516111debf2cef5acd3c44c81b54e477fcadd0ba24affa291d0626",
+      "bytes": 2493
+    },
+    {
+      "label": "newton601h_ba1d4b2-rendering/summary.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-rendering/summary.json",
+      "sha256": "dd14585744eb08a956f421e3901f27c2c85032462c9334edffe5bffdaf40a1e1",
+      "bytes": 1266
+    },
+    {
+      "label": "newton601h_ba1d4b2-rendering/phases.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-rendering/phases.json",
+      "sha256": "e011ec7f740499437af1cc3fd17052b8b538c4621b502cb614b26a2bf5e2486a",
+      "bytes": 32424
+    },
+    {
+      "label": "newton601h_ba1d4b2-rendering/video-pixels.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-rendering/video-pixels.json",
+      "sha256": "90d42c1d3462030642b35c0e71af0a17bbdad0d406cbdc15362d59b4f3d76583",
+      "bytes": 1748
+    },
+    {
+      "label": "newton601h_ba1d4b2-workspace-rendering/summary.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-workspace-rendering/summary.json",
+      "sha256": "1a63b9bda2cfb91b3c44fcfd535cdcd5b8dfa6097b38b6498f4faed248bb4812",
+      "bytes": 1379
+    },
+    {
+      "label": "newton601h_ba1d4b2-workspace-rendering/video-pixels.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-workspace-rendering/video-pixels.json",
+      "sha256": "03475f1d039660e219ea529948df9a33618aa6e90adc1e5b5631b3479f3bd68d",
+      "bytes": 1208
+    },
+    {
+      "label": "newton601h_ba1d4b2-ros-object-rendering/summary.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-ros-object-rendering/summary.json",
+      "sha256": "a60a178d0f7287fd70b527e019ec7400c366d13219fc9f26aaac123ff62fbd1d",
+      "bytes": 1356
+    },
+    {
+      "label": "newton601h_ba1d4b2-ros-object-rendering/video-pixels.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-ros-object-rendering/video-pixels.json",
+      "sha256": "15beb9c2ac4b887bd0728a4cd3c59cbefed8b91c331672d53906746e79d611a6",
+      "bytes": 1183
+    },
+    {
+      "label": "newton601h_ba1d4b2-ros-object-rendering/ros-only/pixel-summary.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-ros-object-rendering/ros-only/pixel-summary.json",
+      "sha256": "ede0eff58400e9c03f5d24a1b3b15935357cba07a872190d74edec296de09775",
+      "bytes": 655
+    },
+    {
+      "label": "newton601h_ba1d4b2-ros-object-rendering/fmb1/pixel-summary.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-ros-object-rendering/fmb1/pixel-summary.json",
+      "sha256": "ed69bd729206fbdfc356e2edd1bed708b5d49f80bb04c89170d1f66ffc0769fc",
+      "bytes": 642
+    },
+    {
+      "label": "newton601h_ba1d4b2-fabric-scale/call-003.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-fabric-scale/call-003.json",
+      "sha256": "8d78084dba0a4cc88372dce2b6b83e9b9b298ca22a03f996e8d9926da74bcbfe",
+      "bytes": 8062
+    },
+    {
+      "label": "newton601h_ba1d4b2-fabric-scale/call-005.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-fabric-scale/call-005.json",
+      "sha256": "b5b002c5fef6812e608d2979aa2d1357d3618893fedcbc7bc1d4360b257ecd49",
+      "bytes": 3269
+    },
+    {
+      "label": "newton601h_ba1d4b2-fabric-control/call-004.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-fabric-control/call-004.json",
+      "sha256": "493ad7f58174a1c468fdd83de16fad394285242eebd49f4cf554ba21f712217d",
+      "bytes": 584
+    },
+    {
+      "label": "newton601h_ba1d4b2-crash-review/summary.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-crash-review/summary.json",
+      "sha256": "663ae7d70caaa22a8e2fbf43573941174dbc35469881d684824edaa5ee341a5b",
+      "bytes": 6561
+    },
+    {
+      "label": "newton601h_ba1d4b2-rendering-visual-review.json",
+      "path": ".work/compat-followup/newton601h_ba1d4b2-rendering-visual-review.json",
+      "sha256": "e189677674f1ac0bc10c6758a9e28add2ccab65a4e95da3efce3cd9a2d486b3d",
+      "bytes": 1679
+    },
+    {
+      "label": "826-final-shutdown",
+      "path": ".work/runs/newton601h_826b84b/shutdown-review.json",
+      "sha256": "450d629b5789cc895fc9d51f1878d3424c8b8ccbecae118ec0e50758827d5cbc",
+      "bytes": 4116
+    },
+    {
+      "label": "826-generic-tools",
+      "path": ".work/compat-followup/newton601h_826b84b-tools.json",
+      "sha256": "fed3a837bc90b98ee5927d70c66f7d55f95c8f2ff749f4eb47925a9fb054d8c7",
+      "bytes": 40422
+    },
+    {
+      "label": "826-generic-equivalents",
+      "path": ".work/compat-followup/newton601h_826b84b-equivalents.json",
+      "sha256": "803db2bbdc9593805ecec3707a1693fc704508c51f8896f1bc8c7f984408b672",
+      "bytes": 86981
+    },
+    {
+      "label": "826-generic-edges",
+      "path": ".work/compat-followup/newton601h_826b84b-edges.json",
+      "sha256": "dfe9837ca25bb330a197e60da57024904cd16d6563e42f77c393f0f1de57f547",
+      "bytes": 27590
+    },
+    {
+      "label": "826-generic-sensors",
+      "path": ".work/compat-followup/newton601h_826b84b-sensors.json",
+      "sha256": "bb45dfc7cef20b5ebf67ca29566081387e936a89dc7126676a31604a89435180",
+      "bytes": 608141
+    },
+    {
+      "label": "826-generic-clear",
+      "path": ".work/compat-followup/newton601h_826b84b-clear.json",
+      "sha256": "4db4ec15fa8a8ed311ad6191d915cad4ca9b5697d4db623741add96fb3bcad3f",
+      "bytes": 19690
+    },
+    {
+      "label": "physics-observation-source.json",
+      "path": ".work/compat-followup/physics-observation-source.json",
+      "sha256": "d7c63058b2b4aa86df482d1ecda40d6cb9be33d0b7f0928222298ad56eaca655",
+      "bytes": 2020
+    },
+    {
+      "label": "physics-observation-focused.log",
+      "path": ".work/compat-followup/physics-observation-focused.log",
+      "sha256": "719bebf1d8ff773e36f8b119fa1ccf02d736c7882a44754e077342a97a93fd1c",
+      "bytes": 181
+    },
+    {
+      "label": "physics-observation-docs.log",
+      "path": ".work/compat-followup/physics-observation-docs.log",
+      "sha256": "1bab4eab353a7b43d7db389d0dbabc12bc94f29bc4b64ad727c3794c0beaff7a",
+      "bytes": 93
+    },
+    {
+      "label": "newton601-fabric-source-review.json",
+      "path": ".work/compat-followup/newton601-fabric-source-review.json",
+      "sha256": "6e61b02d238006ba1201e2f094cbd8b158781c44f386110376f6529678f92ebe",
+      "bytes": 3060
+    }
+  ]
+}

@@ -77,3 +77,14 @@ the windowed run. ROS image arrival in two private controls carried all-zero
 first/last RGB buffers and is not a useful-image pass. Six later real MCP/Kit
 checks on `826b84b` verify legacy success/error envelopes and failed-file
 preservation only; they do not resolve native crashes or certify the full twin.
+
+The [6.0.1 Newton state/rendering supplement](RECENT-NEWTON-601-STATE-20261102.json)
+retains the subsequent `826b84b` full-surface failure at call 144 despite its
+55 earlier passing predicates. `ba1d4b2` separately qualifies finite UR-only
+motion and actual `PHYSICS_STATE_INVALID` responses from body/joint observations
+and step, including partial simulation-time advancement and next-step preflight
+refusal. Its 33-call/14-check pass does not fix the native solver. FMB1 rendering
+became black with finite poses and lost Fabric scale; a later native crash
+preceded the proposed correction. No camera, solver-recovery or backend-wide
+pass is inferred from the error-reporting checks. Per-tool references in the
+draft supplement preserve all actual arguments/results and source identities.

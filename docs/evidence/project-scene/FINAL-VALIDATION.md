@@ -1131,3 +1131,70 @@ were rechecked, all 716 distributed member checksums verified, and the unchanged
 nested privacy guard passed. No geometry, screenshots, video or raw crash dumps
 are included. Remaining Newton modes/releases, final all-tool reconciliation
 and the unexplained native failures remain open. PR #16 stays draft and unmerged.
+
+## Newton 6.0.1 state, rendering and reporting qualification
+
+The [6.0.1 compact index](RECENT-NEWTON-601-STATE-20261102.json) retains two
+serial headless processes and 47 key records. Both used the prepared package
+6.0.1.0 environment: build `6.0.1-rc.7+release.42383.32955d8d.gl`, Kit
+`110.1.2+production.326809.f9bf0dda.gl`, Newton 1.2.1, MuJoCo 3.8.0,
+MuJoCo Warp 3.8.0.3 and bundled Warp 1.13.0. A CPU World does not mean the
+native MuJoCo CPU solver; the default configuration used MuJoCo Warp.
+
+On exact `826b84b69f04a080882c3ef5894877f389af2938`, the five generic scripts
+(32/49/23/327/4 records, including expected errors) and existing PhysicsScene
+checks completed. The twin workflow invoked all 23 UR names and seven built-ins,
+but **failed** at call 144, a 120-step request, after its 55 earlier predicates
+had passed. Runtime wrist pose and all six arm joint positions/velocities became
+NaN. Kit was still responsive and paused. All 175 recorded video frames were
+black; sampled first/last ROS RGB buffers were also zero. Neither successful
+message delivery nor earlier assertions establishes a working full workflow.
+
+Private controls did not establish a solver remedy. A fresh UR-only stage in
+the same process completed 120 single steps and two 120-step batches with finite
+target motion. Unassembled FMB4 stayed finite; assembled FMB4 failed. Raising
+contact/constraint capacity to 1024/6144 still failed after 185.84 wall seconds,
+with no overflow messages in that measured interval. An earlier failed setup
+import had changed nothing and is explicitly retained as a default trial.
+Native MuJoCo CPU stayed finite but missed commanded joints by over 3.2 radians
+after three simulation seconds. Substeps and alternate contact-generation trials
+also failed or refused initialization. These were disposable configuration
+experiments, not shipped defaults or reliable recovery. The process subsequently
+exited through the owned managed SIGINT path without force.
+
+Source `f55c64f`, integrated as exact
+`ba1d4b256a011d00787fe32b2eb85cecec8f8812`, improves reporting rather than the
+solver. A fresh process passed **33 real MCP calls / 14 checks**: finite UR-only
+joint/wrist motion, followed by an actual assembled-FMB4 failure after ten steps.
+`PHYSICS_STATE_INVALID` identifies the wrist orientation, Newton backend, and
+`body_observation` phase. The error records a measured 0.083333 simulation-second
+advance, `fabric_updated=true` and `rendered=false`; it makes no rollback claim.
+Later body/joint reads also fail explicitly, and the next step is refused during
+preflight. This is a scoped error-reporting pass, not physics recovery.
+
+Later named-tool rendering controls in that same `ba1` process produced visible
+robot/bench/room images and six nonblack 25-frame recordings. The native ROS-only
+control received 131 images with a nonzero first sample. Adding FMB1 then produced
+90 ROS messages with zero first/last samples, a black generic camera PNG and an
+entirely black 25-frame recording, while five object poses and arm joints remained
+finite. Read-only inspection showed the FMB bodies' USD world scale of `0.01`
+had become unit scale in Fabric. Stop restored a visible, cropped camera image.
+Installed 6.0 builds lack the scale-preservation code present in 6.1/6.2;
+[NVIDIA's 6.1 release notes](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/overview/release_notes.html)
+also identify corrections to body scale and stage units in Fabric. This supports
+the observed rendering defect; it does not establish the cause of solver NaNs
+or other native faults.
+
+The proposed one-time paused Fabric correction **never executed**. A subsequent
+Play succeeded, then the Pause call lost its connection and the owned PID
+vanished. Stderr recorded a segmentation fault with the main Python frame in
+`SimulationApp.update`; native cause is unknown. No successful A/B, cleanup-as-
+recovery or native fix is claimed. No vendor/source asset was modified.
+
+Three later stills were visually reviewed; other frames were numerically decoded.
+These headless processes had no application-window or Console review. The
+[draft supplement](RELEASE-ASSETS.md) contains 759 redacted members, source-hashed
+selected native excerpts and reproduction inputs; geometry, media and raw crash
+metadata are omitted. All 768 original hashes and 758 member checksums were
+verified. Both PIDs are absent. Remaining Newton modes/releases, final all-tool
+reconciliation and the original `20f` windowed stall remain open; PR #16 is draft.
