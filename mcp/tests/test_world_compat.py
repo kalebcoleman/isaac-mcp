@@ -11,6 +11,44 @@ compat = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(compat)
 
 
+@pytest.mark.parametrize("failure", [None, "native", "stage", "target", "cancel"])
+def test_twin_play_normalization_uses_session_and_respects_external_changes(failure):
+    import asyncio
+    pytest.importorskip("pxr")
+    from pxr import Usd
+    stage = Usd.Stage.CreateInMemory()
+    stage.DefinePrim("/Existing", "Xform")
+    before = stage.GetRootLayer().ExportToString()
+    original = stage.GetEditTarget()
+    current = [stage]
+
+    def exercise():
+        with compat.twin_play_edit(stage, lambda: current[0]) as validate:
+            assert stage.GetEditTarget().GetLayer() == stage.GetSessionLayer()
+            stage.DefinePrim("/Runtime", "Xform")
+            if failure == "native":
+                raise RuntimeError("native failed")
+            if failure == "cancel":
+                raise asyncio.CancelledError()
+            if failure == "stage":
+                current[0] = Usd.Stage.CreateInMemory()
+            if failure == "target":
+                # External targets need to belong to this stage's local stack.
+                stage.SetEditTarget(original)
+            validate()
+
+    if failure:
+        with pytest.raises(asyncio.CancelledError if failure == "cancel" else RuntimeError):
+            exercise()
+    else:
+        exercise()
+    assert stage.GetEditTarget() == original
+    assert stage.GetRootLayer().ExportToString() == before
+    assert stage.GetSessionLayer().GetPrimAtPath("/Runtime")
+    if failure == "stage":
+        assert current[0].GetEditTarget().GetLayer() == current[0].GetRootLayer()
+
+
 @pytest.mark.parametrize("original", [True, False, None])
 @pytest.mark.parametrize("fail", [False, True])
 def test_world_constructor_uses_extension_mode_and_restores_flag(
@@ -65,6 +103,77 @@ def test_async_initialization_handles_old_and_new_context_contracts(behavior):
     else:
         assert isinstance(asyncio.run(compat.initialized_extension_world(World)), World)
     assert calls == (["initialize"] if behavior in ("none", "not_initialized") else [])
+
+
+@pytest.mark.parametrize("applied_device", ["cpu", "cuda:0"])
+def test_twin_applies_cpu_before_checking_new_world_device(applied_device):
+    import asyncio
+
+    events = []
+
+    class World:
+        @classmethod
+        def instance(cls):
+            return None
+
+        def __init__(self, *, device):
+            events.append(("construct", device))
+            self.requested_device = device
+            # Native property reads the global manager until initialization.
+            self.device = "cuda:0"
+            self.engine = "newton"
+
+        def get_physics_context(self):
+            return None
+
+        async def initialize_simulation_context_async(self):
+            events.append(("initialize", self.requested_device))
+            self.device = applied_device
+
+    if applied_device == "cpu":
+        world = asyncio.run(compat.initialized_twin_world(World))
+        assert world.device == "cpu"
+        assert world.engine == "newton"
+    else:
+        with pytest.raises(RuntimeError, match="partially initialized"):
+            asyncio.run(compat.initialized_twin_world(World))
+    assert events == [("construct", "cpu"), ("initialize", "cpu")]
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda:0", "cuda:1", None])
+@pytest.mark.parametrize("ready", [False, True, "raises"])
+def test_existing_world_is_inspected_without_constructor_or_reconfiguration(device, ready):
+    import asyncio
+    from types import SimpleNamespace
+
+    def context():
+        if ready == "raises":
+            raise RuntimeError("Physics context is not initialized")
+        return object() if ready else None
+
+    async def initialize():
+        pytest.fail("An existing context must not be initialized")
+
+    existing = SimpleNamespace(
+        device=device,
+        get_physics_context=context,
+        initialize_simulation_context_async=initialize,
+    )
+
+    class World:
+        @classmethod
+        def instance(cls):
+            return existing
+
+        def __init__(self, **kwargs):
+            pytest.fail("Do not invoke a singleton constructor for an existing World")
+
+    if device == "cpu" and ready is True:
+        assert asyncio.run(compat.initialized_twin_world(World)) is existing
+    else:
+        with pytest.raises(RuntimeError, match="was not reconfigured"):
+            asyncio.run(compat.initialized_twin_world(World))
+    assert existing.device == device
 
 
 @pytest.mark.parametrize("initial", ["playing", "paused", "stopped"])
