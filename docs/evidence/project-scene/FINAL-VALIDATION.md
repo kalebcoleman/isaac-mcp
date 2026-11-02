@@ -1198,3 +1198,69 @@ selected native excerpts and reproduction inputs; geometry, media and raw crash
 metadata are omitted. All 768 original hashes and 758 member checksums were
 verified. Both PIDs are absent. Remaining Newton modes/releases, final all-tool
 reconciliation and the original `20f` windowed stall remain open; PR #16 is draft.
+
+
+## Newton 6.1 contact failures and unshipped collider controls
+
+The [source-identified compact](RECENT-NEWTON-61-CONTACTS-20261102.json)
+records four serial **headless** processes on prepared Isaac Sim 6.1.0.0,
+Newton MuJoCo Warp, Ubuntu 24.04.5 / RTX 5080 / driver 580.178.04. The production
+baseline is exact `ba1d4b256a011d00787fe32b2eb85cecec8f8812`; three later processes
+use an explicitly hashed, **unshipped** collider candidate over that source.
+
+The baseline completed the five generic suites and nine existing-PhysicsScene
+checks. Its twin workflow failed at call 144 after 55 earlier predicates: the
+first assembled-FMB4 120-step batch was finite, while the second returned
+`PHYSICS_STATE_INVALID` for the wrist orientation. Native body/joint arrays
+contained NaNs. The preceding video had 176 decoded, nonzero frames; two reviewed
+samples showed the lit room/bench and a cropped upright robot. That video does
+not prove the later simulation worked, full-robot visibility, or a real-window
+Console review.
+
+Private same-process controls compared the assets' PhysX `sdf` token with an
+exact convex hull for six verified rectangular blocks. Corrected hull controls
+stayed finite where a matched SDF control failed, but dropping/spreading blocks
+on a floor did not prove a stable assembly. The first wrong-name control had
+partially changed one collider before aborting; that failure remains recorded.
+
+A fresh candidate room workflow timed out after 35 completed calls, inside
+`ur5e_dt__load_simple_room`, **before the collider adapter was called**. A captured
+stack localized a Replicator timeline/Runtime USD graph query; it did not establish
+a native cause. The owned process required guarded SIGKILL after SIGINT failed.
+
+The floor-contact candidate initially completed 720 steps with six blocks within
+about 0.11 mm of their authored positions and measured joint target following.
+Later cycles scattered the assembly. A fresh repeat completed 2,160 steps across
+three Stop/Play cycles: the first two were near their authored positions, but the
+third moved a block about 216 mm, despite finite returned states. A separate box-
+primitive control also scattered; moving the hull assembly away from the robot
+produced a NaN failure. The twin-specific Play follow-up instead returned
+`EDIT_TARGET_CHANGED` before stepping: its managed session edit-target precondition
+was unmet. That refusal establishes neither attempted steps nor another NaN.
+**The collider adapter, tests and proposed contract were parked privately and
+are not shipped.** A finite result is not evidence of stable contact behavior.
+
+The original close camera used a one-meter near plane and produced black/gray
+images; a farther camera showed the actual scattered blocks. This motivates the
+separate camera clipping fix, not a remedy for solver NaNs or earlier ROS/Fabric
+black-render failures. Candidate saves were not freshly reopened in Kit and are
+not solver checkpoints. All four PIDs are absent; three stopped via guarded
+SIGINT, the room-stall process via guarded force stop. Cleanup is not recovery.
+
+The [draft supplement](RELEASE-ASSETS.md) retains 483 individual tool-call
+records, 39 key references and hashes for 695 original inputs. All 692 distributed
+member hashes and nested privacy checks passed; no geometry, media, native dumps
+or installed/vendor modules are included. The original `20f` stall, remaining
+Newton qualification and final all-tool reconciliation stay open. PR #16 remains
+a draft; these findings do not establish all-version or backend-wide support.
+
+
+**Evidence correction:** the first derived compact incorrectly called the
+UR-Play follow-up a `PHYSICS_STATE_INVALID` result. Its unchanged call 008
+(SHA-256 `3308de01d27518c3ebfcb4976c3f0ae32d13c4bd4f4254c4f07db86c7505a6c9`)
+returned `EDIT_TARGET_CHANGED` in 0.063 seconds. The v2 compact/archive correct
+that interpretation and retain the superseded hashes. The original archive is
+kept as historical evidence; use v2 for the corrected summary. The separate
+moved-away hull trial is the actual NaN observation. Also, 216 mm is the maximum
+block displacement; the earlier approximately 28 mm description concerned the
+top block's height loss, a different measurement.
