@@ -7,6 +7,15 @@ and 31 generic scene tools; PR #15 adds two asset workflow tools, for 39 combine
 Isolated untrusted loading, authenticated remote upload, presets/manifests and the
 remaining fork-parity work are deferred, not completed capabilities.
 
+Start with the [current tool/source/backend reconciliation](CURRENT-TOOL-RECONCILIATION.md)
+and its [99-row case index](CURRENT-TOOL-RECONCILIATION-20261102.json). Exact `fdb7a02`
+real MCP discovery confirms 90 default / 99 optional-inclusive tools; eight
+online/offline filter profiles retain their exact environment settings. The map
+links 12,073 retained call records and 1,583 observation links from 39 source-identified
+cases. These counts include expected errors and failed workflows, not 99 verified
+tools on every backend. Latest normal PhysX checks and material native failures
+remain explicit; the combined PR is still a draft.
+
 The latest [affected PhysX qualification](RECENT-AFFECTED-PHYSX-2C8-20261102.json)
 uses exact combined `2c8ce63` on all five installed builds, headless and windowed:
 all 23 UR tools and seven built-ins, real ROS effects, existing PhysicsScene and
@@ -46,7 +55,9 @@ physics, fresh Kit reopen, Newton failure remediation and broad all-tool coverag
 
 ## Evidence map and scope
 
-- [Current all-tool validation ledger](ALL-TOOLS-MATRIX.md), [99-name argument/evidence index](ALL-TOOLS-INDEX-20261102.json),
+- [Current source/backend reconciliation](CURRENT-TOOL-RECONCILIATION.md),
+  [current per-tool case index](CURRENT-TOOL-RECONCILIATION-20261102.json),
+  [historical all-tool validation ledger](ALL-TOOLS-MATRIX.md), [original 99-name argument/evidence index](ALL-TOOLS-INDEX-20261102.json),
   [recent headless checks](RECENT-CHECKS-20261102.json),
   [6.0.1 windowed checks and unresolved stall](RECENT-601W-20261102.json),
   [6.1 both-mode, agent and saved-output checks](RECENT-61-20261102.json),
