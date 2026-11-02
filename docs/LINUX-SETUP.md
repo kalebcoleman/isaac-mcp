@@ -191,19 +191,22 @@ asset-redistribution license. Obtain the necessary permission before downloading
 ### Cache location and supported options
 
 The default is `$XDG_CACHE_HOME/ur5e-dt/assets` when `XDG_CACHE_HOME` is set, otherwise
-`~/.cache/ur5e-dt/assets`. `UR5E_DT_ASSET_CACHE` overrides it. Use the same cache in the
+`~/.cache/ur5e-dt/assets`. `ISAAC_MCP_ASSET_PATH` overrides it (a list separated by `:`;
+`UR5E_DT_ASSET_CACHE` is a deprecated alias). Use the same stores in the
 fetcher's environment and the selected **Kit process**; setting it only in the MCP client
-cannot change an already-running Kit process's environment.
+cannot change an already-running Kit process's environment. Stores, the per-project
+`isaac-mcp.json`, user pins and `scripts/isaac_assets.py doctor` are described in
+[ASSETS.md](ASSETS.md).
 
 ```bash
 # Choose your own writable cache, outside Git; prepare it before launching a new session.
-export UR5E_DT_ASSET_CACHE=/absolute/path/to/ur5e-assets
+export ISAAC_MCP_ASSET_PATH=/absolute/path/to/ur5e-assets
 python3 scripts/fetch_ur5e_assets.py --check
 # If preparation is needed and authorized, fetch into this same cache:
 python3 scripts/fetch_ur5e_assets.py
 python3 scripts/fetch_ur5e_assets.py --check
 # After a successful check, launch the intended new session using local assets only:
-UR5E_DT_OFFLINE=1 ./run.sh --port 8766
+ISAAC_MCP_ASSET_STRICT=1 ./run.sh --port 8766
 ```
 
 The initial check may return 1 on a new cache; that is a missing-asset result, not success.
@@ -211,8 +214,8 @@ All options can be inspected without fetching: `python3 scripts/fetch_ur5e_asset
 
 | Option | Scope |
 |---|---|
-| `--cache-dir PATH` | Overrides the destination for this invocation only; select the same directory through `UR5E_DT_ASSET_CACHE` when launching Kit |
-| `--asset-root URL_OR_DIRECTORY` | Overrides the source for this invocation; an existing local mirror must have the manifest's source-relative layout. `UR5E_DT_ASSET_ROOT` is the environment equivalent |
+| `--cache-dir PATH` | Overrides the destination for this invocation only; select the same directory through `ISAAC_MCP_ASSET_PATH` when launching Kit |
+| `--asset-root URL_OR_DIRECTORY` | Overrides the source for this invocation; an existing local mirror must have the manifest's source-relative layout. `ISAAC_MCP_ASSET_REMOTE_ROOT` is the environment equivalent (`UR5E_DT_ASSET_ROOT` is a deprecated alias) |
 | `--check` | Verifies existing cache bytes only; no download or repair |
 | `--force` | Re-fetches/copies even matching files; intentional replacement, not a normal startup requirement |
 
@@ -224,7 +227,8 @@ rather than moving only `rsd455.usd` into a different folder.
 
 ### Local reuse, remote fallback and failures
 
-Resolution prefers a local file under `exts/ur5e-dt/assets`, then the operator cache, then
+Resolution prefers a local file in a project store (`isaac-mcp.json`), then under
+`exts/ur5e-dt/assets`, then the user stores, then
 an allowed configured NVIDIA URL for supported robot/sensor entries. Operator drop-ins
 under the repository asset directory are not manifest-verified; keep private files out of Git.
 Cached manifest entries **and their fetch-group dependencies** are verified before use.
@@ -236,7 +240,7 @@ the configured remote URI. This is not the same as populating and verifying the 
 cache; it requires network access and does not prove the remote load succeeded. Prefer
 explicit prefetch plus `--check` when preparing an offline or repeatable run.
 
-`UR5E_DT_OFFLINE=1` disables this twin resolver's remote fallback. With the robot absent,
+`ISAAC_MCP_ASSET_STRICT=1` (deprecated alias `UR5E_DT_OFFLINE`) disables this twin resolver's remote fallback. With the robot absent,
 Quick Start returns **`Asset not available offline: robot/ur5e.usd`** and preparation guidance.
 That is a real failed operation; it must not be counted as a loaded robot. Offline mode does
 not firewall Kit, arbitrary USD references or other extensions, and it does not prevent an
@@ -244,6 +248,7 @@ explicit fetcher invocation from downloading. For a fully offline preparation, u
 
 The **Vention bench is separate**: no public download is configured. Supply an approved
 licensed workstation project through [workstation preparation](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation),
+or add your own export with `python3 scripts/isaac_assets.py add` (see [ASSETS.md](ASSETS.md)),
 or use the twin's placeholder bench when the manual asset is absent. A placeholder does not
 replace the mandatory UR robot asset. Basic connection and generic scene work require neither.
 

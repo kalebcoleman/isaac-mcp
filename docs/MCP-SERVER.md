@@ -68,6 +68,11 @@ The 39 generic tools are catalog-listed by default. `assets__roots`, `assets__sc
 See [scene tools](TOOLS-SCENE.md) for trusted-root configuration and runtime prerequisites,
 and [the agent tier map](../AGENTS.md#what-you-can-reach-by-tier) for counts and filters.
 
+The twin's own robot, sensor and bench files are resolved separately from these tools.
+Set `ISAAC_MCP_ASSET_PATH` (deprecated alias `UR5E_DT_ASSET_CACHE`) and optionally
+`ISAAC_MCP_ASSET_STRICT=1` (alias `UR5E_DT_OFFLINE`) in the **Kit** environment. See
+[Assets: stores, project file and doctor](ASSETS.md).
+
 ### Bridge discovery and selection
 
 - `list_bridges`: Lists all running Kit bridge instances (PID, port, and app name). *Note: This is a Kit bridge built-in that appears when connected to a bridge.*

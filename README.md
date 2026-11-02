@@ -120,6 +120,11 @@ private Vention bench; that is a separate operator-supplied asset, with a placeh
 when absent. See [cache selection, offline mode and asset terms](docs/LINUX-SETUP.md#prepare-the-ur5e-and-sensor-assets)
 before using an existing shared cache or a custom location. `install.sh` does not run this fetcher.
 
+Keep your own assets (lab-modified robot, Vention bench) in a store outside this checkout:
+set `ISAAC_MCP_ASSET_PATH` (old name `UR5E_DT_ASSET_CACHE`, deprecated), add a per-project
+`isaac-mcp.json`, and check with `python3 scripts/isaac_assets.py doctor`. See
+[Assets: stores, project file and doctor](docs/ASSETS.md).
+
 ## Add only the workflows you need
 
 | Workflow | Start here |

@@ -3,6 +3,7 @@
 These plans distinguish implemented slices from future work. Use the tool references and evidence for current behavior.
 
 - [Asset presets and project-folder discovery](ASSET-PRESETS.md) — catalog, user USD discovery, isolation and safe loading.
+- [Asset naming, packs and stores](ASSET-NAMING-PLAN.md) — proposal for generic `ISAAC_MCP_*` names and optional packs.
 - [Scene tools for agents](SCENE-TOOLS-AGENT-UX.md) — current tool review and prioritized improvements.
 - [End-to-end asset and scene delivery](ASSET-SCENE-END-TO-END.md) — owner-approved first slice in PR #11; isolation, authenticated upload and presets remain follow-ups, with full test and actual-use gates.
 - [Generic Sim tools: follow-up after PR #11](SIM-TOOLS-FOLLOWUP.md) — milestones M0–M7 for what PR #11 leaves open
