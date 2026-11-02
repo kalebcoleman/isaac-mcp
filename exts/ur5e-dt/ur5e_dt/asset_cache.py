@@ -11,8 +11,9 @@ Vention bench are resolved in this order:
    git-ignored, so an operator can place their own licensed copy here.  A
    drop-in is used as-is: it may come from another Isaac Sim release, so it is
    not compared with the manifest hashes.
-3. User stores — ``$ISAAC_MCP_ASSET_PATH`` (an ``os.pathsep``-separated list,
-   default ``~/.cache/ur5e-dt/assets``), populated by
+3. User stores — ``$ISAAC_MCP_ASSET_PATH`` (an ``os.pathsep``-separated list; without it,
+   ``<workspace>/assets`` when ``$ISAAC_MCP_WORKSPACE`` is set and that folder exists, then
+   the old default ``~/.cache/ur5e-dt/assets``), populated by
    ``scripts/fetch_ur5e_assets.py`` or ``scripts/isaac_assets.py add``.  Inside
    a store an asset is looked up under ``<store>/ur5e-dt/<path>`` (the pack
    folder, preferred) and then ``<store>/<path>`` (the flat legacy layout).
@@ -65,6 +66,7 @@ PATH_ENV = "ISAAC_MCP_ASSET_PATH"
 STRICT_ENV = "ISAAC_MCP_ASSET_STRICT"
 REMOTE_ROOT_ENV = "ISAAC_MCP_ASSET_REMOTE_ROOT"
 PROJECT_ENV = "ISAAC_MCP_PROJECT"
+WORKSPACE_ENV = "ISAAC_MCP_WORKSPACE"
 # Deprecated aliases, still honoured.
 CACHE_ENV = "UR5E_DT_ASSET_CACHE"
 ROOT_ENV = "UR5E_DT_ASSET_ROOT"
@@ -209,11 +211,29 @@ def _default_store() -> Path:
     return (base / "ur5e-dt" / "assets").resolve()
 
 
+def workspace_store() -> Path | None:
+    """Return ``<workspace>/assets`` when ``$ISAAC_MCP_WORKSPACE`` names a folder that has one."""
+    raw = os.environ.get(WORKSPACE_ENV, "").strip()
+    if not raw:
+        return None
+    store = (Path(raw).expanduser() / "assets").resolve()
+    return store if store.is_dir() else None
+
+
 def user_stores() -> list[Path]:
-    """Return the user's stores: ``$ISAAC_MCP_ASSET_PATH``, else the default cache."""
+    """Return the user's stores.
+
+    ``$ISAAC_MCP_ASSET_PATH`` (or its deprecated alias) replaces the defaults. Without it
+    the stores are ``<workspace>/assets`` (if ``$ISAAC_MCP_WORKSPACE`` points at a
+    workspace that has one) followed by the old default cache, so nothing that already
+    lives in ``~/.cache/ur5e-dt/assets`` stops resolving.
+    """
     raw = _env(PATH_ENV, CACHE_ENV)
     found = [Path(p).expanduser().resolve() for p in raw.split(os.pathsep) if p.strip()]
-    return found or [_default_store()]
+    if found:
+        return found
+    workspace = workspace_store()
+    return ([workspace] if workspace else []) + [_default_store()]
 
 
 def stores() -> list[Path]:

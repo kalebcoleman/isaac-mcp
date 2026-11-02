@@ -5,6 +5,7 @@ how to move your own assets between machines and projects.
 
 - Your assets live **outside** the isaac-mcp checkout, in an *asset store*.
 - A project can override any asset with an `isaac-mcp.json` file.
+- Keep stores in your workspace folder, `<workspace>/assets` ([WORKSPACE.md](WORKSPACE.md)).
 - Nothing is silent: `where` shows what is searched, `doctor` shows what is found and
   verified, and strict mode refuses the NVIDIA download fallback.
 
@@ -35,10 +36,16 @@ For each asset the first local copy wins:
 1. **Project stores**: `asset_path` of the nearest `isaac-mcp.json`.
 2. **Repo drop-in**: `exts/ur5e-dt/assets/<relpath>` (git-ignored for licensed files).
    Used as-is; it is not hash-checked.
-3. **User stores**: `ISAAC_MCP_ASSET_PATH`, default `~/.cache/ur5e-dt/assets`
-   (`$XDG_CACHE_HOME/ur5e-dt/assets` when that is set).
+3. **User stores**: `ISAAC_MCP_ASSET_PATH` (alias `UR5E_DT_ASSET_CACHE`), a list separated by
+   `:`. When it is set it **replaces** both defaults below; when it is not set the defaults
+   are used in this order:
+   1. `<workspace>/assets`, only when `ISAAC_MCP_WORKSPACE` is set and that folder exists.
+   2. The old default `~/.cache/ur5e-dt/assets` (`$XDG_CACHE_HOME/ur5e-dt/assets` when that is
+      set). It stays a default you can override; nothing existing is moved.
 4. **NVIDIA remote**: only for manifest `remote` entries (`robot/ur5e.usd`,
    `sensors/rsd455.usd`), and never in strict mode.
+
+Run `python3 scripts/isaac_assets.py where` to see the stores actually in use.
 
 The Vention bench has no public source, so it only resolves from steps 1 to 3.
 
@@ -50,6 +57,7 @@ Setting them only in the MCP client does not change a running Kit.
 | Variable | Meaning | Default | Deprecated alias |
 |---|---|---|---|
 | `ISAAC_MCP_ASSET_PATH` | User stores, separated by `:` on Linux (`os.pathsep`) | `~/.cache/ur5e-dt/assets` | `UR5E_DT_ASSET_CACHE` |
+| `ISAAC_MCP_WORKSPACE` | Workspace folder. `<workspace>/assets` becomes a user store when this is set and the folder exists. See [WORKSPACE.md](WORKSPACE.md) | unset | none |
 | `ISAAC_MCP_ASSET_STRICT` | `1`, `true`, `yes` or `on` refuses the NVIDIA remote fallback. `0` turns strict off even if the project file asks for it | off | `UR5E_DT_OFFLINE` |
 | `ISAAC_MCP_ASSET_REMOTE_ROOT` | Base URL or mirror directory for NVIDIA assets | pinned Isaac 5.1 S3 root from the manifest | `UR5E_DT_ASSET_ROOT` |
 | `ISAAC_MCP_PROJECT` | A project directory, or the `isaac-mcp.json` file itself | walk up from the working directory | none |
@@ -67,7 +75,7 @@ up from the working directory of the process.
 
 ```json
 {
-  "asset_path": ["./assets", "~/lab-assets"],
+  "asset_path": ["./assets", "<workspace>/assets"],
   "strict": true
 }
 ```
@@ -138,13 +146,13 @@ python3 scripts/isaac_assets.py doctor --require robot/ur5e.usd --require workst
 python3 scripts/isaac_assets.py doctor --local-only
 
 # Add a file, directory, or .tar/.zip archive to a store.
-python3 scripts/isaac_assets.py add ~/Downloads/lab-robot.tar.gz
+python3 scripts/isaac_assets.py add /path/to/lab-robot.tar.gz
 python3 scripts/isaac_assets.py add ./vention.usd --as workstation/vention.usd
-python3 scripts/isaac_assets.py add ./my-assets --store ~/lab-assets --pack ur5e-dt
+python3 scripts/isaac_assets.py add ./my-assets --store <workspace>/assets --pack ur5e-dt
 python3 scripts/isaac_assets.py add ./ur5e.usd --as robot/ur5e.usd --force
 
 # Re-hash the files in a pack and rewrite its SHA256SUMS.
-python3 scripts/isaac_assets.py pin --store ~/lab-assets --pack ur5e-dt
+python3 scripts/isaac_assets.py pin --store <workspace>/assets --pack ur5e-dt
 ```
 
 | Command | What it does |
@@ -164,12 +172,14 @@ python3 scripts/isaac_assets.py pin --store ~/lab-assets --pack ur5e-dt
 ## Set up a new machine
 
 ```bash
-git clone <repo-url> isaac-mcp && cd isaac-mcp
+# Layout and first steps: see WORKSPACE.md. <workspace> is your workspace folder.
+git clone <repo-url> <workspace>/isaac-mcp && cd <workspace>/isaac-mcp
 ./install.sh --accept-eula
 
 # One time: put your private archive(s) in a store outside the checkout.
-export ISAAC_MCP_ASSET_PATH=~/isaac-assets      # add to your shell profile
-python3 scripts/isaac_assets.py add /path/to/lab-assets.tar.gz
+export ISAAC_MCP_WORKSPACE=<workspace>          # add to your shell profile
+python3 scripts/isaac_env.py init               # creates <workspace>/assets and the rest
+python3 scripts/isaac_assets.py add /path/to/lab-assets.tar.gz --store "$ISAAC_MCP_WORKSPACE/assets"
 
 # Public NVIDIA files (needs network and NVIDIA's terms), if you want them local:
 python3 scripts/fetch_ur5e_assets.py
@@ -178,23 +188,23 @@ python3 scripts/fetch_ur5e_assets.py
 python3 scripts/isaac_assets.py doctor --require robot/ur5e.usd --require workstation/vention.usd
 ```
 
-Then launch with the same variable set: `ISAAC_MCP_ASSET_STRICT=1 ./run.sh --port 8766`.
+Then launch with the same variables set: `ISAAC_MCP_ASSET_STRICT=1 ./run.sh --port 8766`.
 
 ## Move between projects
 
 Give each project its own `isaac-mcp.json`. Everything else stays the same.
 
 ```text
-project-a/isaac-mcp.json   {"asset_path": ["./assets"], "strict": true}
-project-b/isaac-mcp.json   {"asset_path": ["~/lab-assets-v2"]}
+<workspace>/projects/project-a/isaac-mcp.json   {"asset_path": ["./assets"], "strict": true}
+<workspace>/projects/project-b/isaac-mcp.json   {"asset_path": ["<workspace>/assets-v2"]}
 ```
 
 ```bash
-cd project-a && python3 /path/to/isaac-mcp/scripts/isaac_assets.py where
+cd <workspace>/projects/project-a && python3 <repo>/scripts/isaac_assets.py where
 ```
 
 Or select the project without changing directory:
-`ISAAC_MCP_PROJECT=~/project-b python3 scripts/isaac_assets.py doctor`.
+`ISAAC_MCP_PROJECT=<workspace>/projects/project-b python3 scripts/isaac_assets.py doctor`.
 
 The resolver finds the project file from the **Kit process's** working directory or its
 `ISAAC_MCP_PROJECT`. Start Kit from the project directory, or export `ISAAC_MCP_PROJECT`
@@ -245,7 +255,8 @@ means no project file, not a fallback to the walk.
 
 **`assets__prepare_workstation` wrote to a different place**
 That tool writes `workstation/vention.usd` directly under the **first** entry of
-`ISAAC_MCP_ASSET_PATH` (or, without it, `UR5E_DT_ASSET_CACHE` or the default cache), in the
+`ISAAC_MCP_ASSET_PATH` (or, without it, `UR5E_DT_ASSET_CACHE`, then `<workspace>/assets` if
+`ISAAC_MCP_WORKSPACE` is set and that folder exists, then the default cache), in the
 flat layout, not inside the `ur5e-dt` pack folder and without a pin. The resolver finds the
 flat layout, and the file shows as `unpinned` in `doctor`. Both the MCP server and the Kit it
 starts must see the same `ISAAC_MCP_ASSET_PATH`. Check with

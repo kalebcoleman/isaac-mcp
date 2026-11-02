@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # launch_ur_fake.sh — bring up the UR5e ros2_control driver with FAKE (mock) hardware.
 #
-# Why this exists: the URSim-docker path (sim_bringup.sh) needs Docker + a ~/ros2_ws
+# Why this exists: the URSim-docker path (sim_bringup.sh) needs Docker + a ROS 2 workspace (WS_SETUP)
 # install of ur_bringup and clicks through PolyScope; on a fresh box that workspace
 # may be absent. ur_robot_driver's mock_components hardware publishes /joint_states and
 # runs the controllers WITHOUT URSim or a real robot, which is all the Isaac twin needs:
@@ -46,7 +46,8 @@ fi
 source "$ROS_SETUP"
 source "$REPO/config/ros_dds.env"
 # Optional overlay workspace (apt ur_robot_driver works without it; source if present).
-[ -f "$HOME/ros2_ws/install/setup.bash" ] && source "$HOME/ros2_ws/install/setup.bash"
+WS_SETUP="${WS_SETUP:-$HOME/ros2_ws/install/setup.bash}"
+[ -f "$WS_SETUP" ] && source "$WS_SETUP"
 if ! command -v ros2 >/dev/null 2>&1; then
   echo "ERROR: ros2 is unavailable after sourcing $ROS_SETUP" >&2
   exit 1

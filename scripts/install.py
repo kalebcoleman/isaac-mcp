@@ -10,7 +10,7 @@ it added. Stdlib only.
   install (default)   register this repo's exts folder, auto-enable
                       isaac.mcp.bridge + isaac.mcp.panel, set the autostart port
   add-project         persistently register one tool package:
-                        install.py add-project --path ~/myproj/isaac --module myproj_tools
+                        install.py add-project --path <project>/isaac --module myproj_tools
   remove-project      unregister one tool package by module name
   status              print what is currently registered
   install --remove    undo the base registration
@@ -24,7 +24,7 @@ Settings written (all under /persistent in user.config.json):
   exts/isaac.mcp.bridge/toolPaths     sys.path additions so those modules import
 
   python3 scripts/install.py                      # base install (dry-run: add --dry-run)
-  python3 scripts/install.py add-project --path ~/myproj/isaac --module myproj_tools
+  python3 scripts/install.py add-project --path <project>/isaac --module myproj_tools
   python3 scripts/install.py status
 """
 import argparse
