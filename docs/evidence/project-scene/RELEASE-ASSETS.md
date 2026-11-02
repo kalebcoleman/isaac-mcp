@@ -23,6 +23,14 @@ by marking this release draft.
 | [sim-61w-6bc-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-61w-6bc-redacted.tar.gz) | `5f824678a85e0a456756c3734f329e6496f31c12458a110892426e27cfd2143f` | 1073685 |
 | [agent-61w-6bc-reopen-d725-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-61w-6bc-reopen-d725-redacted.tar.gz) | `993dcfceb4a33abd4c43f1334ef3539a253b7272aea57270b450baaacbf0ef1d` | 1625685 |
 | [agent-61w-6bc-window-video.mp4](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-61w-6bc-window-video.mp4) | `8218eff6e8e4db78380b16f9b0dc01695f4fda5ad50c51123c06fbe03bc671e3` | 64813 |
+| [sim-62h-d725-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-62h-d725-redacted.tar.gz) | `0c8fbea06922a6c6a0c3c3ec4d0977d7515491fa22e65e6ab762059c1822bdef` | 1253343 |
+| [sim-62w-2fdf-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-62w-2fdf-redacted.tar.gz) | `abbc9dc3e7297bef6ddd940b402ed39fdf5d1b2dfec16910433e54b061a7c39b` | 1122783 |
+| [agent62w-2fdf-evidence-v2.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent62w-2fdf-evidence-v2.tar.gz) | `fb864cfa1d5aceaa61aed501494bf626bc58c758f5e2cd66fa9417e3296a360e` | 3129287 |
+| [agent-62w-2fdf-full-ur-video.mp4](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-62w-2fdf-full-ur-video.mp4) | `1f35d635ba5fed2520ff20e88368b41a6bf494074c0463fb973193a818bb7f55` | 168758 |
+| [sim-62h-clean-c2ceb-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-62h-clean-c2ceb-redacted.tar.gz) | `be320bf6780ade0de98ef3dc7bc9cf7d9d7e50d74539687d69b1e497a087430e` | 1318870 |
+| [sim-62w-clean-c2ceb-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/sim-62w-clean-c2ceb-redacted.tar.gz) | `272ae373c28c09d5fdf00cc9fac0d297fa6b615e1cec61a8b3bd9dbfb1c5602d` | 2094115 |
+| [agent62w-c2ceb-clean-evidence-v2.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent62w-c2ceb-clean-evidence-v2.tar.gz) | `e6cb470ebab6921cf5f205bdc490edafa6af2f5643a980b37880a4c84603ae69` | 2179254 |
+| [agent-62w-c2ceb-clean-full-ur-video.mp4](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-62w-c2ceb-clean-full-ur-video.mp4) | `8589aa39015a3787345cc508fa275b76b16e0d865fb086721feaa714602c4c75` | 165202 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
@@ -72,3 +80,27 @@ visual review sampled the recorded frames, and the cropped UR wrist limits its m
 claim. Saved/source geometry is excluded. Original private hashes and distributed
 redacted hashes remain distinct. [Compact facts](RECENT-61-20261102.json) map the
 26 original records. The original 6.0.1 stall and remaining matrix are not closed.
+
+The 6.2 supplements distinguish the existing installation's `d725f84` headless
+and `2fdf404` windowed runs from exact `c2ceb7f` qualification in a separate locked
+environment. They retain the initial ROS-driver guard refusal, the successful
+same-PID retry, the invalid-domain launch refusal, cold shader startup, native
+warnings and normal shutdowns. The clean headless bundle also includes a fresh
+reopen of the earlier independent agent's saved output and the package/setup
+records. No source geometry or environment packages are redistributed.
+The independent `2fdf404` bundle preserves the 28-request manual-edit hold and
+91-request authorized continuation, its scoped all-99 ledger and actual media.
+The standalone 42.9-second full-UR clip is identical to the copy in that bundle;
+429 frames decoded, three sampled visually. It is an actual-window recording
+from that earlier installed stack, not a new candidate or clean-environment run.
+[The compact 6.2 facts](RECENT-62-20261102.json) map the source records. All links
+remain draft-release assets requiring repository access until the owner publishes.
+
+The later independent `c2ceb7f` bundle contains 92 real MCP requests, the 99-name
+scoped ledger, 17 measured checks, unchanged source/cache hashes and the selected
+application-window media. The standalone 43.8-second clip is byte-identical to
+its bundled copy: 438 frames decoded, three visually sampled. This uses the
+isolated locked NumPy 2.3.1 environment; it does not replace the earlier 2fdf media
+or establish a full clean-machine installation. The clean agent's own save has
+not yet been reopened. [Its compact addendum](RECENT-62-AGENT-20261102.json) records
+the evidence, partial light/focus observations and separate final shutdown.

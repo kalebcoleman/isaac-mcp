@@ -1,7 +1,7 @@
 # All exposed tools: final validation ledger
 
 Validation remains in progress. All implementation PRs are unmerged; combined PR #16
-is a draft. The candidate at this update is `d725f84cb853bf5ceb2fa3b7d13d0e002d29becf`.
+is a draft. The candidate at this update is `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`.
 The real MCP inventories contain **90 default tools** and **99** with
 `ISAAC_MCP_LOCAL_TOOLS=all,screen_input,sim_launch`. Disabling the generic pack
 with those optional groups selected leaves 60 tools. Every name is tracked below.
@@ -48,8 +48,22 @@ checks passed. A named-tool agent task added 90 requests / 40 names / 17 checks;
 its 99-name ledger retains 59 uncalled names. Fresh saved-output reopening at `d725f84`
 passed 16 calls / 12 checks. [The scoped supplement](RECENT-61-20261102.json) preserves
 warnings, sampled visual limits, source hashes and the unresolved original stall.
-Other-build URDF fix qualification, affected 6.2/6.0.0.0/6.0.0.1 paths and final Newton
-coverage remain pending. All 12 Isaac Lab tools passed a real Lab 3.0 / Sim 6.2 workflow at `411d89f` (41 calls, 16 effect checks). Later mode/video fixes were tested as exact source bytes on a private `33de98d`-based candidate and integrated into `2bbeee4`; these scoped results do not establish other Lab/Sim pairings or a clean installation.
+The next 6.2 PhysX runs passed both modes on the existing environment at `d725f84`
+and `2fdf404`, and then on an isolated locked environment at exact `c2ceb7f`.
+Each completed all 39 generic, 23 UR5e and seven bridge built-in tools, with
+independent light/clone readbacks, articulated URDF checks and legacy verification.
+The first existing-environment headless attempt retained a ROS-driver guard refusal;
+its same-PID retry passed. [The 6.2 supplement](RECENT-62-20261102.json) keeps those
+attempts separate, records the existing NumPy mismatch, and identifies the later
+locked NumPy 2.3.1 runs. The latter are not a full installer or clean-machine test.
+An independent task on that locked `c2ceb7f` windowed process made 92 requests
+across 40 names and passed 17 measured checks. Its separate ledger contains
+38 scoped passes, two partial observations and 59 uncalled names. The
+[task addendum](RECENT-62-AGENT-20261102.json) records actual arguments/results
+in the linked bundle, measured motion, source preservation and sampled media;
+it is not an all-99 pass or a fresh reopening of that newer saved output.
+Affected 6.0.0.0/6.0.0.1 paths and final Newton coverage remain pending.
+All 12 Isaac Lab tools passed a real Lab 3.0 / Sim 6.2 workflow at `411d89f` (41 calls, 16 effect checks). Later mode/video fixes were tested as exact source bytes on a private `33de98d`-based candidate and integrated into `2bbeee4`; these scoped results do not establish other Lab/Sim pairings or a clean installation.
 Host/display tools need one actual-display run, plus simulator target verification.
 
 Residual native cycle and simulation-time warnings remain recorded with uncertainty.
@@ -58,7 +72,7 @@ unreliable recovery require fixes or an explicit unresolved limitation.
 
 | Tool | Exposure | Required scenario | Current evidence state |
 |---|---|---|---|
-| `assets__import_urdf` | default | 39-tool behavior/edge suite and recorded actual use, each Sim release | Original index: invocation only. Extra eea 6.0.1H readback found missing body/mass. Fixed230:24-call authored effect suite and25-call two-link runtime suite passed. Exact6bc 6.1H/W also passed both suites; remaining builds pending. |
+| `assets__import_urdf` | default | 39-tool behavior/edge suite and recorded actual use, each Sim release | Original index: invocation only. Extra eea 6.0.1H readback found missing body/mass. Fixed230:24-call authored effect suite and25-call two-link runtime suite passed. Exact6bc 6.1H/W and c2ceb 6.2H/W also passed both suites; remaining builds pending. |
 | `assets__import_path` | default | Absolute approved multifile USD import; authored pose/joints, source hashes, conflict/unapproved-path refusal | 6 recorded calls; all input source hashes unchanged (4499bf7). Scope/arguments/response references: JSON index. |
 | `assets__prepare_workstation` | default | Licensed Vention project into fresh cache; repeat refusal; real Quick Start composition and source hashes | 4 recorded calls; all input source hashes unchanged (4499bf7). Scope/arguments/response references: JSON index. |
 | `assets__import_usd` | default | 39-tool behavior/edge suite and recorded actual use, each Sim release | 9 recorded calls; Imported robot world transform reads back placed0.5m (4499bf7). Scope/arguments/response references: JSON index. |

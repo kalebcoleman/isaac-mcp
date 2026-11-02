@@ -16,7 +16,7 @@ and diagnostic intervention remain separate from the fresh product results.
 
 This is a chronological record: the earlier commit-specific results and failure history below
 remain historical. The combined candidate at this update is PR #16 at
-`d725f84cb853bf5ceb2fa3b7d13d0e002d29becf`, still draft and unmerged. No original
+`c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`, still draft and unmerged. No original
 implementation PR is being merged separately. The [all-tool ledger](ALL-TOOLS-MATRIX.md)
 tracks the current 90 default / 99 optional-inclusive tool surface.
 
@@ -596,3 +596,102 @@ and distinguishes these code/process scopes. Its three redacted bundles and samp
 application-window video are in the draft release. The original `20f2953` 6.0.1
 native stall remains unresolved; these passes do not establish recovery or complete
 the remaining release/mode/backend matrix.
+
+## 6.2: existing stack, isolated locked stack, and actual use
+
+The next PhysX broad runs used exact `d725f84` headless and `2fdf404` windowed.
+The initial headless fullsurface attempt refused to start the simulated ROS driver
+because its guard detected another driver. A possible concurrent CPU-test mock is
+unproven: no matching PID was retained. A fresh evidence tag on the same owned Kit
+PID passed 137 calls / 55 assertions. The windowed run passed 141 / 54. Both also
+passed the generic/sensor phases, legacy verifier, independent light/clone readbacks,
+24-call authored-physics and 25-call articulated URDF checks, and 21 save checks.
+The existing 6.2 environment had NumPy 2.5.4 despite its package requirement for
+2.3.1; these results retain that actual stack and are not dependency-clean claims.
+
+An independent `2fdf404` task was initially held after 28 requests when lights and
+framing changed outside its calls. The user confirmed those were their own edits
+and authorized continuation. The resumed task made 91 requests and passed 15
+measured checks: 720 steps advanced six simulation seconds, the sample settled at
+1.03999996 m with zero velocity, both robots reached and returned within 0.001 rad,
+and the UR gripper followed its wrist with 1.11e-7 m relative drift. Its 99-name
+ledger records 38 scoped passes, two partial results and 59 uncalled names. The
+full-robot recording decoded 429 frames / 42.9 seconds; three frames were visually
+sampled. All 44 recorded source/cache files and 262 frozen files remained unchanged.
+The launcher contains the separately recorded diagnostic/startup instrumentation.
+The task interval added two warnings and no errors; the actual Console's cumulative
+804 warnings / 63 errors includes prior deliberate negative tests. This is actual
+use, not all-tool or all-version certification.
+
+A separate environment was then created from the exact project lock with
+`uv sync --locked --python /usr/bin/python3.12 --link-mode copy`. The lock inputs
+were unchanged between `2fdf404` and `c2ceb7f`; 186 packages resolved, NumPy was
+2.3.1, and `uv pip check` passed. Existing user environments were not changed.
+This used existing package caches and did not run the full installer, change
+client configuration, or establish a clean-machine or clean Lab-video recipe.
+
+Exact `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` passed the broad 14-phase suite
+in both modes on this isolated environment: 137 calls / 55 fullsurface assertions
+headless, 141 / 54 windowed, plus the legacy/effect/URDF/save checks above. Each
+mode exercised all 39 generic tools, 23 UR5e tools and seven bridge built-ins.
+The windowed isolated-light fixture also passed 16 calls / six checks: changing
+a DomeLight from red to blue reversed the neutral cube's measured RGB channels;
+zero intensity produced a black measured region. This is a rendered effect,
+not photometric calibration or qualification of every light type.
+
+Fresh headless `c2ceb7f` reopening of the earlier agent's composed output passed
+16 calls / 12 checks, including supported body state, two articulations, fresh
+images and 12 steps advancing 0.1 simulation seconds. Saved source bytes were
+unchanged. The old camera was not a live owned sensor; a new camera supplied
+the images. First startup took about 222 seconds while native shaders compiled;
+the later warm launch took about 15 seconds. A separate launch with invalid ROS
+domain 232 was refused before Kit started; its retry used valid domain 171.
+
+Warnings remain. Final headless native counts were 24 deliberate-test error
+markers, 14,330 warning markers and 13,989 simulation-time messages. Final windowed
+counts, including the later independent task, were 24 / 83,214 / 82,297. Neither
+clean run logged an illegal-cycle, nested-task, GetCamera, Force-callback or
+edit-target-change marker in the recorded file. These are observed counts, not
+a causal NumPy comparison or a claim that warnings are harmless. Windowed Console
+samples and native-file counts differ. The broad motion videos decoded 170 and
+193 frames respectively; two frames of each were reviewed and their diagnostic
+upright view crops the upper arm/wrist. A large lighting-test cube remained in
+the later save fixture and obscured its view; the independent task explicitly
+reset that disposable scene. No robot geometry failure is inferred from that view.
+
+[The compact 6.2 supplement](RECENT-62-20261102.json) identifies 51 original
+records, with separate process identities, retries, image hashes and shutdown
+records. Full transcripts and reproduction scripts are attached to the draft
+release. The original 6.0.1 native-step stall, remaining older-build checks and
+broader Newton matrix are still open.
+
+The subsequent independent task used the same frozen `c2ceb7f` windowed process
+on the isolated locked environment. It made 92 requests (91 named calls and one
+catalog listing), using 40 names. All 17 measured checks passed; its 99-name ledger
+records 38 scoped passes, two partial observations and 59 uncalled names. Over
+720 steps, simulation time advanced six seconds. The sample settled at
+0.829999983 m with zero velocity; Agilebot and UR5e reached and returned within
+0.001 rad. The RG2 followed the wrist by about 0.116 m, with measured relative
+translation drift of 1.005e-7 m. Three fresh camera images showed sample descent.
+
+All 40 audited source/cache files and 262 frozen files stayed unchanged; 261 of
+those frozen files match the commit, with the documented startup/log/faulthandler
+instrumentation in the launcher. The composed save succeeded without switching
+the stage. Fresh reopening of this newer agent output is still pending; the
+earlier 2fdf output's successful reopening is a separate result.
+
+The actual-window video decoded all 438 frames / 43.8 seconds. Three frames were
+visually sampled, showing the complete UR arm and RG2 at baseline, target and
+return. Root review separately inspected the recorded target/return/Content
+screenshots and one video sample. The task's bounded native-log interval contains
+eight warnings and zero errors or illegal-cycle markers. Its Console displayed
+cumulative 83,217 warnings / 63 errors from the whole process, including earlier
+tests. These scopes are not interchangeable. Light contribution and independent
+focus readback remain partial in this agent's ledger; the parent's isolated light
+test is separate. The client and recording closed, and the owned Kit process
+exited normally afterward.
+
+[The independent-task addendum](RECENT-62-AGENT-20261102.json) identifies the source
+records, measured tolerances, media/privacy review and draft-release artifacts.
+This closes that actual-use task's stated checks, not the remaining all-build,
+all-backend or clean-installer gates.
