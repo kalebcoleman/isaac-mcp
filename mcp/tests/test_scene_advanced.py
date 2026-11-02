@@ -339,3 +339,63 @@ def test_sensor_limit_refuses_before_native_creation(advanced):
     with pytest.raises(AssetError, match="eight"):
         advanced.execute("sim.camera.create", stage, dict(path="/World/C9"))
     assert stage.GetSessionLayer().ExportToString() == before
+
+
+@pytest.mark.parametrize("parent_type", ["Xform", "Camera"])
+@pytest.mark.parametrize("child_type", ["Camera", "OmniLidar"])
+@pytest.mark.parametrize("hidden", ["parent_inactive", "group_inactive", "removed", "retyped"])
+def test_delete_preserves_sensor_registry_even_when_usd_hides_sensor(
+    advanced, parent_type, child_type, hidden
+):
+    stage = advanced.s.stage()
+    advanced.invalidate()
+    parent, group, child = "/World/A", "/World/A/Group", "/World/A/Group/Sensor"
+    calls = []
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        stage.DefinePrim(parent, parent_type)
+        stage.DefinePrim(group, "Xform")
+        stage.DefinePrim(child, child_type)
+        if hidden == "parent_inactive":
+            stage.GetPrimAtPath(parent).SetActive(False)
+        elif hidden == "group_inactive":
+            stage.GetPrimAtPath(group).SetActive(False)
+        elif hidden == "removed":
+            stage.RemovePrim(child)
+        else:
+            stage.GetPrimAtPath(child).SetTypeName("Xform")
+    advanced.s.owned.update([parent, group, child])
+    for path, kind in [(child, child_type)] + (
+        [(parent, "Camera")] if parent_type == "Camera" else []
+    ):
+        advanced.sensors[path] = (
+            kind,
+            dict(product=SimpleNamespace(destroy=lambda p=path: calls.append(p))),
+        )
+    layers = (stage.GetRootLayer(), stage.GetSessionLayer())
+    before = [layer.ExportToString() for layer in layers]
+    owned_before, sensors_before = advanced.s.owned.copy(), advanced.sensors.copy()
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.prim.delete", stage, dict(path=parent, confirm=True))
+    assert error.value.code == "PROTECTED_PRIM"
+    assert calls == []
+    assert advanced.s.owned == owned_before and advanced.sensors == sensors_before
+    assert [layer.ExportToString() for layer in layers] == before
+    # Teardown can still release the retained resource even if USD no longer has it.
+    advanced.close_sensors()
+    assert set(calls) == set(sensors_before) and not advanced.sensors
+
+
+def test_sensor_registry_protection_uses_prim_ancestry_not_string_prefix(advanced):
+    stage = advanced.s.stage()
+    advanced.invalidate()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        stage.DefinePrim("/World/A", "Xform")
+        UsdGeom.Camera.Define(stage, "/World/AB")
+    advanced.s.owned.update(["/World/A", "/World/AB"])
+    sensor = ("camera", {})
+    advanced.sensors["/World/AB"] = sensor
+    advanced.execute("sim.prim.delete", stage, dict(path="/World/A", confirm=True))
+    assert not stage.GetPrimAtPath("/World/A")
+    assert stage.GetPrimAtPath("/World/AB")
+    assert advanced.sensors == {"/World/AB": sensor}
+    assert advanced.s.owned == {"/World/AB"}

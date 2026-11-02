@@ -54,8 +54,15 @@ def owned(s, stage, p):
     return prim
 
 
-def deletable(s, stage, p, direct_sensor=False):
+def deletable(s, stage, p, direct_sensor=False, sensor_paths=()):
     prim = owned(s, stage, p)
+    # USD traversal cannot see children below inactive prims, or registered
+    # sensors removed/retyped externally. Their native resources still exist.
+    if any(
+        Sdf.Path(q) != prim.GetPath() and Sdf.Path(q).HasPrefix(prim.GetPath())
+        for q in sensor_paths
+    ):
+        refuse("PROTECTED_PRIM", "Subtree contains registered sensor resources.")
     if (
         p == "/World"
         or stage.GetDefaultPrim()
@@ -233,7 +240,9 @@ class Advanced:
                 refuse("CONFIRM_REQUIRED", "confirm=true required.")
             p = a["path"]
             direct_sensor = p in self.sensors
-            deletable(s, stage, p, direct_sensor=direct_sensor)
+            deletable(
+                s, stage, p, direct_sensor=direct_sensor, sensor_paths=self.sensors
+            )
             if direct_sensor:
                 from .sensors import dispose
 
