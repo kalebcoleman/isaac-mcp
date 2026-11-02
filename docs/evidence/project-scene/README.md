@@ -17,6 +17,7 @@ fails closed; no remote upload service or unrestricted fallback is advertised.
 - [Current all-tool validation ledger](ALL-TOOLS-MATRIX.md), [99-name argument/evidence index](ALL-TOOLS-INDEX-20261102.json),
   [recent headless checks](RECENT-CHECKS-20261102.json),
   [6.0.1 windowed checks and unresolved stall](RECENT-601W-20261102.json),
+  [6.1 both-mode, agent and saved-output checks](RECENT-61-20261102.json),
   [final validation work and failures](FINAL-VALIDATION.md).
 - [Earlier per-tool behavior](TOOL-COVERAGE.md), [release/backend results](RUNS.md),
   [compact call inventories](RUN-SUMMARIES.json), [installed package records](INSTALLATIONS.json).
@@ -86,6 +87,14 @@ resolve that failure. A separate legacy checkpoint physics-type defect and bridg
 discovery defect were fixed and qualified narrowly at combined `6bc45c2`.
 The [windowed supplement](RECENT-601W-20261102.json) preserves all distinct scopes;
 the original stall remains an open material limitation.
+
+The later exact `6bc45c2` 6.1 PhysX broad suites passed in both modes, with separate
+legacy, light/clone and articulated URDF readbacks. Independent named-tool use passed
+17 checks in 90 requests; a fresh `d725f84` headless process reopened its composed
+save and passed 12 checks in 16 requests. [The 6.1 supplement](RECENT-61-20261102.json)
+retains per-process warning counts, sampled visual scope, source preservation and
+the camera's live-ownership limitation. It does not resolve the 6.0.1 stall or certify
+the remaining version/backend matrix.
 
 Earlier revisions called all 37 tools through real MCP on each of the five installed PhysX releases. Exact
 cases and revision differences are in RUNS.md. Each release passed a 217-capture stress sequence
