@@ -4,6 +4,11 @@ The automated host suite and live simulator checks cover different things. A pas
 that Isaac Sim, the renderer, ROS, or a particular robot work on a machine. Record the commit, machine, driver,
 versions, commands, and any warnings when reporting a result.
 
+For installation identities, lock-preserving commands and evidence-reporting fields, use the
+[reproducibility guide](REPRODUCIBILITY.md). For a non-destructive first connection, use the
+[setup check](LINUX-SETUP.md#connect-and-check-without-changing-the-scene). The suites below have
+different scopes; native verifiers can build scenes and move joints.
+
 ## Host checks
 
 From the repo root, run:
