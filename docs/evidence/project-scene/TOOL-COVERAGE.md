@@ -99,3 +99,11 @@ The UR-Play follow-up was refused by the edit-target guard before steps were
 established, correcting the first derived note. The adapter was not
 shipped. Named tool responses, time advancement, and successful image/save calls
 are not counted as stable-contact, solver-recovery, or complete twin passes.
+
+
+The [focused clipping supplement](RECENT-CAMERA-CLIPPING-1F21407-20261102.json)
+records exact `1f21407` camera creation/capture on five installed builds in both modes,
+including actual near-plane pixel effects, two resolutions and stage scales, invalid
+units and saved clipping attributes. See [scope and Console/native counts](FINAL-VALIDATION.md#new-camera-clipping-five-builds-both-modes).
+These fresh results do not replace historical broad workflows or qualify Newton/ROS
+rendering failures, physical motion, or fresh Kit reuse of saved cameras.

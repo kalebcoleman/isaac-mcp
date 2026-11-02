@@ -37,6 +37,13 @@ fixtures and a separately licensed real Agilebot robot. Root checks, snapshots, 
 inspection, filters and managed launch are **not an OS sandbox**. Untrusted configuration
 fails closed; no remote upload service or unrestricted fallback is advertised.
 
+The [new-camera clipping matrix](RECENT-CAMERA-CLIPPING-1F21407-20261102.json)
+qualifies exact `1f21407` on all five installed builds in both modes: 500 core MCP
+calls, 40 cameras and 80 actual rendered outputs, with bounded pixel/units/error
+checks and inspected application windows/Consoles. [Scope and warning counts](FINAL-VALIDATION.md#new-camera-clipping-five-builds-both-modes)
+and [reproduction](CAMERA-CLIPPING-REPRODUCTION.md) retain the distinction from
+physics, fresh Kit reopen, Newton failure remediation and broad all-tool coverage.
+
 ## Evidence map and scope
 
 - [Current all-tool validation ledger](ALL-TOOLS-MATRIX.md), [99-name argument/evidence index](ALL-TOOLS-INDEX-20261102.json),
