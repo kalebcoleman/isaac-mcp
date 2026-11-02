@@ -52,6 +52,42 @@ they are not a one-to-one list. Host screen tools can inspect and capture simula
 optional X11 mouse and keyboard tools can be enabled separately as described in
 [host tools](TOOLS-HOST.md#optional-desktop-input). Not every panel control has a dedicated MCP equivalent.
 
+Quick Start constructs the twin's simulation World on the **CPU**, retaining the
+selected physics engine. This makes the twin's existing CPU scene policy explicit
+for Newton too: its default CUDA device is incompatible with the legacy
+articulation reset's CPU gain arrays in the inspected 6.2 build. An already
+initialized non-CPU World is refused without changing its device; use a separate
+disposable stage/session for the twin. Quick Start does not reset a stage on its
+own. Generic tools retain their own selected device and backend; this does not
+establish that every legacy twin operation works on Newton. See the measured
+[compatibility matrix](COMPATIBILITY.md) for qualified workflows.
+
+The Newton twin adapter preserves separate UR5e and RG2 articulations. The
+QuickChanger joins the arm's tree; a MuJoCo equality weld attaches the RG2.
+Newton 1.0's USD importer cannot reliably resolve this separate-articulation
+attachment, so complete Quick Start refuses before assembly on that importer.
+Moving the joint to another USD path does not fix its parser behavior. Generic
+Newton tools and standalone robots have separate coverage; there is no implicit
+fallback to PhysX.
+
+Newton uses force-drive gains of 30 N·m/rad and 8 N·m·s/rad for the actuated RG2
+joint, retaining its 1 N·m cap and five mimic constraints. These are explicit
+controller gains, not a unit conversion of the PhysX acceleration drive.
+Pad-gap observations use runtime link poses, since Newton's Fabric poses need
+not appear in authored USD transforms. PhysX retains its original controller.
+
+On a backend providing the opt-in incoming-joint-wrench output, the twin enables
+that output before physics initialization and publishes the named wrist's
+tree-parent wrench at the `tool0` origin and orientation, with physics-time ROS
+timestamps. It does not assume that the last link is the wrist. The output is
+not a separate sensor for the RG2 loop-closing equality constraint. The inspected
+6.2 backend supports this output for MuJoCo Warp and XPBD; native MuJoCo CPU and
+VBD do not. A CPU *device* does not select the native MuJoCo CPU solver. Actual
+qualification is narrower than API availability; consult the matrix. Older
+backends lacking this output, or an already initialized scene with the output
+disabled, report `force_publisher.available: false` and its reason instead of
+publishing placeholder zero wrenches. No active solver is rebuilt to enable it.
+
 ## Parameter conventions
 
 - Parameter shapes come from `MCP_TOOL_REGISTRY` in `extension.py`; required/default
@@ -102,7 +138,24 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 - Parameters: none.
 - Async: yes.
 - Purpose: start/resume the simulation timeline.
-- Side effects: sets timeline playing; waits for PhysX warm-up (up to ~15 s at 60 Hz) before returning so cooking completes.
+- Side effects: sets timeline playing and waits for physics warm-up. Failure to
+  complete warm-up, a changed stage or a Play request that is not retained returns
+  an error; initialization or playback can already have partial effects.
+- For saved twin graphs, restores the process-local gripper and force callbacks
+  without recreating the USD graphs. Newton's first initialization requires a
+  stopped meter/Z-up stage, enables the installed tensor provider and uses the
+  twin's CPU policy. An active model or existing World on another device is refused.
+  Native initial transform normalization is scoped to the session layer, with the
+  caller's edit target restored unless an external editor changed it. This does
+  not promise byte-identical in-memory root layers: native viewport/render
+  metadata can change during opening or playback. Source files are not saved by
+  this operation. A legacy
+  Newton force graph without a validity gate is refused; use a new disposable
+  stage and Quick Start to build the current graph.
+- `force_publisher` reports the runtime wrench capability/readiness when a twin
+  graph is present. Simulation Play alone does not prove wrench delivery; inspect
+  the reason and actual ROS output. Generic Play has its own physics/edit-target
+  contract and does not restore these twin-specific Python callbacks.
 - Example: `{"tool": "ur5e_dt__play_scene", "arguments": {}}`
 
 ### `ur5e_dt__stop_scene`
@@ -276,6 +329,10 @@ optional X11 mouse and keyboard tools can be enabled separately as described in
 - Side effects: spawns ffmpeg; non-blocking. Requires ffmpeg and a usable viewport.
 - Frames are paced to the requested output rate against elapsed time; short gaps repeat the latest frame. If capture
   falls more than five seconds behind or no frame arrives, recording reports an error instead of claiming success.
+- Complete physics warm-up before recording. A measured cold Newton initialization
+  exceeded the five-second capture-lag limit; restarting recording after warm-up
+  succeeded. A camera switch can retain an initial frame from the previous view;
+  inspect the output before using it as evidence of a particular camera.
 - Example: `{"file_name": "run.mp4", "fps": 30}`
 
 ### `ur5e_dt__stop_recording`

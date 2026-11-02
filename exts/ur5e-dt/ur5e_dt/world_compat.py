@@ -8,7 +8,33 @@ changed across an await, and never suppress asyncio's re-entry diagnostics.
 """
 
 import builtins
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+
+
+@contextmanager
+def twin_play_edit(stage, get_stage):
+    """Keep Newton's initial USD transform normalization in the session layer.
+
+    The caller validates after every ordinary update. Restore only our target;
+    a concurrent user's target or replacement stage is never overwritten.
+    """
+    previous = stage.GetEditTarget()
+    stage.SetEditTarget(stage.GetSessionLayer())
+    owned = stage.GetEditTarget()
+
+    def validate():
+        if get_stage() != stage:
+            raise RuntimeError("Stage changed during twin Play; inspect the current stage")
+        if stage.GetEditTarget() != owned:
+            raise RuntimeError("Edit target changed during twin Play; the external target was preserved")
+
+    try:
+        validate()
+        yield validate
+        validate()
+    finally:
+        if stage.GetEditTarget() == owned:
+            stage.SetEditTarget(previous)
 
 
 @asynccontextmanager
@@ -61,6 +87,10 @@ def extension_world(factory):
 
 async def initialized_extension_world(factory):
     world = extension_world(factory)
+    return await _initialize_world_context(world)
+
+
+async def _initialize_world_context(world):
     try:
         needs_init = world.get_physics_context() is None
     except RuntimeError as e:
@@ -71,3 +101,48 @@ async def initialized_extension_world(factory):
     if needs_init:
         await world.initialize_simulation_context_async()
     return world
+
+
+async def initialized_twin_world(factory):
+    """Use the twin's CPU scene policy without changing the selected engine.
+
+    Newton otherwise defaults to CUDA even when the twin authors PhysX's
+    enableGPUDynamics=false. Its legacy Articulation gains implementation then
+    mixes CPU parameters with CUDA storage during reset. Request the device
+    through World's supported constructor, before physics initialization.
+    An existing World ignores constructor arguments: refuse that mismatch
+    instead of silently reconfiguring an already initialized user's context.
+    """
+    existing = factory.instance()
+    if existing is None:
+        world = extension_world(lambda: factory(device="cpu"))
+        # device reads SimulationManager's current device, not this new World's
+        # requested constructor value. Before async initialization it can still
+        # report the previous/default CUDA device. Check the applied device after.
+        world = await _initialize_world_context(world)
+        if str(world.device) != "cpu":
+            raise RuntimeError(
+                "The new UR5e World did not apply its requested CPU device; "
+                f"observed {world.device!s}. Inspect the partially initialized "
+                "scene before retrying. No engine was switched."
+            )
+        return world
+    if str(existing.device) != "cpu":
+        raise RuntimeError(
+            "The UR5e twin requires a CPU simulation World. The existing World "
+            f"uses {existing.device!s} and was not reconfigured. Use a disposable "
+            "new_stage before Quick Start, or keep this stage for generic tools."
+        )
+    try:
+        context = existing.get_physics_context()
+    except RuntimeError as exc:
+        if "Physics context is not initialized" not in str(exc):
+            raise
+        context = None
+    if context is None:
+        raise RuntimeError(
+            "The existing World is not initialized; its pending device request "
+            "cannot be verified and was not reconfigured. Use a disposable "
+            "new_stage before Quick Start."
+        )
+    return existing

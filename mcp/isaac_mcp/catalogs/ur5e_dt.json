@@ -3,7 +3,7 @@
   "namespace": "ur5e_dt",
   "tools": {
     "ur5e_dt.play_scene": {
-      "description": "Start/resume the simulation timeline in Isaac Sim.",
+      "description": "Start/resume the simulation timeline. Restores the saved twin's Python ROS callbacks; Newton twin playback uses CPU and needs a stopped stage before first initialization. Does not rebuild saved graphs or switch physics engines.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
@@ -258,7 +258,7 @@
       "owner_id": "ur5e-dt"
     },
     "ur5e_dt.quick_start": {
-      "description": "One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Use after new_stage to rebuild the scene from scratch.",
+      "description": "One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
