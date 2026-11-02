@@ -4,6 +4,15 @@ The full installer is pinned to **Isaac Sim 6.2.0.0 and Python 3.12**. It does n
 compatible environment for other 6.x releases. The separate MCP host package requires Python 3.10 or newer;
 its interpreter can be different from the simulator's.
 
+For coverage by tool, start with the [current tool/source/backend reconciliation](evidence/project-scene/CURRENT-TOOL-RECONCILIATION.md).
+It links all 99 names to their historical calls, bounded observations and remaining gaps;
+it does not certify all tools on the current head or every backend. The latest stricter
+`sim__body__state`, `sim__joints__state` and `sim__simulation__step` paths still need targeted
+**normal PhysX checks on all five builds in both modes** in that recorded reconciliation.
+Earlier positive PhysX runs and the later `ba1d4b2` Newton error-reporting checks retain
+separate source identities. Original `20f2953` and Newton failures, fresh-Kit reuse of the
+new camera fixtures, and setup/Lab limitations remain open; see the ledger's linked records.
+
 The table records what this repository has actually exercised, not a guarantee for every machine or feature.
 The 6.0 and 6.1 probes used separate, locally resolved environments rather than this project's locked 6.2
 environment; a clean-install recipe for those builds has not been qualified by this repository. For selection,

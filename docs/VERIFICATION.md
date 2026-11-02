@@ -9,6 +9,29 @@ For installation identities, lock-preserving commands and evidence-reporting fie
 [setup check](LINUX-SETUP.md#connect-and-check-without-changing-the-scene). The suites below have
 different scopes; native verifiers can build scenes and move joints.
 
+## Finding per-tool evidence
+
+The [current tool/source/backend reconciliation](evidence/project-scene/CURRENT-TOOL-RECONCILIATION.md)
+is the entry point for all 99 tool rows, exact discovery profiles, source comparisons and
+remaining gates. Its [JSON projection](evidence/project-scene/CURRENT-TOOL-RECONCILIATION-20261102.json)
+has SHA-256 `07bb8d57b4bc61f2882a7b72563ea2f7347036fb6856608760c045ee3d104808`.
+The 12,073 indexed call records and 1,583 observation links include repeated observations,
+expected refusals and failed workflows: they are not unique dispatches, successful effects
+or an all-99 qualification. Use each row's source/build/backend/mode and bounded observation;
+matching module bytes do not turn historical calls into a new complete-head execution.
+
+The real-MCP inventory belongs to `fdb7a02da1be003e3d338f676ba8105720869ea3`.
+Keep its default and optional-inclusive profiles separate; the measured optional-inclusive
+scene-off counts do not replace default-group guidance. The ledger explains its `O`, `C`,
+`F` and absent cells and links the unchanged historical index plus draft-access records.
+
+One explicit live gap remains in that reconciliation: normal PhysX results for the latest
+`sim__body__state`, `sim__joints__state` and `sim__simulation__step` implementation across
+five builds in both modes. CPU tests and the fresh `ba1d4b2` Newton invalid-state reporting
+fixture do not supply that positive-path evidence. Preserve the original stall, material
+Newton failures, standalone-USD versus fresh-Kit camera distinction and installation/Lab
+limits when reporting readiness; the ledger is a review map, not a merge-ready declaration.
+
 ## Interpreting deliberate asset failures
 
 Native regression harnesses may temporarily hide a robot asset with offline mode enabled,
