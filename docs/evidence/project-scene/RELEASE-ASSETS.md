@@ -7,6 +7,9 @@ by marking this release draft.
 
 | Asset URL | SHA-256 | Bytes |
 |---|---|---:|
+| [tool-reconciliation-fdb7a02-records-01-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/tool-reconciliation-fdb7a02-records-01-redacted.tar.gz) | `61babd321dce5af8aa2659591e2113416e4cfb16f8d2428c54dbc709858f3cde` | 2483884 |
+| [tool-reconciliation-fdb7a02-records-02-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/tool-reconciliation-fdb7a02-records-02-redacted.tar.gz) | `f857d9f4241ed931aa65de79de1f038155706f50eaad432c7910893c830797b4` | 2481045 |
+| [tool-reconciliation-fdb7a02-index-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/tool-reconciliation-fdb7a02-index-redacted.tar.gz) | `02c9e57e3d4bc5b2f2a1ba38bc9a4a296ff7749936224176be188fdeca60eeb7` | 1577628 |
 | [camera-clipping-five-builds-1f21407-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/camera-clipping-five-builds-1f21407-redacted.tar.gz) | `aad719256407192a7c93179fe2c1da29739f1161dad901d79b869400b47e1698` | 2792133 |
 | [newton61-contact-controls-ba1-box1-v2-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton61-contact-controls-ba1-box1-v2-redacted.tar.gz) | `b2e7a68b7b27733dd7a55d070f153369711aca382759dcefd4ec9291c0168579` | 665451 |
 | [newton61-contact-controls-ba1-box1-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton61-contact-controls-ba1-box1-redacted.tar.gz) | `c450357b3f0ffc657ecaf42fb6394b76648624a9b408aa10e687729ce303d3f6` | 664073 |
@@ -206,3 +209,12 @@ synthetic fixture (6.2 actual window before/after and two headless camera output
 All other pixels, saved geometry and source assets are omitted; image hashes and
 scoped visual reviews remain. Its 500 core MCP calls exclude auxiliary viewport/
 desktop and managed-session calls. The release is still a draft requiring access.
+
+The tool-reconciliation index plus two record parts contain the exact fdb discovery
+profiles and the 99-name source/backend ledger. All 5,058 original input hashes and
+12,073 indexed call pointers/arguments/response hashes were checked. The 1,583
+observation links include bounded readbacks and failed predicates, not a count of
+verified tools. The two parts have disjoint relative record paths; verify each
+manifest before combining them in a new private directory. No geometry, media,
+checkpoints or vendor files are included. The original historical index remains
+unchanged, and material native failures remain open.

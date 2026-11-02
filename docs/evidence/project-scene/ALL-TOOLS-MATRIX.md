@@ -1,5 +1,12 @@
 # All exposed tools: final validation ledger
 
+The [current source/backend reconciliation](CURRENT-TOOL-RECONCILIATION.md)
+and [per-tool case index](CURRENT-TOOL-RECONCILIATION-20261102.json) supersede this
+page as the review entry point. They retain exact `fdb7a02` discovery profiles,
+all 99 names, actual arguments/results and later affected-path evidence. The
+historical ledger below remains unchanged in scope; latest normal-physics checks
+and material native failures are explicitly open, so this is not merge readiness.
+
 Validation remains in progress. All implementation PRs are unmerged; combined PR #16
 is a draft. The original census below was assembled against `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a`;
 later source-specific qualification is linked separately, without relabeling those calls.
@@ -200,6 +207,7 @@ uses exact `1f21407` in ten fresh H/W processes. It adds meter/centimeter depth-
 resolution, saved-USD-attribute and invalid-unit evidence for `sim__camera__create`
 and `sim__camera__capture`, with the supporting named prim/material/save workflow.
 It does not rerun all 99 names, simulate body motion, or resolve the documented
-Newton crashes/instability and original `20f` stall. The final per-tool source and
-backend reconciliation remains required; a historical invocation is not a current
-all-version effect pass.
+Newton crashes/instability and original `20f` stall. The
+[per-tool source/backend reconciliation](CURRENT-TOOL-RECONCILIATION.md) now maps
+these records; a historical invocation is not a current all-version effect pass.
+Its remaining-gate list is separate from this historical ledger.
