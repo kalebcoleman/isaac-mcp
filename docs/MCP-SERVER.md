@@ -46,7 +46,7 @@ uv tool install --force --editable ./mcp
 
 Because it is installed in editable mode from `./mcp`, modifications to `mcp/isaac_mcp/` take effect whenever the MCP server process restarts.
 
-`install.sh` also creates an ffmpeg shim at `~/.local/bin/ffmpeg` for the twin's viewport recorder, unless an
+`install.sh` also creates an ffmpeg shim at `~/.local/bin/ffmpeg` (a fixed default) for the twin's viewport recorder, unless an
 unrelated file or symlink already occupies that path. Direct `uv tool install` does not create the shim.
 
 ---
@@ -172,6 +172,15 @@ The switch persists until the MCP server process restarts.
 
 ## 4. Client Configuration
 
+Replace `<repo>` with your checkout (suggested: `<workspace>/isaac-mcp`; see
+[WORKSPACE.md](WORKSPACE.md)) and `<home>` with your home directory. Optional environment
+variables for any client below:
+
+- `ISAAC_MCP_WORKSPACE=<workspace>` makes `<workspace>/assets` an asset store (when the folder exists).
+- `ISAAC_MCP_SIM_ROOT=<repo>` tells managed `sim__launch` sessions which checkout holds `run.sh`;
+  set it when the host is installed outside the checkout.
+- `ISAAC_MCP_PYTHON=<env>/bin/python` pins the Sim interpreter that `run.sh` uses.
+
 ### Claude Code
 
 Configure Claude Code using the `claude mcp` CLI:
@@ -230,14 +239,15 @@ codex mcp add isaac --env DISPLAY="${DISPLAY:-:0}" --env UR5E_DT_PORT=8766 \
 
 ```toml
 [mcp_servers.isaac]
-command = "/home/<user>/.local/bin/isaac-mcp"
+command = "<home>/.local/bin/isaac-mcp"
 
 [mcp_servers.isaac.env]
 DISPLAY = ":0"
 UR5E_DT_PORT = "8766"
 # For the isaaclab__* job tools:
-# ISAACLAB_PYTHON = "/path/to/lab-env/bin/python"
-# ISAACLAB_ROOT = "/path/to/IsaacLab"
+# ISAACLAB_PYTHON = "<workspace>/envs/lab-3.0/bin/python"
+# ISAACLAB_ROOT = "<workspace>/IsaacLab"
+# ISAAC_MCP_WORKSPACE = "<workspace>"
 ```
 
 ### Antigravity
@@ -250,7 +260,7 @@ config**. The file does not allow comments.
 {
   "mcpServers": {
     "isaac": {
-      "command": "/home/<user>/.local/bin/isaac-mcp",
+      "command": "<home>/.local/bin/isaac-mcp",
       "args": [],
       "env": {
         "DISPLAY": ":0",
