@@ -718,6 +718,8 @@ def cmd_add(args) -> int:
             target = pack_dir / rel
             if target.is_symlink() or _inside_repo(target.parent):
                 raise CliError(f"refusing unsafe destination: {target}")
+            if target.exists() and not target.is_file():
+                raise CliError(f"refusing destination: {target} exists and is not a file")
             for parent in PurePosixPath(rel).parents:
                 if str(parent) == ".":
                     continue

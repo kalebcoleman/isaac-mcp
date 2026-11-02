@@ -1259,3 +1259,16 @@ def test_m4_files_installed_before_a_failure_are_still_pinned(cli, capsys, tmp_p
     assert code == 2
     pins = read_pins(store / "ur5e-dt")
     assert pins == {"a.usd": sha(b"a")}
+
+
+def test_b1_force_does_not_half_install_when_a_folder_blocks_a_file(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    (pack / "z" / "sub").mkdir(parents=True)  # a folder where the file z goes
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "a.txt").write_bytes(b"a")
+    (source / "z").write_bytes(b"z")
+    code, _, err = run(cli, capsys, "add", str(source), "--force")
+    assert code == 2 and "is not a file" in err and "Errno" not in err
+    assert not (pack / "a.txt").exists()

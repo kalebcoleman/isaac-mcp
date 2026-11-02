@@ -358,13 +358,13 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-_PINS_CACHE: dict[str, tuple[tuple[int, int, int], dict[str, str]]] = {}
+_PINS_CACHE: dict[str, tuple[tuple[int, int, int, int], dict[str, str]]] = {}
 
 
 def pins(base: Path) -> dict[str, str]:
     """Return ``{relative path: sha256}`` from ``<base>/SHA256SUMS`` (coreutils format).
 
-    Parsed files are cached by modification time, size and inode, so repeated lookups
+    Parsed files are cached by modification and change time, size and inode, so repeated lookups
     (``doctor`` over thousands of pinned files) do not re-read the file each time. The
     returned mapping is shared: do not modify it.
     """
@@ -373,7 +373,7 @@ def pins(base: Path) -> dict[str, str]:
         st = path.stat()
     except OSError:
         return {}
-    stamp = (st.st_mtime_ns, st.st_size, st.st_ino)
+    stamp = (st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino)
     cached = _PINS_CACHE.get(str(path))
     if cached is not None and cached[0] == stamp:
         return cached[1]
