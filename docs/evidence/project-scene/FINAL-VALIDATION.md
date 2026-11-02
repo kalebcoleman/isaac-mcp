@@ -695,3 +695,55 @@ exited normally afterward.
 records, measured tolerances, media/privacy review and draft-release artifacts.
 This closes that actual-use task's stated checks, not the remaining all-build,
 all-backend or clean-installer gates.
+
+## Current-runtime 6.0.0.0 qualification
+
+Exact `c2ceb7f` passed the 14-phase PhysX suites in both modes on the prepared
+6.0.0.0 interpreter: 137 calls / 55 fullsurface assertions headless, 141 / 54
+windowed. Each also passed legacy motion, 24-call / 12-check authored effect
+readbacks, 25-call / seven-check articulated URDF behavior, and 21 save checks.
+Two live layers and 18 recorded source files remained unchanged in each save.
+Both owned processes exited normally after their respective work.
+
+The headless native log contains 38 error markers: 24 deliberate-test markers
+plus 14 traceback lines from the native property-window selection callback
+`save_scroll_pos` accessing `None.scroll_y_max`. Later measured effects passed;
+this does not establish that callback as harmless or fixed. There were 243 warning
+markers. The final windowed file, including independent use, contains 24 error
+markers and 250 warnings. Neither file contains the selected illegal-cycle,
+simulation-time, nested-task, GetCamera, Force-callback or edit-target-change
+signatures. Actual windowed Console samples differ from these file counts and
+show the deliberate missing/corrupt-asset and invalid-quaternion cases.
+
+The independent windowed task made 87 MCP requests (86 tool calls plus one
+catalog listing). All 19 predeclared effect checks passed. Two 90-step advances
+each measured 1.500000078 simulation seconds at the scene's 60 Hz rate. Both
+robots reached modest targets and returned; the sample rested at 0.139999956 m
+with zero velocity on its known support. Wrist/gripper displacement and return
+were observed separately. All 230 audited preexisting files stayed unchanged;
+the recorded launcher instrumentation remains the exception to commit equality.
+Its ledger retains 41 scoped-pass tools, one save partial and 57 uncalled names.
+The task's native-log interval added nine warnings and no errors. A lowercase
+robot-path lookup returned `NOT_FOUND`; discovery supplied `/World/UR5e`.
+
+Both raw actual-window recordings decoded fully (438 and 308 frames); seven
+frames were visually sampled. The raw clips contain private Console paths and
+are excluded from distribution. The bundle includes three reviewed original
+PNGs and an explicitly labeled 1440-by-610 crop of the 308-frame motion clip.
+This shows before/after step results, not a rendering of every physics step.
+The broad-suite videos have separate upright diagnostic framing that crops the
+upper arm. Appearance is not substituted for the numerical motion checks.
+
+A separate fresh headless process reopened the agent's exact composed save.
+Sixteen named MCP calls passed 12 checks: authored pose/camera composition,
+supported body with mass, both six-joint runtime articulations, new camera
+images, cleanup and unchanged saved-source bytes. Twelve steps advanced
+0.2 simulation seconds, preserving 60 Hz instead of assuming 120 Hz. The prior
+camera definition correctly lacked live ownership; a new camera acquired pixels.
+The new process exited normally with 20 warnings and no errors. This is scene
+composition and runtime initialization, not a solver/controller checkpoint.
+
+[The 29-record supplement](RECENT-6000-20261102.json) and its three draft-release
+bundles preserve all source identities, failures, measurements and review limits.
+The original 6.0.1 native stall, remaining current-build checks and broader Newton
+qualification remain open.
