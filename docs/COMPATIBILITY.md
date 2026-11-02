@@ -30,6 +30,8 @@ The [6.0.1.0 Newton state/rendering follow-up](#6010-newton-state-and-rendering-
 separates later solver/rendering failures from fresh-process partial-step error reporting.
 The [6.1.0.0 Newton contact follow-up](#6100-newton-contact-failures-and-unshipped-controls-2026-11-02)
 records a failed assembled workflow and unsuccessful private collider controls.
+The [focused camera clipping checks](#new-camera-clipping-across-five-builds-2026-11-02)
+qualify rendering and units on a later source, without advancing physics or backend qualification.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
 |---|---|---|
@@ -1250,3 +1252,80 @@ individual call records, 695 original-input hashes and 692 checksums for 693 arc
 without geometry, media, vendor modules or native dumps. No whole-workflow, all-version,
 backend-wide or clean-machine claim follows. Earlier PhysX/Lab evidence and the original
 `20f2953` windowed stepping stall retain their separate identities and unresolved limits.
+
+
+## New-camera clipping across five builds (2026-11-02)
+
+**Focused camera clipping and unit checks passed in ten fresh serial processes** on exact
+`1f21407eacd02aa1387aa4348611aa60b7848a06` (tree
+`c8b73b8a4a441978dee7a94d9d9bfb3472d7c717`). The
+[committed camera supplement](evidence/project-scene/RECENT-CAMERA-CLIPPING-1F21407-20261102.json)
+(SHA-256 `456f8d9d94f69de675ae05908ee32ab515176d57d10571ddc70eadf83ea3a09a`)
+contains 39 key source records. These anonymous fixtures selected PhysX but performed
+**no simulation steps**; this is not a physics, UR/ROS, Newton or full-tool matrix pass.
+
+Each build/mode completed 50 core MCP calls: 42 positive calls and eight deliberate
+invalid-unit control calls. Across ten runs, **500 core calls / 910 passing predicates**
+cover 40 new cameras and 80 actual RGB captures. The predicate total comprises 420
+successful-result flags plus 490 count, metadata, pixel, hash, saved-USD and error checks;
+it is not 910 independent physical effects. Auxiliary viewport/desktop calls are separate.
+
+| Package | Exact Sim build | Kit build | Headless / windowed focused outcome |
+|---|---|---|---|
+| 6.0.0.0 | `6.0.0-rc.22+release.33481.407f3ea1.gl` | `110.0.0+feature.276876.4a5123f4.gl` | Each: 50 calls / 91 predicates passed |
+| 6.0.0.1 | `6.0.0-rc.59+release.41464.5f2772bc.gl` | `110.1.1+production.305458.6312fa25.gl` | Each: 50 calls / 91 predicates passed |
+| 6.0.1.0 | `6.0.1-rc.7+release.42383.32955d8d.gl` | `110.1.2+production.326809.f9bf0dda.gl` | Each: 50 calls / 91 predicates passed |
+| 6.1.0.0 | `6.1.0-rc.26+release.49347.2d230af4.gl` | `110.3.0+feature.371399.00c488ae.gl` | Each: 50 calls / 91 predicates passed |
+| 6.2.0.0 | `6.2.0-rc.14+release.52805.02189a84.gl` | `110.4.0+feature.386251.187cf21b.gl` | Each: 50 calls / 91 predicates passed |
+
+Meter and centimeter stages were tested at 128×128 and 384×384 resolution. New cameras
+reported the physical 0.01 m / 1000 m clipping defaults converted into stage units.
+Actual RTX images showed red and green targets at 23 cm; moving red inside the 1 cm
+near plane removed red pixels while green remained, and returning it restored red.
+PNG dimensions and hashes matched the returned metadata. Deliberate `metersPerUnit=0`
+returned `INVALID_STAGE_UNITS` without creating a camera or changing the root layer,
+and restored the prior edit target. See the creation contract in [TOOLS-SCENE.md](TOOLS-SCENE.md).
+
+Two saved outputs per run were independently opened with **standalone OpenUSD** and
+retained both cameras' clipping attributes. This does not qualify camera reuse after
+fresh Kit reopening. Existing/reopened cameras keep their authored settings. Pack-authored
+camera and geometry opinions use the session layer, but successful native RenderProduct
+and settings allocation changed anonymous root-layer text: **whole-root preservation was
+not demonstrated**. The invalid-unit refusal's unchanged-root result is a separate scope.
+
+Camera-file color targets were horizontally cropped; their pixel counts test depth and
+color effects, not complete-object framing. The runtime owner separately reviewed sampled
+actual application windows, including an entire red cube after viewport framing, and the
+Console before and after the negative control. Headless runs have no application-window
+or Console claim. Final whole-native logs and final windowed Console counters differ:
+
+| Package | Whole native warnings: headless / windowed | Final windowed Console warnings / errors |
+|---|---|---|
+| 6.0.0.0 | 13 / 15 | 17 / 0 |
+| 6.0.0.1 | 15 / 18 | 21 / 0 |
+| 6.0.1.0 | 12 / 15 | 17 / 0 |
+| 6.1.0.0 | 12 / 14 | 15 / 0 |
+| 6.2.0.0 | 13 / 15 | 19 / 0 |
+
+All ten final native logs recorded zero error, traceback, cycle, simulation-time-warning,
+nested-task and force-callback markers. Other warnings remain retained; these counts do
+not establish universal harmlessness or supersede warnings from earlier workflows.
+All ten owned PIDs were absent after normal managed SIGINT. The first headless batch's
+stop/PID timing failure occurred after the 6.1 effects passed; later absence was confirmed
+and the wrapper gained a bounded wait. The first 6.2 desktop click was refused by schema
+for missing dimensions before input; its corrected guarded call succeeded. Both original
+harness failures remain in the evidence.
+
+The [reproduction guide](evidence/project-scene/CAMERA-CLIPPING-REPRODUCTION.md) records
+actual harness commands, deployment-path adaptations, diagnostic bootstrap and separate
+host validation dependencies. Runs used Ubuntu 24.04.5 / RTX 5080 / driver 580.178.04,
+four prepared older installations and the previously documented locked local 6.2 environment.
+No vendor source was modified; this is not full-installer or clean-machine qualification.
+The [unpublished draft bundle](evidence/project-scene/RELEASE-ASSETS.md) retains 1,028
+original hashes and 906 checksums for 907 archive members, including four explicitly
+reviewed fixture PNGs and the harness. Other images retain scoped review records/hashes.
+
+No new independent-agent task was performed. This result does not resolve Newton crashes,
+NaNs or contact instability, ROS/Fabric black images, or the original `20f2953` 108-step
+stall. Earlier runtime identities, final per-tool/source/backend reconciliation, and
+setup/Lab dependency and locked-replay limitations remain separate and open.
