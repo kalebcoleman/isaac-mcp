@@ -16,8 +16,10 @@ cases. These counts include expected errors and failed workflows, not 99 verifie
 tools on every backend. The later [exact `0163` normal PhysX supplement](PHYSX-CURRENT-POSITIVE.md)
 adds 445 calls / 230 assertions across five builds in both modes, closing the narrow
 body/joint/step gap without changing those historical counts. PhysX is the release
-target; Newton remains experimental. The original `20f` PhysX stall remains open,
-and the combined PR is still a draft.
+target; Newton remains experimental. The original `20f` PhysX stall remains open;
+the [bounded assessment and recovery procedure](PHYSX-STALL-DISPOSITION.md) records
+two non-reproductions on current runtime, not a cause or fix. The combined PR is
+still a draft.
 
 The latest [affected PhysX qualification](RECENT-AFFECTED-PHYSX-2C8-20261102.json)
 uses exact combined `2c8ce63` on all five installed builds, headless and windowed:
@@ -26,7 +28,8 @@ saved callback checks. [Final validation](FINAL-VALIDATION.md#integrated-affecte
 separates fresh reopens from same-process checks, retains the initial edit-target
 predicate failure, and records native writeback and visual limits. This is an
 affected-path supplement, not a relabeling of historical 99-tool or agent evidence;
-the original `20f` stall and remaining Newton checks are still open.
+the original `20f` stall remains an explicit risk. Further Newton qualification
+is outside the user-selected PhysX release scope.
 
 Subsequent [6.0.0.1 Newton qualification failed](RECENT-NEWTON-6001-FAILURES-20261102.json)
 in both modes on exact `2c8ce63`. Generic scripted checks completed, but the twin

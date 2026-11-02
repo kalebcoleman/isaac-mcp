@@ -98,6 +98,16 @@ The public schemas expose only root IDs/relative paths; broker snapshot paramete
 Errors from these tools set MCP `isError`; legacy tools retain their prior result envelopes.
 Connection/timeout failures after dispatch have unknown outcomes: inspect before retrying.
 
+If a simulation call stops returning, stop dependent mutations; a client timeout
+cannot preempt a synchronous native call. Preserve the request, endpoint, PID and
+logs, and use bounded read-only health checks. For an owned managed session, the
+opt-in `sim__status` / `sim__stop` tools verify its identity; forced stop can lose
+unsaved state and does not recover unknown in-flight effects. Restart from a known
+saved input in a new verified session instead of replaying the pending mutation.
+The [bounded PhysX stall assessment](evidence/project-scene/PHYSX-STALL-DISPOSITION.md)
+records two current-runtime non-reproductions and the still-unexplained original
+6.0.1 windowed stall. Passing later steps are not a fix for that historical failure.
+
 Pose coordinates use **stage units**, `orientation=[w,x,y,z]` must be a finite unit quaternion,
 and `frame` is `local` or `world`. World transforms use the parent's inverse matrix; singular
 parents are refused. Source and target units/up-axis must match. No automatic normalization.

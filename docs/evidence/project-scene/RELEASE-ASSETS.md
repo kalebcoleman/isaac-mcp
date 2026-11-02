@@ -7,6 +7,8 @@ by marking this release draft.
 
 | Asset URL | SHA-256 | Bytes |
 |---|---|---:|
+| [physx-stall-bounded-0163b3f-records-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/physx-stall-bounded-0163b3f-records-redacted.tar.gz) | `2b26770214fd1e448a848f935d2531ca2550f66b5683e00fc0f86ecf4935790f` | 879147 |
+| [physx-stall-bounded-0163b3f-B-native-redacted.log.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/physx-stall-bounded-0163b3f-B-native-redacted.log.gz) | `46808f036383d442c591eb3c67a2c08248207469828b91998c0c6d7367a64b7a` | 1903429 |
 | [tool-reconciliation-fdb7a02-records-01-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/tool-reconciliation-fdb7a02-records-01-redacted.tar.gz) | `61babd321dce5af8aa2659591e2113416e4cfb16f8d2428c54dbc709858f3cde` | 2483884 |
 | [tool-reconciliation-fdb7a02-records-02-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/tool-reconciliation-fdb7a02-records-02-redacted.tar.gz) | `f857d9f4241ed931aa65de79de1f038155706f50eaad432c7910893c830797b4` | 2481045 |
 | [physx-positive-five-builds-0163b3f-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/physx-positive-five-builds-0163b3f-redacted.tar.gz) | `547e8c7deadec20d6cd08e37ef4e58ec1f1841ec5e02b5e0b3f88805ed4aa26c` | 2191863 |

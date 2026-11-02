@@ -1,0 +1,1248 @@
+{
+  "schema_version": 1,
+  "prepared_utc": "2026-11-02T16:00:31.903871+00:00",
+  "scope": "Bounded assessment of the original20f6.0.1windowed PhysX108-step stall; two processes, not a product fix.",
+  "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+  "original_source_sha": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+  "release_target": "PhysX only; no further Newton investigation",
+  "original": {
+    "utc": "2026-11-02T00:58:55.354441+00:00",
+    "code_sha": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+    "pid": 2469951,
+    "port": 18913,
+    "ros_domain": 223,
+    "window_id": 46137357,
+    "mode": "windowed",
+    "backend": "physx",
+    "release": "6.0.1.0",
+    "status": "unresolved native synchronous simulation stall; not a confirmed crash",
+    "native_stack": "SimulationManager.step:948 _physics_sim_interface.simulate(dt,simulation_time)",
+    "gdb": "native attach denied, no system settings changed",
+    "graceful_stop": "sim__stop SIGINT; process did not exit within25s",
+    "force_stop": "sim__stop SIGKILL; process absent and GPU memory returned to624MiB",
+    "visual_review": "Actual window screenshot6a8f985e shows pre-step Agilebot pose, floating sample, person_view. Console was not opened/repainted while main thread stalled.",
+    "limitation": "Client disconnect does not establish native cancellation. Single reproduction, cause not established. Source checkpoint authored120Hz but returned native stepsdt1/60; investigating independently.",
+    "files": [
+      {
+        "path": ".work/sessions/d7495536aa56492695ee7bec65a19d0a/sim.log",
+        "size": 146954,
+        "sha256": "722920ad8c07b61d3cc4454899c1bec7e655c7e53128acf6c516b58c43c43592"
+      },
+      {
+        "path": ".work/runs/final601w_20f/kit-native.log",
+        "size": 60698776,
+        "sha256": "3bd97e571b88358a09a41f94613cda13d3da90037eb76528867683a712a6c407"
+      },
+      {
+        "path": ".work/compat-followup/final601w_20f-stall-gdb.txt",
+        "size": 261,
+        "sha256": "734ba920970bc38353a56fc79116cc8fd0cc21c5e1334e0d2b71d501ae53bc32"
+      },
+      {
+        "path": ".work/compat-followup/final601w_20f-stall-signal.json",
+        "size": 248,
+        "sha256": "7f376ca389798ffe9ce0c57f23b984afced8a373a694dce8e5ad1275203bb502"
+      },
+      {
+        "path": ".work/compat-followup/final601w_20f-stall-graceful-stop.json",
+        "size": 570,
+        "sha256": "14457124b201820e0ba0e8f10a4d1b4e2bf70eb3347a39358c3d62c67fcbe38c"
+      },
+      {
+        "path": ".work/runs/final601w_20f/mcp-stop.json",
+        "size": 570,
+        "sha256": "810137e13ee79dc338335b83a894baba02f42106d8ac83404d02e14e384a88ff"
+      }
+    ]
+  },
+  "original_process_age_s": 751.480037,
+  "original_actual_rate_hz": 60,
+  "original_checkpoint_authored_rate_hz": 120,
+  "original_checkpoint_typeless_over": true,
+  "cases": [
+    {
+      "tag": "stall601w_0163_a",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "session": {
+        "id": "2d036c1fd3e540ed84ee697ce3fb2070",
+        "pid": 3010393,
+        "port": 19030,
+        "ros_domain": 190,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793633818.1785479,
+        "log": "<worktree>/.work/sessions/2d036c1fd3e540ed84ee697ce3fb2070/sim.log",
+        "output_dir": "<worktree>/.work/sessions/2d036c1fd3e540ed84ee697ce3fb2070/output",
+        "user_config": "<worktree>/.work/sessions/2d036c1fd3e540ed84ee697ce3fb2070/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15030,
+          "ram_available_mib": 52185
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "core_completed_calls": 48,
+      "script_assertions": 13,
+      "outcome": "not reproduced in this bounded attempt; original cause unresolved",
+      "process_age_at108_s": 259.5996901988983,
+      "step108_wall_s": 0.37489795684814453,
+      "physics_dt": 0.016666666666666666,
+      "step12_delta_s": 0.2,
+      "step108_delta_s": 1.7999999999999998,
+      "effects": {
+        "joint_target_max_errors_rad": [
+          0.00021354257478378713,
+          7.193803787231001e-05
+        ],
+        "sample_rest_z": 1.0399999618530273,
+        "wrist_world_displacement_m": 0.08550601867443791,
+        "gripper_world_displacement_m": 0.08583760801919993,
+        "wrist_gripper_relative_offset_change_m": 0.0012730534666866543
+      },
+      "source_hashes_unchanged": true,
+      "checkpoint_sha256": "5e886cac0a7b47f9cdff4cac8e152ac4c9591d819d399a4641b6f53096ea9ea9",
+      "prebuild_physics": {
+        "root": "<worktree>/.work/integration/20f2953bb28361f29b0aa720513b5d8bc2d415ed/checkpoints/ur5e-dt-workstation-person-view-portable-20261029T004117Z.usda",
+        "edit_target": "anon:0x45002cd0",
+        "scene_candidates": [
+          {
+            "path": "/physicsScene",
+            "type": "",
+            "attrs": {
+              "physics:gravityDirection": "(0, 0, -1)",
+              "physics:gravityMagnitude": "9.8100004196167",
+              "physxScene:bounceThreshold": "0.0",
+              "physxScene:broadphaseType": "MBP",
+              "physxScene:collisionSystem": "PCM",
+              "physxScene:disableSleeping": "False",
+              "physxScene:enableCCD": "False",
+              "physxScene:enableEnhancedDeterminism": "False",
+              "physxScene:enableExternalForcesEveryIteration": "False",
+              "physxScene:enableGPUDynamics": "False",
+              "physxScene:enableSceneQuerySupport": "True",
+              "physxScene:enableStabilization": "False",
+              "physxScene:frictionCorrelationDistance": "0.02500000037252903",
+              "physxScene:frictionOffsetThreshold": "0.03999999910593033",
+              "physxScene:frictionType": "patch",
+              "physxScene:gpuCollisionStackSize": "67108864",
+              "physxScene:gpuFoundLostAggregatePairsCapacity": "1024",
+              "physxScene:gpuFoundLostPairsCapacity": "262144",
+              "physxScene:gpuHeapCapacity": "67108864",
+              "physxScene:gpuMaxDeformableSurfaceContacts": "1048576",
+              "physxScene:gpuMaxDeformableVolumeContacts": "1048576",
+              "physxScene:gpuMaxNumPartitions": "8",
+              "physxScene:gpuMaxParticleContacts": "1048576",
+              "physxScene:gpuMaxRigidContactCount": "524288",
+              "physxScene:gpuMaxRigidPatchCount": "81920",
+              "physxScene:gpuTempBufferCapacity": "16777216",
+              "physxScene:gpuTotalAggregatePairsCapacity": "1024",
+              "physxScene:invertCollisionGroupFilter": "False",
+              "physxScene:maxBiasCoefficient": "inf",
+              "physxScene:maxPositionIterationCount": "255",
+              "physxScene:maxVelocityIterationCount": "255",
+              "physxScene:minPositionIterationCount": "1",
+              "physxScene:minVelocityIterationCount": "0",
+              "physxScene:reportKinematicKinematicPairs": "False",
+              "physxScene:reportKinematicStaticPairs": "False",
+              "physxScene:solveArticulationContactLast": "False",
+              "physxScene:solverType": "TGS",
+              "physxScene:timeStepsPerSecond": "120",
+              "physxScene:updateType": "Synchronous"
+            }
+          },
+          {
+            "path": "/PhysicsScene",
+            "type": "PhysicsScene",
+            "attrs": {
+              "physics:gravityDirection": "(0, 0, 0)",
+              "physics:gravityMagnitude": "-inf",
+              "physxScene:bounceThreshold": "0.0",
+              "physxScene:broadphaseType": "GPU",
+              "physxScene:collisionSystem": "PCM",
+              "physxScene:disableSleeping": "False",
+              "physxScene:enableCCD": "False",
+              "physxScene:enableEnhancedDeterminism": "False",
+              "physxScene:enableExternalForcesEveryIteration": "False",
+              "physxScene:enableGPUDynamics": "True",
+              "physxScene:enableSceneQuerySupport": "True",
+              "physxScene:enableStabilization": "False",
+              "physxScene:frictionCorrelationDistance": "0.02500000037252903",
+              "physxScene:frictionOffsetThreshold": "0.03999999910593033",
+              "physxScene:frictionType": "patch",
+              "physxScene:gpuCollisionStackSize": "67108864",
+              "physxScene:gpuFoundLostAggregatePairsCapacity": "1024",
+              "physxScene:gpuFoundLostPairsCapacity": "262144",
+              "physxScene:gpuHeapCapacity": "67108864",
+              "physxScene:gpuMaxDeformableSurfaceContacts": "1048576",
+              "physxScene:gpuMaxDeformableVolumeContacts": "1048576",
+              "physxScene:gpuMaxNumPartitions": "8",
+              "physxScene:gpuMaxParticleContacts": "1048576",
+              "physxScene:gpuMaxRigidContactCount": "524288",
+              "physxScene:gpuMaxRigidPatchCount": "81920",
+              "physxScene:gpuTempBufferCapacity": "16777216",
+              "physxScene:gpuTotalAggregatePairsCapacity": "1024",
+              "physxScene:invertCollisionGroupFilter": "False",
+              "physxScene:maxBiasCoefficient": "inf",
+              "physxScene:maxPositionIterationCount": "255",
+              "physxScene:maxVelocityIterationCount": "255",
+              "physxScene:minPositionIterationCount": "1",
+              "physxScene:minVelocityIterationCount": "0",
+              "physxScene:reportKinematicKinematicPairs": "False",
+              "physxScene:reportKinematicStaticPairs": "False",
+              "physxScene:solveArticulationContactLast": "False",
+              "physxScene:solverType": "TGS",
+              "physxScene:timeStepsPerSecond": "60",
+              "physxScene:updateType": "Synchronous"
+            }
+          }
+        ],
+        "dt": 0.016666666666666666,
+        "engine": "physx",
+        "device": "cpu",
+        "fabric": false,
+        "root_memory_sha": "fd99090cac05d4984bb0391e9e27e477bf02fdb2b6bcc6eba58f81cfee136f78"
+      },
+      "initial_stage": {
+        "status": "ok",
+        "session_id": "ed8f29ff568e47779296641f9b1404f8",
+        "stage_id": "dac5e9277732493282410f9a7031c383",
+        "pid": 3010393,
+        "source": "<worktree>/.work/integration/20f2953bb28361f29b0aa720513b5d8bc2d415ed/checkpoints/ur5e-dt-workstation-person-view-portable-20261029T004117Z.usda",
+        "default_prim": null,
+        "meters_per_unit": 1.0,
+        "up_axis": "Z",
+        "prim_count": 2032,
+        "truncated": false,
+        "playing": false,
+        "stopped": true,
+        "time_s": 0.0,
+        "profile": "trusted_project",
+        "sandboxed": false,
+        "staging": "<worktree>/.work/runs/stall601w_0163_a/staging",
+        "usd_version": [
+          0,
+          25,
+          11
+        ],
+        "runtime_edit_target_managed": false,
+        "device_error": null,
+        "runtime": {
+          "release": "6.0.1.0",
+          "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+          "reported_core": "6.0.1",
+          "identity_source": "package and VERSION",
+          "packages": {
+            "isaacsim": "6.0.1.0",
+            "isaacsim-kernel": "6.0.1.0",
+            "isaacsim-core": "6.0.1.0",
+            "isaacsim-sensor": "6.0.1.0",
+            "isaacsim-replicator": "6.0.1.0"
+          },
+          "version_files": {
+            "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+          },
+          "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+          "extensions": {
+            "omni.replicator.core": {
+              "id": "omni.replicator.core-1.13.27",
+              "version": "1.13.27",
+              "enabled": true
+            },
+            "omni.kit.hydra_texture": {
+              "id": "omni.kit.hydra_texture-1.6.0",
+              "version": "1.6.0",
+              "enabled": true
+            },
+            "omni.kit.renderer.capture": {
+              "id": "omni.kit.renderer.capture-2.0.1",
+              "version": "2.0.1",
+              "enabled": true
+            },
+            "omni.syntheticdata": {
+              "id": "omni.syntheticdata-0.6.15",
+              "version": "0.6.15",
+              "enabled": true
+            },
+            "isaacsim.sensors.rtx": {
+              "id": "isaacsim.sensors.rtx-15.17.1",
+              "version": "15.17.1",
+              "enabled": true
+            },
+            "isaacsim.sensors.experimental.rtx": {
+              "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+              "version": "1.4.6",
+              "enabled": true
+            },
+            "isaacsim.core.simulation_manager": {
+              "id": "isaacsim.core.simulation_manager-1.15.6",
+              "version": "1.15.6",
+              "enabled": true
+            },
+            "isaacsim.physics.newton": {
+              "enabled": false
+            },
+            "isaacsim.physics.newton.tensors": {
+              "enabled": false
+            },
+            "omni.warp.core": {
+              "id": "omni.warp.core-1.13.0",
+              "version": "1.13.0",
+              "enabled": true
+            }
+          },
+          "qualified_build": true,
+          "issues": [],
+          "physics_engine": "physx",
+          "physics_adapter": "physx-simulation-manager-v1",
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "physics_packages": {
+            "newton": {
+              "installed_version": "1.2.1",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            },
+            "mujoco": {
+              "installed_version": "3.8.0",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            },
+            "mujoco_warp": {
+              "installed_version": "3.8.0.3",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            }
+          },
+          "warp": {
+            "version": "1.13.0",
+            "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+          }
+        },
+        "app_ready": true,
+        "sensor_resources": {
+          "count": 0,
+          "cleanup_errors": []
+        }
+      },
+      "waits": [
+        {
+          "label": "original inspection gap before lighting/Play",
+          "actual_wall_s": 147.25725555419922
+        },
+        {
+          "label": "original paused pre-command gap / bounded process-age match",
+          "actual_wall_s": 28.00861620903015
+        }
+      ],
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 3010393,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T15:42:39.469142+00:00",
+        "log": ".work/runs/stall601w_0163_a/kit-native.log",
+        "bytes": 31996369,
+        "sha256": "30159bb3a75314dad55ec4379c184cc374051d0613eb696155a46941c10131b4",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 15,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "reviewed_utc": "2026-11-02T15:43:04.967060+00:00",
+        "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 3010393,
+        "window_id": 41943053,
+        "reviewed_images": [
+          {
+            "path": "<worktree>/.work/compat-followup/stall601w_0163_a-bounded-v2/image-003.png",
+            "sha256": "1d3cf49131173641ddf11ccbc7c559bc992415a1714a720f26b774f09cc63b3d",
+            "bytes": 208366
+          },
+          {
+            "path": "<worktree>/.work/compat-followup/stall601w_0163_a-bounded-v2/image-044.png",
+            "sha256": "2052fadc926aee2232a10c74611a95266270df5b8f350cca0123a3ceee5b7d81",
+            "bytes": 297789
+          },
+          {
+            "path": "<worktree>/.work/compat-followup/stall601w_0163_a-console/screen-004.png",
+            "sha256": "32a67bd8161469eec1c24ade3dbbb8a873ac792b9e4a6d5167d0f9e7b58def8c",
+            "bytes": 333597
+          },
+          {
+            "path": "<worktree>/.work/runs/stall601w_0163_a/saved/bounded-after.png",
+            "sha256": "bf6d94d7ba4b0c38266e1d81c3d25733c6ab93752194cf83433a56fccb600614",
+            "bytes": 170647
+          }
+        ],
+        "console": {
+          "warnings": 18,
+          "errors": 0
+        },
+        "observations": [
+          "Initial real application window shows original UR5e+gripper and workstation.",
+          "Post-step window shows Agilebot posed on stand, foreground fixture partly crops sample area; numeric body state establishes sample contact.",
+          "Fresh640x480 camera PNG shows red sample on platform and articulated Agilebot; bluefixture occludes part of base.",
+          "Console was actually opened through selectedPID/window checked tool; visible warnings include startup/USD, bridgeclosedclient, trianglecooking, DLSS and hydratexture-release message. No suppression or general harmlessness conclusion."
+        ],
+        "limits": [
+          "Four stills reviewed; no video-frame review yet.",
+          "Images are private diagnostics, not proposed publication; native warning-line counts separate fromUI."
+        ]
+      },
+      "video": {
+        "video": "<home>/Videos/screen-mcp/screen-20261102-084117-634.mp4",
+        "bytes": 49574,
+        "sha256": "ce83d538d75290593c7ea532e49f416ccf1c16e2932d63a642f6a6129a9e8bea",
+        "frames_decoded": 13,
+        "decoder": "imageio_ffmpeg 7.0.2-static",
+        "metadata": {
+          "ffmpeg_version": "7.0.2-static https://johnvansickle.com/ffmpeg/ built with gcc 8 (Debian 8.3.0-6)",
+          "codec": "h264",
+          "pix_fmt": "yuv420p(progressive)",
+          "fps": 10.0,
+          "source_size": [
+            960,
+            600
+          ],
+          "size": [
+            960,
+            600
+          ],
+          "rotate": 0,
+          "duration": 1.3
+        },
+        "reviewed_frames": [],
+        "note": "Full decode is integrity only; sampled pixel review recorded separately."
+      },
+      "video_review": {
+        "reviewed_utc": "2026-11-02T16:00:27.984280+00:00",
+        "frames_decoded": 13,
+        "reviewed_frames": [
+          {
+            "path": "<worktree>/.work/compat-followup/stall601w_0163_a-video/frame-000.png",
+            "sha256": "b54ef440b4f684813860f6f3277807789b63bfbe2320e933f8ac5530c990a839",
+            "bytes": 217055
+          },
+          {
+            "path": "<worktree>/.work/compat-followup/stall601w_0163_a-video/frame-012.png",
+            "sha256": "6018177c343bacdb37b867af82fee8d186151d8bc0a7ae7d441066f41146708a",
+            "bytes": 219215
+          }
+        ],
+        "observations": [
+          "First sampled real-window frame shows raised red sample and initial Agilebot pose.",
+          "Last sampled frame shows changed Agilebot pose; sample has fallen below viewport crop. Separate runtime z and camera output establish platform contact."
+        ],
+        "limitations": [
+          "Only first and last frames visually reviewed; all frames decoded.",
+          "Short1.3/1.4second captures do not establish real-time simulation or complete robot visibility.",
+          "Private images/video not distributed; hashes are traceability records."
+        ]
+      }
+    },
+    {
+      "tag": "stall601w_0163_b",
+      "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+      "session": {
+        "id": "96c0e94a370c4aa6856c3a066d2e6b57",
+        "pid": 3013125,
+        "port": 19031,
+        "ros_domain": 191,
+        "headless": false,
+        "show_ur5e_panel_on_start": false,
+        "enable_motion_bvh": true,
+        "physics_backend": "physx",
+        "started_at": 1793634159.838072,
+        "log": "<worktree>/.work/sessions/96c0e94a370c4aa6856c3a066d2e6b57/sim.log",
+        "output_dir": "<worktree>/.work/sessions/96c0e94a370c4aa6856c3a066d2e6b57/output",
+        "user_config": "<worktree>/.work/sessions/96c0e94a370c4aa6856c3a066d2e6b57/user.config.json",
+        "initial_resources": {
+          "gpu_total_mib": 16303,
+          "gpu_free_mib": 15004,
+          "ram_available_mib": 52323
+        },
+        "state": "starting",
+        "note": "Use sim__status to confirm bridge readiness."
+      },
+      "core_completed_calls": 54,
+      "script_assertions": 17,
+      "outcome": "not reproduced in this bounded attempt; original cause unresolved",
+      "process_age_at108_s": 751.6654424667358,
+      "step108_wall_s": 0.37163305282592773,
+      "physics_dt": 0.016666666666666666,
+      "step12_delta_s": 0.2,
+      "step108_delta_s": 1.7999999999999998,
+      "effects": {
+        "joint_target_max_errors_rad": [
+          0.00021354257478378713,
+          7.193803787231001e-05
+        ],
+        "sample_rest_z": 1.0399999618530273,
+        "wrist_world_displacement_m": 0.08550601867443791,
+        "gripper_world_displacement_m": 0.08583760801919993,
+        "wrist_gripper_relative_offset_change_m": 0.0012730534666866543
+      },
+      "source_hashes_unchanged": true,
+      "checkpoint_sha256": "5e886cac0a7b47f9cdff4cac8e152ac4c9591d819d399a4641b6f53096ea9ea9",
+      "prebuild_physics": {
+        "root": "<worktree>/.work/integration/20f2953bb28361f29b0aa720513b5d8bc2d415ed/checkpoints/ur5e-dt-workstation-person-view-portable-20261029T004117Z.usda",
+        "edit_target": "anon:0x772570011050",
+        "scene_candidates": [
+          {
+            "path": "/physicsScene",
+            "type": "",
+            "attrs": {
+              "physics:gravityDirection": "(0, 0, -1)",
+              "physics:gravityMagnitude": "9.8100004196167",
+              "physxScene:bounceThreshold": "0.0",
+              "physxScene:broadphaseType": "MBP",
+              "physxScene:collisionSystem": "PCM",
+              "physxScene:disableSleeping": "False",
+              "physxScene:enableCCD": "False",
+              "physxScene:enableEnhancedDeterminism": "False",
+              "physxScene:enableExternalForcesEveryIteration": "False",
+              "physxScene:enableGPUDynamics": "False",
+              "physxScene:enableSceneQuerySupport": "True",
+              "physxScene:enableStabilization": "False",
+              "physxScene:frictionCorrelationDistance": "0.02500000037252903",
+              "physxScene:frictionOffsetThreshold": "0.03999999910593033",
+              "physxScene:frictionType": "patch",
+              "physxScene:gpuCollisionStackSize": "67108864",
+              "physxScene:gpuFoundLostAggregatePairsCapacity": "1024",
+              "physxScene:gpuFoundLostPairsCapacity": "262144",
+              "physxScene:gpuHeapCapacity": "67108864",
+              "physxScene:gpuMaxDeformableSurfaceContacts": "1048576",
+              "physxScene:gpuMaxDeformableVolumeContacts": "1048576",
+              "physxScene:gpuMaxNumPartitions": "8",
+              "physxScene:gpuMaxParticleContacts": "1048576",
+              "physxScene:gpuMaxRigidContactCount": "524288",
+              "physxScene:gpuMaxRigidPatchCount": "81920",
+              "physxScene:gpuTempBufferCapacity": "16777216",
+              "physxScene:gpuTotalAggregatePairsCapacity": "1024",
+              "physxScene:invertCollisionGroupFilter": "False",
+              "physxScene:maxBiasCoefficient": "inf",
+              "physxScene:maxPositionIterationCount": "255",
+              "physxScene:maxVelocityIterationCount": "255",
+              "physxScene:minPositionIterationCount": "1",
+              "physxScene:minVelocityIterationCount": "0",
+              "physxScene:reportKinematicKinematicPairs": "False",
+              "physxScene:reportKinematicStaticPairs": "False",
+              "physxScene:solveArticulationContactLast": "False",
+              "physxScene:solverType": "TGS",
+              "physxScene:timeStepsPerSecond": "120",
+              "physxScene:updateType": "Synchronous"
+            }
+          },
+          {
+            "path": "/PhysicsScene",
+            "type": "PhysicsScene",
+            "attrs": {
+              "physics:gravityDirection": "(0, 0, 0)",
+              "physics:gravityMagnitude": "-inf",
+              "physxScene:bounceThreshold": "0.0",
+              "physxScene:broadphaseType": "GPU",
+              "physxScene:collisionSystem": "PCM",
+              "physxScene:disableSleeping": "False",
+              "physxScene:enableCCD": "False",
+              "physxScene:enableEnhancedDeterminism": "False",
+              "physxScene:enableExternalForcesEveryIteration": "False",
+              "physxScene:enableGPUDynamics": "True",
+              "physxScene:enableSceneQuerySupport": "True",
+              "physxScene:enableStabilization": "False",
+              "physxScene:frictionCorrelationDistance": "0.02500000037252903",
+              "physxScene:frictionOffsetThreshold": "0.03999999910593033",
+              "physxScene:frictionType": "patch",
+              "physxScene:gpuCollisionStackSize": "67108864",
+              "physxScene:gpuFoundLostAggregatePairsCapacity": "1024",
+              "physxScene:gpuFoundLostPairsCapacity": "262144",
+              "physxScene:gpuHeapCapacity": "67108864",
+              "physxScene:gpuMaxDeformableSurfaceContacts": "1048576",
+              "physxScene:gpuMaxDeformableVolumeContacts": "1048576",
+              "physxScene:gpuMaxNumPartitions": "8",
+              "physxScene:gpuMaxParticleContacts": "1048576",
+              "physxScene:gpuMaxRigidContactCount": "524288",
+              "physxScene:gpuMaxRigidPatchCount": "81920",
+              "physxScene:gpuTempBufferCapacity": "16777216",
+              "physxScene:gpuTotalAggregatePairsCapacity": "1024",
+              "physxScene:invertCollisionGroupFilter": "False",
+              "physxScene:maxBiasCoefficient": "inf",
+              "physxScene:maxPositionIterationCount": "255",
+              "physxScene:maxVelocityIterationCount": "255",
+              "physxScene:minPositionIterationCount": "1",
+              "physxScene:minVelocityIterationCount": "0",
+              "physxScene:reportKinematicKinematicPairs": "False",
+              "physxScene:reportKinematicStaticPairs": "False",
+              "physxScene:solveArticulationContactLast": "False",
+              "physxScene:solverType": "TGS",
+              "physxScene:timeStepsPerSecond": "60",
+              "physxScene:updateType": "Synchronous"
+            }
+          }
+        ],
+        "dt": 0.016666666666666666,
+        "engine": "physx",
+        "device": "cpu",
+        "fabric": false,
+        "root_memory_sha": "fd99090cac05d4984bb0391e9e27e477bf02fdb2b6bcc6eba58f81cfee136f78"
+      },
+      "initial_stage": {
+        "status": "ok",
+        "session_id": "724629508f9f4c76bdcdad3bb8b870b9",
+        "stage_id": "2ac2879912b24346b201f58dbc0f1af5",
+        "pid": 3013125,
+        "source": "<worktree>/.work/integration/20f2953bb28361f29b0aa720513b5d8bc2d415ed/checkpoints/ur5e-dt-workstation-person-view-portable-20261029T004117Z.usda",
+        "default_prim": null,
+        "meters_per_unit": 1.0,
+        "up_axis": "Z",
+        "prim_count": 2032,
+        "truncated": false,
+        "playing": false,
+        "stopped": true,
+        "time_s": 0.0,
+        "profile": "trusted_project",
+        "sandboxed": false,
+        "staging": "<worktree>/.work/runs/stall601w_0163_b/staging",
+        "usd_version": [
+          0,
+          25,
+          11
+        ],
+        "runtime_edit_target_managed": false,
+        "device_error": null,
+        "runtime": {
+          "release": "6.0.1.0",
+          "build": "6.0.1-rc.7+release.42383.32955d8d.gl",
+          "reported_core": "6.0.1",
+          "identity_source": "package and VERSION",
+          "packages": {
+            "isaacsim": "6.0.1.0",
+            "isaacsim-kernel": "6.0.1.0",
+            "isaacsim-core": "6.0.1.0",
+            "isaacsim-sensor": "6.0.1.0",
+            "isaacsim-replicator": "6.0.1.0"
+          },
+          "version_files": {
+            "<sim-install-601>/lib/python3.12/site-packages/isaacsim/VERSION": "6.0.1-rc.7+release.42383.32955d8d.gl"
+          },
+          "kit_build": "110.1.2+production.326809.f9bf0dda.gl",
+          "extensions": {
+            "omni.replicator.core": {
+              "id": "omni.replicator.core-1.13.27",
+              "version": "1.13.27",
+              "enabled": true
+            },
+            "omni.kit.hydra_texture": {
+              "id": "omni.kit.hydra_texture-1.6.0",
+              "version": "1.6.0",
+              "enabled": true
+            },
+            "omni.kit.renderer.capture": {
+              "id": "omni.kit.renderer.capture-2.0.1",
+              "version": "2.0.1",
+              "enabled": true
+            },
+            "omni.syntheticdata": {
+              "id": "omni.syntheticdata-0.6.15",
+              "version": "0.6.15",
+              "enabled": true
+            },
+            "isaacsim.sensors.rtx": {
+              "id": "isaacsim.sensors.rtx-15.17.1",
+              "version": "15.17.1",
+              "enabled": true
+            },
+            "isaacsim.sensors.experimental.rtx": {
+              "id": "isaacsim.sensors.experimental.rtx-1.4.6",
+              "version": "1.4.6",
+              "enabled": true
+            },
+            "isaacsim.core.simulation_manager": {
+              "id": "isaacsim.core.simulation_manager-1.15.6",
+              "version": "1.15.6",
+              "enabled": true
+            },
+            "isaacsim.physics.newton": {
+              "enabled": false
+            },
+            "isaacsim.physics.newton.tensors": {
+              "enabled": false
+            },
+            "omni.warp.core": {
+              "id": "omni.warp.core-1.13.0",
+              "version": "1.13.0",
+              "enabled": true
+            }
+          },
+          "qualified_build": true,
+          "issues": [],
+          "physics_engine": "physx",
+          "physics_adapter": "physx-simulation-manager-v1",
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "physics_packages": {
+            "newton": {
+              "installed_version": "1.2.1",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            },
+            "mujoco": {
+              "installed_version": "3.8.0",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            },
+            "mujoco_warp": {
+              "installed_version": "3.8.0.3",
+              "loaded": false,
+              "module": null,
+              "loaded_version": null
+            }
+          },
+          "warp": {
+            "version": "1.13.0",
+            "module": "<sim-install-601>/lib/python3.12/site-packages/isaacsim/extscache/omni.warp.core-1.13.0+lx64/warp/__init__.py"
+          }
+        },
+        "app_ready": true,
+        "sensor_resources": {
+          "count": 0,
+          "cleanup_errors": []
+        }
+      },
+      "waits": [
+        {
+          "label": "original inspection gap before lighting/Play",
+          "actual_wall_s": 147.25870728492737
+        },
+        {
+          "label": "original paused pre-command gap / bounded process-age match",
+          "actual_wall_s": 50.6431097984314
+        }
+      ],
+      "native": {
+        "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 3013125,
+        "pid_absent": true,
+        "reviewed_at": "2026-11-02T15:55:47.868228+00:00",
+        "log": ".work/runs/stall601w_0163_b/kit-native.log",
+        "bytes": 101398547,
+        "sha256": "14062c23377697a7c52ec926db6d4d5b68369cb30680f01a4fda333086e85f02",
+        "whole_log_counts": {
+          "error": 0,
+          "warning": 25,
+          "time": 0,
+          "cycle": 0,
+          "traceback": 0,
+          "force_callback": 0,
+          "nested_task": 0
+        },
+        "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+      },
+      "visual": {
+        "reviewed_utc": "2026-11-02T15:58:05.874452+00:00",
+        "source_sha": "0163b3f07e6b9d3f51006f8845156f664429e580",
+        "pid": 3013125,
+        "window_id": 41943053,
+        "reviewed_images": [
+          {
+            "path": "<worktree>/.work/compat-followup/stall601w_0163_b-bounded-v3/image-050.png",
+            "bytes": 320835,
+            "sha256": "b99dd22e8661fd618c34ff3b893397c2012980f534d11a759c8aa79b9eaa4fcb"
+          },
+          {
+            "path": "<worktree>/.work/compat-followup/stall601w_0163_b-console/screen-004.png",
+            "bytes": 338681,
+            "sha256": "25f7f38c236111fb0e4397ab342f4b699b23be288164059b576e8dea9c9251f8"
+          },
+          {
+            "path": "<worktree>/.work/runs/stall601w_0163_b/saved/bounded-after.png",
+            "bytes": 160005,
+            "sha256": "9d53a06bb87f679f1255f172fd600fbbba0d063b14372d8599204bff726e0577"
+          }
+        ],
+        "console": {
+          "warnings": 28,
+          "errors": 0
+        },
+        "observations": [
+          "Actual final application shows selected Agilebot on stand and foreground fixture; framing crops much of originalUR5e cell and sample.",
+          "ActualConsole opened using checkedPID/window:28warnings0errors; startup/USD/cooking, CameraInfoaspectratio, DLSS resolution and hydratexture-release notices visible.",
+          "Fresh640x480 camera PNG shows redsample resting on platform,Agilebot above it,bluefixture occluding partofbase."
+        ],
+        "limits": [
+          "Three stills reviewed; no general nativewarning harmlessness claim.",
+          "Physical effects are measured by runtime readback, not deduced from these stills. Nativefile linecounts separatefromUI.",
+          "Images remain private diagnostics, not proposed publication."
+        ]
+      },
+      "video": {
+        "video": "<home>/Videos/screen-mcp/screen-20261102-085511-355.mp4",
+        "bytes": 50117,
+        "sha256": "13562d00cf99f6fdbae95c86eff7fd2e0f3ac52c53f0b92d850303e615762f87",
+        "frames_decoded": 14,
+        "decoder": "imageio_ffmpeg 7.0.2-static",
+        "metadata": {
+          "ffmpeg_version": "7.0.2-static https://johnvansickle.com/ffmpeg/ built with gcc 8 (Debian 8.3.0-6)",
+          "codec": "h264",
+          "pix_fmt": "yuv420p(progressive)",
+          "fps": 10.0,
+          "source_size": [
+            960,
+            600
+          ],
+          "size": [
+            960,
+            600
+          ],
+          "rotate": 0,
+          "duration": 1.4
+        },
+        "reviewed_frames": [],
+        "note": "Full decode is integrity only; sampled pixel review recorded separately."
+      },
+      "video_review": {
+        "reviewed_utc": "2026-11-02T16:00:27.984729+00:00",
+        "frames_decoded": 14,
+        "reviewed_frames": [
+          {
+            "path": "<worktree>/.work/compat-followup/stall601w_0163_b-video/frame-000.png",
+            "sha256": "bdfc40fb6310ff68bdf59b887ca2245e2568180978a50d8d058120b0c8a6d048",
+            "bytes": 218246
+          },
+          {
+            "path": "<worktree>/.work/compat-followup/stall601w_0163_b-video/frame-013.png",
+            "sha256": "25a036771d333fa926a7f60ff780bf86c8a697a6588cf01434f2360bb2fe573e",
+            "bytes": 219285
+          }
+        ],
+        "observations": [
+          "First sampled real-window frame shows raised red sample and initial Agilebot pose.",
+          "Last sampled frame shows changed Agilebot pose; sample has fallen below viewport crop. Separate runtime z and camera output establish platform contact."
+        ],
+        "limitations": [
+          "Only first and last frames visually reviewed; all frames decoded.",
+          "Short1.3/1.4second captures do not establish real-time simulation or complete robot visibility.",
+          "Private images/video not distributed; hashes are traceability records."
+        ]
+      }
+    }
+  ],
+  "retained_harness_setup_failures": [
+    {
+      "label": "A-initial-open-harness",
+      "calls": 5,
+      "outcome": "failed or incomplete; see actual error, not automatically a reproduction of original stall",
+      "exception": "ExceptionGroup('unhandled errors in a TaskGroup', [ExceptionGroup('unhandled errors in a TaskGroup', [RuntimeError(('sim__stage__info', {'effects': 'Operation refused or failed. Inspect state before retrying; step/import/native API failures can have partial effects.', 'status': 'error', 'code': 'NO_STAGE', 'message': 'No stage is open; open a disposable stage in the selected application.'}))])])",
+      "source_assets_unchanged": true
+    },
+    {
+      "label": "B-history-frame-harness",
+      "calls": 25,
+      "outcome": "failed or incomplete; see actual error, not automatically a reproduction of original stall",
+      "exception": "ExceptionGroup('unhandled errors in a TaskGroup', [ExceptionGroup('unhandled errors in a TaskGroup', [RuntimeError(('sim__camera__create', {'effects': 'Operation refused or failed. Inspect state before retrying; step/import/native API failures can have partial effects.', 'status': 'error', 'code': 'INVALID_FRAME', 'message': 'Camera target requires frame=world.'}))])])",
+      "source_assets_unchanged": true
+    }
+  ],
+  "exit": {
+    "time_utc": "2026-11-02T15:56:01.472500+00:00",
+    "processes": [
+      {
+        "tag": "stall601w_0163_a",
+        "pid": 3010393,
+        "absent": true,
+        "started_at": 1793633818.1785479,
+        "shutdown": {
+          "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+          "pid": 3010393,
+          "pid_absent": true,
+          "reviewed_at": "2026-11-02T15:42:39.469142+00:00",
+          "log": ".work/runs/stall601w_0163_a/kit-native.log",
+          "bytes": 31996369,
+          "sha256": "30159bb3a75314dad55ec4379c184cc374051d0613eb696155a46941c10131b4",
+          "whole_log_counts": {
+            "error": 0,
+            "warning": 15,
+            "time": 0,
+            "cycle": 0,
+            "traceback": 0,
+            "force_callback": 0,
+            "nested_task": 0
+          },
+          "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+        }
+      },
+      {
+        "tag": "stall601w_0163_b",
+        "pid": 3013125,
+        "absent": true,
+        "started_at": 1793634159.838072,
+        "shutdown": {
+          "source": "0163b3f07e6b9d3f51006f8845156f664429e580",
+          "pid": 3013125,
+          "pid_absent": true,
+          "reviewed_at": "2026-11-02T15:55:47.868228+00:00",
+          "log": ".work/runs/stall601w_0163_b/kit-native.log",
+          "bytes": 101398547,
+          "sha256": "14062c23377697a7c52ec926db6d4d5b68369cb30680f01a4fda333086e85f02",
+          "whole_log_counts": {
+            "error": 0,
+            "warning": 25,
+            "time": 0,
+            "cycle": 0,
+            "traceback": 0,
+            "force_callback": 0,
+            "nested_task": 0
+          },
+          "scope": "Whole native log after managed stop and confirmed owned PID absence; UI and phase-interval counts are separate. Categorization alone is not a harmlessness claim."
+        }
+      }
+    ],
+    "elapsed_since_first_launch_s": 1143.2939612865448,
+    "hard_ceiling_s": 2100,
+    "gpu": "NVIDIA GeForce RTX 5080, 580.178.04, 16303 MiB, 837 MiB, 14995 MiB"
+  },
+  "runtime_differences": {
+    "original": "20f2953bb28361f29b0aa720513b5d8bc2d415ed",
+    "current": "0163b3f07e6b9d3f51006f8845156f664429e580",
+    "changed_files": [
+      {
+        "path": "exts/isaac.mcp.bridge/isaac_mcp_bridge/bridge.py",
+        "original_sha256": "296afb538abc9c7705b2edbd56df16283efcaa899603713fa95a675cf4f66921",
+        "current_sha256": "e39c7659b893263a648cc474607395cb6ad3cdd1ebca380ce4771185d2541e23"
+      },
+      {
+        "path": "exts/isaac.mcp.bridge/isaac_mcp_bridge/builtins.py",
+        "original_sha256": "60bfabcf6c4033cfa0efd4c8fd139700e8641d66753dbe535b8313507748ce2f",
+        "current_sha256": "f32cf7ee5077393768c83fc084a5f608cf160f6c5a4cab399087237e24193804"
+      },
+      {
+        "path": "exts/sim-tools/sim_tools/advanced.py",
+        "original_sha256": "dc124c7c238651ad339d89c6bada1c4d6c64ce02ece07db9d3367f9e5d0ac8b2",
+        "current_sha256": "e26d372e31ef01a60cb522931762421fd5463a42624d3010525b016ff07351fd"
+      },
+      {
+        "path": "exts/sim-tools/sim_tools/physics.py",
+        "original_sha256": "0d1bbeebe8bd1a42bf601d13d98f28bbdefae7f90b1f343edb5811c54cdc4dd5",
+        "current_sha256": "4fc57ec6e3c0eacd1d2429aa69ac2125e3f3a9d107b40e4e9d5fb4bfe6d35d83"
+      },
+      {
+        "path": "exts/sim-tools/sim_tools/sensors.py",
+        "original_sha256": "424095ecfd375b57f56c751c82bd487670e63fa0164b986e927475119d6493a8",
+        "current_sha256": "a7e58cd89653ab36f1b51f356cf651d5d9409b58b8ebbb483a313b1d042543e2"
+      },
+      {
+        "path": "exts/ur5e-dt/ur5e_dt/extension.py",
+        "original_sha256": "844bf125f51bc9a3abeae6f2209851c4e9a4a128c570491cb6a3671c2deffce5",
+        "current_sha256": "2845f41597194c3be52b41ff21b7686705b3fd34e0b0ffa5de5c532bc2206266"
+      },
+      {
+        "path": "exts/ur5e-dt/ur5e_dt/physics_compat.py",
+        "original_sha256": null,
+        "current_sha256": "e28c735b08e4bd1a6d688c128fbd00dad9eb3ce07a95efd120f5f4519a302438"
+      },
+      {
+        "path": "exts/ur5e-dt/ur5e_dt/world_compat.py",
+        "original_sha256": "8309636bc5e0a577105f0c1ad2f525dfe058288121db9e1f3fce78561477539a",
+        "current_sha256": "613b053c058e3510b65ea59d158db0c37b5884f764c165859f8150b0df394aa8"
+      },
+      {
+        "path": "mcp/isaac_mcp/catalogs/sim.json",
+        "original_sha256": "072c344f3718b5bb91f65c8ada34559589bc817857622e182fee6199543ce3da",
+        "current_sha256": "a9dfa18b88fa3485a6d6388dcd8e7f79368e22b37bb3b1e021cba3e234a5268f"
+      },
+      {
+        "path": "mcp/isaac_mcp/catalogs/ur5e_dt.json",
+        "original_sha256": "5e8cb0d9b7ea230a7eae26b9b77a252eaa3720e5d8ae7f1181ffaa5bcc0eab33",
+        "current_sha256": "2e00216b861a127724aa8177cdd4364ff26a4b8b5cee3ea345ef8ab7d8a3a4d5"
+      },
+      {
+        "path": "mcp/isaac_mcp/client.py",
+        "original_sha256": "b56c3333d275a329e55f1c22b995813c5b7c60c686347f72fea796d53b35f019",
+        "current_sha256": "f67578dc6f7dc5412c2aa400dbadcd90bf9ae605a8566b5a947e3f82211e4d42"
+      },
+      {
+        "path": "mcp/isaac_mcp/scene_contracts.py",
+        "original_sha256": "b3789450c2f0fcc80374d8e20c79014fe412d1c35422ccde6f18264a7aba5260",
+        "current_sha256": "c9e853745dfa869903c1cc6d22a7bbb2563e34c665504a91b324a5e13788741e"
+      },
+      {
+        "path": "mcp/isaac_mcp/server.py",
+        "original_sha256": "cac80c08c9f00e7a374c47c53bc70db3ce3c545e0779d2199d31929b1f829a99",
+        "current_sha256": "52dd4f8003201e734bd5b58788597b6318ba65011cc2931fa7429ddcce498a65"
+      }
+    ],
+    "known_differences": [
+      "Current strict runtime pose validation and truthful host error envelope after original20f",
+      "Later viewport edits use session-layer safeguards",
+      "Current twin runtime wrench callback validation and selected backend handling",
+      "Camera clipping/unit correction; step effects read runtime rather than USD fallbacks",
+      "Current checkpoint exporter fixed separately; this diagnostic intentionally reuses unchanged oldcheckpoint and measures60Hz",
+      "All44 recorded original asset/cache byte hashes equal current at preparation; no asset substitution",
+      "FreshAprocess and approximationB cannot duplicate original complete prior allocation/event history"
+    ]
+  },
+  "current_interpreter": {
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "executable": "<sim-install-601>/bin/python",
+    "distributions": {
+      "isaacsim": "6.0.1.0",
+      "isaacsim-kernel": "6.0.1.0",
+      "isaacsim-core": "6.0.1.0",
+      "isaacsim-sensor": "6.0.1.0",
+      "isaacsim-replicator": "6.0.1.0",
+      "numpy": "2.3.1",
+      "mcp": null
+    }
+  },
+  "totals": {
+    "processes": 2,
+    "completed_replay_calls": 102,
+    "setup_history_calls": 30,
+    "script_assertions": 30,
+    "successful_requested_steps": 240
+  },
+  "disposition": "Not reproduced in two bounded current-runtime attempts. The original native stall remains unexplained and an explicit residual functional risk; later success is not a fix or a cause. No project defect isolated and no product patch made.",
+  "recovery": "A client timeout/disconnect does not cancel native work. Stop dependent mutations and do not replay unknown effects. Preserve records; bounded health/PID/log/registered-stack observation; managed ownedPID SIGINT then force only if samePID persists. Discard unsaved state and reopen known input in a new verified session. Original required force cleanup; these two attempts exited normally. No original in-flight state recovery claim.",
+  "limitations": [
+    "Original complete14-phase/allocation history was not recreated; A age259.60s, B targeted751.48s with a smaller explicit preceding history.",
+    "B original ROS save and twoPlay/Pause/Stop cycles plus genericcamera were used; this is not proof of identical native callbacks/render allocations.",
+    "The old checkpoint was deliberately not fixed: typed-scene problem and authored120Hz vs runtime60Hz retained without a rate override.",
+    "Thirteen current host/runtime/catalog files differ from original20f; identical44asset/cache hashes do not make executable behavior identical.",
+    "Prepared6.0.1.0 environment, diagnostic upload-disabled bootstrap, Ubuntu24.04.5/RTX5080/driver580.178.04; not cleanmachine/newversion evidence.",
+    "Expected missing-articulation tool error retained; setup NO_STAGE/INVALID_FRAME harness failures are distinct from the original native pending step.",
+    "Private real-window stills and first/lastvideo frames sampled only;13/14frames decoded, viewport cropsoriginalcell/sample; no real-time/frame-synchronized physics claim.",
+    "Final native0Error/traceback/cycle/time counts and UI0errors are scoped observations, not all-warning harmlessness or native-crash impossibility.",
+    "No new independent natural-language agent, no broadsuite/newton/lab rerun, no hardnative cancellation or artificially injected recovery.",
+    "No freshKit reuse of the later camera clipping fixture files; existing related limitation stays separate.",
+    "User-led ASU fresh-user install and final combined review remain separate. PR16 draft/unmerged and release unpublished."
+  ],
+  "native_b_asset": {
+    "name": "physx-stall-bounded-0163b3f-B-native-redacted.log.gz",
+    "sha256": "46808f036383d442c591eb3c67a2c08248207469828b91998c0c6d7367a64b7a",
+    "bytes": 1903429,
+    "expanded_bytes": 101368439
+  },
+  "records": [
+    {
+      "label": "stall601w_0163_a/summary",
+      "path": ".work/compat-followup/stall601w_0163_a-bounded-v2/summary.json",
+      "sha256": "74ea139d67232cbc0e9f24474ee8163ac94b2096723c553c41336a21820b5975",
+      "bytes": 48903
+    },
+    {
+      "label": "stall601w_0163_a/checks",
+      "path": ".work/compat-followup/stall601w_0163_a-bounded-v2/checks.json",
+      "sha256": "0cc4d27ecd1badf5434f438fa7139e8e084c3f6ebf7b1bf762eebf952a94eab8",
+      "bytes": 19716
+    },
+    {
+      "label": "stall601w_0163_a/native",
+      "path": ".work/runs/stall601w_0163_a/shutdown-log-review-final.json",
+      "sha256": "6adac89ff76a158321aa9ecf464ec39afcd1e0cb37badea6151b07b8d2aada4e",
+      "bytes": 644
+    },
+    {
+      "label": "stall601w_0163_a/visual",
+      "path": ".work/compat-followup/stall601w_0163_a-visual-review.json",
+      "sha256": "9252d3b97a8678f22cc8d770e72405602119e8d733c5f363ebfbfb5692977732",
+      "bytes": 2096
+    },
+    {
+      "label": "stall601w_0163_a/video",
+      "path": ".work/compat-followup/stall601w_0163_a-video/video-integrity.json",
+      "sha256": "d5ec7ee05a20ed7e097abb8d8e69bfd471129a8fdb586e72857dce89d6c6c665",
+      "bytes": 686
+    },
+    {
+      "label": "stall601w_0163_a/video-review",
+      "path": ".work/compat-followup/stall601w_0163_a-video/sampled-review.json",
+      "sha256": "b7b1e043e05757b24b55e5cb943245adfbe62b8ccfd50e41f255d36ff2ee3bb4",
+      "bytes": 1181
+    },
+    {
+      "label": "stall601w_0163_a/source",
+      "path": ".work/runs/stall601w_0163_a/source-hashes.json",
+      "sha256": "26ff5d9795ddc36d4cd2d0180e0bd49bb876dbff7a0fb6ad27d817fc158c6e77",
+      "bytes": 9919
+    },
+    {
+      "label": "stall601w_0163_a/module-equality",
+      "path": ".work/runs/stall601w_0163_a/bounded-module-comparison.json",
+      "sha256": "481a2677e1b15afac96e06875f1a465310b4aa8fab536f1abcb95fd29497d3a0",
+      "bytes": 1029
+    },
+    {
+      "label": "stall601w_0163_a/108-step",
+      "path": ".work/compat-followup/stall601w_0163_a-bounded-v2/call-042.json",
+      "sha256": "1193d5b6f7f771c4bf09280a3c5080fe57d56a89579c6914b32333a6c3d2db95",
+      "bytes": 7879
+    },
+    {
+      "label": "stall601w_0163_b/summary",
+      "path": ".work/compat-followup/stall601w_0163_b-bounded-v3/summary.json",
+      "sha256": "1e849a2b41d8a373f0c573bde60588a361fb67ebc5904e4890be6a46cdd9b9bf",
+      "bytes": 49437
+    },
+    {
+      "label": "stall601w_0163_b/checks",
+      "path": ".work/compat-followup/stall601w_0163_b-bounded-v3/checks.json",
+      "sha256": "44b9167fa4ec01365fe7fbd9787b98581c371d692b5067c5a66e1f6039fb87a1",
+      "bytes": 20101
+    },
+    {
+      "label": "stall601w_0163_b/native",
+      "path": ".work/runs/stall601w_0163_b/shutdown-log-review-final.json",
+      "sha256": "72ad3debd044e717f1b2992e0f6d662cda1fdf137d16cfe0c8c98426bb040424",
+      "bytes": 645
+    },
+    {
+      "label": "stall601w_0163_b/visual",
+      "path": ".work/compat-followup/stall601w_0163_b-visual-review.json",
+      "sha256": "ffb81d734a734a5ca07796b1c040e481ffa4e5fb48309db897bda944120d71b6",
+      "bytes": 1774
+    },
+    {
+      "label": "stall601w_0163_b/video",
+      "path": ".work/compat-followup/stall601w_0163_b-video/video-integrity.json",
+      "sha256": "42f8e56d8b953e1f2c104a53ede2bbce125f273c7f4184e885ab7fb94fff5162",
+      "bytes": 686
+    },
+    {
+      "label": "stall601w_0163_b/video-review",
+      "path": ".work/compat-followup/stall601w_0163_b-video/sampled-review.json",
+      "sha256": "c7f59bfb6bec94353041c38bcf21560c38e8e423fe2a1702d7b52a669a16a340",
+      "bytes": 1181
+    },
+    {
+      "label": "stall601w_0163_b/source",
+      "path": ".work/runs/stall601w_0163_b/source-hashes.json",
+      "sha256": "fd53da5704009cdfea30a7c1313a5c0e0ceab9fd9e5e822605aa7544ebf48f74",
+      "bytes": 9919
+    },
+    {
+      "label": "stall601w_0163_b/module-equality",
+      "path": ".work/runs/stall601w_0163_b/bounded-module-comparison.json",
+      "sha256": "481a2677e1b15afac96e06875f1a465310b4aa8fab536f1abcb95fd29497d3a0",
+      "bytes": 1029
+    },
+    {
+      "label": "stall601w_0163_b/108-step",
+      "path": ".work/compat-followup/stall601w_0163_b-bounded-v3/call-048.json",
+      "sha256": "502f9294f83069ea0edb5aa6143d1d1de2eb3cd0ec4f3a650b3cd850e3f59bd5",
+      "bytes": 7879
+    },
+    {
+      "label": "A-initial-open-harness",
+      "path": ".work/compat-followup/stall601w_0163_a-bounded/summary.json",
+      "sha256": "ff5132d9b43552ddad7877072e17001ff67c93269cecb1cca2b8d0aa77883e6b",
+      "bytes": 2115
+    },
+    {
+      "label": "B-history-frame-harness",
+      "path": ".work/compat-followup/stall601w_0163_b-bounded-v2/summary.json",
+      "sha256": "b214eb94358b884a31a6207a80880033ca6022651d843fb94e1927a4c5199b86",
+      "bytes": 2667
+    },
+    {
+      "label": "original/pending-step53.json",
+      "path": ".work/compat-followup/agent-final601w-20f/pending-step53.json",
+      "sha256": "d1ea63ed2a7ca75c3648881d3f618e280c007fda990f6dae2e61f44247c3f086",
+      "bytes": 782
+    },
+    {
+      "label": "original/stage-source-before.json",
+      "path": ".work/compat-followup/agent-final601w-20f/stage-source-before.json",
+      "sha256": "9ed1ae47df453ca154a097e1b7240550ba56029822b26749564131c24ba12d77",
+      "bytes": 314
+    },
+    {
+      "label": "original/stage-source-after.json",
+      "path": ".work/compat-followup/agent-final601w-20f/stage-source-after.json",
+      "sha256": "0fd3e08d323046fa807dd456dd89ce238726c41078a4c8548660914e3aca0a78",
+      "bytes": 421
+    },
+    {
+      "label": "original/source-assets-before.json",
+      "path": ".work/compat-followup/agent-final601w-20f/source-assets-before.json",
+      "sha256": "4501419a8b1c373bbcf5754d9ac6101acbc8315b5a201f2cfcfeb8a3c58e8cb0",
+      "bytes": 6578
+    },
+    {
+      "label": "original/environment.json",
+      "path": ".work/compat-followup/agent-final601w-20f/environment.json",
+      "sha256": "a91aab8b67d9f4c36dc04fb0accd58cd3edbd4e262e58fa737f36f217ebc43a7",
+      "bytes": 363
+    },
+    {
+      "label": "original/launch.json",
+      "path": ".work/compat-followup/agent-final601w-20f/launch.json",
+      "sha256": "191387670e67395e54ded330c22de27ebe8e8341f9bb2fdc0ba3f04fe534f7c1",
+      "bytes": 879
+    },
+    {
+      "label": "original/final601w_20f-stall-diagnostic.json",
+      "path": ".work/compat-followup/final601w_20f-stall-diagnostic.json",
+      "sha256": "c701d328f512a49b4ae844df2fc1326d423ec6cfb4db99463f8cac8bcffdc39b",
+      "bytes": 2164
+    },
+    {
+      "label": "original/final601w_20f-stall-gdb.txt",
+      "path": ".work/compat-followup/final601w_20f-stall-gdb.txt",
+      "sha256": "734ba920970bc38353a56fc79116cc8fd0cc21c5e1334e0d2b71d501ae53bc32",
+      "bytes": 261
+    },
+    {
+      "label": "original/final601w_20f-stall-signal.json",
+      "path": ".work/compat-followup/final601w_20f-stall-signal.json",
+      "sha256": "7f376ca389798ffe9ce0c57f23b984afced8a373a694dce8e5ad1275203bb502",
+      "bytes": 248
+    },
+    {
+      "label": "original/final601w_20f-stall-graceful-stop.json",
+      "path": ".work/compat-followup/final601w_20f-stall-graceful-stop.json",
+      "sha256": "14457124b201820e0ba0e8f10a4d1b4e2bf70eb3347a39358c3d62c67fcbe38c",
+      "bytes": 570
+    },
+    {
+      "label": "original/final601w_20f-run-progress.json",
+      "path": ".work/compat-followup/final601w_20f-run-progress.json",
+      "sha256": "0a002bf7d6a4b658130e41d8abdfb796f00804277858a2fac11cb81880a6e20e",
+      "bytes": 30380
+    },
+    {
+      "label": "stall-20f-bounded-plan.md",
+      "path": ".work/compat-followup/stall-20f-bounded-plan.md",
+      "sha256": "24a90e2646ee780d6b11d055d20f9d146467f647a873e2f6003c4e115adbfa01",
+      "bytes": 5512
+    },
+    {
+      "label": "stall20f-current-runtime-differences.json",
+      "path": ".work/compat-followup/stall20f-current-runtime-differences.json",
+      "sha256": "e3ec9cbebefb3d0544d88a2d7d03159261a54959069c27646c36648b0bc97358",
+      "bytes": 4034
+    },
+    {
+      "label": "stall20f-current-python-metadata.json",
+      "path": ".work/compat-followup/stall20f-current-python-metadata.json",
+      "sha256": "20ccb183124d49794367ab6ab2586c63d209416de25e809df8b198f0de9a1611",
+      "bytes": 355
+    },
+    {
+      "label": "stall20f-bounded-exit.json",
+      "path": ".work/compat-followup/stall20f-bounded-exit.json",
+      "sha256": "541c832c5a72d047aa89778e800fae65690f4cca70d47afc99a92c25ffbe56e3",
+      "bytes": 2034
+    }
+  ]
+}
