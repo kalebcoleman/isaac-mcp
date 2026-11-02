@@ -238,6 +238,37 @@ remained pending at this handoff. They do not fix the exact `2c8ce63` Newton 6.0
 headless/windowed native failures or the original `20f2953` stepping stall. Earlier native
 and CPU records retain their own identities; no clean-machine/full-installer claim follows.
 
+### CPU and package follow-up after physics-state diagnostics (2026-11-02)
+
+At exact commit `ba1d4b256a011d00787fe32b2eb85cecec8f8812` (tree
+`be0be9e2523a4c307336a6f9cb09a80285c32e2f`), the full host suite passed **1,380 tests
+in 171.11 seconds**, retaining the intentional duplicate-ZIP-member warning. Focused
+step-failure, scene USD, scene gateway and host-catalog checks passed **123 tests in
+24.90 seconds**. The **MCP 1.22.0** minimum-SDK selection passed **234 tests in
+28.45 seconds**, retaining the Pydantic unresolved `lifespan` annotation warning.
+These are pytest durations; wrapper elapsed times are recorded separately. All six
+jobs completed normally with exit zero, and the exact checkout remained clean.
+
+Documentation/privacy, asset, catalog, shell-syntax and whitespace checks, wheel/sdist
+builds and `npm pack --dry-run` passed. Inspection verified all six actual-command-output
+log hashes and endings, plus the identity and package/tool record hashes, against summary
+SHA-256 `a567f3304ca5e324b80b35ef2f2aa514a437d86f3bb310d918a881a264bfff39`.
+The package/tool record lists Python 3.12.3, uv 0.12.14, Node v26.13.0 and npm 11.20.0,
+plus sizes/digests for the 119,389-byte wheel and 291,632-byte sdist. The packages were
+built locally, not published.
+
+The integrated `physics.py` and `advanced.py` bytes match submitted source
+`f55c64f8e51b192a11a32b1cce9a75b8801db8d2`; the catalog and new step-failure test also
+match. The combined contract retains the separate project-asset routing, so the complete
+contract file is not byte-identical to that source. The change reports invalid observed
+runtime data as `PHYSICS_STATE_INVALID` and includes partial-step clock/phase diagnostics
+after native execution starts. It neither rolls back nor automatically retries; elapsed
+simulation time is not proof of valid physics. Existing `DEVICE_ERROR` quarantine remains.
+Fresh integrated native qualification was **pending at this CPU handoff**. These CPU
+results do not remediate the Newton 6.0.0.1 native failures, the later 6.0.1.0 nonfinite-state
+failure, or the original `20f2953` stepping stall. Historical native/CPU identities and
+clean-machine/full-installer limits remain unchanged.
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
