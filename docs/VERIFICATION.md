@@ -269,6 +269,37 @@ results do not remediate the Newton 6.0.0.1 native failures, the later 6.0.1.0 n
 failure, or the original `20f2953` stepping stall. Historical native/CPU identities and
 clean-machine/full-installer limits remain unchanged.
 
+### CPU and package follow-up after physical camera defaults (2026-11-02)
+
+At exact commit `1f21407eacd02aa1387aa4348611aa60b7848a06` (tree
+`c8b73b8a4a441978dee7a94d9d9bfb3472d7c717`), the full host suite passed **1,390 tests
+in 170.25 seconds**, retaining the intentional duplicate-ZIP-member warning. The selected
+focused run passed **97 tests in 24.95 seconds** across camera units, sensor lifetime,
+advanced scene tools, scene gateway and host catalog. Its recorded command selects five
+test files; this differs from the source worker's 117-test selection and does not relabel
+that result. The **MCP 1.22.0** minimum-SDK run passed **234 tests in 28.38 seconds**,
+retaining the Pydantic unresolved `lifespan` annotation warning. Durations are pytest
+results; wrapper elapsed times remain separate. All six jobs exited zero normally at
+a clean exact checkout.
+
+Documentation/privacy, asset, catalog, shell-syntax and whitespace checks, wheel/sdist
+builds and `npm pack --dry-run` passed. Inspection verified the six actual-command-output
+log hashes and endings and both supporting record hashes against summary SHA-256
+`7c8c59e4b92c329d14cac856d73b2ed3b2d8b482475627bc7a3a269b369aa2df`.
+The package/tool record lists Python 3.12.3, uv 0.12.14, Node v26.13.0 and npm 11.20.0,
+with sizes/digests for the 119,458-byte wheel and 292,238-byte sdist. Built locally does
+not mean published.
+
+The integrated `sensors.py`, `advanced.py`, simulator catalog and camera-unit test bytes
+match source `1c48532e21e8707fa48aba62a524fb62d77a1b43`. The combined contract retains
+project-asset routing and is not byte-identical to the source contract. The change gives
+newly created cameras 0.01–1,000 metre clipping defaults converted to stage units, refuses
+invalid units before mutation, and preserves existing/reopened camera settings. Native
+camera qualification was **pending at this CPU handoff**. No box-collider adapter shipped.
+These results do not resolve prior ROS/Fabric black output, Newton solver/native failures
+or the original `20f2953` stepping stall, and do not establish clean-machine/full-installer
+qualification. Earlier CPU and native evidence retains its own source identity.
+
 ## Live UR5e baseline
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
