@@ -59,3 +59,12 @@ These are scoped native runs, not an independent agent task or all-version
 Newton certification. Integrated PhysX/older-Newton regressions remain separate;
 the subsequent `166e10d` PhysX header failure is retained in
 [final validation](FINAL-VALIDATION.md).
+
+The later [exact integrated PhysX supplement](RECENT-AFFECTED-PHYSX-2C8-20261102.json)
+exercises all 23 UR names and seven built-ins on `2c8ce63`, on each of the five
+installed builds in both modes. Its draft archive's `PER-TOOL-CALL-REFERENCES.json`
+indexes actual full-surface arguments and MCP results; paths under
+`.work/compat-followup/` map to its `records/` members. Each run's independent
+assertion and ROS records establish the bounded effects, with callback/restoration
+checks recorded separately. Historical generic/host/Lab results keep their source
+identities; this supplement does not certify every parameter or complete Newton.

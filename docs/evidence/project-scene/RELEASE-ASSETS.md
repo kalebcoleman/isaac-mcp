@@ -42,6 +42,7 @@ by marking this release draft.
 | [lab3-sim62-c2ceb-selfcontained-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/lab3-sim62-c2ceb-selfcontained-redacted.tar.gz) | `c417aee1540d61f6a44aab8ec9a02dc921ff60021b8e133751bfad5f6ce24022` | 1505566 |
 | [newton-twin62-c2-candidates-v2-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/newton-twin62-c2-candidates-v2-redacted.tar.gz) | `57bcdb0cfb0d58b720e84e4ef3667c2031e1c3469ea60d1557d92fb389d799b6` | 2803657 |
 | [physx-wrench62-166-candidates-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/physx-wrench62-166-candidates-redacted.tar.gz) | `b1b884ddd2017e726ed5195b541e4d2d9cad3cc5d212d9aa391f5962681d1aae` | 1354455 |
+| [affected-physx-five-builds-2c8-redacted.tar.gz](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/affected-physx-five-builds-2c8-redacted.tar.gz) | `d7996dc94648c15ea28d86b646f1fa0f8a66c08311e4a8f44e6e5421c4b431e3` | 5661671 |
 
 `historical-evidence` preserves earlier failures and source comparison; `compatibility-followup`
 contains the later release/build investigation, full suites, independent agents and cleanup.
@@ -166,3 +167,15 @@ or videos are distributed. [The 21-record compact index](RECENT-PHYSX-WRENCH-62-
 keeps original hashes, current source differences and remaining integrated gates
 explicit. The static-subtree readback excludes enumerated native pose/velocity/
 joint-state fields in diagnostic copies only; it is not whole-root preservation.
+
+
+The affected PhysX supplement records exact integrated `2c8ce63` on five installed
+builds in both modes. All 2,156 members passed the unchanged nested privacy scanner;
+2,151 original file hashes were reverified. It contains actual MCP calls, ROS
+measurements, final native logs, harnesses, module identity and the initial
+6.0.0.0 edit-target predicate failure followed by the settled retry. Geometry,
+raw screenshots and videos are omitted. Pixel/video hashes identify private
+originals and their limited sampling, not distributed images.
+[The 88-record compact index](RECENT-AFFECTED-PHYSX-2C8-20261102.json) retains
+source identities, native writeback and warning scopes. The 99-tool ledger,
+older Newton and original `20f` stall remain separate.
