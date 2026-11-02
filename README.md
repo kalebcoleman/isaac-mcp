@@ -72,6 +72,8 @@ not the GPU requirement. First startup may spend minutes preparing shaders and e
 
 ### Connect your agent
 
+Leave the simulator running. Use a second terminal from the same checkout root for the commands below.
+
 Register `isaac-mcp` as a **stdio** server using your client's
 [configuration instructions](docs/MCP-SERVER.md#4-client-configuration).
 For Claude Code, the installer can register it explicitly:

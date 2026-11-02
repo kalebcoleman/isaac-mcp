@@ -25,7 +25,7 @@ See [compatibility](COMPATIBILITY.md) for tested simulator releases and their in
 |---|---|---|
 | Host Python **3.10+** | MCP connection, tool discovery, desktop capture, Lab job management | `isaac-mcp` installed by `uv tool`; independent of Sim |
 | Sim Python **3.12** | Kit, rendering, physics, bridge and scene/UR tools | Checkout `.venv` by default, or explicit `UR5E_DT_PYTHON` |
-| Optional Isaac Lab | Training, evaluation and play | Existing `ISAACLAB_PYTHON` and `ISAACLAB_ROOT`; Lab versions are independent of Sim versions |
+| Optional Isaac Lab | Training, evaluation and play | Existing `ISAACLAB_PYTHON` and `ISAACLAB_ROOT`; select a compatible Sim/Lab version pairing |
 | Optional system ROS | External ROS nodes and the UR mock driver | Matching system ROS distribution, separate from Sim's bundled bridge |
 
 No personal environment name or directory layout is required. Keep existing installations where they are.
@@ -97,6 +97,8 @@ it imports the runtime and may execute a Torch CUDA kernel. It is not a CPU-only
 not be run against an older build or alongside someone else's GPU job as a generic diagnostic.
 
 ## Connect and check without changing the scene
+
+Leave the simulator running; use a second terminal from the same checkout root for terminal checks or registration.
 
 Configure the host as a **stdio MCP server** using the [client guide](MCP-SERVER.md#4-client-configuration),
 then reconnect the client. The server command is `isaac-mcp`, not the simulator Python.
