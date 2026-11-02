@@ -49,13 +49,16 @@ result = {
 }
 ```
 
-Check a prim and its world transform:
+Check a prim and its world transform. USD prim paths are case-sensitive: the supplied twin
+uses `/World/UR5e`. For imported robots, discover the actual path with `sim__stage__tree` or
+`sim__prim__find` using the current stage identity; substitute that path below rather than
+assuming the twin's name applies. Prefer `sim__prim__get` when a named read is sufficient:
 
 ```python
 stage = omni.usd.get_context().get_stage()
-prim = stage.GetPrimAtPath("/World/ur5e")
+prim = stage.GetPrimAtPath("/World/UR5e")
 if not prim.IsValid():
-    result = {"error": "no prim at /World/ur5e"}
+    result = {"error": "no prim at /World/UR5e"}
 else:
     xf = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
     result = {"type": prim.GetTypeName(), "translation": list(xf.ExtractTranslation())}
