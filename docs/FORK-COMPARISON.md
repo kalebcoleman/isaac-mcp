@@ -35,7 +35,7 @@ No raw Python/manual UI action is counted as a substitute for any dedicated tool
 
 | Fork tool / task | Our registered tool(s) | Parameter, behavior and usability difference | Implementation status | Live exercise and evidence |
 |---|---|---|---|---|
-| [`import_urdf`](https://github.com/whats2000/isaacsim-mcp-server/blob/bfcd2111a9a98657ea87ba3be8564ea19c1a89e6/isaac_mcp/tools/assets.py) — Import a robot from a URDF file into the scene. | assets__import_urdf | Approved snapshot; relative file dependencies; DTD/entities/package:// refused; private generated output, then normal USD pipeline. | Implemented subset | [Expanded 23–25: actual converted prim, same stage](evidence/project-scene/TOOL-COVERAGE.md) |
+| [`import_urdf`](https://github.com/whats2000/isaacsim-mcp-server/blob/bfcd2111a9a98657ea87ba3be8564ea19c1a89e6/isaac_mcp/tools/assets.py) — Import a robot from a URDF file into the scene. | assets__import_urdf | Approved snapshot; relative dependencies; DTD/entities/package:// refused. Validate/select shared physics on private generated output, then normal USD pipeline. | Implemented subset; current fix partly qualified | [Retained missing-physics failure and230f4b3 6.0.1H authored/runtime test](evidence/project-scene/FINAL-VALIDATION.md); other-build fix qualification pending |
 | [`load_usd`](https://github.com/whats2000/isaacsim-mcp-server/blob/bfcd2111a9a98657ea87ba3be8564ea19c1a89e6/isaac_mcp/tools/assets.py) — Load a USD asset from a URL or file path into the scene. | assets__import_usd | No arbitrary paths/URLs; complete bounded project snapshot, missing/outside dependencies refused except explicitly identified installed OmniPBR module. | Implemented, stronger targeting/policy | [Core 9–14, 11 conflict refusal](evidence/project-scene/TOOL-COVERAGE.md); [agent source hashes + visible robot](evidence/project-scene/TOOL-COVERAGE.md) |
 | [`search_usd`](https://github.com/whats2000/isaacsim-mcp-server/blob/bfcd2111a9a98657ea87ba3be8564ea19c1a89e6/isaac_mcp/tools/assets.py) — Search the NVIDIA USD asset library by text description, then load the best match. | assets__search | Local approved filename search only. Fork uses external USDSearch3d semantic service and auto-load; that service is not configured here. | Partial; remote semantic search missing | [Expanded 2: local filename result only](evidence/project-scene/TOOL-COVERAGE.md); semantic service not exercised. |
 | [`generate_3d`](https://github.com/whats2000/isaacsim-mcp-server/blob/bfcd2111a9a98657ea87ba3be8564ea19c1a89e6/isaac_mcp/tools/assets.py) — Generate a 3D model from text or image using Beaver3D, then load it into the scene. | None | No generation integration; no approved provider credentials/endpoint or paid usage. No user file sent anywhere or placeholder claimed as implemented. | Missing integration; live provider use also blocked | Missing integration; no provider/service request or paid usage. |
@@ -92,10 +92,17 @@ runs on each installed release, including6.0.0.0 without experimental.rtx and th
 6.0.0.1 build. A stale first read on6.0.0.0 was reproduced and addressed with CPU priming and
 four ordinary render completions. Sensor creation/deletion/recreation and stage teardown now
 have ownership checks; the6.0.1 native teardown failure and scoped retest are documented.
+A later independent6.0.0.1 task still found stale post-step pixels despite those completions.
+The current default capture instead waits for an owned Hydra product event and a fresh renderer
+CPU transfer, copying pixels inside the callback. Final-code6.0.0.0/6.0.0.1 tests verify immediate
+post-step pixel motion and runtime rest; further final-candidate releases are being validated.
+The old priming result alone is not evidence for the current capture contract.
 A save/reopen test also found invalid serialized native graph handles; saved copies omit those
-runtime records while retaining scene sensor definitions. Fresh-process6.0.0 camera readout
-after reopening still returns NOT_READY despite extended warm-up; it remains a documented
-follow-up, not a working edge case. These are measured adapter paths,
+runtime records while retaining scene sensor definitions. The later6.0.0 `NOT_READY` readout
+failure was traced to an exported `/Orchestrator` graph skipping its Python subscription.
+The corrected save omits recognized orchestration state; fresh-process windowed and headless
+MCP reopen/capture checks pass. Unknown or user-connected native graph content refuses save.
+[Final validation](evidence/project-scene/FINAL-VALIDATION.md) records the measured cases. These are measured adapter paths,
 not an all-versions or all-edge-cases guarantee.
 See the per-version evidence, not PR #9's different workflows, for tested combinations.
 
