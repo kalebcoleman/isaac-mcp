@@ -3,11 +3,13 @@
 
 The public repository ships only assets whose licences permit redistribution.
 The NVIDIA UR5e and RealSense models are downloaded from NVIDIA's public asset
-root into ``$UR5E_DT_ASSET_CACHE`` (default ``~/.cache/ur5e-dt/assets``).  The
-extension resolves bundled files first, then that cache, then the same pinned
-URL directly, so running this script is only needed for offline use. Cached
-files are checked against the manifest hash before use. Set ``UR5E_DT_OFFLINE=1``
-to refuse the remote fallback and fail clearly when the cache is incomplete.
+root into the primary asset store: the first entry of ``$ISAAC_MCP_ASSET_PATH``
+(deprecated alias ``$UR5E_DT_ASSET_CACHE``), default ``~/.cache/ur5e-dt/assets``.
+The extension resolves bundled files first, then the stores, then the same
+pinned URL directly, so running this script is only needed for offline use.
+Stored files are checked against the manifest hash before use. Set
+``ISAAC_MCP_ASSET_STRICT=1`` (deprecated alias ``UR5E_DT_OFFLINE``) to refuse
+the remote fallback and fail clearly when the store is incomplete.
 
 Examples::
 
@@ -161,13 +163,13 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
     )
     for item in manifest.get("manual", []):
         print(f"Manual: {item['target']} — {item['hint']}")
-    print("Air-gapped runs: set UR5E_DT_OFFLINE=1 after this fetch.")
+    print("Air-gapped runs: set ISAAC_MCP_ASSET_STRICT=1 after this fetch.")
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cache-dir", type=Path, default=None, help="override UR5E_DT_ASSET_CACHE")
+    parser.add_argument("--cache-dir", type=Path, default=None, help="override the primary store (ISAAC_MCP_ASSET_PATH)")
     parser.add_argument(
         "--asset-root",
         default=None,

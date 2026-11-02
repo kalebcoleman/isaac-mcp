@@ -824,7 +824,10 @@ class Scene:
         materials = self.validate_project_materials(snapshot_id, manifest_sha256)
         _, manifest = self.broker.verify(snapshot_id, manifest_sha256)
         source_root = filename.parents[len(Path(manifest["entry"]).parts) - 1]
-        override = os.getenv("UR5E_DT_ASSET_CACHE", "").strip()
+        # First entry of ISAAC_MCP_ASSET_PATH (the primary store), else the legacy name.
+        override = os.getenv("ISAAC_MCP_ASSET_PATH", "").strip()
+        override = override.split(os.pathsep)[0].strip() if override else ""
+        override = override or os.getenv("UR5E_DT_ASSET_CACHE", "").strip()
         xdg = os.getenv("XDG_CACHE_HOME", "").strip()
         cache = (
             Path(override).expanduser()
@@ -834,7 +837,11 @@ class Scene:
             / "assets"
         )
         if not cache.is_absolute() or ".." in cache.parts:
-            refuse("CONFIG", "UR5E_DT_ASSET_CACHE must be an absolute local directory.")
+            refuse(
+                "CONFIG",
+                "The asset store (ISAAC_MCP_ASSET_PATH, or the deprecated "
+                "UR5E_DT_ASSET_CACHE) must be an absolute local directory.",
+            )
         repo = Path(__file__).resolve().parents[3]
         if cache == repo or repo in cache.parents:
             refuse("CONFIG", "Workstation cache must be outside the repository.")

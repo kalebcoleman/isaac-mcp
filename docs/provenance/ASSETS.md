@@ -159,25 +159,31 @@ Add:
 
 The twin runs inside Isaac Sim, whose licence already lets the operator use NVIDIA's asset library,
 online or from a local mirror. The twin only needs to reference or fetch those files, not ship them.
-`exts/ur5e-dt/ur5e_dt/asset_cache.py` resolves an asset in this order:
+`exts/ur5e-dt/ur5e_dt/asset_cache.py` resolves an asset in this order (details in
+[ASSETS.md](../ASSETS.md)):
 
-1. **Bundled** — `exts/ur5e-dt/assets/<path>`, for the redistributable files.
-2. **Operator cache** — `$UR5E_DT_ASSET_CACHE` (default `~/.cache/ur5e-dt/assets`), populated by
-   `scripts/fetch_ur5e_assets.py`.
-3. **Pinned NVIDIA asset root** — the HTTPS S3 URL recorded in
+1. **Project stores** — `asset_path` of the nearest `isaac-mcp.json`.
+2. **Bundled / drop-in** — `exts/ur5e-dt/assets/<path>`, for the redistributable files and
+   operator-supplied licensed copies. Used as-is, not hash-checked.
+3. **User stores** — `$ISAAC_MCP_ASSET_PATH` (default `~/.cache/ur5e-dt/assets`; deprecated alias
+   `UR5E_DT_ASSET_CACHE`), populated by `scripts/fetch_ur5e_assets.py` or
+   `scripts/isaac_assets.py add`. Each store is searched under `<store>/ur5e-dt/<path>`, then
+   `<store>/<path>`. A `SHA256SUMS` file beside an asset is a user pin that replaces the manifest hash.
+4. **Pinned NVIDIA asset root** — the HTTPS S3 URL recorded in
    `exts/ur5e-dt/assets-manifest.json` for `robot/ur5e.usd` and `sensors/rsd455.usd`. Isaac Sim's
    asset resolver accepts the URL directly, so a run with network needs no download step.
+   `ISAAC_MCP_ASSET_STRICT=1` (or `"strict": true` in the project file) disables this step.
 
 The manifest pins the Isaac 5.1 generation because the twin was authored against those files; the
 old bundle was the 5.0 generation and already ran on the supported 6.x releases. The fetcher
 verifies the recorded SHA-256 and byte size, so a cached copy is reproducible. The resolver also
 checks a cached file against the manifest before use; a mismatch raises `AssetCorrupt` with the
-`--force` command. Set `UR5E_DT_OFFLINE=1` for an air-gapped run: a missing cache entry then fails
+`--force` command. Set `ISAAC_MCP_ASSET_STRICT=1` (deprecated alias `UR5E_DT_OFFLINE`) for an air-gapped run: a missing cache entry then fails
 with `AssetMissing` and the fetch command instead of returning an unreachable URL. `load_ur5e`
 creates the missing `tool0` Xform at load time.
 
 The workstation has no public source. `load_workstation` accepts a user-supplied `vention.usd` in
-the cache and otherwise builds a simple placeholder bench with the same top-at-z=0 contract. The
+a store and otherwise builds a simple placeholder bench with the same top-at-z=0 contract. The
 bench is visual context only; the robot and object tools do not depend on it.
 
 Poliigon cannot be fetched automatically because it needs an account. Replacing the oak material

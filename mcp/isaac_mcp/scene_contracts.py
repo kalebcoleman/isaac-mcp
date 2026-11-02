@@ -171,7 +171,7 @@ add(
 )
 add(
     "sim.stage.save",
-    "Export a flattened copy, including session edits, to a new basename in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
+    "Export a flattened copy, including session edits, to a new basename ending .usda in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
     dict(
         **TARGET,
         filename=field("string", "New basename ending .usda; no directories."),
@@ -252,7 +252,7 @@ add(
 )
 add(
     "sim.light.modify",
-    "Change intensity/color of a pack-owned light on a stopped timeline.",
+    "Set intensity and color (both required) of a pack-owned light on a stopped timeline.",
     dict(
         **TARGET,
         path=field("string", "Pack-owned light path."),

@@ -15,7 +15,7 @@ logs/
 resources/*
 !exts/ur5e-dt/assets/**
 # Third-party assets that must not be committed (see docs/provenance/ASSETS.md).
-# Put operator copies in $UR5E_DT_ASSET_CACHE, not here.
+# Put operator copies in a store on $ISAAC_MCP_ASSET_PATH (see docs/ASSETS.md), not here.
 exts/ur5e-dt/assets/robot/
 exts/ur5e-dt/assets/sensors/
 exts/ur5e-dt/assets/workstation/

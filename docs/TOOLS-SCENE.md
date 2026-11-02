@@ -58,14 +58,14 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__physics__inspect` | Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. |
 | `sim__body__state` | Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. |
 | `sim__timeline__control` | Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. |
-| `sim__stage__save` | Export a flattened copy, including session edits, to a new basename in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. ROS camera render handles require the explicit export option described below. |
+| `sim__stage__save` | Export a flattened copy, including session edits, to a new basename ending .usda in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. ROS camera render handles require the explicit export option described below. |
 | `sim__viewport__frame` | Select visible geometry and frame the active camera using session-layer edits; source layers and the previous edit target are preserved. No Kit undo entry. Refuses mismatched viewport contexts, look-through targets, unsafe session-sublayer camera opinions, empty bounds and subtrees above 10,000 composed prims. Reports the camera transform and `render_complete=false`: allow ordinary rendering, then capture the verified application window. Framing a smaller subtree can avoid surrounding occluders. Native failures can leave selection/session-camera changes; inspect before retrying. |
 | `assets__search` | Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. |
 | `sim__prim__delete` | Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused. |
 | `sim__prim__clone` | Clone a pack-created simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations. |
 | `sim__stage__clear_owned` | Remove only pack-created non-sensor, non-articulated subtrees, preserving other scene content. Explicit stopped target and confirm required. Returns removed/refused lists. |
 | `sim__light__create` | Create a SphereLight, DistantLight or DomeLight without asset-valued textures. Pose in stage units, orientation wxyz. |
-| `sim__light__modify` | Change intensity/color of a pack-owned light on a stopped timeline. |
+| `sim__light__modify` | Set intensity and color (both required) of a pack-owned light on a stopped timeline. |
 | `sim__material__create` | Create a UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs. |
 | `sim__material__apply` | Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. |
 | `sim__physics__configure` | Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch. |
@@ -123,8 +123,8 @@ the resulting prim or viewport before assuming physics is ready.
 For a workstation, after the same one-time trusted-root approval, call
 `assets__prepare_workstation` with the exact `session_id` and `stage_id` from `sim__stage__info`
 and `source_path` set to the absolute USD path under that root. The tool writes a private project
-copy and wrapper to `workstation/vention.usd` under `UR5E_DT_ASSET_CACHE` (or the twin's default
-XDG cache), and reports the destination and dependency checks. It does **not** load the scene:
+copy and wrapper to `workstation/vention.usd` under the first store of `ISAAC_MCP_ASSET_PATH` (deprecated alias
+`UR5E_DT_ASSET_CACHE`, or the twin's default XDG cache), and reports the destination and dependency checks. It does **not** load the scene:
 call `ur5e_dt__load_workstation` or the appropriate workstation quick-start, then inspect
 `/World/Vention`. The twin and selected Kit must use the same cache. The resolver introduced in
 PR #14 prefers a bundled/operator drop-in over the cache; remove neither automatically and check
