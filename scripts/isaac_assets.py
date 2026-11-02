@@ -37,6 +37,7 @@ import sys
 import tarfile
 import tempfile
 import zipfile
+import zlib
 from pathlib import Path, PurePosixPath
 
 REPO = Path(__file__).resolve().parents[1]
@@ -359,24 +360,54 @@ def _open_tar(archive: Path, limits: Limits):
         raise
 
 
-def _zip_entry_count(archive: Path) -> int | None:
-    """Read the entry count from the end-of-central-directory record without parsing the rest."""
+def _check_zip_directory(archive: Path, limits: Limits) -> None:
+    """Walk the zip central directory under the member limit before ``zipfile`` loads it.
+
+    ``zipfile`` parses the directory by its byte size, not by the claimed entry count, so
+    the count in the end record cannot be trusted. This reads the records themselves, one
+    fixed-size header at a time, stops as soon as the limit is exceeded, and requires the
+    real record count and byte size to match the end record.
+    """
     with archive.open("rb") as fh:
         fh.seek(0, os.SEEK_END)
         size = fh.tell()
         tail_len = min(size, 65535 + 22 + 20 + 56 + 1024)
-        fh.seek(size - tail_len)
+        base = size - tail_len
+        fh.seek(base)
         tail = fh.read()
-    i = tail.rfind(b"PK\x05\x06")
-    if i < 0 or len(tail) - i < 22:
-        return None
-    total = struct.unpack("<H", tail[i + 10 : i + 12])[0]
-    if total != 0xFFFF:
-        return total
-    j = tail.rfind(b"PK\x06\x06", 0, i)
-    if j >= 0 and len(tail) - j >= 56:
-        return struct.unpack("<Q", tail[j + 32 : j + 40])[0]
-    return None
+        i = tail.rfind(b"PK\x05\x06")
+        if i < 0 or len(tail) - i < 22:
+            return  # not a zip we can pre-check; zipfile will report it
+        total = struct.unpack("<H", tail[i + 10 : i + 12])[0]
+        cd_size = struct.unpack("<L", tail[i + 12 : i + 16])[0]
+        end_pos = base + i
+        if total == 0xFFFF or cd_size == 0xFFFFFFFF:
+            j = tail.rfind(b"PK\x06\x06", 0, i)
+            if j >= 0 and len(tail) - j >= 56:
+                total = struct.unpack("<Q", tail[j + 32 : j + 40])[0]
+                cd_size = struct.unpack("<Q", tail[j + 40 : j + 48])[0]
+                end_pos = base + j
+        pos = end_pos - cd_size
+        if pos < 0:
+            raise CliError("malformed zip archive: central directory size is inconsistent")
+        count = 0
+        while pos < end_pos:
+            fh.seek(pos)
+            head = fh.read(46)
+            if len(head) < 46 or head[:4] != b"PK\x01\x02":
+                raise CliError("malformed zip archive: bad central directory record")
+            name_len, extra_len, comment_len = struct.unpack("<HHH", head[28:34])
+            pos += 46 + name_len + extra_len + comment_len
+            count += 1
+            if count > limits.members:
+                raise CliError(
+                    f"archive has more than {limits.members} members; "
+                    "raise --max-members if this is expected"
+                )
+        if pos != end_pos or count != total:
+            raise CliError(
+                f"malformed zip archive: directory has {count} records but declares {total}"
+            )
 
 
 def _extract_archive(archive: Path, into: Path, limits: Limits | None = None) -> None:
@@ -384,12 +415,7 @@ def _extract_archive(archive: Path, into: Path, limits: Limits | None = None) ->
     limits = limits or Limits(DEFAULT_MAX_MEMBERS, DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_TOTAL_BYTES)
     names: set[str] = set()
     if archive.name.lower().endswith(".zip"):
-        count = _zip_entry_count(archive)
-        if count is not None and count > limits.members:
-            raise CliError(
-                f"archive has {count} members, more than {limits.members}; "
-                "raise --max-members if this is expected"
-            )
+        _check_zip_directory(archive, limits)
         try:
             zf = zipfile.ZipFile(archive)
         except zipfile.BadZipFile as exc:
@@ -521,6 +547,13 @@ def _publish(dfd: int, tmp: str, name: str, force: bool) -> None:
     os.unlink(tmp, dir_fd=dfd)
 
 
+def _unlink_quietly(dfd: int, name: str) -> None:
+    try:
+        os.unlink(name, dir_fd=dfd)
+    except FileNotFoundError:
+        pass
+
+
 def _write_new_file(dfd: int, name: str, write) -> str:
     """Create a uniquely named temp file in *dfd* (exclusive, no symlink following)."""
     tmp = _temp_name(name)
@@ -544,7 +577,11 @@ def _install_file(src: Path, rel: str, pack_dir: Path, force: bool) -> None:
                 shutil.copyfileobj(handle, out, 1 << 20)
 
         tmp = _write_new_file(dfd, name, write)
-        _publish(dfd, tmp, name, force)
+        try:
+            _publish(dfd, tmp, name, force)
+        except BaseException:
+            _unlink_quietly(dfd, tmp)
+            raise
     finally:
         os.close(dfd)
 
@@ -554,7 +591,11 @@ def _write_pins(pack_dir: Path, entries: dict[str, str]) -> None:
     dfd = _open_dir_chain(pack_dir, ())
     try:
         tmp = _write_new_file(dfd, asset_cache.PINS_FILE, lambda out: out.write(text.encode("utf-8")))
-        os.rename(tmp, asset_cache.PINS_FILE, src_dir_fd=dfd, dst_dir_fd=dfd)
+        try:
+            os.rename(tmp, asset_cache.PINS_FILE, src_dir_fd=dfd, dst_dir_fd=dfd)
+        except BaseException:
+            _unlink_quietly(dfd, tmp)
+            raise
     finally:
         os.close(dfd)
 
@@ -573,11 +614,14 @@ def cmd_add(args) -> int:
             if args.as_:
                 raise CliError("--as applies to a single file, not an archive")
             scratch = Path(tempfile.mkdtemp(prefix="isaac-assets-"))
-            _extract_archive(
-                src,
-                scratch,
-                Limits(args.max_members, args.max_file_bytes, args.max_total_bytes),
-            )
+            try:
+                _extract_archive(
+                    src,
+                    scratch,
+                    Limits(args.max_members, args.max_file_bytes, args.max_total_bytes),
+                )
+            except (tarfile.TarError, zipfile.BadZipFile, lzma.LZMAError, zlib.error, EOFError) as exc:
+                raise CliError(f"corrupt or truncated archive: {src} ({exc})") from exc
             sources = _walk_directory(scratch)
         elif src.is_dir():
             if args.as_:
