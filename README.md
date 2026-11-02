@@ -44,7 +44,9 @@ See the [tool tiers and filters](AGENTS.md#what-you-can-reach-by-tier).
 >
 > **Validation status:** the installer pins **6.2.0.0**. Scoped results exist for **6.0.0.0,
 > 6.0.0.1, 6.0.1.0, 6.1.0.0 and 6.2.0.0**, with source, mode and limitations recorded in the
-> [matrix](docs/COMPATIBILITY.md). The original 6.0.1 windowed native-step stall remains unresolved.
+> [matrix](docs/COMPATIBILITY.md). The original 6.0.1 windowed native-step stall remains unexplained:
+> [two bounded replays did not reproduce it](docs/evidence/project-scene/PHYSX-STALL-DISPOSITION.md).
+> The assessment and recovery guidance are complete; this is **not a stall fix**.
 > Final PhysX evidence review, the separate fresh-Kit camera-reuse gap and setup limitations
 > remain open; changing the release target does not resolve them.
 > This is a draft integration, not an all-version or clean-machine certification.
