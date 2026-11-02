@@ -15,6 +15,7 @@ environment, results and omissions. The table preserves the historical smoke sco
 [6.0.1.0 headless](#6010-headless-follow-up-2026-11-02) and
 [windowed follow-ups](#6010-windowed-follow-up-2026-11-02) are recorded separately below.
 The [6.1.0.0 PhysX follow-up](#6100-physx-follow-up-2026-11-02) records later mode-specific checks.
+The [6.2.0.0 follow-up](#6200-physx-follow-up-2026-11-02) separates existing and isolated locked environments.
 Final qualification of the combined candidate across the requested builds and modes remains pending.
 
 | Isaac Sim Python package | Project status | Evidence and limits |
@@ -500,3 +501,129 @@ These PhysX results do not qualify generic Newton tools or an installed Isaac La
 Newton/MJWarp pairing; those are separate scopes. They do not resolve the original `20f2953`
 6.0.1 stall or supply the still-pending fresh reopen of that build's newer independent task
 save. Remaining build/mode/backend, clean-install and final-review gates remain open.
+
+## 6.2.0.0 PhysX follow-up (2026-11-02)
+
+The [parent/setup index](evidence/project-scene/RECENT-62-20261102.json) and separate
+[independent clean-stack addendum](evidence/project-scene/RECENT-62-AGENT-20261102.json)
+record these scopes. Their SHA-256 values are respectively
+`2034b8869d5c60d858ac49ef930724bd12b14318dbb9dc9d70b00c56a95b28f0` and
+`0d236c5dd1cfe396deab2c5a0dbee8aa61105224c13b9e7c54faa3f3a6275d2d`;
+all 51 + 15 original source-record sizes and hashes were rechecked for this summary.
+The evidence files preserve earlier observations; later documentation commits are not new runs.
+
+These runs used package **6.2.0.0**, build `6.2.0-rc.14+release.52805.02189a84.gl`,
+Kit `110.4.0+feature.386251.187cf21b.gl`, Python 3.12.3, Ubuntu 24.04.5,
+RTX 5080 and driver 580.178.04. Windowed runs used X11. All results below are **PhysX**.
+
+| Environment and mode | Exact source | Full-surface calls / assertions | Save checks; preserved layers / source files |
+|---|---|---|---|
+| Existing, headless | `d725f84cb853bf5ceb2fa3b7d13d0e002d29becf` | 137 / 55, same-process retry | 21; 2 / 15 |
+| Existing, windowed | `2fdf4044ffdaa081431c14485a88d00abe185c07` | 141 / 54 | 21; 2 / 18 |
+| Isolated locked, headless | `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` | 137 / 55 | 21; 2 / 18 |
+| Isolated locked, windowed | `c2ceb7f1b8130f414872cb4475ffdd1c2d38b96a` | 141 / 54 | 21; 2 / 14 |
+
+Across the broad phases, each mode exercised 39 generic tools, 23 UR5e tools and seven
+bridge built-ins. Host/desktop and Lab evidence is separate, not all 99 tools per mode.
+The runs also passed legacy/existing-physics regressions, 24-call / 12-check authored
+USD effect checks and 25-call / seven-check articulated URDF runtime checks. Saving
+preserved the recorded source hashes; composed USD export is not a solver/controller checkpoint.
+
+The existing headless run's initial full-surface attempt refused the simulated ROS driver
+at call 84 because another driver was detected. A retry under a new evidence tag in the
+**same Kit process**, without code changes or guard weakening, passed. A concurrent CPU-test
+mock was considered, but no matching PID was captured: the cause remains unproven.
+An invalid ROS domain 232 separately caused a locked-environment launch request to refuse
+before Kit started; the corrected launch used domain 171. That refusal is a harness input
+failure, not a simulator-functionality pass.
+
+The existing stack contained **NumPy 2.5.4** despite the kernel's **2.3.1** requirement;
+its dependency check failed. The separate new locked venv used identical `2fdf404`/`c2ceb7f`
+project inputs, NumPy **2.3.1**, and passed the 186-package check. Cached locked sync took
+18.13 seconds on the existing machine. No existing environment was repaired, and neither
+full `install.sh` execution nor clean-machine setup was established. See [reproducibility](REPRODUCIBILITY.md).
+Differences between these runs are not evidence that NumPy caused or fixed native warnings.
+
+### Native logs, Console and visual scope
+
+Counts below are **error / warning / illegal-cycle / simulation-time occurrences** in the
+specified native file scope. They are not counts of failed functional checks or Console totals.
+
+| Run | Reviewed prefix | Final log including shutdown |
+|---|---|---|
+| Existing headless `d725f84` | 30 / 9,053 / 2,897 / 5,855 | 30 / 9,142 / 2,926 / 5,914 |
+| Existing windowed `2fdf404` | 24 / 582 / 0 / 125 | 24 / 801 / 0 / 125 |
+| Locked headless `c2ceb7f` | 24 / 14,299 / 0 / 13,958 | 24 / 14,330 / 0 / 13,989 |
+| Locked windowed `c2ceb7f` | 24 / 83,206 / 0 / 82,297 | 24 / 83,214 / 0 / 82,297 |
+
+Final logs recorded zero reentry, `GetCamera`, Force-callback and edit-target-change markers.
+The 24-error cases include deliberate missing/corrupt-asset and invalid-quaternion tests;
+original responses and other diagnostics remain retained. Neither passing checks nor those
+negative tests justify treating unexplained errors or warnings as harmless. All owned
+processes exited normally; the locked windowed final log includes subsequent independent use.
+
+The existing windowed Console showed 412–441 warnings / 63 errors during the parent review,
+and 804 / 63 at the later review. The locked parent sampled 60,703 / 63, while its later
+independent task saw 83,217 / 63. These UI observations have different timing and aggregation
+from the native prefixes, final files and bounded task intervals; do not subtract them to
+infer a task's native error count.
+
+Runtime-owner visual review sampled **2/172**, **3/193**, **2/170** and **2/193** decoded
+broad-video frames respectively for the table's four runs. Diagnostic upright poses crop
+the upper arm/wrist; these recordings are not full-robot visual certification. The locked
+headless save camera is mostly black with only a partial scene. The later locked windowed
+save view is obscured by a retained lighting-test cube, not evidence of a robot geometry
+failure. The broad window capture and separate independent task show the complete robot.
+Headless sensor/video observations are not window or Console inspections.
+
+The locked windowed parent's separate 16-call / six-check lighting experiment measured
+red, blue and zero-intensity effects on a neutral cube. This is scoped rendered-effect
+proof, not photometric calibration or qualification of every light type.
+
+### Independent tasks and saved-output reopening
+
+The **existing `2fdf404`** task made 119 requests: 28 before a hold and 91 after the user
+confirmed their manual lighting/framing edits and authorized continuation in the same process.
+The earlier report that Kit had exited during that hold was corrected; only the later normal
+shutdown is exit evidence. Fifteen measured checks passed, including 720 steps advancing
+six simulation seconds, sample rest and both robots' target/return. Its ledger records
+38 scoped passes, two partials (isolated light contribution and visual confirmation of a
+window click), and 59 uncalled names. The task's native interval had two warnings and no
+errors. Its full-robot video decoded 429 frames, with three visually sampled. The README
+media retains this existing-stack identity and is not relabeled as locked-stack evidence.
+
+That task's **older save** was reopened in a fresh locked **`c2ceb7f` headless** process:
+16 named calls / 12 checks passed, including two initialized articulations, supported body
+state, new camera images and 12 steps advancing 0.1 simulation seconds. Source bytes stayed
+unchanged. The saved camera was not a currently owned live sensor; a new camera supplied
+the captures. Native review recorded 18 warnings and zero errors/cycles/time warnings;
+the process exited normally. First shader/startup preparation took about 222 seconds,
+not a clean-machine installation timing.
+
+The separate **locked `c2ceb7f` windowed** actual-use task made **92 requests** (91 named
+calls plus one catalog listing), across 40 names. All **17 measured checks** passed;
+its ledger retains **38 scoped passes, two partials and 59 uncalled names**. The partials
+are independent focus-state readback for `raise_window` and the light's isolated contribution;
+the parent's lighting experiment does not upgrade that agent's observation.
+
+Over 720 steps, physics advanced **six simulation seconds**. The sample settled at
+0.829999983 m with zero velocity; Agilebot and UR5e reached and returned within 0.001 rad.
+RG2 followed the wrist with approximately 1.005e-7 m relative translation drift; gripper
+opening/controller competition and the imported test fixture's joint were not independently
+exercised. Forty source/cache files and 262 frozen files stayed unchanged. Of those frozen
+files, 261 match the commit; the launcher contains documented diagnostic logging/faulthandler
+and initial saved-stage loading. The task then explicitly reset its disposable stage through
+a named tool. This deviation is preserved, not described as byte-identical launch code.
+
+All 438 frames of its 43.8-second actual-window video decoded; the child visually sampled
+frames 0/150/437, showing the full UR/RG2. The runtime owner separately reviewed target,
+return and final Content screenshots plus one video sample. The bounded task interval had
+eight warnings, zero errors and zero cycles; it is separate from the final whole-session log.
+**This newer clean-agent composed save still needs its own fresh-process reopen.** The older
+`2fdf404` save's successful reopen does not cover it.
+
+Redacted records and videos are listed in the [draft release index](evidence/project-scene/RELEASE-ASSETS.md);
+they remain unpublished and require access. The original `20f2953` / 6.0.1 native-step
+stall is unresolved. Remaining older-build, generic Newton, clean-machine/full-installer,
+clean Lab-video and final-review gates stay open; installed backend packages and historical
+99-name invocation coverage do not establish universal tool or version support.
