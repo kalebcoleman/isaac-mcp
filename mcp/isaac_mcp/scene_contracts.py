@@ -385,6 +385,50 @@ add(
     ),
 )
 add(
+    "sim.graph.node_types",
+    "Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions.",
+    dict(
+        **TARGET,
+        contains=field("string", "Substring of the node type id or its UI name, case-insensitive (<=64 chars)."),
+        limit=field("integer", "Maximum node types returned, 1..40.", False, default=20),
+        ports=field("boolean", "Include ports (default: only when 5 or fewer types match; at most 8 detailed).", False),
+    ),
+)
+add(
+    "sim.graph.inspect",
+    "Read an OmniGraph: every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). Read-only.",
+    dict(
+        **TARGET,
+        path=field("string", "Graph prim path, e.g. /World/ROS_Clock."),
+        limit=field("integer", "Maximum nodes returned, 1..128.", False, default=64),
+    ),
+)
+add(
+    "sim.graph.show",
+    "Open a graph in the Action Graph editor of a windowed Isaac Sim and frame its nodes, e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands the nodes (port names readable) and auto-arranges them, writing both into the stage. Uses the editor's internal API; refuses cleanly if it changed.",
+    dict(
+        **TARGET,
+        path=field("string", "Graph prim path."),
+        layout=field("boolean", "Auto-arrange the nodes first (writes node positions).", False, default=False),
+        width=field("integer", "Undock the editor window and size it (pixels); 0 keeps the docked layout.", False, default=0),
+        height=field("integer", "Window height in pixels when width is set.", False, default=0),
+    ),
+)
+add(
+    "sim.map.occupancy",
+    "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as /clock run meanwhile), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.",
+    dict(
+        **TARGET,
+        min=field("array", "World [x, y] lower corner of the map in metres."),
+        max=field("array", "World [x, y] upper corner of the map in metres."),
+        z=field("array", "World [z_min, z_max] in metres; Isaac's generator samples one cell-thick layer at the middle of this range, so centre it on the lidar height.", False, default=[0.05, 0.3]),
+        clear=field("array", "Up to 16 [x, y, radius] circles (metres) to mark free, e.g. the robot's own footprint at its start pose.", False, default=[]),
+        start=field("array", "World [x, y] in free space the generator flood-fills from; cells it cannot reach are unknown. Default: the centre of the bounds (move it if a table or pillar is there).", False),
+        cell_size=field("number", "Cell size in metres (map resolution).", False, default=0.05),
+        basename=field("string", "Output file stem (letters, digits, _ -); writes <basename>.pgm and .yaml.", False, default="map"),
+    ),
+)
+add(
     "sim.logs.tail",
     "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs.",
     dict(**TARGET, limit=field("integer", "Maximum lines 1..100.", False, default=50)),

@@ -67,7 +67,7 @@ Pause before saving and check the exported scene after reopening in a fresh proc
    `docs/TOOLS-ISAACLAB.md#locating-an-isaac-lab-install`; do not reinstall or rename an existing
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__stage__info` or `assets__roots`. The
-   39-tool pack (31 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   44-tool pack (36 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan` and `assets__search` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -180,6 +180,19 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   ScriptNode. Use them only when the user asked and Kit was launched with
   `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`; this is not a sandbox.
 
+### Action Graphs and maps
+
+- Before building an Action Graph, look node types up with `sim__graph__node_types` (by id or UI
+  name, e.g. `contains="Make Array"`): it returns the exact type id and port names for this Isaac
+  version, which often differ from tutorials (Break 3-Vector takes `inputs:tuple`; Make Array is
+  `ConstructArray` and needs `inputs:input1..` added with `og.Controller.create_attribute`).
+  Connect with full paths (`<graph>/<node>.outputs:x`). Check the result with `sim__graph__inspect`.
+- For a video or screenshot of a graph, `sim__graph__show` (windowed Kit, `layout=true`, a
+  `width`/`height` to undock it) opens it readable in the Action Graph editor.
+- No map files for Nav2? `sim__map__occupancy` writes a `map_server` PGM + YAML from the scene's
+  colliders (centre `z` on the lidar height; put `start` in open floor; `clear` the robot's own
+  footprint). It plays 8 frames itself, so `/clock` restarts: generate the map before starting RViz.
+
 ### ROS 2 TF and RViz 2
 
 Never hand-build TF/clock graphs with `run_python`; use the tools so the tree is the same every
@@ -224,5 +237,5 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 39 generic tools: 31 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 44 generic tools: 36 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.

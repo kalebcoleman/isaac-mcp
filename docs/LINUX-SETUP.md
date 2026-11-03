@@ -276,7 +276,7 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | `isaac-mcp` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
 | Interpreter missing | Run `python3 scripts/isaac_env.py find`, select a compatible `ISAAC_MCP_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
 | `uv pip check` fails | Record exact versions and conflicts. Use a new isolated locked environment for comparison; do not infer a native failure's cause from metadata alone |
-| 85 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
+| 89 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |

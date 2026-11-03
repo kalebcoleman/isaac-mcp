@@ -108,6 +108,119 @@ class Extension(omni.ext.IExt):
         elif event.type == int(omni.timeline.TimelineEventType.PLAY):
             self._runtime_edit_restorer.cancel()
 
+    async def _timeline_control(self, args):
+        """sim.timeline.control with its guards: settle a pending Stop before Play, the physics
+        backend check and session-layer edit lease (in dispatch), the guarded native Stop, and
+        restoring the edit target. Also used by tools that need physics to run briefly."""
+        import asyncio
+        import omni.kit.app as kit_app
+        from isaac_mcp.project_assets import refuse
+        from .timeline import complete_requested_stop, settle_stop
+
+        timeline_target = (args["session_id"], args["stage_id"])
+        timeline_was_stopped = self.scene.timeline.is_stopped()
+        stop_target_guard = None
+        if args.get("action") == "stop":
+            from .runtime_edit import stop_edit_target_guard
+
+            self.scene.target(*timeline_target)
+            stop_target_guard = stop_edit_target_guard(self.scene, self.scene.stage())
+
+        def validate_stopped():
+            self.scene.target(*timeline_target)
+            if stop_target_guard is not None:
+                stop_target_guard()
+            if not self.scene.timeline.is_stopped():
+                refuse(
+                    "TIMELINE_INTERRUPTED",
+                    "Timeline changed while awaiting native Stop; no automatic Play retry.",
+                )
+
+        if args.get("action") == "play" and self.scene.timeline.is_stopped():
+            await settle_stop(kit_app.get_app().next_update_async, validate_stopped)
+        result = self.dispatch("sim.timeline.control", args)
+        # Await the ordinary frame, never recursively pump the app loop.
+        await asyncio.wait_for(kit_app.get_app().next_update_async(), 5)
+        self.scene.target(*timeline_target)
+        if args["action"] == "stop":
+            result["native_stop_observation"] = await complete_requested_stop(
+                kit_app.get_app().next_update_async,
+                validate_stopped,
+            )
+        if self.scene.timeline.is_stopped():
+            result["edit_target_restored"] = self.scene.end_runtime_edit(self.scene.stage())
+        result.update(
+            playing=self.scene.timeline.is_playing(),
+            stopped=self.scene.timeline.is_stopped(),
+            time_s=self.scene.timeline.get_current_time(),
+        )
+        result["effects"] = (
+            "Timeline state observed after an application update; physics readiness requires a runtime read."
+        )
+        expected = {
+            "play": result["playing"],
+            "stop": result["stopped"],
+            "pause": not result["playing"] and (not result["stopped"] or timeline_was_stopped),
+        }[args["action"]]
+        if not expected:
+            refuse(
+                "TIMELINE_INTERRUPTED",
+                "Requested timeline state was not retained; inspect the returned state before retrying.",
+                observed_state=result,
+            )
+        return result
+
+    async def _occupancy_cycle(self, args):
+        """Isaac's occupancy generator only sees colliders while physics runs: from a stopped
+        timeline, play (through the guarded timeline path), let a few frames run, generate, then
+        stop again so robots return to their authored poses and physics writes stay in the
+        session layer."""
+        import asyncio
+        import omni.kit.app as kit_app
+        from isaac_mcp.project_assets import refuse
+
+        from .graph import validate_occupancy
+        from isaac_mcp.project_assets import AssetError
+
+        s = self.scene
+        ids = dict(session_id=args["session_id"], stage_id=args["stage_id"])
+        stage = s.target(**ids)
+        if not s.timeline.is_stopped():
+            refuse("TIMELINE_ACTIVE", "Stop the timeline first; the tool plays a few frames itself so robots "
+                   "are mapped at their start poses.")
+        validate_occupancy(s, stage, args)  # refuse bad arguments before anything plays
+
+        async def stop():
+            if not s.timeline.is_stopped():
+                await self._timeline_control({**ids, "action": "stop"})
+
+        try:
+            await self._timeline_control({**ids, "action": "play"})
+            for _ in range(8):
+                await kit_app.get_app().next_update_async()
+            result = self.dispatch("sim.map.occupancy", dict(args))
+        except (Exception, asyncio.CancelledError) as exc:
+            try:
+                await stop()
+            except Exception as stop_exc:  # keep the original outcome; report the stop problem with it
+                if isinstance(exc, AssetError):
+                    exc.details["stop_error"] = str(stop_exc)[:300]
+                elif isinstance(exc, Exception):
+                    raise RuntimeError(f"{exc}; stopping the timeline also failed ({str(stop_exc)[:200]}), "
+                                       "so it may still be playing") from exc
+            raise
+        stopped = True
+        try:
+            await stop()
+        except Exception as stop_exc:  # the map exists: still return it, with the stop problem
+            stopped = False
+            result["stop_error"] = (f"{str(stop_exc)[:300]}; the timeline may still be playing. "
+                                    "Stop it with sim__timeline__control.")
+        result["timeline"] = ("played 8 frames for the physics scene" + (", then stopped" if stopped else "")
+                              + ". While playing, OnPlaybackTick graphs ran: /clock restarted and ROS "
+                              "publishers/controllers ticked.")
+        return result
+
     async def _wait_sensor_frame(self, name, args):
         """Observe ordinary rendering without changing timeline or re-entering Kit."""
         from isaac_mcp.project_assets import refuse
@@ -216,82 +329,35 @@ class Extension(omni.ext.IExt):
                 async with self._operation_lock:
                     render_observation = None
                     camera_frame = None
-                    timeline_target = None
-                    timeline_was_stopped = False
-                    if name == "sim.timeline.control":
-                        import omni.kit.app as kit_app
-                        from .timeline import complete_requested_stop, settle_stop
-
-                        timeline_target = (args["session_id"], args["stage_id"])
-                        timeline_was_stopped = self.scene.timeline.is_stopped()
-                        stop_target_guard = None
-                        if args.get("action") == "stop":
-                            from .runtime_edit import stop_edit_target_guard
-
-                            self.scene.target(*timeline_target)
-                            stop_target_guard = stop_edit_target_guard(self.scene, self.scene.stage())
-
-                        def validate_stopped():
-                            self.scene.target(*timeline_target)
-                            if stop_target_guard is not None:
-                                stop_target_guard()
-                            if not self.scene.timeline.is_stopped():
-                                from isaac_mcp.project_assets import refuse
-
-                                refuse(
-                                    "TIMELINE_INTERRUPTED",
-                                    "Timeline changed while awaiting native Stop; no automatic Play retry.",
-                                )
-
-                        if args.get("action") == "play" and self.scene.timeline.is_stopped():
-                            await settle_stop(kit_app.get_app().next_update_async, validate_stopped)
                     if name in ("sim.camera.capture", "sim.lidar.read"):
                         (
                             render_observation,
                             camera_frame,
                         ) = await self._wait_sensor_frame(name, args)
-                    result = self.dispatch(name, args, camera_frame=camera_frame)
+                    if name == "sim.timeline.control":
+                        result = await self._timeline_control(args)
+                    elif name == "sim.map.occupancy":
+                        result = await self._occupancy_cycle(args)
+                    else:
+                        path, layout = args.get("path"), args.get("layout", False)
+                        size = (args.get("width", 0), args.get("height", 0))
+                        ids = (args.get("session_id"), args.get("stage_id"))
+                        result = self.dispatch(name, args, camera_frame=camera_frame)
+                        if isinstance(result, dict) and result.get("_finish") == "sim.graph.show":
+                            import omni.kit.app as kit_app
+                            from .graph import show_graph_finish, show_graph_refocus
+
+                            for _ in range(4):  # the editor builds its window on later frames
+                                await kit_app.get_app().next_update_async()
+                            # Re-check the target: the stage may have changed during those frames.
+                            stage = self.scene.target(*ids, bool(layout))
+                            result = show_graph_finish(stage, path, bool(layout), *size)
+                            for _ in range(3):
+                                await kit_app.get_app().next_update_async()
+                            show_graph_refocus()
+                            await kit_app.get_app().next_update_async()
                     if render_observation is not None:
                         result["render_observation"] = render_observation
-                    if name == "sim.timeline.control":
-                        import asyncio
-                        import omni.kit.app as kit_app
-
-                        # Await the ordinary frame, never recursively pump the app loop.
-                        await asyncio.wait_for(kit_app.get_app().next_update_async(), 5)
-                        self.scene.target(*timeline_target)
-                        if args["action"] == "stop":
-                            result["native_stop_observation"] = await complete_requested_stop(
-                                kit_app.get_app().next_update_async,
-                                validate_stopped,
-                            )
-                        if self.scene.timeline.is_stopped():
-                            result["edit_target_restored"] = (
-                                self.scene.end_runtime_edit(self.scene.stage())
-                            )
-                        result.update(
-                            playing=self.scene.timeline.is_playing(),
-                            stopped=self.scene.timeline.is_stopped(),
-                            time_s=self.scene.timeline.get_current_time(),
-                        )
-                        result["effects"] = (
-                            "Timeline state observed after an application update; physics readiness requires a runtime read."
-                        )
-                        expected = {
-                            "play": result["playing"],
-                            "stop": result["stopped"],
-                            "pause": not result["playing"] and (
-                                not result["stopped"] or timeline_was_stopped
-                            ),
-                        }[args["action"]]
-                        if not expected:
-                            from isaac_mcp.project_assets import refuse
-
-                            refuse(
-                                "TIMELINE_INTERRUPTED",
-                                "Requested timeline state was not retained; inspect the returned state before retrying.",
-                                observed_state=result,
-                            )
                 import json
 
                 if len(json.dumps(result).encode()) > 65536:
