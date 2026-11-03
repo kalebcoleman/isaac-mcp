@@ -17,6 +17,17 @@ MAX_PRIMS = 10000
 MAX_SPECS = 200000
 
 
+# A reference or payload to a prim path that does not exist contributes no specs, so it cannot hide a
+# render-handle dependency. Lab handouts ship with such dangling internal references (the TurtleBot3
+# scene has two), and refusing on them left students with no way to save at all.
+HARMLESS_COMPOSITION_ERRORS = ("ErrorUnresolvedPrimPath",)
+
+
+def blocking_composition_errors(errors):
+    """Composition errors that could hide content from the dependency scan (all but harmless kinds)."""
+    return [e for e in errors if type(e).__name__ not in HARMLESS_COMPOSITION_ERRORS]
+
+
 def unsupported(message, path, **details):
     refuse("SAVE_UNSUPPORTED", message + " Live stage and source files preserved.",
            path=str(path), **details)
@@ -85,10 +96,12 @@ def camera_handles(stage, reset, binding_check):
             next(iter(selected)), properties=sorted(selected),
             retry_with={"reset_camera_render_handles": True})
     # A masked/unloaded composition cannot establish that all dependencies were inspected.
+    blocking = blocking_composition_errors(stage.GetCompositionErrors())
     if (stage.GetPopulationMask().GetPaths() != [Sdf.Path.absoluteRootPath]
-            or stage.GetCompositionErrors()
+            or blocking
             or any(p.HasPayload() and not p.IsLoaded() for p in prims)):
-        unsupported("Complete loaded composition is required to check render-handle dependencies.", "/")
+        unsupported("Complete loaded composition is required to check render-handle dependencies.", "/",
+                    composition_errors=[str(e)[:300] for e in blocking[:5]])
     for entry in selected.values():
         attr = stage.GetAttributeAtPath(entry["path"])
         stack = attr.GetPropertyStack()

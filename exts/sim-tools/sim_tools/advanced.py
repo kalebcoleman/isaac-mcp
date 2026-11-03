@@ -13,6 +13,7 @@ from isaac_mcp.project_assets import AssetError, refuse
 from .core import bounded, vector
 
 MUTATIONS = {
+    "sim.graph.build",
     "sim.prim.delete",
     "sim.prim.clone",
     "sim.stage.clear_owned",
@@ -861,6 +862,10 @@ class Advanced:
                 ],
                 scope="last 32 KiB; WARN/ERROR only",
             )
+        if name == "sim.graph.build":
+            from .graph_build import build
+
+            return build(stage, a, s.timeline.is_stopped())
         if name in ("sim.graph.node_types", "sim.graph.inspect", "sim.graph.show", "sim.map.occupancy"):
             from . import graph
 

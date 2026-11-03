@@ -57,16 +57,30 @@ def path(value, root=False):
     return p
 
 
-def bounded(stage, root, limit):
+RUNTIME_ROOTS = ("/Render",)  # Replicator/render-product prims Kit adds at runtime; they crowded out the scene
+
+
+def bounded(stage, root, limit, depth=None, include_runtime=True):
+    """Prims under *root* (pre-order), at most *limit*; *depth* levels below root; runtime /Render prims
+    skipped unless *include_runtime* or the root is inside them."""
     if type(limit) is not int or not 1 <= limit <= 200:
         refuse("LIMIT", "limit must be 1..200.")
+    if depth is not None and (type(depth) is not int or not 1 <= depth <= 64):
+        refuse("LIMIT", "depth must be 1..64.")
     p = stage.GetPrimAtPath(path(root, True))
     if not p:
         refuse("NOT_FOUND", "No prim at requested root.")
+    base = p.GetPath().pathElementCount
+    skip = () if include_runtime or any(str(p.GetPath()).startswith(r) for r in RUNTIME_ROOTS) else RUNTIME_ROOTS
     it = iter(Usd.PrimRange(p, Usd.PrimAllPrimsPredicate))
     nodes = []
     for prim in it:
         if prim.IsPseudoRoot():
+            continue
+        text = str(prim.GetPath())
+        too_deep = depth is not None and prim.GetPath().pathElementCount - base > depth
+        if too_deep or any(text == r or text.startswith(r + "/") for r in skip):
+            it.PruneChildren()
             continue
         if len(nodes) == limit:
             return nodes, True
@@ -983,7 +997,23 @@ class Scene:
                 shutil.rmtree(work, ignore_errors=True)
                 shutil.rmtree(bundle, ignore_errors=True)
 
-    def save(self, stage, filename, runtime_poses=None, reset_camera_render_handles=False):
+    def save_directory(self, directory):
+        """Where sim.stage.save writes: the configured output root, or an existing folder under the
+        user's home (students keep lab checkpoints in their own work folder)."""
+        if directory in (None, ""):
+            self.output.mkdir(mode=0o700, parents=True, exist_ok=True)
+            return self.output
+        if not isinstance(directory, str) or not os.path.isabs(os.path.expanduser(directory)):
+            refuse("INVALID_OUTPUT", "directory must be an absolute path to an existing folder.")
+        folder = Path(os.path.expanduser(directory)).resolve()
+        home = Path.home().resolve()
+        if not folder.is_dir():
+            refuse("INVALID_OUTPUT", f"{folder} is not an existing folder; create it first.")
+        if folder != home and home not in folder.parents and folder != self.output.resolve():
+            refuse("INVALID_OUTPUT", f"directory must be inside {home} (or the configured output root).")
+        return folder
+
+    def save(self, stage, filename, runtime_poses=None, reset_camera_render_handles=False, directory=None):
         if self.timeline.is_playing():
             refuse(
                 "TIMELINE_ACTIVE",
@@ -999,15 +1029,15 @@ class Scene:
         from .render_export import camera_handles, reset_export_handles
 
         handles = camera_handles(stage, reset_camera_render_handles, self.render_binding)
-        self.output.mkdir(mode=0o700, parents=True, exist_ok=True)
+        folder = self.save_directory(directory)
         from isaac_mcp.project_assets import open_dir
 
-        fd = open_dir(self.output)
+        fd = open_dir(folder)
         tmp = None
         try:
             # Export to private temporary file; hard-link publication is no-replace,
             # unlike an exists check followed by Export to the destination.
-            handle, tmp = tempfile.mkstemp(suffix=".usda", dir=self.output)
+            handle, tmp = tempfile.mkstemp(suffix=".usda", dir=folder)
             os.close(handle)
             layer = stage.Flatten()
             omitted_render_properties = reset_export_handles(layer, handles)
@@ -1021,7 +1051,7 @@ class Scene:
             except FileExistsError:
                 refuse("CONFLICT", "Output already exists; no overwrite.")
             return dict(
-                file=str(self.output / filename),
+                file=str(folder / filename),
                 bytes=os.stat(filename, dir_fd=fd).st_size,
                 flattened=True,
                 stage_switched=False,
