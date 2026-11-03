@@ -159,10 +159,13 @@ def windows():
     return out
 
 
-def fingerprint(type_name, identifier="", name="", text=""):
+def fingerprint(type_name, identifier="", name="", text="", context=""):
     """What a ref must still point at: Kit paths are positional (".../Button[2]"), so after the UI is
-    rebuilt (another prim in Property, a moved Stage row) the same path can name a different widget."""
+    rebuilt (another prim in Property, a moved Stage row) the same path can name a different widget.
+    Unnamed fields (Property values) use the nearest row label as context ("@Translate")."""
     label = identifier or name or ("" if type_name == "StringField" else str(text or "")[:40])
+    if not label and context:
+        label = "@" + str(context)[:40]
     return f"{type_name}:{label}".replace("|", "/")
 
 
@@ -180,9 +183,52 @@ def inside(point, rect):
     return rx <= x < rx + rw and ry <= y < ry + rh
 
 
-def _widget_fingerprint(widget):
-    return fingerprint(type(widget).__name__, getattr(widget, "identifier", ""), getattr(widget, "name", ""),
-                       getattr(widget, "text", ""))
+def _context(path, ui_test):
+    """Text of the nearest Label beside the widget (up to three levels up), e.g. a Property row name."""
+    import omni.ui as ui
+
+    parts = path.split("/")
+    for up in range(1, 4):
+        if len(parts) - up < 2:
+            break
+        try:
+            parent = ui_test.find("/".join(parts[:-up])).widget
+        except Exception:  # noqa: BLE001
+            continue
+        for child in ui.Inspector.get_children(parent):
+            text = getattr(child, "text", "") if type(child).__name__ == "Label" else ""
+            if text:
+                return text
+    return ""
+
+
+def _bound_attribute(widget):
+    """'/Cube.xformOp:translate#1' for a Property field: the USD attribute (and vector channel) it edits.
+    Property fields share generic identifiers ("value"), so this is what tells rows apart."""
+    model = getattr(widget, "model", None)
+    getter = getattr(model, "get_attribute_paths", None)
+    if not callable(getter):
+        return ""
+    try:
+        paths = [str(p) for p in getter()]
+    except Exception:  # noqa: BLE001
+        return ""
+    if not paths:
+        return ""
+    channel = getattr(model, "_channel_index", None)
+    return ",".join(paths)[:120] + (f"#{channel}" if isinstance(channel, int) else "")
+
+
+def _widget_fingerprint(widget, path, ui_test):
+    type_name = type(widget).__name__
+    fp = fingerprint(type_name, getattr(widget, "identifier", ""), getattr(widget, "name", ""),
+                     getattr(widget, "text", ""))
+    bound = _bound_attribute(widget)
+    if bound:
+        return f"{fp}@{bound}".replace("|", "/")
+    if fp.endswith(":"):  # unnamed: add the nearest label so another row's field does not match
+        fp = fingerprint(type_name, context=_context(path, ui_test))
+    return fp
 
 
 def _shown(path, center, ui_test):
@@ -203,7 +249,7 @@ def _shown(path, center, ui_test):
                 frame = ui_test.find("/".join(parts[: i + 1]))
                 pos, size = frame.position, frame.size
             except Exception:  # noqa: BLE001
-                continue
+                return "its scrolling panel could not be measured"
             if not inside(center, (pos.x, pos.y, size.x, size.y)):
                 return "it is scrolled out of view; scroll its panel first"
     if getattr(win, "docked", False):
@@ -273,19 +319,26 @@ def find(a):
         raise UIRefusal("LIMIT", "limit must be 1..100.")
     ui_test = _ui_test()
     dpi = ui.Workspace.get_dpi_scale()
-    widgets, matched, budget, hidden = [], 0, 48_000, 0  # stay well under the 64 KiB response cap
+    widgets, matched, budget, hidden, examined = [], 0, 48_000, 0, 0  # stay well under the 64 KiB cap
+    rects = {w.title: (w.position_x, w.position_y, w.width, w.height) for w in ui.Workspace.get_windows()}
     for title, ref, widget, cheap in _candidates(window or None, bool(query), query):
         matched += 1
-        if len(widgets) >= limit or budget <= 0:
+        if len(widgets) >= limit or budget <= 0 or examined >= 4 * limit:
             continue
         try:
-            size, center, path = ref.size, ref.center, ref.realpath
+            size, center = ref.size, ref.center
+            if size.x <= 0 or size.y <= 0 or not inside((center.x, center.y), rects.get(title, (0, 0, 0, 0))):
+                hidden += 1  # cheap check first: no path walk for rows outside the window
+                continue
+            examined += 1
+            path = ref.realpath
         except Exception:  # noqa: BLE001 - stale or not yet laid out
-            continue
-        if size.x <= 0 or size.y <= 0 or _shown(path, (center.x, center.y), ui_test) is not None:
             hidden += 1
             continue
-        record = widget_record(cheap["type"], f"{path}|{_widget_fingerprint(widget)}", title, cheap["name"],
+        if _shown(path, (center.x, center.y), ui_test) is not None:
+            hidden += 1
+            continue
+        record = widget_record(cheap["type"], f"{path}|{_widget_fingerprint(widget, path, ui_test)}", title, cheap["name"],
                                cheap["text"], cheap["tooltip"], cheap["value"], (center.x, center.y),
                                (size.x, size.y), dpi, getattr(widget, "enabled", True), cheap["identifier"])
         budget -= len(json.dumps(record))
@@ -312,6 +365,9 @@ def _resolve(a):
         if not isinstance(ref, str) or "//" not in ref or len(ref) > 800:
             raise UIRefusal("INVALID_VALUE", "ref must be a widget ref from sim__ui__find.")
         path, expected = split_ref(ref)
+        if expected is None:
+            raise UIRefusal("INVALID_VALUE", "ref must be a ref returned by sim__ui__find (it ends in |Type:label); "
+                                             "for a raw position use x and y.")
         ui_test = _ui_test()
         try:
             found = ui_test.find(path)
@@ -319,7 +375,7 @@ def _resolve(a):
             found = None
         if found is None or found.widget is None:
             raise UIRefusal("STALE_WIDGET", "That widget no longer exists (the UI was rebuilt); call sim__ui__find again.")
-        actual = _widget_fingerprint(found.widget)
+        actual = _widget_fingerprint(found.widget, path, ui_test)
         if expected is not None and actual != expected:
             raise UIRefusal("STALE_WIDGET", f"That ref now points at a different widget ({actual}, expected "
                                             f"{expected}): the UI was rebuilt. Call sim__ui__find again.")
@@ -332,6 +388,14 @@ def _resolve(a):
         if why:
             raise UIRefusal("NOT_VISIBLE", f"That widget cannot be clicked: {why}.")
         enabled = bool(getattr(found.widget, "enabled", True))
+        parts = path.split("/")
+        for i in range(2, len(parts)):  # a disabled container disables its children
+            if not enabled:
+                break
+            try:
+                enabled = bool(getattr(ui_test.find("/".join(parts[:i])).widget, "enabled", True))
+            except Exception:  # noqa: BLE001
+                pass
         return round(c.x * dpi), round(c.y * dpi), dict(ref=ref, type=type(found.widget).__name__,
                                                           name=getattr(found.widget, "name", ""), enabled=enabled)
     x, y = a.get("x"), a.get("y")

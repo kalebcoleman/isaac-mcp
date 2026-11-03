@@ -397,8 +397,34 @@ def test_ui_refs_carry_a_fingerprint_of_the_widget():
     assert ui.fingerprint("Label", text="Cube") == "Label:Cube"
     assert ui.fingerprint("StringField", text="typed text") == "StringField:"  # values change; not identity
     assert ui.fingerprint("Button", name="a|b") == "Button:a/b"
+    assert ui.fingerprint("FloatField", context="Translate") == "FloatField:@Translate"
+    assert ui.fingerprint("FloatField", identifier="x", context="Translate") == "FloatField:x"
     ref = "Main ToolBar//Frame/VStack[0]/ToolButton[5]|" + fp
     assert ui.split_ref(ref) == ("Main ToolBar//Frame/VStack[0]/ToolButton[5]", fp)
     assert ui.split_ref("Main ToolBar//Frame/VStack[0]/ToolButton[5]") == (
         "Main ToolBar//Frame/VStack[0]/ToolButton[5]", None)
     assert ui.inside((5, 5), (0, 0, 10, 10)) and not ui.inside((10, 5), (0, 0, 10, 10))
+
+
+def test_property_fields_are_fingerprinted_by_the_attribute_they_edit():
+    # Round 2 of #62: every Property value field is identifier "value"; after selecting another prim the
+    # same path is another prim's field. The bound USD attribute and channel tell them apart.
+    ui = _ui_module()
+
+    class Model:
+        def __init__(self, path, channel):
+            self.path, self._channel_index = path, channel
+
+        def get_attribute_paths(self):
+            return [self.path]
+
+    class FloatDrag:
+        identifier, name, text = "value", "value", ""
+
+        def __init__(self, path, channel):
+            self.model = Model(path, channel)
+
+    cube = ui._widget_fingerprint(FloatDrag("/Cube.xformOp:translate", 1), "Property//Frame/x", None)
+    sphere = ui._widget_fingerprint(FloatDrag("/Sphere.xformOp:translate", 1), "Property//Frame/x", None)
+    assert cube == "FloatDrag:value@/Cube.xformOp:translate#1" and cube != sphere
+    assert ui.split_ref("Property//Frame/x|" + cube)[1] == cube
