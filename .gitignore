@@ -7,20 +7,15 @@ node_modules/
 *.npz
 outputs/
 logs/
-# USD is ignored by default; the ur5e-dt tool pack's assets are the exception
+# The repository is code-only: assets live in each user's local asset folder
+# (isaac-mcp-assets next to the checkout; see docs/ASSETS.md) and are never committed.
 *.usd
 *.usda
 *.usdc
 *.usdz
 resources/*
-!exts/ur5e-dt/assets/**
-# Third-party assets that must not be committed (see docs/provenance/ASSETS.md).
-# Put operator copies in a store on $ISAAC_MCP_ASSET_PATH (see docs/ASSETS.md), not here.
-exts/ur5e-dt/assets/robot/
-exts/ur5e-dt/assets/sensors/
-exts/ur5e-dt/assets/workstation/
-exts/ur5e-dt/assets/gripper/RG2.usd
-exts/ur5e-dt/assets/objects/fmb4/materials/oak/
+# Old checkouts kept assets here; `python3 scripts/isaac_assets.py migrate` moves them out.
+exts/ur5e-dt/assets/
 
 # screenshots saved by sessions while testing; not part of the repo
 captures/

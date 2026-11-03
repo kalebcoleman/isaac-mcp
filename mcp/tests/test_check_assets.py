@@ -1,4 +1,4 @@
-"""The redistribution guard must reject tracked exclusions in every path class."""
+"""The repository must stay code-only: no assets tracked anywhere."""
 
 import importlib.util
 import json
@@ -15,47 +15,72 @@ def asset_guard(tmp_path, monkeypatch):
     guard = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(guard)
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    assets = tmp_path / "exts/ur5e-dt/assets"
-    assets.mkdir(parents=True)
-    manifest = assets.parent / "assets-manifest.json"
+    manifest = tmp_path / "exts/ur5e-dt/assets-manifest.json"
+    manifest.parent.mkdir(parents=True)
     manifest.write_text(json.dumps({
-        "fetch": [{"files": [{"target": "custom/fetched.usd"}]}],
-        "manual": [{"target": "custom/manual.usd"}],
-        "bundled": [],
+        "fetch": [{"files": [{"target": "robot/x.usd", "source": "Isaac/x.usd", "sha256": "0" * 64}]}],
+        "manual": [{"target": "workstation/vention.usd"}],
+        "local": [{"path": "gripper", "licence": "Apache-2.0"}],
     }))
-    for name in ("THIRD-PARTY-NOTICES.md", "docs/provenance/husarion-ur-onrobot-rg2-LICENSE"):
-        path = tmp_path / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("Test notice\n")
     monkeypatch.setattr(guard, "REPO", tmp_path)
-    monkeypatch.setattr(guard, "ASSETS", assets)
     monkeypatch.setattr(guard, "MANIFEST", manifest)
     return guard
 
 
-def add_asset(guard, relative, *, tracked=True):
-    path = guard.ASSETS / relative
+def track(guard, relative):
+    path = guard.REPO / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("Synthetic test fixture\n")
-    if tracked:
-        subprocess.run(["git", "add", "--", str(path)], cwd=guard.REPO, check=True)
-    return path.relative_to(guard.REPO).as_posix()
+    subprocess.run(["git", "add", "--", str(path)], cwd=guard.REPO, check=True)
+    return relative
+
+
+def test_a_clean_code_only_repository_passes(asset_guard, capsys):
+    track(asset_guard, "scripts/tool.py")
+    track(asset_guard, "docs/media/screenshot.png")
+    track(asset_guard, "exts/ur5e-dt/data/icon.png")
+    assert asset_guard.main() == 0
+    assert "code-only" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("relative", [
-    "gripper/RG2.usd",
-    "gripper/husarion_rg2/husarion_rg2_fixed.usd",
-    "custom/fetched.usd",
-    "custom/manual.usd",
-    "robot/fixture.usd",
+    "exts/ur5e-dt/assets/gripper/QuickChanger.usd",
+    "exts/ur5e-dt/assets/fmb_assembly1.json",
+    "exts/ur5e-dt/assets/README.md",
 ])
-def test_tracked_exclusion_is_rejected(asset_guard, capsys, relative):
-    path = add_asset(asset_guard, relative)
+def test_anything_in_the_old_asset_folder_is_rejected(asset_guard, capsys, relative):
+    track(asset_guard, relative)
     assert asset_guard.main() == 1
-    assert f"non-redistributable asset is tracked: {path}" in capsys.readouterr().out
+    assert relative in capsys.readouterr().out
 
 
-def test_allowed_tracked_gripper_and_untracked_local_asset_pass(asset_guard):
-    add_asset(asset_guard, "gripper/allowed-fixture.usd")
-    add_asset(asset_guard, "gripper/RG2.usd", tracked=False)
+@pytest.mark.parametrize("relative", [
+    "somewhere/robot.usd", "x/scene.usda", "y/part.stl", "z/arm.urdf", "m/mat.mdl", "w/model.glb",
+])
+def test_asset_files_anywhere_are_rejected(asset_guard, capsys, relative):
+    track(asset_guard, relative)
+    assert asset_guard.main() == 1
+    assert f"asset file tracked in the repository: {relative}" in capsys.readouterr().out
+
+
+def test_images_outside_docs_and_extension_data_are_rejected(asset_guard, capsys):
+    track(asset_guard, "textures/wood.png")
+    assert asset_guard.main() == 1
+    assert "image tracked outside docs/" in capsys.readouterr().out
+
+
+def test_untracked_local_files_are_ignored(asset_guard):
+    path = asset_guard.REPO / "exts/ur5e-dt/assets/robot/ur5e.usd"
+    path.parent.mkdir(parents=True)
+    path.write_text("local only\n")
     assert asset_guard.main() == 0
+
+
+def test_malformed_manifest_entries_are_reported(asset_guard, capsys):
+    data = json.loads(asset_guard.MANIFEST.read_text())
+    data["fetch"][0]["files"][0].pop("sha256")
+    data["local"].append({"path": "objects"})
+    asset_guard.MANIFEST.write_text(json.dumps(data))
+    assert asset_guard.main() == 1
+    out = capsys.readouterr().out
+    assert "without sha256" in out and "needs path and licence" in out

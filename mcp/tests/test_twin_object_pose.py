@@ -57,8 +57,63 @@ def test_invalid_pose_refuses_without_mutation(bad):
     assert stage.GetRootLayer().ExportToString() == before
 
 
-def test_referenced_fmb_body_rotation_and_source_preservation():
-    asset = ROOT / 'exts/ur5e-dt/assets/objects/fmb1/u_brown_physics.usda'
+# A synthetic stand-in for an FMB object: a physics overlay layer that references a
+# geometry layer whose mesh is authored in centimetres (scale 0.01), like the real
+# objects in the asset folder. The repository ships no assets, so the test builds it.
+_GEOMETRY = """#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+def Xform "Root"
+{
+    def Xform "u_brown"
+    {
+        float3 xformOp:rotateXYZ = (0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        double3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        def Mesh "u_brown"
+        {
+            int[] faceVertexCounts = [3]
+            int[] faceVertexIndices = [0, 1, 2]
+            point3f[] points = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
+            double3 xformOp:rotateZYX = (0, 0, 0)
+            double3 xformOp:scale = (0.01, 0.01, 0.01)
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZYX", "xformOp:scale"]
+        }
+    }
+}
+"""
+_PHYSICS = """#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+def Xform "Root" (
+    prepend references = @./u_brown.usda@
+)
+{
+    over "u_brown"
+    {
+        over "u_brown" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+            bool physics:rigidBodyEnabled = 1
+        }
+    }
+}
+"""
+
+
+def test_referenced_fmb_body_rotation_and_source_preservation(tmp_path):
+    (tmp_path / 'u_brown.usda').write_text(_GEOMETRY)
+    asset = tmp_path / 'u_brown_physics.usda'
+    asset.write_text(_PHYSICS)
     stage = Usd.Stage.CreateInMemory()
     stage.DefinePrim('/Object').GetReferences().AddReference(str(asset))
     prim = stage.GetPrimAtPath('/Object/u_brown/u_brown')

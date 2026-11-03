@@ -127,7 +127,7 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   `source_path`. It prepares `workstation/vention.usd` in the private asset cache and returns
   `loaded:false`; then call `ur5e_dt__load_workstation` and inspect `/World/Vention`.
   The twin and selected Kit must share the cache. Existing files are not overwritten, and a
-  bundled/operator drop-in takes precedence over the cache; verify which file was loaded.
+  project store (`isaac-mcp.json`) takes precedence over the asset folder; verify which file was loaded (`scripts/isaac_assets.py doctor`). The repository ships no assets.
   See `docs/TOOLS-SCENE.md` for approval, staging, dependency limitations and cache placement.
 - **Playback and runtime state:** `sim__timeline__control` (play/pause/stop) and
   `sim__simulation__step` (1–120 exact steps while paused). `sim__body__state` and

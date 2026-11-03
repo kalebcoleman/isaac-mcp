@@ -124,12 +124,13 @@ For a workstation, after the same one-time trusted-root approval, call
 `assets__prepare_workstation` with the exact `session_id` and `stage_id` from `sim__stage__info`
 and `source_path` set to the absolute USD path under that root. The tool writes a private project
 copy and wrapper to `workstation/vention.usd` under the first store of `ISAAC_MCP_ASSET_PATH` (deprecated alias
-`UR5E_DT_ASSET_CACHE`, then `<workspace>/assets` when `ISAAC_MCP_WORKSPACE` names a workspace with one, then the twin's default XDG cache), and reports the destination and dependency checks. It does **not** load the scene:
+`UR5E_DT_ASSET_CACHE`, then `<workspace>/isaac-mcp-assets` when `ISAAC_MCP_WORKSPACE` is set, otherwise the `isaac-mcp-assets` folder next to the checkout), in its `ur5e-dt` pack folder, and reports the destination and dependency checks. It does **not** load the scene:
 call `ur5e_dt__load_workstation` or the appropriate workstation quick-start, then inspect
-`/World/Vention`. The twin and selected Kit must use the same cache. The resolver introduced in
-PR #14 prefers a bundled/operator drop-in over the cache; remove neither automatically and check
-which one the twin actually used. Existing workstation files are never replaced. The cache must
-be outside the repository and disjoint from approved roots and staging.
+`/World/Vention`. The twin and selected Kit must use the same asset folder. A project store
+(`isaac-mcp.json`) still takes precedence; check which file the twin actually used with
+`scripts/isaac_assets.py doctor`. Existing workstation files are never replaced. The asset folder
+must be outside the repository, not group- or world-writable, and disjoint from approved roots
+and staging.
 
 The user is responsible for trusting and having rights to the asset. Existing USD checks refuse
 missing or outside-snapshot dependencies, URLs and unsupported paths; native USD parsing can

@@ -176,7 +176,7 @@ Replace `<repo>` with your checkout (suggested: `<workspace>/isaac-mcp`; see
 [WORKSPACE.md](WORKSPACE.md)) and `<home>` with your home directory. Optional environment
 variables for any client below:
 
-- `ISAAC_MCP_WORKSPACE=<workspace>` makes `<workspace>/assets` an asset store (when the folder exists).
+- `ISAAC_MCP_WORKSPACE=<workspace>` makes `<workspace>/isaac-mcp-assets` the asset folder (otherwise it is `isaac-mcp-assets` next to the checkout).
 - `ISAAC_MCP_SIM_ROOT=<repo>` tells managed `sim__launch` sessions which checkout holds `run.sh`;
   set it when the host is installed outside the checkout.
 - `ISAAC_MCP_PYTHON=<env>/bin/python` pins the Sim interpreter that `run.sh` uses.
