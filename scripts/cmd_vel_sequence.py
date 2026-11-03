@@ -91,8 +91,13 @@ class _Stop(Exception):
     """Raised from a signal handler so ``finally`` publishes zero."""
 
 
+_STATE = {"stopping": False}
+
+
 def _install_signal_handlers() -> None:
     def handler(signum, _frame):
+        if _STATE["stopping"]:
+            return  # the zero is already going out
         raise _Stop(signal.Signals(signum).name)
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, handler)
@@ -150,13 +155,20 @@ def run(args, steps: List[Step]) -> int:
         print(f"cmd_vel_sequence: {error}: stopping the robot", file=sys.stderr)
         status = 1
     finally:
-        # Ignore further signals while the stop goes out: a second Ctrl-C must not skip it.
-        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-            signal.signal(sig, signal.SIG_IGN)
-        for _ in range(args.stop_repeats):
-            publisher.publish(message(None))
-            time.sleep(0.05)
-        print(f"cmd_vel_sequence: published zero velocity {args.stop_repeats} time(s)", file=sys.stderr)
+        # A second signal must not skip the stop: one landing before the handler sees `stopping`
+        # raises _Stop here, and the loop simply sends the remaining zeros.
+        sent = 0
+        while sent < args.stop_repeats:
+            try:
+                _STATE["stopping"] = True
+                for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                    signal.signal(sig, signal.SIG_IGN)
+                publisher.publish(message(None))
+                sent += 1
+                time.sleep(0.05)
+            except _Stop:
+                continue
+        print(f"cmd_vel_sequence: published zero velocity {sent} time(s)", file=sys.stderr)
         node.destroy_node()
         rclpy.try_shutdown()
     return status
@@ -189,6 +201,10 @@ def main(argv=None) -> int:
         p.error("--rate must be between 1 and 200 Hz")
     if args.stop_repeats < 1:
         p.error("--stop-repeats must be at least 1")
+    for name in ("max_linear", "max_angular"):
+        value = getattr(args, name)
+        if not math.isfinite(value) or value <= 0:  # nan would disable the limit
+            p.error(f"--{name.replace('_', '-')} must be a positive finite number")
     if not args.topic.startswith("/"):
         p.error("--topic must be absolute, like /cmd_vel")
     try:

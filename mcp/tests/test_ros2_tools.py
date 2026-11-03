@@ -888,3 +888,13 @@ def test_ros_env_must_be_sourced():
     import subprocess
     done = subprocess.run(["bash", str(ROS_ENV)], capture_output=True, text=True, timeout=10)
     assert done.returncode == 2 and "must be sourced" in done.stderr
+
+
+def test_cmd_vel_sequence_refuses_non_finite_limits():
+    import runpy
+    import pytest as _pytest
+
+    module = runpy.run_path(str(REPO / "scripts/cmd_vel_sequence.py"))
+    with _pytest.raises(SystemExit):
+        module["main"](["0.1,0,1", "--max-linear", "nan", "--dry-run"])
+    assert module["main"](["0.1,0,1", "--dry-run"]) == 0

@@ -128,6 +128,7 @@ def test_refresh_wait_polls_until_the_bridge_answers(monkeypatch):
         return ["status"]
 
     monkeypatch.setattr(gw, "discover_and_register_tools", discover)
+    monkeypatch.setattr(gw, "_probe_bridge", lambda server: None)
     monkeypatch.setattr(gw, "REFRESH_POLL_S", 0.01)
     message = asyncio.run(gw._refresh_tools(server, None, 5))
     assert len(attempts) == 3 and "after 3 attempt(s)" in message and not message.startswith("Error")
@@ -142,6 +143,7 @@ def test_refresh_wait_is_bounded_and_gives_up_with_guidance(monkeypatch):
         raise ConnectionRefusedError("[Errno 111] Connection refused")
 
     monkeypatch.setattr(gw, "discover_and_register_tools", offline)
+    monkeypatch.setattr(gw, "_probe_bridge", lambda server: None)
     monkeypatch.setattr(gw, "REFRESH_POLL_S", 0.01)
     monkeypatch.setattr(gw, "REFRESH_WAIT_MAX_S", 0.05)
     message = asyncio.run(gw._refresh_tools(server, None, 10_000))   # clamped to the max
@@ -158,6 +160,7 @@ def test_refresh_wait_does_not_retry_an_ambiguous_bridge(monkeypatch):
         raise RuntimeError("multiple bridges running (a pid=1 port=1, b pid=2 port=2)")
 
     monkeypatch.setattr(gw, "discover_and_register_tools", ambiguous)
+    monkeypatch.setattr(gw, "_probe_bridge", lambda server: None)
     message = asyncio.run(gw._refresh_tools(server, None, 30))
     assert len(attempts) == 1 and "use_bridge(port)" in message
 
@@ -167,3 +170,16 @@ def test_refresh_tools_advertises_wait_s():
     tools = {t.name: t for t in asyncio.run(server.list_tools())}
     assert tools["refresh_tools"].inputSchema["properties"]["wait_s"]["default"] == 0
     assert "ctx" not in tools["refresh_tools"].inputSchema["properties"]
+
+
+def test_refresh_wait_rejects_nan_and_probes_off_the_event_loop(monkeypatch):
+    # Review of #66: wait_s=nan made the deadline nan (poll forever); the boot probe blocked the loop.
+    import threading
+
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    assert "finite" in asyncio.run(gw._refresh_tools(server, None, float("nan")))
+    threads = []
+    monkeypatch.setattr(gw, "_probe_bridge", lambda s: threads.append(threading.current_thread().name))
+    monkeypatch.setattr(gw, "discover_and_register_tools", lambda s: ["status"])
+    asyncio.run(gw._refresh_tools(server, None, 5))
+    assert threads and threads[0] != threading.main_thread().name

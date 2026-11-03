@@ -151,7 +151,11 @@ _ros_env_main() {
   return 0
 }
 
-if (return 0 2>/dev/null); then
+if [ -z "${BASH_VERSION:-}" ]; then
+  # zsh/sh: BASH_SOURCE, word splitting and setup.bash all differ; refuse instead of half-working.
+  echo "ros_env.sh: source it from bash (in zsh, source <install>/setup.zsh and config/ros_dds.env by hand)" >&2
+  return 2 2>/dev/null || exit 2
+elif (return 0 2>/dev/null); then
   _ros_env_main "$@"
   _ros_env_rc=$?
   unset -f _ros_env_main _say _resolve

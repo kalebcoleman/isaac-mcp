@@ -868,18 +868,42 @@ def _starting_hint(server: FastMCP, error: BaseException) -> str:
             "lists running bridges.")
 
 
+def _probe_bridge(server: FastMCP) -> None:
+    """Ask the bridge for its tools on a fresh connection (run on a worker thread by refresh_tools):
+    while Kit boots, list_tools can block for the whole discovery timeout, and doing that on the
+    event loop froze the server for most of a long wait."""
+    state = _state_for(server)
+    port = state.client.port if state.client is not None else None
+    client = BridgeClient(port=port) if port else BridgeClient()
+    try:
+        client.call("list_tools", timeout=DISCOVERY_TIMEOUT_S)
+    finally:
+        try:
+            client.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None, wait_s: float = 0) -> str:
     import asyncio
+    import math
     import time
     try:
-        wait = min(max(float(wait_s or 0), 0.0), REFRESH_WAIT_MAX_S)
+        wait = float(wait_s or 0)
     except (TypeError, ValueError):
         return "Error: wait_s must be a number of seconds (0 to 180)."
-    deadline = time.monotonic() + wait
+    if not math.isfinite(wait):
+        return "Error: wait_s must be a finite number of seconds (0 to 180)."
+    wait = min(max(wait, 0.0), REFRESH_WAIT_MAX_S)
+    start = time.monotonic()
+    deadline = start + wait
     attempts = 0
+
     while True:
         attempts += 1
         try:
+            if wait:
+                await asyncio.to_thread(_probe_bridge, server)  # registration stays on the loop thread
             added = discover_and_register_tools(server)
             break
         except Exception as e:
@@ -889,7 +913,7 @@ async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None, wait_s:
             if not _booting_error(e):
                 return f"Error: {e}"
             if time.monotonic() + REFRESH_POLL_S > deadline:
-                waited = (f" (waited {wait:.0f} s, {attempts} attempt(s))" if wait else "")
+                waited = (f" (waited {time.monotonic() - start:.0f} s, {attempts} attempt(s))" if wait else "")
                 return _starting_hint(server, e) + waited
             await asyncio.sleep(REFRESH_POLL_S)
     if added:
