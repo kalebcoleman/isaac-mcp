@@ -501,11 +501,18 @@ def _build_tool_function(name: str, canonical: str, description: str,
     annotations: Dict[str, Any] = {"return": str}
     for f in ordered:
         annotation = (Literal[tuple(f["enum"])] if f["kind"] == "enum"
-                      else _KIND_ANNOTATIONS[f["kind"]])
+                      else _KIND_ANNOTATIONS.get(f["kind"], Any))  # an unknown kind must not break discovery
         # These versioned contracts also carry usable client-side descriptions and
         # typed vectors. Leave the legacy bridge/UR5e schema surface unchanged.
         from .scene_contracts import REGISTRY
-        if canonical in REGISTRY:
+        if canonical in REGISTRY and f["name"] not in REGISTRY[canonical]["parameters"]:
+            # A newer bridge can serve a parameter this host's registry does not know yet (the two
+            # checkouts sync separately): keep the bridge's plain type and description instead of
+            # failing discovery or guessing a typed vector.
+            from typing import Annotated
+            from pydantic import Field
+            annotation = Annotated[annotation, Field(description=f.get("description") or "")]
+        elif canonical in REGISTRY:
             from typing import Annotated
             from pydantic import Field
             spec = REGISTRY[canonical]["parameters"][f["name"]]

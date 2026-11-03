@@ -2819,11 +2819,11 @@
       "owner_id": "generic-sim"
     },
     "sim.ui.act": {
-      "description": "Drive Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
+      "description": "Drive Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
       "parameters": {
         "action": {
           "type": "string",
-          "description": "What to do.",
+          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs).",
           "required": true,
           "enum": [
             "click",
@@ -2835,6 +2835,7 @@
             "type",
             "keypress",
             "menu",
+            "tab",
             "wait"
           ]
         },
@@ -2871,6 +2872,11 @@
         "keys": {
           "type": "array",
           "description": "For action=keypress: one key plus optional modifiers, e.g. [\"ctrl\", \"s\"], [\"enter\"], [\"shift\", \"tab\"].",
+          "required": false
+        },
+        "window": {
+          "type": "string",
+          "description": "For action=tab: the window or tab title, e.g. 'Console' or 'Content'.",
           "required": false
         },
         "menu": {
@@ -2911,12 +2917,13 @@
             "type",
             "keypress",
             "menu",
+            "tab",
             "wait"
           ],
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "What to do."
+          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs)."
         },
         {
           "name": "ref",
@@ -2980,6 +2987,15 @@
           "default": null,
           "has_default": false,
           "description": "For action=keypress: one key plus optional modifiers, e.g. [\"ctrl\", \"s\"], [\"enter\"], [\"shift\", \"tab\"]."
+        },
+        {
+          "name": "window",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "For action=tab: the window or tab title, e.g. 'Console' or 'Content'."
         },
         {
           "name": "menu",
