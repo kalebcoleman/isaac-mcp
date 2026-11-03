@@ -482,7 +482,7 @@ def test_tf_far_from_the_clock_is_an_error():
     # The twin's clock keeps counting across stop/play while TF restarted at 0 (round-1 finding).
     edges = GOOD[:1] + [e("base_link", "tool0", stamp=2.0)]
     errors, *_ = doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/twin"], clock_times=[121.9, 122.0])
-    assert any("differ by -120.0 s" in x for x in errors)
+    assert any("1 frame(s) differ from /clock" in x and "tool0 -120.0 s" in x for x in errors)
     assert doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/a"], clock_times=[1.9, 2.0])[0] == []
 
 
@@ -614,3 +614,10 @@ def test_reused_clock_reset_behaviour_is_read_from_its_time_node(monkeypatch):
     assert ros2.clock_resets_on_stop("/Graph/ActionGraph_UR5e/ros2_publish_clock") is False
     upstream[:] = []
     assert ros2.clock_resets_on_stop("/x") is None
+
+
+def test_one_robot_on_the_wrong_time_base_is_not_hidden_by_another():
+    edges = GOOD[:1] + [e("base_link", "tool0", stamp=120.0), e("r2_base", "r2_tool", stamp=0.3)]
+    errors, *_ = doctor.analyze(edges + [e("world", "r2_base", 0, True)], "world", clock_seen=True,
+                                clock_publishers=["/twin"], clock_times=[120.0])
+    assert any("r2_tool" in x and "differ from /clock" in x for x in errors)

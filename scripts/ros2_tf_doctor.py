@@ -151,13 +151,16 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publisher
                             "RViz resets once per restart; that is expected.")
     # Newest sample of each frame only (lists are in arrival order), so a stop/play while
     # listening does not compare pre-reset TF with the post-reset clock.
-    sim_tf = [v[-1] for v in stamps.values() if v[-1] <= WALL_EPOCH]
-    if sim_tf and clock_times:
-        skew = max(sim_tf) - clock_times[-1]
-        if abs(skew) > CLOCK_SKEW:
-            errors.append(f"TF stamps and /clock differ by {skew:+.1f} s of sim time: they come from different "
-                          "time sources (one restarts at 0 on stop/play, the other keeps counting), so "
-                          "use_sim_time nodes cannot look TF up. Re-run sim__ros2__tf_setup (clock=auto).")
+    # Each frame on its own: one robot on the wrong time base must not hide behind another.
+    newest = {c: v[-1] for c, v in stamps.items() if v[-1] <= WALL_EPOCH}
+    if newest and clock_times:
+        off = {c: t - clock_times[-1] for c, t in newest.items() if abs(t - clock_times[-1]) > CLOCK_SKEW}
+        if off:
+            worst = max(off, key=lambda c: abs(off[c]))
+            errors.append(f"{len(off)} frame(s) differ from /clock by more than {CLOCK_SKEW:g} s of sim time "
+                          f"(worst: {worst} {off[worst]:+.1f} s; {', '.join(sorted(off)[:8])}): they use a different "
+                          "time source (one restarts at 0 on stop/play, the other keeps counting), so use_sim_time "
+                          "nodes cannot look them up. Re-run sim__ros2__tf_setup (clock=auto).")
     if "wall" in domains and "sim" not in domains and clock_seen:
         warnings.append("/clock is published but TF uses wall-clock time; the TF publishers are not using "
                         "simulation time.")

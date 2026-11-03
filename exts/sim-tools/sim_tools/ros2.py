@@ -509,6 +509,9 @@ def setup(scene, stage, a):
     updated = []
     for other in sorted(g for g in scene.owned if g != CLOCK_GRAPH and g != graph
                         and (g == GRAPH_PATH or g.startswith(GRAPH_PATH + "_"))):
+        if not stage.GetPrimAtPath(other):  # deleted outside the tool (UI, run_python): forget it
+            scene.owned.discard(other)
+            continue
         try:
             attr = og.Controller.attribute(f"{other}/{TIME}.inputs:resetOnStop")
             if bool(attr.get()) != bool(reset_on_stop):
@@ -569,7 +572,7 @@ def setup(scene, stage, a):
                    **({"note": "Every robot set up by this tool shares this clock. Running the twin's own setup "
                                "(quick_start) afterwards adds a second /clock: call this tool again "
                                "(clock=auto); it drops its clock and updates every robot it set up."}
-                      if clock["publish"] else {})),
+                      if CLOCK_GRAPH in scene.owned else {})),
         other_ros2_publishers=others,
         warnings=clock_warnings + ([
             "Other graphs also publish TF or joint states ("
