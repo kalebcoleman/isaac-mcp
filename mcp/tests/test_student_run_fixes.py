@@ -246,11 +246,16 @@ def test_refresh_tools_names_managed_simulators_on_other_ports(monkeypatch):
 
     monkeypatch.setattr(gw, "discover_and_register_tools", offline)
     monkeypatch.setattr(gw, "_screen_port", lambda state=None: 8766)
-    monkeypatch.setattr(gw, "live_ports", lambda env=None: [(8766, 10), (8771, 342055)])
+    import time
+    monkeypatch.setattr(gw, "live_sessions", lambda env=None: [
+        {"port": 8766, "pid": 10, "started_at": time.time() - 95},
+        {"port": 8771, "pid": 342055, "started_at": None}])
     message = asyncio.run(gw._refresh_tools(server))
-    assert "port 8771 (PID 342055)" in message and "use_bridge(port)" in message
-    assert "port 8766 (PID 10)" not in message
-    monkeypatch.setattr(gw, "live_ports", lambda env=None: [])
+    assert "port 8771 (PID 342055; call use_bridge(port) to select it)" in message
+    # PR D: the configured port's own session is named too, with how long it has been starting.
+    assert "port 8766 (PID 10, started 9" in message and "the configured port" in message
+    assert "still starting" in message and "refresh_tools(wait_s=" in message
+    monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])
     assert "Managed simulators" not in asyncio.run(gw._refresh_tools(server))
 
 

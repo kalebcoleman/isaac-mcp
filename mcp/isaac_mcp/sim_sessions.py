@@ -408,6 +408,17 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
         return _stop(settings, session_id, expected_pid, confirm_discard, force)
 
 
+def live_sessions(env: Mapping[str, str] | None = None) -> list[dict]:
+    """``{port, pid, started_at}`` of managed simulator sessions that are still alive (best effort)."""
+    try:
+        return sorted(({"port": int(x["port"]), "pid": int(x["pid"]),
+                        "started_at": float(x["started_at"]) if x.get("started_at") is not None else None}
+                       for x in _sessions(_sessions_dir(os.environ if env is None else env)) if _alive(x)),
+                      key=lambda x: (x["port"], x["pid"]))
+    except Exception:  # noqa: BLE001 - only used to enrich an error message
+        return []
+
+
 def live_ports(env: Mapping[str, str] | None = None) -> list[tuple[int, int]]:
     """``(port, pid)`` of managed simulator sessions that are still alive (best effort)."""
     try:

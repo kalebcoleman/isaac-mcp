@@ -62,7 +62,7 @@ from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
 from .local_tools import DEFAULT_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups
 from .desktop_input import register_desktop_input_tools
-from .sim_sessions import live_ports, register_sim_session_tools
+from .sim_sessions import live_sessions, register_sim_session_tools
 from .screen import register_screen_tools
 
 logging.basicConfig(level=logging.INFO,
@@ -75,9 +75,10 @@ SERVER_INSTRUCTIONS = os.getenv(
     "Isaac Sim / Isaac Lab MCP server. Isaac Sim tools are discovered from the "
     "running Kit bridge. The ur5e_dt__* twin tools are listed by default from a packaged "
     "catalog, but work only when the selected bridge's Kit loaded the twin extension; "
-    "otherwise they return an error that says what to do. If the bridge built-ins "
-    "(run_python, status, ...) are not listed, call refresh_tools first: the client may "
-    "have connected before Kit started, or ISAAC_MCP_BUILTINS=0 may hide them. "
+    "otherwise they return an error that says what to do. The bridge built-ins "
+    "(run_python, status, list_bridges, the file tools) are also listed from startup and "
+    "dial the selected bridge when called; ISAAC_MCP_BUILTINS=0 hides them. If Kit is still "
+    "starting, refresh_tools(wait_s=120) waits for its bridge. "
     "ISAAC_MCP_NAMESPACE may hide catalog and other namespaced tools. "
     "Find advertised bridges with the isaac_mcp.client CLI (--list-bridges) and "
     "confirm the chosen bridge's PID and port (status) before scene-changing calls, "
@@ -433,14 +434,15 @@ def _offline_note(server: Any) -> str:
     for canonical in offline.names.values():
         if canonical in HOST_RUN_TOOLS:   # served by this host server, never by a bridge
             continue
-        space = canonical.split(".", 1)[0]
+        space = canonical.split(".", 1)[0] if "." in canonical else "built-ins"
         spaces[space] = spaces.get(space, 0) + 1
     if not spaces:
         return ""
     counts = ", ".join(f"{space}: {count}" for space, count in sorted(spaces.items()))
     return ("\nNote: " + counts + " tool(s) are listed from the packaged catalog but have not "
             "been confirmed on the selected bridge. Select a bridge that loaded the extension "
-            "(use_bridge) or start one yourself, then call refresh_tools.")
+            "(use_bridge) or start one yourself, then call refresh_tools. They stay callable: "
+            "each one dials the selected bridge when called.")
 
 
 _BRIDGE_HELP = (
@@ -474,6 +476,14 @@ def _catalog_error(canonical: str, error: BaseException, state: Optional[_Bridge
         return (f"Error: {canonical} is not available and was not run: {where} is running but did "
                 f"not register it, so its Kit has not loaded the extension that provides it, or "
                 f"runs an older one. {_BRIDGE_HELP}")
+    if "." not in canonical:   # a bridge built-in: every bridge serves it, none was reachable
+        return (f"Error: {canonical} is not available: no Isaac Sim bridge could be reached ({error}). "
+                "If the connection failed after dispatch, the tool may have run; check the "
+                "simulator state before retrying. If Kit was just started it may still be loading "
+                "(2-3 minutes on a first start): call refresh_tools(wait_s=120). Otherwise find a "
+                "running bridge with `python -m isaac_mcp.client --list-bridges` and select it with "
+                "use_bridge(port), or start Kit (`./run.sh --headless`, or sim__launch when "
+                "simulator launch is enabled). This server never starts a simulator on its own.")
     return (f"Error: {canonical} is not available: no Isaac Sim bridge could be reached ({error}). "
             "If the connection failed after dispatch, the tool may have run; check the "
             f"simulator state before retrying. {_BRIDGE_HELP}")
@@ -818,28 +828,75 @@ def _screen_port(state: Optional[_BridgeState] = None) -> int | None:
         return None
 
 
-async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None) -> str:
+# refresh_tools(wait_s=...) polls at most this long for a bridge that is still starting.
+REFRESH_WAIT_MAX_S = 180.0
+REFRESH_POLL_S = 3.0
+
+
+def _booting_error(error: BaseException) -> bool:
+    """Discovery failures a Kit that is still starting produces: nothing advertised or listening
+    yet, or a bridge whose main loop is still busy loading (``list_tools`` times out)."""
+    return _needs_bridge_guidance(error) or isinstance(error, (TimeoutError, ConnectionError))
+
+
+def _starting_hint(server: FastMCP, error: BaseException) -> str:
+    """Explain a discovery failure that usually means Kit is still starting, with any managed
+    simulator session's age (sim__launch records ``started_at``)."""
+    import time
+    state = _state_for(server)
+    current = _screen_port(state)
+    sessions = live_sessions(getattr(state, "env", None))
+    lines = []
+    for session in sessions:
+        age = (f", started {time.time() - session['started_at']:.0f} s ago"
+               if session.get("started_at") else "")
+        where = "the configured port" if session["port"] == current else "call use_bridge(port) to select it"
+        lines.append(f"port {session['port']} (PID {session['pid']}{age}; {where})")
+    managed = ("" if not lines else " Managed simulators started with sim__launch are running on "
+               + ", ".join(lines) + ".")
+    if isinstance(error, TimeoutError):
+        cause = (f"Error: the Isaac Sim bridge accepted the connection but did not answer list_tools "
+                 f"in time ({error}). Kit is probably still starting: the bridge opens its port "
+                 "before the app finishes loading, and a first start can take 2-3 minutes.")
+    else:
+        cause = (f"Error: no Isaac Sim bridge is reachable ({error}). Isaac Sim is probably not running "
+                 "yet, or is still starting (a first start can take 2-3 minutes before the bridge "
+                 "answers).")
+    return (cause + managed + " Wait until it is ready (refresh_tools(wait_s=120) polls for you), "
+            "or start it if nothing is running (sim__launch when simulator launch is enabled, or "
+            "./run.sh), then call refresh_tools again. `python -m isaac_mcp.client --list-bridges` "
+            "lists running bridges.")
+
+
+async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None, wait_s: float = 0) -> str:
+    import asyncio
+    import time
     try:
-        added = discover_and_register_tools(server)
-    except Exception as e:
-        if isinstance(e, RuntimeError) and str(e).startswith("multiple bridges running"):
-            return (f"Error: {e} Pick one with use_bridge(port) (`python -m isaac_mcp.client "
-                    "--list-bridges` shows each one's port and PID); do not start another simulator.")
-        if _needs_bridge_guidance(e):
-            state = _state_for(server)
-            managed = [p for p in live_ports(getattr(state, "env", None)) if p[0] != _screen_port(state)]
-            hint = ("" if not managed else " Managed simulators started with sim__launch are running on "
-                    + ", ".join(f"port {port} (PID {pid})" for port, pid in managed)
-                    + ": this server dials its configured port, so call use_bridge(port) to select one.")
-            return (f"Error: no Isaac Sim bridge is reachable ({e}).{hint} Isaac Sim is probably not "
-                    "running yet, or is still starting: start it (sim__launch when simulator launch "
-                    "is enabled, or ./run.sh), wait until it is ready, then call refresh_tools again. "
-                    "`python -m isaac_mcp.client --list-bridges` lists running bridges.")
-        return f"Error: {e}"
+        wait = min(max(float(wait_s or 0), 0.0), REFRESH_WAIT_MAX_S)
+    except (TypeError, ValueError):
+        return "Error: wait_s must be a number of seconds (0 to 180)."
+    deadline = time.monotonic() + wait
+    attempts = 0
+    while True:
+        attempts += 1
+        try:
+            added = discover_and_register_tools(server)
+            break
+        except Exception as e:
+            if isinstance(e, RuntimeError) and str(e).startswith("multiple bridges running"):
+                return (f"Error: {e} Pick one with use_bridge(port) (`python -m isaac_mcp.client "
+                        "--list-bridges` shows each one's port and PID); do not start another simulator.")
+            if not _booting_error(e):
+                return f"Error: {e}"
+            if time.monotonic() + REFRESH_POLL_S > deadline:
+                waited = (f" (waited {wait:.0f} s, {attempts} attempt(s))" if wait else "")
+                return _starting_hint(server, e) + waited
+            await asyncio.sleep(REFRESH_POLL_S)
     if added:
         await _notify_tools_changed(ctx)
-    return ((f"Registered/updated/removed {len(added)} tool(s): {added}" if added
-             else "No new or changed tools (registry unchanged).") + _offline_note(server))
+    waited = f" after {attempts} attempt(s)" if attempts > 1 else ""
+    return ((f"Registered/updated/removed {len(added)} tool(s){waited}: {added}" if added
+             else f"No new or changed tools (registry unchanged){waited}.") + _offline_note(server))
 
 
 async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None) -> str:
@@ -893,10 +950,13 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
     mcp = ScopedTools(server, groups)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
-    async def refresh_tools(ctx: Context = None) -> str:  # type: ignore[assignment]
+    async def refresh_tools(wait_s: float = 0, ctx: Context = None) -> str:  # type: ignore[assignment]
         """Re-discover the bridge registry and register any new tools (use after
-        the bridge's reload_tools, after enabling a project, or after Kit restarts)."""
-        return await _refresh_tools(server, ctx)
+        the bridge's reload_tools, after enabling a project, or after Kit restarts).
+
+        wait_s (0-180, default 0): keep polling up to this many seconds while no bridge answers
+        yet, e.g. while Kit is still starting (a first start can take 2-3 minutes)."""
+        return await _refresh_tools(server, ctx, wait_s)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
     async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[assignment]

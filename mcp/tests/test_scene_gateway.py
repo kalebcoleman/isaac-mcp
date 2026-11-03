@@ -10,7 +10,9 @@ from isaac_mcp.host_catalog import load_catalog
 def test_full_catalog_and_errors(monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     catalog = load_catalog()
-    assert len(catalog) == 23 + len(REGISTRY)
+    builtins = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file"}
+    assert len(catalog) == 23 + len(REGISTRY) + len(builtins)
+    assert {k for k in catalog if "." not in k} == builtins
     assert len([k for k in catalog if k.startswith("ur5e_dt.")]) == 23
     server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
 
@@ -127,8 +129,10 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
     hidden = gw.build_server({"ISAAC_MCP_SCENE_TOOLS": "0"})
     visible = gw.build_server({})
-    assert len(hidden._tool_manager._tools) == 47
-    assert len(visible._tool_manager._tools) == 95
+    # The 7 bridge built-ins are listed offline too (PR D), so offline == with a bridge.
+    assert len(hidden._tool_manager._tools) == 54
+    assert len(visible._tool_manager._tools) == 102
+    assert "run_python" in visible._tool_manager._tools and "status" in hidden._tool_manager._tools
     assert "sim__stage__info" in visible._tool_manager._tools
     assert "sim__stage__info" not in hidden._tool_manager._tools
     assert sum(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools) == 23

@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "namespace": null,
+  "tools": {
+    "run_python": {
+      "description": "Execute Python code on the Kit main thread with full access to the Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` to let frames run between steps). Set persistent=True with a session_id to keep variables alive between calls — useful for multi-step workflows where later calls need results from earlier ones. Opening a stage (including save-as) resets every session; the next call says so.",
+      "parameters": {
+        "code": {
+          "type": "string",
+          "required": true,
+          "description": "Python code to execute on Kit's main thread"
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Session identifier for persistent execution. Use the same ID across calls to share state. Defaults to 'default'."
+        },
+        "persistent": {
+          "type": "boolean",
+          "description": "If true, variables persist across calls with the same session_id."
+        }
+      },
+      "fields": [
+        {
+          "name": "code",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Python code to execute on Kit's main thread"
+        },
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Session identifier for persistent execution. Use the same ID across calls to share state. Defaults to 'default'."
+        },
+        {
+          "name": "persistent",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "If true, variables persist across calls with the same session_id."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "isaac.mcp.bridge"
+    },
+    "list_bridges": {
+      "description": "List all isaac.mcp.bridge bridges advertised on this box (this Kit process and any siblings, e.g. a second instance on an ephemeral port).",
+      "parameters": {},
+      "fields": [],
+      "namespace": null,
+      "owner_id": "isaac.mcp.bridge"
+    },
+    "reload_tools": {
+      "description": "Hot-reload one autoloaded tool package: unregister its owner, re-import the module (the submodule named _state is preserved so live handles survive), and re-register its tools. Follow with the MCP front-end's refresh so new schemas are rediscovered.",
+      "parameters": {
+        "module": {
+          "type": "string",
+          "required": true,
+          "description": "Tool-package module name as registered (see list_tools namespaces / owners)."
+        }
+      },
+      "fields": [
+        {
+          "name": "module",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Tool-package module name as registered (see list_tools namespaces / owners)."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "isaac.mcp.bridge"
+    },
+    "put_file": {
+      "description": "Write a file on the bridge's box (content base64-encoded). run_python executes on the box, so code and assets must exist on ITS disk — this verb ships them from a remote driver without a side-channel rsync/scp. Writing a .py purges the sibling __pycache__ so the next import can't serve stale bytecode. Content rides one NDJSON frame in memory: right for code and tool-sized assets, not multi-GB payloads.",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "description": "Destination path on the bridge's box (~ expands)."
+        },
+        "content_b64": {
+          "type": "string",
+          "required": true,
+          "description": "File content, base64-encoded."
+        },
+        "mkdirs": {
+          "type": "boolean",
+          "description": "Create missing parent directories (default true)."
+        }
+      },
+      "fields": [
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Destination path on the bridge's box (~ expands)."
+        },
+        {
+          "name": "content_b64",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "File content, base64-encoded."
+        },
+        {
+          "name": "mkdirs",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Create missing parent directories (default true)."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "isaac.mcp.bridge"
+    },
+    "get_file": {
+      "description": "Read a file from the bridge box's disk, returned base64-encoded (content_b64). Pull half of put_file.",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "description": "Path on the bridge's box (~ expands)."
+        }
+      },
+      "fields": [
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Path on the bridge's box (~ expands)."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "isaac.mcp.bridge"
+    },
+    "status": {
+      "description": "Instance identity: pid, port, headless-vs-headful, app + version, uptime, registered namespaces — verify you reached the instance you intended.",
+      "parameters": {},
+      "fields": [],
+      "namespace": null,
+      "owner_id": "isaac.mcp.bridge"
+    },
+    "stat_file": {
+      "description": "Existence, size, and sha256 of a file on the bridge's box — lets a remote driver skip unchanged pushes and verify assets instead of blindly re-syncing.",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "description": "Path on the bridge's box (~ expands)."
+        }
+      },
+      "fields": [
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Path on the bridge's box (~ expands)."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "isaac.mcp.bridge"
+    }
+  }
+}

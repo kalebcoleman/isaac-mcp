@@ -5,7 +5,8 @@ running Kit and read its ``list_tools`` registry. A client that connects before 
 to a Kit without a given extension, would then never see that extension's tools at all. This
 module is the other half: a *snapshot* of each known extension's registry that ships inside the
 wheel (``isaac_mcp/catalogs/*.json``), so the gateway can register callable proxies for those
-tools at startup. A live bridge's own metadata always wins over the snapshot (see server.py).
+tools at startup (``builtins.json`` holds the bridge's own bare-named verbs, ``run_python``,
+``status`` and the file tools, with a ``null`` namespace). A live bridge's own metadata always wins over the snapshot (see server.py).
 
 Each entry has exactly the shape of a bridge ``list_tools`` entry (``description``,
 ``parameters``, ``fields``, ``namespace``, ``owner_id``), so the gateway treats a snapshot entry
@@ -44,10 +45,13 @@ class CatalogError(RuntimeError):
 _CACHE: Dict[str, Dict[str, Any]] | None = None
 
 
-def _validate_tool(canonical: str, meta: Any, namespace: str, where: str) -> None:
+def _validate_tool(canonical: str, meta: Any, namespace: Any, where: str) -> None:
     if not isinstance(meta, dict) or set(meta) != _TOOL_KEYS:
         raise CatalogError(f"{where}: {canonical!r} must have exactly the keys {sorted(_TOOL_KEYS)}")
-    if not canonical.startswith(namespace + ".") or canonical == namespace + ".":
+    if namespace is None:   # the bridge's own bare-named built-ins (run_python, status, ...)
+        if not canonical or "." in canonical:
+            raise CatalogError(f"{where}: built-in {canonical!r} must be a bare name")
+    elif not canonical.startswith(namespace + ".") or canonical == namespace + ".":
         raise CatalogError(f"{where}: {canonical!r} is not in namespace {namespace!r}")
     if meta["namespace"] != namespace:
         raise CatalogError(f"{where}: {canonical!r} declares namespace {meta['namespace']!r}")
@@ -85,7 +89,9 @@ def _read_all() -> Dict[str, Dict[str, Any]]:
         if not isinstance(document, dict) or document.get("version") != CATALOG_VERSION:
             raise CatalogError(f"{where}: unsupported catalog version")
         namespace = document.get("namespace")
-        if not isinstance(namespace, str) or not namespace or not isinstance(document.get("tools"), dict):
+        # ``null`` is the bridge built-ins catalog: bare names, the builtins gate instead of a namespace.
+        if (namespace is not None and (not isinstance(namespace, str) or not namespace)) \
+                or not isinstance(document.get("tools"), dict):
             raise CatalogError(f"{where}: needs a namespace and a tools object")
         for canonical, meta in document["tools"].items():
             _validate_tool(canonical, meta, namespace, where)

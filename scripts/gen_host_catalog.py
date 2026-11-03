@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Generate the host's packaged tool catalog from the extensions' own tool registries.
 
-The MCP host lists the UR5e twin's tools even when no Kit bridge is running, from a snapshot
-shipped in the wheel (``mcp/isaac_mcp/catalogs/ur5e_dt.json``, read by ``isaac_mcp.host_catalog``).
+The MCP host lists the UR5e twin's tools, the generic scene tools and the bridge built-ins even
+when no Kit bridge is running, from snapshots shipped in the wheel (``mcp/isaac_mcp/catalogs/*.json``,
+read by ``isaac_mcp.host_catalog``).
 This script is the only thing that writes that snapshot, and it derives every byte from the
 sources of truth:
 
@@ -72,6 +73,32 @@ def build_ur5e_catalog() -> Dict[str, Any]:
     return document
 
 
+BUILTINS_OUTPUT = ROOT / "mcp/isaac_mcp/catalogs/builtins.json"
+
+
+def build_builtins_catalog() -> Dict[str, Any]:
+    """The bridge's own bare-named verbs (run_python, status, ...), as ``list_tools`` serves them.
+
+    Read from ``isaac_mcp_bridge.builtins.builtin_tools`` (pure Python outside Kit). Internal verbs
+    (``list_tools``) are left out, as the bridge leaves them out of its own listing."""
+    _field_specs()   # puts the bridge package on sys.path
+    from isaac_mcp_bridge.bridge import BUILTIN_OWNER_ID  # noqa: PLC0415
+    from isaac_mcp_bridge.builtins import builtin_tools  # noqa: PLC0415
+    from isaac_mcp_bridge.schema import field_specs  # noqa: PLC0415
+    tools = {}
+    for definition in builtin_tools(None):
+        if definition.internal:
+            continue
+        tools[definition.name] = {
+            "description": definition.description,
+            "parameters": definition.parameters,
+            "fields": field_specs(definition.parameters),
+            "namespace": None,
+            "owner_id": BUILTIN_OWNER_ID,
+        }
+    return {"version": CATALOG_VERSION, "namespace": None, "tools": tools}
+
+
 def render(document: Dict[str, Any]) -> str:
     return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
 
@@ -98,6 +125,12 @@ def main(argv=None) -> int:
         elif not dest.exists() or dest.read_text()!=expected:
             print(str(dest)+" is stale; run --write",file=sys.stderr)
             return 1
+    builtins_text = render(build_builtins_catalog())
+    if args.write:
+        BUILTINS_OUTPUT.write_text(builtins_text, encoding="utf-8")
+    elif not BUILTINS_OUTPUT.exists() or BUILTINS_OUTPUT.read_text(encoding="utf-8") != builtins_text:
+        print(f"{BUILTINS_OUTPUT} is stale: the bridge built-ins changed; run --write", file=sys.stderr)
+        return 1
     text = render(build_ur5e_catalog())
     if args.write:
         args.output.parent.mkdir(parents=True, exist_ok=True)

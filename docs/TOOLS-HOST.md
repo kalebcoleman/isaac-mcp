@@ -2,8 +2,9 @@
 
 The host `isaac-mcp` process speaks MCP to the client. It provides the gateway and desktop tools below even when
 Kit is disconnected. The 23 UR5e tools are also listed from a packaged catalog, even with Kit down; a live twin
-bridge is required to execute them. The seven bridge built-ins are discovered from a running Kit bridge; they can be hidden from
-the host's MCP list with `ISAAC_MCP_BUILTINS=0`. Other packs are documented in the [UR5e](TOOLS-UR5E.md) and
+bridge is required to execute them. The seven bridge built-ins are listed the same way, from a packaged snapshot of the bridge's own
+verbs, and run on the selected bridge when called; they can be hidden from the host's MCP list with
+`ISAAC_MCP_BUILTINS=0`. Clients that ignore `tools/list_changed` (OpenCode) therefore see them from startup. Other packs are documented in the [UR5e](TOOLS-UR5E.md) and
 [Isaac Lab](TOOLS-ISAACLAB.md) references.
 
 Examples below show the **tool name** and a JSON object of **arguments**. Use the tool-calling interface of your MCP
@@ -19,18 +20,18 @@ bridge is unavailable.
 
 | MCP tool | Arguments | Use and effects |
 |---|---|---|
-| `refresh_tools` | none | Rediscover the selected bridge's registry after a bridge starts or a module changes. Adds or updates visible tools and removes tools no longer advertised; catalog-listed tools remain visible as proxies. A failed or malformed discovery, or a collision between bridge tool names or with a host tool, leaves the existing list intact. The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after a refresh that changed the list; a client that ignores the notification still needs a reconnect (or `python -m isaac_mcp.client list_tools`). |
+| `refresh_tools` | `wait_s=0` (seconds, clamped to 0-180) | Rediscover the selected bridge's registry after a bridge starts or a module changes. Adds or updates visible tools and removes tools no longer advertised; catalog-listed tools remain visible as proxies. A failed or malformed discovery, or a collision between bridge tool names or with a host tool, leaves the existing list intact. The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after a refresh that changed the list; a client that ignores the notification still needs a reconnect (or `python -m isaac_mcp.client list_tools`). When no bridge answers, or one accepts the connection but `list_tools` times out, the error says Kit is probably still starting and names any managed `sim__launch` session with its age; with `wait_s` > 0 it polls every 3 s until the bridge answers or the time runs out (an ambiguous "multiple bridges" error is returned at once). A first Kit start took 172 s on a lab PC. |
 | `use_bridge` | `port` (integer, required) | Connect to a different bridge on that port, report its identity, and replace the previously discovered bridge tools. The choice lasts until the host server restarts. Sends `notifications/tools/list_changed` after replacing the tools. |
 
 For a bridge already connected, `status` verifies its PID, port, app version and other identity data; `list_bridges`
-lists advertised bridge instances (they are bridge built-ins, so they appear as MCP tools only when built-ins are
-enabled and a bridge is reachable; `python -m isaac_mcp.client --list-bridges` works either way). Example MCP calls: `use_bridge` with `{"port":8766}`, followed by `status` with
+lists advertised bridge instances (they are bridge built-ins: listed unless `ISAAC_MCP_BUILTINS=0`, but they need a reachable bridge to answer;
+`python -m isaac_mcp.client --list-bridges` works either way). Example MCP calls: `use_bridge` with `{"port":8766}`, followed by `status` with
 `{}` and `refresh_tools` with `{}`. Switching targets changes the selected simulation; verify the result before
 issuing scene-changing commands.
 
-Catalog-listed twin tools alone do not prove a live bridge is available. The client may have connected before Kit
-started, or `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may hide bridge tools (including `status` and
-`list_bridges`). Call `refresh_tools` and verify with the CLI below before starting another Kit.
+Catalog-listed tools, built-ins included, do not prove a live bridge is available: call `status` to find out.
+`ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may hide bridge tools (including `status` and
+`list_bridges`), and tools of uncatalogued extensions appear only after discovery. Call `refresh_tools` and verify with the CLI below before starting another Kit.
 
 The bridge also has an internal `list_tools` discovery operation. It is intentionally hidden from the bridge's own
 advertised tool list, so it is not normally a dynamically registered MCP tool. Ask the MCP client to list tools, or
@@ -94,12 +95,12 @@ conservative destructive and open-world annotations. To enable the separate simu
 - `gateway` only controls the two tools. Bridge discovery at startup is part of the server lifespan and still runs when
   `gateway` is excluded; without the tools, a client cannot re-run or redirect it, so restart the MCP connection after
   starting Kit.
-- `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only the tools discovered from the bridge.
+- `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only bridge tools (discovered live or listed from the catalog).
   `ISAAC_MCP_LOCAL_TOOLS` filters only the host's local tools. These compose with
   `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 48 generic `sim`/`assets`
   tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
   and optional managed-session tools are unaffected. With standard local groups, opting out
-  gives 47 offline tools or 54 with bridge built-ins. These are visibility controls, not isolation.
+  gives 54 tools, offline or with a bridge. These are visibility controls, not isolation.
 - `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
   server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
   [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.
@@ -249,8 +250,9 @@ as `scope: "process"`, and a forced stop there may leave child processes that re
 
 ## Kit bridge built-ins
 
-These tools operate on the **bridge machine**, inside or alongside the Kit process. Their availability depends on
-the selected bridge and the host's built-in filter.
+These tools operate on the **bridge machine**, inside or alongside the Kit process. The host lists them from a packaged
+snapshot (`mcp/isaac_mcp/catalogs/builtins.json`, regenerated by `scripts/gen_host_catalog.py --write`) unless
+`ISAAC_MCP_BUILTINS=0`; each call is sent to the selected bridge, and without one it returns an error that says what to do.
 
 | MCP tool | Arguments and defaults | Use and effects |
 |---|---|---|

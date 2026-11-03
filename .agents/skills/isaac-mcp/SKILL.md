@@ -53,8 +53,10 @@ Pause before saving and check the exported scene after reopening in a fresh proc
 
 ## First calls in a session
 
-1. `refresh_tools`, which rediscovers bridge tools. Generic scene and UR5e catalog tools are
-   listed even with Kit offline; execution still requires the selected bridge and extension.
+1. `refresh_tools`, which rediscovers bridge tools. The built-ins (`run_python`, `status`, ...),
+   generic scene and UR5e catalog tools are listed even with Kit offline, so a listed tool does not
+   mean Kit is up: `status` tells you. Kit can take 2-3 minutes to start; while it boots, call
+   `refresh_tools(wait_s=120)` (max 180) instead of retrying by hand.
 2. Find bridges. Use `list_bridges` if it is listed. Otherwise run the CLI in a shell
    (`python -m isaac_mcp.client --list-bridges`), which works even when bridge built-ins are hidden
    by `ISAAC_MCP_BUILTINS=0` or `ISAAC_MCP_NAMESPACE`. It exits 2 with `[]` when none is advertised.
@@ -225,10 +227,33 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
 5. Before debugging RViz, run `python3 scripts/ros2_tf_doctor.py --fixed-frame <frame>`
    (`--isaac-ros` without a system ROS 2) and fix every ERROR it prints. It also checks
    sensor topics' stamps against `/clock`.
-6. Hand-built graphs (a lab that names its own graphs): give every Read Simulation Time node
+6. Hand-built graphs (a lab that names its own graphs): Isaac 6.2 differs from 6.0 tutorials
+   (Constant Token, token values, Make Array, 2D RTX lidar, `IsaacComputeTransformTree`); read
+   `docs/ISAAC-6.2-NOTES.md` first. Also give every Read Simulation Time node
    the same `resetOnStop`. Sensor helpers (lidar, camera) restart at 0 on Stop, so with
    `resetOnStop=False` on the clock graph RViz drops every scan after the first Stop/Play.
    `True` everywhere is the safe choice when sensor helpers are present.
+
+### ROS 2 from an agent shell (lessons from the TurtleBot3/Nav2 lab)
+
+- `source scripts/ros_env.sh [install] [--overlay <nav2 env>]` (after `export ROS_DOMAIN_ID=<sim's>`)
+  sources ROS, then `config/ros_dds.env`, then stops the `ros2` daemon. A daemon started with other
+  DDS settings makes `ros2 topic list` / `node list` empty while data flows; otherwise use
+  `--no-daemon` (`ros2 topic hz` has no such flag).
+- Kit's bridge nodes do not show in `ros2 node list`; verify with topics and `/tf`.
+- The harness kills a tool call's process group when it ends: start RViz and other long-lived
+  processes with `setsid nohup <cmd> > log 2>&1 < /dev/null &`, record `$!`, stop that PID.
+- Bound every ROS command: `ros2 topic pub --times N`, `timeout -s KILL <s> ...`. A plain
+  `timeout 6 ros2 topic pub ... | tail` hung 120 s while the robot drove into a wall.
+- Keyboard teleop needs a TTY. Drive with `python3 scripts/cmd_vel_sequence.py "0.15,0,5;0,0.5,3"`
+  (m/s, rad/s, s per step); it always publishes zero at the end, also on Ctrl-C/SIGTERM.
+- Nav2's `map` frame is the world frame: the map YAML `origin` is only the image's corner, so
+  do not offset goals by it.
+- Same distro on both sides: Jazzy on Ubuntu 24.04, Humble on 22.04 (`run.sh` picks by OS unless
+  `ROS_DISTRO` is exported). Jazzy and Humble did not exchange messages with these DDS settings.
+- RViz layout: `scripts/ros2_rviz_config.py --view topdown --scale 80 --target-frame base_link
+  --hide-panels` (top-down, follows the robot, 3D view only). `Hide Left Dock: true` in a
+  config does nothing in RViz2.
 
 ## Using Isaac Sim's UI (works on a locked or remote PC)
 
@@ -255,7 +280,8 @@ worked while locked on GNOME.
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| Only host and `isaaclab__*` tools listed | Connected before Kit, or bridge tools filtered | `refresh_tools`, then the `--list-bridges` CLI |
+| `run_python`/`status` not listed | `ISAAC_MCP_BUILTINS=0` (they are listed offline otherwise) | Use the `isaac_mcp.client` CLI, or ask the user to enable built-ins |
+| `refresh_tools`: no bridge reachable, or no response for `list_tools` | Kit still starting | `refresh_tools(wait_s=120)`; the error names a managed session and its age |
 | `refresh_tools` reports connection refused | No bridge on that port | Check the listing; start Kit with `isaac.mcp.bridge` only if none is advertised and the user agrees |
 | `refresh_tools` refused right after `sim__launch` | The server dials its configured port, not the new session's | `use_bridge(port=<the launched port>)` (sim__status's `next` says so) |
 | Monitor recording looks choppy; result says "composed" | Screen locked or blanked (PC used remotely): frames are composed from window pixels | Record the windows that matter with `window_id=` or `window_ids=[...]` |

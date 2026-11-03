@@ -71,33 +71,33 @@ configured filters.
 | Desktop input (optional) | 5 (`window_*`) | only when `screen_input` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-desktop-input) |
 | Simulator sessions (optional) | 4 (`sim__*`) | only when `sim_launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
 | Isaac Lab (`isaaclab__*`) | 12 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
-| Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | a Kit bridge is reachable; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
+| Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
 | Generic scene and assets | 48 (`assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots/scan/search run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
 | UR5e twin (`ur5e_dt__*`) | 23 | listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, a client that lists exactly 95 tools can see the
-host, Isaac Lab, generic and UR5e catalog tiers, but not the bridge built-ins. That does not prove that no
-bridge exists. The possible causes are:
+With default groups and no namespace filter, a client lists exactly 102 tools from startup:
+the host, Isaac Lab, bridge built-in, generic and UR5e catalog tiers, whether or not Kit is running.
+A listed tool does not prove that a bridge exists: catalogued tools dial the selected bridge when
+called and return an actionable error if none answers. Use `status` (or the CLI check below) to
+find out. Fewer tools mean a filter:
 
-- no Kit bridge is running;
-- the client connected before Kit started, so the bridge tools have not been discovered yet
-  (call `refresh_tools`);
-- a filter is hiding bridge tools from a reachable bridge (`ISAAC_MCP_NAMESPACE` or
-  `ISAAC_MCP_BUILTINS=0`);
+- `ISAAC_MCP_BUILTINS=0` hides the bridge built-ins, `ISAAC_MCP_NAMESPACE` hides namespaced
+  bridge and catalog tools, and `ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack;
 - `ISAAC_MCP_LOCAL_TOOLS` is restricting the local tools (the default, `all`, registers 24 local tools),
   so the listed host and Isaac Lab tools may be a subset. If its `gateway` group is excluded,
   `refresh_tools` and `use_bridge` are not listed: bridge tools are then discovered only when
   the server starts, so restart the MCP connection after starting Kit.
 
-The other 7 tools (bridge built-ins) require discovery from a reachable bridge. With the standard
-groups and bridge built-ins visible there are 102 tools in total. The optional desktop input and
+The other 7 tools (bridge built-ins) are listed from the same kind of snapshot as the twin and
+scene tools, so clients that ignore `tools/list_changed` (OpenCode) can call them at once. With
+the standard groups and bridge built-ins visible there are 102 tools in total. The optional desktop input and
 simulator session groups add 9 more. The initial generic tools are documented in `docs/TOOLS-SCENE.md`; the broader
 `docs/GENERIC-SIM-TOOLS.md` design includes capabilities not yet implemented. Untrusted
 loading and remote upload remain disabled; bounded trusted USDZ packages are supported.
 
 Set `ISAAC_MCP_SCENE_TOOLS=0` in the MCP server environment to hide the entire generic
 scene/asset pack, both offline and after bridge refresh. It is read once per server startup.
-With otherwise standard settings this restores 47 offline tools and 54 with bridge built-ins.
+With otherwise standard settings this leaves 54 tools, offline or with a bridge.
 The 23 UR5e tools, Isaac Lab, desktop tools and optional managed `sim__launch/list/status/stop`
 tools retain their existing rules. This discovery preference is not a security boundary.
 
@@ -190,7 +190,7 @@ See [docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md).
 ## Changing tools
 
 Every registered tool must be documented in its `docs/TOOLS-*.md` page, and the counts above
-(each tier's Tools cell, the 83 and 7 subtotals and the 90 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
+(each tier's Tools cell, the 100 listed offline, the 7 built-ins and the 100 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
 CI along with the host test suite (`pytest -q` from `mcp/`, see `.github/workflows/ci.yml`).
 After changing the twin tool registry, run `python3 scripts/gen_host_catalog.py --write` and commit the
 updated snapshot; `--check` and the host tests detect drift.
