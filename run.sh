@@ -72,7 +72,8 @@ done
 if [ "$PY_AUTODETECT" = 1 ]; then
   if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/scripts/isaac_env.py" ]; then
     # Any Isaac Sim 6.x; the first match in the documented search order wins.
-    if DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6)" && [ -n "$DETECTED" ]; then
+    if [ "$SHOW_HELP" = 1 ]; then _detect_stderr=/dev/null; else _detect_stderr=/dev/stderr; fi
+    if DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6 2>"$_detect_stderr")" && [ -n "$DETECTED" ]; then
       PY="$DETECTED"
       if [ "$SHOW_HELP" != 1 ]; then
         echo "run.sh: auto-detected interpreter $PY (pin one with ISAAC_MCP_PYTHON=/path/to/python; list all with scripts/isaac_env.py find)" >&2
@@ -88,6 +89,7 @@ if [ "${ISAAC_MCP_PRINT_PYTHON:-0}" = 1 ]; then
 fi
 
 if [ "$SHOW_HELP" = 1 ]; then
+  if [ -x "$PY" ]; then HELP_PY="$PY"; else HELP_PY="$PY (not found; list candidates with: python3 scripts/isaac_env.py find)"; fi
   cat <<EOF
 Usage: ./run.sh [options] [-- <extra kit args>]
 
@@ -95,7 +97,7 @@ Launch Isaac Sim 6.2 with the Kit MCP bridge and UR5e tools.
 
 Configuration:
   Port:        $PORT (override with UR5E_DT_PORT or --port)
-  Interpreter: $PY
+  Interpreter: $HELP_PY
                (override with ISAAC_MCP_PYTHON; UR5E_DT_PYTHON is an alias; without either, the
                checkout .venv is used, else scripts/isaac_env.py auto-detects an existing install)
 

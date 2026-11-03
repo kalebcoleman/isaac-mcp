@@ -33,7 +33,7 @@ in-flight call must drain before the twin can re-register.
 The host MCP server is installed automatically when running `./install.sh` from the repository root:
 
 ```bash
-./install.sh --no-sim           # Host only, editable via uv tool; no Sim/Lab install
+./install.sh --no-sim           # Host only, editable via uv tool; installs no Sim or Lab, records a Sim it finds
 # Optional, only to register these clients:
 ./install.sh --no-sim --claude  # Also writes Claude Code and Claude Desktop configs
 ```

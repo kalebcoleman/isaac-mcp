@@ -198,3 +198,32 @@ def test_the_opencode_snippet_is_valid_json_for_unusual_paths(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     body = re.search(r'"environment": (\{.*\})', result.stdout).group(1)
     assert json.loads(body)["ISAAC_MCP_PYTHON"] == env["ISAAC_MCP_PYTHON"]
+
+
+def test_no_sim_records_an_installed_isaac_sim_and_never_syncs(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / "lab-isaac", "6.2.0.0"))
+    env["OMNI_KIT_ACCEPT_EULA"] = "YES"
+    result = _install(root, env, "--no-sim", "--claude-code")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "uv sync" not in _calls(log)
+    assert f"ISAAC_MCP_PYTHON={env['ISAAC_MCP_PYTHON']}" in _calls(log)
+
+
+def test_no_sim_without_any_isaac_sim_never_syncs_even_with_the_eula_accepted(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    env["OMNI_KIT_ACCEPT_EULA"] = "YES"
+    result = _install(root, env, "--no-sim", "--claude-code")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "uv sync" not in _calls(log) and "ISAAC_MCP_PYTHON=" not in _calls(log)
+    assert "no Isaac Sim 6.x found to record" in result.stdout
+
+
+def test_no_sim_with_a_bad_named_interpreter_warns_and_still_installs_the_host(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = "/no/such/python"
+    result = _install(root, env, "--no-sim", "--claude-code")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ISAAC_MCP_PYTHON is set but does not point" in result.stderr
+    assert "no interpreter recorded" in result.stderr
+    assert "uv sync" not in _calls(log) and "ISAAC_MCP_PYTHON=" not in _calls(log)

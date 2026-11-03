@@ -40,8 +40,7 @@ in the [compatibility matrix](COMPATIBILITY.md).
 
 ### 1. Reliability
 
-- [ ] Make `./verify.sh` detect a checkpoint with dead asset references instead of failing later in the motion check. See
-  [the failure it causes](VERIFICATION.md#live-ur5e-baseline).
+- [x] Make `./verify.sh` detect a checkpoint with dead asset references up front. See [the message](VERIFICATION.md#live-ur5e-baseline).
 - [ ] Improve the `randomize_single_object` placement configuration without breaking existing defaults; test feasible
   and infeasible scenes.
 - [ ] Investigate the `NoneType.GetCamera` viewport exception during stage reset without suppressing it. See

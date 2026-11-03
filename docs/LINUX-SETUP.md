@@ -67,7 +67,7 @@ The convenience installer:
   interpreter into the Claude entries it creates. If nothing is found, it continues to the checks below and **stops at the
   EULA check unless `--accept-eula` was given or `OMNI_KIT_ACCEPT_EULA=YES` is already exported; in those two cases it
   downloads the environment**. An existing checkout `.venv` is re-synced unless you pass `--no-sim`, the one form that never
-  touches a simulator environment. `--no-sim` does not look for a Sim, so it records no interpreter in client entries.
+  downloads or syncs a simulator. `--no-sim` still looks for an installed Isaac Sim 6.x and records it in client entries.
 - Runs **`uv sync --python 3.12` in the current directory**. It may update the lock/environment;
   it does not enforce `--locked` and does not use `ISAAC_MCP_PYTHON` (or its alias `UR5E_DT_PYTHON`) as its install target.
 - Runs `uv tool install --force --editable` for the host with the `isaaclab` metrics extra.
@@ -157,7 +157,7 @@ compatible installation. Do not rename, relocate or reinstall an environment jus
 
 ```bash
 # From checkout root; this replaces only the user-level host tool and may create its ffmpeg shim.
-# --no-sim records no interpreter: for sim__launch, also set ISAAC_MCP_PYTHON in the client's isaac entry.
+# Export ISAAC_MCP_PYTHON first if the install is outside the searched locations, so it is recorded.
 ./install.sh --no-sim
 ISAAC_SIM_PYTHON=<env>/bin/python
 "$ISAAC_SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
@@ -290,7 +290,7 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK: `uv run --isolated --project mcp --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
 | `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; for the twin that is `/World/UR5e/root_joint`. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
-| `./verify.sh` fails `single_joint_motion` with `'NoneType' object has no attribute 'is_homogeneous'` | A pre-migration `checkpoints/*.usda` has dead references, so the reopened arm is empty. See [Verification](VERIFICATION.md#live-ur5e-baseline) |
+| `./verify.sh` stops with `FAILED: checkpoint` | A pre-migration `checkpoints/*.usda` has dead references. Inspect it and move it aside. See [Verification](VERIFICATION.md#live-ur5e-baseline) |
 | `SAVE_UNSUPPORTED` | Inspect returned properties/retry guidance; pause and follow the explicit normalization contract in [scene tools](TOOLS-SCENE.md) |
 | `TIMELINE_BUSY` or a call stops responding | Preserve logs and identity; do not repeatedly replay Play or assume a client timeout cancels native work. See the known stall in [compatibility](COMPATIBILITY.md) |
 | No display / screenshot fails | Use the actual X11/XWayland display for window tools, or headless sensor capture; neither creates a desktop session |

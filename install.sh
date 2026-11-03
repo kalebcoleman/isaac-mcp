@@ -8,7 +8,8 @@
 #   ./install.sh [options]
 #
 # Options:
-#   --no-sim          Skip the 20 GB Isaac Sim environment sync (installs host MCP server only)
+#   --no-sim          Never download or sync Isaac Sim: install the host MCP server only, and record
+#                     an installed Isaac Sim 6.x in client configurations when one is found
 #   --download-sim    Create the locked 6.2 environment even when an Isaac Sim is already installed
 #   --claude          Configure both Claude Code and Claude Desktop
 #   --claude-code     Configure Claude Code only
@@ -37,10 +38,12 @@ usage() {
   cat <<'EOF'
 Usage: ./install.sh [options]
 
-Idempotent setup for the UR5e digital twin repository.
+Idempotent setup for isaac-mcp: the host MCP server and, only when needed, Isaac Sim.
+An installed Isaac Sim 6.x is used and recorded in the client configurations this writes.
 
 Options:
-  --no-sim          Skip Isaac Sim environment sync (host MCP server only)
+  --no-sim          Never download or sync Isaac Sim (host MCP server only); an installed
+                    Isaac Sim 6.x is still found and recorded in client configurations
   --download-sim    Download the locked Isaac Sim 6.2 environment into .venv even when an
                     Isaac Sim 6.x is already installed (by default an existing install is used)
   --claude          Configure both Claude Code and Claude Desktop
@@ -124,8 +127,11 @@ fi
 # this installer's environment. The interpreter found here is written into the client
 # configuration (ISAAC_MCP_PYTHON), so sim__launch/run.sh use it even from a shell where the
 # variables that found it (VIRTUAL_ENV, CONDA_PREFIX, ISAACSIM_PATH, ...) are not set.
+# --no-sim never downloads, so a failed look there is only a warning; it still records what it finds.
 SIM_PYTHON=""
-if [ "$NO_SIM" = 0 ] && [ "$DOWNLOAD_SIM" = 0 ] && [ ! -x "$ROOT/.venv/bin/python" ]; then
+HOST_ONLY="$NO_SIM"
+if [ "$DOWNLOAD_SIM" = 0 ] && { [ "$NO_SIM" = 1 ] || [ ! -x "$ROOT/.venv/bin/python" ]; } \
+    && { [ "$NO_SIM" = 0 ] || command -v python3 >/dev/null 2>&1; }; then
   if ! command -v python3 >/dev/null 2>&1; then
     echo "python3 is required to look for an installed Isaac Sim (or pass --download-sim)" >&2
     exit 1
@@ -168,7 +174,8 @@ PY
   rc=$?
   set -e
   if [ "$rc" = 3 ]; then
-    exit 1
+    [ "$HOST_ONLY" = 1 ] || exit 1
+    echo "WARNING: no interpreter recorded (see above); continuing with the host server only" >&2
   elif [ "$rc" = 0 ] && [ -n "$FOUND" ]; then
     IFS=$'\t' read -r SIM_PYTHON SIM_VERSION SIM_SOURCE <<<"$FOUND"
     echo "== using the Isaac Sim already installed: $SIM_PYTHON (Isaac Sim $SIM_VERSION, found via $SIM_SOURCE)"
@@ -186,12 +193,12 @@ PY
     NO_SIM=1
   elif [ "$rc" != 4 ]; then
     echo "could not check for an installed Isaac Sim (exit $rc); not downloading. Pass --no-sim or --download-sim." >&2
-    exit 1
+    [ "$HOST_ONLY" = 1 ] || exit 1
   fi
 fi
 
 if [ "$NO_SIM" = 1 ] && [ -z "$SIM_PYTHON" ]; then
-  echo "== --no-sim: sim__launch/run.sh look for Isaac Sim when they start. If yours is only reachable"
+  echo "== --no-sim: no Isaac Sim 6.x found to record. sim__launch/run.sh look again when they start. If yours is only reachable"
   echo "   through shell variables (an activated venv/conda env, ISAACSIM_PATH), put ISAAC_MCP_PYTHON in the client's isaac entry."
 fi
 

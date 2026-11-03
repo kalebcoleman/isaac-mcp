@@ -55,14 +55,14 @@ MCP_SETTINGS_KEY = SETTINGS_SUBTREE.split("/", 1)[1]  # subtree under persistent
 def find_config(explicit):
     if explicit:
         return explicit
-    # Prefer the "Isaac-Sim Full" app (normal/GUI launches), newest version;
-    # fall back to any Kit app data dir.
-    for pattern in (f"{HOME}/.local/share/ov/data/Kit/Isaac-Sim Full/*/user.config.json",
-                    f"{HOME}/.local/share/ov/data/Kit/Isaac-Sim*/*/user.config.json",
-                    f"{HOME}/.local/share/ov/data/Kit/*/*/user.config.json"):
-        cands = glob.glob(pattern)
-        if cands:
-            return max(cands, key=os.path.getmtime)
+    # Never guess between apps or versions: the most recently used config can belong to another
+    # Isaac Sim than the one being set up, and this edits it.
+    cands = sorted(glob.glob(f"{HOME}/.local/share/ov/data/Kit/*/*/user.config.json"))
+    if len(cands) == 1:
+        return cands[0]
+    if cands:
+        listed = "\n".join(f"  {cand}" for cand in cands)
+        sys.exit(f"Several Kit configs found; pass the one you mean with --config:\n{listed}")
     sys.exit("No Kit user.config.json found. Launch the app once, or pass --config.")
 
 

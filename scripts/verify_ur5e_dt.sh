@@ -11,6 +11,12 @@ BRIDGE="$ROOT/mcp"
 export_reference_if_missing() {
   [ -f "$ROOT/checkpoints/$(python3 -c "import json;print(json.load(open('$ROOT/checkpoints/ur5e-dt-workstation-person-view-portable.json'))['checkpoint'])")" ] || run_check export_reference
 }
+# Stop before touching the scene when a reused checkpoint can only reopen as an empty robot.
+stale_checkpoint="$(python3 "$ROOT/scripts/check_checkpoint_refs.py" "$ROOT/checkpoints/ur5e-dt-workstation-person-view-portable.json" 2>&1)" || {
+  echo "== FAILED: checkpoint"
+  echo "$stale_checkpoint"
+  exit 1
+}
 FAILED=()
 run_check() {
   echo "== $1"

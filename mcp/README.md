@@ -87,8 +87,8 @@ search path, auto-enables `isaac.mcp.bridge` + `isaac.mcp.panel`, and sets the
 bridge port (default **8766**). Restart the app; the bridge binds with the
 built-in tools. `--remove` undoes it.
 
-Run `python3 scripts/install.py status` first: it auto-detects a Kit app's config, which may not be the one you mean. Pass
-`--config <path/to/user.config.json>` to choose. Run it while the app is **down**; a running app overwrites the file on exit
+With more than one Kit config on the machine it refuses to guess and lists them; pass the one you mean with
+`--config <path/to/user.config.json>`. Run it while the app is **down**; a running app overwrites the file on exit
 ([why](docs/configuration.md#register-while-the-app-is-down)).
 
 Connect an agent or IDE: install the host as above and add it to `.mcp.json` (Claude Code, Cursor, etc.):

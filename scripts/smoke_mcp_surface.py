@@ -6,9 +6,9 @@ tools, bridge forwarding), so it exercises the full registered surface.
     uv run --project mcp python scripts/smoke_mcp_surface.py offline
     UR5E_DT_PORT=8780 uv run --project mcp python scripts/smoke_mcp_surface.py live PLAN.json
 
-``offline`` calls the host/Isaac Lab tools, then ``sim__stage__info`` and ``ur5e_dt__new_stage``. Those
-last two reach any lone advertised bridge, and ``new_stage`` clears its stage: stop or pin away from a
-simulator you care about first. ``live`` runs a JSON plan
+``offline`` calls the host/Isaac Lab tools, then two read-only bridge tools with the bridge pinned to a
+closed port, so it never reaches a running simulator and shows the errors a client gets without one.
+``live`` runs a JSON plan
 (list of {"tool": name, "args": {...}}) against the bridge selected by UR5E_DT_PORT; it changes
 the stage, so use a disposable simulator. Prints a markdown table.
 """
@@ -22,6 +22,8 @@ import time
 
 os.environ.setdefault("ISAAC_MCP_LOCAL_TOOLS", "all,sim_launch")
 
+# Nothing listens on port 1 without root; a pin takes precedence over bridge discovery.
+OFFLINE_PORT = "1"
 OFFLINE_PLAN = [
     ("refresh_tools", {}), ("screen_info", {}), ("list_windows", {}),
     ("screen_recording_status", {}), ("sim__list", {}),
@@ -29,7 +31,7 @@ OFFLINE_PLAN = [
     ("isaaclab__runs_list", {}), ("isaaclab__checkpoints_list", {}),
     ("assets__roots", {}), ("assets__scan", {"root_id": "does-not-exist"}),
     ("assets__search", {"query": "ur5e"}),
-    ("sim__stage__info", {}), ("ur5e_dt__new_stage", {}),
+    ("sim__stage__info", {}), ("ur5e_dt__get_recording_status", {}),
 ]
 
 
@@ -118,6 +120,8 @@ class Live:
 
 def main(argv: list[str]) -> int:
     mode = argv[1] if len(argv) > 1 else "offline"
+    if mode == "offline":
+        os.environ["UR5E_DT_PORT"] = OFFLINE_PORT
     plan = OFFLINE_PLAN if mode == "offline" else [(p["tool"], p.get("args", {})) for p in json.load(open(argv[2]))]
     rows = asyncio.run(run(plan))
     if len(argv) > 3:

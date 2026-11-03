@@ -105,7 +105,7 @@ def test_verifier_rejects_semantic_failures_with_successful_client(tmp_path, res
     )
     (checkpoints / "reference.usda").touch()
     repo = Path(__file__).resolve().parents[2]
-    for name in ("verify_ur5e_dt.sh", "validate_ur5e_check.py"):
+    for name in ("verify_ur5e_dt.sh", "validate_ur5e_check.py", "check_checkpoint_refs.py"):
         shutil.copy(repo / "scripts" / name, scripts / name)
     if bad_check == "gravity_robot_chain":
         responses[bad_check]["result"][ROOTS[0]]["gravity_enabled_count"] = 1

@@ -410,10 +410,11 @@ The validator is [`scripts/validate_ur5e_check.py`](../scripts/validate_ur5e_che
 malformed, non-finite or out-of-range observations, and `verify.sh` exits nonzero if a check or its response fails.
 If a check fails, inspect the named result and the simulator log before changing limits.
 
-**If `single_joint_motion` fails with `'NoneType' object has no attribute 'is_homogeneous'`** on a checkout older than the
-code-only asset migration, a local git-ignored `checkpoints/ur5e-dt-workstation-person-view-portable-*.usda` still references
-`../exts/ur5e-dt/assets/...`. The verifier reuses an existing file, and the reopened `/World/UR5e` is empty. Inspect that
-file, move it aside and re-run: `./verify.sh` exports a new one from your current assets. A clean clone is not affected.
+**If `verify.sh` stops with `FAILED: checkpoint`**, the git-ignored `checkpoints/ur5e-dt-workstation-person-view-portable-*.usda`
+it would reuse references files that no longer exist, usually because it predates the code-only asset migration. Reopened,
+`/World/UR5e` would be empty and the motion check would fail with `'NoneType' object has no attribute 'is_homogeneous'`.
+The verifier checks this before touching the scene (`scripts/check_checkpoint_refs.py`) and never changes the file. Inspect
+it, move it aside and re-run: `./verify.sh` exports a new one from your current assets. A clean clone is not affected.
 
 ## Last live check
 
@@ -425,7 +426,7 @@ Source `d721f91`, Ubuntu 24.04, RTX 5080, Isaac Sim 6.2.0.0, headless PhysX, dis
   existing Sim and a throwaway `HOME`, and the `client.py` terminal checks all worked.
 - `smoke_tools.py`: **20/20**, with the known `randomize_single_object` warning for its narrow default strip.
 - `./verify.sh` from a clean clone: **all checks passed**; elbow commanded -0.1 rad, achieved -0.0999992, returned to within 3e-9.
-  The same run from an older checkout failed as described above.
+  The same run from an older checkout failed in the motion check, which `verify.sh` now reports up front as described above.
 - `validate_scene_tools.py` over real MCP: passed, 32 calls.
 - Further calls over real MCP returned the expected results: stage tree, save and open, prim create, clone, transform, find and delete,
   graph node types, build and inspect, occupancy map, viewport frame, `sim__ui__find` and a `wait` action, lights, materials, camera create and capture,
