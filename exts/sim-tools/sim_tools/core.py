@@ -60,6 +60,15 @@ def path(value, root=False):
 RUNTIME_ROOTS = ("/Render",)  # Replicator/render-product prims Kit adds at runtime; they crowded out the scene
 
 
+def _ros_environment():
+    try:
+        from .ros_env import describe
+
+        return describe()
+    except Exception:  # noqa: BLE001 - informational only
+        return None
+
+
 def bounded(stage, root, limit, depth=None, include_runtime=True):
     """Prims under *root* (pre-order), at most *limit*; *depth* levels below root; runtime /Render prims
     skipped unless *include_runtime* or the root is inside them."""
@@ -191,7 +200,9 @@ class Scene:
         if session_id != self.session_id or stage_id != self.stage_id:
             refuse(
                 "STALE_TARGET",
-                "Session or stage changed. Review current_target and resend its IDs explicitly; this call was not retargeted.",
+                "Session or stage changed (Kit restarted, the stage was opened or reloaded). This call was not "
+                f"retargeted. Resend it with session_id=\"{self.session_id}\" and stage_id=\"{self.stage_id}\" "
+                "(check current_target first if the stage is not the one you meant).",
                 current_target=dict(
                     session_id=self.session_id,
                     stage_id=self.stage_id,
@@ -247,6 +258,7 @@ class Scene:
             usd_version=list(Usd.GetVersion()),
             runtime_edit_target_managed=self._runtime_edit_target is not None,
             device_error=self.device_error,
+            ros=_ros_environment(),
         )
 
     def prim(self, stage, value):

@@ -36,26 +36,60 @@ def split_port(ref, names, graph_path=""):
     if graph_path and ref.startswith(graph_path.rstrip("/") + "/"):
         ref = ref[len(graph_path.rstrip("/")) + 1:]
     node, _, port = ref.partition(".")
+    if NAME.match(port) and ":" not in port:
+        port = "?" + port  # bare port name: build() picks outputs:/inputs:/state: from the real node
     if node not in names:
         raise SpecError("UNKNOWN_NODE", f"{ref!r} names node {node!r}, which is not in nodes "
                         f"({', '.join(sorted(names)) or 'none'}).")
-    if not PORT.match(port):
+    if not port.startswith("?") and not PORT.match(port):
         raise SpecError("INVALID_VALUE", f"{ref!r}: the port must look like inputs:name or outputs:name.")
     return node, port
 
 
+def _node_pair(item, notes):
+    """(name, type) from [name, type], [type, name] (swapped back, with a note) or {"name","type"}."""
+    if isinstance(item, dict):
+        name = item.get("name") or item.get("id") or item.get("node")
+        kind = item.get("type") or item.get("node_type") or item.get("type_id")
+        if isinstance(name, str) and isinstance(kind, str):
+            return name, kind
+    elif isinstance(item, (list, tuple)) and len(item) == 2 and all(isinstance(x, str) for x in item):
+        name, kind = item
+        if "." in name and "." not in kind and NAME.match(kind):
+            notes.append(f"nodes entry {list(item)!r} had the type first; read it as [name, type] = "
+                         f"[{kind!r}, {name!r}]")
+            return kind, name
+        return name, kind
+    raise SpecError("INVALID_VALUE", f"nodes entry {item!r}: use [name, node_type], e.g. "
+                    "[\"tick\", \"omni.graph.action.OnPlaybackTick\"], or {\"name\": ..., \"type\": ...}.")
+
+
+def _edge(item):
+    """[from, to] from [a, b], [srcNode, srcPort, dstNode, dstPort] or {"from","to"} objects."""
+    if isinstance(item, dict):
+        src = item.get("from") or item.get("source") or item.get("src")
+        dst = item.get("to") or item.get("target") or item.get("dst")
+        if isinstance(src, str) and isinstance(dst, str):
+            return src, dst
+    elif isinstance(item, (list, tuple)) and all(isinstance(x, str) for x in item):
+        if len(item) == 2:
+            return item[0], item[1]
+        if len(item) == 4:  # a bare port name is resolved against the created node in build()
+            return f"{item[0]}.{item[1]}", f"{item[2]}.{item[3]}"
+    raise SpecError("INVALID_VALUE", f"connection {item!r}: use [\"node.outputs:x\", \"node.inputs:y\"] "
+                    "(or [srcNode, srcPort, dstNode, dstPort], or {\"from\": ..., \"to\": ...}).")
+
+
 def parse_spec(a):
     """Validate and normalize the tool arguments (no Kit needed)."""
+    notes = []
     nodes = a.get("nodes")
     if not isinstance(nodes, list) or not 1 <= len(nodes) <= MAX_NODES:
         raise SpecError("INVALID_VALUE", f"nodes: 1..{MAX_NODES} [name, node_type] pairs, e.g. "
                         "[\"tick\", \"omni.graph.action.OnPlaybackTick\"].")
     names, pairs = set(), []
     for item in nodes:
-        if (not isinstance(item, (list, tuple)) or len(item) != 2
-                or not all(isinstance(x, str) for x in item)):
-            raise SpecError("INVALID_VALUE", f"nodes entry {item!r}: use [name, node_type].")
-        name, kind = item
+        name, kind = _node_pair(item, notes)
         if not NAME.match(name):
             raise SpecError("INVALID_VALUE", f"node name {name!r}: letters, digits and _, starting with a letter.")
         if name in names:
@@ -72,6 +106,8 @@ def parse_spec(a):
     norm_values = []
     for ref, value in values.items():
         node, port = split_port(ref, names, graph_path)
+        if port.startswith("?"):
+            port = "inputs:" + port[1:]
         if not port.startswith("inputs:"):
             raise SpecError("INVALID_VALUE", f"{ref!r}: only inputs can be set.")
         norm_values.append((node, port, value))
@@ -80,9 +116,9 @@ def parse_spec(a):
         raise SpecError("INVALID_VALUE", f"connections: up to {MAX_EDGES} [from, to] pairs.")
     edges = []
     for item in connections:
-        if not isinstance(item, (list, tuple)) or len(item) != 2:
-            raise SpecError("INVALID_VALUE", f"connection {item!r}: use [\"node.outputs:x\", \"node.inputs:y\"].")
-        src, dst = (split_port(x, names, graph_path) for x in item)
+        src, dst = (split_port(x, names, graph_path) for x in _edge(item))
+        if dst[1].startswith("?"):
+            dst = (dst[0], "inputs:" + dst[1][1:])
         if not dst[1].startswith("inputs:"):
             raise SpecError("INVALID_VALUE", f"connection {item!r}: the second end must be an input.")
         edges.append((src, dst))
@@ -92,6 +128,8 @@ def parse_spec(a):
     norm_targets = []
     for ref, paths in targets.items():
         node, port = split_port(ref, names, graph_path)
+        if port.startswith("?"):
+            port = "inputs:" + port[1:]
         if isinstance(paths, str):
             paths = [paths]
         if (not isinstance(paths, list) or not 1 <= len(paths) <= 64
@@ -101,7 +139,8 @@ def parse_spec(a):
     evaluator = a.get("evaluator", "execution")
     if evaluator not in EVALUATORS:
         raise SpecError("INVALID_VALUE", f"evaluator: one of {', '.join(EVALUATORS)}.")
-    return dict(nodes=pairs, values=norm_values, connections=edges, targets=norm_targets, evaluator=evaluator)
+    return dict(nodes=pairs, values=norm_values, connections=edges, targets=norm_targets, evaluator=evaluator,
+                notes=notes)
 
 
 def token_map(raw):
@@ -177,7 +216,7 @@ def build(stage, a, stopped):
     if not stage.GetPrimAtPath(Sdf.Path(path).GetParentPath()):
         return _refuse(SpecError("NOT_FOUND", f"The parent of {path} does not exist."))
 
-    notes, created_ports = [], []
+    notes, created_ports = list(spec["notes"]), []
     keys = og.Controller.Keys
     try:
         og.Controller.edit({"graph_path": path, "evaluator_name": spec["evaluator"]},
@@ -220,8 +259,21 @@ def build(stage, a, stopped):
                 set_value(node, port, value)
             except Exception:  # noqa: BLE001 - extended ("any") inputs resolve their type once connected
                 deferred.append((node, port, value))
+        def source_port(node, port):
+            # A bare source port: outputs: first, then a constant node's inputs:value, then state:.
+            if not port.startswith("?"):
+                return port
+            n = og.Controller.node(f"{path}/{node}")
+            for prefix in ("outputs:", "inputs:", "state:"):
+                if n.get_attribute_exists(prefix + port[1:]):
+                    note = f"{node}.{port[1:]}: no output of that name; connected from {prefix}{port[1:]}"
+                    if prefix != "outputs:" and note not in notes:
+                        notes.append(note)
+                    return prefix + port[1:]
+            return "outputs:" + port[1:]  # attr() then refuses with the node's real ports
+
         for (s_node, s_port), (d_node, d_port) in spec["connections"]:
-            og.Controller.connect(attr(s_node, s_port, False), attr(d_node, d_port, True))
+            og.Controller.connect(attr(s_node, source_port(s_node, s_port), False), attr(d_node, d_port, True))
         for node, port, value in deferred:
             try:
                 attr(node, port, False)
@@ -251,6 +303,10 @@ def build(stage, a, stopped):
                if stage.GetPrimAtPath(f"{path}/{node}").GetAttribute(port).Get() is None]
     if unsaved:
         notes.append("not authored in USD (runtime only, would not survive a save): " + ", ".join(unsaved))
+    if any(kind.startswith(("isaacsim.ros2.", "omni.isaac.ros2")) for _, kind in spec["nodes"]):
+        from .ros_env import shell_hint
+
+        notes.append(shell_hint())
     result = inspect_graph(stage, path, 128)
     result.update(built=True, replaced=replaced, created_ports=created_ports, notes=notes,
                   next="Play the timeline, then sim__graph__inspect again: nodes that failed to compute list "

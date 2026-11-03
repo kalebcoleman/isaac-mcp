@@ -324,6 +324,16 @@ def _candidates(window_filter, include_labels, query):
                 yield title, ref, widget, cheap
 
 
+def _menu_bar():
+    """Top-level menu names: menus are not widgets in find's results; open them with action=menu."""
+    try:
+        import omni.ui as ui
+
+        return [t for t in (getattr(c, "text", "") for c in ui.Inspector.get_children(_ui_test().get_menubar().widget)) if t]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def menu_children(path, inside=False):
     """Items available under the deepest existing level of *path* ("" = the menu bar); with ``inside``
     the last level is walked too, so this lists what the menu *path* itself contains."""
@@ -384,6 +394,9 @@ def find(a):
                          height=round(ui.Workspace.get_main_window_height()), dpi_scale=dpi),
         windows=windows() if not window else [w for w in windows() if window.lower() in w["title"].lower()],
         hidden_tabs=[t for t in hidden_tabs() if not window or window.lower() in t.lower()],
+        menu_bar=_menu_bar(),
+        menu_note="Menus are not listed as widgets: open them with sim__ui__act action=menu, e.g. "
+                  "menu='Window/Graph Editors/Action Graph' (menu_bar lists the top-level names).",
         matches=matched, widgets=widgets, truncated=len(widgets) + hidden < matched,
         skipped_not_shown=hidden,
         coordinates="x, y are the widget centre in pixels of the Isaac Sim main window, the same pixels as "

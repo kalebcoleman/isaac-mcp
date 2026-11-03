@@ -45,11 +45,38 @@ Pause before saving and check the exported scene after reopening in a fresh proc
    before `run_python`, file writes or any `ur5e_dt__*`, `sim__*` or `assets__*` call that changes
    the stage.
 4. **Look, don't ask.** When a window is open (play, a GUI Sim), take a `screenshot` or a short
-   recording yourself and decide the next step from it.
+   recording yourself and decide the next step from it. Use `list_windows` to find windows:
+   `wmctrl`/`xdotool` from a shell may see nothing on a locked or remote session, which does not
+   mean Isaac Sim is headless (`status` says `headless`).
 5. **Report tool results as they are.** Generic scene tools set MCP `isError` and return a `code`
    such as `STALE_TARGET`; legacy tools may return `{"status": "error", "message": ...}`
    or `{"error": ..., "hint": ...}`. Quote the error and
    follow the hint before retrying.
+   Generic scene tools refuse arguments they do not have ("Extra inputs are not permitted"), so
+   a misspelled or invented parameter is never silently ignored: check the tool's schema.
+
+## Calling the tools
+
+Call the isaac tools as MCP tools, not by importing Python packages or running repo scripts.
+If your client only gives you a code tool (OpenCode's "Code Mode" `execute`), the tools are
+JavaScript functions there, not Python:
+
+```js
+;(async () => {
+  const info = await tools.isaac.sim__stage__info({});
+  const r = info.result ?? info;                       // a JSON string or already an object
+  const target = typeof r === "string" ? JSON.parse(r) : r;
+  return JSON.stringify({session_id: target.session_id, stage_id: target.stage_id});
+})()
+```
+
+Pass Python for `run_python` in a template literal so `\n` and quotes survive:
+``await tools.isaac.run_python({code: String.raw`import omni.usd
+result = omni.usd.get_context().get_stage().GetRootLayer().identifier`})``
+(the code must not contain a backtick or `${`).
+`python -m isaac_mcp.client` only works with the MCP server's own Python; do not import
+`omni`/`pxr` outside Kit (use `run_python`), and never `pip install` into the system Python
+(`--break-system-packages`) to make a script run.
 
 ## First calls in a session
 
@@ -236,6 +263,9 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
 
 ### ROS 2 from an agent shell (lessons from the TurtleBot3/Nav2 lab)
 
+- Your shell must use the simulator's DDS settings or `ros2 topic list` stays empty while Kit
+  publishes: `sim__stage__info` returns them under `ros` with the exact shell line to run
+  (`sim__graph__build` repeats it for ROS graphs).
 - `source scripts/ros_env.sh [install] [--overlay <nav2 env>]` (after `export ROS_DOMAIN_ID=<sim's>`)
   sources ROS, then `config/ros_dds.env`, then stops the `ros2` daemon. A daemon started with other
   DDS settings makes `ros2 topic list` / `node list` empty while data flows; otherwise use
@@ -289,7 +319,7 @@ worked while locked on GNOME.
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use `python -m isaac_mcp.client list_tools --port <port>` |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
-| `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed | Read `current_target`; resend its `session_id` and `stage_id` explicitly |
+| `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed (Kit restarted, stage opened) | The message names the current `session_id` and `stage_id`: resend with those, never the old ones |
 | A cleanup command killed its own shell (exit 144) | `pkill -f`/`pgrep -f` patterns also match the shell running them | Stop processes by the exact PID you recorded when starting them |
 | RViz frames jump, "Frame does not exist", extrapolation errors | Two TF publishers, wrong Fixed Frame or wall-clock node | `scripts/ros2_tf_doctor.py`; see the ROS 2 section above |
 | RViz drops scans: "timestamp on the message is earlier than all the data in the transform cache" | Sensor stamps and `/clock` on different time bases (`resetOnStop` differs) | The doctor names the topic; use one `resetOnStop` setting everywhere, then Stop and Play |

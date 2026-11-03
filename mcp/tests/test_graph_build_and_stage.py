@@ -46,7 +46,7 @@ def test_spec_accepts_the_lab_clock_graph_and_full_paths():
     (dict(nodes=NODES, connections=[["tock.outputs:tick", "pub.inputs:execIn"]]), "UNKNOWN_NODE"),
     (dict(nodes=NODES, connections=[["tick.outputs:tick", "pub.outputs:x"]]), "INVALID_VALUE"),
     (dict(nodes=NODES, values={"pub.outputs:x": 1}), "INVALID_VALUE"),
-    (dict(nodes=NODES, values={"pub.topicName": 1}), "INVALID_VALUE"),        # port without inputs:
+    (dict(nodes=NODES, values={"pub": 1}), "INVALID_VALUE"),                  # no port at all
     (dict(nodes=NODES, targets={"pub.inputs:targetPrim": ["World/robot"]}), "INVALID_VALUE"),
     (dict(nodes=NODES, evaluator="lazy"), "INVALID_VALUE"),
 ])
