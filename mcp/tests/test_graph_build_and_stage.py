@@ -117,3 +117,12 @@ def test_node_types_report_allowed_token_values():
     ports = graph.ogn_ports({"t": {"inputs": {"conversion": {"type": "token", "allowedTokens":
                                                               {"toStage": "Convert to stage units"}}}}}, "t")
     assert ports["inputs"]["inputs:conversion"]["allowed_values"] == ["Convert to stage units"]
+
+
+def test_allowed_tokens_in_list_and_string_form():
+    # Review of #64: Isaac's ALLOWED_TOKENS_RAW can be a JSON list or a comma string, not only a dict.
+    assert gb.token_value("B", ["foo", "B"]) == ("B", None)
+    assert gb.token_value("foo", "foo,B") == ("foo", None)
+    with pytest.raises(gb.SpecError):
+        gb.token_value("x", ["foo", "B"])
+    assert gb.token_map({"k": "v"}) == {"k": "v"} and gb.token_map(None) == {}

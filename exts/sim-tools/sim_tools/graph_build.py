@@ -104,8 +104,20 @@ def parse_spec(a):
     return dict(nodes=pairs, values=norm_values, connections=edges, targets=norm_targets, evaluator=evaluator)
 
 
+def token_map(raw):
+    """Isaac's ALLOWED_TOKENS_RAW is a JSON dict {key: value}, a JSON list, or a comma string."""
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items()}
+    if isinstance(raw, list):
+        return {str(t): str(t) for t in raw}
+    if isinstance(raw, str):
+        return {t.strip(): t.strip() for t in raw.split(",") if t.strip()}
+    return {}
+
+
 def token_value(value, allowed_raw):
-    """(value to store, note) for a token input with allowed tokens {key: display}; raises on a bad value."""
+    """(value to store, note) for a token input with allowed tokens; raises on a bad value."""
+    allowed_raw = token_map(allowed_raw)
     if not allowed_raw or not isinstance(value, str):
         return value, None
     shown = list(allowed_raw.values())
@@ -152,7 +164,15 @@ def build(stage, a, stopped):
         if existing.GetTypeName() != "OmniGraph":
             return _refuse(SpecError("NOT_A_GRAPH", f"{path} is a {existing.GetTypeName() or 'typeless'} prim, "
                                      "not a graph; refusing to replace it."))
+        target_layer = stage.GetEditTarget().GetLayer()
+        if any(spec.layer != target_layer for spec in existing.GetPrimStack()):
+            return _refuse(SpecError("NOT_REPLACEABLE", f"{path} comes (partly) from another layer, a reference or a "
+                                     "payload, so it cannot be deleted from here. Deactivate it, or build at "
+                                     "another path."))
         stage.RemovePrim(path)
+        if stage.GetPrimAtPath(path):
+            return _refuse(SpecError("NOT_REPLACEABLE", f"{path} is still defined after removing it from the edit "
+                                     "layer; build at another path."))
         replaced = True
     if not stage.GetPrimAtPath(Sdf.Path(path).GetParentPath()):
         return _refuse(SpecError("NOT_FOUND", f"The parent of {path} does not exist."))
@@ -189,7 +209,11 @@ def build(stage, a, stopped):
                 raw = a_.get_metadata(og.MetadataKeys.ALLOWED_TOKENS_RAW)
             except Exception:  # noqa: BLE001
                 pass
-            value, note = token_value(value, json.loads(raw) if raw else None)
+            try:
+                parsed = json.loads(raw) if raw else None
+            except ValueError:
+                parsed = raw  # a plain comma-separated string
+            value, note = token_value(value, parsed)
             if note:
                 notes.append(f"{node}.{port}: {note}")
             try:

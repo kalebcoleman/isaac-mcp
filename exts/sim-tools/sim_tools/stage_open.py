@@ -48,6 +48,9 @@ async def open_stage(scene, args):
     import omni.usd
     from isaac_mcp.project_assets import refuse
 
+    if not omni.kit.app.get_app().is_app_ready():
+        refuse("APP_STARTING", "Kit startup is still running. Wait until sim.stage.info reports app_ready=true; "
+               "no stage was opened.")
     scene.target(args.get("session_id"), args.get("stage_id"))
     file, problem = check_path(args.get("path"))
     if problem:
@@ -56,8 +59,9 @@ async def open_stage(scene, args):
         refuse("TIMELINE_ACTIVE", "Stop the timeline before opening another stage.")
     ctx = omni.usd.get_context()
     stage = ctx.get_stage()
+    layers_dirty = any(layer.dirty for layer in stage.GetLayerStack(includeSessionLayers=False)) if stage else False
     dirty = bool(stage) and unsaved_work(stage.GetRootLayer().anonymous,
-                                         stage.GetRootLayer().dirty or ctx.has_pending_edit(),
+                                         layers_dirty or ctx.has_pending_edit(),
                                          [p.GetName() for p in stage.GetPseudoRoot().GetChildren()])
     if dirty and not args.get("discard_changes", False):
         refuse("UNSAVED_CHANGES", "The current stage has unsaved edits. Save them first (sim__stage__save), or pass "

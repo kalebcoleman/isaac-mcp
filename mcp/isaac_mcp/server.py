@@ -731,7 +731,7 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
     if canonical in REGISTRY:
         from mcp.types import ToolAnnotations
         read_only = canonical in {"assets.roots", "assets.scan", "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.physics.inspect", "sim.body.state", "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "assets.search", "sim.lidar.read", "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find"}
-        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.ui.act"},
+        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.ui.act", "sim.stage.open", "sim.graph.build"},
                                                  idempotentHint=read_only, openWorldHint=canonical.startswith(("assets.", "sim.controller.")))
     server.tool(**options)(handler)
 
