@@ -415,6 +415,33 @@ add(
     ),
 )
 add(
+    "sim.ui.find",
+    "List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views, and labels when a query is given) with their text, tooltip, current value, a ref, and their centre in pixels of the Isaac Sim window (the same pixels as screenshot(window_id=<Isaac Sim window>)), plus the visible Kit windows. Works while the desktop is locked or used remotely. Use the ref with sim__ui__act instead of guessing coordinates.",
+    dict(
+        query=field("string", "Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only.", False, default=""),
+        window=field("string", "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.", False, default=""),
+        limit=field("integer", "Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).", False, default=40),
+    ),
+)
+add(
+    "sim.ui.act",
+    "Drive Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
+    dict(
+        action=field("string", "What to do.", enum=["click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "wait"]),
+        ref=field("string", "Widget ref from sim__ui__find (its centre is used). For type/keypress it is clicked first to focus it.", False),
+        x=field("integer", "X in Isaac Sim window pixels (when no ref).", False),
+        y=field("integer", "Y in Isaac Sim window pixels (when no ref).", False),
+        end_x=field("integer", "Drag end X in window pixels.", False),
+        end_y=field("integer", "Drag end Y in window pixels.", False),
+        text=field("string", "Text for action=type (1..500 characters, no newlines; send enter with keypress).", False),
+        keys=field("array", "For action=keypress: one key plus optional modifiers, e.g. [\"ctrl\", \"s\"], [\"enter\"], [\"shift\", \"tab\"].", False),
+        menu=field("string", "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube'.", False),
+        scroll_x=field("integer", "Horizontal wheel steps for action=scroll (-20..20).", False, default=0),
+        scroll_y=field("integer", "Vertical wheel steps for action=scroll (-20..20; negative scrolls down).", False, default=0),
+        frames=field("integer", "Frames to wait after the action so the UI updates (0..600).", False, default=3),
+    ),
+)
+add(
     "sim.map.occupancy",
     "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as /clock run meanwhile), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.",
     dict(

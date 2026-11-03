@@ -334,7 +334,18 @@ class Extension(omni.ext.IExt):
                             render_observation,
                             camera_frame,
                         ) = await self._wait_sensor_frame(name, args)
-                    if name == "sim.timeline.control":
+                    if name in ("sim.ui.find", "sim.ui.act"):
+                        # Kit UI, not the stage: no session/stage target (the UI outlives stage changes).
+                        from .ui import UIRefusal, act, find
+
+                        try:
+                            result = find(args) if name == "sim.ui.find" else await act(args)
+                        except UIRefusal as exc:
+                            return dict(status="error", code=exc.code, message=str(exc),
+                                        effects="No input was sent." if name == "sim.ui.find" or exc.code in (
+                                            "INVALID_VALUE", "LIMIT", "STALE_WIDGET", "NOT_VISIBLE",
+                                            "OUT_OF_WINDOW", "NO_UI", "DISABLED") else "Inspect the UI before retrying.")
+                    elif name == "sim.timeline.control":
                         result = await self._timeline_control(args)
                     elif name == "sim.map.occupancy":
                         result = await self._occupancy_cycle(args)

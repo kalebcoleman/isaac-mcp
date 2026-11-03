@@ -121,7 +121,7 @@ under `~/Videos/screen-mcp/` on the **host server** machine. Mouse and keyboard 
 | `list_windows` | `filter=null` | List visible windows and IDs; the optional string filters title or window class. A `client` marker identifies windows reported by the window manager as application clients. |
 | `move_window` | `x`, `y`, `width`, `height`, `window=null`, `window_id=null`, `expected_pid=null` | Un-maximize, move and resize a window through the window manager (EWMH), for example Isaac Sim on the left and RViz 2 on the right before a screen recording. Returns the geometry actually applied; a window manager or app may limit it. |
 | `raise_window` | `window=null`, `window_id=null`, `expected_pid=null` | Request window-manager activation and verify it became active. Activation gives the window focus. Select the actual client window ID rather than a window-manager frame, and supply the expected PID when targeting a known process. Ambiguous titles owned by different processes require a window ID. |
-| `screenshot` | `monitor=null`, `window=null`, `window_id=null`, `max_width=1600` | Save a full-resolution PNG and return a caption plus inline image, scaled down to at most `max_width` (clamped to 320–3840). With no selector, auto-targets Isaac Sim/Lab if found, otherwise monitor 1. `monitor=0` means all monitors. |
+| `screenshot` | `monitor=null`, `window=null`, `window_id=null`, `max_width=1600` | Save a full-resolution PNG and return a caption plus inline image, scaled down to at most `max_width` (clamped to 320–3840). With no selector, auto-targets Isaac Sim/Lab if found, otherwise monitor 1. `monitor=0` means all monitors. When the session is locked or blanked (a PC used remotely), monitor captures are composed from the visible windows' own pixels in stacking order, and the caption says so. A downscaled inline image's caption gives the factor back to original pixels. |
 | `start_screen_recording` | `monitor=null`, `window=null`, `window_id=null`, `fps=15`, `max_width=1600`, `max_seconds=600`, `full_screen=true` | Start one MP4 recording; no audio. With no selector, auto-target a simulator window, otherwise monitor 1. `fps` is clamped to 1–30 and `max_seconds` to 5–3600. `full_screen=true` scales/pads to the primary monitor; false uses the window or monitor size capped by `max_width`. |
 | `stop_screen_recording` | none | Stop and finalize the active recording, reporting its path and result. |
 | `screen_recording_status` | none | Report active recording, elapsed time and frame count, or the most recent recording. |
@@ -143,9 +143,9 @@ default even when `ISAAC_MCP_LOCAL_TOOLS=all`. Window activation requires a wind
 |---|---|---|
 | `window_click` | `x`, `y`, `expected_width`, `expected_height`, `button="left"`, `clicks=1` | Click once or twice; buttons are `left`, `middle`, `right`. |
 | `window_drag` | `x`, `y`, `end_x`, `end_y`, `expected_width`, `expected_height` | Left-button drag inside one window. |
-| `window_scroll` | `x`, `y`, `expected_width`, `expected_height`, `direction`, `steps=1` | Scroll `up` or `down`, 1–10 steps. |
+| `window_scroll` | `x`, `y`, `expected_width`, `expected_height`, `direction`, `steps=1` | Scroll `up`, `down`, `left` or `right`, 1–10 steps. |
 | `window_type` | `text` | Type 1–200 printable ASCII characters without using the clipboard. |
-| `window_key` | `key`, `modifiers=null` | One navigation/edit key, F1–F12, or ASCII letter/digit; modifiers may be `ctrl` and `shift`. |
+| `window_key` | `key`, `modifiers=null` | One navigation/edit key, F1–F12, or ASCII letter/digit; modifiers may be `ctrl`, `shift`, `alt` and `super`. |
 
 Every input call also requires integer `window_id` and `expected_pid`, taken from a fresh `list_windows` result.
 Identify the actual client window, not an unrelated frame or dialog; some desktops list both. Inspect a fresh
@@ -156,6 +156,8 @@ relative to the selected window's top-left corner. For example, for a 1200×800 
 First use `raise_window(window_id=12345, expected_pid=6789)` if the window is covered. Take a new screenshot after an action changes the
 UI; refresh the size and coordinates after a resize. Input tool success means events were sent, not that the app has
 processed them. A busy simulator can take several seconds to show the result; wait and inspect before the next action.
+
+All `window_*` input is refused while the desktop is locked or its screen saver is active: the lock screen holds the X keyboard and pointer grabs, so input (and typed text) would reach it instead of the window. `window_type` is also refused while another client holds the keyboard grab (an open menu). For Isaac Sim's own UI, use `sim__ui__find` and `sim__ui__act`, which drive Kit's input and keep working on a locked or remote desktop.
 
 Pointer actions fail if the ID/PID or size changed, the point is offscreen, or another window covers a checked point.
 Keyboard actions require focus inside the selected window; click it first. Caps Lock must be off for `window_type`
