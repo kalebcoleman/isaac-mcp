@@ -2765,7 +2765,7 @@
       "owner_id": "generic-sim"
     },
     "sim.map.occupancy": {
-      "description": "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays a few frames (the generator needs running physics), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.",
+      "description": "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as /clock run meanwhile), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2801,6 +2801,11 @@
           "description": "Up to 16 [x, y, radius] circles (metres) to mark free, e.g. the robot's own footprint at its start pose.",
           "required": false,
           "default": []
+        },
+        "start": {
+          "type": "array",
+          "description": "World [x, y] in free space the generator flood-fills from; cells it cannot reach are unknown. Default: the centre of the bounds (move it if a table or pillar is there).",
+          "required": false
         },
         "cell_size": {
           "type": "number",
@@ -2872,6 +2877,15 @@
           "default": [],
           "has_default": true,
           "description": "Up to 16 [x, y, radius] circles (metres) to mark free, e.g. the robot's own footprint at its start pose."
+        },
+        {
+          "name": "start",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "World [x, y] in free space the generator flood-fills from; cells it cannot reach are unknown. Default: the centre of the bounds (move it if a table or pillar is there)."
         },
         {
           "name": "cell_size",

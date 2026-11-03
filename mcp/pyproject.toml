@@ -25,7 +25,7 @@ dependencies = [
 test = [
     "pytest",
 ]
-scene-test = ["usd-core>=25.11,<27"]
+scene-test = ["usd-core>=25.11,<27", "numpy"]  # numpy: occupancy-map tests
 # Isaac Lab tool pack: TensorBoard event-file readout (isaaclab__metrics_*, isaaclab__tensorboard_tail).
 isaaclab = [
     "tensorboard>=2.14",

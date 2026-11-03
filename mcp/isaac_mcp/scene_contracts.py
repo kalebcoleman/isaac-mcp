@@ -416,13 +416,14 @@ add(
 )
 add(
     "sim.map.occupancy",
-    "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays a few frames (the generator needs running physics), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.",
+    "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as /clock run meanwhile), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.",
     dict(
         **TARGET,
         min=field("array", "World [x, y] lower corner of the map in metres."),
         max=field("array", "World [x, y] upper corner of the map in metres."),
         z=field("array", "World [z_min, z_max] in metres; Isaac's generator samples one cell-thick layer at the middle of this range, so centre it on the lidar height.", False, default=[0.05, 0.3]),
         clear=field("array", "Up to 16 [x, y, radius] circles (metres) to mark free, e.g. the robot's own footprint at its start pose.", False, default=[]),
+        start=field("array", "World [x, y] in free space the generator flood-fills from; cells it cannot reach are unknown. Default: the centre of the bounds (move it if a table or pillar is there).", False),
         cell_size=field("number", "Cell size in metres (map resolution).", False, default=0.05),
         basename=field("string", "Output file stem (letters, digits, _ -); writes <basename>.pgm and .yaml.", False, default="map"),
     ),

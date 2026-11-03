@@ -881,6 +881,9 @@ class Advanced:
                 w, h = a.get("width", 0), a.get("height", 0)
                 if type(w) is not int or type(h) is not int or (w or h) and not (300 <= w <= 8000 and 200 <= h <= 8000):
                     refuse("INVALID_VALUE", "width 300..8000 and height 200..8000, or both 0.")
+                if a.get("layout") and not s.timeline.is_stopped():
+                    refuse("TIMELINE_ACTIVE", "layout=true writes node positions into the stage: stop the timeline "
+                           "first, or show the graph without layout.")
                 graph.show_graph_open(stage, a["path"], w, h)
                 return {"_finish": "sim.graph.show"}  # extension.py completes it after a few frames
             return graph.occupancy_map(s, stage, a)

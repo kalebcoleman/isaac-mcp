@@ -190,7 +190,8 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
 - For a video or screenshot of a graph, `sim__graph__show` (windowed Kit, `layout=true`, a
   `width`/`height` to undock it) opens it readable in the Action Graph editor.
 - No map files for Nav2? `sim__map__occupancy` writes a `map_server` PGM + YAML from the scene's
-  colliders (centre `z` on the lidar height; `clear` the robot's own footprint).
+  colliders (centre `z` on the lidar height; put `start` in open floor; `clear` the robot's own
+  footprint). It plays 8 frames itself, so `/clock` restarts: generate the map before starting RViz.
 
 ### ROS 2 TF and RViz 2
 

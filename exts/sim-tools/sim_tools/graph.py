@@ -74,17 +74,27 @@ def ogn_ports(ogn: dict, type_name: str) -> dict:
     return out
 
 
-_RST_ROW = re.compile(r'^\s*"[^"]*\(\*(?P<name>(?:inputs|outputs):[^*]+)\*\)",\s*"``(?P<type>.*?)``",'
-                      r'\s*"(?P<desc>[^"]*)",\s*"(?P<default>[^"]*)"\s*$')
+_RST_NAME = re.compile(r"\(\*(?P<name>(?:inputs|outputs):[^*]+)\*\)\s*$")
 
 
 def rst_ports(text: str) -> dict:
     """Ports from a generated OmniGraph node .rst page (C++ nodes ship no .ogn file)."""
+    import csv
+
     out = {"inputs": {}, "outputs": {}}
     for line in text.splitlines():
-        m = _RST_ROW.match(line)
-        if not m:
+        if "(*inputs:" not in line and "(*outputs:" not in line:
             continue
+        try:  # csv-table rows: quotes inside cells are doubled ("")
+            cells = next(csv.reader([line.strip()], skipinitialspace=True))
+        except (csv.Error, StopIteration):
+            continue
+        if len(cells) < 4:
+            continue
+        m = _RST_NAME.search(cells[0])
+        if not m or not (cells[1].startswith("``") and cells[1].endswith("``")):
+            continue
+        m = {"name": m["name"], "type": cells[1][2:-2], "desc": cells[2], "default": cells[3]}
         name, kind = m["name"], m["type"]
         if kind.startswith("["):  # extended type: any of a long list
             n = kind.count("'") // 2
@@ -103,6 +113,8 @@ _OGN_INDEX = {}
 
 def _find_ogn(ext_path: str, type_name: str):
     """Ports of *type_name* from its .ogn file (or, for compiled nodes, its generated .rst page)."""
+    if not ext_path:
+        return None
     short = type_name.rsplit(".", 1)[-1]
     index = _OGN_INDEX.get(ext_path)
     if index is None:
@@ -176,12 +188,29 @@ def node_types(contains, limit=20, ports=None):
     )
 
 
+def _graph_path(path):
+    from isaac_mcp.project_assets import refuse
+
+    if not isinstance(path, str) or not re.fullmatch(r"(/[A-Za-z_][A-Za-z0-9_]*)+", path):
+        refuse("INVALID_VALUE", "path must be an absolute prim path like /World/ROS_Clock.")
+    return path
+
+
+def _headless():
+    import carb.settings
+    import sys
+
+    settings = carb.settings.get_settings()
+    return (settings.get("/app/window/hideUi") or settings.get("/app/window/enabled") is False
+            or os.environ.get("UR5E_DT_HEADLESS") == "1" or "--no-window" in sys.argv)
+
+
 def inspect_graph(stage, path, limit=64):
     """Nodes of an OmniGraph with their types, input values and connections."""
     import omni.graph.core as og
     from isaac_mcp.project_assets import refuse
 
-    graph = og.get_graph_by_path(path)
+    graph = og.get_graph_by_path(_graph_path(path))
     if graph is None or not graph.is_valid():
         prim = stage.GetPrimAtPath(path)
         refuse("NOT_A_GRAPH", f"No OmniGraph at {path}" + (f" (prim type {prim.GetTypeName()})" if prim else "")
@@ -214,14 +243,14 @@ def inspect_graph(stage, path, limit=64):
 
 def show_graph_open(stage, path, width=0, height=0):
     """Step 1 of sim.graph.show: open the editor on *path* (its window is built on a later frame)."""
-    import carb.settings
     from isaac_mcp.project_assets import refuse
 
-    if carb.settings.get_settings().get("/app/window/hideUi") or os.environ.get("UR5E_DT_HEADLESS") == "1":
+    if _headless():
         refuse("HEADLESS", "The Action Graph editor needs a windowed Isaac Sim (sim__launch headless=false).")
     import omni.graph.core as og
 
-    if og.get_graph_by_path(path) is None:
+    graph = og.get_graph_by_path(_graph_path(path))
+    if graph is None or not graph.is_valid():
         refuse("NOT_A_GRAPH", f"No OmniGraph at {path}.")
     _enable("omni.graph.window.action")
     try:
@@ -322,6 +351,12 @@ def occupancy_map(scene, stage, a):
     cell = float(a.get("cell_size", 0.05))
     if not 0.005 <= cell <= 1.0:
         refuse("INVALID_VALUE", "cell_size must be 0.005..1.0 m.")
+    start = a.get("start") or [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2]
+    if not (isinstance(start, list) and len(start) == 2 and all(isinstance(x, (int, float)) and math.isfinite(x) for x in start)
+            and lo[0] < start[0] < hi[0] and lo[1] < start[1] < hi[1]):
+        refuse("INVALID_VALUE", "start must be [x, y] metres inside the bounds, in free space.")
+    if UsdGeom.GetStageUpAxis(stage) != UsdGeom.Tokens.z:
+        refuse("UNSUPPORTED_STAGE", "Occupancy maps need a Z-up stage (ROS convention).")
     if (hi[0] - lo[0]) * (hi[1] - lo[1]) / (cell * cell) > 16_000_000:
         refuse("LIMIT", "Map larger than 16 million cells; increase cell_size or shrink the bounds.")
     base = a.get("basename", "map")
@@ -332,6 +367,10 @@ def occupancy_map(scene, stage, a):
             isinstance(c, list) and len(c) == 3 and all(isinstance(x, (int, float)) and math.isfinite(x) for x in c)
             and c[2] > 0 for c in clear)):
         refuse("INVALID_VALUE", "clear: up to 16 [x, y, radius] circles in metres.")
+    pgm_path, yaml_path = scene.output / f"{base}.pgm", scene.output / f"{base}.yaml"
+    for p in (pgm_path, yaml_path):
+        if p.exists():
+            refuse("CONFLICT", f"{p} exists; choose another basename.")
     mpu = UsdGeom.GetStageMetersPerUnit(stage) or 1.0
     to_su = 1.0 / mpu
     if not _enable("isaacsim.asset.gen.omap"):
@@ -340,8 +379,9 @@ def occupancy_map(scene, stage, a):
 
     om = _omap.acquire_omap_interface()
     try:
+        # The generator flood-fills free space from this origin ("must be in unoccupied space").
         cz = (z[0] + z[1]) / 2 * to_su
-        cx, cy = (lo[0] + hi[0]) / 2 * to_su, (lo[1] + hi[1]) / 2 * to_su
+        cx, cy = start[0] * to_su, start[1] * to_su
         om.set_cell_size(cell * to_su)
         om.set_transform((cx, cy, cz), (lo[0] * to_su - cx, lo[1] * to_su - cy, z[0] * to_su - cz),
                          (hi[0] * to_su - cx, hi[1] * to_su - cy, z[1] * to_su - cz))
@@ -353,21 +393,21 @@ def occupancy_map(scene, stage, a):
     finally:
         _omap.release_omap_interface(om)
     if not len(buffer) or dims.x * dims.y != len(buffer):
-        refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) in "
-               "the bounds and a physics scene; press Play once, Stop, then retry.")
+        refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) "
+               "inside the bounds and a UsdPhysics.Scene on the stage.")
     pgm, origin, counts = pgm_and_origin(buffer, dims.x, dims.y, min_bound, cell * to_su, mpu, clear)
     scene.output.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pgm_path, yaml_path = scene.output / f"{base}.pgm", scene.output / f"{base}.yaml"
-    for p in (pgm_path, yaml_path):
-        if p.exists():
-            refuse("CONFLICT", f"{p} exists; choose another basename.")
     pgm_path.write_bytes(pgm)
     yaml_text = (f"image: {base}.pgm\nmode: trinary\nresolution: {cell:g}\n"
                  f"origin: [{origin[0]:.4f}, {origin[1]:.4f}, 0.0]\nnegate: 0\n"
                  "occupied_thresh: 0.65\nfree_thresh: 0.25\n")
     yaml_path.write_text(yaml_text)
+    total = max(1, sum(counts.values()))
     if counts["occupied"] == 0:
         warn = "No occupied cells: nothing with a collider intersects the z slice inside the bounds."
+    elif counts["unknown"] > 0.5 * total:
+        warn = (f"{counts['unknown'] * 100 // total}% of the map is unknown (not reachable from start "
+                f"{start}): move start into the main free area, or the bounds into one room.")
     else:
         warn = None
     return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=dims.x, height=dims.y, resolution=cell,

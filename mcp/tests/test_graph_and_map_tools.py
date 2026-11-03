@@ -11,7 +11,11 @@ REPO = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("sim_tools_graph_under_test", REPO / "exts/sim-tools/sim_tools/graph.py")
 graph = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(graph)
-np = pytest.importorskip("numpy")
+
+
+@pytest.fixture
+def np():
+    return pytest.importorskip("numpy")
 
 
 def test_ogn_ports_use_og_style_names_and_keep_defaults():
@@ -51,7 +55,7 @@ def test_short_bounds_values():
     assert graph._short(float("nan")) == "nan" and graph._short("x" * 500) == "x" * 200
 
 
-def _buffer_with(cells, dims_x, dims_y):
+def _buffer_with(np, cells, dims_x, dims_y):
     """Isaac buffer: row-major, dims_x per row, in Isaac's (180-degree-rotated) layout."""
     buf = np.zeros(dims_y * dims_x, dtype=np.float32)
     for r, c in cells:
@@ -59,11 +63,11 @@ def _buffer_with(cells, dims_x, dims_y):
     return buf.tolist()
 
 
-def test_map_layout_matches_the_live_probe():
+def test_map_layout_matches_the_live_probe(np):
     # Live (Isaac Sim 6.2): boxes at world (2, 1) and (-1, -2) in a [-3, 3] map landed there after
     # the 180-degree rotation. Here: one occupied buffer cell must come out at the mirrored pixel.
     dims_x, dims_y = 4, 3
-    pgm, origin, counts = graph.pgm_and_origin(_buffer_with([(0, 0)], dims_x, dims_y), dims_x, dims_y,
+    pgm, origin, counts = graph.pgm_and_origin(_buffer_with(np, [(0, 0)], dims_x, dims_y), dims_x, dims_y,
                                                (-1.0, -0.5, 0.0), 0.5, 1.0)
     header, body = pgm.split(b"255\n", 1)
     img = np.frombuffer(body, dtype=np.uint8).reshape(dims_y, dims_x)
@@ -73,14 +77,14 @@ def test_map_layout_matches_the_live_probe():
     assert set(np.unique(img)) <= {0, 254}
 
 
-def test_unknown_cells_and_units():
+def test_unknown_cells_and_units(np):
     buf = [0.5] * 4
     pgm, origin, counts = graph.pgm_and_origin(buf, 2, 2, (-100.0, -50.0, 0.0), 5.0, 0.01)  # centimetre stage
     assert origin == (-1.0, -0.5) and counts["unknown"] == 4
     assert set(pgm.split(b"255\n", 1)[1]) == {205}
 
 
-def test_clear_circles_mark_the_robot_footprint_free():
+def test_clear_circles_mark_the_robot_footprint_free(np):
     dims = 10
     buf = np.ones(dims * dims).tolist()  # everything occupied
     pgm, origin, counts = graph.pgm_and_origin(buf, dims, dims, (0.0, 0.0, 0.0), 0.1, 1.0, clear=[[0.5, 0.5, 0.15]])
@@ -99,3 +103,17 @@ def test_contracts_registered_with_the_expected_fields():
     occ = REGISTRY["sim.map.occupancy"]["parameters"]
     assert occ["min"]["required"] and occ["max"]["required"] and occ["cell_size"]["default"] == 0.05
     assert "clear" in occ and not occ["clear"]["required"]
+    assert "start" in occ and not occ["start"]["required"]
+
+
+def test_rst_rows_with_escaped_quotes_are_not_dropped():
+    # Real case (ArraySlice): descriptions with "" quotes made the old regex skip the row.
+    text = ('    "End (*inputs:end*)", "``int``", "The end index, exclusive. ""end"" may be negative.", "0"\n'
+            '    "Use Length (*inputs:useLength*)", "``bool``", "Use ""length"" instead of ""end"".", "False"\n')
+    ports = graph.rst_ports(text)["inputs"]
+    assert set(ports) == {"inputs:end", "inputs:useLength"}
+    assert ports["inputs:end"]["description"] == 'The end index, exclusive. "end" may be negative.'
+
+
+def test_find_ogn_ignores_an_empty_extension_path():
+    assert graph._find_ogn("", "omni.graph.nodes.ArraySlice") is None
