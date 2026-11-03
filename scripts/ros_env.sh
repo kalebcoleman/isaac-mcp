@@ -21,6 +21,13 @@
 # Auto-detection looks at ROS_DISTRO (if exported), then the OS default, in /opt/ros/<distro>
 # and ~/ros2/<distro> (ISAAC_ROS_SEARCH overrides those roots, colon-separated).
 
+# zsh/sh: BASH_SOURCE, word splitting and setup.bash all differ, and dash cannot even parse the bash
+# below; refuse before defining anything instead of half-working.
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "ros_env.sh: source it from bash (in zsh, source <install>/setup.zsh and config/ros_dds.env by hand)" >&2
+  return 2 2>/dev/null || exit 2
+fi
+
 _ros_env_main() {
   local here repo base="" quiet=0 keep_daemon=0 dry=0 arg
   local -a overlays=()
@@ -151,11 +158,7 @@ _ros_env_main() {
   return 0
 }
 
-if [ -z "${BASH_VERSION:-}" ]; then
-  # zsh/sh: BASH_SOURCE, word splitting and setup.bash all differ; refuse instead of half-working.
-  echo "ros_env.sh: source it from bash (in zsh, source <install>/setup.zsh and config/ros_dds.env by hand)" >&2
-  return 2 2>/dev/null || exit 2
-elif (return 0 2>/dev/null); then
+if (return 0 2>/dev/null); then
   _ros_env_main "$@"
   _ros_env_rc=$?
   unset -f _ros_env_main _say _resolve

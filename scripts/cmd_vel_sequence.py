@@ -98,6 +98,7 @@ def _install_signal_handlers() -> None:
     def handler(signum, _frame):
         if _STATE["stopping"]:
             return  # the zero is already going out
+        _STATE["stopping"] = True  # set here, so a second signal can never interrupt the stop
         raise _Stop(signal.Signals(signum).name)
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, handler)
@@ -152,6 +153,7 @@ def run(args, steps: List[Step]) -> int:
         print(f"cmd_vel_sequence: {stop}: stopping the robot", file=sys.stderr)
         status = 130
     except Exception as error:  # noqa: BLE001 - always fall through to the zero command
+        _STATE["stopping"] = True
         print(f"cmd_vel_sequence: {error}: stopping the robot", file=sys.stderr)
         status = 1
     finally:

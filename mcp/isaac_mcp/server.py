@@ -872,9 +872,16 @@ def _probe_bridge(server: FastMCP) -> None:
     """Ask the bridge for its tools on a fresh connection (run on a worker thread by refresh_tools):
     while Kit boots, list_tools can block for the whole discovery timeout, and doing that on the
     event loop froze the server for most of a long wait."""
+    from .client import _resolve_endpoint
+
     state = _state_for(server)
-    port = state.client.port if state.client is not None else None
-    client = BridgeClient(port=port) if port else BridgeClient()
+    if state.client is not None:
+        # Resolve host and port as one pair: a discovered bridge may advertise a non-loopback host,
+        # and passing only the port would dial 127.0.0.1 and look like a bridge that never starts.
+        host, port = _resolve_endpoint(state.client._host, state.client._port)
+        client = BridgeClient(host=host, port=port)
+    else:
+        client = BridgeClient()
     try:
         client.call("list_tools", timeout=DISCOVERY_TIMEOUT_S)
     finally:
