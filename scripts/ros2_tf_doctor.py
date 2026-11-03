@@ -192,7 +192,7 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publisher
     topic_stamps = topic_stamps or {}
     off, silent = {}, sorted(t for t, v in topic_stamps.items() if not v)
     wall = sorted(t for t, v in topic_stamps.items() if v and v[-1][0] > WALL_EPOCH)
-    if wall and clock_seen:
+    if wall and clock_times and clock_times[-1] <= WALL_EPOCH:  # bag playback can put wall time on /clock
         errors.append(f"{', '.join(wall[:8])} stamped with wall-clock time while /clock runs sim time: "
                       "use_sim_time nodes such as RViz drop them. The publisher is not using simulation time.")
     for topic, samples in sorted(topic_stamps.items()):
@@ -260,7 +260,7 @@ def capture(seconds, topics=()):
     topic_stamps = {}
     sensor_qos = QoSProfile(depth=5, history=HistoryPolicy.KEEP_LAST,
                             reliability=ReliabilityPolicy.BEST_EFFORT)  # matches reliable and best-effort publishers
-    wanted = {t if t.startswith("/") else "/" + t for t in topics}
+    wanted = {t if t.startswith("/") else "/" + t for t in topics} - {"/tf", "/tf_static", "/clock"}  # checked anyway
     for name, types in node.get_topic_names_and_types():
         kind = next((t for t in types if t in SENSOR_TYPES or name in wanted), None)
         if kind is None or name in ("/tf", "/tf_static", "/clock"):

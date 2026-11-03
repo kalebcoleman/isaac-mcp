@@ -675,3 +675,10 @@ def test_unchecked_topics_and_wall_clock_sensor_stamps():
     assert not any("stamped more than" in x for x in errors)
     assert any("not checked: /cmd_vel" in w for w in warnings) and not any("no messages" in w for w in warnings)
     assert info["unchecked"] == ["/cmd_vel"]
+
+
+def test_wall_clock_sensor_stamps_are_fine_when_clock_is_wall_time_too():
+    # Round 2 of #60: `ros2 bag play --clock` publishes wall time on /clock.
+    errors, *_ = doctor.analyze(GOOD[:1], "world", clock_seen=True, clock_publishers=["/bag"],
+                                clock_times=[1.79e9], topic_stamps={"/scan": [(1.79e9, 1.79e9)]})
+    assert not any("wall-clock time" in x for x in errors)
