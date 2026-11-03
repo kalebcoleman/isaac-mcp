@@ -211,7 +211,9 @@ def remove_stdout_proxy():
     """Restore the real stream (extension shutdown)."""
     import sys
 
-    while getattr(sys.stdout, "_isaac_mcp_proxy", False):
+    for _ in range(8):  # bounded; only our own proxy class is unwrapped, never a wrapper above it
+        if not any("_isaac_mcp_proxy" in vars(cls) for cls in type(sys.stdout).__mro__):
+            break
         sys.stdout = sys.stdout._real
 
 

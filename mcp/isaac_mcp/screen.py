@@ -698,13 +698,13 @@ def register_screen_tools(
                     window=obj, client_type=disp.intern_atom("_NET_MOVERESIZE_WINDOW"),
                     data=(32, [flags, int(x), int(y), int(width), int(height)])), event_mask=mask)
                 disp.sync()
-                # Wait until the window manager has applied it: the size matches and the geometry
-                # changed (unless nothing had to change).
                 # The requested x/y place the frame while we read the client area, so instead of
                 # guessing an offset, accept the geometry once it is the right size and two
                 # readings in a row agree after it changed (or after 0.3 s of no change).
                 deadline = time.monotonic() + 1.0
-                settle = time.monotonic() + 0.3
+                # Already the right size: only the position changes, so wait for that (a busy window
+                # manager can take longer than 0.3 s) up to the deadline.
+                settle = deadline if before[2:] == (width, height) else time.monotonic() + 0.3
                 geo, last = before, None
                 while time.monotonic() < deadline:
                     time.sleep(0.05)
