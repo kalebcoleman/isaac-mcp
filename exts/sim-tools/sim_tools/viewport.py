@@ -291,6 +291,10 @@ class Follower:
         if spec is None or spec["timeline"].is_stopped():
             return  # paused stepping still moves bodies; Stop resets them, so keep the last view
         try:
+            now = spec["viewport"].time
+            if spec.get("last_time") == now:
+                return  # paused: nothing moved, skip the bounds pass
+            spec["last_time"] = now
             spec["validate"]()
             prim = spec["prim"]
             if not prim or not prim.IsValid() or not prim.IsActive():

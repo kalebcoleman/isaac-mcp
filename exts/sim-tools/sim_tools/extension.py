@@ -357,7 +357,17 @@ class Extension(omni.ext.IExt):
                 break
             previous = state
         if result.get("laid_out"):
-            result["positions_stored"] = store_positions(path)
+            # The waits above can take tens of seconds; Play or a stage swap may have happened since.
+            try:
+                self.scene.target(*ids, True)
+                safe = self.scene.timeline.is_stopped()
+            except Exception:  # noqa: BLE001 - stale target or timeline running
+                safe = False
+            if safe:
+                result["positions_stored"] = store_positions(path)
+            else:
+                result.update(positions_stored=0, positions_note="not stored: the timeline started or the "
+                              "stage changed while the editor was opening")
         result.update(fitted=fitted, frames_waited=frames, seconds=round(time.monotonic() - begin, 2))
         return result
 
@@ -620,12 +630,13 @@ class Extension(omni.ext.IExt):
             if follow is False:
                 stopped = self.follower.stop("follow=false")
                 return dict(stopped=stopped, **self.follower.status())
+            plain = not any(a.get(k) is not None for k in ("margin", "eye", "target")) and not follow
+            if plain and not a.get("path"):  # refuse before touching a running follow
+                refuse("INVALID_VALUE", "Give path to frame, or eye and target.")
             # Any other viewport call takes the camera back from a running follow.
             self.follower.stop("replaced by a new sim.viewport.frame call")
             viewport = get_active_viewport()
-            if not any(a.get(k) is not None for k in ("margin", "eye", "target")) and not follow:
-                if not a.get("path"):
-                    refuse("INVALID_VALUE", "Give path to frame, or eye and target.")
+            if plain:
                 return frame(
                     s, stage, a["path"], omni.usd.get_context(), viewport,
                     frame_viewport_selection, disabled,
