@@ -42,7 +42,7 @@ GROUPS: dict[str, frozenset[str]] = {
     }),
     "screen_read": frozenset({"screen_info", "list_windows", "screen_recording_status"}),
     "screen_capture": frozenset({"screenshot", "start_screen_recording", "stop_screen_recording"}),
-    "screen_control": frozenset({"raise_window"}),
+    "screen_control": frozenset({"raise_window", "move_window"}),
     "screen_input": frozenset({
         "window_click", "window_drag", "window_scroll", "window_type", "window_key",
     }),

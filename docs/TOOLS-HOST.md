@@ -62,7 +62,7 @@ startup with a message listing the valid names; it never registers nothing silen
 | `isaaclab_run` | `isaaclab__train`, `isaaclab__eval`, `isaaclab__play`, `isaaclab__runs_cancel` |
 | `screen_read` | `screen_info`, `list_windows`, `screen_recording_status` |
 | `screen_capture` | `screenshot`, `start_screen_recording`, `stop_screen_recording` |
-| `screen_control` | `raise_window` |
+| `screen_control` | `raise_window`, `move_window` |
 | `screen_input` | `window_click`, `window_drag`, `window_scroll`, `window_type`, `window_key` (explicit opt-in) |
 | `sim_launch` | `sim__launch`, `sim__list`, `sim__status`, `sim__stop` (explicit opt-in) |
 | `gateway` | `refresh_tools`, `use_bridge` |
@@ -119,6 +119,7 @@ under `~/Videos/screen-mcp/` on the **host server** machine. Mouse and keyboard 
 |---|---|---|
 | `screen_info` | none | Report display, monitors, auto-target, capture locations and recording state. |
 | `list_windows` | `filter=null` | List visible windows and IDs; the optional string filters title or window class. A `client` marker identifies windows reported by the window manager as application clients. |
+| `move_window` | `x`, `y`, `width`, `height`, `window=null`, `window_id=null`, `expected_pid=null` | Un-maximize, move and resize a window through the window manager (EWMH), for example Isaac Sim on the left and RViz 2 on the right before a screen recording. Returns the geometry actually applied; a window manager or app may limit it. |
 | `raise_window` | `window=null`, `window_id=null`, `expected_pid=null` | Request window-manager activation and verify it became active. Activation gives the window focus. Select the actual client window ID rather than a window-manager frame, and supply the expected PID when targeting a known process. Ambiguous titles owned by different processes require a window ID. |
 | `screenshot` | `monitor=null`, `window=null`, `window_id=null`, `max_width=1600` | Save a full-resolution PNG and return a caption plus inline image, scaled down to at most `max_width` (clamped to 320–3840). With no selector, auto-targets Isaac Sim/Lab if found, otherwise monitor 1. `monitor=0` means all monitors. |
 | `start_screen_recording` | `monitor=null`, `window=null`, `window_id=null`, `fps=15`, `max_width=1600`, `max_seconds=600`, `full_screen=true` | Start one MP4 recording; no audio. With no selector, auto-target a simulator window, otherwise monitor 1. `fps` is clamped to 1–30 and `max_seconds` to 5–3600. `full_screen=true` scales/pads to the primary monitor; false uses the window or monitor size capped by `max_width`. |

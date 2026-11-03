@@ -14,7 +14,10 @@ Handlers here follow the same contract as any tool: return the payload dict,
 or raise (``ToolError`` to attach diagnostics). The bridge owns the envelope.
 """
 
+import ast
+import contextvars
 import functools
+import inspect
 import traceback
 from typing import Any, Dict, List
 
@@ -23,9 +26,10 @@ from .protocol import ToolError
 _RUN_PYTHON_DESCRIPTION = (
     "Execute Python code on the Kit main thread with full access to the "
     "Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a "
-    "value). Set persistent=True with a session_id to keep variables alive "
-    "between calls — useful for multi-step workflows where later calls need "
-    "results from earlier ones."
+    "value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` "
+    "to let frames run between steps). Set persistent=True with a session_id to keep variables "
+    "alive between calls — useful for multi-step workflows where later calls need results from "
+    "earlier ones. Opening a stage (including save-as) resets every session; the next call says so."
 )
 _RUN_PYTHON_PARAMETERS = {
     "code": {"type": "string", "required": True,
@@ -78,27 +82,139 @@ def cmd_run_python(bridge, code: str, session_id: str = "default",
     exec_globals = {**preload, "__builtins__": __builtins__}
     if persistent:
         exec_globals.update(bridge.sessions.namespace(session_id))
+    generation = bridge.sessions.generation
+
+    try:
+        # Top-level `await` is allowed: such code compiles to a coroutine that the bridge
+        # awaits on Kit's event loop, so it can wait for app updates, renders or timers.
+        compiled = compile(code, "<run_python>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+    except SyntaxError as e:
+        raise ToolError(f"SyntaxError: {e}", details={"traceback": traceback.format_exc()})
+
+    def reset_note() -> str:
+        # Consumed only when the call reports (finish/fail), so a cancelled call keeps it pending.
+        reason = bridge.sessions.take_reset(session_id) if persistent else ""
+        return (f"Session {session_id!r} was reset because {reason}: variables, imports and "
+                "functions from earlier calls are gone (prim references would be stale). "
+                "Re-run your setup code." if reason else "")
+
+    def fail(e: BaseException, output: str):
+        note = reset_note()
+        details = {"output": output, "traceback": traceback.format_exc()}
+        if note:
+            details["session_reset"] = note
+        elif persistent and isinstance(e, NameError):
+            details["hint"] = ("Persistent sessions keep only the variables of successful calls; "
+                               "names from a call that raised are not saved.")
+        raise ToolError((note + " " if note and isinstance(e, NameError) else "") + str(e),
+                        details=details)
+
+    def finish(output: str):
+        note = reset_note()
+        payload = {"output": output, "result": exec_globals.get("result", None)}
+        if persistent:
+            payload["session_id"] = session_id
+            if bridge.sessions.generation != generation:
+                # A stage was opened while this call ran (e.g. it awaited open_stage_async): its
+                # namespace still holds references to the old stage, so it is not saved.
+                payload["session_vars"] = []
+                payload["session_reset"] = (
+                    f"A stage was opened during this call, so session {session_id!r} was not saved; "
+                    "variables from this and earlier calls are gone. Re-run your setup code.")
+                bridge.sessions.take_reset(session_id)
+            else:
+                payload["session_vars"] = bridge.sessions.persist(session_id, exec_globals)
+                if note:
+                    payload["session_reset"] = note
+        return payload
+
+    if compiled.co_flags & inspect.CO_COROUTINE:
+        async def run_async():
+            # Capture only this call's prints: a context-local buffer behind one proxy, so Kit
+            # output from other tasks during the await still reaches the console.
+            capture = _Capture()
+            token = _CAPTURE.set(capture)
+            _install_stdout_proxy()
+            try:
+                await eval(compiled, exec_globals)
+            except Exception as e:
+                fail(e, capture.buf.getvalue())
+            finally:
+                # Tasks and callbacks the code started copied this context; closing the holder
+                # sends their later prints back to the console instead of a buffer nobody reads.
+                capture.open = False
+                _CAPTURE.reset(token)
+            return finish(capture.buf.getvalue())
+        return run_async()
 
     old_stdout = sys.stdout
     sys.stdout = capture = io.StringIO()
     try:
-        exec(code, exec_globals)
+        exec(compiled, exec_globals)
     except Exception as e:
-        raise ToolError(str(e), details={
-            "output": capture.getvalue(),
-            "traceback": traceback.format_exc(),
-        })
+        fail(e, capture.getvalue())
     finally:
         sys.stdout = old_stdout
+    return finish(capture.getvalue())
 
-    payload = {
-        "output": capture.getvalue(),
-        "result": exec_globals.get("result", None),
-    }
-    if persistent:
-        payload["session_id"] = session_id
-        payload["session_vars"] = bridge.sessions.persist(session_id, exec_globals)
-    return payload
+
+_CAPTURE = contextvars.ContextVar("isaac_mcp_run_python_capture", default=None)
+
+
+class _Capture:
+    """One awaiting call's output buffer; closed when the call returns."""
+
+    def __init__(self):
+        import io
+
+        self.buf = io.StringIO()
+        self.open = True
+
+
+class _StdoutProxy:
+    """sys.stdout stand-in: writes go to the awaiting run_python call's buffer when the current
+    asyncio context has an open one, else to the real stream."""
+
+    _isaac_mcp_proxy = True
+
+    def __init__(self, real):
+        self._real = real
+
+    def _target(self):
+        capture = _CAPTURE.get()
+        return capture.buf if capture is not None and capture.open else self._real
+
+    def write(self, text):
+        return self._target().write(text)
+
+    def writelines(self, lines):
+        target = self._target()
+        for line in lines:
+            target.write(line)
+
+    def flush(self):
+        return self._target().flush()
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+def _install_stdout_proxy():
+    import sys
+
+    # Duck-typed so a hot-reloaded module (a new class) does not stack a second proxy.
+    if not getattr(sys.stdout, "_isaac_mcp_proxy", False):
+        sys.stdout = _StdoutProxy(sys.stdout)
+
+
+def remove_stdout_proxy():
+    """Restore the real stream (extension shutdown)."""
+    import sys
+
+    for _ in range(8):  # bounded; only our own proxy class is unwrapped, never a wrapper above it
+        if not any("_isaac_mcp_proxy" in vars(cls) for cls in type(sys.stdout).__mro__):
+            break
+        sys.stdout = sys.stdout._real
 
 
 _PUT_FILE_DESCRIPTION = (
