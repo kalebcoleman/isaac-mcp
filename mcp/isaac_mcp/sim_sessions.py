@@ -336,8 +336,9 @@ def _status(env: Mapping[str, str], session_id: str) -> dict:
     if state in ("running", "readiness_unknown"):
         # The MCP server keeps dialling its configured port (UR5E_DT_PORT/ISAAC_MCP_PORT) and
         # refresh_tools does not switch: a student run on a lab PC lost time here.
-        result["next"] = (f"call use_bridge(port={session['port']}) so sim__* and run_python go to this "
-                          "simulator; refresh_tools alone reconnects to the configured port.")
+        result["next"] = (f"if this MCP server is not already using port {session['port']}, call "
+                          f"use_bridge(port={session['port']}) so sim__* and run_python go to this simulator; "
+                          "refresh_tools alone reconnects to the configured port.")
     return result
 
 

@@ -527,12 +527,27 @@ LOCKED_NOTE = ("\nwarning: the screen is locked or blanked, so monitor captures 
                "window instead (window=... or window_id=...): window captures read the window's own pixels.")
 
 
+_LOCK_CACHE: list = [0.0, False]  # [monotonic time, value]: monitor captures can come quickly
+
+
 def _screen_locked() -> bool:
     """True when the desktop session is locked or the screen saver is active (best effort, never raises).
 
     Seen on a lab PC with nobody at the keyboard: every monitor capture was black while window
-    captures were fine."""
-    probes = [["gdbus", "call", "--session", "--dest", "org.gnome.ScreenSaver", "--object-path",
+    captures were fine. Cached for 5 s; each probe has a 1 s timeout."""
+    now = time.monotonic()
+    if now - _LOCK_CACHE[0] < 5.0:
+        return _LOCK_CACHE[1]
+    _LOCK_CACHE[:] = [now, _probe_locked()]
+    return _LOCK_CACHE[1]
+
+
+def _probe_locked() -> bool:
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    # Without a session bus, gdbus would autolaunch a stray dbus-daemon (and find no screen saver).
+    has_bus = bool(os.environ.get("DBUS_SESSION_BUS_ADDRESS")) or bool(runtime and os.path.exists(
+        os.path.join(runtime, "bus")))
+    probes = [] if not has_bus else [["gdbus", "call", "--session", "--dest", "org.gnome.ScreenSaver", "--object-path",
                "/org/gnome/ScreenSaver", "--method", "org.gnome.ScreenSaver.GetActive"]]
     session = os.environ.get("XDG_SESSION_ID")
     if session:
@@ -541,7 +556,7 @@ def _screen_locked() -> bool:
         if not shutil.which(cmd[0]):
             continue
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=2,
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=1,
                                  stdin=subprocess.DEVNULL).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             continue
