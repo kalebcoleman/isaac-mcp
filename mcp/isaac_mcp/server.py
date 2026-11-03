@@ -520,6 +520,9 @@ def _build_tool_function(name: str, canonical: str, description: str,
             if f["kind"] == "array":
                 strings = f["name"] in {"observe_prims", "observe_joints"} or (canonical == "sim.ui.act" and f["name"] == "keys")
                 annotation = list[str] if strings else list[float]
+                if canonical == "sim.graph.build" and f["name"] in ("nodes", "connections"):
+                    # [name, type] / [from, to] string pairs.
+                    annotation = list[Annotated[list[str], Field(min_length=2, max_length=2)]]
                 if canonical == "sim.map.occupancy" and f["name"] == "clear":
                     # A list of [x, y, radius] circles; list[float] rejected every valid value.
                     annotation = list[Annotated[list[float], Field(min_length=3, max_length=3)]]
@@ -528,7 +531,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 if f["name"] in lengths:
                     bounds = {"min_length": lengths[f["name"]], "max_length": lengths[f["name"]]}
                 else:
-                    bounds = {"max_length": {"observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5}.get(f["name"], 128)}
+                    bounds = {"max_length": {"observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256}.get(f["name"], 128)}
             annotation = Annotated[annotation, Field(description=spec["description"], **bounds)]
         if f["required"] and not f["has_default"]:
             param_list.append(f["name"])
@@ -728,7 +731,7 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
     if canonical in REGISTRY:
         from mcp.types import ToolAnnotations
         read_only = canonical in {"assets.roots", "assets.scan", "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.physics.inspect", "sim.body.state", "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "assets.search", "sim.lidar.read", "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find"}
-        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.ui.act"},
+        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.ui.act", "sim.stage.open", "sim.graph.build"},
                                                  idempotentHint=read_only, openWorldHint=canonical.startswith(("assets.", "sim.controller.")))
     server.tool(**options)(handler)
 

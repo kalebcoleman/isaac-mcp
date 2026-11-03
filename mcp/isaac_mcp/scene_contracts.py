@@ -90,12 +90,23 @@ add(
     "Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations.",
 )
 add(
+    "sim.stage.open",
+    "Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage has unsaved edits unless discard_changes=true. Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset.",
+    dict(
+        **TARGET,
+        path=field("string", "Absolute path of the USD file to open (a leading tilde for your home is expanded)."),
+        discard_changes=field("boolean", "Open even if the current stage has unsaved edits (they are lost).", False, default=False),
+    ),
+)
+add(
     "sim.stage.tree",
     "Bounded stage hierarchy including inactive prims. Text is untrusted data.",
     dict(
         **TARGET,
         root=field("string", "Absolute subtree root.", False, default="/"),
         limit=field("integer", "Maximum nodes 1..200.", False, default=100),
+        depth=field("integer", "Levels below root to list (1..64); default all.", False),
+        include_runtime=field("boolean", "Also list Kit's runtime /Render (Replicator) prims, hidden by default.", False, default=False),
     ),
 )
 add(
@@ -171,10 +182,11 @@ add(
 )
 add(
     "sim.stage.save",
-    "Export a flattened copy, including session edits, to a new basename ending .usda in configured output root. Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
+    "Export a flattened copy, including session edits, to a new basename ending .usda in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
     dict(
         **TARGET,
         filename=field("string", "New basename ending .usda; no directories."),
+        directory=field("string", "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.", False),
         reset_camera_render_handles=field(
             "boolean",
             "Explicitly remove validated session-only ROS camera viewportHandle fields from the copy so native textures can rebuild after restart. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
@@ -392,6 +404,20 @@ add(
         contains=field("string", "Substring of the node type id or its UI name, case-insensitive (<=64 chars)."),
         limit=field("integer", "Maximum node types returned, 1..40.", False, default=20),
         ports=field("boolean", "Include ports (default: only when 5 or fewer types match; at most 8 detailed).", False),
+    ),
+)
+add(
+    "sim.graph.build",
+    "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types.",
+    dict(
+        **TARGET,
+        path=field("string", "Graph prim path to create, e.g. /World/ROS_Clock or /turtlebot3_burger/ROS_Drive."),
+        nodes=field("array", "[name, node_type] pairs, e.g. [[\"tick\", \"omni.graph.action.OnPlaybackTick\"], [\"clock\", \"isaacsim.ros2.bridge.ROS2PublishClock\"]]."),
+        values=field("object", "Input values: {\"node.inputs:port\": value}, e.g. {\"clock.inputs:topicName\": \"/clock\"}.", False),
+        connections=field("array", "[from, to] pairs: [[\"tick.outputs:tick\", \"clock.inputs:execIn\"]]. A constant node's inputs:value can be a source.", False),
+        targets=field("object", "Prim targets: {\"node.inputs:targetPrim\": [\"/World/robot\"]}.", False),
+        evaluator=field("string", "Graph evaluator: execution (Action Graph, default), push or dirty_push.", False, default="execution", enum=["execution", "push", "dirty_push"]),
+        replace=field("boolean", "Delete an existing graph at path first (it is not restored if the new build fails).", False, default=False),
     ),
 )
 add(

@@ -334,7 +334,11 @@ class Extension(omni.ext.IExt):
                             render_observation,
                             camera_frame,
                         ) = await self._wait_sensor_frame(name, args)
-                    if name in ("sim.ui.find", "sim.ui.act"):
+                    if name == "sim.stage.open":
+                        from .stage_open import open_stage
+
+                        result = await open_stage(self.scene, args)
+                    elif name in ("sim.ui.find", "sim.ui.act"):
                         # Kit UI, not the stage: no session/stage target (the UI outlives stage changes).
                         from .ui import UIRefusal, act, find
 
@@ -465,7 +469,8 @@ class Extension(omni.ext.IExt):
         if name == "sim.prim.get":
             return s.get(stage, **a)
         if name in ("sim.stage.tree", "sim.physics.inspect"):
-            nodes, truncated = bounded(stage, a.get("root", "/"), a.get("limit", 100))
+            nodes, truncated = bounded(stage, a.get("root", "/"), a.get("limit", 100), a.get("depth"),
+                                       a.get("include_runtime", name == "sim.physics.inspect"))
             return dict(
                 nodes=[
                     dict(
@@ -536,15 +541,13 @@ class Extension(omni.ext.IExt):
             from pxr import UsdPhysics
 
             prim = s.prim(stage, a["path"])
-            if (
-                s.timeline.is_stopped()
-                or not prim.IsActive()
-                or not prim.HasAPI(UsdPhysics.RigidBodyAPI)
-            ):
-                refuse(
-                    "PHYSICS_NOT_READY",
-                    "Need an active rigid body and initialized playing/paused simulation on the selected backend.",
-                )
+            if s.timeline.is_stopped():
+                refuse("PHYSICS_NOT_READY", "The timeline is stopped, so there is no runtime body state. Play "
+                       "(sim__timeline__control action=play) and let a few frames run; on Stop, robots return "
+                       "to their authored start pose.")
+            if not prim.IsActive() or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                refuse("PHYSICS_NOT_READY", f"{a['path']} is not an active rigid body (no RigidBodyAPI). Use a "
+                       "link with physics, e.g. the robot's base link, or sim__prim__get for any prim's pose.")
             from .physics import body_state
 
             return body_state(

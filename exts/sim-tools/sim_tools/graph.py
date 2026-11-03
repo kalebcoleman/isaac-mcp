@@ -64,6 +64,9 @@ def ogn_ports(ogn: dict, type_name: str) -> dict:
             entry = {"type": spec.get("type")}
             if "default" in spec:
                 entry["default"] = _short(spec["default"])
+            allowed = allowed_values(spec)
+            if allowed:
+                entry["allowed_values"] = allowed
             if spec.get("optional"):
                 entry["optional"] = True
             desc = _text(spec.get("description"))
@@ -72,6 +75,20 @@ def ogn_ports(ogn: dict, type_name: str) -> dict:
             ports[f"{section}:{name}"] = entry
         out[section] = ports
     return out
+
+
+def allowed_values(spec):
+    """Values a token input accepts, from an .ogn port spec. The stored value is the *display* string:
+    Scale To/From Stage Units takes "Convert to stage units", not its key "toStage" (a student set the key
+    and the node silently output zeros)."""
+    tokens = spec.get("allowedTokens") or (spec.get("metadata") or {}).get("allowedTokens")
+    if isinstance(tokens, dict):
+        return [str(v) for v in tokens.values()]
+    if isinstance(tokens, list):
+        return [str(v) for v in tokens]
+    if isinstance(tokens, str):
+        return [t.strip() for t in tokens.split(",") if t.strip()]
+    return []
 
 
 _RST_NAME = re.compile(r"\(\*(?P<name>(?:inputs|outputs):[^*]+)\*\)\s*$")
@@ -178,6 +195,10 @@ def node_types(contains, limit=20, ports=None):
             if found_ports:
                 ports, source = found_ports
                 entry.update(ports)
+                if not ports.get("outputs") and any(n.endswith(":value") for n in ports.get("inputs", {})):
+                    entry["constant_note"] = (
+                        "No output port: this is a constant node, and its inputs:value is the value other nodes "
+                        "read. Connect from '<node>.inputs:value' (e.g. Constant Token -> Make Array).")
                 if "arraySize" in source:
                     entry["dynamic_inputs_note"] = (
                         "Only inputs:input0 exists at first. Setting inputs:arraySize from a script does not add "
@@ -220,6 +241,31 @@ def _headless():
             or os.environ.get("UR5E_DT_HEADLESS") == "1" or "--no-window" in sys.argv)
 
 
+def _allowed_tokens(attr):
+    import omni.graph.core as og
+
+    try:
+        raw = attr.get_metadata(og.MetadataKeys.ALLOWED_TOKENS)
+    except Exception:  # noqa: BLE001
+        return []
+    return [t for t in (raw or "").split(",") if t]
+
+
+def _messages(node):
+    """Errors and warnings from the node's last compute: the only sign of e.g. a bad token value."""
+    import omni.graph.core as og
+
+    out = {}
+    for key, severity in (("errors", og.Severity.ERROR), ("warnings", og.Severity.WARNING)):
+        try:
+            msgs = [str(m)[:300] for m in node.get_compute_messages(severity)][:5]
+        except Exception:  # noqa: BLE001
+            msgs = []
+        if msgs:
+            out[key] = msgs
+    return out
+
+
 def inspect_graph(stage, path, limit=64):
     """Nodes of an OmniGraph with their types, input values and connections."""
     import omni.graph.core as og
@@ -246,14 +292,23 @@ def inspect_graph(stage, path, limit=64):
                         entry["value"] = _short(og.Controller.get(attr))
                     except Exception as exc:  # unresolved extended types have no value yet
                         entry["value"] = f"<unreadable: {type(exc).__name__}>"
+                allowed = _allowed_tokens(attr)
+                if allowed:
+                    entry["allowed_values"] = allowed
                 inputs[name] = entry
             elif name.startswith("outputs:"):
                 downstream = [c.get_path() for c in attr.get_downstream_connections()]
                 outputs[name] = {"type": attr.get_resolved_type().get_ogn_type_name(),
                                  **({"to": downstream} if downstream else {})}
-        out.append(dict(path=node.get_prim_path(), type=node.get_type_name(), inputs=inputs, outputs=outputs))
+        record = dict(path=node.get_prim_path(), type=node.get_type_name(), inputs=inputs, outputs=outputs)
+        record.update(_messages(node))
+        out.append(record)
+    failing = [n["path"] for n in out if n.get("errors")]
     return dict(graph=path, evaluator=graph.get_evaluator_name(), node_count=len(nodes),
-                truncated=len(nodes) > limit, nodes=out)
+                truncated=len(nodes) > limit, nodes=out,
+                **({"nodes_with_errors": failing,
+                    "note": "Compute errors come from the last time the graph ran (play the timeline first)."}
+                   if failing else {}))
 
 
 def show_graph_open(stage, path, width=0, height=0):
