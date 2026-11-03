@@ -204,6 +204,7 @@ def test_status_verifies_bridge_pid_and_reports_reused_pid_as_exited(setup, monk
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
     monkeypatch.setattr(sim.client, "call", lambda *a, **kw: {"pid": 510, "app_ready": True})
     assert sim._status(setup, record["id"])["state"] == "running"
+    assert f"use_bridge(port={record['port']})" in sim._status(setup, record["id"])["next"]
     monkeypatch.setattr(sim.client, "call", lambda *a, **kw: {"pid": 510, "app_ready": False})
     assert sim._status(setup, record["id"])["state"] == "starting"
     monkeypatch.setattr(sim.client, "call", lambda *a, **kw: {"pid": 510})

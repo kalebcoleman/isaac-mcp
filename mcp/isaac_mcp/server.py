@@ -62,7 +62,7 @@ from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
 from .local_tools import DEFAULT_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups
 from .desktop_input import register_desktop_input_tools
-from .sim_sessions import register_sim_session_tools
+from .sim_sessions import live_ports, register_sim_session_tools
 from .screen import register_screen_tools
 
 logging.basicConfig(level=logging.INFO,
@@ -178,6 +178,7 @@ class _BridgeState:
         self.client: Optional[BridgeClient] = None
         self.name_map: Dict[str, str] = {}
         self.registered_meta: Dict[str, Dict[str, Any]] = {}
+        self.env: Optional[Mapping[str, str]] = None  # build_server's env (sim session directory)
 
     def get_client(self) -> BridgeClient:
         if self.client is None:
@@ -814,7 +815,12 @@ async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None) -> str:
             return (f"Error: {e} Pick one with use_bridge(port) (`python -m isaac_mcp.client "
                     "--list-bridges` shows each one's port and PID); do not start another simulator.")
         if _needs_bridge_guidance(e):
-            return (f"Error: no Isaac Sim bridge is reachable ({e}). Isaac Sim is probably not "
+            state = _state_for(server)
+            managed = [p for p in live_ports(getattr(state, "env", None)) if p[0] != _screen_port(state)]
+            hint = ("" if not managed else " Managed simulators started with sim__launch are running on "
+                    + ", ".join(f"port {port} (PID {pid})" for port, pid in managed)
+                    + ": this server dials its configured port, so call use_bridge(port) to select one.")
+            return (f"Error: no Isaac Sim bridge is reachable ({e}).{hint} Isaac Sim is probably not "
                     "running yet, or is still starting: start it (sim__launch when simulator launch "
                     "is enabled, or ./run.sh), wait until it is ready, then call refresh_tools again. "
                     "`python -m isaac_mcp.client --list-bridges` lists running bridges.")
@@ -942,6 +948,7 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     _advertise_tools_list_changed(server)
     register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups)
     register_desktop_input_tools(server, groups=groups)
+    state.env = env
     register_sim_session_tools(server, groups=groups, env=env)
     register_isaaclab_tools(server, groups=groups)
     _register_gateway_tools(server, groups)
