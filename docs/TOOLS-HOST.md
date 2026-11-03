@@ -99,7 +99,7 @@ conservative destructive and open-world annotations. To enable the separate simu
   `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 39 generic `sim`/`assets`
   tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
   and optional managed-session tools are unaffected. With standard local groups, opting out
-  gives 44 offline tools or 51 with bridge built-ins. These are visibility controls, not isolation.
+  gives 45 offline tools or 52 with bridge built-ins. These are visibility controls, not isolation.
 - `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
   server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
   [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.

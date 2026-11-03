@@ -191,7 +191,12 @@ def node_types(contains, limit=20, ports=None):
 def _graph_path(path):
     from isaac_mcp.project_assets import refuse
 
-    if not isinstance(path, str) or not re.fullmatch(r"(/[A-Za-z_][A-Za-z0-9_]*)+", path):
+    from pxr import Sdf
+
+    if not isinstance(path, str) or not Sdf.Path.IsValidPathString(path):
+        refuse("INVALID_VALUE", "path must be an absolute prim path like /World/ROS_Clock.")
+    p = Sdf.Path(path)
+    if not (p.IsAbsolutePath() and p.IsPrimPath()):
         refuse("INVALID_VALUE", "path must be an absolute prim path like /World/ROS_Clock.")
     return path
 
@@ -337,40 +342,64 @@ def pgm_and_origin(buffer, dims_x, dims_y, min_bound, cell_size, meters_per_unit
                                                 unknown=int(grid.size - (grid == 1.0).sum() - (grid == 0.0).sum()))
 
 
-def occupancy_map(scene, stage, a):
-    """Generate a 2D occupancy map from the stage's colliders and write a Nav2 PGM + YAML."""
+def _numbers(v, n):
+    """A list of *n* finite numbers (bools are not numbers here)."""
+    return isinstance(v, list) and len(v) == n and all(type(x) in (int, float) and math.isfinite(x) for x in v)
+
+
+def validate_occupancy(scene, stage, a):
+    """Check every argument with no side effects, so refusals happen before any Play."""
     from isaac_mcp.project_assets import refuse
     from pxr import UsdGeom
 
-    lo, hi, z = a["min"], a["max"], a.get("z", [0.05, 0.3])
+    lo, hi, z = a.get("min"), a.get("max"), a.get("z", [0.05, 0.3])
     for v, n in ((lo, "min"), (hi, "max"), (z, "z")):
-        if not (isinstance(v, list) and len(v) == 2 and all(isinstance(x, (int, float)) and math.isfinite(x) for x in v)):
+        if not _numbers(v, 2):
             refuse("INVALID_VALUE", f"{n} must be two finite numbers (metres).")
     if not (hi[0] > lo[0] and hi[1] > lo[1] and z[1] > z[0]):
         refuse("INVALID_VALUE", "max must exceed min, and z[1] must exceed z[0].")
-    cell = float(a.get("cell_size", 0.05))
-    if not 0.005 <= cell <= 1.0:
+    cell = a.get("cell_size", 0.05)
+    if type(cell) not in (int, float) or not 0.005 <= cell <= 1.0:
         refuse("INVALID_VALUE", "cell_size must be 0.005..1.0 m.")
     start = a.get("start") or [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2]
-    if not (isinstance(start, list) and len(start) == 2 and all(isinstance(x, (int, float)) and math.isfinite(x) for x in start)
-            and lo[0] < start[0] < hi[0] and lo[1] < start[1] < hi[1]):
+    if not (_numbers(start, 2) and lo[0] < start[0] < hi[0] and lo[1] < start[1] < hi[1]):
         refuse("INVALID_VALUE", "start must be [x, y] metres inside the bounds, in free space.")
     if UsdGeom.GetStageUpAxis(stage) != UsdGeom.Tokens.z:
         refuse("UNSUPPORTED_STAGE", "Occupancy maps need a Z-up stage (ROS convention).")
     if (hi[0] - lo[0]) * (hi[1] - lo[1]) / (cell * cell) > 16_000_000:
         refuse("LIMIT", "Map larger than 16 million cells; increase cell_size or shrink the bounds.")
     base = a.get("basename", "map")
-    if not re.fullmatch(r"[A-Za-z0-9_\-]{1,60}", base):
+    if not isinstance(base, str) or not re.fullmatch(r"[A-Za-z0-9_\-]{1,60}", base):
         refuse("INVALID_OUTPUT", "basename: letters, digits, _ and - only (<=60), no extension.")
     clear = a.get("clear") or []
-    if not (isinstance(clear, list) and len(clear) <= 16 and all(
-            isinstance(c, list) and len(c) == 3 and all(isinstance(x, (int, float)) and math.isfinite(x) for x in c)
-            and c[2] > 0 for c in clear)):
+    if not (isinstance(clear, list) and len(clear) <= 16 and all(_numbers(c, 3) and c[2] > 0 for c in clear)):
         refuse("INVALID_VALUE", "clear: up to 16 [x, y, radius] circles in metres.")
     pgm_path, yaml_path = scene.output / f"{base}.pgm", scene.output / f"{base}.yaml"
     for p in (pgm_path, yaml_path):
         if p.exists():
             refuse("CONFLICT", f"{p} exists; choose another basename.")
+    return dict(lo=lo, hi=hi, z=z, cell=float(cell), start=start, base=base, clear=clear,
+                pgm_path=pgm_path, yaml_path=yaml_path)
+
+
+def cell_value(pgm, width, height, origin, res, x, y):
+    """PGM value (0 occupied, 254 free, 205 unknown) of the cell containing world (x, y)."""
+    col = int(math.floor((x - origin[0]) / res))
+    row = height - 1 - int(math.floor((y - origin[1]) / res))
+    if not (0 <= col < width and 0 <= row < height):
+        return None
+    body = pgm[len(pgm) - width * height:]
+    return body[row * width + col]
+
+
+def occupancy_map(scene, stage, a):
+    """Generate a 2D occupancy map from the stage's colliders and write a Nav2 PGM + YAML."""
+    from isaac_mcp.project_assets import refuse
+    from pxr import UsdGeom
+
+    v = validate_occupancy(scene, stage, a)
+    lo, hi, z, cell, start, base, clear = (v[k] for k in ("lo", "hi", "z", "cell", "start", "base", "clear"))
+    pgm_path, yaml_path = v["pgm_path"], v["yaml_path"]
     mpu = UsdGeom.GetStageMetersPerUnit(stage) or 1.0
     to_su = 1.0 / mpu
     if not _enable("isaacsim.asset.gen.omap"):
@@ -396,6 +425,19 @@ def occupancy_map(scene, stage, a):
         refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) "
                "inside the bounds and a UsdPhysics.Scene on the stage.")
     pgm, origin, counts = pgm_and_origin(buffer, dims.x, dims.y, min_bound, cell * to_su, mpu, clear)
+    at_start = cell_value(pgm, dims.x, dims.y, origin, cell, start[0], start[1])
+    total = max(1, sum(counts.values()))
+    if counts["occupied"] == 0 and counts["unknown"] > 0.5 * total:
+        # Seen live: with start inside a solid collider the generator marks that collider's
+        # interior free, finds no walls, and leaves everything else unknown.
+        refuse("START_BLOCKED", f"start {start} seems to be inside an obstacle or a closed space: no walls were "
+               "found around it and most of the map is unknown. Move start to open floor. No files were written.",
+               cells=counts)
+    if at_start != 254:
+        refuse("START_BLOCKED", f"start {start} is {'occupied' if at_start == 0 else 'not in mapped free space'}: "
+               "the generator flood-fills free space from it, so the map would be empty or wrong. Move start to "
+               "open floor (or clear the robot's footprint there). No files were written.",
+               cells=counts)
     scene.output.mkdir(mode=0o700, parents=True, exist_ok=True)
     pgm_path.write_bytes(pgm)
     yaml_text = (f"image: {base}.pgm\nmode: trinary\nresolution: {cell:g}\n"
@@ -403,11 +445,11 @@ def occupancy_map(scene, stage, a):
                  "occupied_thresh: 0.65\nfree_thresh: 0.25\n")
     yaml_path.write_text(yaml_text)
     total = max(1, sum(counts.values()))
-    if counts["occupied"] == 0:
-        warn = "No occupied cells: nothing with a collider intersects the z slice inside the bounds."
-    elif counts["unknown"] > 0.5 * total:
+    if counts["unknown"] > 0.5 * total:
         warn = (f"{counts['unknown'] * 100 // total}% of the map is unknown (not reachable from start "
                 f"{start}): move start into the main free area, or the bounds into one room.")
+    elif counts["occupied"] == 0:
+        warn = "No occupied cells reached from start: nothing with a collider intersects the z slice there."
     else:
         warn = None
     return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=dims.x, height=dims.y, resolution=cell,

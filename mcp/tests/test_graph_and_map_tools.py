@@ -117,3 +117,35 @@ def test_rst_rows_with_escaped_quotes_are_not_dropped():
 
 def test_find_ogn_ignores_an_empty_extension_path():
     assert graph._find_ogn("", "omni.graph.nodes.ArraySlice") is None
+
+
+def test_cell_value_reads_the_start_cell(np):
+    dims = 10
+    buf = np.zeros(dims * dims)
+    buf[0] = 1.0  # buffer (0,0) -> after the 180-degree turn, the top-right... bottom-right pixel
+    pgm, origin, _ = graph.pgm_and_origin(buf.tolist(), dims, dims, (0.0, 0.0, 0.0), 0.1, 1.0)
+    assert graph.cell_value(pgm, dims, dims, origin, 0.1, 0.95, 0.05) == 0     # bottom-right cell: occupied
+    assert graph.cell_value(pgm, dims, dims, origin, 0.1, 0.05, 0.95) == 254   # top-left: free
+    assert graph.cell_value(pgm, dims, dims, origin, 0.1, 5.0, 5.0) is None    # outside the map
+
+
+def test_numbers_reject_booleans_and_wrong_lengths():
+    assert graph._numbers([1, 2.5], 2) and not graph._numbers([True, 1], 2) and not graph._numbers([1], 2)
+    assert not graph._numbers([1, float("inf")], 2)
+
+
+def test_graph_paths_accept_unicode_and_refuse_property_paths(monkeypatch):
+    pytest.importorskip("pxr")
+    import types
+
+    class Refused(Exception):
+        pass
+
+    def refuse(code, message, **kw):
+        raise Refused(code)
+
+    monkeypatch.setitem(sys.modules, "isaac_mcp.project_assets", types.SimpleNamespace(refuse=refuse))
+    assert graph._graph_path("/World/Graphe_\u00e9") == "/World/Graphe_\u00e9"
+    for bad in ("World/Graph", "/World/Graph.inputs:x", "/World/Graph{v=a}", ""):
+        with pytest.raises(Refused):
+            graph._graph_path(bad)

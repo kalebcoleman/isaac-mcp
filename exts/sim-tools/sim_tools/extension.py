@@ -178,19 +178,38 @@ class Extension(omni.ext.IExt):
         import omni.kit.app as kit_app
         from isaac_mcp.project_assets import refuse
 
+        from .graph import validate_occupancy
+        from isaac_mcp.project_assets import AssetError
+
         s = self.scene
         ids = dict(session_id=args["session_id"], stage_id=args["stage_id"])
-        s.target(**ids)
+        stage = s.target(**ids)
         if not s.timeline.is_stopped():
             refuse("TIMELINE_ACTIVE", "Stop the timeline first; the tool plays a few frames itself so robots "
                    "are mapped at their start poses.")
-        await self._timeline_control({**ids, "action": "play"})
+        validate_occupancy(s, stage, args)  # refuse bad arguments before anything plays
+
+        async def stop():
+            if not s.timeline.is_stopped():
+                await self._timeline_control({**ids, "action": "stop"})
+
         try:
+            await self._timeline_control({**ids, "action": "play"})
             for _ in range(8):
                 await kit_app.get_app().next_update_async()
             result = self.dispatch("sim.map.occupancy", dict(args))
-        finally:
-            await self._timeline_control({**ids, "action": "stop"})
+        except BaseException as exc:
+            try:
+                await stop()
+            except Exception as stop_exc:  # keep the original outcome; report the stop problem with it
+                if isinstance(exc, AssetError):
+                    exc.details["stop_error"] = str(stop_exc)[:300]
+            raise
+        try:
+            await stop()
+        except Exception as stop_exc:  # the map exists: still return it, with the stop problem
+            result["stop_error"] = (f"{str(stop_exc)[:300]}; the timeline may still be playing. "
+                                    "Stop it with sim__timeline__control.")
         result["timeline"] = ("played 8 frames for the physics scene, then stopped. While playing, "
                               "OnPlaybackTick graphs ran: /clock restarted and ROS publishers/controllers ticked.")
         return result

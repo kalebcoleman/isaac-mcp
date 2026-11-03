@@ -97,7 +97,7 @@ loading and remote upload remain disabled; bounded trusted USDZ packages are sup
 
 Set `ISAAC_MCP_SCENE_TOOLS=0` in the MCP server environment to hide the entire generic
 scene/asset pack, both offline and after bridge refresh. It is read once per server startup.
-With otherwise standard settings this restores 44 offline tools and 51 with bridge built-ins.
+With otherwise standard settings this restores 45 offline tools and 52 with bridge built-ins.
 The 23 UR5e tools, Isaac Lab, desktop tools and optional managed `sim__launch/list/status/stop`
 tools retain their existing rules. This discovery preference is not a security boundary.
 
