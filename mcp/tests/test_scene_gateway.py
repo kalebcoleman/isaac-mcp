@@ -65,6 +65,11 @@ def test_full_catalog_and_errors(monkeypatch):
                 and "tool acquisition" in camera_wait["description"]
             )
             assert "completed scan" in lidar_wait["description"]
+            # Student run 2: clear was typed list[float], so no [x, y, r] circle got through.
+            clear = listed["sim__map__occupancy"].inputSchema["properties"]["clear"]
+            assert clear["maxItems"] == 16
+            assert clear["items"]["type"] == "array" and clear["items"]["items"]["type"] == "number"
+            assert clear["items"]["minItems"] == clear["items"]["maxItems"] == 3
             roots = await c.call_tool("assets__roots", {})
             assert (
                 not roots.isError and json.loads(roots.content[0].text)["roots"] == []

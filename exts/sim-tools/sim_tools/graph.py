@@ -123,15 +123,22 @@ def _find_ogn(ext_path: str, type_name: str):
             for path in Path(ext_path).rglob(pattern):
                 index.setdefault(path.name, path)  # OgnROS2PublishClock.ogn -> path
         _OGN_INDEX[ext_path] = index
+    # Most ids drop the Ogn prefix (omni.graph.nodes.ConstructArray -> OgnConstructArray.ogn); Isaac's
+    # often keep it (isaacsim.core.nodes.OgnIsaacScaleToFromStageUnit -> OgnIsaacScaleToFromStageUnit.ogn).
+    stems = [f"Ogn{short}"] + ([short] if short.startswith("Ogn") else [])
     try:
-        path = index.get(f"Ogn{short}.ogn")
-        if path is not None:
-            return ogn_ports(json.loads(path.read_text()), type_name), path.read_text()
-        path = index.get(f"Ogn{short}.rst")
-        if path is not None:
-            text = path.read_text()
-            ports = rst_ports(text)
-            return (ports, text) if ports["inputs"] or ports["outputs"] else None
+        for stem in stems:
+            path = index.get(f"{stem}.ogn")
+            if path is not None:
+                text = path.read_text()
+                return ogn_ports(json.loads(text), type_name), text
+        for stem in stems:
+            path = index.get(f"{stem}.rst")
+            if path is not None:
+                text = path.read_text()
+                ports = rst_ports(text)
+                if ports["inputs"] or ports["outputs"]:
+                    return ports, text
     except (OSError, ValueError):
         return None
     return None

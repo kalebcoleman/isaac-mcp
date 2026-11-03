@@ -512,12 +512,15 @@ def _build_tool_function(name: str, canonical: str, description: str,
             if f["kind"] == "array":
                 strings = f["name"] in {"observe_prims", "observe_joints"}
                 annotation = list[str] if strings else list[float]
+                if canonical == "sim.map.occupancy" and f["name"] == "clear":
+                    # A list of [x, y, radius] circles; list[float] rejected every valid value.
+                    annotation = list[Annotated[list[float], Field(min_length=3, max_length=3)]]
                 lengths = {"position": 3, "orientation": 4, "scale": 3,
                            "color": 3, "gravity": 3, "target": 3}
                 if f["name"] in lengths:
                     bounds = {"min_length": lengths[f["name"]], "max_length": lengths[f["name"]]}
                 else:
-                    bounds = {"max_length": {"observe_prims": 16, "observe_joints": 8}.get(f["name"], 128)}
+                    bounds = {"max_length": {"observe_prims": 16, "observe_joints": 8, "clear": 16}.get(f["name"], 128)}
             annotation = Annotated[annotation, Field(description=spec["description"], **bounds)]
         if f["required"] and not f["has_default"]:
             param_list.append(f["name"])
