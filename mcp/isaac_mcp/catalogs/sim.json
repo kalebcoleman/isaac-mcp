@@ -2327,6 +2327,177 @@
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
+    "sim.ros2.tf_setup": {
+      "description": "Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /joint_states, the static world->base_link (or world->odom + odometry for a mobile base) and the robot's link TF from Isaac. Rebuilds its own graph on each call, so no frame is ever published twice by this tool. Timeline must be stopped; publishes while playing. Then use scripts/ros2_rviz_config.py and scripts/ros2_tf_doctor.py (docs/ROS2-RVIZ.md).",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "required": true
+        },
+        "robot": {
+          "type": "string",
+          "description": "Robot prim at or above its articulation root.",
+          "required": true
+        },
+        "base_link": {
+          "type": "string",
+          "description": "Robot root link prim; default: a link named base_link, base_footprint or base.",
+          "required": false,
+          "default": ""
+        },
+        "base_frame": {
+          "type": "string",
+          "description": "TF name for the base link; default: the base_link prim name.",
+          "required": false,
+          "default": ""
+        },
+        "base": {
+          "type": "string",
+          "description": "fixed (arm on a table: static world->base) or mobile (odometry: world->odom->base).",
+          "required": false,
+          "default": "fixed"
+        },
+        "world_frame": {
+          "type": "string",
+          "description": "Root frame for RViz's Fixed Frame, e.g. world or map. Empty: publish no world link (a localization node provides map->odom).",
+          "required": false,
+          "default": "world"
+        },
+        "link_frames": {
+          "type": "string",
+          "description": "isaac: Isaac publishes every link frame. robot_state_publisher: Isaac publishes only /joint_states and the base link; run robot_state_publisher with the URDF. Never both.",
+          "required": false,
+          "default": "isaac"
+        },
+        "extra_frames": {
+          "type": "array",
+          "description": "Up to 16 more prims (cameras, LiDARs) to publish relative to the base link; frame name = prim name.",
+          "required": false,
+          "default": []
+        },
+        "namespace": {
+          "type": "string",
+          "description": "ROS node namespace prepended to the topics.",
+          "required": false,
+          "default": ""
+        },
+        "joint_states_topic": {
+          "type": "string",
+          "description": "Joint state topic.",
+          "required": false,
+          "default": "joint_states"
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim.stage.info (process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+        },
+        {
+          "name": "robot",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Robot prim at or above its articulation root."
+        },
+        {
+          "name": "base_link",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "Robot root link prim; default: a link named base_link, base_footprint or base."
+        },
+        {
+          "name": "base_frame",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "TF name for the base link; default: the base_link prim name."
+        },
+        {
+          "name": "base",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "fixed",
+          "has_default": true,
+          "description": "fixed (arm on a table: static world->base) or mobile (odometry: world->odom->base)."
+        },
+        {
+          "name": "world_frame",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "world",
+          "has_default": true,
+          "description": "Root frame for RViz's Fixed Frame, e.g. world or map. Empty: publish no world link (a localization node provides map->odom)."
+        },
+        {
+          "name": "link_frames",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "isaac",
+          "has_default": true,
+          "description": "isaac: Isaac publishes every link frame. robot_state_publisher: Isaac publishes only /joint_states and the base link; run robot_state_publisher with the URDF. Never both."
+        },
+        {
+          "name": "extra_frames",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": [],
+          "has_default": true,
+          "description": "Up to 16 more prims (cameras, LiDARs) to publish relative to the base link; frame name = prim name."
+        },
+        {
+          "name": "namespace",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "ROS node namespace prepended to the topics."
+        },
+        {
+          "name": "joint_states_topic",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "joint_states",
+          "has_default": true,
+          "description": "Joint state topic."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
     "sim.logs.tail": {
       "description": "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs.",
       "parameters": {

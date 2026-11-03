@@ -368,6 +368,22 @@ add(
     ),
 )
 add(
+    "sim.ros2.tf_setup",
+    "Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /joint_states, the static world->base_link (or world->odom + odometry for a mobile base) and the robot's link TF from Isaac. Rebuilds its own graph on each call, so no frame is ever published twice by this tool. Timeline must be stopped; publishes while playing. Then use scripts/ros2_rviz_config.py and scripts/ros2_tf_doctor.py (docs/ROS2-RVIZ.md).",
+    dict(
+        **TARGET,
+        robot=field("string", "Robot prim at or above its articulation root."),
+        base_link=field("string", "Robot root link prim; default: a link named base_link, base_footprint or base.", False, default=""),
+        base_frame=field("string", "TF name for the base link; default: the base_link prim name.", False, default=""),
+        base=field("string", "fixed (arm on a table: static world->base) or mobile (odometry: world->odom->base).", False, default="fixed"),
+        world_frame=field("string", "Root frame for RViz's Fixed Frame, e.g. world or map. Empty: publish no world link (a localization node provides map->odom).", False, default="world"),
+        link_frames=field("string", "isaac: Isaac publishes every link frame. robot_state_publisher: Isaac publishes only /joint_states and the base link; run robot_state_publisher with the URDF. Never both.", False, default="isaac"),
+        extra_frames=field("array", "Up to 16 more prims (cameras, LiDARs) to publish relative to the base link; frame name = prim name.", False, default=[]),
+        namespace=field("string", "ROS node namespace prepended to the topics.", False, default=""),
+        joint_states_topic=field("string", "Joint state topic.", False, default="joint_states"),
+    ),
+)
+add(
     "sim.logs.tail",
     "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs.",
     dict(**TARGET, limit=field("integer", "Maximum lines 1..100.", False, default=50)),
