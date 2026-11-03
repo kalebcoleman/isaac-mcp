@@ -25,7 +25,8 @@ INTERACTIVE = {
 TEXTUAL = {"Label"}
 MAX_TEXT = 500
 MAX_WIDGETS_PER_WINDOW = 6000
-ACTIONS = ("click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "tab", "wait")
+ACTIONS = ("click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "tab", "close",
+           "wait")
 
 # Key names (OpenAI-style, case-insensitive) -> carb.input.KeyboardInput attribute names.
 KEY_NAMES = {
@@ -70,6 +71,25 @@ def parse_keys(keys):
     if len(main) != 1:
         raise UIRefusal("INVALID_VALUE", "keys must contain exactly one non-modifier key.")
     return mods, main[0]
+
+
+def menu_path(path):
+    """Validated menu path: "Layouts" (a top-level menu, opened to show its items) or "Window/Console".
+    Surrounding spaces of each level are dropped; empty levels ("Window//X", "/Edit") are refused."""
+    if not isinstance(path, str) or not 1 <= len(path) <= 200:
+        raise UIRefusal("INVALID_VALUE", "menu: a menu path such as \"Window/Graph Editors/Action Graph\" or a "
+                                         "top-level menu such as \"Layouts\".")
+    parts = [p.strip() for p in path.split("/")]
+    if not all(parts):
+        raise UIRefusal("INVALID_VALUE", f"menu {path!r} has an empty level; separate levels with single '/', "
+                                         "e.g. \"Window/Console\".")
+    return "/".join(parts)
+
+
+def window_title(title, action):
+    if not isinstance(title, str) or not title.strip() or len(title) > 120:
+        raise UIRefusal("INVALID_VALUE", f"window: for action={action}, the title of a Kit window or tab, e.g. 'Console'.")
+    return title
 
 
 def matches(record, query):
@@ -304,13 +324,15 @@ def _candidates(window_filter, include_labels, query):
                 yield title, ref, widget, cheap
 
 
-def menu_children(path):
-    """Items available under the deepest existing level of *path* ("" = the menu bar)."""
+def menu_children(path, inside=False):
+    """Items available under the deepest existing level of *path* ("" = the menu bar); with ``inside``
+    the last level is walked too, so this lists what the menu *path* itself contains."""
     import omni.ui as ui
 
     level = _ui_test().get_menubar().widget
     walked = []
-    for part in [p for p in path.split("/") if p][:-1]:
+    parts = [p for p in path.split("/") if p]
+    for part in parts if inside else parts[:-1]:
         nxt = next((c for c in ui.Inspector.get_children(level) if getattr(c, "text", "") == part), None)
         if nxt is None:
             break
@@ -483,13 +505,12 @@ async def act(a):
         if hit is not None and not hit["enabled"] and action != "move":
             raise UIRefusal("DISABLED", "That widget is disabled (greyed out); it would ignore the input.")
 
+    menu = menu_path(a.get("menu")) if action == "menu" else None
     result = dict(action=action)
-    if action == "tab":
+    if action in ("tab", "close"):
         # Dock tab headers are drawn by the dock, not widgets: bring the window to the front the way a
-        # tab click does (selected in its dock, focused).
-        title = a.get("window")
-        if not isinstance(title, str) or not title:
-            raise UIRefusal("INVALID_VALUE", "window: the title of a Kit window or tab, e.g. 'Console'.")
+        # tab click does (selected in its dock, focused), or hide it the way its tab's close button does.
+        title = window_title(a.get("window"), action)
         import omni.ui as ui
 
         win = ui.Workspace.get_window(title)
@@ -497,6 +518,15 @@ async def act(a):
             names = sorted({w.title for w in ui.Workspace.get_windows() if w.title})
             raise UIRefusal("NO_WINDOW", f"No Kit window titled {title!r}. Known windows: {', '.join(names[:40])}. "
                                          "Closed windows open from the Window menu (action=menu).")
+        if action == "close":
+            was_visible = bool(win.visible)
+            ui.Workspace.show_window(title, False)
+            await tick(max(frames, 2))
+            win = ui.Workspace.get_window(title)
+            hidden = win is None or not bool(win.visible)
+            return dict(result, window=title, hidden=hidden, was_visible=was_visible, frames_waited=max(frames, 2),
+                        note=("reopen it with action=tab, window=" + repr(title) + " (or from the Window menu)")
+                        if hidden else "Kit did not hide it; check with sim__ui__find or a screenshot")
         ui.Workspace.show_window(title, True)
         await tick(1)
         win.focus()
@@ -510,9 +540,7 @@ async def act(a):
         return dict(result, frames_waited=max(frames, 1))
 
     if action == "menu":
-        path = a.get("menu")
-        if not isinstance(path, str) or "/" not in path or len(path) > 200:
-            raise UIRefusal("INVALID_VALUE", "menu: a menu path such as \"Window/Graph Editors/Action Graph\".")
+        path = menu
         ui_test = _ui_test()
         try:
             await ui_test.menu_click(path)
@@ -525,9 +553,31 @@ async def act(a):
             hint = (f" Items {where}: {', '.join(items)}." if items else
                     f" Nothing is listed {where}: its extension may not be loaded yet (for the Action Graph "
                     "editor use sim__graph__show).")
-            raise UIRefusal("MENU_NOT_FOUND", f"Could not open menu {path!r}.{hint} Close any open menu with "
-                                              "keypress [\"escape\"] before retrying.") from exc
+            raise UIRefusal("MENU_NOT_FOUND", f"Could not open menu {path!r}.{hint} If a menu was left open, "
+                                              "action=menu with its top-level name (e.g. 'Window') opens and "
+                                              "closes it.") from exc
         await tick(frames)
+        if "/" not in path:
+            # A top-level menu: clicking it only opens it. Report what it offers, then close it again (Kit
+            # menus ignore an Escape keypress sent this way), so no menu is left covering the viewport.
+            try:
+                _, items = menu_children(path, inside=True)
+            except Exception:  # noqa: BLE001
+                items = []
+            items = [t for t in items if t != "placeholder"]
+            left_open = None
+            try:
+                await ui_test.menu_click(path, show=False)
+                await tick(2)
+                menu_ref = ui_test.get_menubar().find_menu(path)
+                left_open = bool(getattr(getattr(menu_ref, "widget", None), "shown", False))
+            except Exception:  # noqa: BLE001
+                pass
+            return dict(result, menu=path, items=items, closed_again=left_open is False, frames_waited=frames,
+                        note=f"'{path}' is a top-level menu: it was opened to list its items" +
+                             (" and closed again" if left_open is False else
+                              "; it may still be open, check with a screenshot") +
+                             f". Run an item with menu='{path}/<item>'.")
         return dict(result, menu=path, frames_waited=frames,
                     note="menu clicks move Kit's cursor through the menu; verify with a screenshot")
 
