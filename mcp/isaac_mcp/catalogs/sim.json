@@ -2395,9 +2395,14 @@
         },
         "clock": {
           "type": "string",
-          "description": "auto: publish /clock only if no other graph does (two clocks make RViz reset constantly); publish; skip.",
+          "description": "auto: reuse an existing /clock, else publish one shared clock for all robots (two clocks make RViz reset constantly); publish: always keep the tool's clock; skip: never create one.",
           "required": false,
-          "default": "auto"
+          "default": "auto",
+          "enum": [
+            "auto",
+            "publish",
+            "skip"
+          ]
         }
       },
       "fields": [
@@ -2502,12 +2507,16 @@
         },
         {
           "name": "clock",
-          "kind": "string",
-          "enum": null,
+          "kind": "enum",
+          "enum": [
+            "auto",
+            "publish",
+            "skip"
+          ],
           "required": false,
           "default": "auto",
           "has_default": true,
-          "description": "auto: publish /clock only if no other graph does (two clocks make RViz reset constantly); publish; skip."
+          "description": "auto: reuse an existing /clock, else publish one shared clock for all robots (two clocks make RViz reset constantly); publish: always keep the tool's clock; skip: never create one."
         }
       ],
       "namespace": "sim",

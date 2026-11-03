@@ -55,7 +55,7 @@ def odom_frame(namespace=""):
 
 def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", world_frame="world",
                   link_frames="isaac", extra_prims=(), namespace="", joint_states_topic="joint_states",
-                  base_tf_name=None, publish_clock=True):
+                  base_tf_name=None, publish_clock=True, reset_on_stop=True):
     """Return ``(nodes, values, connects, frames)`` for the graph.
 
     ``base_pose`` is ``((x, y, z) metres, (qx, qy, qz, qw))`` of the base link in the world at
@@ -87,7 +87,9 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
         ("PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"),
     ]
     values = [
-        (f"{TIME}.inputs:resetOnStop", True),
+        # Must match the /clock this robot's stamps are read against (see setup()): a clock that keeps
+        # counting across stop/play next to TF that restarts at 0 leaves TF far in the past.
+        (f"{TIME}.inputs:resetOnStop", bool(reset_on_stop)),
         ("PublishJointState.inputs:targetPrim", robot),
         ("PublishJointState.inputs:topicName", joint_states_topic.lstrip("/")),
         ("PublishJointState.inputs:nodeNamespace", namespace),
@@ -235,24 +237,90 @@ ROS2_PUBLISHERS = {
 }
 
 
+CLOCK_GRAPH = GRAPH_PATH + "_clock"  # the tool's single /clock, shared by every robot it sets up
+PUBLISHER_KINDS = {t.rsplit(".", 1)[-1]: kind for t, kind in ROS2_PUBLISHERS.items()}
+
+
+def _graphs(og):
+    """Every graph, including subgraphs, skipping disabled ones."""
+    todo, seen = list(og.get_all_graphs()), set()
+    while todo:
+        graph = todo.pop()
+        path = graph.get_path_to_graph()
+        if path in seen:
+            continue
+        seen.add(path)
+        if getattr(graph, "is_disabled", lambda: False)():
+            continue
+        yield graph
+        todo.extend(getattr(graph, "get_subgraphs", lambda: [])())
+
+
 def other_ros2_publishers(own_graph):
-    """ROS 2 clock/TF/joint-state/odometry publisher nodes in graphs this call does not own.
+    """ROS 2 clock/TF/joint-state/odometry publisher nodes outside *own_graph*.
 
     A second /clock makes time jump back and forth (RViz resets constantly), and a second TF or
-    joint-state publisher for the same robot makes frames jump, so the caller has to know.
+    joint-state publisher for the same robot makes frames jump, so the caller has to know. Node
+    types are matched by their last component, so the older ``omni.isaac.ros2_bridge`` names
+    count too. ``tool`` marks graphs this tool built (other robots, or its shared clock).
     """
     import omni.graph.core as og
 
     found = []
-    for graph in og.get_all_graphs():
+    for graph in _graphs(og):
         path = graph.get_path_to_graph()
         if path == own_graph or path.startswith(own_graph + "/"):
             continue
         for node in graph.get_nodes():
-            kind = ROS2_PUBLISHERS.get(node.get_type_name())
+            kind = PUBLISHER_KINDS.get(node.get_type_name().rsplit(".", 1)[-1])
             if kind:
-                found.append(dict(node=node.get_prim_path(), publishes=kind))
+                found.append(dict(node=node.get_prim_path(), publishes=kind,
+                                  tool=path == GRAPH_PATH or path.startswith(GRAPH_PATH + "_")))
     return found
+
+
+def clock_resets_on_stop(clock_node_path):
+    """resetOnStop of the IsaacReadSimulationTime feeding a /clock publisher, or None if unknown."""
+    import omni.graph.core as og
+
+    try:
+        attr = og.Controller.attribute(clock_node_path + ".inputs:timeStamp")
+        for upstream in attr.get_upstream_connections():
+            node = upstream.get_node()
+            if node.get_type_name().rsplit(".", 1)[-1] == "IsaacReadSimulationTime":
+                return bool(node.get_attribute("inputs:resetOnStop").get())
+    except Exception:
+        return None
+    return None
+
+
+def clock_graph_plan():
+    """Nodes, values and connections of the shared clock graph (NVIDIA's create_ros2_clock_graph)."""
+    nodes = [(TICK, "omni.graph.action.OnPlaybackTick"), (CONTEXT, "isaacsim.ros2.bridge.ROS2Context"),
+             (TIME, "isaacsim.core.nodes.IsaacReadSimulationTime"), (CLOCK, "isaacsim.ros2.bridge.ROS2PublishClock")]
+    values = [(f"{TIME}.inputs:resetOnStop", True), (f"{CLOCK}.inputs:topicName", "clock")]
+    connects = [(f"{TICK}.outputs:tick", f"{CLOCK}.inputs:execIn"),
+                (f"{CONTEXT}.outputs:context", f"{CLOCK}.inputs:context"),
+                (f"{TIME}.outputs:simulationTime", f"{CLOCK}.inputs:timeStamp")]
+    return nodes, values, connects
+
+
+def plan_clock(mode, publishers):
+    """Decide the /clock for this call. Returns dict(publish, remove_tool_clock, reset_on_stop, source).
+
+    ``publishers`` is other_ros2_publishers() output. The tool keeps its clock in one shared graph
+    (CLOCK_GRAPH), never in a robot's graph, so deleting one robot never removes the clock.
+    """
+    if mode not in ("auto", "publish", "skip"):
+        raise ValueError("clock must be auto, publish or skip")
+    foreign = [o for o in publishers if o["publishes"] == "/clock" and not o["tool"]]
+    tool_clock = [o for o in publishers if o["publishes"] == "/clock" and o["tool"]]
+    if mode == "publish" or (mode == "auto" and not foreign):
+        return dict(publish=True, remove_tool_clock=False, reset_on_stop=True, source=CLOCK_GRAPH + "/" + CLOCK,
+                    foreign=[o["node"] for o in foreign])
+    source = foreign[0]["node"] if foreign else (tool_clock[0]["node"] if tool_clock else None)
+    return dict(publish=False, remove_tool_clock=bool(mode == "auto" and foreign and tool_clock), reset_on_stop=None,
+                source=source, foreign=[o["node"] for o in foreign])
 
 NAME_OVERRIDE = "isaac:nameOverride"
 
@@ -345,18 +413,26 @@ def setup(scene, stage, a):
     except ValueError as exc:
         refuse("INVALID_VALUE", str(exc))
     others = other_ros2_publishers(own)
-    clock_mode = a.get("clock", "auto")
-    if clock_mode not in ("auto", "publish", "skip"):
-        refuse("INVALID_VALUE", "clock must be auto, publish or skip")
-    other_clocks = [o["node"] for o in others if o["publishes"] == "/clock"]
-    publish_clock = clock_mode == "publish" or (clock_mode == "auto" and not other_clocks)
+    try:
+        clock = plan_clock(a.get("clock", "auto"), others)
+    except ValueError as exc:
+        refuse("INVALID_VALUE", str(exc))
+    clock_warnings = []
+    reset_on_stop = clock["reset_on_stop"]
+    if reset_on_stop is None:
+        reset_on_stop = clock_resets_on_stop(clock["source"]) if clock["source"] else None
+        if reset_on_stop is None:
+            reset_on_stop = True
+            if clock["source"]:
+                clock_warnings.append(f"Could not read how {clock['source']} counts time across stop/play; TF "
+                                      "assumes it restarts at 0. Run the doctor after a stop/play.")
     try:
         nodes, values, connects, frames = planned_graph(
             robot=articulation, base_prim=base_path, base_frame=base_frame, base_pose=pose,
             mode=a.get("base", "fixed"), world_frame=a.get("world_frame", "world"),
             link_frames=a.get("link_frames", "isaac"), extra_prims=extra,
             namespace=a.get("namespace", ""), joint_states_topic=a.get("joint_states_topic", "joint_states"),
-            base_tf_name=base_tf_name, publish_clock=publish_clock,
+            base_tf_name=base_tf_name, publish_clock=False, reset_on_stop=reset_on_stop,
         )
     except ValueError as exc:
         refuse("INVALID_VALUE", str(exc))
@@ -401,8 +477,32 @@ def setup(scene, stage, a):
                   if existing else "Nothing was left behind."))
     scene.owned.add(graph)
 
+    # The shared clock graph: created once, removed when another (non-tool) clock takes over.
+    clock_existing = bool(stage.GetPrimAtPath(CLOCK_GRAPH))
+    if clock["remove_tool_clock"] and clock_existing and CLOCK_GRAPH in scene.owned:
+        with Usd.EditContext(stage, stage.GetSessionLayer()):
+            stage.RemovePrim(CLOCK_GRAPH)
+        scene.owned.discard(CLOCK_GRAPH)
+    elif clock["publish"] and not clock_existing:
+        c_nodes, c_values, c_connects = clock_graph_plan()
+        try:
+            with Usd.EditContext(stage, stage.GetSessionLayer()):
+                og.Controller.edit({"graph_path": CLOCK_GRAPH, "evaluator_name": "execution"},
+                                   {keys.CREATE_NODES: c_nodes, keys.CONNECT: c_connects, keys.SET_VALUES: c_values})
+            scene.owned.add(CLOCK_GRAPH)
+        except Exception as exc:
+            with Usd.EditContext(stage, stage.GetSessionLayer()):
+                if stage.GetPrimAtPath(CLOCK_GRAPH):
+                    stage.RemovePrim(CLOCK_GRAPH)
+            clock_warnings.append(f"Could not build {CLOCK_GRAPH} ({type(exc).__name__}); nothing publishes /clock.")
+    elif clock["publish"] and clock_existing and CLOCK_GRAPH not in scene.owned:
+        clock_warnings.append(f"{CLOCK_GRAPH} exists but was not created in this session; it was left as is.")
+    if clock["publish"] and clock["foreign"]:
+        clock_warnings.append(f"{len(clock['foreign']) + 1} /clock publishers ({', '.join(clock['foreign'])} and "
+                              f"{CLOCK_GRAPH}): time jumps back and RViz keeps resetting. Use clock=auto.")
+
     ns = ("/" + a.get("namespace").strip("/")) if (a.get("namespace") or "").strip("/") else ""
-    topics = (["/clock"] if publish_clock else []) + ["/tf", "/tf_static", ns + "/" + a.get("joint_states_topic", "joint_states").lstrip("/")]
+    topics = ["/clock", "/tf", "/tf_static", ns + "/" + a.get("joint_states_topic", "joint_states").lstrip("/")]
     if a.get("base", "fixed") == "mobile":
         topics.append(f"{ns}/odom")
     fixed = frames["root"]
@@ -442,12 +542,16 @@ def setup(scene, stage, a):
             f"and set that node's odom_frame_id to {frames['odom']}.",
         ] if a.get("base", "fixed") == "mobile" else []),
         rebuilt=existing,
-        clock=("published by this graph" if publish_clock else
-               f"not published here: already published by {', '.join(other_clocks) or 'another node'}"),
+        clock=dict(source=clock["source"] or "none", shared_tool_clock=clock["publish"],
+                   stamps_reset_on_stop=reset_on_stop,
+                   note=("Every robot set up by this tool shares this clock. Running the twin's own setup "
+                         "(quick_start) afterwards adds a second /clock: call this tool again (clock=auto) "
+                         "to drop the tool's clock.")),
         other_ros2_publishers=others,
-        warnings=([f"{len(other_clocks) + 1} /clock publishers: time jumps back and RViz keeps resetting. "
-                   "Use clock=auto, or delete the other clock node."] if publish_clock and other_clocks else [])
-        + ([f"Other graphs also publish TF or joint states ({', '.join(o['node'] for o in others if o['publishes'] != '/clock')}). "
-            "If they cover this robot, its frames are published twice and RViz jumps: delete those nodes or "
-            "do not use this tool for that robot."] if any(o["publishes"] != "/clock" for o in others) else []),
+        warnings=clock_warnings + ([
+            "Other graphs also publish TF or joint states ("
+            + ", ".join(o["node"] for o in others if o["publishes"] != "/clock" and not o["tool"])
+            + "). If they cover this robot, its frames are published twice and RViz jumps: delete those "
+            "nodes or do not use this tool for that robot."
+        ] if any(o["publishes"] != "/clock" and not o["tool"] for o in others) else []),
     )

@@ -421,7 +421,8 @@ def test_doctor_flags_two_clock_publishers_and_backward_time():
                                      clock_publishers=["/a/clock_pub", "/b/clock_pub"])
     assert any("2 nodes publish /clock" in x and "resetting" in x for x in errors)
     assert info["clock_publishers"] == ["/a/clock_pub", "/b/clock_pub"]
-    errors, *_ = doctor.analyze(GOOD, "world", clock_seen=True, clock_publishers=["/a"], clock_jumps_back=3)
+    errors, *_ = doctor.analyze(GOOD, "world", clock_seen=True, clock_publishers=["/a"],
+                                clock_times=[5.0, 4.9, 5.0, 4.95, 5.1, 5.05])
     assert any("went backwards 3" in x for x in errors)
     assert doctor.analyze(GOOD, "world", clock_seen=True, clock_publishers=["/a"])[0] == []
 
@@ -466,3 +467,107 @@ def test_doctor_counts_backward_clock_jumps(monkeypatch, capsys):
     monkeypatch.setattr(doctor, "capture", lambda seconds: (edges, [5.0, 4.0, 5.2], set(), {"/one"}))
     assert doctor.main(["--fixed-frame", "world"]) == 1
     assert "went backwards 1 time" in capsys.readouterr().out
+
+
+def test_a_timeline_restart_is_a_warning_not_an_error(monkeypatch, capsys):
+    edges = [dict(parent="world", child="base_link", static=True, stamp=0.0),
+             dict(parent="base_link", child="tool0", static=False, stamp=0.1)]
+    monkeypatch.setattr(doctor, "capture", lambda seconds: (edges, [5.0, 5.1, 0.0, 0.1], set(), {"/one"}))
+    assert doctor.main(["--fixed-frame", "world"]) == 0
+    out = capsys.readouterr().out
+    assert "restarted from 0 1 time" in out and "ERROR" not in out
+
+
+def test_tf_far_from_the_clock_is_an_error():
+    # The twin's clock keeps counting across stop/play while TF restarted at 0 (round-1 finding).
+    edges = GOOD[:1] + [e("base_link", "tool0", stamp=2.0)]
+    errors, *_ = doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/twin"], clock_times=[121.9, 122.0])
+    assert any("differ by -120.0 s" in x for x in errors)
+    assert doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/a"], clock_times=[1.9, 2.0])[0] == []
+
+
+def test_robot_graphs_never_publish_the_clock_and_match_its_reset_behaviour():
+    _, values, _, _ = plan(publish_clock=False, reset_on_stop=False)
+    assert dict(values)["ReadSimTime.inputs:resetOnStop"] is False
+    nodes, values, connects = ros2.clock_graph_plan()
+    assert dict(nodes)["PublishClock"] == "isaacsim.ros2.bridge.ROS2PublishClock"
+    assert ("ReadSimTime.outputs:simulationTime", "PublishClock.inputs:timeStamp") in connects
+    assert ("OnPlaybackTick.outputs:tick", "PublishClock.inputs:execIn") in connects
+
+
+def pub(node, kind="/clock", tool=False):
+    return dict(node=node, publishes=kind, tool=tool)
+
+
+def test_clock_plan_reuses_a_foreign_clock_and_keeps_one_shared_tool_clock():
+    twin = pub("/Graph/ActionGraph_UR5e/ros2_publish_clock")
+    mine = pub(ros2.CLOCK_GRAPH + "/PublishClock", tool=True)
+    p = ros2.plan_clock("auto", [twin])
+    assert not p["publish"] and p["source"] == twin["node"] and p["reset_on_stop"] is None
+    p = ros2.plan_clock("auto", [])
+    assert p["publish"] and p["reset_on_stop"] is True and p["source"].startswith(ros2.CLOCK_GRAPH)
+    p = ros2.plan_clock("auto", [mine])  # second robot: keep using the shared tool clock
+    assert p["publish"] and not p["remove_tool_clock"]
+    p = ros2.plan_clock("auto", [twin, mine])  # twin set up afterwards: drop the tool's clock
+    assert not p["publish"] and p["remove_tool_clock"] and p["source"] == twin["node"]
+    p = ros2.plan_clock("publish", [twin])
+    assert p["publish"] and p["foreign"] == [twin["node"]]
+    p = ros2.plan_clock("skip", [])
+    assert not p["publish"] and p["source"] is None
+    with pytest.raises(ValueError):
+        ros2.plan_clock("always", [])
+
+
+def test_publisher_scan_walks_subgraphs_skips_own_and_disabled_and_marks_tool_graphs(monkeypatch):
+    import types
+
+    class Node:
+        def __init__(self, path, kind):
+            self.path, self.kind = path, kind
+
+        def get_prim_path(self):
+            return self.path
+
+        def get_type_name(self):
+            return self.kind
+
+    class Graph:
+        def __init__(self, path, nodes=(), subs=(), disabled=False):
+            self.path, self.nodes, self.subs, self.disabled = path, list(nodes), list(subs), disabled
+
+        def get_path_to_graph(self):
+            return self.path
+
+        def get_nodes(self):
+            return self.nodes
+
+        def get_subgraphs(self):
+            return self.subs
+
+        def is_disabled(self):
+            return self.disabled
+
+    own = ros2.graph_path("r2")
+    sub = Graph("/Graph/Outer/Inner", [Node("/Graph/Outer/Inner/c", "omni.isaac.ros2_bridge.ROS2PublishClock")])
+    graphs = [
+        Graph("/Graph/Outer", [Node("/Graph/Outer/x", "omni.graph.action.OnPlaybackTick")], [sub]),
+        Graph(own, [Node(own + "/TFRobotLinks", "isaacsim.ros2.bridge.ROS2PublishTransformTree")]),
+        Graph(ros2.graph_path("r1"), [Node("/r1/tf", "isaacsim.ros2.bridge.ROS2PublishTransformTree")]),
+        Graph("/Graph/Off", [Node("/Graph/Off/c", "isaacsim.ros2.bridge.ROS2PublishClock")], disabled=True),
+    ]
+    og = types.SimpleNamespace(get_all_graphs=lambda: graphs)
+    monkeypatch.setitem(sys.modules, "omni", types.SimpleNamespace(graph=types.SimpleNamespace(core=og)))
+    monkeypatch.setitem(sys.modules, "omni.graph", types.SimpleNamespace(core=og))
+    monkeypatch.setitem(sys.modules, "omni.graph.core", og)
+    found = ros2.other_ros2_publishers(own)
+    assert dict(node="/Graph/Outer/Inner/c", publishes="/clock", tool=False) in found  # subgraph, old type name
+    assert dict(node="/r1/tf", publishes="TF", tool=True) in found  # another robot from this tool
+    assert not any(f["node"].startswith(own) for f in found)  # own graph excluded
+    assert not any(f["node"] == "/Graph/Off/c" for f in found)  # disabled graph skipped
+
+
+def test_the_clock_option_is_an_enum_in_the_contract():
+    sys.path.insert(0, str(REPO / "mcp"))
+    from isaac_mcp.scene_contracts import REGISTRY
+
+    assert REGISTRY["sim.ros2.tf_setup"]["parameters"]["clock"]["enum"] == ["auto", "publish", "skip"]

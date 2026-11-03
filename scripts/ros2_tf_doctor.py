@@ -16,7 +16,8 @@ playing) and reports the problems that make RViz show a wrong or flickering tree
 - simulation-time and wall-clock stamps mixed in one tree, or sim-time stamps with no
   /clock (some node is missing use_sim_time:=true);
 - several /tf publishers, listed by node, when frames look duplicated;
-- more than one /clock publisher, or /clock going backwards (RViz then keeps resetting).
+- more than one /clock publisher, or /clock going backwards (RViz then keeps resetting);
+- TF stamps far from /clock (two time sources, e.g. after a stop/play).
 
 Exit status: 0 no errors, 1 errors found, 2 could not run (ROS 2 not sourced, no data).
 ``analyze`` is pure and unit-tested without ROS.
@@ -37,7 +38,23 @@ ROOT = Path(__file__).resolve().parent.parent
 WALL_EPOCH = 1e9  # stamps above this are wall-clock time (2001+); simulation time starts at 0
 
 
-def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publishers=(), clock_jumps_back=0):
+RESET_TO = 0.5  # a /clock jump to below this many seconds is a timeline stop/play, not a second clock
+CLOCK_SKEW = 1.0  # TF this far from /clock (sim seconds) cannot be looked up by use_sim_time nodes
+
+
+def clock_jumps(times):
+    """Return (resets, backward_steps) in a /clock sample sequence."""
+    resets = back = 0
+    for a, b in zip(times, times[1:]):
+        if b < a:
+            if b < RESET_TO and a - b > 1.0:
+                resets += 1
+            else:
+                back += 1
+    return resets, back
+
+
+def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publishers=(), clock_times=()):
     """Return ``(errors, warnings, info)`` for observed TF edges.
 
     ``edges``: iterable of dicts ``{"parent", "child", "static", "stamp"}`` (stamp in seconds).
@@ -124,9 +141,21 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publisher
         errors.append(f"{len(clock_pubs)} nodes publish /clock ({', '.join(clock_pubs)}): time jumps back and forth, "
                       "so RViz keeps resetting ('Detected jump back in time') and TF is cleared. Keep one; "
                       "sim__ros2__tf_setup reuses an existing clock.")
-    elif clock_jumps_back:
-        errors.append(f"/clock went backwards {clock_jumps_back} time(s) while listening: two clock sources, or the "
-                      "timeline was reset; RViz clears TF on every jump.")
+    else:
+        resets, back = clock_jumps(list(clock_times))
+        if back:
+            errors.append(f"/clock went backwards {back} time(s) while listening (not a reset to 0): two clock "
+                          "sources; RViz clears TF on every jump.")
+        if resets:
+            warnings.append(f"/clock restarted from 0 {resets} time(s): the timeline was stopped and played. "
+                            "RViz resets once per restart; that is expected.")
+    sim_tf = [x for v in stamps.values() for x in v if x <= WALL_EPOCH]
+    if sim_tf and clock_times:
+        skew = max(sim_tf) - clock_times[-1]
+        if abs(skew) > CLOCK_SKEW:
+            errors.append(f"TF stamps and /clock differ by {skew:+.1f} s of sim time: they come from different "
+                          "time sources (one restarts at 0 on stop/play, the other keeps counting), so "
+                          "use_sim_time nodes cannot look TF up. Re-run sim__ros2__tf_setup (clock=auto).")
     if "wall" in domains and "sim" not in domains and clock_seen:
         warnings.append("/clock is published but TF uses wall-clock time; the TF publishers are not using "
                         "simulation time.")
@@ -261,9 +290,8 @@ def main(argv=None) -> int:
               "(source /opt/ros/<distro>/setup.bash), or pass --isaac-ros to use Isaac Sim's bundled ROS 2.",
               file=sys.stderr)
         return 2
-    jumps = sum(1 for a, b in zip(clock_times, clock_times[1:]) if b < a)
     errors, warnings, info = analyze(edges, args.fixed_frame, clock_seen=bool(clock_times), tf_publishers=publishers,
-                                     clock_publishers=clock_publishers, clock_jumps_back=jumps)
+                                     clock_publishers=clock_publishers, clock_times=clock_times)
     if args.json:
         print(json.dumps(dict(errors=errors, warnings=warnings, **info), indent=2))
     else:

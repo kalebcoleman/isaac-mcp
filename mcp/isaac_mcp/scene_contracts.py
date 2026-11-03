@@ -381,7 +381,7 @@ add(
         extra_frames=field("array", "Up to 16 more prims (cameras, LiDARs) to publish relative to the base link; frame name = prim name.", False, default=[]),
         namespace=field("string", "ROS node namespace prepended to the topics.", False, default=""),
         joint_states_topic=field("string", "Joint state topic.", False, default="joint_states"),
-        clock=field("string", "auto: publish /clock only if no other graph does (two clocks make RViz reset constantly); publish; skip.", False, default="auto"),
+        clock=field("string", "auto: reuse an existing /clock, else publish one shared clock for all robots (two clocks make RViz reset constantly); publish: always keep the tool's clock; skip: never create one.", False, default="auto", enum=["auto", "publish", "skip"]),
     ),
 )
 add(
