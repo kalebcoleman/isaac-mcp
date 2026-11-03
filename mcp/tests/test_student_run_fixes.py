@@ -317,6 +317,7 @@ def test_monitor_captures_warn_when_locked_and_window_captures_do_not(monkeypatc
             return FakeShot()
 
     monkeypatch.setattr(screen, "_screen_locked", lambda: True)
+    monkeypatch.setattr(screen, "_composite", lambda bbox: (screen.PILImage.new("RGB", (4, 2)), 1))
     monkeypatch.setattr(screen, "SHOT_DIR", tmp_path)
     monkeypatch.setattr(screen.mss, "MSS", FakeMSS)
     monkeypatch.setattr(screen, "_bbox", lambda m=0: {"left": 0, "top": 0, "width": 4, "height": 2})
@@ -328,3 +329,46 @@ def test_monitor_captures_warn_when_locked_and_window_captures_do_not(monkeypatc
     shot = server._tool_manager._tools["screenshot"].fn
     assert "screen is locked" in shot(monitor=1)[1]
     assert "screen is locked" not in shot(window_id=7)[1]
+
+
+def _ui_module():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/ui.py"
+    spec = importlib.util.spec_from_file_location("sim_tools_ui_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_ui_keys_follow_openai_style_names():
+    ui = _ui_module()
+    assert ui.parse_keys(["ctrl", "s"]) == (["CONTROL"], "S")
+    assert ui.parse_keys(["Enter"]) == ([], "ENTER")
+    assert ui.parse_keys(["shift", "alt", "tab"]) == (["SHIFT", "ALT"], "TAB")
+    assert ui.parse_keys(["7"]) == ([], "KEY_7")
+    assert ui.parse_keys(["f5"]) == ([], "F5")
+    for bad in ([], ["ctrl"], ["a", "b"], ["ctrl", "ctrl", "a"], ["hyper", "a"], "ctrl+s", [""] ):
+        with pytest.raises(ui.UIRefusal):
+            ui.parse_keys(bad)
+
+
+def test_ui_widget_records_are_in_window_pixels_and_match_by_text():
+    ui = _ui_module()
+    rec = ui.widget_record("ToolButton", "Main ToolBar//Frame/VStack[0]/ToolButton[5]", "Main ToolBar", "play", "",
+                           "Play ('Space')", None, (20, 302), (34, 34), 1.5, identifier="play")
+    assert (rec["x"], rec["y"], rec["width"]) == (30, 453, 51)
+    assert ui.matches(rec, "PLAY") and ui.matches(rec, "space") and not ui.matches(rec, "stop")
+    assert ui.matches(rec, "") and "value" not in rec and "enabled" not in rec
+    field = ui.widget_record("StringField", "r", "Stage", "", "", "", "Cube", (1, 1), (2, 2), 1.0, enabled=False)
+    assert field["value"] == "Cube" and field["enabled"] is False and ui.matches(field, "cube")
+
+
+def test_locked_screenshot_is_composed_bottom_to_top_without_wm_frames():
+    from isaac_mcp import screen
+
+    wins = [{"id": 1, "class": "Isaac"}, {"id": 2, "class": "mutter-x11-frames"}, {"id": 3, "class": "rviz2"},
+            {"id": 4, "class": "unmanaged"}]
+    order = [w["id"] for w in screen.composite_order(wins, stacking=[3, 1])]
+    assert order == [4, 3, 1]

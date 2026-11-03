@@ -38,7 +38,10 @@ _KEYS = {
     "space": "space",
     **{f"f{i}": f"F{i}" for i in range(1, 13)},
 }
-_MODIFIERS = {"ctrl": "Control_L", "shift": "Shift_L"}
+_MODIFIERS = {"ctrl": "Control_L", "shift": "Shift_L", "alt": "Alt_L", "super": "Super_L"}
+_LOCKED = ("the desktop is locked or its screen saver is active (the PC is probably used remotely): X input "
+           "would go to the lock screen, typed text into its password box, not to the window. For Isaac Sim "
+           "use sim__ui__find and sim__ui__act, which drive Kit's own input; window screenshots still work.")
 _BUSY_MASK = (X.ShiftMask | X.ControlMask | X.Mod1Mask | X.Mod3Mask | X.Mod4Mask | X.Mod5Mask
               | X.Button1Mask | X.Button2Mask | X.Button3Mask | X.Button4Mask | X.Button5Mask)
 
@@ -109,10 +112,25 @@ def _check_idle(disp) -> None:
         raise ValueError("keyboard or mouse buttons are in use; release them and retry")
 
 
+def _keyboard_grabbed(disp) -> bool:
+    """True when another client holds the keyboard grab (a lock screen; also an open popup menu).
+
+    Probed by grabbing and releasing at once; nothing is typed."""
+    root = disp.screen().root
+    status = root.grab_keyboard(False, X.GrabModeAsync, X.GrabModeAsync, X.CurrentTime)
+    if status == X.GrabSuccess:
+        disp.ungrab_keyboard(X.CurrentTime)
+        disp.sync()
+        return False
+    return status == X.AlreadyGrabbed
+
+
 @contextmanager
 def _target(window_id: int, expected_pid: int):
     if window_id <= 0 or expected_pid <= 0:
         raise ValueError("window_id and expected_pid must be positive")
+    if screen._probe_locked():  # fresh, not cached: this guards where keystrokes go
+        raise RuntimeError(_LOCKED)
     # Require a fresh, titled top-level window, not an arbitrary X resource ID.
     visible = screen._match_window(None, window_id)
     if visible.get("pid") != expected_pid:
@@ -275,18 +293,19 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
     def window_scroll(window_id: int, expected_pid: int, x: int, y: int,
                       expected_width: int, expected_height: int,
                       direction: str, steps: int = 1) -> str:
-        """Scroll up or down at a visible window point, at most ten steps per call.
+        """Scroll up, down, left or right at a visible window point, at most ten steps per call.
 
         Coordinates are original window pixels; inspect a fresh screenshot and size first.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        if direction not in ("up", "down") or not 1 <= steps <= _MAX_SCROLL:
-            raise ValueError("direction must be up or down and steps must be 1–10")
+        buttons = {"up": 4, "down": 5, "left": 6, "right": 7}
+        if direction not in buttons or not 1 <= steps <= _MAX_SCROLL:
+            raise ValueError("direction must be up, down, left or right and steps must be 1–10")
         with _action_lock():
             for _ in range(steps):
                 with _target(window_id, expected_pid) as (disp, window, geom):
                     _point(disp, window, geom, x, y, expected_width, expected_height)
-                    _click(disp, 4 if direction == "up" else 5)
+                    _click(disp, buttons[direction])
         return f"sent {steps} scroll step(s) {direction} to window {window_id}; verify the resulting UI"
 
     @mcp.tool(annotations=DESKTOP_INPUT)
@@ -299,6 +318,10 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         if not text or len(text) > _MAX_TEXT or any(not 32 <= ord(c) <= 126 for c in text):
             raise ValueError("text must contain 1–200 printable ASCII characters")
         with _action_lock(), _target(window_id, expected_pid) as (disp, window, _):
+            if _keyboard_grabbed(disp):  # a menu, or a lock screen the lock probe did not detect
+                raise RuntimeError("another client holds the keyboard grab (an open menu or a lock screen), so "
+                                   "typed text would go there, not to the window. Close the menu "
+                                   "(window_key escape) or unlock the desktop, then capture again.")
             _focus(disp, window)
             if disp.screen().root.query_pointer().mask & X.LockMask:
                 raise ValueError("turn off Caps Lock before typing")
@@ -324,12 +347,12 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
                    modifiers: list[str] | None = None) -> str:
         """Send one navigation/editing key or ASCII letter/digit to the focused X11 window.
 
-        Modifiers may contain ctrl and/or shift. Input can trigger destructive or external actions.
+        Modifiers may contain ctrl, shift, alt and super. Input can trigger destructive or external actions.
         """
         name = key.lower()
         modifiers = modifiers or []
         if len(set(modifiers)) != len(modifiers) or any(m not in _MODIFIERS for m in modifiers):
-            raise ValueError("modifiers may contain ctrl and shift, at most once each")
+            raise ValueError("modifiers may contain ctrl, shift, alt and super, at most once each")
         if name in _KEYS:
             symbol = XK.string_to_keysym(_KEYS[name])
         elif len(key) == 1 and key.isascii() and key.isalnum():

@@ -41,6 +41,14 @@ class Display:
         self.grabbed = False
         self.closed = False
         self.events = []
+        self.keyboard_owner = None  # another client's keyboard grab (lock screen, open menu)
+        self.root.grab_keyboard = self.grab_keyboard
+
+    def grab_keyboard(self, *args):
+        return X.AlreadyGrabbed if self.keyboard_owner else X.GrabSuccess
+
+    def ungrab_keyboard(self, *args):
+        pass
 
     def screen(self):
         return SimpleNamespace(root=self.root, width_in_pixels=1000, height_in_pixels=800)
@@ -97,6 +105,7 @@ def desktop_setup(monkeypatch):
     monkeypatch.setattr(desktop.screen, "_xdisplay", lambda: disp)
     monkeypatch.setattr(desktop, "_desktop_lock", nullcontext)
     monkeypatch.setattr(desktop.time, "sleep", lambda _: None)
+    monkeypatch.setattr(desktop.screen, "_probe_locked", lambda: False)
 
     def fake_input(d, event, detail=0, **kwargs):
         d.events.append((event, detail, kwargs))
@@ -173,7 +182,7 @@ def test_validation_rejects_unsupported_input_before_typing(desktop_setup):
             tools["window_type"](101, 22, value)
     assert not events(disp, X.KeyPress)
     with pytest.raises(ValueError, match="modifiers"):
-        tools["window_key"](101, 22, "a", ["alt"])
+        tools["window_key"](101, 22, "a", ["hyper"])
     with pytest.raises(ValueError, match="steps"):
         tools["window_scroll"](101, 22, 0, 0, 300, 200, "down", 11)
 
@@ -262,3 +271,33 @@ def test_releases_pressed_keys_after_injection_error(desktop_setup, monkeypatch)
         tools["window_key"](101, 22, "a", ["ctrl"])
     assert events(disp, X.KeyRelease) == [38, 37]
     assert disp.closed and not disp.grabbed
+
+
+def test_a_locked_desktop_refuses_all_input(desktop_setup, monkeypatch):
+    # Remote lab PC: the lock screen holds the grabs, so XTEST input (and typed text) would reach it.
+    disp, tools = desktop_setup
+    monkeypatch.setattr(desktop.screen, "_probe_locked", lambda: True)
+    for call in (lambda: tools["window_click"](101, 22, 10, 10, 300, 200),
+                 lambda: tools["window_type"](101, 22, "secret"),
+                 lambda: tools["window_key"](101, 22, "enter"),
+                 lambda: tools["window_scroll"](101, 22, 10, 10, 300, 200, "down")):
+        with pytest.raises(RuntimeError, match="sim__ui__act"):
+            call()
+    assert disp.events == []
+
+
+def test_typing_is_refused_while_another_client_holds_the_keyboard(desktop_setup):
+    disp, tools = desktop_setup
+    disp.keyboard_owner = "menu"
+    with pytest.raises(RuntimeError, match="keyboard grab"):
+        tools["window_type"](101, 22, "ab")
+    assert events(disp, X.KeyPress) == []
+
+
+def test_horizontal_scroll_and_alt_super_modifiers(desktop_setup):
+    disp, tools = desktop_setup
+    tools["window_scroll"](101, 22, 10, 10, 300, 200, "left")
+    tools["window_scroll"](101, 22, 10, 10, 300, 200, "right")
+    assert events(disp, X.ButtonPress) == [6, 7]
+    with pytest.raises(ValueError, match="alt and super"):
+        tools["window_key"](101, 22, "a", ["hyper"])

@@ -128,7 +128,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
     hidden = gw.build_server({"ISAAC_MCP_SCENE_TOOLS": "0"})
     visible = gw.build_server({})
     assert len(hidden._tool_manager._tools) == 45
-    assert len(visible._tool_manager._tools) == 89
+    assert len(visible._tool_manager._tools) == 91
     assert "sim__stage__info" in visible._tool_manager._tools
     assert "sim__stage__info" not in hidden._tool_manager._tools
     assert sum(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools) == 23

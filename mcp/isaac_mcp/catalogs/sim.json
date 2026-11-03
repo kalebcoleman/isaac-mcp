@@ -2764,6 +2764,263 @@
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
+    "sim.ui.find": {
+      "description": "List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views, and labels when a query is given) with their text, tooltip, current value, a ref, and their centre in pixels of the Isaac Sim window (the same pixels as screenshot(window_id=<Isaac Sim window>)), plus the visible Kit windows. Works while the desktop is locked or used remotely. Use the ref with sim__ui__act instead of guessing coordinates.",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only.",
+          "required": false,
+          "default": ""
+        },
+        "window": {
+          "type": "string",
+          "description": "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.",
+          "required": false,
+          "default": ""
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum widgets returned, 1..200.",
+          "required": false,
+          "default": 40
+        }
+      },
+      "fields": [
+        {
+          "name": "query",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only."
+        },
+        {
+          "name": "window",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'."
+        },
+        {
+          "name": "limit",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 40,
+          "has_default": true,
+          "description": "Maximum widgets returned, 1..200."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.ui.act": {
+      "description": "Drive Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
+      "parameters": {
+        "action": {
+          "type": "string",
+          "description": "What to do.",
+          "required": true,
+          "enum": [
+            "click",
+            "double_click",
+            "right_click",
+            "move",
+            "drag",
+            "scroll",
+            "type",
+            "keypress",
+            "menu",
+            "wait"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "description": "Widget ref from sim__ui__find (its centre is used). For type/keypress it is clicked first to focus it.",
+          "required": false
+        },
+        "x": {
+          "type": "integer",
+          "description": "X in Isaac Sim window pixels (when no ref).",
+          "required": false
+        },
+        "y": {
+          "type": "integer",
+          "description": "Y in Isaac Sim window pixels (when no ref).",
+          "required": false
+        },
+        "end_x": {
+          "type": "integer",
+          "description": "Drag end X in window pixels.",
+          "required": false
+        },
+        "end_y": {
+          "type": "integer",
+          "description": "Drag end Y in window pixels.",
+          "required": false
+        },
+        "text": {
+          "type": "string",
+          "description": "Text for action=type (1..500 characters, no newlines; send enter with keypress).",
+          "required": false
+        },
+        "keys": {
+          "type": "array",
+          "description": "For action=keypress: one key plus optional modifiers, e.g. [\"ctrl\", \"s\"], [\"enter\"], [\"shift\", \"tab\"].",
+          "required": false
+        },
+        "menu": {
+          "type": "string",
+          "description": "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube'.",
+          "required": false
+        },
+        "scroll_x": {
+          "type": "integer",
+          "description": "Horizontal wheel steps for action=scroll (-20..20).",
+          "required": false,
+          "default": 0
+        },
+        "scroll_y": {
+          "type": "integer",
+          "description": "Vertical wheel steps for action=scroll (-20..20; negative scrolls down).",
+          "required": false,
+          "default": 0
+        },
+        "frames": {
+          "type": "integer",
+          "description": "Frames to wait after the action so the UI updates (0..600).",
+          "required": false,
+          "default": 3
+        }
+      },
+      "fields": [
+        {
+          "name": "action",
+          "kind": "enum",
+          "enum": [
+            "click",
+            "double_click",
+            "right_click",
+            "move",
+            "drag",
+            "scroll",
+            "type",
+            "keypress",
+            "menu",
+            "wait"
+          ],
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "What to do."
+        },
+        {
+          "name": "ref",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Widget ref from sim__ui__find (its centre is used). For type/keypress it is clicked first to focus it."
+        },
+        {
+          "name": "x",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "X in Isaac Sim window pixels (when no ref)."
+        },
+        {
+          "name": "y",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Y in Isaac Sim window pixels (when no ref)."
+        },
+        {
+          "name": "end_x",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Drag end X in window pixels."
+        },
+        {
+          "name": "end_y",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Drag end Y in window pixels."
+        },
+        {
+          "name": "text",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Text for action=type (1..500 characters, no newlines; send enter with keypress)."
+        },
+        {
+          "name": "keys",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "For action=keypress: one key plus optional modifiers, e.g. [\"ctrl\", \"s\"], [\"enter\"], [\"shift\", \"tab\"]."
+        },
+        {
+          "name": "menu",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube'."
+        },
+        {
+          "name": "scroll_x",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 0,
+          "has_default": true,
+          "description": "Horizontal wheel steps for action=scroll (-20..20)."
+        },
+        {
+          "name": "scroll_y",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 0,
+          "has_default": true,
+          "description": "Vertical wheel steps for action=scroll (-20..20; negative scrolls down)."
+        },
+        {
+          "name": "frames",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 3,
+          "has_default": true,
+          "description": "Frames to wait after the action so the UI updates (0..600)."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
     "sim.map.occupancy": {
       "description": "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as /clock run meanwhile), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.",
       "parameters": {

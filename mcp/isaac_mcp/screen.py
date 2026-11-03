@@ -525,6 +525,48 @@ def _primary_monitor_size() -> tuple[int, int]:
 
 LOCKED_NOTE = ("\nwarning: the screen is locked or blanked, so monitor captures are black. Capture a "
                "window instead (window=... or window_id=...): window captures read the window's own pixels.")
+COMPOSITE_NOTE = ("\nnote: the screen is locked or blanked (the PC is probably used remotely), so this image "
+                  "was composed from the visible windows' own pixels in stacking order; window decorations, "
+                  "panels and the wallpaper are not shown. Desktop input (window_*) is refused while locked; "
+                  "for Isaac Sim's UI use sim__ui__find and sim__ui__act.")
+
+
+def _stacking() -> list[int]:
+    """Client window ids bottom to top (_NET_CLIENT_LIST_STACKING); empty when the WM does not say."""
+    disp = _xdisplay()
+    try:
+        prop = disp.screen().root.get_full_property(disp.intern_atom("_NET_CLIENT_LIST_STACKING"),
+                                                    X.AnyPropertyType)
+        return [int(v) for v in (prop.value if prop is not None else [])]
+    except Exception:  # noqa: BLE001
+        return []
+    finally:
+        disp.close()
+
+
+def composite_order(windows: list[dict], stacking: list[int]) -> list[dict]:
+    """Windows to paint bottom to top: WM frame windows dropped (their client is painted instead),
+    unknown windows below the stacked clients, stacked clients in the WM's order."""
+    rank = {wid: i for i, wid in enumerate(stacking)}
+    keep = [w for w in windows if w.get("class") != "mutter-x11-frames"]
+    return sorted(keep, key=lambda w: rank.get(w["id"], -1))
+
+
+def _composite(bbox: dict) -> tuple[PILImage.Image, int]:
+    """The monitor area composed from each visible window's own pixels (works while locked)."""
+    canvas = PILImage.new("RGB", (bbox["width"], bbox["height"]), (32, 32, 32))
+    painted = 0
+    for win in composite_order(_visible_windows(), _stacking()):
+        if (win["x"] >= bbox["left"] + bbox["width"] or win["y"] >= bbox["top"] + bbox["height"]
+                or win["x"] + win["width"] <= bbox["left"] or win["y"] + win["height"] <= bbox["top"]):
+            continue
+        try:
+            image = _grab_window_image(win)
+        except RuntimeError:
+            continue
+        canvas.paste(image, (win["x"] - bbox["left"], win["y"] - bbox["top"]))
+        painted += 1
+    return canvas, painted
 
 
 _LOCK_CACHE: list = [0.0, False]  # [monotonic time, value]: monitor captures can come quickly
@@ -784,6 +826,7 @@ def register_screen_tools(
         """
         max_width = max(320, min(int(max_width), 3840))
         target = None
+        composed = False
         if window or window_id is not None:
             target = _match_window(window, window_id)
         elif monitor is None:
@@ -795,11 +838,16 @@ def register_screen_tools(
             label = f"{win['title']} (id={win['id']})"
         else:
             bbox = _bbox(1 if monitor is None else monitor)
-            with mss.MSS() as sct:
-                raw = sct.grab(bbox)
-            full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+            composed = _screen_locked()
+            if composed:
+                full, painted = _composite(bbox)
+            else:
+                with mss.MSS() as sct:
+                    raw = sct.grab(bbox)
+                full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
             source = f"{bbox['width']}x{bbox['height']}+{bbox['left']}+{bbox['top']}"
-            label = f"monitor {1 if monitor is None else monitor}"
+            label = f"monitor {1 if monitor is None else monitor}" + (
+                f" (composed from {painted} window(s))" if composed else "")
         path = SHOT_DIR / f"screen-{_stamp()}.png"
         full.save(path, "PNG", optimize=True)
         inline = full
@@ -813,8 +861,13 @@ def register_screen_tools(
             f"source: {source}\n"
             f"window: {label}"
         )
-        if target is None and _screen_locked():
-            caption += LOCKED_NOTE
+        if inline.width != full.width:
+            # OpenAI's computer-use guide: map coordinates from a downscaled screenshot back to the
+            # environment's pixels. Input tools take original pixels.
+            caption += (f"\nscale: input tools take original pixels; multiply a point in this image by "
+                        f"{full.width / inline.width:.3f}")
+        if target is None and composed:
+            caption += COMPOSITE_NOTE
         buf = io.BytesIO()
         inline.save(buf, "PNG", optimize=True)
         return [Image(data=buf.getvalue(), format="png"), caption]
