@@ -792,7 +792,7 @@ def test_the_wheel_config_ships_the_whole_package_directory():
         assert not {"exclude", "only-include", "only-packages"} & set(target)
     from importlib import resources
     packaged = resources.files("isaac_mcp").joinpath(host_catalog.CATALOG_DIR)
-    assert sorted(entry.name for entry in packaged.iterdir() if entry.name.endswith(".json")) == ["assets.json", "sim.json", "ur5e_dt.json"]
+    assert sorted(entry.name for entry in packaged.iterdir() if entry.name.endswith(".json")) == ["assets.json", "builtins.json", "sim.json", "ur5e_dt.json"]
 
 
 

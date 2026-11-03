@@ -33,8 +33,8 @@ This run used an existing installation with a documented NumPy dependency mismat
   evaluation or play, and inspect metrics and checkpoints in its own environment.
 
 There are **48 generic scene/asset tools, 23 UR5e tools and 12 Lab tools**. Default discovery
-lists **95 tools offline**, **102 with bridge built-ins**, or **111 with both optional groups**.
-Catalog entries remain visible offline; simulator operations need a live selected bridge.
+lists **102 tools** from startup (the 7 bridge built-ins are catalogued too), or **111 with both
+optional groups**. Catalog entries remain visible offline; simulator operations need a live selected bridge.
 See the [tool tiers and filters](AGENTS.md#what-you-can-reach-by-tier).
 
 > **Release target: PhysX.** Newton is experimental; the [backend scope](docs/COMPATIBILITY.md#release-backend-scope)
@@ -152,6 +152,7 @@ set `ISAAC_MCP_ASSET_PATH` (old name `UR5E_DT_ASSET_CACHE`, deprecated), add a p
 | Workflow | Start here |
 |---|---|
 | External ROS mock driver or ROS clients | [System ROS versus the bundled Sim bridge](docs/LINUX-SETUP.md#optional-ur5e-mock-ros-driver) |
+| ROS 2, RViz 2 and Nav2 with the simulator; labs written for Isaac Sim 6.0 | [ROS 2 TF and RViz 2](docs/ROS2-RVIZ.md) · [Isaac Sim 6.2 notes](docs/ISAAC-6.2-NOTES.md) |
 | Isaac Lab training, evaluation and video | [Lab discovery, versions and video dependencies](docs/TOOLS-ISAACLAB.md) |
 | Mouse/keyboard input or managed Sim sessions | [Opt-in host tools](docs/TOOLS-HOST.md) |
 | Your USD project or private workstation assets | [Trusted project roots and asset preparation](docs/TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation) |

@@ -75,9 +75,9 @@ Set `ISAAC_MCP_ASSET_PATH` (deprecated alias `UR5E_DT_ASSET_CACHE`) and optional
 
 ### Bridge discovery and selection
 
-- `list_bridges`: Lists all running Kit bridge instances (PID, port, and app name). *Note: This is a Kit bridge built-in that appears when connected to a bridge.*
+- `list_bridges`: Lists all running Kit bridge instances (PID, port, and app name). *Note: This is a Kit bridge built-in. It is listed from startup but answers only when a bridge is reachable.*
 - `use_bridge`: Points the host MCP server at a different bridge port at runtime without restarting the client.
-- `refresh_tools`: Forces rediscovery of tools from the currently connected bridge.
+- `refresh_tools`: Forces rediscovery of tools from the currently connected bridge. `refresh_tools(wait_s=120)` waits (up to 180 s) for a Kit that is still starting.
 
 ### Desktop & Window Capture Tools
 - `screenshot`: Captures an image of the Isaac Sim window (or desktop/monitor) and returns an inline thumbnail plus saved PNG path.
@@ -105,8 +105,9 @@ limitations in [host tools](TOOLS-HOST.md#optional-desktop-input).
 
 The host MCP server and the bridge inside Kit are separate processes. A working
 `list_windows` or Isaac Lab tool does not mean that the bridge is connected, and a
-client that lists the UR5e tools has not proved that a bridge exists: these are catalog-listed. The client may
-have connected before Kit started (call `refresh_tools`),
+client that lists the UR5e tools or `run_python` has not proved that a bridge exists: these are catalog-listed
+(call `status`). The client may have connected before Kit started (call `refresh_tools`, or
+`refresh_tools(wait_s=120)` while Kit boots),
 or `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may be hiding bridge tools
 (verify with the CLI below). Reuse the intended bridge when it meets the task; start another Kit
 only when explicitly needed and after the [parallel-launch checks](TOOLS-HOST.md#optional-simulator-sessions).

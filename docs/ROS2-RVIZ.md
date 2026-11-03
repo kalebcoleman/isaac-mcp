@@ -1,7 +1,8 @@
 # ROS 2 TF and RViz 2 with Isaac Sim
 
 Use this guide to get a correct TF tree and a working RViz 2 view of an Isaac Sim robot,
-the same way on any machine. It covers three tools:
+the same way on any machine. Labs written for Isaac Sim 6.0 should also read the
+[Isaac Sim 6.2 notes](ISAAC-6.2-NOTES.md) (node and API differences, verified live). It covers three tools:
 
 | Step | Tool | Runs where |
 |---|---|---|
@@ -27,16 +28,23 @@ Isaac Sim ships its own ROS 2 libraries for the bridge, but RViz 2 needs a ROS 2
 - **Without sudo** (lab and university accounts): [RoboStack](https://robostack.github.io/)
   installs ROS 2 into your home folder with micromamba:
 
+  Pick the distro from the OS first, because it must match the simulator's bundled bridge (see the
+  last item): **Jazzy on Ubuntu 24.04, Humble on Ubuntu 22.04.**
+
   ```bash
+  . /etc/os-release
+  case "$VERSION_ID" in 22.04) DISTRO=humble ;; *) DISTRO=jazzy ;; esac   # what run.sh picks
   mkdir -p ~/.local && curl -fsSL https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C ~/.local bin/micromamba
-  ~/.local/bin/micromamba create -y -p ~/ros2/humble -c conda-forge -c robostack-staging \
-      ros-humble-desktop ros-humble-rmw-cyclonedds-cpp ros-humble-tf2-tools ros-humble-xacro
-  ~/.local/bin/micromamba run -p ~/ros2/humble rviz2
-  # or, per shell: eval "$(~/.local/bin/micromamba shell hook -s bash)"; micromamba activate ~/ros2/humble
+  ~/.local/bin/micromamba create -y -p ~/ros2/$DISTRO -c conda-forge -c robostack-$DISTRO \
+      ros-$DISTRO-desktop ros-$DISTRO-rmw-cyclonedds-cpp ros-$DISTRO-tf2-tools ros-$DISTRO-xacro
+  ~/.local/bin/micromamba run -p ~/ros2/$DISTRO rviz2
+  # or, per shell: source scripts/ros_env.sh ~/ros2/$DISTRO   (activates it, then config/ros_dds.env)
   ```
 
-  About 5.5 GB. Validated on Ubuntu 22.04 with Isaac Sim 6.2: the doctor and RViz 2 see the
-  simulator's TF with `config/ros_dds.env` sourced.
+  About 5.5 GB. Validated with Humble on Ubuntu 22.04 with Isaac Sim 6.2: the doctor and RViz 2 see
+  the simulator's TF with `config/ros_dds.env` sourced. (Older Humble environments were created from
+  the `robostack-staging` channel; they keep working.) On 24.04 with sudo, apt's
+  `/opt/ros/jazzy` is the simpler choice.
 - **Only the doctor:** `--isaac-ros` uses Isaac Sim's bundled ROS 2; no install needed.
 - **Use the same distro as the simulator's bridge.** `run.sh` loads Isaac's bundled Humble on
   Ubuntu 22.04 and Jazzy on 24.04 (`ROS_DISTRO` overrides it). Humble and Jazzy nodes did not
@@ -109,9 +117,65 @@ it publishes on every playback tick.
 python3 scripts/ros2_rviz_config.py --fixed-frame world --out ~/lab.rviz \
     --image /camera/rgb --scan /scan --cloud /point_cloud --odom /odom
 #   add --robot-model when robot_state_publisher provides /robot_description
-set -a; . config/ros_dds.env; set +a          # same DDS settings as the simulator
-rviz2 -d ~/lab.rviz --ros-args -p use_sim_time:=true
+export ROS_DOMAIN_ID=<the simulator's domain>
+source scripts/ros_env.sh                      # ROS 2, then config/ros_dds.env, then daemon stop
+setsid nohup rviz2 -d ~/lab.rviz --ros-args -p use_sim_time:=true > /tmp/rviz.log 2>&1 < /dev/null &
+echo $! > /tmp/rviz.pid                         # stop it later with: kill "$(cat /tmp/rviz.pid)"
 ```
+
+`setsid nohup` keeps RViz running after the command that started it ends (agent harnesses kill
+the process group of each tool call). View and window options:
+
+| Option | Effect |
+|---|---|
+| `--view orbit` (default) / `--view topdown` | 3D orbit camera, or a 2D `TopDownOrtho` view like a map |
+| `--distance M` | orbit camera distance (default 3 m) |
+| `--scale PX` | top-down zoom in pixels per metre (default 100) |
+| `--target-frame base_link` | the view follows that frame (default: the Fixed Frame, a still view) |
+| `--hide-panels` | leaves the Displays and Views panels out: the 3D view (and any image docks) only. Add panels back from RViz's Panels menu |
+| `--width` / `--height` | window size in pixels (default 1400 x 900) |
+
+Checked in rviz2 (Humble, RoboStack) with window captures: `Hide Left Dock: true` and per-panel
+`collapsed: true` in a config file have no effect when RViz2 loads it, so `--hide-panels` omits the
+panels instead. An Image display opens its own dock about 320 px wide; RViz2 has no per-display
+size setting (the dock layout is a binary `QMainWindow State` that RViz writes itself), so drag
+the dock edge and use File > Save Config to keep a larger image.
+
+## Agent shells: environment and driving
+
+`scripts/ros_env.sh` must be **sourced**. It sources a ROS 2 install (a path, or auto-detected:
+`ROS_DISTRO` if exported, else Humble on 22.04 and Jazzy on 24.04, in `/opt/ros/<distro>` and
+`~/ros2/<distro>`), any `--overlay` on top of it, then `config/ros_dds.env`, then runs
+`ros2 daemon stop`, and prints what it chose:
+
+```bash
+export ROS_DOMAIN_ID=63                      # a prefix assignment (ROS_DOMAIN_ID=63 source ...) does not last
+source scripts/ros_env.sh ~/ros2/humble --overlay ~/ros2/humble_nav2   # RoboStack + a Nav2 env
+source scripts/ros_env.sh /opt/ros/jazzy --overlay ~/ros2/jazzy_nav2/install
+source scripts/ros_env.sh --dry-run          # print the choice only
+```
+
+RoboStack prefixes are activated with micromamba (stacked for an overlay, with the overlay first on
+`AMENT_PREFIX_PATH`). The daemon matters: one started earlier with other DDS settings answers
+`ros2 topic list` and `ros2 node list` with nothing while data flows. `--keep-daemon` skips the
+stop; `ros2 topic list --no-daemon` avoids the daemon (`ros2 topic hz` has no such flag). Kit's
+bridge nodes do not appear in `ros2 node list` at all; check topics and `/tf` instead.
+
+Without a TTY there is no keyboard teleop. Drive with timed steps (linear m/s, angular rad/s,
+seconds):
+
+```bash
+python3 scripts/cmd_vel_sequence.py "0.15,0,5;0,0.5,3;0,0,1"         # --topic, --rate, --stamped
+python3 scripts/cmd_vel_sequence.py "0.15,0,5" --dry-run              # print the plan only
+```
+
+It always publishes a zero Twist at the end, on errors, and on Ctrl-C, SIGTERM or SIGHUP; only
+SIGKILL skips that. For one-off messages use `ros2 topic pub --times N`, and wrap any command
+that could block in `timeout -s KILL <s>`: a `timeout 6 ros2 topic pub ... | tail` hung for 120 s
+in a lab run while the robot drove into a wall.
+
+For Nav2, the `map` frame is the world frame. The `origin` in the map YAML is the position of the
+image's lower-left corner, not an offset to add to goals.
 
 ## 3. Check the tree
 

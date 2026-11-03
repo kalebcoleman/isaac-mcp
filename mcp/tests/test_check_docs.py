@@ -24,7 +24,7 @@ LABELS = check_docs.TIER_ROWS
 # The three subtotal statements in the guide and the figure the code implies for each.
 PHRASES = {
     "host_isaaclab": (r"exactly \d+ tools", "exactly {} tools",
-                      lambda c: c["host"] + c["isaaclab"] + c["ur5e"] + c["generic"]),
+                      lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"]),
     "bridge": (r"The other \d+ tools", "The other {} tools",
                lambda c: c["builtins"]),
     "total": (r"there are \d+ tools in total", "there are {} tools in total",

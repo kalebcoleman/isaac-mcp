@@ -276,8 +276,11 @@ def _listed(server):
     async def go():
         async with create_connected_server_and_client_session(server._mcp_server) as client:
             await client.initialize()
+            # Catalog tools count as bridge tools here only while the live bridge serves them
+            # (the built-ins are catalogued too, so an offline run_python proxy is not a live one).
+            live = gw._state_for(server).name_map
             return {t.name: t for t in (await client.list_tools()).tools
-                    if t.name not in OFFLINE}
+                    if t.name not in OFFLINE or t.name in live}
     return asyncio.run(go())
 
 
@@ -287,6 +290,19 @@ def test_startup_discovery_still_runs_when_gateway_is_excluded(bridge):
     listed = _listed(server)
     assert {"demo__ping", "other__pong", "run_python"} <= set(listed)
     assert set(listed) - {"demo__ping", "other__pong", "run_python"} == set(lt.READ_ONLY_TOOLS)
+
+
+BUILTINS = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file"}
+
+
+def test_builtins_are_listed_offline_and_follow_the_builtins_switch(monkeypatch):
+    # PR D: OpenCode ignores tools/list_changed, so the built-ins must be listed before discovery.
+    monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
+    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "no-such-namespace")   # as live: built-ins have none
+    assert BUILTINS <= set(build("none")._tool_manager._tools)
+    assert BUILTINS <= set(gw.offline_tools(build("none")))
+    monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
+    assert not BUILTINS & set(build("none")._tool_manager._tools)
 
 
 def test_none_is_a_pure_bridge_gateway(bridge):

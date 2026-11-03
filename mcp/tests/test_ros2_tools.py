@@ -682,3 +682,219 @@ def test_wall_clock_sensor_stamps_are_fine_when_clock_is_wall_time_too():
     errors, *_ = doctor.analyze(GOOD[:1], "world", clock_seen=True, clock_publishers=["/bag"],
                                 clock_times=[1.79e9], topic_stamps={"/scan": [(1.79e9, 1.79e9)]})
     assert not any("wall-clock time" in x for x in errors)
+
+
+# ---- PR D: RViz view options, the /cmd_vel driver and scripts/ros_env.sh ---------------------
+
+def _rviz(tmp_path, *extra):
+    out = tmp_path / "v.rviz"
+    assert rviz.main(["--fixed-frame", "World", "--out", str(out), "--force", *extra]) == 0
+    yaml = pytest.importorskip("yaml")
+    return yaml.safe_load(out.read_text())
+
+
+def test_rviz_default_view_and_panels_are_unchanged(tmp_path):
+    doc = _rviz(tmp_path)
+    view = doc["Visualization Manager"]["Views"]["Current"]
+    assert view["Class"] == "rviz_default_plugins/Orbit" and view["Distance"] == 3
+    assert view["Target Frame"] == "<Fixed Frame>"
+    assert [p["Class"] for p in doc["Panels"]] == ["rviz_common/Displays", "rviz_common/Views"]
+
+
+def test_rviz_topdown_view_follows_a_target_frame(tmp_path):
+    view = _rviz(tmp_path, "--view", "topdown", "--scale", "80", "--target-frame", "base_link")[
+        "Visualization Manager"]["Views"]["Current"]
+    assert view["Class"] == "rviz_default_plugins/TopDownOrtho"
+    assert view["Value"] == "TopDownOrtho (rviz_default_plugins)"
+    assert view["Scale"] == 80 and view["Target Frame"] == "base_link"
+
+
+def test_rviz_orbit_distance(tmp_path):
+    view = _rviz(tmp_path, "--distance", "6.5", "--target-frame", "base_link")["Visualization Manager"]["Views"]["Current"]
+    assert view["Distance"] == 6.5 and view["Target Frame"] == "base_link"
+
+
+def test_rviz_hide_panels_leaves_the_panels_out(tmp_path):
+    # Verified in rviz2 Humble: "Hide Left Dock: true" and per-panel "collapsed: true" are ignored at
+    # load; only a config without the panels shows the 3D view alone.
+    doc = _rviz(tmp_path, "--hide-panels", "--image", "/camera/rgb", "--width", "1600")
+    assert doc["Panels"] == []
+    assert doc["Window Geometry"]["Width"] == 1600
+    assert doc["Window Geometry"]["Hide Left Dock"] is False
+    assert any(d["Class"] == "rviz_default_plugins/Image" for d in doc["Visualization Manager"]["Displays"])
+
+
+@pytest.mark.parametrize("argv", [["--target-frame", "base link"], ["--distance", "0"], ["--scale", "-1"],
+                                  ["--view", "side"], ["--width", "50"]])
+def test_rviz_view_options_refuse_bad_values(tmp_path, argv):
+    with pytest.raises(SystemExit):
+        rviz.main(["--fixed-frame", "world", "--out", str(tmp_path / "x.rviz"), *argv])
+
+
+cmdvel = _load("cmd_vel_sequence_under_test", "scripts/cmd_vel_sequence.py")
+
+
+def test_cmd_vel_sequence_parses_and_times_steps():
+    steps = cmdvel.parse_sequence("0.15,0,5; 0,0.5,3 ;0,0,1;")
+    assert steps == [cmdvel.Step(0.15, 0.0, 5.0), cmdvel.Step(0.0, 0.5, 3.0), cmdvel.Step(0.0, 0.0, 1.0)]
+    assert cmdvel.command_at(steps, 0.0).linear == 0.15
+    assert cmdvel.command_at(steps, 5.0).angular == 0.5
+    assert cmdvel.command_at(steps, 8.5) == cmdvel.Step(0.0, 0.0, 1.0)
+    assert cmdvel.command_at(steps, 9.0) is None and cmdvel.command_at(steps, -1) is None
+    assert "stop (zero Twist)" in cmdvel.describe(steps)
+
+
+@pytest.mark.parametrize("text", ["", "1,2", "a,b,c", "0.1,0,0", "0.1,0,-1", "5,0,1", "0,9,1",
+                                  "nan,0,1", "0.1,0,601"])
+def test_cmd_vel_sequence_refuses_bad_steps(text):
+    with pytest.raises(ValueError):
+        cmdvel.parse_sequence(text)
+
+
+FAKE_ROS = '''
+import sys, types, json, os
+log = open(os.environ["FAKE_ROS_LOG"], "a")
+class _V: x = 0.0; y = 0.0; z = 0.0
+class Twist:
+    def __init__(self): self.linear, self.angular = _V(), _V()
+class TwistStamped:
+    def __init__(self):
+        self.header = types.SimpleNamespace(stamp=None, frame_id="")
+        self.twist = Twist()
+class _Pub:
+    def get_subscription_count(self): return 1
+    def publish(self, m):
+        t = m.twist if isinstance(m, TwistStamped) else m
+        log.write(json.dumps([t.linear.x, t.angular.z]) + "\\n"); log.flush()
+class _Node:
+    def create_publisher(self, *a): return _Pub()
+    def get_clock(self): return types.SimpleNamespace(now=lambda: types.SimpleNamespace(to_msg=lambda: 0))
+    def destroy_node(self): pass
+rclpy = types.ModuleType("rclpy")
+rclpy.init = lambda **kw: None
+rclpy.create_node = lambda name: _Node()
+rclpy.try_shutdown = lambda: None
+msg = types.ModuleType("geometry_msgs.msg"); msg.Twist, msg.TwistStamped = Twist, TwistStamped
+sys.modules.update({"rclpy": rclpy, "geometry_msgs": types.ModuleType("geometry_msgs"), "geometry_msgs.msg": msg})
+'''
+
+
+def _run_driver(tmp_path, sequence, signal_after=None):
+    import json
+    import os
+    import signal as sig
+    import subprocess
+    import time
+    (tmp_path / "sitecustomize.py").write_text(FAKE_ROS)
+    log = tmp_path / "published.jsonl"
+    env = dict(os.environ, PYTHONPATH=str(tmp_path), FAKE_ROS_LOG=str(log))
+    proc = subprocess.Popen([sys.executable, str(REPO / "scripts/cmd_vel_sequence.py"), sequence, "--rate", "50"],
+                            env=env, stderr=subprocess.PIPE, text=True)
+    if signal_after is not None:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not (log.exists() and log.read_text().count("\n") >= 3):
+            time.sleep(0.05)
+        proc.send_signal(signal_after)
+    _, err = proc.communicate(timeout=30)
+    return proc.returncode, [json.loads(line) for line in log.read_text().splitlines()], err
+
+
+def test_cmd_vel_driver_publishes_the_sequence_then_zero(tmp_path):
+    code, sent, _ = _run_driver(tmp_path, "0.2,0,0.2;0,0.4,0.2")
+    assert code == 0
+    assert [0.2, 0.0] in sent and [0.0, 0.4] in sent
+    assert sent[-5:] == [[0.0, 0.0]] * 5
+
+
+@pytest.mark.parametrize("signame", ["SIGINT", "SIGTERM", "SIGHUP"])
+def test_cmd_vel_driver_stops_the_robot_on_a_signal(tmp_path, signame):
+    import signal as sig
+    code, sent, err = _run_driver(tmp_path, "0.3,0,60", signal_after=getattr(sig, signame))
+    assert code == 130 and signame in err
+    assert sent[0] == [0.3, 0.0] and sent[-5:] == [[0.0, 0.0]] * 5
+
+
+ROS_ENV = REPO / "scripts" / "ros_env.sh"
+
+
+def _fake_prefix(root, name, conda=False):
+    prefix = root / name
+    (prefix / "bin").mkdir(parents=True)
+    (prefix / "setup.bash").write_text(f'export ROS_DISTRO={name.split("_")[0]}\n'
+                                       f'export FAKE_SOURCED="${{FAKE_SOURCED:+$FAKE_SOURCED,}}{name}"\n'
+                                       f'export PATH="{prefix}/bin:$PATH"\n')
+    (prefix / "local_setup.bash").write_text(
+        f'export AMENT_PREFIX_PATH="{prefix}${{AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}}"\n')
+    if conda:
+        (prefix / "conda-meta").mkdir()
+    return prefix
+
+
+def _source(tmp_path, args, extra_env=None):
+    import os
+    import subprocess
+    bin_dir = tmp_path / "fakebin"
+    bin_dir.mkdir(exist_ok=True)
+    ros2 = bin_dir / "ros2"
+    ros2.write_text('#!/bin/sh\necho "ros2 $*" >> "$FAKE_ROS2_LOG"\n')
+    ros2.chmod(0o755)
+    script = (f'set -- keep; source "{ROS_ENV}" {args}; rc=$?; '
+              'echo "rc=$rc arg=$1 distro=$ROS_DISTRO sourced=$FAKE_SOURCED rmw=$RMW_IMPLEMENTATION '
+              'domain=$ROS_DOMAIN_ID ament=$AMENT_PREFIX_PATH"')
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "FAKE_ROS2_LOG": str(tmp_path / "ros2.log"),
+           **(extra_env or {})}
+    done = subprocess.run(["bash", "--noprofile", "--norc", "-c", script], env=env, capture_output=True,
+                          text=True, timeout=30)
+    calls = (tmp_path / "ros2.log").read_text() if (tmp_path / "ros2.log").exists() else ""
+    return done.stdout.strip(), done.stderr, calls
+
+
+def test_ros_env_sources_install_then_dds_then_stops_the_daemon(tmp_path):
+    base = _fake_prefix(tmp_path / "opt", "jazzy")
+    out, err, calls = _source(tmp_path, f"{base}", {"ROS_DOMAIN_ID": "63"})
+    assert "rc=0 arg=keep distro=jazzy sourced=jazzy rmw=rmw_cyclonedds_cpp domain=63" in out
+    assert calls.strip() == "ros2 daemon stop"
+    assert f"sourced {base}/setup.bash" in err and "stopped any ros2 daemon" in err
+
+
+def test_ros_env_overlay_order_and_keep_daemon(tmp_path):
+    base = _fake_prefix(tmp_path / "opt", "humble")
+    overlay = _fake_prefix(tmp_path / "ws", "humble_nav2")
+    out, _, calls = _source(tmp_path, f"{base} --overlay {overlay} --keep-daemon")
+    assert "sourced=humble,humble_nav2" in out and calls == ""
+
+
+def test_ros_env_stacked_conda_overlay_comes_first_on_the_ament_path(tmp_path):
+    # Without micromamba on PATH the script sets CONDA_PREFIX/PATH itself; the re-applied
+    # local_setup order must put the overlay first (RoboStack Humble + a Nav2 env).
+    base = _fake_prefix(tmp_path / "ros2", "humble", conda=True)
+    overlay = _fake_prefix(tmp_path / "ros2", "humble_nav2", conda=True)
+    out, _, _ = _source(tmp_path, f"{base} --overlay {overlay} --keep-daemon")
+    assert f"ament={overlay}:{base}" in out
+
+
+def test_ros_env_auto_detects_and_reports_missing_installs(tmp_path):
+    _fake_prefix(tmp_path / "roots", "jazzy")
+    out, err, _ = _source(tmp_path, "--keep-daemon", {"ISAAC_ROS_SEARCH": str(tmp_path / "roots"),
+                                                      "ROS_DISTRO": "jazzy"})
+    assert "rc=0" in out and "distro=jazzy" in out
+    out, err, _ = _source(tmp_path, "--keep-daemon", {"ISAAC_ROS_SEARCH": str(tmp_path / "none")})
+    assert "rc=1" in out and "no ROS 2 install found" in err
+    out, err, _ = _source(tmp_path, f"{tmp_path / 'missing'}")
+    assert "rc=1" in out and "has no setup.bash" in err
+
+
+def test_ros_env_must_be_sourced():
+    import subprocess
+    done = subprocess.run(["bash", str(ROS_ENV)], capture_output=True, text=True, timeout=10)
+    assert done.returncode == 2 and "must be sourced" in done.stderr
+
+
+def test_cmd_vel_sequence_refuses_non_finite_limits():
+    import runpy
+    import pytest as _pytest
+
+    module = runpy.run_path(str(REPO / "scripts/cmd_vel_sequence.py"))
+    with _pytest.raises(SystemExit):
+        module["main"](["0.1,0,1", "--max-linear", "nan", "--dry-run"])
+    assert module["main"](["0.1,0,1", "--dry-run"]) == 0

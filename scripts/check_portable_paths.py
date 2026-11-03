@@ -35,6 +35,7 @@ ALLOWED_HOME_DIRS = {
     "Pictures",
     "Videos",
     "ros2_ws",  # default for WS_SETUP in the ROS scripts, overridable
+    "ros2",  # RoboStack prefixes documented in ROS2-RVIZ.md; ros_env.sh search root, ISAAC_ROS_SEARCH overrides
     ".ursim",  # URSim program data, overridable with PROGRAM_DIR
     "isaac-workspace",  # documented default workspace, overridable with ISAAC_MCP_WORKSPACE
 }
