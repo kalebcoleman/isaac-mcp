@@ -1511,7 +1511,7 @@ def test_migrate_skips_a_file_that_no_longer_matches_its_old_pin(cli, capsys, tm
     (old / "SHA256SUMS").write_text(f"{sha(b'bench')}  workstation/vention.usd\n")
     monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
     code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
-    assert code == 1 and "changed since they were pinned" in err and "vention.usd" in err
+    assert code == 1 and "does not match its pin" in err and "vention.usd" in err
     assert not (store / "ur5e-dt" / "workstation" / "vention.usd").exists()
     assert (store / "ur5e-dt" / "workstation" / "ok.usd").read_bytes() == b"fine"
 
@@ -1563,3 +1563,64 @@ def test_the_store_folder_itself_keeps_its_permissions(cli, capsys, tmp_path, mo
     assert run(cli, capsys, "add", str(source))[0] == 0
     assert store.stat().st_mode & 0o777 == 0o775
     assert (store / "ur5e-dt").stat().st_mode & 0o022 == 0
+
+
+def test_migrate_skips_an_unpinned_old_nvidia_file_with_the_wrong_bytes(cli, capsys, tmp_path, monkeypatch):
+    # Round 2 finding 1: the old resolver refused it, so it must not become "yours".
+    store = make_store(tmp_path, monkeypatch)
+    _manifest_with_robot(cli, tmp_path, monkeypatch)
+    old = tmp_path / "old-cache"
+    (old / "robot").mkdir(parents=True)
+    (old / "robot" / "ur5e.usd").write_bytes(b"truncated")
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 1 and "never pinned" in err  # nothing else to migrate, still an error
+    assert not (store / "ur5e-dt" / "robot" / "ur5e.usd").exists()
+    code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"), "--dry-run")
+    assert code == 1
+
+
+def test_migrate_reports_a_git_failure_and_exits_nonzero(cli, capsys, tmp_path, monkeypatch):
+    import subprocess
+
+    store = make_store(tmp_path, monkeypatch)
+    checkout, _ = _old_checkout(tmp_path)
+    _git(checkout, "init", "-q")
+    real = subprocess.run
+
+    def broken(cmd, *a, **k):
+        if cmd[:1] == ["git"] and "rev-list" in cmd:
+            raise subprocess.CalledProcessError(128, cmd, output="", stderr="fatal: detected dubious ownership\n")
+        return real(cmd, *a, **k)
+
+    monkeypatch.setattr(cli.subprocess, "run", broken)
+    code, out, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 1 and "dubious ownership" in err and "history could not be read" in err
+    assert (store / "ur5e-dt" / "gripper" / "QuickChanger.usd").is_file()  # working tree still copied
+
+
+def test_migrate_git_rev_needs_a_git_checkout(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    checkout, _ = _old_checkout(tmp_path)
+    code, _, err = run(cli, capsys, "migrate", "--from", str(checkout), "--git-rev", "HEAD", "--no-legacy-stores")
+    assert code == 2 and "needs a git checkout" in err
+
+
+def test_migrate_moves_nvidias_sensor_from_its_old_name_to_its_canonical_place(cli, capsys, tmp_path, monkeypatch):
+    import json as _json
+
+    store = make_store(tmp_path, monkeypatch)
+    manifest = tmp_path / "assets-manifest.json"
+    manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
+        {"target": "sensors/rsd455.usd", "source": "x", "sha256": sha(b"sensor"), "size": 6,
+         "cache_path": "Isaac/Sensors/rsd455.usd"}]}]}))
+    monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
+    checkout, assets = _old_checkout(tmp_path)
+    (assets / "sensors").mkdir()
+    (assets / "sensors" / "rsd455.usd").write_bytes(b"sensor")
+    code, _, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    pack = store / "ur5e-dt"
+    assert (pack / "Isaac" / "Sensors" / "rsd455.usd").read_bytes() == b"sensor"
+    assert not (pack / "sensors").exists()
+    assert "Isaac/Sensors/rsd455.usd" not in read_pins(pack)
