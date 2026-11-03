@@ -801,9 +801,12 @@ class Advanced:
                     rate="A USD camera has no tick rate: it renders every frame. Set a ROS publishing rate on the ROS2 Camera Helper (frameSkipCount).",
                 )
             else:
-                import carb.settings
+                try:
+                    import carb.settings
 
-                motion = bool(carb.settings.get_settings().get("/renderer/raytracingMotion/enabled"))
+                    motion = bool(carb.settings.get_settings().get("/renderer/raytracingMotion/enabled"))
+                except ImportError:  # host unit tests without Kit
+                    motion = None
                 result.update(
                     sensor_path=sensor["sensor_path"],
                     tick_rate_hz=sensor["tick_rate_hz"],
@@ -814,7 +817,7 @@ class Advanced:
                     motion_bvh=motion,
                     **({"warning": sensor["warning"]} if "warning" in sensor else {}),
                 )
-                if not motion:
+                if motion is False:
                     result["motion_note"] = (
                         "Motion BVH is off: scans are correct, but motion distortion within one scan "
                         "(sensor or objects moving during the sweep) is not modelled. Launch with "
