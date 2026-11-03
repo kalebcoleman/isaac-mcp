@@ -134,17 +134,25 @@ if [ "$NO_SIM" = 0 ] && [ "$DOWNLOAD_SIM" = 0 ] && [ ! -x "$ROOT/.venv/bin/pytho
   FOUND="$(python3 - "$ROOT/scripts/isaac_env.py" <<'PY'
 import json, os, subprocess, sys
 tool = sys.argv[1]
-EXPLICIT = ("ISAAC_MCP_PYTHON", "UR5E_DT_PYTHON", "ISAAC_SIM_PYTHON", "ISAACSIM_PATH", "ISAAC_SIM_PATH", "ISAAC_PATH")
+INTERP_VARS = ("ISAAC_MCP_PYTHON", "UR5E_DT_PYTHON", "ISAAC_SIM_PYTHON")   # isaac_env.py EXPLICIT_VARS
+ROOT_VARS = ("ISAACSIM_PATH", "ISAAC_SIM_PATH", "ISAAC_PATH")                # isaac_env.py STANDALONE_ENV_VARS
 listed = subprocess.run([sys.executable, tool, "find", "--json"], capture_output=True, text=True)
 if listed.returncode:
     print(listed.stderr.strip() or "isaac_env.py find failed", file=sys.stderr)
     sys.exit(3)
 cands = [c for c in json.loads(listed.stdout or "[]")
          if str(c.get("isaacsim") or "").split(".")[0] == "6"]
-named = [v for v in EXPLICIT if os.environ.get(v, "").strip()]
+# Same precedence as isaac_env.py: an interpreter variable wins over an install-root variable.
+# Only the variables the user named count (not an activated VIRTUAL_ENV/CONDA_PREFIX), so a typo
+# is reported instead of being replaced by whatever environment happens to be active.
+named = [v for v in INTERP_VARS if os.environ.get(v, "").strip()]
+wanted = {f"env:{v}" for v in named}
+if not named:
+    named = [v for v in ROOT_VARS if os.environ.get(v, "").strip()]
+    wanted = {f"standalone:{v}" for v in named}
 if named:
     # The user chose an install: it must be Isaac Sim 6.x; never fall back to a download.
-    chosen = [c for c in cands if c.get("source", "").startswith("env:")]
+    chosen = [c for c in cands if c.get("source") in wanted]
     if not chosen:
         print(f"{', '.join(named)} is set but does not point at an Isaac Sim 6.x install "
               "(check it with: python3 scripts/isaac_env.py find). Fix or unset it; "
@@ -180,6 +188,11 @@ PY
     echo "could not check for an installed Isaac Sim (exit $rc); not downloading. Pass --no-sim or --download-sim." >&2
     exit 1
   fi
+fi
+
+if [ "$NO_SIM" = 1 ] && [ -z "$SIM_PYTHON" ]; then
+  echo "== --no-sim: sim__launch/run.sh look for Isaac Sim when they start. If yours is only reachable"
+  echo "   through shell variables (an activated venv/conda env, ISAACSIM_PATH), put ISAAC_MCP_PYTHON in the client's isaac entry."
 fi
 
 echo "== checking preconditions"
@@ -357,10 +370,11 @@ PY
 fi
 
 if [ "$DO_PRINT_OPENCODE" = 1 ]; then
+  jstr() { python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$1"; }
   lab_json=""
-  [ -n "$LAB_PYTHON" ] && lab_json+=", \"ISAACLAB_PYTHON\": \"$LAB_PYTHON\""
-  [ -n "$LAB_ROOT" ] && lab_json+=", \"ISAACLAB_ROOT\": \"$LAB_ROOT\""
-  [ -n "$SIM_PYTHON" ] && lab_json+=", \"ISAAC_MCP_PYTHON\": \"$SIM_PYTHON\""
+  [ -n "$LAB_PYTHON" ] && lab_json+=", \"ISAACLAB_PYTHON\": $(jstr "$LAB_PYTHON")"
+  [ -n "$LAB_ROOT" ] && lab_json+=", \"ISAACLAB_ROOT\": $(jstr "$LAB_ROOT")"
+  [ -n "$SIM_PYTHON" ] && lab_json+=", \"ISAAC_MCP_PYTHON\": $(jstr "$SIM_PYTHON")"
   cat <<EOF
 
 OpenCode entry (~/.config/opencode/opencode.jsonc):

@@ -157,3 +157,44 @@ def test_install_refuses_no_sim_with_download_sim(tmp_path):
     root, env, _ = _sandbox(tmp_path)
     result = _install(root, env, "--no-sim", "--download-sim")
     assert result.returncode == 2 and "cannot be combined" in result.stderr
+
+
+def _fake_standalone(root: Path, version: str) -> Path:
+    """A standalone install root (python.sh + VERSION), as NVIDIA's zip/workstation install."""
+    root.mkdir(parents=True)
+    (root / "python.sh").write_text("#!/bin/sh\nexit 0\n")
+    (root / "python.sh").chmod(0o755)
+    (root / "VERSION").write_text(f"{version}\n")
+    return root
+
+
+def test_a_valid_standalone_isaacsim_path_is_used(tmp_path):
+    # Round 2 finding 1: the README's ISAACSIM_PATH advice must work.
+    root, env, log = _sandbox(tmp_path)
+    env["ISAACSIM_PATH"] = str(_fake_standalone(tmp_path / "isaac-sim", "6.2.0"))
+    result = _install(root, env, "--claude-code")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "standalone:ISAACSIM_PATH" in result.stdout and "uv sync" not in _calls(log)
+    assert "ISAAC_MCP_PYTHON=" in _calls(log)
+
+
+def test_a_typo_is_reported_even_when_another_environment_is_active(tmp_path):
+    # Round 2 finding 2: an activated venv must not silently replace what the user named.
+    root, env, log = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = "/no/such/python"
+    env["VIRTUAL_ENV"] = str(_fake_isaac(tmp_path / "active-venv", "6.2.0.0").parent.parent)
+    result = _install(root, env, "--claude-code")
+    assert result.returncode == 1 and "ISAAC_MCP_PYTHON is set but does not point" in result.stderr
+    assert "uv sync" not in _calls(log) and "claude mcp add" not in _calls(log)
+
+
+def test_the_opencode_snippet_is_valid_json_for_unusual_paths(tmp_path):
+    import json
+    import re
+
+    root, env, _ = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / 'odd"name\\dir', "6.2.0.0"))
+    result = _install(root, env, "--print-opencode")
+    assert result.returncode == 0, result.stdout + result.stderr
+    body = re.search(r'"environment": (\{.*\})', result.stdout).group(1)
+    assert json.loads(body)["ISAAC_MCP_PYTHON"] == env["ISAAC_MCP_PYTHON"]
