@@ -119,6 +119,25 @@ def test_find_ogn_ignores_an_empty_extension_path():
     assert graph._find_ogn("", "omni.graph.nodes.ArraySlice") is None
 
 
+def test_find_ogn_handles_ids_that_keep_the_ogn_prefix(tmp_path):
+    # Student run 2: "Scale To/From Stage Units" is isaacsim.core.nodes.OgnIsaacScaleToFromStageUnit,
+    # and the lookup searched for OgnOgnIsaacScaleToFromStageUnit.ogn, so it reported no ports.
+    nodes = tmp_path / "python" / "nodes"
+    nodes.mkdir(parents=True)
+    tid = "isaacsim.core.nodes.OgnIsaacScaleToFromStageUnit"
+    (nodes / "OgnIsaacScaleToFromStageUnit.ogn").write_text(json.dumps({tid: {
+        "inputs": {"value": {"type": ["numerics"], "description": "Input value"}},
+        "outputs": {"result": {"type": ["numerics"], "description": "Output value"}}}}))
+    ports, _ = graph._find_ogn(str(tmp_path), tid)
+    assert set(ports["inputs"]) == {"inputs:value"} and set(ports["outputs"]) == {"outputs:result"}
+    # Ids without the prefix still find Ogn<name>.ogn.
+    (nodes / "OgnConstructArray.ogn").write_text(json.dumps({"omni.graph.nodes.ConstructArray": {
+        "inputs": {"arraySize": {"type": "int"}}, "outputs": {}}}))
+    graph._OGN_INDEX.clear()
+    ports, _ = graph._find_ogn(str(tmp_path), "omni.graph.nodes.ConstructArray")
+    assert "inputs:arraySize" in ports["inputs"]
+
+
 def test_cell_value_reads_the_start_cell(np):
     dims = 10
     buf = np.zeros(dims * dims)

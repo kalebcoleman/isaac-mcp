@@ -125,8 +125,9 @@ python3 scripts/ros2_tf_doctor.py --fixed-frame world --isaac-ros
 
 It listens for a few seconds and reports frames with two parents, frames on both `/tf` and
 `/tf_static`, frames that do not reach the Fixed Frame, mixed sim/wall time, a missing
-`/clock`, frames that stopped updating, and which nodes publish TF. Exit 0 means the tree is
-consistent. Fix every `ERROR` before debugging RViz itself.
+`/clock`, frames that stopped updating, and which nodes publish TF. It also compares the
+header stamps of sensor topics (LaserScan, Image, CameraInfo, PointCloud2, Imu, Odometry, and
+any `--topic`) with `/clock`. Exit 0 means the tree is consistent. Fix every `ERROR` before debugging RViz itself.
 
 Example: an extra `robot_state_publisher` running next to Isaac's link TF:
 
@@ -147,6 +148,8 @@ WARNING: several nodes publish TF: /_Graph_isaac_mcp_ros2_TFRobotLinks, ..., /ro
 | TF shows only the robot's top prim | targeted the robot Xform, not its articulation | the tool resolves the articulation root; for hand-built graphs target that prim |
 | RobotModel white/missing | no `/robot_description` | `link_frames=robot_state_publisher` + `robot_state_publisher` with the URDF |
 | RViz log floods "Detected jump back in time. Resetting RViz" | two `/clock` publishers | doctor lists them; keep one (`clock=auto` reuses the existing one) |
+| RViz drops every scan: "timestamp on the message is earlier than all the data in the transform cache" | the lidar helper restarts at 0 on Stop but the clock graph's Read Simulation Time has `resetOnStop=False` | doctor reports the topic's offset; give every Read Simulation Time node the same `resetOnStop` (`True` with sensor helpers), then Stop and Play |
+| LaserScan shown in RViz but no points visible | Isaac's 2D lidar publishes zero intensities and the display colours by intensity | use `Color Transformer: FlatColor` (`ros2_rviz_config.py` writes that) |
 | ROS 2 node fails: "SharedMemory: unknown element" / "rmw handle is invalid" | an old `cyclonedds.xml` with `<SharedMemory>` and a Cyclone build without it | use this repository's current `config/cyclonedds.xml` |
 | Frames stop after reset | timeline stopped | play again; RViz resets once if `/clock` restarts from 0 (the twin's clock keeps counting) |
 | Robot vanishes after stop/play, "extrapolation into the past" | TF and `/clock` from different time sources | doctor reports the skew; re-run `sim__ros2__tf_setup` (`clock=auto`) |

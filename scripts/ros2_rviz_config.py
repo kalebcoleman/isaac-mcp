@@ -54,10 +54,15 @@ def display(kind: str, topic: str, index: int) -> list[str]:
     i = "    "
     lines = [f"  - Class: {cls}", f"{i}Enabled: true", f"{i}Name: {q(f'{label} {topic}')}", f"{i}Value: true"]
     if kind in ("scan", "cloud"):
+        # Flat colour: Isaac's RTX 2D lidar publishes all-zero intensities, and with the Intensity
+        # transformer RViz drew the scan invisibly (student run 2).
         lines += [f"{i}Size (m): {0.05 if kind == 'scan' else 0.01}", f"{i}Style: Flat Squares",
-                  f"{i}Color Transformer: Intensity", f"{i}Use Fixed Frame: true"]
+                  f"{i}Color Transformer: FlatColor", f"{i}Color: 255; 0; 0", f"{i}Use Fixed Frame: true"]
     if kind == "odom":
-        lines += [f"{i}Keep: 50", f"{i}Position Tolerance: 0.1", f"{i}Angle Tolerance: 0.1"]
+        # One small arrow: the default 50 full-size arrows covered the robot and scan.
+        lines += [f"{i}Keep: 1", f"{i}Position Tolerance: 0.1", f"{i}Angle Tolerance: 0.1",
+                  f"{i}Shape:", f"{i}  Value: Arrow", f"{i}  Shaft Length: 0.3", f"{i}  Shaft Radius: 0.02",
+                  f"{i}  Head Length: 0.08", f"{i}  Head Radius: 0.05", f"{i}  Color: 255; 25; 0"]
     if kind == "image":
         lines += [f"{i}Normalize Range: true"]
     return lines + topic_block(topic, i)
