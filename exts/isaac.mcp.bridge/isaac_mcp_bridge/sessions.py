@@ -57,10 +57,6 @@ class SessionStore:
         self._sessions.clear()
         self.generation += 1
 
-    def peek_reset(self, session_id: str) -> str:
-        """The pending reset reason for a session, without consuming it."""
-        return self._reset.get(session_id, "")
-
     def take_reset(self, session_id: str) -> str:
         """Why this session's variables were dropped since its last call ('' if they were not)."""
         return self._reset.pop(session_id, "")

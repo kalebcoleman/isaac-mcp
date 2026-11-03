@@ -15,6 +15,12 @@ from isaac_mcp_bridge.protocol import ToolError
 from isaac_mcp_bridge.sessions import SessionStore
 
 
+@pytest.fixture(autouse=True)
+def _no_leftover_stdout_proxy():
+    yield
+    bi.remove_stdout_proxy()
+
+
 @pytest.fixture
 def kit_stubs(monkeypatch):
     """run_python imports carb, omni and pxr; stub the Kit-only ones."""
@@ -123,10 +129,18 @@ def test_move_window_unmaximizes_moves_and_reports_geometry(monkeypatch):
 
 def test_a_stage_opened_during_an_awaiting_call_is_not_saved(kit_stubs):
     run(kit_stubs, "old_prim = 'stale'", persistent=True, session_id="lab")
-    kit_stubs.trigger = kit_stubs.sessions.clear  # what the bridge does on a stage-open event
-    code = "import asyncio\nfresh = 'new'\nawait asyncio.sleep(0)\ntrigger()\nresult = old_prim"
-    kit_stubs.sessions._sessions["lab"]["trigger"] = kit_stubs.trigger
-    out = run(kit_stubs, code, persistent=True, session_id="lab")
+    async def scenario():
+        async def stage_open_event():  # Kit delivers the stage-open event while the call awaits
+            await asyncio.sleep(0)
+            kit_stubs.sessions.clear()
+
+        task = asyncio.ensure_future(stage_open_event())
+        code = "import asyncio\nfresh = 'new'\nawait asyncio.sleep(0.01)\nresult = old_prim"
+        out = await bi.cmd_run_python(kit_stubs, code, persistent=True, session_id="lab")
+        await task
+        return out
+
+    out = asyncio.run(scenario())
     assert out["session_vars"] == [] and "was not saved" in out["session_reset"]
     with pytest.raises(ToolError) as err:  # nothing stale came back, and the reset was reported once
         run(kit_stubs, "result = old_prim", persistent=True, session_id="lab")
@@ -199,3 +213,24 @@ def test_move_window_waits_for_a_position_only_move(monkeypatch):
     screen.register_screen_tools(server, groups={"screen_control"})
     out = server._tool_manager._tools["move_window"].fn(x=960, y=40, width=900, height=1000, window_id=7)
     assert "now 900x1000+960+40" in out  # not the stale +0+0 read right after sending
+
+
+def test_tasks_started_by_the_code_print_to_the_console_after_the_call(kit_stubs, capsys):
+    async def scenario():
+        code = ("import asyncio\nasync def monitor():\n    await asyncio.sleep(0.02)\n    print('later')\n"
+                "started = asyncio.ensure_future(monitor())\nprint('now')\nawait asyncio.sleep(0)\nresult = 1")
+        out = await bi.cmd_run_python(kit_stubs, code, persistent=True, session_id="m")
+        await asyncio.sleep(0.05)  # the monitor prints after the call returned
+        return out
+
+    out = asyncio.run(scenario())
+    assert out["output"] == "now\n"
+    assert "later" in capsys.readouterr().out
+
+
+def test_proxy_handles_writelines_and_is_removed_on_shutdown(kit_stubs, capsys):
+    out = run(kit_stubs, "import sys, asyncio\nsys.stdout.writelines(['a\\n', 'b\\n'])\nawait asyncio.sleep(0)")
+    assert out["output"] == "a\nb\n"
+    assert getattr(sys.stdout, "_isaac_mcp_proxy", False)
+    bi.remove_stdout_proxy()
+    assert not getattr(sys.stdout, "_isaac_mcp_proxy", False)

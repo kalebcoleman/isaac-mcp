@@ -132,16 +132,19 @@ def cmd_run_python(bridge, code: str, session_id: str = "default",
         async def run_async():
             # Capture only this call's prints: a context-local buffer behind one proxy, so Kit
             # output from other tasks during the await still reaches the console.
-            capture = io.StringIO()
+            capture = _Capture()
             token = _CAPTURE.set(capture)
             _install_stdout_proxy()
             try:
                 await eval(compiled, exec_globals)
             except Exception as e:
-                fail(e, capture.getvalue())
+                fail(e, capture.buf.getvalue())
             finally:
+                # Tasks and callbacks the code started copied this context; closing the holder
+                # sends their later prints back to the console instead of a buffer nobody reads.
+                capture.open = False
                 _CAPTURE.reset(token)
-            return finish(capture.getvalue())
+            return finish(capture.buf.getvalue())
         return run_async()
 
     old_stdout = sys.stdout
@@ -158,20 +161,39 @@ def cmd_run_python(bridge, code: str, session_id: str = "default",
 _CAPTURE = contextvars.ContextVar("isaac_mcp_run_python_capture", default=None)
 
 
+class _Capture:
+    """One awaiting call's output buffer; closed when the call returns."""
+
+    def __init__(self):
+        import io
+
+        self.buf = io.StringIO()
+        self.open = True
+
+
 class _StdoutProxy:
     """sys.stdout stand-in: writes go to the awaiting run_python call's buffer when the current
-    asyncio context has one, else to the real stream."""
+    asyncio context has an open one, else to the real stream."""
+
+    _isaac_mcp_proxy = True
 
     def __init__(self, real):
         self._real = real
 
+    def _target(self):
+        capture = _CAPTURE.get()
+        return capture.buf if capture is not None and capture.open else self._real
+
     def write(self, text):
-        buf = _CAPTURE.get()
-        return (buf if buf is not None else self._real).write(text)
+        return self._target().write(text)
+
+    def writelines(self, lines):
+        target = self._target()
+        for line in lines:
+            target.write(line)
 
     def flush(self):
-        buf = _CAPTURE.get()
-        return (buf if buf is not None else self._real).flush()
+        return self._target().flush()
 
     def __getattr__(self, name):
         return getattr(self._real, name)
@@ -180,8 +202,17 @@ class _StdoutProxy:
 def _install_stdout_proxy():
     import sys
 
-    if not isinstance(sys.stdout, _StdoutProxy):
+    # Duck-typed so a hot-reloaded module (a new class) does not stack a second proxy.
+    if not getattr(sys.stdout, "_isaac_mcp_proxy", False):
         sys.stdout = _StdoutProxy(sys.stdout)
+
+
+def remove_stdout_proxy():
+    """Restore the real stream (extension shutdown)."""
+    import sys
+
+    while getattr(sys.stdout, "_isaac_mcp_proxy", False):
+        sys.stdout = sys.stdout._real
 
 
 _PUT_FILE_DESCRIPTION = (

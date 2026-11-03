@@ -700,15 +700,19 @@ def register_screen_tools(
                 disp.sync()
                 # Wait until the window manager has applied it: the size matches and the geometry
                 # changed (unless nothing had to change).
-                unchanged = before[2:] == (width, height) and abs(before[0] - x) <= 64 and abs(before[1] - y) <= 64
+                # The requested x/y place the frame while we read the client area, so instead of
+                # guessing an offset, accept the geometry once it is the right size and two
+                # readings in a row agree after it changed (or after 0.3 s of no change).
                 deadline = time.monotonic() + 1.0
-                geo = before
+                settle = time.monotonic() + 0.3
+                geo, last = before, None
                 while time.monotonic() < deadline:
                     time.sleep(0.05)
                     geo = geometry()
                     sized = abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2
-                    if sized and (geo != before or unchanged):
+                    if sized and geo == last and (geo != before or time.monotonic() >= settle):
                         break
+                    last = geo
                 sized = abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2
                 return (f"moved: {win['title']} (id={win['id']}) now {geo[2]}x{geo[3]}+{geo[0]}+{geo[1]} "
                         "(client area; the frame's title bar sits above it)"
