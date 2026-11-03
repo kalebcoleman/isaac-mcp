@@ -459,7 +459,7 @@ def test_doctor_command_reports_two_clocks_end_to_end(monkeypatch, capsys, as_js
     edges = [dict(parent="world", child="base_link", static=True, stamp=0.0),
              dict(parent="base_link", child="tool0", static=False, stamp=5.0)]
     clock = [5.0, 4.9, 5.1, 5.0]  # two publishers a few frames apart
-    monkeypatch.setattr(doctor, "capture", lambda seconds, topics: (edges, clock, {"/isaac"}, {"/twin_clock", "/tool_clock"}, {}))
+    monkeypatch.setattr(doctor, "capture", lambda seconds, topics: (edges, clock, {"/isaac"}, {"/twin_clock", "/tool_clock"}, {}, []))
     argv = ["--fixed-frame", "world"] + (["--json"] if as_json else [])
     assert doctor.main(argv) == 1
     out = capsys.readouterr().out
@@ -476,7 +476,7 @@ def test_doctor_command_reports_two_clocks_end_to_end(monkeypatch, capsys, as_js
 def test_doctor_counts_backward_clock_jumps(monkeypatch, capsys):
     edges = [dict(parent="world", child="base_link", static=True, stamp=0.0),
              dict(parent="base_link", child="tool0", static=False, stamp=5.0)]
-    monkeypatch.setattr(doctor, "capture", lambda seconds, topics: (edges, [5.0, 4.0, 5.2], set(), {"/one"}, {}))
+    monkeypatch.setattr(doctor, "capture", lambda seconds, topics: (edges, [5.0, 4.0, 5.2], set(), {"/one"}, {}, []))
     assert doctor.main(["--fixed-frame", "world"]) == 1
     assert "went backwards 1 time" in capsys.readouterr().out
 
@@ -484,7 +484,7 @@ def test_doctor_counts_backward_clock_jumps(monkeypatch, capsys):
 def test_a_timeline_restart_is_a_warning_not_an_error(monkeypatch, capsys):
     edges = [dict(parent="world", child="base_link", static=True, stamp=0.0),
              dict(parent="base_link", child="tool0", static=False, stamp=0.1)]
-    monkeypatch.setattr(doctor, "capture", lambda seconds, topics: (edges, [5.0, 5.1, 0.0, 0.1], set(), {"/one"}, {}))
+    monkeypatch.setattr(doctor, "capture", lambda seconds, topics: (edges, [5.0, 5.1, 0.0, 0.1], set(), {"/one"}, {}, []))
     assert doctor.main(["--fixed-frame", "world"]) == 0
     out = capsys.readouterr().out
     assert "restarted from 0 1 time" in out and "ERROR" not in out
@@ -657,8 +657,21 @@ def test_doctor_passes_extra_topics_to_capture(monkeypatch, capsys):
     def fake(seconds, topics):
         seen["topics"] = topics
         return ([dict(parent="world", child="base_link", static=True, stamp=0.0)], [1.0], set(), {"/c"},
-                {"/my_topic": [(1.0, 1.0)]})
+                {"/my_topic": [(1.0, 1.0)]}, [])
 
     monkeypatch.setattr(doctor, "capture", fake)
     assert doctor.main(["--fixed-frame", "world", "--topic", "/my_topic"]) == 0
     assert seen["topics"] == ["/my_topic"] and "topics checked ['/my_topic']" in capsys.readouterr().out
+
+
+def test_unchecked_topics_and_wall_clock_sensor_stamps():
+    # Review of #60: a headerless --topic (e.g. /cmd_vel) is "not checked", not "no messages";
+    # a sensor on wall-clock time next to a sim-time /clock is an error.
+    edges = GOOD[:1]
+    errors, warnings, info = doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/c"],
+                                            clock_times=[5.0], topic_stamps={"/scan": [(1.79e9, 5.0)]},
+                                            unchecked=["/cmd_vel"])
+    assert any("/scan stamped with wall-clock time" in x for x in errors)
+    assert not any("stamped more than" in x for x in errors)
+    assert any("not checked: /cmd_vel" in w for w in warnings) and not any("no messages" in w for w in warnings)
+    assert info["unchecked"] == ["/cmd_vel"]

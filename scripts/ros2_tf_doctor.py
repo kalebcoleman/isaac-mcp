@@ -63,12 +63,13 @@ SENSOR_TYPES = ("sensor_msgs/msg/LaserScan", "sensor_msgs/msg/Image", "sensor_ms
 
 
 def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publishers=(), clock_times=(),
-            topic_stamps=None):
+            topic_stamps=None, unchecked=()):
     """Return ``(errors, warnings, info)`` for observed TF edges.
 
     ``edges``: iterable of dicts ``{"parent", "child", "static", "stamp"}`` (stamp in seconds).
     ``tf_publishers``: node names publishing /tf or /tf_static.
     ``topic_stamps``: ``{topic: [(header stamp, newest /clock when it arrived or None), ...]}``.
+    ``unchecked``: requested topics that could not be checked (not found, no header, type not importable).
     """
     errors, warnings = [], []
     parents, kinds, stamps = {}, {}, {}
@@ -190,9 +191,13 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publisher
 
     topic_stamps = topic_stamps or {}
     off, silent = {}, sorted(t for t, v in topic_stamps.items() if not v)
+    wall = sorted(t for t, v in topic_stamps.items() if v and v[-1][0] > WALL_EPOCH)
+    if wall and clock_seen:
+        errors.append(f"{', '.join(wall[:8])} stamped with wall-clock time while /clock runs sim time: "
+                      "use_sim_time nodes such as RViz drop them. The publisher is not using simulation time.")
     for topic, samples in sorted(topic_stamps.items()):
         timed = [(stamp, clock) for stamp, clock in samples if clock is not None and stamp <= WALL_EPOCH]
-        if timed:
+        if timed and samples[-1][0] <= WALL_EPOCH:
             stamp, clock = timed[-1]  # newest only, as for TF: a stop/play while listening is not a fault
             if abs(stamp - clock) > CLOCK_SKEW:
                 off[topic] = stamp - clock
@@ -206,19 +211,22 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publisher
                       "Use the same setting everywhere (True is the safe choice with sensor helpers), then Stop and Play.")
     if silent:
         warnings.append(f"no messages on {', '.join(silent[:8])} while listening.")
+    if unchecked:
+        warnings.append(f"not checked: {', '.join(sorted(unchecked)[:8])} (not published, no header, or its "
+                        "message package is not importable here).")
 
     info = dict(frames=len(frames), roots=roots, fixed_frame=fixed_frame,
                 static=sorted(c for c, k in kinds.items() if k == {"static"}),
                 time_source=sorted(domains), clock=clock_seen, tf_publishers=publishers, clock_publishers=clock_pubs,
                 tree={c: sorted(p) for c, p in sorted(parents.items())},
-                topics={t: len(v) for t, v in sorted(topic_stamps.items())})
+                topics={t: len(v) for t, v in sorted(topic_stamps.items())}, unchecked=sorted(unchecked))
     return errors, warnings, info
 
 
 def capture(seconds, topics=()):
     """Listen to /tf, /tf_static, /clock and sensor topics.
 
-    Returns (edges, clock times, TF publishers, clock publishers, topic stamps). Sensor topics are
+    Returns (edges, clock times, TF publishers, clock publishers, topic stamps, unchecked topics). Sensor topics are
     every topic of a SENSOR_TYPES type plus *topics*, subscribed after a short discovery pause.
     """
     import importlib
@@ -244,8 +252,8 @@ def capture(seconds, topics=()):
     node.create_subscription(TFMessage, "/tf", on_tf(False), 100)
     node.create_subscription(TFMessage, "/tf_static", on_tf(True), static_qos)
     node.create_subscription(Clock, "/clock", lambda m: clock.append(m.clock.sec + m.clock.nanosec * 1e-9), 10)
-    end = time.monotonic() + seconds
-    discover = min(time.monotonic() + 0.5, end)
+    discover = time.monotonic() + 0.5  # then listen the full *seconds* with every subscription in place
+    end = discover + seconds
     while time.monotonic() < discover:
         rclpy.spin_once(node, timeout_sec=0.05)
 
@@ -270,8 +278,7 @@ def capture(seconds, topics=()):
             s = msg.header.stamp
             topic_stamps[name].append((s.sec + s.nanosec * 1e-9, clock[-1] if clock else None))
         node.create_subscription(msg_type, name, on_msg, sensor_qos)
-    for name in wanted - set(topic_stamps):
-        topic_stamps[name] = []  # asked for but not found (or no header): reported as silent
+    unchecked = sorted(wanted - set(topic_stamps))  # asked for but not found, no header, or not importable
     while time.monotonic() < end:
         rclpy.spin_once(node, timeout_sec=0.05)
     publishers = set()
@@ -283,7 +290,7 @@ def capture(seconds, topics=()):
                         for i in node.get_publishers_info_by_topic("/clock")}
     node.destroy_node()
     rclpy.shutdown()
-    return edges, clock, publishers, clock_publishers, topic_stamps
+    return edges, clock, publishers, clock_publishers, topic_stamps, unchecked
 
 
 def dds_env(env):
@@ -354,7 +361,7 @@ def main(argv=None) -> int:
         rest = [a for a in (argv if argv is not None else sys.argv[1:]) if a != "--isaac-ros"]
         return subprocess.run([python, str(Path(__file__).resolve()), *rest], env=env).returncode
     try:
-        edges, clock_times, publishers, clock_publishers, topic_stamps = capture(
+        edges, clock_times, publishers, clock_publishers, topic_stamps, unchecked = capture(
             max(0.5, min(args.seconds, 30.0)), args.topic)
     except ImportError as exc:
         print(f"ROS 2 Python packages not found ({exc}). Source ROS 2 first "
@@ -363,7 +370,7 @@ def main(argv=None) -> int:
         return 2
     errors, warnings, info = analyze(edges, args.fixed_frame, clock_seen=bool(clock_times), tf_publishers=publishers,
                                      clock_publishers=clock_publishers, clock_times=clock_times,
-                                     topic_stamps=topic_stamps)
+                                     topic_stamps=topic_stamps, unchecked=unchecked)
     if args.json:
         print(json.dumps(dict(errors=errors, warnings=warnings, **info), indent=2))
     else:
