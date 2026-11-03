@@ -8,8 +8,5 @@
             <ParticipantIndex>auto</ParticipantIndex>
             <MaxAutoParticipantIndex>100</MaxAutoParticipantIndex>
         </Discovery>
-        <SharedMemory>
-            <Enable>false</Enable>
-        </SharedMemory>
     </Domain>
 </CycloneDDS>
