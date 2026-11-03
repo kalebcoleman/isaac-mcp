@@ -531,8 +531,12 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 strings = f["name"] in {"observe_prims", "observe_joints"} or (canonical == "sim.ui.act" and f["name"] == "keys")
                 annotation = list[str] if strings else list[float]
                 if canonical == "sim.graph.build" and f["name"] in ("nodes", "connections"):
-                    # [name, type] / [from, to] string pairs.
-                    annotation = list[Annotated[list[str], Field(min_length=2, max_length=2)]]
+                    # [name, type] / [from, to] pairs, and the shapes weak models reach for first:
+                    # {"name","type"} / {"from","to"} objects and [srcNode, srcPort, dstNode, dstPort].
+                    # The bridge normalizes them (graph_build.parse_spec) and says what it did.
+                    from typing import Union
+                    annotation = list[Union[Annotated[list[str], Field(min_length=2, max_length=4)],
+                                            dict[str, str]]]
                 if canonical == "sim.map.occupancy" and f["name"] == "clear":
                     # A list of [x, y, radius] circles; list[float] rejected every valid value.
                     annotation = list[Annotated[list[float], Field(min_length=3, max_length=3)]]
@@ -745,6 +749,21 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
         options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.ui.act", "sim.stage.open", "sim.graph.build"},
                                                  idempotentHint=read_only, openWorldHint=canonical.startswith(("assets.", "sim.controller.")))
     server.tool(**options)(handler)
+    if canonical in REGISTRY:
+        _forbid_unknown_arguments(server, name)
+
+
+def _forbid_unknown_arguments(server: FastMCP, name: str) -> None:
+    """Refuse arguments a scene tool does not have instead of silently dropping them.
+
+    A student passed properties={...} to sim__graph__build; FastMCP ignored the key, the call
+    "succeeded", and the values it meant to set were never applied."""
+    tool = server._tool_manager._tools.get(name)
+    model = getattr(getattr(tool, "fn_metadata", None), "arg_model", None)
+    if model is None:
+        return
+    model.model_config["extra"] = "forbid"
+    model.model_rebuild(force=True)
 
 
 # ==================== Server ====================
