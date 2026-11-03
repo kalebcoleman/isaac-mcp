@@ -399,3 +399,70 @@ def test_a_parent_of_a_looped_fixed_frame_is_not_called_disconnected():
     errors, *_ = doctor.analyze(edges, "world", clock_seen=True)
     cut = [x for x in errors if "do not connect" in x]
     assert cut and cut[0].split(": ", 1)[1].split(" (")[0] == "c, d"
+
+
+def test_clock_can_be_left_to_an_existing_publisher():
+    nodes, values, connects, frames = plan(publish_clock=False)
+    assert "PublishClock" not in dict(nodes)
+    assert not any("PublishClock" in a for a, _ in values)
+    _check_wiring(nodes, values, connects)
+    assert "PublishClock" in dict(plan()[0])
+
+
+def test_the_contract_offers_clock_modes():
+    sys.path.insert(0, str(REPO / "mcp"))
+    from isaac_mcp.scene_contracts import REGISTRY
+
+    assert REGISTRY["sim.ros2.tf_setup"]["parameters"]["clock"]["default"] == "auto"
+
+
+def test_doctor_flags_two_clock_publishers_and_backward_time():
+    errors, _, info = doctor.analyze(GOOD, "world", clock_seen=True,
+                                     clock_publishers=["/a/clock_pub", "/b/clock_pub"])
+    assert any("2 nodes publish /clock" in x and "resetting" in x for x in errors)
+    assert info["clock_publishers"] == ["/a/clock_pub", "/b/clock_pub"]
+    errors, *_ = doctor.analyze(GOOD, "world", clock_seen=True, clock_publishers=["/a"], clock_jumps_back=3)
+    assert any("went backwards 3" in x for x in errors)
+    assert doctor.analyze(GOOD, "world", clock_seen=True, clock_publishers=["/a"])[0] == []
+
+
+def test_rviz_config_sets_a_usable_window_size(tmp_path):
+    out = tmp_path / "w.rviz"
+    rviz.main(["--fixed-frame", "world", "--out", str(out)])
+    yaml = pytest.importorskip("yaml")
+    geometry = yaml.safe_load(out.read_text())["Window Geometry"]
+    assert geometry["Width"] >= 1200 and geometry["Height"] >= 800
+
+
+def test_the_cyclone_profile_has_no_shared_memory_element():
+    # Cyclone builds without iceoryx reject it and no ROS 2 client can start.
+    text = (REPO / "config" / "cyclonedds.xml").read_text()
+    assert "SharedMemory" not in text and "<AllowMulticast>false</AllowMulticast>" in text
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_doctor_command_reports_two_clocks_end_to_end(monkeypatch, capsys, as_json):
+    # Runs main() (argument parsing, clock-jump counting, text and JSON output) on fake ROS data.
+    edges = [dict(parent="world", child="base_link", static=True, stamp=0.0),
+             dict(parent="base_link", child="tool0", static=False, stamp=5.0)]
+    clock = [5.0, 4.9, 5.1, 5.0]  # two publishers a few frames apart
+    monkeypatch.setattr(doctor, "capture", lambda seconds: (edges, clock, {"/isaac"}, {"/twin_clock", "/tool_clock"}))
+    argv = ["--fixed-frame", "world"] + (["--json"] if as_json else [])
+    assert doctor.main(argv) == 1
+    out = capsys.readouterr().out
+    if as_json:
+        import json
+
+        data = json.loads(out)
+        assert data["clock_publishers"] == ["/tool_clock", "/twin_clock"]
+        assert any("2 nodes publish /clock" in x for x in data["errors"])
+    else:
+        assert "ERROR: 2 nodes publish /clock" in out and "2 publisher(s)" in out
+
+
+def test_doctor_counts_backward_clock_jumps(monkeypatch, capsys):
+    edges = [dict(parent="world", child="base_link", static=True, stamp=0.0),
+             dict(parent="base_link", child="tool0", static=False, stamp=5.0)]
+    monkeypatch.setattr(doctor, "capture", lambda seconds: (edges, [5.0, 4.0, 5.2], set(), {"/one"}))
+    assert doctor.main(["--fixed-frame", "world"]) == 1
+    assert "went backwards 1 time" in capsys.readouterr().out

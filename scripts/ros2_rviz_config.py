@@ -134,6 +134,10 @@ def render(fixed_frame: str, robot_model: bool, description_topic: str, topics: 
         "      Target Frame: <Fixed Frame>",
         "      Value: Orbit (rviz)",
         "    Saved: ~",
+        "Window Geometry:",
+        "  Width: 1400",
+        "  Height: 900",
+        "  Hide Left Dock: false",
         "",
     ]
     return "\n".join(out)

@@ -55,7 +55,7 @@ def odom_frame(namespace=""):
 
 def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", world_frame="world",
                   link_frames="isaac", extra_prims=(), namespace="", joint_states_topic="joint_states",
-                  base_tf_name=None):
+                  base_tf_name=None, publish_clock=True):
     """Return ``(nodes, values, connects, frames)`` for the graph.
 
     ``base_pose`` is ``((x, y, z) metres, (qx, qy, qz, qw))`` of the base link in the world at
@@ -84,17 +84,19 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
         (TICK, "omni.graph.action.OnPlaybackTick"),
         (CONTEXT, "isaacsim.ros2.bridge.ROS2Context"),
         (TIME, "isaacsim.core.nodes.IsaacReadSimulationTime"),
-        (CLOCK, "isaacsim.ros2.bridge.ROS2PublishClock"),
         ("PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"),
     ]
     values = [
         (f"{TIME}.inputs:resetOnStop", True),
-        (f"{CLOCK}.inputs:topicName", "clock"),
         ("PublishJointState.inputs:targetPrim", robot),
         ("PublishJointState.inputs:topicName", joint_states_topic.lstrip("/")),
         ("PublishJointState.inputs:nodeNamespace", namespace),
     ]
-    publishers = [CLOCK, "PublishJointState"]
+    publishers = ["PublishJointState"]
+    if publish_clock:
+        nodes.append((CLOCK, "isaacsim.ros2.bridge.ROS2PublishClock"))
+        values.append((f"{CLOCK}.inputs:topicName", "clock"))
+        publishers.append(CLOCK)
     connects = []
     frames = {"links": "isaac" if link_frames == "isaac" else "robot_state_publisher (from /joint_states)"}
     edges = []
@@ -224,6 +226,34 @@ def check_frames(links, base_path, base_frame, base_tf_name, extras, world_frame
 
 # ----------------------------------------------------------------- Kit side
 
+ROS2_PUBLISHERS = {
+    "isaacsim.ros2.bridge.ROS2PublishClock": "/clock",
+    "isaacsim.ros2.bridge.ROS2PublishTransformTree": "TF",
+    "isaacsim.ros2.bridge.ROS2PublishRawTransformTree": "TF",
+    "isaacsim.ros2.bridge.ROS2PublishJointState": "joint states",
+    "isaacsim.ros2.bridge.ROS2PublishOdometry": "odometry",
+}
+
+
+def other_ros2_publishers(own_graph):
+    """ROS 2 clock/TF/joint-state/odometry publisher nodes in graphs this call does not own.
+
+    A second /clock makes time jump back and forth (RViz resets constantly), and a second TF or
+    joint-state publisher for the same robot makes frames jump, so the caller has to know.
+    """
+    import omni.graph.core as og
+
+    found = []
+    for graph in og.get_all_graphs():
+        path = graph.get_path_to_graph()
+        if path == own_graph or path.startswith(own_graph + "/"):
+            continue
+        for node in graph.get_nodes():
+            kind = ROS2_PUBLISHERS.get(node.get_type_name())
+            if kind:
+                found.append(dict(node=node.get_prim_path(), publishes=kind))
+    return found
+
 NAME_OVERRIDE = "isaac:nameOverride"
 
 
@@ -311,22 +341,29 @@ def setup(scene, stage, a):
     q = world.RemoveScaleShear().ExtractRotationQuat().GetNormalized()
     pose = ((t[0], t[1], t[2]), (q.GetImaginary()[0], q.GetImaginary()[1], q.GetImaginary()[2], q.GetReal()))
     try:
+        own = graph_path(a.get("namespace", ""))
+    except ValueError as exc:
+        refuse("INVALID_VALUE", str(exc))
+    others = other_ros2_publishers(own)
+    clock_mode = a.get("clock", "auto")
+    if clock_mode not in ("auto", "publish", "skip"):
+        refuse("INVALID_VALUE", "clock must be auto, publish or skip")
+    other_clocks = [o["node"] for o in others if o["publishes"] == "/clock"]
+    publish_clock = clock_mode == "publish" or (clock_mode == "auto" and not other_clocks)
+    try:
         nodes, values, connects, frames = planned_graph(
             robot=articulation, base_prim=base_path, base_frame=base_frame, base_pose=pose,
             mode=a.get("base", "fixed"), world_frame=a.get("world_frame", "world"),
             link_frames=a.get("link_frames", "isaac"), extra_prims=extra,
             namespace=a.get("namespace", ""), joint_states_topic=a.get("joint_states_topic", "joint_states"),
-            base_tf_name=base_tf_name,
+            base_tf_name=base_tf_name, publish_clock=publish_clock,
         )
     except ValueError as exc:
         refuse("INVALID_VALUE", str(exc))
 
     import omni.graph.core as og
 
-    try:
-        graph = graph_path(a.get("namespace", ""))
-    except ValueError as exc:
-        refuse("INVALID_VALUE", str(exc))
+    graph = own
     had_scope = bool(stage.GetPrimAtPath("/Graph"))
     existing = bool(stage.GetPrimAtPath(graph))  # read before removal: a removed prim is falsy
     if existing:
@@ -365,7 +402,7 @@ def setup(scene, stage, a):
     scene.owned.add(graph)
 
     ns = ("/" + a.get("namespace").strip("/")) if (a.get("namespace") or "").strip("/") else ""
-    topics = ["/clock", "/tf", "/tf_static", ns + "/" + a.get("joint_states_topic", "joint_states").lstrip("/")]
+    topics = (["/clock"] if publish_clock else []) + ["/tf", "/tf_static", ns + "/" + a.get("joint_states_topic", "joint_states").lstrip("/")]
     if a.get("base", "fixed") == "mobile":
         topics.append(f"{ns}/odom")
     fixed = frames["root"]
@@ -405,4 +442,12 @@ def setup(scene, stage, a):
             f"and set that node's odom_frame_id to {frames['odom']}.",
         ] if a.get("base", "fixed") == "mobile" else []),
         rebuilt=existing,
+        clock=("published by this graph" if publish_clock else
+               f"not published here: already published by {', '.join(other_clocks) or 'another node'}"),
+        other_ros2_publishers=others,
+        warnings=([f"{len(other_clocks) + 1} /clock publishers: time jumps back and RViz keeps resetting. "
+                   "Use clock=auto, or delete the other clock node."] if publish_clock and other_clocks else [])
+        + ([f"Other graphs also publish TF or joint states ({', '.join(o['node'] for o in others if o['publishes'] != '/clock')}). "
+            "If they cover this robot, its frames are published twice and RViz jumps: delete those nodes or "
+            "do not use this tool for that robot."] if any(o["publishes"] != "/clock" for o in others) else []),
     )
