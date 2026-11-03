@@ -81,6 +81,60 @@ def test_missing_camera_relationship_is_restored_only_in_export(configured, monk
     assert unchanged(stage) == before and len(checked) == 1
 
 
+@pytest.mark.parametrize("dormant", ["inactive", "abstract"])
+@pytest.mark.parametrize("reset", [False, True])
+@pytest.mark.parametrize("has_handle", [False, True])
+def test_dormant_producer_with_active_helper_does_not_block_save(
+        configured, monkeypatch, dormant, reset, has_handle):
+    from sim_tools import render_export
+
+    scene, stage, product, producer, checked = configured
+    producer.GetRelationship("inputs:cameraPrim").SetTargets([])
+    if not has_handle:
+        with Usd.EditContext(stage, stage.GetSessionLayer()):
+            product.RemoveProperty("viewportHandle")
+    if dormant == "inactive":
+        producer.SetActive(False)
+    else:
+        producer.SetSpecifier(Sdf.SpecifierClass)
+
+    def unexpected_resolver(*args):
+        pytest.fail("a dormant producer must not be resolved")
+
+    monkeypatch.setattr(render_export, "runtime_camera_target", unexpected_resolver)
+    before = unchanged(stage)
+    result = scene.save(stage, "dormant.usda", reset_camera_render_handles=reset)
+    assert Usd.Stage.Open(result["file"])
+    assert result["restored_camera_targets"] == []
+    assert result["omitted_runtime_render_properties"] == []
+    assert not checked and unchanged(stage) == before
+
+
+def test_dormant_producer_does_not_skip_active_handle_safety(configured):
+    scene, stage, product, producer, checked = configured
+    producer.GetRelationship("inputs:cameraPrim").SetTargets([])
+    producer.SetActive(False)
+    active = stage.DefinePrim("/Graph/Camera/ActiveProduct", "OmniGraphNode")
+    active.CreateAttribute("node:type", Sdf.ValueTypeNames.Token).Set(
+        "isaacsim.core.nodes.IsaacCreateRenderProduct")
+    active.CreateRelationship("inputs:cameraPrim").SetTargets(["/World/Camera"])
+    for name, value in [("width", 1280), ("height", 720)]:
+        active.CreateAttribute("inputs:" + name, Sdf.ValueTypeNames.Int).Set(value)
+    helper = stage.DefinePrim("/Graph/Camera/ActiveHelper", "OmniGraphNode")
+    helper.CreateAttribute("node:type", Sdf.ValueTypeNames.Token).Set(
+        "isaacsim.ros2.bridge.ROS2CameraHelper")
+    helper.CreateAttribute("inputs:renderProductPath", Sdf.ValueTypeNames.String).SetConnections(
+        [active.GetPath().AppendProperty("outputs:renderProductPath")])
+
+    with pytest.raises(AssetError) as error:
+        scene.save(stage, "refused.usda")
+    assert error.value.code == "SAVE_UNSUPPORTED"
+    assert error.value.details["retry_with"] == {"reset_camera_render_handles": True}
+    result = scene.save(stage, "active.usda", reset_camera_render_handles=True)
+    assert result["omitted_runtime_render_properties"] == [str(product.GetPath()) + ".viewportHandle"]
+    assert len(checked) == 1 and checked[0]["producer"] == str(active.GetPath())
+
+
 @pytest.mark.parametrize("reset", [False, True])
 @pytest.mark.parametrize("product_exists", [False, True])
 @pytest.mark.parametrize("relationship_exists", [False, True])

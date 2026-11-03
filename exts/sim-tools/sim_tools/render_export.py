@@ -66,10 +66,12 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
     selected = {}
     repairs = {}
     # An empty target must be resolved even before the first Play, when no
-    # render product or viewport handle exists yet. Inspect all producers,
-    # including ones used by consumers other than the ROS camera helpers.
+    # render product or viewport handle exists yet. Inspect all active,
+    # concrete producers, including ones used by non-ROS camera helpers.
+    # Inactive and abstract producers do not execute in the exported stage.
     for producer in prims:
-        if producer.GetAttribute("node:type").Get() != PRODUCER:
+        if (not producer.IsActive() or producer.IsAbstract()
+                or producer.GetAttribute("node:type").Get() != PRODUCER):
             continue
         rel = producer.GetRelationship("inputs:cameraPrim")
         if not rel and producer.GetAttribute("inputs:cameraPrim"):
@@ -120,7 +122,8 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
             continue
         for source in helper.GetAttribute("inputs:renderProductPath").GetConnections():
             producer = stage.GetPrimAtPath(source.GetPrimPath())
-            if (not producer or producer.GetAttribute("node:type").Get() != PRODUCER
+            if (not producer or not producer.IsActive() or producer.IsAbstract()
+                    or producer.GetAttribute("node:type").Get() != PRODUCER
                     or source.name != "outputs:renderProductPath"):
                 continue
             rel = producer.GetRelationship("inputs:cameraPrim")

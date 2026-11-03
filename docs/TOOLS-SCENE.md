@@ -114,9 +114,10 @@ a data handle across updates. `og.Controller.edit(graph_path, {og.Controller.Key
 Viewport framing reports both the requested and selected path. If a geometry-free
 `base_footprint` has a visible `base_link` sibling and either link or their parent has a rigid-body
 or articulation API, the tool selects that link; follow tracks the selected subtree. Other empty
-subtrees return `NO_BOUNDS` with bounded nearby geometry `candidates` for an explicit retry;
-`candidates_truncated=true` means the search hit its limit. If course map files are missing or
-the maps folder is empty, `sim__map__occupancy` can generate a map from scene colliders such as
+subtrees return `NO_BOUNDS` with bounded nearby visible geometry `candidates` for an explicit
+retry; inherited invisibility excludes an entire subtree. `candidates_truncated=true` means the
+search hit its limit. If course map files are missing or the maps folder is empty,
+`sim__map__occupancy` can generate a map from scene colliders such as
 `/SimpleRoom`.
 
 URDF conversion returns `converted_physics`: the original and selected variant, available
@@ -439,8 +440,8 @@ Binding validation reads the already-retained texture objects through a bounded 
 inspected Replicator cache layouts. It does not call create/attach APIs or pruning getters.
 An unfamiliar layout refuses. It never passes a USD integer to the native factory lookup:
 that lookup crashed during 6.2 live qualification; its handle contract was not established.
-When any recognized producer's USD `inputs:cameraPrim` relationship is empty, save checks it
-even if no ROS camera helper is connected or no viewport handle exists. It can recover the target
+When any active, concrete recognized producer's USD `inputs:cameraPrim` relationship is empty,
+save checks it even if no ROS camera helper is connected or no viewport handle exists. It can recover the target
 from the existing OmniGraph runtime value only when its runtime render-product path,
 camera relationship and resolution agree. It writes the target into the private exported copy
 and lists it in `restored_camera_targets`; the live stage remains unchanged. An unavailable or

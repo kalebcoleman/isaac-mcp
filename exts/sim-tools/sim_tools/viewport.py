@@ -74,9 +74,22 @@ def check_subtree(prim):
             refuse("LIMIT", f"Viewport framing is limited to {CAP} composed prims; select a smaller subtree.")
 
 
+def _is_visible(prim, time):
+    # A query root may be a non-imageable Scope; its nearest imageable parent
+    # still supplies visibility inherited from the rest of the namespace.
+    while prim and not prim.IsPseudoRoot():
+        imageable = UsdGeom.Imageable(prim)
+        if imageable:
+            return imageable.ComputeVisibility(time) != UsdGeom.Tokens.invisible
+        prim = prim.GetParent()
+    return True
+
+
 def _finite_bounds(prim, time):
     """Current world-aligned bounds of visible geometry. PhysX writes simulated link poses to
     USD while playing, so this follows a robot whose links move under a fixed root prim."""
+    if not _is_visible(prim, time):
+        return None
     bounds = UsdGeom.BBoxCache(
         time, [UsdGeom.Tokens.default_, UsdGeom.Tokens.render, UsdGeom.Tokens.proxy]
     ).ComputeWorldBound(prim).ComputeAlignedRange()
@@ -121,11 +134,19 @@ def frame_prim(stage, prim, time):
     # any sibling (or the entire parent) is the requested object.
     candidates = []
     truncated = False
-    traversal = Usd.PrimRange(parent, Usd.TraverseInstanceProxies(Usd.PrimDefaultPredicate))
+    traversal = iter(Usd.PrimRange(parent, Usd.TraverseInstanceProxies(Usd.PrimDefaultPredicate)))
     for index, candidate in enumerate(traversal):
         if index >= CAP:
             truncated = True
             break
+        # Prune invisible branches so they cannot exhaust the bounded search
+        # before visible siblings are reached. Compute inherited visibility at
+        # the search root; below it a local invisible opinion hides the subtree.
+        imageable = UsdGeom.Imageable(candidate)
+        if ((index == 0 and not _is_visible(candidate, time))
+                or (imageable and imageable.GetVisibilityAttr().Get(time) == UsdGeom.Tokens.invisible)):
+            traversal.PruneChildren()
+            continue
         if candidate.IsA(UsdGeom.Gprim) and _finite_bounds(candidate, time) is not None:
             if len(candidates) == 20:
                 truncated = True

@@ -26,8 +26,9 @@ An affected export reports `SAVE_UNSUPPORTED` with `properties` and `retry_with`
 before explicitly opting in to normalization with `true`. Successful exports report exact
 `omitted_runtime_render_properties`. Ambiguous, authored or unavailable bindings still refuse.
 This changes the private export only; it does not repair an already-stale scene or prove authorship.
-For a missing camera producer relationship, save restores a runtime target in the export only
-when the observed render product confirms the camera and resolution; see `restored_camera_targets`.
+For a missing active, concrete camera producer relationship, save restores a runtime target in
+the export only when the observed render product confirms the camera and resolution; see
+`restored_camera_targets`.
 Pause before saving and check the exported scene after reopening in a fresh process.
 
 ## Ground rules
