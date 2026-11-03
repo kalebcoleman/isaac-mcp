@@ -266,8 +266,9 @@ def build(stage, a, stopped):
             n = og.Controller.node(f"{path}/{node}")
             for prefix in ("outputs:", "inputs:", "state:"):
                 if n.get_attribute_exists(prefix + port[1:]):
-                    if prefix != "outputs:":
-                        notes.append(f"{node}.{port[1:]}: no output of that name; connected from {prefix}{port[1:]}")
+                    note = f"{node}.{port[1:]}: no output of that name; connected from {prefix}{port[1:]}"
+                    if prefix != "outputs:" and note not in notes:
+                        notes.append(note)
                     return prefix + port[1:]
             return "outputs:" + port[1:]  # attr() then refuses with the node's real ports
 

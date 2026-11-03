@@ -8,9 +8,11 @@ nothing while Kit was publishing. ``describe`` is pure and unit-tested.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 from pathlib import Path
 
+FORCED = ("RMW_IMPLEMENTATION", "ROS_LOCALHOST_ONLY", "CYCLONEDDS_URI")  # set by config/ros_dds.env
 KEYS = ("ROS_DISTRO", "ROS_DOMAIN_ID", "RMW_IMPLEMENTATION", "ROS_LOCALHOST_ONLY", "CYCLONEDDS_URI",
         "ROS_AUTOMATIC_DISCOVERY_RANGE", "ROS_STATIC_PEERS")
 REPO = Path(__file__).resolve().parents[3]
@@ -21,6 +23,10 @@ def describe(env=None, repo=REPO):
     env = os.environ if env is None else env
     settings = {k: env.get(k) for k in KEYS if env.get(k)}
     distro = settings.get("ROS_DISTRO")
+    if distro and not re.fullmatch(r"[a-z]+", distro):
+        distro = None  # never paste an odd value into a path the user runs
+    # The profile forces these; when Kit runs without them (not launched via run.sh), unset them too.
+    unsets = "; ".join(f"unset {k}" for k in FORCED if k not in settings)
     domain = settings.get("ROS_DOMAIN_ID", "0")
     # Re-export every captured setting after sourcing: the profile forces Cyclone/localhost, but this
     # Kit may run with other DDS settings, and a mismatched shell sees no topics at all.
@@ -39,6 +45,8 @@ def describe(env=None, repo=REPO):
         exports = "; ".join(f"export {k}={shlex.quote(v)}" for k, v in settings.items() if k not in already)
     if exports:
         shell += f"; {exports}"
+    if unsets:
+        shell += f"; {unsets}"
     shell += "   # bash; then ros2 topic list"
     return dict(settings=settings, shell=shell)
 

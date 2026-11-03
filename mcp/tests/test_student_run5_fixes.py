@@ -62,6 +62,12 @@ def test_ros_environment_gives_a_matching_shell_line(tmp_path):
     assert odd["shell"].count("ROS_DOMAIN_ID") == 1
     fallback = ros_env.describe({"ROS_DISTRO": "humble"}, tmp_path / "nowhere")
     assert "/opt/ros/humble/setup.bash" in fallback["shell"]
+    # Round 2: an odd distro is never pasted into a path; profile-forced keys Kit lacks are unset.
+    evil = ros_env.describe({"ROS_DISTRO": "x;rm -rf ~"}, tmp_path / "nowhere")
+    assert "rm -rf ~/setup" not in evil["shell"] and "/opt/ros/<distro>/setup.bash" in evil["shell"]
+    assert "unset ROS_LOCALHOST_ONLY" in evil["shell"] and "unset RMW_IMPLEMENTATION" in evil["shell"]
+    assert "unset" not in ros_env.describe({"RMW_IMPLEMENTATION": "a", "ROS_LOCALHOST_ONLY": "1",
+                                            "CYCLONEDDS_URI": "b"}, tmp_path)["shell"]
 
 
 def test_scene_tools_refuse_unknown_arguments():
