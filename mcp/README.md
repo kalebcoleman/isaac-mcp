@@ -1,66 +1,54 @@
 # isaac-mcp
 
-Host-side Model Context Protocol (MCP) server for Isaac Sim, Isaac Lab and Omniverse Kit.
-It provides the Kit bridge gateway plus host-side desktop capture.
-The package provides one CLI, `isaac-mcp`.
-Opt-in groups also provide X11 desktop input and managed simulator sessions; see
-[host tools](../docs/TOOLS-HOST.md#optional-desktop-input) for configuration and limitations.
+Host-side Model Context Protocol (MCP) server for Isaac Sim, Isaac Lab and Omniverse Kit, with one CLI, `isaac-mcp`.
+It connects MCP clients to the tools inside a running Kit process and adds desktop capture and Isaac Lab job control.
+This page covers the host package and adding your own tools. For the project overview and setup, see the
+[project README](../README.md).
 
-Install it as an editable tool (shared by every MCP client):
+## Install
+
+Install it as an editable tool, shared by every MCP client. Linux x86_64 only.
 
 ```bash
-# From repository root:
+# From the repository root:
 ./install.sh --no-sim
-# Or install host package directly:
+# Or the host package alone:
 uv tool install --force --editable ./mcp
 ```
 
-Both commands install `isaac-mcp`. The installer also creates an `~/.local/bin/ffmpeg` shim for the Kit
-viewport recorder when that path does not already contain an unrelated file; a direct `uv tool install` does
-not create that shim. For the pinned Sim installation and EULA requirements, follow [Linux setup](../docs/LINUX-SETUP.md).
+Both install `isaac-mcp`. The installer also creates an `~/.local/bin/ffmpeg` shim for the Kit viewport recorder when
+that path does not already hold an unrelated file; a direct `uv tool install` does not. For the pinned Sim
+installation and EULA requirements, see [Linux setup](../docs/LINUX-SETUP.md). For where things live, see
+[Workspace](../docs/WORKSPACE.md).
 
-Where things live (checkout, asset stores, Sim environments, auto-detection of an existing
-install): [docs/WORKSPACE.md](../docs/WORKSPACE.md). Linux x86_64 only.
+To register a client, run `./install.sh --no-sim --claude` from the repository root for Claude Code and Claude Desktop,
+or see [client configuration](../docs/MCP-SERVER.md#4-client-configuration) for the others.
 
-Client configs: from the `isaac-mcp` repository root run
-`./install.sh --no-sim --claude` for Claude Code and Claude Desktop. Details:
-[docs/MCP-SERVER.md](../docs/MCP-SERVER.md).
+## Tools
 
-The 23 `ur5e_dt__*` tools are listed from a packaged catalog even before a simulator is running.
-They execute through a bridge that has the twin extension loaded; when no suitable bridge is available,
-they return an error with connection guidance. The supplied `run.sh` enables the tools while hiding their
-panel by default; use `--ur5e-panel` to show it. The generic scene/asset pack is also
-catalog-listed; see [scene tools](../docs/TOOLS-SCENE.md) for its runtime requirements
-and trusted-root setup. Other available tools include:
+The host lists 102 tools from startup, even before a simulator is running. Those that act on a scene execute through
+a bridge, and return an error with connection guidance when none is available. See
+[Tool arguments](../docs/TOOLS-ARGUMENTS.md) for all of them.
 
-| Tool | Purpose |
+| Group | Reference |
 |---|---|
-| `screenshot` | Screen, monitor, or window -> inline image + full-res PNG |
-| `list_windows` | Visible windows with ids, geometry, class, title |
-| `raise_window` | Bring a window to the front before capturing it |
-| `start_screen_recording` | Record the desktop or a window to MP4; full-screen output by default |
-| `stop_screen_recording` | Finalize and report the MP4 |
-| `screen_recording_status` | Elapsed time and frames |
-| `screen_info` | Display, monitors, capture dirs, recording state |
-| `use_bridge` | Switch to another running Kit process by port |
+| `refresh_tools`, `use_bridge`, screenshots, recording, window placement, `join_videos` | [Host tools](../docs/TOOLS-HOST.md) |
+| `status`, `run_python`, `list_bridges`, `reload_tools`, file tools (bridge built-ins) | [Bridge built-ins](../docs/TOOLS-HOST.md#kit-bridge-built-ins) |
+| `sim__*`, `assets__*` | [Scene tools](../docs/TOOLS-SCENE.md) |
+| `ur5e_dt__*` | [UR5e tools](../docs/TOOLS-UR5E.md) |
+| `isaaclab__*` | [Isaac Lab tools](../docs/TOOLS-ISAACLAB.md) |
+| `window_*`, `sim__launch` and friends (opt-in) | [Optional desktop input and sessions](../docs/TOOLS-HOST.md#optional-desktop-input) |
 
-`list_bridges` (a bridge builtin) shows every running bridge on this box.
-Set `UR5E_DT_PORT` to pin the ur5e-dt twin bridge (`ISAAC_MCP_PORT` is the
-generic fallback); with several running and no pin, discovery refuses rather
-than guessing. The ur5e-dt extension registers with the same bridge as other
-tool packs; the launch script sets the shared port to the selected twin port.
+Set `UR5E_DT_PORT` to pin a bridge (`ISAAC_MCP_PORT` is the generic fallback). With several running and no pin, discovery
+refuses rather than guessing. See [Environment variables](../docs/ENVIRONMENT.md).
 
-For a clean Isaac Sim viewport render without desktop chrome, use the Kit
-extension's `ur5e_dt__start_recording` / `ur5e_dt__stop_recording`. A screen
-tool call with `window` (or `window_id`) reads that window's own pixels, so
-overlapping windows do not appear in the still or the video.
-`screenshot()` and `start_screen_recording()` with no target pick the Isaac Sim
-window when it is open (the one owned by the Kit process on the configured
-port), so the default is the sim, not the desktop. Window recordings keep the
-window's native size, capped at 1920 wide (`max_width`); pass `full_screen=True`
-to letterbox into the monitor's shape. Several windows can be recorded into one
-video with `window_ids=[...]` (works while the screen is locked).
-Monitor captures show the desktop as displayed, including whatever is on top.
+For a clean viewport render without desktop chrome, use `ur5e_dt__start_recording` and `ur5e_dt__stop_recording`. A screen
+tool call with `window` or `window_id` reads that window's own pixels, so overlapping windows do not appear in the capture.
+`screenshot()` and `start_screen_recording()` with no target pick the Isaac Sim window when it is open. Window recordings
+keep the window's native size, capped at 1920 wide (`max_width`); pass `full_screen=True` to letterbox into the monitor's
+shape, or `window_ids=[...]` to record several windows into one video. Monitor captures show the desktop as displayed.
+
+## The bridge
 
 **One bridge, one port, per Kit process.** Projects register tools under a
 namespace; name collisions between projects are impossible by construction
@@ -81,12 +69,15 @@ flowchart TB
     CLI["isaac_mcp.client<br/>scripts · tests · doctors · CLI"] -->|NDJSON| BRIDGE
 ```
 
-## Setup (once per machine)
+## Register the bridge in your own Kit app (once per machine)
+
+`./run.sh` already enables the bridge. Use this for another Kit app or a plain Isaac Sim install.
 
 Register the bridge permanently (afterwards, launches need no flags or env
 vars):
 
 ```bash
+# From the repository root:
 python3 scripts/install.py            # add --dry-run to preview
 ```
 
@@ -99,13 +90,12 @@ built-in tools. `--remove` undoes it.
 Run it while the app is **down**; a running app overwrites the file on exit
 ([why](docs/configuration.md#register-while-the-app-is-down)).
 
-Connect an agent/IDE — install the front-end (`pip install -e .` or `uv sync`)
-and add to `.mcp.json` (Claude Code, Cursor, etc.):
+Connect an agent or IDE: install the host as above and add it to `.mcp.json` (Claude Code, Cursor, etc.):
 
 ```json
 {
   "mcpServers": {
-    "kit": { "command": "isaac-mcp" }
+    "isaac": { "command": "isaac-mcp" }
   }
 }
 ```
@@ -122,7 +112,7 @@ which reaches everything in the sim. Tools discovered from the bridge appear as 
 ## Adding a project (the contract)
 
 A project is a **plain Python package** — not a Kit extension. It declares a
-namespace and either exposes one entrypoint (copy `examples/demo_tools/`) or
+namespace and either exposes one entrypoint (copy `mcp/examples/demo_tools/`) or
 none at all ([declared toolsets](docs/tool-authoring.md#declared-toolsets)):
 
 ```python
@@ -173,8 +163,10 @@ with BridgeClient() as c:                            # persistent + reconnect
 ```
 
 ```bash
-python3 -m isaac_mcp.client <tool> ['{"json":"params"}'] [--port N]
-python3 -m isaac_mcp.client --list-bridges          # what's running
+# From the repository root, with any Python (stdlib only):
+python3 mcp/isaac_mcp/client.py <tool> ['{"json":"params"}'] [--port N]
+python3 mcp/isaac_mcp/client.py --list-bridges      # what's running
+# Or `python -m isaac_mcp.client ...` from an environment with the package installed.
 # exit codes: 0 success · 1 bridge answered with an error · 2 unreachable
 ```
 
@@ -196,17 +188,20 @@ gateway needs it.
 ## Layout
 
 ```
-exts/isaac.mcp.bridge/          the bridge extension (protocol, bridge, builtins, autoload)
-exts/isaac.mcp.panel/    registry-driven control panel (optional)
-isaac_mcp/                    the MCP front-end (FastMCP server, TCP client to the bridge)
-scripts/install.py          permanent registration: base install + add-project
-examples/demo_tools/        the template tool package — copy to onboard a project
-tests/                      protocol / registry / autoload / live-socket tests (no Kit needed)
-docs/                       protocol, configuration, tool authoring, Isaac Lab
+mcp/isaac_mcp/               the MCP front-end (FastMCP server, TCP client to the bridge)
+mcp/examples/demo_tools/     the template tool package; copy it to onboard a project
+mcp/tests/                   host, protocol, registry and live-socket tests (no Kit needed)
+mcp/docs/                    protocol, configuration, tool authoring, Isaac Lab
+exts/isaac.mcp.bridge/       the bridge extension (protocol, bridge, builtins, autoload)
+exts/isaac.mcp.panel/        registry-driven control panel (optional)
+exts/sim-tools/              generic scene and asset tools
+exts/ur5e-dt/                the UR5e digital twin tools
+scripts/install.py           permanent registration: base install + add-project
 ```
 
 ## Development
 
 ```bash
-python3 -m pytest tests/    # the socket server runs under plain asyncio in tests
+cd mcp
+uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab --extra scene-test pytest -q
 ```
