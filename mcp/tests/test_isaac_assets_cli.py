@@ -1430,3 +1430,25 @@ def test_an_existing_group_writable_pack_folder_is_tightened(cli, capsys, tmp_pa
     code, out, _ = run(cli, capsys, "add", str(source))
     assert code == 0 and "removed group/world write permission" in out
     assert pack.stat().st_mode & 0o022 == 0
+
+
+def test_migrate_keeps_a_pinned_lab_robot_over_nvidias_cached_copy(cli, capsys, tmp_path, monkeypatch):
+    import json as _json
+
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    (pack / "robot").mkdir(parents=True)
+    (pack / "robot" / "ur5e.usd").write_bytes(b"lab robot")
+    (pack / "SHA256SUMS").write_text(f"{sha(b'lab robot')}  robot/ur5e.usd\n")
+    old = tmp_path / "old-cache"
+    (old / "robot").mkdir(parents=True)
+    (old / "robot" / "ur5e.usd").write_bytes(b"nvidia robot")
+    manifest = tmp_path / "assets-manifest.json"
+    manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
+        {"target": "robot/ur5e.usd", "source": "x", "sha256": sha(b"nvidia robot"), "size": 12}]}]}))
+    monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 0, err
+    assert "keeping 1 file(s) you pinned yourself" in out
+    assert (pack / "robot" / "ur5e.usd").read_bytes() == b"lab robot"

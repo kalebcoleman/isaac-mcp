@@ -948,7 +948,13 @@ def cmd_migrate(args) -> int:
         # is pinned as the user's own copy.
         nvidia = {e.get("cache_path", e["target"]) for g in asset_cache.manifest().get("fetch", []) for e in g.get("files", [])}
         own = {rel: p for rel, p in sources.items() if rel not in nvidia}
-        public = {rel: p for rel, p in sources.items() if rel in nvidia}
+        # A file the user pinned (e.g. a lab-modified robot) always wins over NVIDIA's copy,
+        # exactly as in fetch_ur5e_assets.py.
+        pinned = asset_cache.pins(pack_dir) if pack_dir.is_dir() else {}
+        public = {rel: p for rel, p in sources.items() if rel in nvidia and rel not in pinned}
+        kept = sum(1 for rel in sources if rel in nvidia and rel in pinned)
+        if kept:
+            print(f"keeping {kept} file(s) you pinned yourself instead of NVIDIA's copy")
         a1, i1 = _install_many(own, pack_dir, args.force, pin=True)
         a2, i2 = _install_many(public, pack_dir, args.force, pin=False)
     finally:
