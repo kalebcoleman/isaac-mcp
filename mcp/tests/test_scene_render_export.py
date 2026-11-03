@@ -81,6 +81,71 @@ def test_missing_camera_relationship_is_restored_only_in_export(configured, monk
     assert unchanged(stage) == before and len(checked) == 1
 
 
+@pytest.mark.parametrize("reset", [False, True])
+@pytest.mark.parametrize("product_exists", [False, True])
+@pytest.mark.parametrize("relationship_exists", [False, True])
+@pytest.mark.parametrize("helper_connected", [False, True])
+def test_empty_producer_camera_is_checked_without_a_render_handle(
+        configured, monkeypatch, reset, product_exists, relationship_exists, helper_connected):
+    from sim_tools import render_export
+
+    scene, stage, product, producer, checked = configured
+    if relationship_exists:
+        producer.GetRelationship("inputs:cameraPrim").SetTargets([])
+    else:
+        producer.RemoveProperty("inputs:cameraPrim")
+    if not helper_connected:
+        stage.RemovePrim("/Graph/Camera/ROS2CameraHelper")
+        stage.RemovePrim("/Graph/Camera/ROS2CameraInfoHelper")
+    product_path = product.GetPath()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        product.RemoveProperty("viewportHandle")
+        if not product_exists:
+            stage.RemovePrim(product_path)
+    calls = []
+    def resolve(s, p):
+        calls.append((s, p.GetPath()))
+        return Sdf.Path("/World/Camera"), product_path
+    monkeypatch.setattr(render_export, "runtime_camera_target", resolve)
+    before = unchanged(stage)
+    if product_exists:
+        result = scene.save(stage, "handleless.usda", reset_camera_render_handles=reset)
+        reopened = Usd.Stage.Open(result["file"])
+        rel = reopened.GetPrimAtPath(producer.GetPath()).GetRelationship("inputs:cameraPrim")
+        assert rel.GetTargets() == [Sdf.Path("/World/Camera")]
+        assert result["restored_camera_targets"] == [{"producer": str(producer.GetPath()),
+                                                       "camera": "/World/Camera", "product": str(product_path)}]
+        assert not result["omitted_runtime_render_properties"]
+    else:
+        with pytest.raises(AssetError) as error:
+            scene.save(stage, "no-product.usda", reset_camera_render_handles=reset)
+        assert error.value.code == "SAVE_UNSUPPORTED"
+        assert error.value.details["path"] == str(producer.GetPath())
+        assert error.value.details["camera"] == "/World/Camera"
+        assert not (scene.output / "no-product.usda").exists()
+    assert len(calls) == 1 and not checked and unchanged(stage) == before
+
+
+def test_camera_target_attribute_refuses_with_actionable_error(configured, monkeypatch):
+    from sim_tools import render_export
+
+    scene, stage, product, producer, checked = configured
+    producer.RemoveProperty("inputs:cameraPrim")
+    producer.CreateAttribute("inputs:cameraPrim", Sdf.ValueTypeNames.String).Set("/World/Camera")
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        product.RemoveProperty("viewportHandle")
+    monkeypatch.setattr(render_export, "runtime_camera_target",
+                        lambda s, p: (Sdf.Path("/World/Camera"), product.GetPath()))
+    before = unchanged(stage)
+    with pytest.raises(AssetError) as error:
+        scene.save(stage, "attribute.usda", reset_camera_render_handles=True)
+    assert error.value.code == "SAVE_UNSUPPORTED"
+    assert error.value.details["path"] == str(producer.GetPath())
+    assert "relationship" in str(error.value)
+    assert unchanged(stage) == before and not checked
+    assert not (scene.output / "attribute.usda").exists()
+
+
 @pytest.mark.parametrize("camera, product", [
     ("/World/Missing", "/Render/CameraProduct"),
     ("/World/Camera", "/Render/Missing"),

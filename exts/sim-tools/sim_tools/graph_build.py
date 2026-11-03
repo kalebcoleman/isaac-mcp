@@ -22,6 +22,7 @@ EVALUATORS = ("execution", "push", "dirty_push")
 MAX_NODES = 64
 MAX_EDGES = 256
 MAX_JSON = 1024 * 1024
+MAX_JSON_DEPTH = 64
 
 
 class SpecError(ValueError):
@@ -36,10 +37,22 @@ def _json_container(value, field, shape):
     if isinstance(value, str):
         if len(value) > MAX_JSON:
             raise SpecError("INVALID_VALUE", f"{field}: JSON exceeds {MAX_JSON} characters.")
+        def reject_constant(constant):
+            raise ValueError(f"invalid JSON constant: {constant}")
+
         try:
-            value = json.loads(value)
-        except ValueError as exc:
+            value = json.loads(value, parse_constant=reject_constant)
+        except (ValueError, RecursionError) as exc:
             raise SpecError("INVALID_VALUE", f"{field}: expected {shape}, or its JSON-encoded string.") from exc
+    # Bound nesting for both decoded and native containers before validation or
+    # formatting an error. JSON parsers and Python repr have recursion limits.
+    pending = [(value, 0)]
+    while pending:
+        item, depth = pending.pop()
+        if isinstance(item, (list, dict)):
+            if depth >= MAX_JSON_DEPTH:
+                raise SpecError("INVALID_VALUE", f"{field}: expected {shape}; nesting is limited to {MAX_JSON_DEPTH} levels.")
+            pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
     return value
 
 

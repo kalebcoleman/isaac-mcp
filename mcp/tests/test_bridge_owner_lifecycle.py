@@ -18,6 +18,7 @@ runs) plus ``pre_dispatch_hooks()``, so these pin the public contract, not the s
 """
 
 import asyncio
+import importlib
 import re
 import sys
 import textwrap
@@ -58,6 +59,8 @@ def tool_dir(tmp_path, monkeypatch):
         for sub, src in (submodules or {}).items():
             (pkg / f"{sub}.py").write_text(textwrap.dedent(src))
         created.append(name)
+        # A prior package import can cache this directory before the new package exists.
+        importlib.invalidate_caches()
         return pkg
 
     yield make

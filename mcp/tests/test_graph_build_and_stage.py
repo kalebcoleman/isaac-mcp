@@ -89,6 +89,21 @@ def test_serialized_spec_errors_are_actionable(bad, message):
         gb.parse_spec(bad)
 
 
+@pytest.mark.parametrize("bad, field", [
+    ({"nodes": "[" * 2000 + "]" * 2000}, "nodes"),
+    ({"nodes": "[" * 20000 + "]" * 20000}, "nodes"),
+    ({"nodes": ["[" * 2000 + "]" * 2000]}, "nodes"),
+    ({"nodes": NODES, "values": '{"pub.inputs:value": NaN}'}, "values"),
+    ({"nodes": NODES, "values": '{"pub.inputs:value": Infinity}'}, "values"),
+    ({"nodes": NODES, "targets": {"pub.inputs:targetPrim": "[" * 2000 + "]" * 2000}}, "targets"),
+])
+def test_invalid_json_nesting_and_constants_have_actionable_errors(bad, field):
+    with pytest.raises(gb.SpecError) as error:
+        gb.parse_spec(bad)
+    assert error.value.code == "INVALID_VALUE"
+    assert field in str(error.value) and "expected" in str(error.value)
+
+
 def test_serialized_spec_retains_node_and_connection_limits():
     with pytest.raises(gb.SpecError, match="at most 64 pairs"):
         gb.parse_spec({"nodes": ['["tick", "omni.graph.action.OnPlaybackTick"]'] * 65})

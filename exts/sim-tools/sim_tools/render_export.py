@@ -63,11 +63,58 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
             unsupported("Render-handle inspection exceeds 10000 prims.", "/")
         prims.append(prim)
     products = [p for p in prims if p.GetTypeName() == "RenderProduct"]
-    has_handles = any(p.HasAttribute("viewportHandle") for p in products)
-    if not has_handles:
-        return [], []
     selected = {}
     repairs = {}
+    # An empty target must be resolved even before the first Play, when no
+    # render product or viewport handle exists yet. Inspect all producers,
+    # including ones used by consumers other than the ROS camera helpers.
+    for producer in prims:
+        if producer.GetAttribute("node:type").Get() != PRODUCER:
+            continue
+        rel = producer.GetRelationship("inputs:cameraPrim")
+        if not rel and producer.GetAttribute("inputs:cameraPrim"):
+            unsupported(f"Camera producer {producer.GetPath()} has an attribute instead of an "
+                        "inputs:cameraPrim relationship; rebuild or set the camera target before saving.",
+                        producer.GetPath(), camera=None)
+        cameras = rel.GetTargets() if rel else []
+        if cameras:
+            if len(cameras) != 1:
+                unsupported(f"Camera producer {producer.GetPath()} needs exactly one camera target.",
+                            producer.GetPath(), camera=[str(c) for c in cameras])
+            continue
+        width_attr = producer.GetAttribute("inputs:width")
+        height_attr = producer.GetAttribute("inputs:height")
+        width = width_attr.Get() if width_attr else None
+        height = height_attr.Get() if height_attr else None
+        if type(width) is not int or type(height) is not int:
+            unsupported(f"Camera producer {producer.GetPath()} needs explicit integer width and height.",
+                        producer.GetPath(), camera=[])
+        camera, runtime_product = (target_resolver or runtime_camera_target)(stage, producer)
+        if (not camera.IsAbsolutePath() or not camera.IsPrimPath()
+                or not runtime_product.IsAbsolutePath() or not runtime_product.IsPrimPath()):
+            unsupported(f"Cannot verify runtime camera {camera} and render product {runtime_product} "
+                        f"for producer {producer.GetPath()}; inspect cameraPrim and resolution.",
+                        producer.GetPath(), camera=str(camera), product=str(runtime_product))
+        camera_prim, product_prim = stage.GetPrimAtPath(camera), stage.GetPrimAtPath(runtime_product)
+        if (not camera_prim or not camera_prim.IsA(UsdGeom.Camera) or not product_prim
+                or product_prim.GetTypeName() != "RenderProduct"
+                or product_prim.GetRelationship("camera").GetTargets() != [camera]
+                or tuple(product_prim.GetAttribute("resolution").Get() or ()) != (width, height)):
+            unsupported(f"Cannot verify runtime camera {camera} and render product {runtime_product} "
+                        f"for producer {producer.GetPath()}; inspect cameraPrim and resolution.",
+                        producer.GetPath(), camera=str(camera), product=str(runtime_product))
+        explicit_rel = producer.GetRelationship("inputs:renderProductPrim")
+        explicit = explicit_rel.GetTargets() if explicit_rel else []
+        if explicit and explicit != [runtime_product]:
+            unsupported("Explicit camera product does not match the observed runtime product.",
+                        producer.GetPath(), camera=str(camera), product=str(runtime_product))
+        if producer.IsInstance() or producer.IsInstanceProxy() or producer.IsInPrototype():
+            unsupported("Cannot restore a camera target on an instanced producer.", producer.GetPath(),
+                        camera=str(camera))
+        repairs[str(producer.GetPath())] = dict(producer=str(producer.GetPath()), camera=str(camera),
+                                                product=str(runtime_product))
+    if not any(p.HasAttribute("viewportHandle") for p in products):
+        return [], list(repairs.values())
     for helper in prims:
         if helper.GetAttribute("node:type").Get() not in HELPERS:
             continue
@@ -76,30 +123,16 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
             if (not producer or producer.GetAttribute("node:type").Get() != PRODUCER
                     or source.name != "outputs:renderProductPath"):
                 continue
-            cameras = producer.GetRelationship("inputs:cameraPrim").GetTargets()
+            rel = producer.GetRelationship("inputs:cameraPrim")
+            cameras = rel.GetTargets() if rel else []
+            if not cameras:
+                cameras = [Sdf.Path(repairs[str(producer.GetPath())]["camera"])]
             width = producer.GetAttribute("inputs:width").Get()
             height = producer.GetAttribute("inputs:height").Get()
             if type(width) is not int or type(height) is not int:
                 unsupported(f"Camera producer {producer.GetPath()} needs explicit integer width and height.", producer.GetPath(),
                             camera=[str(c) for c in cameras])
-            if not cameras:
-                camera, runtime_product = (target_resolver or runtime_camera_target)(stage, producer)
-                camera_prim, product_prim = stage.GetPrimAtPath(camera), stage.GetPrimAtPath(runtime_product)
-                if (not camera.IsAbsolutePath() or not camera.IsPrimPath() or not camera_prim
-                        or not camera_prim.IsA(UsdGeom.Camera) or not product_prim
-                        or product_prim.GetTypeName() != "RenderProduct"
-                        or product_prim.GetRelationship("camera").GetTargets() != [camera]
-                        or tuple(product_prim.GetAttribute("resolution").Get() or ()) != (width, height)):
-                    unsupported(f"Cannot verify runtime camera {camera} and render product {runtime_product} "
-                                f"for producer {producer.GetPath()}; inspect cameraPrim and resolution.",
-                                producer.GetPath(), camera=str(camera), product=str(runtime_product))
-                cameras = [camera]
-                repair = dict(producer=str(producer.GetPath()), camera=str(camera), product=str(runtime_product))
-                previous = repairs.get(repair["producer"])
-                if previous and previous != repair:
-                    unsupported("Camera producer has conflicting runtime targets.", producer.GetPath(), camera=str(camera))
-                repairs[repair["producer"]] = repair
-            elif len(cameras) != 1:
+            if len(cameras) != 1:
                 unsupported(f"Camera producer {producer.GetPath()} needs exactly one camera target.",
                             producer.GetPath(), camera=[str(c) for c in cameras])
             # Version 2 (6.0.0.0) has no renderProductPrim input. Never require it.
@@ -172,7 +205,9 @@ def restore_export_camera_targets(layer, repairs):
     stage = Usd.Stage.Open(layer)
     for entry in repairs:
         producer = stage.GetPrimAtPath(entry["producer"])
-        if not producer or producer.GetRelationship("inputs:cameraPrim").GetTargets():
+        rel = producer.GetRelationship("inputs:cameraPrim") if producer else None
+        if (not producer or (rel and rel.GetTargets())
+                or (not rel and producer.GetAttribute("inputs:cameraPrim"))):
             unsupported("Camera target changed while exporting; inspect and retry.", entry["producer"],
                         camera=entry["camera"])
         if not producer.CreateRelationship("inputs:cameraPrim").SetTargets([Sdf.Path(entry["camera"])]):

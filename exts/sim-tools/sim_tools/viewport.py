@@ -6,7 +6,7 @@ follow mode (a Kit update subscription, released on stop, stage close, camera ch
 
 import math
 
-from pxr import Gf, Usd, UsdGeom
+from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
 from isaac_mcp.project_assets import refuse
 from .core import CAP, matrix
@@ -102,22 +102,37 @@ def frame_prim(stage, prim, time):
     parent = prim.GetParent()
     if not parent or parent.IsPseudoRoot():
         refuse("NO_BOUNDS", "No finite visible geometry found near the requested prim.", candidates=[])
-    check_subtree(parent)
-    siblings = [p for p in parent.GetChildren() if p != prim and _finite_bounds(p, time) is not None]
-    candidates = [str(p.GetPath()) for p in siblings[:20]]
-    # A base_footprint is often a geometry-free physics sibling of base_link.
+    # A geometry-free robot footprint often has a base_link sibling. Require
+    # physics evidence on the robot or either link so ordinary scene siblings
+    # are never selected silently. Check this small subtree before scanning a
+    # potentially large parent.
     if prim.GetName() == "base_footprint":
-        base = [p for p in siblings if p.GetName() == "base_link"]
-        if len(base) == 1:
-            return base[0]
-    # Do not silently frame an entire conventional scene root (and unrelated objects).
-    if siblings and parent.GetName() != "World" and parent != stage.GetDefaultPrim():
-        if len(siblings) == 1:
-            return siblings[0]
-        if _finite_bounds(parent, time) is not None:
-            return parent
+        base = parent.GetChild("base_link")
+        robot = base and any(
+            p.HasAPI(UsdPhysics.RigidBodyAPI) or p.HasAPI(UsdPhysics.ArticulationRootAPI)
+            for p in (prim, parent, base)
+        )
+        if robot:
+            check_subtree(base)
+            if _finite_bounds(base, time) is not None:
+                return base
+    # Bound the search even if the surrounding environment is very large.
+    # Offer visible geometry paths for an explicit retry, without guessing that
+    # any sibling (or the entire parent) is the requested object.
+    candidates = []
+    truncated = False
+    traversal = Usd.PrimRange(parent, Usd.TraverseInstanceProxies(Usd.PrimDefaultPredicate))
+    for index, candidate in enumerate(traversal):
+        if index >= CAP:
+            truncated = True
+            break
+        if candidate.IsA(UsdGeom.Gprim) and _finite_bounds(candidate, time) is not None:
+            if len(candidates) == 20:
+                truncated = True
+                break
+            candidates.append(str(candidate.GetPath()))
     refuse("NO_BOUNDS", "No unambiguous visible geometry subtree near the requested prim; select a candidate.",
-           candidates=candidates)
+           candidates=candidates, candidates_truncated=truncated)
 
 
 def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled):
@@ -272,7 +287,8 @@ def place(scene, stage, context, viewport, a, undo_disabled):
         capture="Allow ordinary render updates, then use screenshot with this application PID/window ID.",
     )
     if prim is not None:
-        result.update(path=path, requested_path=requested_path, prim_center=list(center), bounding_radius=radius,
+        result.update(path=path, requested_path=requested_path, selected_path=path,
+                      prim_center=list(center), bounding_radius=radius,
                       margin_m=margin or 0.0)
     follow = None
     if a.get("follow"):

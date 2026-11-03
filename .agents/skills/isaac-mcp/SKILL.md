@@ -193,8 +193,10 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   `sim__viewport__frame` selects visible geometry and edits the active camera in the session
   layer; it is a scene edit, with no Kit undo entry. For videos of a moving robot use
   `margin` (metres) or `eye`/`target`, and `follow=true` to keep it in view while playing
-  (`follow=false` stops). When a footprint has no geometry the tool can use its `base_link`
-  sibling; check the returned selected path, which is also used for follow. `render_complete=false` means allow
+  (`follow=false` stops). For a geometry-free `base_footprint`, the tool can select a visible
+  `base_link` sibling when either link or their parent has a rigid-body or articulation API.
+  Otherwise it returns nearby geometry candidates for an explicit retry. Check the returned
+  selected path, which is also used for follow. `render_complete=false` means allow
   ordinary rendering before inspecting the verified application window. A native failure can
   leave selection or session-camera changes; inspect before retrying. Prefer a smaller subtree
   when surrounding geometry occludes the target. See `docs/TOOLS-SCENE.md` for context,

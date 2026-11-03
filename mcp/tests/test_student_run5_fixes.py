@@ -126,6 +126,62 @@ def test_serialized_graph_payload_reaches_parser_through_mcp():
     asyncio.run(run())
 
 
+def test_graph_schema_and_serialization_errors_at_mcp_boundary():
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    seen = []
+
+    class Bridge:
+        def call(self, name, args):
+            assert name == "sim.graph.build"
+            seen.append(args)
+            try:
+                gb.parse_spec(args)
+                return {"status": "ok"}
+            except gb.SpecError as exc:
+                return {"status": "error", "code": exc.code, "message": str(exc)}
+        def close(self):
+            pass
+
+    gw._state_for(server).client = Bridge()
+
+    async def run():
+        async with create_connected_server_and_client_session(server._mcp_server) as client:
+            await client.initialize()
+            listed = {t.name: t for t in (await client.list_tools()).tools}
+            props = listed["sim__graph__build"].inputSchema["properties"]
+            for field, expected in (("nodes", "array"), ("connections", "array"),
+                                    ("values", "object"), ("targets", "object")):
+                schema = props[field]
+                assert schema.get("description")
+                assert {branch.get("type") for branch in schema["anyOf"]} >= {"string", expected}
+                assert all(branch.get("type") for branch in schema["anyOf"])
+            valid = {"session_id": "s", "stage_id": "t", "path": "/G",
+                     "nodes": [["clock", PUB]], "connections": [],
+                     "values": {"clock.inputs:topicName": "/clock"},
+                     "targets": {"clock.inputs:targetPrim": ["/World/Camera"]}}
+            result = await client.call_tool("sim__graph__build", valid)
+            assert not result.isError and seen[-1]["nodes"] == valid["nodes"]
+            deep = "[" * 2000 + "]" * 2000
+            cases = [
+                ("nodes", deep),
+                ("nodes", [deep]),
+                ("connections", deep),
+                ("values", '{"clock.inputs:value": NaN}'),
+                ("targets", {"clock.inputs:targetPrim": deep}),
+            ]
+            for field, value in cases:
+                args = dict(valid, **{field: value})
+                before = len(seen)
+                result = await client.call_tool("sim__graph__build", args)
+                assert len(seen) == before + 1  # bridge parser, not FastMCP pre-parsing
+                assert result.isError and field in result.content[0].text
+                assert "expected" in result.content[0].text
+                assert "recursion" not in result.content[0].text.lower()
+                assert len(result.content[0].text) < 500
+
+    asyncio.run(run())
+
+
 def test_body_path_aliases_reach_the_bridge():
     server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
     seen = []
