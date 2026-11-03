@@ -419,6 +419,9 @@ def setup(scene, stage, a):
         refuse("INVALID_VALUE", str(exc))
     clock_warnings = []
     reset_on_stop = clock["reset_on_stop"]
+    if clock["publish"] and stage.GetPrimAtPath(CLOCK_GRAPH) and CLOCK_GRAPH not in scene.owned:
+        reset_on_stop = None  # an existing tool clock from before a reload: match what it does
+        clock["source"] = CLOCK_GRAPH + "/" + CLOCK
     if reset_on_stop is None:
         reset_on_stop = clock_resets_on_stop(clock["source"]) if clock["source"] else None
         if reset_on_stop is None:
@@ -495,8 +498,26 @@ def setup(scene, stage, a):
                 if stage.GetPrimAtPath(CLOCK_GRAPH):
                     stage.RemovePrim(CLOCK_GRAPH)
             clock_warnings.append(f"Could not build {CLOCK_GRAPH} ({type(exc).__name__}); nothing publishes /clock.")
+    elif clock["remove_tool_clock"] and clock_existing:
+        clock_warnings.append(f"Two /clock publishers: {CLOCK_GRAPH} (not created in this session, so it was not "
+                              f"removed) and {', '.join(clock['foreign'])}. Delete {CLOCK_GRAPH}; RViz keeps "
+                              "resetting while both run.")
     elif clock["publish"] and clock_existing and CLOCK_GRAPH not in scene.owned:
         clock_warnings.append(f"{CLOCK_GRAPH} exists but was not created in this session; it was left as is.")
+    # Every robot graph this session owns must stamp with the same stop/play behaviour as /clock;
+    # when the clock source changes, the robots set up earlier are updated too.
+    updated = []
+    for other in sorted(g for g in scene.owned if g != CLOCK_GRAPH and g != graph
+                        and (g == GRAPH_PATH or g.startswith(GRAPH_PATH + "_"))):
+        try:
+            attr = og.Controller.attribute(f"{other}/{TIME}.inputs:resetOnStop")
+            if bool(attr.get()) != bool(reset_on_stop):
+                with Usd.EditContext(stage, stage.GetSessionLayer()):
+                    og.Controller.set(attr, bool(reset_on_stop))
+                updated.append(other)
+        except Exception as exc:
+            clock_warnings.append(f"Could not update {other} to the current clock ({type(exc).__name__}); "
+                                  "call this tool again for that robot.")
     if clock["publish"] and clock["foreign"]:
         clock_warnings.append(f"{len(clock['foreign']) + 1} /clock publishers ({', '.join(clock['foreign'])} and "
                               f"{CLOCK_GRAPH}): time jumps back and RViz keeps resetting. Use clock=auto.")
@@ -543,10 +564,12 @@ def setup(scene, stage, a):
         ] if a.get("base", "fixed") == "mobile" else []),
         rebuilt=existing,
         clock=dict(source=clock["source"] or "none", shared_tool_clock=clock["publish"],
-                   stamps_reset_on_stop=reset_on_stop,
-                   note=("Every robot set up by this tool shares this clock. Running the twin's own setup "
-                         "(quick_start) afterwards adds a second /clock: call this tool again (clock=auto) "
-                         "to drop the tool's clock.")),
+                   tool_clock_present=bool(stage.GetPrimAtPath(CLOCK_GRAPH)),
+                   stamps_reset_on_stop=reset_on_stop, robot_graphs_updated=updated,
+                   **({"note": "Every robot set up by this tool shares this clock. Running the twin's own setup "
+                               "(quick_start) afterwards adds a second /clock: call this tool again "
+                               "(clock=auto); it drops its clock and updates every robot it set up."}
+                      if clock["publish"] else {})),
         other_ros2_publishers=others,
         warnings=clock_warnings + ([
             "Other graphs also publish TF or joint states ("

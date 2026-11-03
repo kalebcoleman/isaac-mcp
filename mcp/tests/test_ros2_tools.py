@@ -571,3 +571,46 @@ def test_the_clock_option_is_an_enum_in_the_contract():
     from isaac_mcp.scene_contracts import REGISTRY
 
     assert REGISTRY["sim.ros2.tf_setup"]["parameters"]["clock"]["enum"] == ["auto", "publish", "skip"]
+
+
+def test_stop_play_while_listening_is_not_a_skew_error():
+    edges = GOOD[:1] + [e("base_link", "tool0", stamp=t) for t in (120.0, 120.1, 0.1)]
+    errors, warnings, _ = doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/one"],
+                                         clock_times=[120.0, 120.1, 0.0, 0.1])
+    assert errors == [] and any("restarted from 0" in w for w in warnings)
+
+
+def test_an_early_restart_counts_as_a_reset():
+    assert doctor.clock_jumps([0.8, 0.0, 0.1]) == (1, 0)
+    assert doctor.clock_jumps([5.0, 4.9, 5.0]) == (0, 1)
+
+
+def test_reused_clock_reset_behaviour_is_read_from_its_time_node(monkeypatch):
+    import types
+
+    class Attr:
+        def __init__(self, node):
+            self.node = node
+
+        def get_node(self):
+            return self.node
+
+    class Node:
+        def __init__(self, kind, reset):
+            self.kind, self.reset = kind, reset
+
+        def get_type_name(self):
+            return self.kind
+
+        def get_attribute(self, name):
+            return types.SimpleNamespace(get=lambda: self.reset)
+
+    upstream = [Attr(Node("isaacsim.core.nodes.IsaacReadSimulationTime", False))]
+    og = types.SimpleNamespace(Controller=types.SimpleNamespace(
+        attribute=lambda path: types.SimpleNamespace(get_upstream_connections=lambda: upstream)))
+    monkeypatch.setitem(sys.modules, "omni", types.SimpleNamespace(graph=types.SimpleNamespace(core=og)))
+    monkeypatch.setitem(sys.modules, "omni.graph", types.SimpleNamespace(core=og))
+    monkeypatch.setitem(sys.modules, "omni.graph.core", og)
+    assert ros2.clock_resets_on_stop("/Graph/ActionGraph_UR5e/ros2_publish_clock") is False
+    upstream[:] = []
+    assert ros2.clock_resets_on_stop("/x") is None

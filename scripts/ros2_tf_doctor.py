@@ -47,7 +47,7 @@ def clock_jumps(times):
     resets = back = 0
     for a, b in zip(times, times[1:]):
         if b < a:
-            if b < RESET_TO and a - b > 1.0:
+            if b < RESET_TO and a - b > RESET_TO:
                 resets += 1
             else:
                 back += 1
@@ -149,7 +149,9 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publisher
         if resets:
             warnings.append(f"/clock restarted from 0 {resets} time(s): the timeline was stopped and played. "
                             "RViz resets once per restart; that is expected.")
-    sim_tf = [x for v in stamps.values() for x in v if x <= WALL_EPOCH]
+    # Newest sample of each frame only (lists are in arrival order), so a stop/play while
+    # listening does not compare pre-reset TF with the post-reset clock.
+    sim_tf = [v[-1] for v in stamps.values() if v[-1] <= WALL_EPOCH]
     if sim_tf and clock_times:
         skew = max(sim_tf) - clock_times[-1]
         if abs(skew) > CLOCK_SKEW:

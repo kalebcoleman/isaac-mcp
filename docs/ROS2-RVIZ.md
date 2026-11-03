@@ -58,7 +58,9 @@ Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have
    an existing clock (`clock=auto`), or else publishes one shared clock
    (`/Graph/isaac_mcp_ros2_clock`) for every robot it sets up, and matches its TF stamps to that
    clock's stop/play behaviour. Running the twin's own setup (`quick_start`) afterwards adds a second
-   clock: call the tool again with `clock=auto`. Every other node, RViz included, must run with
+   clock: call the tool again with `clock=auto`; it drops its clock and updates every robot it
+   set up. The shared clock stays after the last robot graph is deleted (`sim__stage__clear_owned`
+   removes it). Every other node, RViz included, must run with
    `use_sim_time:=true`; mixing wall-clock and sim stamps makes TF lookups fail or extrapolate.
 3. **One root.** RViz's *Fixed Frame* must be the root of a single connected tree
    (`world` for an arm on a table, `map` or `odom` for a mobile base). A frame that does not
