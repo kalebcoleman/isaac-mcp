@@ -56,7 +56,7 @@ Tool `sim__ros2__tf_setup`, with the IDs from `sim__stage__info`:
 | Mobile base, no localization | `base=mobile`, `base_link=<chassis prim>`, `world_frame=map` |
 | Mobile base with AMCL/SLAM | `base=mobile`, `base_link=<chassis prim>`, `world_frame=""` |
 | Cameras, LiDARs, `tool0` | `extra_frames=["/World/.../tool0", "/World/camera"]` (published relative to the base link) |
-| Several robots | one call per robot, each with its own `namespace` (its own graph; `/joint_states` and `/odom` are namespaced, TF stays on `/tf`). Their link names must differ: set `isaac:nameOverride` |
+| Several robots | one call per robot, each with its own `namespace` (its own graph; `/joint_states` and `/odom` are namespaced, TF stays on `/tf`). Their link names must differ: set `isaac:nameOverride`. A namespaced mobile base gets its own odometry frame `<ns>_odom`. Each graph also publishes `/clock` (same sim time) |
 
 The tool finds the articulation root itself (often a fixed `root_joint` below the robot prim).
 It refuses a `base_link` that is not one of the robot's links, a `base_frame` that differs from

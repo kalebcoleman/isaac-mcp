@@ -109,8 +109,9 @@ def test_namespace_applies_to_joint_states_and_odometry_but_tf_stays_global():
 
 def test_each_namespace_gets_its_own_graph():
     assert ros2.graph_path("") == "/Graph/isaac_mcp_ros2"
-    assert ros2.graph_path("/robot1/") == "/Graph/isaac_mcp_ros2_robot1"
     assert ros2.graph_path("a/b") != ros2.graph_path("a")
+    assert ros2.graph_path("a/b") != ros2.graph_path("a_b")  # one-to-one
+    assert ros2.graph_path("/robot1/").startswith("/Graph/isaac_mcp_ros2_robot1_")
 
 
 @pytest.mark.parametrize("kw", [
@@ -334,3 +335,43 @@ def test_isaac_ros_reexec_drops_the_flag_and_returns_the_child_status(monkeypatc
     assert doctor.main(["--fixed-frame", "world", "--isaac-ros", "--seconds", "1"]) == 1
     cmd, env = calls[0]
     assert cmd[0] == "/isaac/python" and "--isaac-ros" not in cmd and cmd[-3:] == ["world", "--seconds", "1"]
+
+
+def test_namespaced_mobile_robots_get_their_own_odom_frame():
+    _, values, _, frames = plan(mode="mobile", namespace="r1")
+    v = dict(values)
+    assert v["TFWorldToOdom.inputs:childFrameId"] == "r1_odom"
+    assert v["TFOdomToBase.inputs:parentFrameId"] == "r1_odom"
+    assert v["PublishOdometry.inputs:odomFrameId"] == "r1_odom"
+    assert frames["odom"] == "r1_odom"
+    assert dict(plan(mode="mobile")[1])["PublishOdometry.inputs:odomFrameId"] == "odom"
+    assert check(extras=[("/x/r1_odom", "r1_odom")], mode="mobile", namespace="r1")[0] == "DUPLICATE_FRAME_NAMES"
+
+
+@pytest.mark.parametrize("ns", ["a//b", "a/1b", "bad ns"])
+def test_invalid_namespaces_are_refused(ns):
+    with pytest.raises(ValueError):
+        ros2.graph_path(ns)
+    with pytest.raises(ValueError):
+        plan(namespace=ns)
+
+
+def test_renamed_base_with_extra_frames_is_refused_even_with_robot_state_publisher():
+    # Isaac names the extra frames' parent after the base prim, not after base_frame.
+    assert check(base_frame="base_footprint", link_frames="robot_state_publisher",
+                 extras=[("/World/cam", "cam")])[0] == "BASE_FRAME_MISMATCH"
+    _, _, _, frames = plan(base_frame="base_footprint", base_tf_name="chassis",
+                           link_frames="robot_state_publisher", extra_prims=["/World/cam"])
+    assert [e["parent"] for e in frames["edges"] if e["source"] == "TFExtraFrames"] == ["chassis"]
+
+
+def test_doctor_loop_does_not_hide_an_orphan_and_is_reported_once():
+    edges = [e("world", "base", 0, True), e("a", "b"), e("b", "a"), e("c", "d")]
+    errors, *_ = doctor.analyze(edges, "world", clock_seen=True)
+    assert sum("TF loop" in x for x in errors) == 1
+    assert any("do not connect to 'world'" in x and "c" in x and "d" in x for x in errors)
+
+
+def test_isaac_ros_env_points_cyclone_at_the_repository_profile(tmp_path, monkeypatch):
+    env = doctor.dds_env({"PATH": "/usr/bin:/bin"})
+    assert env["CYCLONEDDS_URI"].endswith("config/cyclonedds.xml") and env["ROS_DOMAIN_ID"] == "0"

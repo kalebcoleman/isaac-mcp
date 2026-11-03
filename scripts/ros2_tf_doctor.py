@@ -76,18 +76,21 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=()):
             seen = []
             while f in parents:
                 if f in seen:  # a loop: two publishers made a frame its own ancestor
-                    cycles.add(" -> ".join(seen[seen.index(f):] + [f]))
+                    loop = seen[seen.index(f):]
+                    start = loop.index(min(loop))  # one spelling per loop, whatever frame we came from
+                    loop = loop[start:] + loop[:start]
+                    cycles.add(" -> ".join(loop + [loop[0]]))
                     return None
                 seen.append(f)
                 f = sorted(parents[f])[0]
             return f
         fixed_root = root_of(fixed_frame)
-        cut = sorted(f for f in frames if root_of(f) != fixed_root or fixed_root is None)
+        # Frames in or below a loop are reported as the loop; others must reach the Fixed Frame's root.
+        rooted = {f: root_of(f) for f in frames}
+        cut = [] if fixed_root is None else sorted(f for f, r in rooted.items() if r is not None and r != fixed_root)
         for loop in sorted(cycles):
             errors.append(f"TF loop {loop}: a frame is its own ancestor, so nothing in it can be placed. "
                           "Two publishers disagree about which frame is the parent; keep one.")
-        if cycles:
-            cut = []
         if cut:
             errors.append(f"{len(cut)} frame(s) do not connect to '{fixed_frame}': {', '.join(cut[:12])}"
                           + (" ..." if len(cut) > 12 else "") + f" (separate roots: {', '.join(roots)}).")
