@@ -861,6 +861,29 @@ class Advanced:
                 ],
                 scope="last 32 KiB; WARN/ERROR only",
             )
+        if name in ("sim.graph.node_types", "sim.graph.inspect", "sim.graph.show", "sim.map.occupancy"):
+            from . import graph
+
+            if name == "sim.graph.node_types":
+                contains = a.get("contains")
+                limit = a.get("limit", 20)
+                if not isinstance(contains, str) or not 1 <= len(contains.strip()) <= 64:
+                    refuse("INVALID_VALUE", "contains: 1..64 characters.")
+                if type(limit) is not int or not 1 <= limit <= 40:
+                    refuse("LIMIT", "limit must be 1..40.")
+                return graph.node_types(contains, limit, a.get("ports"))
+            if name == "sim.graph.inspect":
+                limit = a.get("limit", 64)
+                if type(limit) is not int or not 1 <= limit <= 128:
+                    refuse("LIMIT", "limit must be 1..128.")
+                return graph.inspect_graph(stage, a["path"], limit)
+            if name == "sim.graph.show":
+                w, h = a.get("width", 0), a.get("height", 0)
+                if type(w) is not int or type(h) is not int or (w or h) and not (300 <= w <= 8000 and 200 <= h <= 8000):
+                    refuse("INVALID_VALUE", "width 300..8000 and height 200..8000, or both 0.")
+                graph.show_graph_open(stage, a["path"], w, h)
+                return {"_finish": "sim.graph.show"}  # extension.py completes it after a few frames
+            return graph.occupancy_map(s, stage, a)
         if name == "sim.ros2.tf_setup":
             from .ros2 import setup
 

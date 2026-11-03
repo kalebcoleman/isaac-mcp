@@ -2522,6 +2522,379 @@
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
+    "sim.graph.node_types": {
+      "description": "Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "required": true
+        },
+        "contains": {
+          "type": "string",
+          "description": "Substring of the node type id or its UI name, case-insensitive (<=64 chars).",
+          "required": true
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum node types returned, 1..40.",
+          "required": false,
+          "default": 20
+        },
+        "ports": {
+          "type": "boolean",
+          "description": "Include ports (default: only when 5 or fewer types match; at most 8 detailed).",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim.stage.info (process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+        },
+        {
+          "name": "contains",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Substring of the node type id or its UI name, case-insensitive (<=64 chars)."
+        },
+        {
+          "name": "limit",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 20,
+          "has_default": true,
+          "description": "Maximum node types returned, 1..40."
+        },
+        {
+          "name": "ports",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Include ports (default: only when 5 or fewer types match; at most 8 detailed)."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.graph.inspect": {
+      "description": "Read an OmniGraph: every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). Read-only.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Graph prim path, e.g. /World/ROS_Clock.",
+          "required": true
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum nodes returned, 1..128.",
+          "required": false,
+          "default": 64
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim.stage.info (process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Graph prim path, e.g. /World/ROS_Clock."
+        },
+        {
+          "name": "limit",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 64,
+          "has_default": true,
+          "description": "Maximum nodes returned, 1..128."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.graph.show": {
+      "description": "Open a graph in the Action Graph editor of a windowed Isaac Sim and frame its nodes, e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands the nodes (port names readable) and auto-arranges them, writing both into the stage. Uses the editor's internal API; refuses cleanly if it changed.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Graph prim path.",
+          "required": true
+        },
+        "layout": {
+          "type": "boolean",
+          "description": "Auto-arrange the nodes first (writes node positions).",
+          "required": false,
+          "default": false
+        },
+        "width": {
+          "type": "integer",
+          "description": "Undock the editor window and size it (pixels); 0 keeps the docked layout.",
+          "required": false,
+          "default": 0
+        },
+        "height": {
+          "type": "integer",
+          "description": "Window height in pixels when width is set.",
+          "required": false,
+          "default": 0
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim.stage.info (process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Graph prim path."
+        },
+        {
+          "name": "layout",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Auto-arrange the nodes first (writes node positions)."
+        },
+        {
+          "name": "width",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 0,
+          "has_default": true,
+          "description": "Undock the editor window and size it (pixels); 0 keeps the docked layout."
+        },
+        {
+          "name": "height",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 0,
+          "has_default": true,
+          "description": "Window height in pixels when width is set."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.map.occupancy": {
+      "description": "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays a few frames (the generator needs running physics), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "required": true
+        },
+        "min": {
+          "type": "array",
+          "description": "World [x, y] lower corner of the map in metres.",
+          "required": true
+        },
+        "max": {
+          "type": "array",
+          "description": "World [x, y] upper corner of the map in metres.",
+          "required": true
+        },
+        "z": {
+          "type": "array",
+          "description": "World [z_min, z_max] in metres; Isaac's generator samples one cell-thick layer at the middle of this range, so centre it on the lidar height.",
+          "required": false,
+          "default": [
+            0.05,
+            0.3
+          ]
+        },
+        "clear": {
+          "type": "array",
+          "description": "Up to 16 [x, y, radius] circles (metres) to mark free, e.g. the robot's own footprint at its start pose.",
+          "required": false,
+          "default": []
+        },
+        "cell_size": {
+          "type": "number",
+          "description": "Cell size in metres (map resolution).",
+          "required": false,
+          "default": 0.05
+        },
+        "basename": {
+          "type": "string",
+          "description": "Output file stem (letters, digits, _ -); writes <basename>.pgm and .yaml.",
+          "required": false,
+          "default": "map"
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim.stage.info (process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+        },
+        {
+          "name": "min",
+          "kind": "array",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "World [x, y] lower corner of the map in metres."
+        },
+        {
+          "name": "max",
+          "kind": "array",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "World [x, y] upper corner of the map in metres."
+        },
+        {
+          "name": "z",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": [
+            0.05,
+            0.3
+          ],
+          "has_default": true,
+          "description": "World [z_min, z_max] in metres; Isaac's generator samples one cell-thick layer at the middle of this range, so centre it on the lidar height."
+        },
+        {
+          "name": "clear",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": [],
+          "has_default": true,
+          "description": "Up to 16 [x, y, radius] circles (metres) to mark free, e.g. the robot's own footprint at its start pose."
+        },
+        {
+          "name": "cell_size",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 0.05,
+          "has_default": true,
+          "description": "Cell size in metres (map resolution)."
+        },
+        {
+          "name": "basename",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "map",
+          "has_default": true,
+          "description": "Output file stem (letters, digits, _ -); writes <basename>.pgm and .yaml."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
     "sim.logs.tail": {
       "description": "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs.",
       "parameters": {

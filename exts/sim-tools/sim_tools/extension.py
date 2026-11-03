@@ -108,6 +108,30 @@ class Extension(omni.ext.IExt):
         elif event.type == int(omni.timeline.TimelineEventType.PLAY):
             self._runtime_edit_restorer.cancel()
 
+    async def _occupancy_cycle(self, args):
+        """Isaac's occupancy generator only sees colliders while physics runs: from a stopped
+        timeline, play a few frames, generate, then stop (robots return to their authored poses)."""
+        import omni.kit.app as kit_app
+        from isaac_mcp.project_assets import refuse
+
+        s = self.scene
+        s.target(args["session_id"], args["stage_id"])
+        if not s.timeline.is_stopped():
+            refuse("TIMELINE_ACTIVE", "Stop the timeline first; the tool plays a few frames itself so robots "
+                   "are mapped at their start poses.")
+        next_update = kit_app.get_app().next_update_async
+        s.timeline.play()
+        try:
+            for _ in range(8):
+                await next_update()
+            result = self.dispatch("sim.map.occupancy", args)
+        finally:
+            s.timeline.stop()
+            for _ in range(3):
+                await next_update()
+        result["timeline"] = "played 8 frames for the physics scene, then stopped"
+        return result
+
     async def _wait_sensor_frame(self, name, args):
         """Observe ordinary rendering without changing timeline or re-entering Kit."""
         from isaac_mcp.project_assets import refuse
@@ -250,7 +274,25 @@ class Extension(omni.ext.IExt):
                             render_observation,
                             camera_frame,
                         ) = await self._wait_sensor_frame(name, args)
-                    result = self.dispatch(name, args, camera_frame=camera_frame)
+                    if name == "sim.map.occupancy":
+                        result = await self._occupancy_cycle(args)
+                    else:
+                        path, layout = args.get("path"), args.get("layout", False)
+                        size = (args.get("width", 0), args.get("height", 0))
+                        result = self.dispatch(name, args, camera_frame=camera_frame)
+                        if isinstance(result, dict) and result.get("_finish") == "sim.graph.show":
+                            import omni.kit.app as kit_app
+                            from .graph import show_graph_finish
+
+                            for _ in range(4):  # the editor builds its window on later frames
+                                await kit_app.get_app().next_update_async()
+                            from .graph import show_graph_refocus
+
+                            result = show_graph_finish(self.scene.stage(), path, bool(layout), *size)
+                            for _ in range(3):
+                                await kit_app.get_app().next_update_async()
+                            show_graph_refocus()
+                            await kit_app.get_app().next_update_async()
                     if render_observation is not None:
                         result["render_observation"] = render_observation
                     if name == "sim.timeline.control":
