@@ -111,9 +111,12 @@ Details: [references/isaac-sim.md](references/isaac-sim.md).
   want in a checkpoint file with `run_python` on the root layer. Stop the timeline before saving:
   while it plays, physics writes moved link poses back into the USD, so a "start" checkpoint can
   save the robot wherever it drove.
-- **Demo videos:** lay windows out with `move_window` (for example Isaac Sim left, RViz 2 right),
-  then record a monitor or one window with `start_screen_recording`. A window that closes can hand
-  focus to another one, which then covers RViz; raise it again or record RViz's window by id.
+- **Demo videos:** `tile_windows(window_ids=[sim, rviz])` puts them side by side without frame
+  overlap (or `move_window`, whose x/y/size are the client area), then
+  `start_screen_recording(window_ids=[sim, rviz])` records both into ONE synced video from each
+  window's own pixels, so covering windows, focus changes and a locked screen do not matter. Output
+  is native size up to 1920 wide. Join clips with `join_videos` (`concat`, `hstack`, `vstack`)
+  instead of hand-written ffmpeg.
 - Prefer a pack's named tools (for example `ur5e_dt__play_scene`) over hand-written `run_python`
   when one exists; they carry the project's checks.
 - `screenshot` with no selector auto-targets the Isaac Sim / Isaac Lab window, even if covered. For
@@ -237,13 +240,16 @@ keyboard and would receive the keystrokes. Isaac Sim's own UI still works throug
    and their centre in Isaac Sim window pixels.
 2. `sim__ui__act` with that `ref` (or `x`, `y`): `click`, `double_click`, `right_click`, `move`,
    `drag`, `scroll`, `type` (ref first focuses the field), `keypress` (`["ctrl", "s"]`, `["enter"]`),
-   `menu` (`"Create/Mesh/Cube"`; a wrong path lists the real items), `tab` (`window="Console"`:
-   bring a docked tab to the front; `sim__ui__find` lists `hidden_tabs`), or `wait`.
+   `menu` (`"Create/Mesh/Cube"`; a wrong path lists the real items; `"Layouts"` alone lists that
+   menu's items), `tab` (`window="Console"`: bring a docked tab to the front; `sim__ui__find` lists
+   `hidden_tabs`), `close` (`window="Console"`: hide a panel; reopen with `tab`), or `wait`.
 3. Check the result: `screenshot(window_id=<Isaac Sim window>)` (its pixels are the same as
    `sim__ui__find`'s; a downscaled image's caption gives the scale factor), or `sim__ui__find`.
 
 Prefer a dedicated tool (timeline, stage, graph) when one exists; use the UI for what has none.
-Use `window_*` only for other apps (RViz 2) on an unlocked desktop.
+Use `window_*` only for other apps (RViz 2) on an unlocked desktop. `raise_window` cannot work
+while locked (it says so); captures and recordings do not need it. `move_window`/`tile_windows`
+worked while locked on GNOME.
 
 ## Troubleshooting
 
@@ -252,7 +258,7 @@ Use `window_*` only for other apps (RViz 2) on an unlocked desktop.
 | Only host and `isaaclab__*` tools listed | Connected before Kit, or bridge tools filtered | `refresh_tools`, then the `--list-bridges` CLI |
 | `refresh_tools` reports connection refused | No bridge on that port | Check the listing; start Kit with `isaac.mcp.bridge` only if none is advertised and the user agrees |
 | `refresh_tools` refused right after `sim__launch` | The server dials its configured port, not the new session's | `use_bridge(port=<the launched port>)` (sim__status's `next` says so) |
-| Monitor recording is all black; screenshot says "composed from N window(s)" | Screen locked or blanked (PC used remotely) | Record a window (`window=`/`window_id=`); screenshots are composed from window pixels |
+| Monitor recording looks choppy; result says "composed" | Screen locked or blanked (PC used remotely): frames are composed from window pixels | Record the windows that matter with `window_id=` or `window_ids=[...]` |
 | `window_*` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find`/`sim__ui__act`; other apps need the desktop unlocked |
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use `python -m isaac_mcp.client list_tools --port <port>` |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |

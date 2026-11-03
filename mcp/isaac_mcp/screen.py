@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -60,11 +62,24 @@ class Recording:
     max_seconds: int = 600
     started: float = field(default_factory=time.monotonic)
     error: str | None = None
+    # Several windows composed into one video: the windows and their cells on the canvas.
+    windows: list[dict] | None = None
+    cells: list[tuple[int, int, int, int]] | None = None
+    layout: str | None = None
+    # Monitor recordings: frames composed from window pixels while the screen was locked.
+    composed_frames: int = 0
+    captured: int = 0  # distinct captures; frames - captured were repeated to keep real time
+    warnings: list[str] = field(default_factory=list)
 
 
 _lock = threading.Lock()
 _current: Recording | None = None
 _last: dict | None = None
+
+DEFAULT_MAX_WIDTH = 1920
+RECORD_LAYOUTS = ("side_by_side", "top_bottom", "grid")
+MAX_RECORD_WINDOWS = 6
+MAX_CANVAS_HEIGHT = 2160
 
 
 def _scaled_recording_size(width: int, height: int, max_width: int) -> tuple[int, int]:
@@ -74,6 +89,93 @@ def _scaled_recording_size(width: int, height: int, max_width: int) -> tuple[int
     # Round height to the nearest multiple of two, as ffmpeg's scale=-2 does.
     out_height = max(2, 2 * ((height * out_width + width) // (2 * width)))
     return out_width, out_height
+
+
+def grid_shape(count: int, layout: str) -> tuple[int, int]:
+    """(rows, columns) for ``count`` windows in a recording or tiling layout."""
+    if count < 1:
+        raise ValueError("at least one window is needed")
+    if layout in ("side_by_side", "left_right"):
+        return 1, count
+    if layout in ("top_bottom", "stacked"):
+        return count, 1
+    if layout == "grid":
+        cols = math.ceil(math.sqrt(count))
+        return math.ceil(count / cols), cols
+    raise ValueError(f"unknown layout {layout!r}")
+
+
+def fit_into(src_w: int, src_h: int, cell_w: int, cell_h: int) -> tuple[int, int, int, int]:
+    """(x, y, w, h) of a src_w x src_h image scaled to fit a cell, aspect kept and centred (padding around)."""
+    if src_w <= 0 or src_h <= 0 or cell_w <= 0 or cell_h <= 0:
+        return 0, 0, 0, 0
+    scale = min(cell_w / src_w, cell_h / src_h)
+    w = max(1, min(cell_w, round(src_w * scale)))
+    h = max(1, min(cell_h, round(src_h * scale)))
+    return (cell_w - w) // 2, (cell_h - h) // 2, w, h
+
+
+def _cuts(lengths: list[float], scale: float) -> list[int]:
+    """Integer boundaries of consecutive spans (no gaps or overlaps after rounding)."""
+    out, acc = [0], 0.0
+    for length in lengths:
+        acc += length * scale
+        out.append(round(acc))
+    return out
+
+
+def multi_window_layout(sizes: list[tuple[int, int]], layout: str, max_width: int = DEFAULT_MAX_WIDTH,
+                        max_height: int = MAX_CANVAS_HEIGHT) -> tuple[int, int, list[tuple[int, int, int, int]]]:
+    """Canvas (width, height) and one (x, y, w, h) cell per window for a composed recording.
+
+    side_by_side scales every window to a common height (the tallest), top_bottom to a common width
+    (the widest), so each fills its cell exactly; grid uses equal cells of the largest window size.
+    The canvas is then scaled down (never up) to max_width x max_height and made even."""
+    if not sizes:
+        raise ValueError("at least one window is needed")
+    if any(w <= 0 or h <= 0 for w, h in sizes):
+        raise ValueError("window sizes must be positive")
+    rows, cols = grid_shape(len(sizes), layout)
+    if layout == "side_by_side":
+        height = max(h for _, h in sizes)
+        widths = [w * height / h for w, h in sizes]
+        total_w, total_h = sum(widths), height
+    elif layout == "top_bottom":
+        width = max(w for w, _ in sizes)
+        heights = [h * width / w for w, h in sizes]
+        total_w, total_h = width, sum(heights)
+    else:
+        cell_w, cell_h = max(w for w, _ in sizes), max(h for _, h in sizes)
+        total_w, total_h = cols * cell_w, rows * cell_h
+    scale = min(1.0, max_width / total_w, max_height / total_h)
+    canvas_w = max(2, int(total_w * scale) - int(total_w * scale) % 2)
+    canvas_h = max(2, int(total_h * scale) - int(total_h * scale) % 2)
+    # Rescale so the cells end exactly at the (even, truncated) canvas edges.
+    sx, sy = canvas_w / total_w, canvas_h / total_h
+    cells = []
+    if layout == "side_by_side":
+        xs = _cuts(widths, sx)
+        cells = [(xs[i], 0, xs[i + 1] - xs[i], canvas_h) for i in range(len(sizes))]
+    elif layout == "top_bottom":
+        ys = _cuts(heights, sy)
+        cells = [(0, ys[i], canvas_w, ys[i + 1] - ys[i]) for i in range(len(sizes))]
+    else:
+        xs = _cuts([cell_w] * cols, sx)
+        ys = _cuts([cell_h] * rows, sy)
+        for i in range(len(sizes)):
+            r, c = divmod(i, cols)
+            cells.append((xs[c], ys[r], xs[c + 1] - xs[c], ys[r + 1] - ys[r]))
+    return canvas_w, canvas_h, cells
+
+
+def recording_filter(out_width: int, out_height: int, full_screen: bool, prescaled: bool = False) -> str:
+    """The ffmpeg -vf chain: letterbox into a full-screen frame, or scale to the output size."""
+    if full_screen:
+        return (f"scale={out_width}:{out_height}:force_original_aspect_ratio=decrease,"
+                f"pad={out_width}:{out_height}:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p")
+    if prescaled:
+        return "format=yuv420p"
+    return f"scale={out_width}:{out_height},format=yuv420p"
 
 
 def _ffmpeg() -> str:
@@ -88,13 +190,62 @@ def _ffmpeg() -> str:
         return found
 
 
+def _bgrx_image(width: int, height: int, data: bytes) -> PILImage.Image:
+    return PILImage.frombytes("RGB", (width, height), data, "raw", "BGRX")
+
+
+def _read_window(disp, obj) -> tuple[int, int, bytes]:
+    """Current size and BGRA pixels of a window through an open display (one XGetImage)."""
+    geom = obj.get_geometry()
+    width, height = geom.width, geom.height
+    data = obj.get_image(0, 0, width, height, X.ZPixmap, 0xFFFFFFFF).data
+    if len(data) == width * height * 4:
+        return width, height, data
+    if len(data) == width * height * 3:
+        out = bytearray(width * height * 4)
+        out[0::4], out[1::4], out[2::4] = data[0::3], data[1::3], data[2::3]
+        return width, height, bytes(out)
+    raise RuntimeError(f"unexpected X image layout: {len(data)} bytes for {width}x{height}")
+
+
+def _compose_cells(rec: Recording, disp, objs: list, gone: set[int]) -> bytes:
+    """One frame of a multi-window recording: each window's own pixels fitted into its cell."""
+    canvas = PILImage.new("RGB", (rec.bbox["width"], rec.bbox["height"]), (0, 0, 0))
+    for i, (obj, cell) in enumerate(zip(objs, rec.cells)):
+        if i in gone:
+            continue
+        try:
+            width, height, data = _read_window(disp, obj)
+        except (XError, RuntimeError) as exc:
+            gone.add(i)
+            win = rec.windows[i]
+            rec.warnings.append(f"window {win['id']} ({win['title']}) could not be read after "
+                                f"{time.monotonic() - rec.started:.1f}s ({type(exc).__name__}); its cell is black")
+            continue
+        x, y, w, h = fit_into(width, height, cell[2], cell[3])
+        image = _bgrx_image(width, height, data)
+        if (w, h) != (width, height):
+            image = image.resize((w, h), PILImage.BILINEAR)
+        canvas.paste(image, (cell[0] + x, cell[1] + y))
+    if len(gone) == len(objs):
+        raise RuntimeError("none of the recorded windows can be read any more (closed?)")
+    return canvas.tobytes("raw", "BGRX")
+
+
 def _record_loop(rec: Recording) -> None:
-    interval = 1.0 / rec.fps
+    """Capture frames until stopped. A frame is repeated when a capture falls behind, so the video
+    keeps real time (duration = wall time) instead of playing fast."""
     sct = None
     disp = None
     obj = None
+    objs: list = []
+    gone: set[int] = set()
+    windows_cache: tuple[float, list[dict]] = (0.0, [])
     try:
-        if rec.window is not None:
+        if rec.windows:
+            disp = _xdisplay()
+            objs = [disp.create_resource_object("window", w["id"]) for w in rec.windows]
+        elif rec.window is not None:
             disp = _xdisplay()
             obj = disp.create_resource_object("window", rec.window["id"])
         else:
@@ -102,7 +253,9 @@ def _record_loop(rec: Recording) -> None:
         width, height = rec.bbox["width"], rec.bbox["height"]
         while not rec.stop.is_set():
             frame_start = time.monotonic()
-            if obj is not None:
+            if objs:
+                data = _compose_cells(rec, disp, objs, gone)
+            elif obj is not None:
                 raw = obj.get_image(0, 0, width, height, X.ZPixmap, 0xFFFFFFFF).data
                 if len(raw) != width * height * 4:
                     raise RuntimeError(
@@ -110,19 +263,30 @@ def _record_loop(rec: Recording) -> None:
                         f"({len(raw)} bytes for {width}x{height})"
                     )
                 data = raw
+            elif _screen_locked():
+                # Locked or blanked: the monitor is black, so compose it from the windows' own pixels.
+                if frame_start - windows_cache[0] > 1.0:
+                    windows_cache = (frame_start, composite_order(_visible_windows(), _stacking()))
+                image, _painted = _composite(rec.bbox, windows_cache[1])
+                data = image.tobytes("raw", "BGRX")
+                rec.composed_frames += 1
             else:
                 data = sct.grab(rec.bbox).bgra
+            rec.captured += 1
+            due = max(rec.frames + 1, int((time.monotonic() - rec.started) * rec.fps))
             try:
-                rec.proc.stdin.write(data)
+                while rec.frames < due:
+                    rec.proc.stdin.write(data)
+                    rec.frames += 1
                 rec.proc.stdin.flush()
             except (BrokenPipeError, ValueError):
                 rec.error = "ffmpeg closed the input pipe"
                 break
-            rec.frames += 1
             if time.monotonic() - rec.started >= rec.max_seconds:
                 rec.error = f"stopped at max_seconds={rec.max_seconds}"
                 break
-            delay = interval - (time.monotonic() - frame_start)
+            next_due = rec.started + rec.frames / rec.fps
+            delay = next_due - time.monotonic()
             if delay > 0:
                 rec.stop.wait(delay)
     except Exception as exc:  # noqa: BLE001
@@ -162,11 +326,7 @@ def _finish(rec: Recording) -> dict:
         "size_mb": round(size / (1024 * 1024), 2),
         "width": rec.out_width or rec.bbox["width"],
         "height": rec.out_height or rec.bbox["height"],
-        "source": (
-            f"window: {rec.window['title']} (id={rec.window['id']})"
-            if rec.window
-            else "monitor"
-        ),
+        "source": _recording_source(rec),
         "output": (
             f"{rec.out_width}x{rec.out_height} ({'full screen' if rec.full_screen else 'scaled capture'})"
             if rec.out_width and rec.out_height
@@ -174,6 +334,15 @@ def _finish(rec: Recording) -> dict:
         ),
         "note": "no audio track",
     }
+    if rec.captured and rec.frames > rec.captured * 1.25:
+        result["capture_rate"] = (f"{rec.captured} distinct captures for {rec.frames} frames: capturing was "
+                                  "slower than fps, so frames were repeated to keep real time; lower fps or "
+                                  "max_width for smoother video")
+    if rec.composed_frames:
+        result["composed"] = (f"{rec.composed_frames} capture(s) were composed from the windows' own pixels "
+                              "because the screen was locked or blanked (no panels, decorations or wallpaper)")
+    for i, warning in enumerate(rec.warnings[:5]):
+        result[f"window_warning{'' if i == 0 else i + 1}"] = warning
     if rec.error:
         result["warning"] = rec.error
     if size == 0:
@@ -181,6 +350,15 @@ def _finish(rec: Recording) -> dict:
         if stderr:
             result["ffmpeg"] = stderr.decode("utf-8", "replace")[-800:]
     return result
+
+
+def _recording_source(rec: Recording) -> str:
+    if rec.windows:
+        names = ", ".join(f"{w['title']} (id={w['id']})" for w in rec.windows)
+        return f"{len(rec.windows)} windows, {rec.layout}: {names}"
+    if rec.window:
+        return f"window: {rec.window['title']} (id={rec.window['id']})"
+    return "monitor"
 
 
 # ------------------------------------------------------------------ display
@@ -523,8 +701,197 @@ def _primary_monitor_size() -> tuple[int, int]:
         return width, height
 
 
+# ---------------------------------------------------------------- placement
+
+TILE_LAYOUTS = ("left_right", "top_bottom", "grid")
+
+
+def placement_request(x: int, y: int, width: int, height: int, extents: tuple[int, int, int, int],
+                      frame: bool = False) -> tuple[int, int, int, int]:
+    """The x, y, width, height to send in _NET_MOVERESIZE_WINDOW (NorthWest gravity) so the client
+    area lands at (x, y, width, height), or with ``frame`` the outer frame (title bar included) does.
+
+    EWMH: with NorthWest gravity x/y position the frame's outer corner while width/height size the
+    client, and _NET_FRAME_EXTENTS (left, right, top, bottom) is the frame around the client."""
+    left, right, top, bottom = extents
+    if frame:
+        return x, y, width - left - right, height - top - bottom
+    return x - left, y - top, width, height
+
+
+def client_target(x: int, y: int, width: int, height: int, extents: tuple[int, int, int, int],
+                  frame: bool = False) -> tuple[int, int, int, int]:
+    """Where the client area should end up for a requested geometry."""
+    left, right, top, bottom = extents
+    if frame:
+        return x + left, y + top, width - left - right, height - top - bottom
+    return x, y, width, height
+
+
+def _close(a: tuple[int, int, int, int], b: tuple[int, int, int, int], tol: int = 2) -> bool:
+    return all(abs(p - q) <= tol for p, q in zip(a, b))
+
+
+def tile_rects(area: tuple[int, int, int, int], count: int, layout: str = "left_right",
+               gap: int = 0) -> list[tuple[int, int, int, int]]:
+    """Outer (frame) rectangles that split a work area (x, y, w, h) into ``count`` tiles."""
+    if layout not in TILE_LAYOUTS:
+        raise ValueError(f"layout must be one of {', '.join(TILE_LAYOUTS)}")
+    rows, cols = grid_shape(count, layout)
+    ax, ay, aw, ah = area
+    gap = max(0, int(gap))
+    xs = _cuts([1.0] * cols, (aw - gap * (cols - 1)) / cols)
+    ys = _cuts([1.0] * rows, (ah - gap * (rows - 1)) / rows)
+    out = []
+    for i in range(count):
+        r, c = divmod(i, cols)
+        out.append((ax + xs[c] + c * gap, ay + ys[r] + r * gap, xs[c + 1] - xs[c], ys[r + 1] - ys[r]))
+    return out
+
+
+def intersect(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> tuple[int, int, int, int] | None:
+    x1, y1 = max(a[0], b[0]), max(a[1], b[1])
+    x2, y2 = min(a[0] + a[2], b[0] + b[2]), min(a[1] + a[3], b[1] + b[3])
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return x1, y1, x2 - x1, y2 - y1
+
+
+def frame_extents(disp, obj) -> tuple[int, int, int, int]:
+    """(left, right, top, bottom) frame decoration from _NET_FRAME_EXTENTS; zeros when absent."""
+    try:
+        prop = obj.get_full_property(disp.intern_atom("_NET_FRAME_EXTENTS"), X.AnyPropertyType)
+        values = list(prop.value) if prop is not None else []
+        if len(values) == 4 and all(isinstance(v, int) and 0 <= v < 1000 for v in values):
+            return tuple(int(v) for v in values)  # type: ignore[return-value]
+    except Exception:  # noqa: BLE001 - extents only refine placement
+        pass
+    return 0, 0, 0, 0
+
+
+def _workarea(disp) -> tuple[int, int, int, int] | None:
+    """The current desktop's _NET_WORKAREA (screen minus panels/docks), or None."""
+    try:
+        root = disp.screen().root
+        prop = root.get_full_property(disp.intern_atom("_NET_WORKAREA"), X.AnyPropertyType)
+        values = [int(v) for v in prop.value] if prop is not None else []
+        desk = root.get_full_property(disp.intern_atom("_NET_CURRENT_DESKTOP"), X.AnyPropertyType)
+        index = int(desk.value[0]) if desk is not None and len(desk.value) else 0
+        if len(values) >= 4 * (index + 1):
+            x, y, w, h = values[4 * index: 4 * index + 4]
+            if w > 0 and h > 0:
+                return x, y, w, h
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _monitors() -> list[dict]:
+    with mss.MSS() as sct:
+        return [dict(m) for m in sct.monitors]
+
+
+def _monitor_for(point: tuple[int, int], monitors: list[dict]) -> int:
+    """Index (1-based, as in screen_info) of the monitor containing a point, else 1."""
+    for i, m in enumerate(monitors[1:], start=1):
+        if m["left"] <= point[0] < m["left"] + m["width"] and m["top"] <= point[1] < m["top"] + m["height"]:
+            return i
+    return 1
+
+
+def _place_window(disp, win: dict, x: int, y: int, width: int, height: int, frame: bool = False) -> dict:
+    """Un-maximize, move and resize one window so its client area (or outer frame) lands at the
+    requested geometry, correcting once for any offset the WM applied. Never raises for a WM that
+    refuses: the result says what happened."""
+    obj = disp.create_resource_object("window", win["id"])
+    root = disp.screen().root
+
+    def geometry():
+        g = obj.get_geometry()
+        pos = root.translate_coords(obj, 0, 0)  # absolute (see list_windows)
+        return (pos.x, pos.y, g.width, g.height)
+
+    extents = frame_extents(disp, obj)
+    target = client_target(x, y, width, height, extents, frame)
+    if target[2] < 50 or target[3] < 50:
+        raise ValueError(f"the client area would be {target[2]}x{target[3]} after the frame "
+                         f"(extents left/right/top/bottom {extents}); request a larger size")
+    mask = X.SubstructureRedirectMask | X.SubstructureNotifyMask
+    state = disp.intern_atom("_NET_WM_STATE")
+    maxv = disp.intern_atom("_NET_WM_STATE_MAXIMIZED_VERT")
+    maxh = disp.intern_atom("_NET_WM_STATE_MAXIMIZED_HORZ")
+    moveresize = disp.intern_atom("_NET_MOVERESIZE_WINDOW")
+    # EWMH: x, y, width and height present (bits 8-11), NorthWest gravity (1), from a pager (2 << 12).
+    flags = 1 | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11) | (2 << 12)
+
+    def send(req):
+        root.send_event(xevent.ClientMessage(window=obj, client_type=moveresize,
+                                             data=(32, [flags, *(int(v) & 0xFFFFFFFF for v in req)])), event_mask=mask)
+        disp.sync()
+
+    def settle(before, size):
+        # Accept the geometry once it is the right size and two readings agree after it changed (or
+        # after 0.3 s of no change). Already the right size: wait for the position up to the deadline.
+        deadline = time.monotonic() + 1.0
+        quiet = deadline if before[2:] == size else time.monotonic() + 0.3
+        geo, last = before, None
+        while time.monotonic() < deadline:
+            time.sleep(0.05)
+            geo = geometry()
+            sized = abs(geo[2] - size[0]) <= 2 and abs(geo[3] - size[1]) <= 2
+            if (geo == target or sized) and geo == last and (geo != before or time.monotonic() >= quiet):
+                break
+            last = geo
+        return geo
+
+    before = geometry()
+    root.send_event(xevent.ClientMessage(window=obj, client_type=state,
+                                         data=(32, [0, maxv, maxh, 2, 0])), event_mask=mask)
+    req = placement_request(x, y, width, height, extents, frame)
+    send(req)
+    geo = settle(before, target[2:])
+    corrected = False
+    # The WM put the frame somewhere else than extents predicted (CSD shadows, a stale extent): shift
+    # the request by the observed client offset once. A clamped position stays clamped, so stop then.
+    if geo[2:4] == target[2:4] or _close(geo[2:4], target[2:4]):
+        dx, dy = target[0] - geo[0], target[1] - geo[1]
+        if (dx or dy) and abs(dx) <= 200 and abs(dy) <= 200 and not _close(geo, target):
+            send((req[0] + dx, req[1] + dy, req[2], req[3]))
+            geo = settle(geo, target[2:])
+            corrected = True
+    left, right, top, bottom = frame_extents(disp, obj)
+    outer = (geo[0] - left, geo[1] - top, geo[2] + left + right, geo[3] + top + bottom)
+    return dict(id=win["id"], title=win["title"], client=geo, frame=outer,
+                extents=(left, right, top, bottom), requested=(x, y, width, height),
+                requested_client=target, applied=_close(geo, target), corrected=corrected,
+                moved=geo != before)
+
+
+def _fmt_geo(g) -> str:
+    return f"{g[2]}x{g[3]}+{g[0]}+{g[1]}"
+
+
+def _placement_line(r: dict) -> str:
+    line = (f"moved: {r['title']} (id={r['id']}) now {_fmt_geo(r['client'])} client area, "
+            f"frame {_fmt_geo(r['frame'])} (frame extents left/right/top/bottom "
+            f"{'/'.join(str(v) for v in r['extents'])})")
+    if not r["applied"]:
+        line += (f"; clamped: requested client {_fmt_geo(r['requested_client'])}, the window manager or the "
+                 "app limited it (screen edge, panel, minimum/maximum size)")
+        if not r["moved"]:
+            line += "; the window did not move at all (some window managers ignore moves while the screen is locked)"
+    return line
+
+
+RAISE_LOCKED = ("the screen is locked (the PC is probably used remotely), so no window can be raised or "
+                "focused: the lock screen covers the desktop. Raising is not needed for captures: "
+                "screenshot(window_id=...) and start_screen_recording(window_id=... or window_ids=[...]) read "
+                "each window's own pixels even when it is covered; for Isaac Sim's UI use sim__ui__act.")
 LOCKED_NOTE = ("\nwarning: the screen is locked or blanked, so monitor captures are black. Capture a "
                "window instead (window=... or window_id=...): window captures read the window's own pixels.")
+LOCKED_RECORD_NOTE = ("\nnote: the screen is locked or blanked, so each frame is composed from the visible "
+                      "windows' own pixels in stacking order (no panels, decorations or wallpaper). For one or a "
+                      "few windows, window_id=... or window_ids=[...] is cheaper and sharper.")
 COMPOSITE_NOTE = ("\nnote: the screen is locked or blanked (the PC is probably used remotely), so this image "
                   "was composed from the visible windows' own pixels in stacking order; window decorations, "
                   "panels and the wallpaper are not shown. Desktop input (window_*) is refused while locked; "
@@ -553,11 +920,15 @@ def composite_order(windows: list[dict], stacking: list[int]) -> list[dict]:
     return sorted(keep, key=lambda w: rank.get(w["id"], len(stacking)))
 
 
-def _composite(bbox: dict) -> tuple[PILImage.Image, int]:
-    """The monitor area composed from each visible window's own pixels (works while locked)."""
+def _composite(bbox: dict, ordered: list[dict] | None = None) -> tuple[PILImage.Image, int]:
+    """The monitor area composed from each visible window's own pixels (works while locked).
+
+    ``ordered`` is a window list already in composite_order (a recording caches it between frames)."""
     canvas = PILImage.new("RGB", (bbox["width"], bbox["height"]), (32, 32, 32))
     painted = 0
-    for win in composite_order(_visible_windows(), _stacking()):
+    if ordered is None:
+        ordered = composite_order(_visible_windows(), _stacking())
+    for win in ordered:
         if (win["x"] >= bbox["left"] + bbox["width"] or win["y"] >= bbox["top"] + bbox["height"]
                 or win["x"] + win["width"] <= bbox["left"] or win["y"] + win["height"] <= bbox["top"]):
             continue
@@ -613,6 +984,171 @@ def _probe_locked() -> bool | None:
         if out == "(false,)":
             answer = False
     return answer
+# ---------------------------------------------------------------- joining clips
+
+JOIN_MODES = ("concat", "hstack", "vstack")
+VIDEO_SUFFIXES = (".mp4", ".mov", ".mkv", ".webm")
+MAX_JOIN_INPUTS = 8
+MAX_JOIN_SECONDS = 3600
+MAX_INPUT_BYTES = 4 << 30
+
+
+def _allowed_roots() -> list[Path]:
+    roots = [Path.home().resolve()]
+    try:
+        roots.append(VIDEO_DIR.resolve())
+    except OSError:
+        pass
+    return roots
+
+
+def _under(path: Path, roots: list[Path]) -> bool:
+    return any(path == root or root in path.parents for root in roots)
+
+
+def safe_input_video(raw: str, roots: list[Path] | None = None) -> Path:
+    """Resolve an input clip; it must be a regular video file under the home or screen-mcp video folder.
+    A bare file name is looked up in the screen-mcp video folder."""
+    roots = roots or _allowed_roots()
+    if not isinstance(raw, str) or not raw.strip() or "\0" in raw:
+        raise ValueError("each input must be a file path")
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        if len(candidate.parts) != 1:
+            raise ValueError(f"{raw!r}: give an absolute path or a file name in {VIDEO_DIR}")
+        candidate = VIDEO_DIR / candidate
+    path = candidate.resolve()
+    if not _under(path, roots):
+        raise ValueError(f"{raw!r} is outside your home folder and {VIDEO_DIR}; only those are read")
+    if path.suffix.lower() not in VIDEO_SUFFIXES:
+        raise ValueError(f"{raw!r}: expected a video file ({', '.join(VIDEO_SUFFIXES)})")
+    if not path.is_file():
+        raise ValueError(f"{raw!r}: no such file")
+    if path.stat().st_size > MAX_INPUT_BYTES:
+        raise ValueError(f"{raw!r} is larger than 4 GiB")
+    return path
+
+
+def safe_output_video(raw: str | None, roots: list[Path] | None = None) -> Path:
+    """Output path: a new .mp4 in the screen-mcp video folder (bare name) or under home. Never an existing file."""
+    roots = roots or _allowed_roots()
+    if raw is None or raw == "":
+        return VIDEO_DIR / f"joined-{_stamp()}.mp4"
+    if not isinstance(raw, str) or "\0" in raw:
+        raise ValueError("output must be a file name or path")
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        if len(candidate.parts) != 1:
+            raise ValueError(f"output {raw!r}: give a file name (saved in {VIDEO_DIR}) or an absolute path")
+        candidate = VIDEO_DIR / candidate
+    if candidate.suffix.lower() != ".mp4":
+        raise ValueError("output must end in .mp4")
+    parent = candidate.parent.resolve()
+    path = parent / candidate.name
+    if not _under(parent, roots):
+        raise ValueError(f"output {raw!r} is outside your home folder and {VIDEO_DIR}; only those are written")
+    if not parent.is_dir():
+        raise ValueError(f"output folder {parent} does not exist")
+    if os.path.lexists(path):
+        raise ValueError(f"output {path} already exists; join_videos never overwrites, choose another name")
+    return path
+
+
+_DURATION = re.compile(r"Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)")
+_VIDEO_SIZE = re.compile(r"Stream #\S+.*?: Video: .*?(?<![0-9])(\d{2,5})x(\d{2,5})(?![0-9])")
+_FPS = re.compile(r"(\d+(?:\.\d+)?) fps")
+
+
+def parse_probe(text: str) -> dict | None:
+    """Width, height, fps and duration from `ffmpeg -i` output (ffprobe is often not installed)."""
+    size = _VIDEO_SIZE.search(text)
+    duration = _DURATION.search(text)
+    if not size or not duration:
+        return None
+    line = text[size.start(): text.find("\n", size.start()) if "\n" in text[size.start():] else len(text)]
+    fps = _FPS.search(line)
+    h, m, sec = duration.groups()
+    return dict(width=int(size.group(1)), height=int(size.group(2)),
+                fps=float(fps.group(1)) if fps else None,
+                duration=int(h) * 3600 + int(m) * 60 + float(sec))
+
+
+def probe_video(ffmpeg: str, path: Path) -> dict:
+    try:
+        out = subprocess.run([ffmpeg, "-hide_banner", "-nostdin", "-i", str(path)], capture_output=True,
+                             text=True, timeout=20, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError(f"{path}: ffmpeg took too long to read it") from exc
+    info = parse_probe(out.stderr)
+    if info is None:
+        raise ValueError(f"{path}: no video stream found (is it a video file?)")
+    return info
+
+
+def _even_floor(v: float) -> int:
+    n = int(v)
+    return max(2, n - n % 2)
+
+
+def join_plan(infos: list[dict], mode: str, max_width: int = DEFAULT_MAX_WIDTH, fps: int | None = None,
+              shortest: bool = False) -> dict:
+    """The ffmpeg filter graph and output size/duration for joining clips. Pure (unit-tested)."""
+    if mode not in JOIN_MODES:
+        raise ValueError(f"mode must be one of {', '.join(JOIN_MODES)}")
+    if not 2 <= len(infos) <= MAX_JOIN_INPUTS:
+        raise ValueError(f"give 2..{MAX_JOIN_INPUTS} input videos")
+    rates = [i["fps"] for i in infos if i.get("fps")]
+    rate = int(fps) if fps else int(round(min(max(rates), 60))) if rates else 15
+    rate = max(1, min(rate, 60))
+    chains = []
+    if mode == "concat":
+        first = infos[0]
+        w, h = _scaled_recording_size(first["width"], first["height"], max_width)
+        for i in range(len(infos)):
+            chains.append(f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                          f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps={rate},format=yuv420p[v{i}]")
+        joined = "".join(f"[v{i}]" for i in range(len(infos)))
+        chains.append(f"{joined}concat=n={len(infos)}:v=1:a=0[v]")
+        duration = sum(i["duration"] for i in infos)
+        width, height = w, h
+    else:
+        horizontal = mode == "hstack"
+        if horizontal:
+            common = max(i["height"] for i in infos)
+            spans = [i["width"] * common / i["height"] for i in infos]
+            total_w, total_h = sum(spans), common
+        else:
+            common = max(i["width"] for i in infos)
+            spans = [i["height"] * common / i["width"] for i in infos]
+            total_w, total_h = common, sum(spans)
+        scale = min(1.0, max_width / total_w, MAX_CANVAS_HEIGHT / total_h)
+        common_out = _even_floor(common * scale)
+        sizes = [_even_floor(span * common_out / common) for span in spans]
+        for i, size in enumerate(sizes):
+            dims = f"{size}:{common_out}" if horizontal else f"{common_out}:{size}"
+            chains.append(f"[{i}:v]scale={dims},setsar=1,fps={rate}[v{i}]")
+        joined = "".join(f"[v{i}]" for i in range(len(infos)))
+        chains.append(f"{joined}{mode}=inputs={len(infos)}:shortest={1 if shortest else 0},format=yuv420p[v]")
+        durations = [i["duration"] for i in infos]
+        duration = min(durations) if shortest else max(durations)
+        width, height = (sum(sizes), common_out) if horizontal else (common_out, sum(sizes))
+    return dict(filter=";".join(chains), width=width, height=height, fps=rate, duration=duration)
+
+
+def join_command(ffmpeg: str, inputs: list[Path], plan: dict, output: Path) -> list[str]:
+    cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-n"]
+    for path in inputs:
+        cmd += ["-i", str(path)]
+    cmd += ["-filter_complex", plan["filter"], "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output)]
+    return cmd
+
+
+def join_timeout(duration: float) -> int:
+    """Seconds allowed for encoding: generous for veryfast x264, bounded at 15 minutes."""
+    return int(max(60, min(900, 30 + 3 * duration)))
+
+
 def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
 
@@ -745,6 +1281,8 @@ def register_screen_tools(
                     if prop is not None and len(prop.value) and int(prop.value[0]) == win["id"]:
                         return f"activated: {win['title']} (id={win['id']})"
                     time.sleep(0.02)
+                if _probe_locked():
+                    raise RuntimeError(RAISE_LOCKED)
                 raise RuntimeError("window manager did not activate the window; select the client "
                                    "window ID (not its frame) or activate it manually")
             finally:
@@ -752,10 +1290,15 @@ def register_screen_tools(
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
     def move_window(x: int, y: int, width: int, height: int, window: str | None = None,
-                    window_id: int | None = None, expected_pid: int | None = None) -> str:
+                    window_id: int | None = None, expected_pid: int | None = None,
+                    frame: bool = False) -> str:
         """Move and resize a window (pixels, top-left origin), e.g. to put Isaac Sim and RViz side
-        by side before a screen recording. Un-maximizes it first; returns the geometry the window
-        manager actually applied. expected_pid rejects an unexpected owner."""
+        by side before a screen recording. By default x, y, width, height are the client area (the
+        window's content, what window captures record); frame=true places the outer frame including
+        the title bar instead. The window manager's frame offset (_NET_FRAME_EXTENTS) is accounted for.
+        Un-maximizes it first; returns the client and frame geometry actually applied and whether the
+        window manager clamped it. expected_pid rejects an unexpected owner. To lay out several
+        windows at once use tile_windows."""
         from .desktop_input import _action_lock
 
         if width < 100 or height < 100 or width > 16384 or height > 16384:
@@ -766,50 +1309,58 @@ def register_screen_tools(
                 raise ValueError("target window PID is missing or changed; list windows again")
             disp = _xdisplay()
             try:
-                obj = disp.create_resource_object("window", win["id"])
-                root = disp.screen().root
-
-                def geometry():
-                    g = obj.get_geometry()
-                    pos = root.translate_coords(obj, 0, 0)  # absolute (see list_windows)
-                    return (pos.x, pos.y, g.width, g.height)
-
-                before = geometry()
-                mask = X.SubstructureRedirectMask | X.SubstructureNotifyMask
-                state = disp.intern_atom("_NET_WM_STATE")
-                maxv = disp.intern_atom("_NET_WM_STATE_MAXIMIZED_VERT")
-                maxh = disp.intern_atom("_NET_WM_STATE_MAXIMIZED_HORZ")
-                # EWMH: remove (0) both maximized states, then _NET_MOVERESIZE_WINDOW with
-                # x, y, width and height present (bits 8-11) from a pager-like source (2 << 12).
-                root.send_event(xevent.ClientMessage(window=obj, client_type=state,
-                                                     data=(32, [0, maxv, maxh, 2, 0])), event_mask=mask)
-                flags = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11) | (2 << 12)
-                root.send_event(xevent.ClientMessage(
-                    window=obj, client_type=disp.intern_atom("_NET_MOVERESIZE_WINDOW"),
-                    data=(32, [flags, int(x), int(y), int(width), int(height)])), event_mask=mask)
-                disp.sync()
-                # The requested x/y place the frame while we read the client area, so instead of
-                # guessing an offset, accept the geometry once it is the right size and two
-                # readings in a row agree after it changed (or after 0.3 s of no change).
-                deadline = time.monotonic() + 1.0
-                # Already the right size: only the position changes, so wait for that (a busy window
-                # manager can take longer than 0.3 s) up to the deadline.
-                settle = deadline if before[2:] == (width, height) else time.monotonic() + 0.3
-                geo, last = before, None
-                while time.monotonic() < deadline:
-                    time.sleep(0.05)
-                    geo = geometry()
-                    sized = abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2
-                    if sized and geo == last and (geo != before or time.monotonic() >= settle):
-                        break
-                    last = geo
-                sized = abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2
-                return (f"moved: {win['title']} (id={win['id']}) now {geo[2]}x{geo[3]}+{geo[0]}+{geo[1]} "
-                        "(client area; the frame's title bar sits above it)"
-                        + ("" if sized else f"; requested {width}x{height}+{x}+{y}, the window manager or "
-                           "the app limited it"))
+                return _placement_line(_place_window(disp, win, x, y, width, height, frame))
             finally:
                 disp.close()
+
+    @mcp.tool(annotations=IDEMPOTENT_WRITE)
+    def tile_windows(window_ids: list[int], layout: str = "left_right", monitor: int | None = None,
+                     gap: int = 0) -> str:
+        """Tile 2-6 windows over a monitor's work area (the screen minus panels, _NET_WORKAREA), e.g.
+        Isaac Sim left and RViz 2 right for a demo video. layout: left_right (one row), top_bottom (one
+        column) or grid. Each window's outer frame (title bar included) fills its tile, so title bars
+        do not overlap. monitor: 1-based index from screen_info (default: the monitor holding the first
+        window). gap: pixels between tiles. Reports each window's final client geometry and whether
+        the window manager clamped it; record the result with start_screen_recording(window_ids=...)."""
+        from .desktop_input import _action_lock
+
+        if layout not in TILE_LAYOUTS:
+            raise ValueError(f"layout must be one of {', '.join(TILE_LAYOUTS)}")
+        ids = [int(w) for w in (window_ids or [])]
+        if not 2 <= len(ids) <= MAX_RECORD_WINDOWS or len(set(ids)) != len(ids):
+            raise ValueError(f"window_ids: 2..{MAX_RECORD_WINDOWS} distinct window IDs from list_windows")
+        if not 0 <= int(gap) <= 200:
+            raise ValueError("gap must be 0..200 pixels")
+        with _action_lock():
+            wins = [_match_window(None, wid, True) for wid in ids]
+            monitors = _monitors()
+            if monitor is None:
+                first = wins[0]
+                monitor = _monitor_for((first["x"] + first["width"] // 2, first["y"] + first["height"] // 2),
+                                       monitors)
+            if not 1 <= int(monitor) < len(monitors):
+                raise ValueError(f"monitor must be 1..{len(monitors) - 1} (see screen_info)")
+            m = monitors[int(monitor)]
+            mon_rect = (m["left"], m["top"], m["width"], m["height"])
+            disp = _xdisplay()
+            try:
+                work = _workarea(disp)
+                area = intersect(mon_rect, work) if work else None
+                area = area or mon_rect
+                rects = tile_rects(area, len(wins), layout, int(gap))
+                for (_, _, w, h) in rects:
+                    if w < 100 or h < 100:
+                        raise ValueError(f"the work area {_fmt_geo(area)} is too small for {len(wins)} tiles")
+                results = [_place_window(disp, win, *rect, frame=True) for win, rect in zip(wins, rects)]
+            finally:
+                disp.close()
+        lines = [f"tiled {len(results)} windows {layout} on monitor {monitor}, work area {_fmt_geo(area)}"
+                 + ("" if work else " (no _NET_WORKAREA; used the whole monitor)")]
+        lines += [_placement_line(r) for r in results]
+        clamped = [r for r in results if not r["applied"]]
+        if clamped:
+            lines.append(f"{len(clamped)} window(s) were clamped; their tiles may overlap or leave gaps")
+        return "\n".join(lines)
 
     @mcp.tool(annotations=ADDITIVE)
     def screenshot(
@@ -884,23 +1435,32 @@ def register_screen_tools(
         window: str | None = None,
         window_id: int | None = None,
         fps: int = 15,
-        max_width: int = 1600,
+        max_width: int | None = None,
         max_seconds: int = 600,
-        full_screen: bool = True,
+        full_screen: bool | None = None,
+        window_ids: list[int] | None = None,
+        layout: str = "side_by_side",
     ) -> str:
         """Start a desktop MP4 recording. One at a time; stop it with stop_screen_recording.
 
         With no arguments this records the Isaac Sim window when one is open,
         so the video is just the sim and not the desktop. Otherwise pass
-        `window`/`window_id`, `monitor=N`, or `monitor=0` for all monitors. A
-        window recording reads that window's own pixels, so another window
-        covering it does not appear in the video. With full_screen (default
-        true) the video is scaled and padded to the primary monitor (1920x1080
-        here), so the result is a full-screen video even when the window is
-        smaller or behind another window. Set full_screen=False for the native
-        window size, capped by max_width. fps is clamped to 1-30, max_seconds
-        to 5-3600 (default 600). No audio. For a clean Isaac Sim viewport
-        render without desktop chrome, use the Kit tool start_recording instead.
+        `window`/`window_id`, `monitor=N`, or `monitor=0` for all monitors.
+        A window recording reads that window's own pixels, so another window
+        covering it does not appear in the video, and it works while the
+        screen is locked. `window_ids=[a, b, ...]` (2-6 windows, e.g. Isaac Sim
+        and RViz 2) records them into ONE video, read from each window's own
+        pixels every frame, so they stay in sync: `layout` is side_by_side
+        (default), top_bottom or grid; aspect ratios are kept and cells padded.
+        Output size: the native capture size scaled down to `max_width`
+        (default 1920), never up. full_screen=true instead letterboxes into
+        the primary monitor's shape (also capped by max_width). A monitor
+        recording while the screen is locked is composed from the windows'
+        own pixels each frame instead of recording black. fps is clamped to
+        1-30, max_seconds to 5-3600 (default 600). If capturing falls behind
+        fps, frames are repeated so the video keeps real time. No audio. For a
+        clean Isaac Sim viewport render, use the Kit tool start_recording.
+        Join or stack finished clips with join_videos.
 
         Privacy: the recording is saved on this machine; stop_screen_recording reports its path, and window
         titles and pixels can reach the model through the other screen tools.
@@ -908,10 +1468,17 @@ def register_screen_tools(
         global _current
         fps = max(1, min(int(fps), 30))
         max_seconds = max(5, min(int(max_seconds), 3600))
-        max_width = max(320, min(int(max_width), 3840))
-        out_width = out_height = None
-        if full_screen:
-            out_width, out_height = _primary_monitor_size()
+        max_width = max(320, min(int(max_width if max_width is not None else DEFAULT_MAX_WIDTH), 3840))
+        full_screen = bool(full_screen)
+        ids = [int(w) for w in window_ids] if window_ids else []
+        if ids:
+            if window or window_id is not None or monitor is not None:
+                raise ValueError("pass window_ids alone, not with window, window_id or monitor")
+            if not 2 <= len(ids) <= MAX_RECORD_WINDOWS or len(set(ids)) != len(ids):
+                raise ValueError(f"window_ids: 2..{MAX_RECORD_WINDOWS} distinct window IDs from list_windows "
+                                 "(use window_id for one window)")
+            if layout not in RECORD_LAYOUTS:
+                raise ValueError(f"layout must be one of {', '.join(RECORD_LAYOUTS)}")
         with _lock:
             if _current is not None:
                 raise RuntimeError(
@@ -919,11 +1486,20 @@ def register_screen_tools(
                     "call stop_screen_recording first"
                 )
             target = None
-            if window or window_id is not None:
+            targets: list[dict] = []
+            cells = None
+            if ids:
+                targets = [_match_window(None, wid) for wid in ids]
+                width, height, cells = multi_window_layout(
+                    [(w["width"], w["height"]) for w in targets], layout, max_width)
+                bbox = {"left": 0, "top": 0, "width": width, "height": height}
+            elif window or window_id is not None:
                 target = _match_window(window, window_id)
             elif monitor is None:
                 target = auto_target()
-            if target is not None:
+            if targets:
+                pass  # canvas size and cells set above
+            elif target is not None:
                 win = target
                 width = win["width"] - (win["width"] % 2)
                 height = win["height"] - (win["height"] % 2)
@@ -936,13 +1512,12 @@ def register_screen_tools(
                 bbox["width"], bbox["height"] = width, height
             path = VIDEO_DIR / f"screen-{_stamp()}.mp4"
             if full_screen:
-                vf = (
-                    f"scale={out_width}:{out_height}:force_original_aspect_ratio=decrease,"
-                    f"pad={out_width}:{out_height}:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p"
-                )
+                out_width, out_height = _scaled_recording_size(*_primary_monitor_size(), max_width)
+            elif targets:
+                out_width, out_height = width, height  # composed at the output size already
             else:
                 out_width, out_height = _scaled_recording_size(width, height, max_width)
-                vf = f"scale={out_width}:{out_height},format=yuv420p"
+            vf = recording_filter(out_width, out_height, full_screen, prescaled=bool(targets))
             cmd = [
                 _ffmpeg(),
                 "-hide_banner",
@@ -990,26 +1565,98 @@ def register_screen_tools(
                 out_height=out_height,
                 full_screen=full_screen,
                 max_seconds=max_seconds,
+                windows=targets or None,
+                cells=cells,
+                layout=layout if targets else None,
             )
             rec.thread = threading.Thread(target=_record_loop, args=(rec,), daemon=True)
             rec.thread.start()
             _current = rec
-        source = (
-            f"window {target['title']!r} (id={target['id']})"
-            if target
-            else f"monitor {monitor}"
-        )
-        output = (
-            f"{out_width}x{out_height} full screen"
-            if full_screen
-            else f"{out_width}x{out_height}, max width {max_width}"
-        )
+        if targets:
+            source = f"{len(targets)} windows, {layout}: " + ", ".join(
+                f"{w['title']!r} (id={w['id']}, {w['width']}x{w['height']})" for w in targets)
+            source += f"; canvas {width}x{height}"
+        elif target:
+            source = f"window {target['title']!r} (id={target['id']}) at {width}x{height}+{bbox['left']}+{bbox['top']}"
+        else:
+            source = f"monitor {monitor} at {width}x{height}+{bbox['left']}+{bbox['top']}"
+        output = (f"{out_width}x{out_height} full screen (letterboxed)" if full_screen
+                  else f"{out_width}x{out_height}, max width {max_width}")
+        locked = not targets and target is None and _screen_locked()
         return (
             f"recording to {path}\n"
-            f"source: {source} at {width}x{height}+{bbox['left']}+{bbox['top']}\n"
+            f"source: {source}\n"
             f"output: {output}\n"
             f"fps: {fps}, limit: {max_seconds}s. Call stop_screen_recording when done."
-        ) + (LOCKED_NOTE if target is None and _screen_locked() else "")
+        ) + (LOCKED_RECORD_NOTE if locked else "")
+
+    @mcp.tool(annotations=ADDITIVE)
+    def join_videos(inputs: list[str], mode: str = "concat", output: str | None = None,
+                    max_width: int = DEFAULT_MAX_WIDTH, fps: int | None = None, shortest: bool = False) -> str:
+        """Join 2-8 video clips into one new MP4 with the bundled ffmpeg: mode=concat plays them one after
+        another (each scaled and padded to the first clip's size), hstack puts them side by side (scaled
+        to a common height), vstack stacks them top to bottom (common width). For a synchronized
+        side-by-side demo, prefer start_screen_recording(window_ids=[...]) over stacking separate clips.
+        inputs: absolute paths or file names in ~/Videos/screen-mcp; only files under your home folder
+        or that folder are read. output: a new file name (saved in ~/Videos/screen-mcp) or an absolute
+        path under home ending in .mp4; never overwrites (default joined-<time>.mp4). max_width (default
+        1920) caps the output width; fps defaults to the fastest input (max 60). With hstack/vstack a
+        shorter clip freezes on its last frame unless shortest=true ends the video with the shortest one.
+        Audio is dropped. Encoding is bounded to 15 minutes and the result to 1 hour of video.
+
+        Privacy: reads and writes video files on this machine only; returns paths and sizes.
+        """
+        if not isinstance(inputs, list) or not 2 <= len(inputs) <= MAX_JOIN_INPUTS:
+            raise ValueError(f"inputs: 2..{MAX_JOIN_INPUTS} video paths")
+        if mode not in JOIN_MODES:
+            raise ValueError(f"mode must be one of {', '.join(JOIN_MODES)}")
+        max_width = max(320, min(int(max_width), 3840))
+        if fps is not None and not 1 <= int(fps) <= 60:
+            raise ValueError("fps must be 1..60")
+        roots = _allowed_roots()
+        paths = [safe_input_video(raw, roots) for raw in inputs]
+        out = safe_output_video(output, roots)
+        ffmpeg = _ffmpeg()
+        infos = [probe_video(ffmpeg, path) for path in paths]
+        plan = join_plan(infos, mode, max_width, fps, shortest)
+        if plan["duration"] > MAX_JOIN_SECONDS:
+            raise ValueError(f"the result would be {plan['duration']:.0f} s; the limit is {MAX_JOIN_SECONDS} s")
+        tmp = out.with_name(f".{out.stem}.partial-{os.getpid()}-{threading.get_ident()}.mp4")
+        timeout = join_timeout(plan["duration"])
+        started = time.monotonic()
+        try:
+            try:
+                proc = subprocess.run(join_command(ffmpeg, paths, plan, tmp), capture_output=True, text=True,
+                                      timeout=timeout, stdin=subprocess.DEVNULL)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(f"ffmpeg did not finish within {timeout} s; nothing was written") from exc
+            if proc.returncode != 0 or not tmp.exists() or tmp.stat().st_size == 0:
+                raise RuntimeError(f"ffmpeg failed (exit {proc.returncode}); nothing was written: "
+                                   f"{proc.stderr.strip()[-600:]}")
+            try:
+                os.link(tmp, out)  # atomic and refuses an existing name, so a race cannot overwrite
+            except FileExistsError as exc:
+                raise RuntimeError(f"{out} appeared while encoding; nothing was overwritten") from exc
+        finally:
+            try:
+                tmp.unlink()
+            except FileNotFoundError:
+                pass
+        size = out.stat().st_size
+        result = {
+            "path": str(out),
+            "mode": mode,
+            "inputs": ", ".join(f"{p.name} ({i['width']}x{i['height']}, {i['duration']:.1f}s)"
+                                for p, i in zip(paths, infos)),
+            "width": plan["width"],
+            "height": plan["height"],
+            "fps": plan["fps"],
+            "duration_s": round(plan["duration"], 2),
+            "size_mb": round(size / (1024 * 1024), 2),
+            "encode_s": round(time.monotonic() - started, 1),
+            "note": "no audio track",
+        }
+        return "\n".join(f"{k}: {v}" for k, v in result.items())
 
     @mcp.tool(annotations=ADDITIVE)
     def stop_screen_recording() -> str:
@@ -1045,5 +1692,5 @@ def register_screen_tools(
             f"frames: {rec.frames}\n"
             f"region: {rec.bbox['width']}x{rec.bbox['height']}"
             f"+{rec.bbox['left']}+{rec.bbox['top']}\n"
-            f"source: {rec.window['title'] if rec.window else 'monitor'}"
+            f"source: {_recording_source(rec)}"
         )

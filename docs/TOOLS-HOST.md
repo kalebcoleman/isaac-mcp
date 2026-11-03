@@ -49,7 +49,7 @@ such as `ur5e_dt__play_scene`.
 
 ## Choosing which local tools a server exposes
 
-The 21 standard local tools (the nine host gateway and desktop tools and the twelve `isaaclab__*` tools) are registered by
+The 24 standard local tools (the twelve host gateway and desktop tools and the twelve `isaaclab__*` tools) are registered by
 default. Five desktop input tools and four simulator-session tools are opt-in. `ISAAC_MCP_LOCAL_TOOLS` selects groups for one server process, read once at startup. It is a
 comma-separated list of group names and aliases; unset or empty means `all`. An unknown name stops the server at
 startup with a message listing the valid names; it never registers nothing silently.
@@ -61,8 +61,8 @@ startup with a message listing the valid names; it never registers nothing silen
 | `isaaclab_jobs` | `isaaclab__runs_list`, `isaaclab__runs_status`, `isaaclab__runs_tail` |
 | `isaaclab_run` | `isaaclab__train`, `isaaclab__eval`, `isaaclab__play`, `isaaclab__runs_cancel` |
 | `screen_read` | `screen_info`, `list_windows`, `screen_recording_status` |
-| `screen_capture` | `screenshot`, `start_screen_recording`, `stop_screen_recording` |
-| `screen_control` | `raise_window`, `move_window` |
+| `screen_capture` | `screenshot`, `start_screen_recording`, `stop_screen_recording`, `join_videos` |
+| `screen_control` | `raise_window`, `move_window`, `tile_windows` |
 | `screen_input` | `window_click`, `window_drag`, `window_scroll`, `window_type`, `window_key` (explicit opt-in) |
 | `sim_launch` | `sim__launch`, `sim__list`, `sim__status`, `sim__stop` (explicit opt-in) |
 | `gateway` | `refresh_tools`, `use_bridge` |
@@ -96,10 +96,10 @@ conservative destructive and open-world annotations. To enable the separate simu
   starting Kit.
 - `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only the tools discovered from the bridge.
   `ISAAC_MCP_LOCAL_TOOLS` filters only the host's local tools. These compose with
-  `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 44 generic `sim`/`assets`
+  `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 48 generic `sim`/`assets`
   tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
   and optional managed-session tools are unaffected. With standard local groups, opting out
-  gives 45 offline tools or 52 with bridge built-ins. These are visibility controls, not isolation.
+  gives 47 offline tools or 54 with bridge built-ins. These are visibility controls, not isolation.
 - `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
   server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
   [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.
@@ -119,17 +119,33 @@ under `~/Videos/screen-mcp/` on the **host server** machine. Mouse and keyboard 
 |---|---|---|
 | `screen_info` | none | Report display, monitors, auto-target, capture locations and recording state. |
 | `list_windows` | `filter=null` | List visible windows and IDs; the optional string filters title or window class. A `client` marker identifies windows reported by the window manager as application clients. |
-| `move_window` | `x`, `y`, `width`, `height`, `window=null`, `window_id=null`, `expected_pid=null` | Un-maximize, move and resize a window through the window manager (EWMH), for example Isaac Sim on the left and RViz 2 on the right before a screen recording. Returns the geometry actually applied; a window manager or app may limit it. |
-| `raise_window` | `window=null`, `window_id=null`, `expected_pid=null` | Request window-manager activation and verify it became active. Activation gives the window focus. Select the actual client window ID rather than a window-manager frame, and supply the expected PID when targeting a known process. Ambiguous titles owned by different processes require a window ID. |
+| `move_window` | `x`, `y`, `width`, `height`, `window=null`, `window_id=null`, `expected_pid=null`, `frame=false` | Un-maximize, move and resize a window through the window manager (EWMH), for example Isaac Sim on the left and RViz 2 on the right before a screen recording. By default the geometry is the **client area** (the window content that captures record); `frame=true` places the outer frame including the title bar. The frame offset comes from `_NET_FRAME_EXTENTS`, and an unexpected offset is corrected once. Returns the final client and frame geometry and says `clamped` when the window manager or app limited it (for example GNOME keeps title bars below the top panel). Negative coordinates are allowed. |
+| `tile_windows` | `window_ids` (2–6 IDs), `layout="left_right"`, `monitor=null`, `gap=0` | Tile windows over a monitor's work area (`_NET_WORKAREA`, the screen minus panels): `left_right` (one row), `top_bottom` (one column) or `grid`. Each outer frame fills its tile, so title bars do not overlap. `monitor` is the 1-based index from `screen_info` (default: the monitor holding the first window). Reports each window's client geometry and any clamp. |
+| `raise_window` | `window=null`, `window_id=null`, `expected_pid=null` | Request window-manager activation and verify it became active. Activation gives the window focus. Select the actual client window ID rather than a window-manager frame, and supply the expected PID when targeting a known process. Ambiguous titles owned by different processes require a window ID. On a locked screen activation is impossible, and the error says so; window screenshots and recordings do not need it. |
 | `screenshot` | `monitor=null`, `window=null`, `window_id=null`, `max_width=1600` | Save a full-resolution PNG and return a caption plus inline image, scaled down to at most `max_width` (clamped to 320–3840). With no selector, auto-targets Isaac Sim/Lab if found, otherwise monitor 1. `monitor=0` means all monitors. When the session is locked or blanked (a PC used remotely), monitor captures are composed from the visible windows' own pixels in stacking order, and the caption says so. A downscaled inline image's caption gives the factor back to original pixels. |
-| `start_screen_recording` | `monitor=null`, `window=null`, `window_id=null`, `fps=15`, `max_width=1600`, `max_seconds=600`, `full_screen=true` | Start one MP4 recording; no audio. With no selector, auto-target a simulator window, otherwise monitor 1. `fps` is clamped to 1–30 and `max_seconds` to 5–3600. `full_screen=true` scales/pads to the primary monitor; false uses the window or monitor size capped by `max_width`. |
+| `start_screen_recording` | `monitor=null`, `window=null`, `window_id=null`, `fps=15`, `max_width=1920`, `max_seconds=600`, `full_screen=false`, `window_ids=null`, `layout="side_by_side"` | Start one MP4 recording; no audio. With no selector, auto-target a simulator window, otherwise monitor 1. `window_ids` (2–6 IDs) records several windows into **one** video, reading each window's own pixels every frame so they stay in sync; `layout` is `side_by_side`, `top_bottom` or `grid`, aspect ratios are kept and cells padded. Output is the native capture size scaled down (never up) to `max_width`. `full_screen=true` letterboxes into the primary monitor's shape, also capped by `max_width`. A monitor recording on a locked or blanked screen is composed from the windows' own pixels each frame. `fps` is clamped to 1–30 and `max_seconds` to 5–3600; when capture falls behind `fps`, frames are repeated so the video keeps real time, and the stop result reports it. |
 | `stop_screen_recording` | none | Stop and finalize the active recording, reporting its path and result. |
+| `join_videos` | `inputs` (2–8 paths), `mode="concat"`, `output=null`, `max_width=1920`, `fps=null`, `shortest=false` | Join clips into one new MP4 with the bundled ffmpeg (no ffprobe needed): `concat` plays them in order, each scaled and padded to the first clip's size; `hstack`/`vstack` place them side by side (scaled to the tallest clip's height) or top to bottom (widest width), with the result capped by `max_width`. A shorter stacked clip freezes on its last frame unless `shortest=true`. Inputs must be video files under the home folder or `~/Videos/screen-mcp` (a bare name means that folder); `output` is a new `.mp4` name in that folder or an absolute path under home and is never overwritten (default `joined-<time>.mp4`). Audio is dropped; encoding is bounded to 15 minutes and the result to one hour. |
 | `screen_recording_status` | none | Report active recording, elapsed time and frame count, or the most recent recording. |
 
 Examples: `list_windows` with `{"filter":"Isaac"}`; `screenshot` with `{"window_id":12345}`;
-`start_screen_recording` with `{"window_id":12345,"fps":15,"max_seconds":20,"full_screen":false}`; then
-`stop_screen_recording` with `{}`. Window capture reads the selected window's pixels, including when another window
+`start_screen_recording` with `{"window_id":12345,"fps":15,"max_seconds":20}`; then
+`stop_screen_recording` with `{}`. For a demo with Isaac Sim and RViz 2 together: `tile_windows` with
+`{"window_ids":[12345,23456]}`, then `start_screen_recording` with `{"window_ids":[12345,23456]}`; join clips
+afterwards with `join_videos` and `{"inputs":["intro.mp4","demo.mp4"],"output":"final.mp4"}`. Window capture reads the selected window's pixels, including when another window
 covers it. For a clean simulator viewport without desktop chrome, use the twin's `ur5e_dt__start_recording` instead.
+
+Recording defaults changed: `full_screen` now defaults to false and `max_width` to 1920. Previously a window
+recording was scaled and padded to the primary monitor by default (3440×1440 on an ultra-wide, or a 1440×900 window
+upscaled to 1920×1080), and `full_screen=false` capped at 1600. Now a window keeps its native size up to 1920 wide,
+and explicit `full_screen=true` letterboxes into the monitor's shape at most `max_width` wide; pass
+`max_width=3840` for the old full-resolution full-screen output.
+
+On a locked or remote PC (monitor captures black, X input refused): window screenshots and recordings,
+`window_ids` recordings and locked monitor recordings work from window pixels; `move_window` and `tile_windows`
+worked on GNOME/mutter (Ubuntu 22.04) while locked; `raise_window` cannot work and says so. A composed locked
+monitor recording costs about 150 ms per frame for six windows at 3440×1440 (about six distinct captures per
+second, with frames repeated to keep real time), so prefer `window_ids` for the windows that matter.
 
 ### Optional desktop input
 

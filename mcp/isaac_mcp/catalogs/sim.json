@@ -3268,11 +3268,11 @@
       "owner_id": "generic-sim"
     },
     "sim.ui.act": {
-      "description": "Drive Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
+      "description": "Drive Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
       "parameters": {
         "action": {
           "type": "string",
-          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs).",
+          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab).",
           "required": true,
           "enum": [
             "click",
@@ -3285,6 +3285,7 @@
             "keypress",
             "menu",
             "tab",
+            "close",
             "wait"
           ]
         },
@@ -3325,12 +3326,12 @@
         },
         "window": {
           "type": "string",
-          "description": "For action=tab: the window or tab title, e.g. 'Console' or 'Content'.",
+          "description": "For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'.",
           "required": false
         },
         "menu": {
           "type": "string",
-          "description": "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube'.",
+          "description": "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube', or a top-level menu such as 'Layouts' (opened to list its items, then closed again).",
           "required": false
         },
         "scroll_x": {
@@ -3367,12 +3368,13 @@
             "keypress",
             "menu",
             "tab",
+            "close",
             "wait"
           ],
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs)."
+          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab)."
         },
         {
           "name": "ref",
@@ -3444,7 +3446,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "For action=tab: the window or tab title, e.g. 'Console' or 'Content'."
+          "description": "For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'."
         },
         {
           "name": "menu",
@@ -3453,7 +3455,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube'."
+          "description": "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube', or a top-level menu such as 'Layouts' (opened to list its items, then closed again)."
         },
         {
           "name": "scroll_x",
