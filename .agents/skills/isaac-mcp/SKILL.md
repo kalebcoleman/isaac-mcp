@@ -67,7 +67,7 @@ Pause before saving and check the exported scene after reopening in a fresh proc
    `docs/TOOLS-ISAACLAB.md#locating-an-isaac-lab-install`; do not reinstall or rename an existing
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__stage__info` or `assets__roots`. The
-   46-tool pack (38 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   48-tool pack (40 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan` and `assets__search` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -182,11 +182,14 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
 
 ### Action Graphs and maps
 
-- Before building an Action Graph, look node types up with `sim__graph__node_types` (by id or UI
-  name, e.g. `contains="Make Array"`): it returns the exact type id and port names for this Isaac
-  version, which often differ from tutorials (Break 3-Vector takes `inputs:tuple`; Make Array is
-  `ConstructArray` and needs `inputs:input1..` added with `og.Controller.create_attribute`).
-  Connect with full paths (`<graph>/<node>.outputs:x`). Check the result with `sim__graph__inspect`.
+- Open a scene file with `sim__stage__open` (not run_python); it returns the new IDs.
+- Build Action Graphs with `sim__graph__build` (nodes, values, connections, prim targets in one
+  call; timeline stopped). Look node types up first with `sim__graph__node_types` (by id or UI name,
+  e.g. `contains="Make Array"`): exact type ids, ports and allowed token values for this Isaac
+  version, which often differ from tutorials. The build checks every port, adds Make Array inputs,
+  stores token values, and rolls back on errors. Then play and `sim__graph__inspect`: it lists each
+  node's compute errors (a wrong token makes a node silently output zeros).
+- Save checkpoints into your own folder: `sim__stage__save` with `directory=<folder under home>`.
 - For a video or screenshot of a graph, `sim__graph__show` (windowed Kit, `layout=true`, a
   `width`/`height` to undock it) opens it readable in the Action Graph editor.
 - No map files for Nav2? `sim__map__occupancy` writes a `map_server` PGM + YAML from the scene's
@@ -264,5 +267,5 @@ Use `window_*` only for other apps (RViz 2) on an unlocked desktop.
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 46 generic tools: 38 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 48 generic tools: 40 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.
