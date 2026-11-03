@@ -67,7 +67,7 @@ Pause before saving and check the exported scene after reopening in a fresh proc
    `docs/TOOLS-ISAACLAB.md#locating-an-isaac-lab-install`; do not reinstall or rename an existing
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__stage__info` or `assets__roots`. The
-   44-tool pack (36 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   46-tool pack (38 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan` and `assets__search` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -219,6 +219,23 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
    `resetOnStop=False` on the clock graph RViz drops every scan after the first Stop/Play.
    `True` everywhere is the safe choice when sensor helpers are present.
 
+## Using Isaac Sim's UI (works on a locked or remote PC)
+
+Lab PCs are often used remotely with the screen locked. Then monitor screenshots are composed
+from window pixels, and desktop input (`window_*`) is refused, because the lock screen holds the
+keyboard and would receive the keystrokes. Isaac Sim's own UI still works through Kit's input:
+
+1. `sim__ui__find(query="play")`, or `window="Stage"`: widgets with text, tooltip, value, a `ref`,
+   and their centre in Isaac Sim window pixels.
+2. `sim__ui__act` with that `ref` (or `x`, `y`): `click`, `double_click`, `right_click`, `move`,
+   `drag`, `scroll`, `type` (ref first focuses the field), `keypress` (`["ctrl", "s"]`, `["enter"]`),
+   `menu` (`"Create/Mesh/Cube"`; a wrong path lists the real items), or `wait`.
+3. Check the result: `screenshot(window_id=<Isaac Sim window>)` (its pixels are the same as
+   `sim__ui__find`'s; a downscaled image's caption gives the scale factor), or `sim__ui__find`.
+
+Prefer a dedicated tool (timeline, stage, graph) when one exists; use the UI for what has none.
+Use `window_*` only for other apps (RViz 2) on an unlocked desktop.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Action |
@@ -226,7 +243,8 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
 | Only host and `isaaclab__*` tools listed | Connected before Kit, or bridge tools filtered | `refresh_tools`, then the `--list-bridges` CLI |
 | `refresh_tools` reports connection refused | No bridge on that port | Check the listing; start Kit with `isaac.mcp.bridge` only if none is advertised and the user agrees |
 | `refresh_tools` refused right after `sim__launch` | The server dials its configured port, not the new session's | `use_bridge(port=<the launched port>)` (sim__status's `next` says so) |
-| Monitor screenshot or recording is all black | Screen locked or blanked (nobody at a lab PC) | Capture the window (`window=`/`window_id=`); the tool warns when it detects a lock |
+| Monitor recording is all black; screenshot says "composed from N window(s)" | Screen locked or blanked (PC used remotely) | Record a window (`window=`/`window_id=`); screenshots are composed from window pixels |
+| `window_*` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find`/`sim__ui__act`; other apps need the desktop unlocked |
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use `python -m isaac_mcp.client list_tools --port <port>` |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
@@ -245,5 +263,5 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 44 generic tools: 36 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 46 generic tools: 38 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.
