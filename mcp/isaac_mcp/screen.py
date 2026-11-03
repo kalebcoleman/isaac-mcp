@@ -70,6 +70,7 @@ class Recording:
     composed_frames: int = 0
     captured: int = 0  # distinct captures; frames - captured were repeated to keep real time
     warnings: list[str] = field(default_factory=list)
+    warned: set = field(default_factory=set)
 
 
 _lock = threading.Lock()
@@ -226,13 +227,16 @@ def _compose_cells(rec: Recording, disp, objs: list, gone: dict) -> bytes:
         try:
             width, height, data = _read_window(disp, obj)
         except (XError, RuntimeError) as exc:
-            first = i not in gone
-            gone[i] = None if isinstance(exc, (BadWindow, BadDrawable)) else now
-            if first:
-                win = rec.windows[i]
+            permanent = isinstance(exc, (BadWindow, BadDrawable))
+            gone[i] = None if permanent else now
+            win = rec.windows[i]
+            key = (i, "permanent" if permanent else "transient")
+            if key not in rec.warned:  # one warning per window and kind, so flapping cannot grow the list
+                rec.warned.add(key)
                 rec.warnings.append(f"window {win['id']} ({win['title']}) could not be read after "
                                     f"{now - rec.started:.1f}s ({type(exc).__name__}); its cell is black"
-                                    + ("" if gone[i] is None else " until it can be read again"))
+                                    + (" for the rest of the recording (window destroyed)" if permanent
+                                       else " until it can be read again"))
             continue
         gone.pop(i, None)
         x, y, w, h = fit_into(width, height, cell[2], cell[3])
@@ -1167,13 +1171,20 @@ def join_plan(infos: list[dict], mode: str, max_width: int = DEFAULT_MAX_WIDTH, 
     return dict(filter=";".join(chains), width=width, height=height, fps=rate, duration=duration)
 
 
-def join_command(ffmpeg: str, inputs: list[Path], plan: dict, output: Path) -> list[str]:
-    cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-n"]
+def join_command(ffmpeg: str, inputs: list[Path], plan: dict, output: Path, overwrite: bool = False) -> list[str]:
+    """``overwrite`` is only for our own claimed temporary file (never the user's output name)."""
+    cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y" if overwrite else "-n"]
     for path in inputs:
         cmd += ["-i", str(path)]
     cmd += ["-filter_complex", plan["filter"], "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "veryfast",
             "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output)]
     return cmd
+
+
+def _umask() -> int:
+    mask = os.umask(0)
+    os.umask(mask)
+    return mask
 
 
 def join_timeout(duration: float) -> int:
@@ -1669,24 +1680,31 @@ def register_screen_tools(
         started = time.monotonic()
         try:
             try:
-                tmp.unlink()  # ffmpeg -n refuses an existing name; the claim only reserved it
-                proc = subprocess.run(join_command(ffmpeg, paths, plan, tmp), capture_output=True, text=True,
+                # Write over the empty file we claimed (-y for this temporary name only): unlinking it
+                # first would leave a gap in which another process could take the name.
+                proc = subprocess.run(join_command(ffmpeg, paths, plan, tmp, overwrite=True), capture_output=True, text=True,
                                       timeout=timeout, stdin=subprocess.DEVNULL)
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError(f"ffmpeg did not finish within {timeout} s; nothing was written") from exc
             if proc.returncode != 0 or not tmp.exists() or tmp.stat().st_size == 0:
                 raise RuntimeError(f"ffmpeg failed (exit {proc.returncode}); nothing was written: "
                                    f"{proc.stderr.strip()[-600:]}")
+            os.chmod(tmp, 0o666 & ~_umask())  # the claim made it 0600; the result gets normal permissions
             try:
                 os.link(tmp, out)  # atomic and refuses an existing name, so a race cannot overwrite
             except FileExistsError as exc:
                 raise RuntimeError(f"{out} appeared while encoding; nothing was overwritten") from exc
-            except OSError:  # no hard links here (some network/AD homes, FUSE): exclusive create, then replace
+            except OSError as link_error:  # no hard links (some network/AD homes, FUSE): exclusive create, replace
                 try:
                     os.close(os.open(out, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
                 except FileExistsError as exc:
                     raise RuntimeError(f"{out} appeared while encoding; nothing was overwritten") from exc
-                os.replace(tmp, out)
+                try:
+                    os.replace(tmp, out)
+                except OSError as exc:
+                    out.unlink(missing_ok=True)  # do not leave our empty placeholder behind
+                    raise RuntimeError(f"could not publish {out} (hard link: {link_error.strerror}; "
+                                       f"replace: {exc.strerror}); nothing was written") from exc
         finally:
             try:
                 tmp.unlink()
