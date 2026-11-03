@@ -122,7 +122,7 @@ def test_find_ogn_ignores_an_empty_extension_path():
 def test_cell_value_reads_the_start_cell(np):
     dims = 10
     buf = np.zeros(dims * dims)
-    buf[0] = 1.0  # buffer (0,0) -> after the 180-degree turn, the top-right... bottom-right pixel
+    buf[0] = 1.0  # buffer cell 0 -> after the 180-degree turn, the bottom-right pixel
     pgm, origin, _ = graph.pgm_and_origin(buf.tolist(), dims, dims, (0.0, 0.0, 0.0), 0.1, 1.0)
     assert graph.cell_value(pgm, dims, dims, origin, 0.1, 0.95, 0.05) == 0     # bottom-right cell: occupied
     assert graph.cell_value(pgm, dims, dims, origin, 0.1, 0.05, 0.95) == 254   # top-left: free
@@ -146,6 +146,26 @@ def test_graph_paths_accept_unicode_and_refuse_property_paths(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "isaac_mcp.project_assets", types.SimpleNamespace(refuse=refuse))
     assert graph._graph_path("/World/Graphe_\u00e9") == "/World/Graphe_\u00e9"
-    for bad in ("World/Graph", "/World/Graph.inputs:x", "/World/Graph{v=a}", ""):
+    for bad in ("World/Graph", "/World/Graph.inputs:x", "/World/Graph{v=a}", "", "/World/a b", "/World/1abc"):
         with pytest.raises(Refused):
             graph._graph_path(bad)
+
+
+def test_start_blocked_decisions():
+    walls_mostly_unknown = {"occupied": 50, "free": 100, "unknown": 850}  # big bounds, walls exist
+    assert graph.start_blocked(walls_mostly_unknown, [254]) is None
+    open_field = {"occupied": 0, "free": 1000, "unknown": 0}
+    assert graph.start_blocked(open_field, [254]) is None
+    inside = {"occupied": 0, "free": 40, "unknown": 960}  # seen live with start inside a box
+    assert "inside an obstacle" in graph.start_blocked(inside, [254])
+    assert graph.start_blocked(open_field, [0]) == "is occupied"
+    assert graph.start_blocked(open_field, [205]) == "is not in mapped free space"
+    assert "inside a collider" in graph.start_blocked(open_field, [254], start_in_collider=True)
+
+
+def test_start_on_a_cell_edge_checks_the_touching_cells(np):
+    dims = 10
+    buf = np.zeros(dims * dims)
+    pgm, origin, _ = graph.pgm_and_origin(buf.tolist(), dims, dims, (0.0, 0.0, 0.0), 0.1, 1.0)
+    assert len(graph.cells_at(pgm, dims, dims, origin, 0.1, 0.3, 0.3)) == 4   # a corner: four cells
+    assert len(graph.cells_at(pgm, dims, dims, origin, 0.1, 0.35, 0.35)) == 1  # a cell centre: one

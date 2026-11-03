@@ -67,7 +67,7 @@ Pause before saving and check the exported scene after reopening in a fresh proc
    `docs/TOOLS-ISAACLAB.md#locating-an-isaac-lab-install`; do not reinstall or rename an existing
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__stage__info` or `assets__roots`. The
-   39-tool pack (31 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   44-tool pack (36 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan` and `assets__search` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -237,5 +237,5 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 39 generic tools: 31 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 44 generic tools: 36 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.

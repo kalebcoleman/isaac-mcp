@@ -96,7 +96,7 @@ conservative destructive and open-world annotations. To enable the separate simu
   starting Kit.
 - `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only the tools discovered from the bridge.
   `ISAAC_MCP_LOCAL_TOOLS` filters only the host's local tools. These compose with
-  `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 39 generic `sim`/`assets`
+  `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 44 generic `sim`/`assets`
   tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
   and optional managed-session tools are unaffected. With standard local groups, opting out
   gives 45 offline tools or 52 with bridge built-ins. These are visibility controls, not isolation.

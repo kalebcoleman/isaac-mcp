@@ -175,6 +175,7 @@ class Extension(omni.ext.IExt):
         timeline, play (through the guarded timeline path), let a few frames run, generate, then
         stop again so robots return to their authored poses and physics writes stay in the
         session layer."""
+        import asyncio
         import omni.kit.app as kit_app
         from isaac_mcp.project_assets import refuse
 
@@ -198,20 +199,26 @@ class Extension(omni.ext.IExt):
             for _ in range(8):
                 await kit_app.get_app().next_update_async()
             result = self.dispatch("sim.map.occupancy", dict(args))
-        except BaseException as exc:
+        except (Exception, asyncio.CancelledError) as exc:
             try:
                 await stop()
             except Exception as stop_exc:  # keep the original outcome; report the stop problem with it
                 if isinstance(exc, AssetError):
                     exc.details["stop_error"] = str(stop_exc)[:300]
+                elif isinstance(exc, Exception):
+                    raise RuntimeError(f"{exc}; stopping the timeline also failed ({str(stop_exc)[:200]}), "
+                                       "so it may still be playing") from exc
             raise
+        stopped = True
         try:
             await stop()
         except Exception as stop_exc:  # the map exists: still return it, with the stop problem
+            stopped = False
             result["stop_error"] = (f"{str(stop_exc)[:300]}; the timeline may still be playing. "
                                     "Stop it with sim__timeline__control.")
-        result["timeline"] = ("played 8 frames for the physics scene, then stopped. While playing, "
-                              "OnPlaybackTick graphs ran: /clock restarted and ROS publishers/controllers ticked.")
+        result["timeline"] = ("played 8 frames for the physics scene" + (", then stopped" if stopped else "")
+                              + ". While playing, OnPlaybackTick graphs ran: /clock restarted and ROS "
+                              "publishers/controllers ticked.")
         return result
 
     async def _wait_sensor_frame(self, name, args):

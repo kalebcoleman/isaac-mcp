@@ -32,7 +32,7 @@ This run used an existing installation with a documented NumPy dependency mismat
 - **Run optional Isaac Lab jobs.** Discover an existing Lab installation, launch training,
   evaluation or play, and inspect metrics and checkpoints in its own environment.
 
-There are **39 generic scene/asset tools, 23 UR5e tools and 12 Lab tools**. Default discovery
+There are **44 generic scene/asset tools, 23 UR5e tools and 12 Lab tools**. Default discovery
 lists **89 tools offline**, **96 with bridge built-ins**, or **105 with both optional groups**.
 Catalog entries remain visible offline; simulator operations need a live selected bridge.
 See the [tool tiers and filters](AGENTS.md#what-you-can-reach-by-tier).

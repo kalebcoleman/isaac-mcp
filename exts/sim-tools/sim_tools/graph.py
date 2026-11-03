@@ -193,7 +193,10 @@ def _graph_path(path):
 
     from pxr import Sdf
 
-    if not isinstance(path, str) or not Sdf.Path.IsValidPathString(path):
+    valid = Sdf.Path.IsValidPathString(path) if isinstance(path, str) else False
+    if isinstance(valid, tuple):  # some USD versions return (False, message) for invalid paths
+        valid = valid[0]
+    if not bool(valid):
         refuse("INVALID_VALUE", "path must be an absolute prim path like /World/ROS_Clock.")
     p = Sdf.Path(path)
     if not (p.IsAbsolutePath() and p.IsPrimPath()):
@@ -392,6 +395,44 @@ def cell_value(pgm, width, height, origin, res, x, y):
     return body[row * width + col]
 
 
+def cells_at(pgm, width, height, origin, res, x, y):
+    """PGM values of the cells touching world (x, y): one cell, or up to four when the point lies
+    on a cell edge (floating-point floor could pick either side)."""
+    eps = res * 1e-6
+    cols = {int(math.floor((x - origin[0] + d) / res)) for d in (-eps, eps)}
+    rows = {height - 1 - int(math.floor((y - origin[1] + d) / res)) for d in (-eps, eps)}
+    body = pgm[len(pgm) - width * height:]
+    return [body[r * width + c] for r in rows for c in cols if 0 <= c < width and 0 <= r < height]
+
+
+def start_blocked(counts, start_cells, start_in_collider=False):
+    """Why the flood-fill start makes the map unusable, or None. Pure, so it is unit-tested."""
+    total = max(1, sum(counts.values()))
+    if start_in_collider:
+        return "is inside a collider (PhysX overlap at the start point)"
+    if counts["occupied"] == 0 and counts["unknown"] > 0.5 * total:
+        # Seen live: with start inside a solid collider the generator marks that collider's
+        # interior free, finds no walls, and leaves everything else unknown.
+        return "seems to be inside an obstacle or a closed space: no walls were found and most of the map is unknown"
+    if 254 not in start_cells:
+        return "is occupied" if 0 in start_cells else "is not in mapped free space"
+    return None
+
+
+def _start_in_collider(stage, start, z_mid, cell, to_su):
+    """PhysX overlap test at the start point (physics is playing during generation)."""
+    try:
+        from omni.physx import get_physx_scene_query_interface
+
+        hits = []
+        get_physx_scene_query_interface().overlap_sphere(
+            cell * 0.25 * to_su, (start[0] * to_su, start[1] * to_su, z_mid * to_su),
+            lambda hit: hits.append(hit.rigid_body or hit.collision) or False, False)
+        return bool(hits)
+    except Exception:  # no PhysX scene query available: fall back to the map-based checks
+        return False
+
+
 def occupancy_map(scene, stage, a):
     """Generate a 2D occupancy map from the stage's colliders and write a Nav2 PGM + YAML."""
     from isaac_mcp.project_assets import refuse
@@ -406,6 +447,7 @@ def occupancy_map(scene, stage, a):
         refuse("EXTENSION_UNAVAILABLE", "isaacsim.asset.gen.omap could not be enabled in this Isaac Sim.")
     from isaacsim.asset.gen.omap.bindings import _omap
 
+    in_collider = _start_in_collider(stage, start, (z[0] + z[1]) / 2, cell, to_su)
     om = _omap.acquire_omap_interface()
     try:
         # The generator flood-fills free space from this origin ("must be in unoccupied space").
@@ -425,19 +467,11 @@ def occupancy_map(scene, stage, a):
         refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) "
                "inside the bounds and a UsdPhysics.Scene on the stage.")
     pgm, origin, counts = pgm_and_origin(buffer, dims.x, dims.y, min_bound, cell * to_su, mpu, clear)
-    at_start = cell_value(pgm, dims.x, dims.y, origin, cell, start[0], start[1])
-    total = max(1, sum(counts.values()))
-    if counts["occupied"] == 0 and counts["unknown"] > 0.5 * total:
-        # Seen live: with start inside a solid collider the generator marks that collider's
-        # interior free, finds no walls, and leaves everything else unknown.
-        refuse("START_BLOCKED", f"start {start} seems to be inside an obstacle or a closed space: no walls were "
-               "found around it and most of the map is unknown. Move start to open floor. No files were written.",
-               cells=counts)
-    if at_start != 254:
-        refuse("START_BLOCKED", f"start {start} is {'occupied' if at_start == 0 else 'not in mapped free space'}: "
-               "the generator flood-fills free space from it, so the map would be empty or wrong. Move start to "
-               "open floor (or clear the robot's footprint there). No files were written.",
-               cells=counts)
+    reason = start_blocked(counts, cells_at(pgm, dims.x, dims.y, origin, cell, start[0], start[1]), in_collider)
+    if reason:
+        refuse("START_BLOCKED", f"start {start} {reason}. The generator flood-fills free space from it, so the "
+               "map would be empty or wrong. Move start to open floor next to (not on) the robot; `clear` only "
+               "edits the saved image. No files were written.", cells=counts)
     scene.output.mkdir(mode=0o700, parents=True, exist_ok=True)
     pgm_path.write_bytes(pgm)
     yaml_text = (f"image: {base}.pgm\nmode: trinary\nresolution: {cell:g}\n"
