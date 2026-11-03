@@ -33,7 +33,7 @@ This run used an existing installation with a documented NumPy dependency mismat
   evaluation or play, and inspect metrics and checkpoints in its own environment.
 
 There are **39 generic scene/asset tools, 23 UR5e tools and 12 Lab tools**. Default discovery
-lists **83 tools offline**, **90 with bridge built-ins**, or **99 with both optional groups**.
+lists **84 tools offline**, **91 with bridge built-ins**, or **100 with both optional groups**.
 Catalog entries remain visible offline; simulator operations need a live selected bridge.
 See the [tool tiers and filters](AGENTS.md#what-you-can-reach-by-tier).
 

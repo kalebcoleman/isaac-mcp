@@ -26,6 +26,7 @@ MUTATIONS = {
     "sim.lidar.create",
     "sim.controller.create",
     "sim.controller.update",
+    "sim.ros2.tf_setup",
 }
 
 
@@ -860,6 +861,10 @@ class Advanced:
                 ],
                 scope="last 32 KiB; WARN/ERROR only",
             )
+        if name == "sim.ros2.tf_setup":
+            from .ros2 import setup
+
+            return setup(s, stage, a)
         if name.startswith("sim.controller."):
             if os.getenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS") != "1":
                 refuse(
