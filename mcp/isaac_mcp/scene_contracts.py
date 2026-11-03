@@ -166,7 +166,9 @@ add(
     "Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input.",
     dict(
         **TARGET,
-        path=field("string", "Absolute rigid body path."),
+        path=field("string", "Absolute rigid body path; prim and prim_path are aliases. Supply one.", False),
+        prim=field("string", "Alias for path.", False),
+        prim_path=field("string", "Alias for path.", False),
         include_dynamics=field(
             "boolean",
             "Include measured world COM linear/angular velocity and runtime mass, including kg conversion.",
@@ -197,7 +199,7 @@ add(
 )
 add(
     "sim.viewport.frame",
-    "Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. follow=true (with path): keep the prim in view while the timeline plays, moving the camera with it at the same offset (works for robots whose links move under a fixed root); follow=false stops it; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds. Does not wait for rendered pixels; then screenshot the app window or record.",
+    "Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. If the prim has no geometry, an unambiguous nearby subtree can be selected; the result reports the requested and actual paths, and follow tracks the actual path. follow=false stops following; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds (with candidates). Does not wait for rendered pixels; then screenshot the app window or record.",
     dict(
         **TARGET,
         path=field("string", "Absolute prim path to frame or follow.", False, default=""),
@@ -427,14 +429,14 @@ add(
 )
 add(
     "sim.graph.build",
-    "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types.",
+    "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Containers or individual node/connection entries may be JSON-encoded strings; flat alternating node and connection lists also work. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types.",
     dict(
         **TARGET,
         path=field("string", "Graph prim path to create, e.g. /World/ROS_Clock or /turtlebot3_burger/ROS_Drive."),
-        nodes=field("array", "[name, node_type] pairs, e.g. [[\"tick\", \"omni.graph.action.OnPlaybackTick\"], [\"clock\", \"isaacsim.ros2.bridge.ROS2PublishClock\"]]."),
-        values=field("object", "Input values: {\"node.inputs:port\": value}, e.g. {\"clock.inputs:topicName\": \"/clock\"}.", False),
-        connections=field("array", "[from, to] pairs: [[\"tick.outputs:tick\", \"clock.inputs:execIn\"]]. A constant node's inputs:value can be a source.", False),
-        targets=field("object", "Prim targets: {\"node.inputs:targetPrim\": [\"/World/robot\"]}.", False),
+        nodes=field("array", "[name, node_type] pairs or {name, type} objects; entries or whole list may be JSON strings, e.g. ['[\"tick\", \"omni.graph.action.OnPlaybackTick\"]']. A flat alternating list is also accepted."),
+        values=field("object", "Input values: {\"node.inputs:port\": value}, or a JSON string containing that object.", False),
+        connections=field("array", "[from, to] pairs or {from, to} objects; entries or whole list may be JSON strings. A flat alternating list is also accepted.", False),
+        targets=field("object", "Prim targets: {\"node.inputs:targetPrim\": [\"/World/robot\"]}, or a JSON string containing that object or a target path list.", False),
         evaluator=field("string", "Graph evaluator: execution (Action Graph, default), push or dirty_push.", False, default="execution", enum=["execution", "push", "dirty_push"]),
         replace=field("boolean", "Delete an existing graph at path first (it is not restored if the new build fails).", False, default=False),
     ),
@@ -450,7 +452,7 @@ add(
 )
 add(
     "sim.graph.show",
-    "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands the nodes (port names readable) and auto-arranges them, writing both into the stage; graphs already laid out are not re-arranged. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window (not a separate desktop window); it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed.",
+    "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands and arranges nodes, writing positions into the stage; stop first, or use layout=false while playing. TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window; it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed.",
     dict(
         **TARGET,
         path=field("string", "Graph prim path (not needed with close=true).", False, default=""),

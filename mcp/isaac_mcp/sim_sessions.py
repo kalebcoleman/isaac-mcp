@@ -345,7 +345,9 @@ def _status(env: Mapping[str, str], session_id: str) -> dict:
 def _stop(env: Mapping[str, str], session_id: str, expected_pid: int, confirm_discard: bool,
           force: bool = False) -> dict:
     if not confirm_discard:
-        raise ValueError("confirm_discard must be true; stopping can discard unsaved scene changes")
+        force_arg = ", force=true" if force else ""
+        raise ValueError(f"Stopping can discard unsaved scene changes. After saving, retry: "
+                         f"sim__stop(session_id={session_id!r}, expected_pid={expected_pid!r}, confirm_discard=true{force_arg}).")
     base = _sessions_dir(env)
     with _launch_lock(base):
         session = _read(base, session_id)

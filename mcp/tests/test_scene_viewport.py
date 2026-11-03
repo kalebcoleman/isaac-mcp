@@ -156,11 +156,31 @@ def test_empty_and_bounded_geometry_refuse_without_false_success(scene, view, mo
     with pytest.raises(AssetError) as error:
         view.call("/World/Empty")
     assert error.value.code == "NO_BOUNDS"
+    assert "/World/Box" in error.value.details["candidates"]
     monkeypatch.setattr("sim_tools.viewport.CAP", 1)
     with pytest.raises(AssetError) as error:
         view.call("/World")
     assert error.value.code == "LIMIT"
     assert not view.selected and view.calls == 0
+
+
+def test_frame_and_follow_geometry_free_footprint_use_base_link(scene, view, monkeypatch):
+    from sim_tools import viewport as vp
+
+    stage = scene.stage()
+    UsdGeom.Xform.Define(stage, "/World/Robot/base_footprint")
+    UsdGeom.Xform.Define(stage, "/World/Robot/base_link")
+    UsdGeom.Cube.Define(stage, "/World/Robot/base_link/Visual")
+    requested = "/World/Robot/base_footprint"
+    result = view.call(requested)
+    assert result["requested_path"] == requested
+    assert result["selected_path"] == "/World/Robot/base_link"
+    assert view.selected[-1] == result["selected_path"]
+    monkeypatch.setattr(vp, "set_camera", lambda *args: 5.0)
+    result, follow = vp.place(scene, stage, view.context, view.viewport,
+                              {"path": requested, "follow": True, "eye": [5, 5, 5]}, lambda: None)
+    assert result["requested_path"] == requested and result["path"] == "/World/Robot/base_link"
+    assert follow["path"] == result["path"]
 
 
 def test_absent_viewport_is_an_actionable_refusal(scene, view):

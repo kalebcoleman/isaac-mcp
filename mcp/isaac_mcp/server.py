@@ -527,16 +527,13 @@ def _build_tool_function(name: str, canonical: str, description: str,
             from pydantic import Field
             spec = REGISTRY[canonical]["parameters"][f["name"]]
             bounds = {}
-            if f["kind"] == "array":
+            if canonical == "sim.graph.build" and f["name"] in ("nodes", "connections", "values", "targets"):
+                # Let the bridge normalize JSON-encoded containers and report a
+                # concise shape error instead of FastMCP's nested union dump.
+                annotation = Any
+            elif f["kind"] == "array":
                 strings = f["name"] in {"observe_prims", "observe_joints"} or (canonical == "sim.ui.act" and f["name"] == "keys")
                 annotation = list[str] if strings else list[float]
-                if canonical == "sim.graph.build" and f["name"] in ("nodes", "connections"):
-                    # [name, type] / [from, to] pairs, and the shapes weak models reach for first:
-                    # {"name","type"} / {"from","to"} objects and [srcNode, srcPort, dstNode, dstPort].
-                    # The bridge normalizes them (graph_build.parse_spec) and says what it did.
-                    from typing import Union
-                    annotation = list[Union[Annotated[list[str], Field(min_length=2, max_length=4)],
-                                            dict[str, str]]]
                 if canonical == "sim.map.occupancy" and f["name"] == "clear":
                     # A list of [x, y, radius] circles; list[float] rejected every valid value.
                     annotation = list[Annotated[list[float], Field(min_length=3, max_length=3)]]

@@ -39,6 +39,63 @@ def test_spec_accepts_the_lab_clock_graph_and_full_paths():
     assert spec["evaluator"] == "execution"
 
 
+def test_antigravity_serialized_clock_payload_and_nested_targets():
+    spec = gb.parse_spec({
+        "path": "/World/ROS_Clock",
+        "nodes": ['["tick", "omni.graph.action.OnPlaybackTick"]',
+                  '["context", "isaacsim.ros2.bridge.ROS2Context"]',
+                  '["time", "isaacsim.core.nodes.IsaacReadSimulationTime"]',
+                  '["clock", "isaacsim.ros2.bridge.ROS2PublishClock"]'],
+        "connections": ['["tick.outputs:tick", "clock.inputs:execIn"]',
+                        '["context.outputs:context", "clock.inputs:context"]',
+                        '["time.outputs:simulationTime", "clock.inputs:timeStamp"]'],
+        "values": '{"clock.inputs:topicName": "/clock", "clock.inputs:queueSize": 10, '
+                  '"context.inputs:domain_id": 0, "context.inputs:useDomainIDEnvVar": false, '
+                  '"time.inputs:resetOnStop": true}',
+        "targets": {"clock.inputs:targetPrim": '["/World/robot"]'},
+    })
+    assert spec["nodes"][0] == ("tick", "omni.graph.action.OnPlaybackTick")
+    assert spec["connections"][0] == (("tick", "outputs:tick"), ("clock", "inputs:execIn"))
+    assert ("clock", "inputs:topicName", "/clock") in spec["values"]
+    assert ("clock", "inputs:queueSize", 10) in spec["values"]
+    assert spec["targets"] == [("clock", "inputs:targetPrim", ["/World/robot"])]
+
+
+def test_json_whole_containers_object_entries_and_flat_lists():
+    spec = gb.parse_spec(dict(nodes='["tick", "omni.graph.action.OnPlaybackTick", '
+                                    '"pub", "isaacsim.ros2.bridge.ROS2PublishClock"]',
+                              connections='["tick.outputs:tick", "pub.inputs:execIn"]',
+                              values='{"pub.inputs:topicName":"/clock"}',
+                              targets='{"pub.inputs:targetPrim":"[\\"/World/robot\\"]"}'))
+    assert spec["nodes"] == [("tick", NODES[0][1]), ("pub", NODES[1][1])]
+    assert spec["targets"] == [("pub", "inputs:targetPrim", ["/World/robot"])]
+    object_spec = gb.parse_spec(dict(nodes=['{"name":"tick","type":"omni.graph.action.OnPlaybackTick"}',
+                                             '{"name":"pub","type":"isaacsim.ros2.bridge.ROS2PublishClock"}'],
+                                     connections=['{"from":"tick.outputs:tick","to":"pub.inputs:execIn"}']))
+    assert object_spec["nodes"] == spec["nodes"]
+    assert object_spec["connections"] == spec["connections"]
+
+
+@pytest.mark.parametrize("bad, message", [
+    ({"nodes": '[bad'}, "nodes: expected"),
+    ({"nodes": ["tick", "omni.graph.action.OnPlaybackTick", "orphan"]}, "even number"),
+    ({"nodes": NODES, "connections": ['["bad"']}, r"connections\[0\]: expected"),
+    ({"nodes": NODES, "values": '[]'}, "values: an object"),
+    ({"nodes": NODES, "targets": '{bad'}, "targets: expected"),
+    ({"nodes": NODES, "values": {"pub.outputs:x": 1}}, "only inputs"),
+])
+def test_serialized_spec_errors_are_actionable(bad, message):
+    with pytest.raises(gb.SpecError, match=message):
+        gb.parse_spec(bad)
+
+
+def test_serialized_spec_retains_node_and_connection_limits():
+    with pytest.raises(gb.SpecError, match="at most 64 pairs"):
+        gb.parse_spec({"nodes": ['["tick", "omni.graph.action.OnPlaybackTick"]'] * 65})
+    with pytest.raises(gb.SpecError, match="at most 256 pairs"):
+        gb.parse_spec({"nodes": NODES, "connections": ["tick.outputs:tick", "pub.inputs:execIn"] * 257})
+
+
 @pytest.mark.parametrize("bad, code", [
     (dict(nodes=[]), "INVALID_VALUE"),
     (dict(nodes=[["tick", "OnPlaybackTick"]]), "INVALID_VALUE"),              # not a full type id

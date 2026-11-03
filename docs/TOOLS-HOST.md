@@ -204,7 +204,7 @@ creates files, and can affect the GPU and network. All four tools have conservat
 | `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false`, `show_ur5e_panel=false`, `enable_motion_bvh=false`, `physics_backend="physx"` | Start a new process with a local bridge, UR5e tools, chosen ROS domain and separate output/log and persistent Kit settings. Set `show_ur5e_panel=true` to show the panel in a graphical session. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the new process’s installed Newton engine with no fallback. Returns a session ID and PID before the bridge is ready. |
 | `sim__list` | none | List managed sessions, including those started by an earlier server process. |
 | `sim__status` | `session_id` | Check the original PID's identity, bridge and Kit readiness, and current memory snapshot. |
-| `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. |
+| `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Without it, the error includes the exact retry call. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. |
 
 Example calls: `sim__launch` with `{"port":18766,"ros_domain":42}`, then `sim__status` with
 `{"session_id":"<id returned by launch>"}`. Wait until `state` is `running`, select that port with `use_bridge`, and

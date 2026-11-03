@@ -62,6 +62,67 @@ def test_default_refuses_broken_save_and_supplies_explicit_policy(configured):
     assert not (scene.output / "default.usda").exists()
 
 
+def test_missing_camera_relationship_is_restored_only_in_export(configured, monkeypatch):
+    from sim_tools import render_export
+
+    scene, stage, product, producer, checked = configured
+    producer.GetRelationship("inputs:cameraPrim").SetTargets([])
+    monkeypatch.setattr(render_export, "runtime_camera_target",
+                        lambda s, p: (Sdf.Path("/World/Camera"), product.GetPath()))
+    before = unchanged(stage)
+    with pytest.raises(AssetError) as error:
+        scene.save(stage, "no-policy.usda")
+    assert error.value.details["retry_with"] == {"reset_camera_render_handles": True}
+    result = scene.save(stage, "repaired.usda", reset_camera_render_handles=True)
+    reopened = Usd.Stage.Open(result["file"])
+    assert reopened.GetPrimAtPath(producer.GetPath()).GetRelationship("inputs:cameraPrim").GetTargets() == [Sdf.Path("/World/Camera")]
+    assert result["restored_camera_targets"] == [{"producer": str(producer.GetPath()),
+                                                   "camera": "/World/Camera", "product": str(product.GetPath())}]
+    assert unchanged(stage) == before and len(checked) == 1
+
+
+@pytest.mark.parametrize("camera, product", [
+    ("/World/Missing", "/Render/CameraProduct"),
+    ("/World/Camera", "/Render/Missing"),
+    ("/World", "/Render/CameraProduct"),
+])
+def test_missing_camera_relationship_refuses_unverified_runtime_binding(configured, monkeypatch, camera, product):
+    from sim_tools import render_export
+    scene, stage, _, producer, _ = configured
+    producer.GetRelationship("inputs:cameraPrim").SetTargets([])
+    monkeypatch.setattr(render_export, "runtime_camera_target",
+                        lambda s, p: (Sdf.Path(camera), Sdf.Path(product)))
+    before = unchanged(stage)
+    with pytest.raises(AssetError) as error:
+        scene.save(stage, "unverified.usda", reset_camera_render_handles=True)
+    assert error.value.code == "SAVE_UNSUPPORTED"
+    assert error.value.details["path"] == str(producer.GetPath())
+    assert error.value.details["camera"] == camera
+    assert unchanged(stage) == before and not (scene.output / "unverified.usda").exists()
+
+
+def test_runtime_camera_target_unavailable_names_the_producer(configured, monkeypatch):
+    import types
+    from sim_tools import render_export
+    scene, stage, _, producer, _ = configured
+    producer.GetRelationship("inputs:cameraPrim").SetTargets([])
+    core = types.ModuleType("omni.graph.core")
+    core.Controller = types.SimpleNamespace(node=lambda path: (_ for _ in ()).throw(RuntimeError("unavailable")))
+    graph = types.ModuleType("omni.graph")
+    graph.core = core
+    usd = types.ModuleType("omni.usd")
+    usd.get_context = lambda: types.SimpleNamespace(get_stage=lambda: stage)
+    omni = types.ModuleType("omni")
+    omni.graph, omni.usd = graph, usd
+    for name, module in (("omni", omni), ("omni.graph", graph), ("omni.graph.core", core), ("omni.usd", usd)):
+        monkeypatch.setitem(sys.modules, name, module)
+    before = unchanged(stage)
+    with pytest.raises(AssetError) as error:
+        scene.save(stage, "unavailable.usda", reset_camera_render_handles=True)
+    assert error.value.code == "SAVE_UNSUPPORTED" and str(producer.GetPath()) in str(error.value)
+    assert error.value.details["camera"] is None and unchanged(stage) == before
+
+
 @pytest.mark.parametrize("handle", [0, 16])
 @pytest.mark.parametrize("explicit", [False, True])
 def test_explicit_policy_preserves_everything_except_exact_handle(configured, handle, explicit):

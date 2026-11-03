@@ -1038,9 +1038,9 @@ class Scene:
                 "INVALID_OUTPUT",
                 "Use a simple basename ending .usda (<=65 characters).",
             )
-        from .render_export import camera_handles, reset_export_handles
+        from .render_export import camera_handles, reset_export_handles, restore_export_camera_targets
 
-        handles = camera_handles(stage, reset_camera_render_handles, self.render_binding)
+        handles, camera_repairs = camera_handles(stage, reset_camera_render_handles, self.render_binding)
         folder = self.save_directory(directory)
         from isaac_mcp.project_assets import open_dir
 
@@ -1053,6 +1053,7 @@ class Scene:
             os.close(handle)
             layer = stage.Flatten()
             omitted_render_properties = reset_export_handles(layer, handles)
+            restored_camera_targets = restore_export_camera_targets(layer, camera_repairs)
             omitted_render_paths = strip_runtime_render_state(layer)
             if runtime_poses:
                 apply_snapshot_poses(layer, runtime_poses)
@@ -1070,6 +1071,7 @@ class Scene:
                 runtime_pose_count=len(runtime_poses or []),
                 omitted_runtime_render_paths=omitted_render_paths,
                 omitted_runtime_render_properties=omitted_render_properties,
+                restored_camera_targets=restored_camera_targets,
                 snapshot="composed USD with runtime rigid-body poses"
                 if runtime_poses
                 else "composed USD",
