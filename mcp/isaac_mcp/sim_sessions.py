@@ -306,7 +306,9 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
                                    f"inspect {log}: {cleanup}") from exc
             raise
         threading.Thread(target=proc.wait, daemon=True).start()
-        return {**_public(record), "state": "starting", "note": "Use sim__status to confirm bridge readiness."}
+        return {**_public(record), "state": "starting",
+                "note": (f"Use sim__status to confirm bridge readiness, then use_bridge(port={port}) "
+                         "to send tool calls to this simulator.")}
 
 
 def _status(env: Mapping[str, str], session_id: str) -> dict:
@@ -330,7 +332,13 @@ def _status(env: Mapping[str, str], session_id: str) -> dict:
         resources = _resources()
     except RuntimeError as exc:
         resources = {"error": str(exc)}
-    return {**_public(session), "state": state, "current_resources": resources}
+    result = {**_public(session), "state": state, "current_resources": resources}
+    if state in ("running", "readiness_unknown"):
+        # The MCP server keeps dialling its configured port (UR5E_DT_PORT/ISAAC_MCP_PORT) and
+        # refresh_tools does not switch: a student run on a lab PC lost time here.
+        result["next"] = (f"call use_bridge(port={session['port']}) so sim__* and run_python go to this "
+                          "simulator; refresh_tools alone reconnects to the configured port.")
+    return result
 
 
 def _stop(env: Mapping[str, str], session_id: str, expected_pid: int, confirm_discard: bool,
@@ -397,3 +405,12 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
         Use force=true only if normal shutdown failed: it sends SIGKILL to the process group.
         """
         return _stop(settings, session_id, expected_pid, confirm_discard, force)
+
+
+def live_ports(env: Mapping[str, str] | None = None) -> list[tuple[int, int]]:
+    """``(port, pid)`` of managed simulator sessions that are still alive (best effort)."""
+    try:
+        return sorted((int(x["port"]), int(x["pid"])) for x in _sessions(_sessions_dir(os.environ if env is None else env))
+                      if _alive(x))
+    except Exception:  # noqa: BLE001 - only used to enrich an error message
+        return []

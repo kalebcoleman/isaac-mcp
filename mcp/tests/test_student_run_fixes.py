@@ -234,3 +234,41 @@ def test_proxy_handles_writelines_and_is_removed_on_shutdown(kit_stubs, capsys):
     assert getattr(sys.stdout, "_isaac_mcp_proxy", False)
     bi.remove_stdout_proxy()
     assert not getattr(sys.stdout, "_isaac_mcp_proxy", False)
+
+
+def test_refresh_tools_names_managed_simulators_on_other_ports(monkeypatch):
+    # Student run 3 (lab PC): the config pinned port 8766, sim__launch used 8771, and refresh_tools
+    # kept saying "no bridge" until the agent found use_bridge on its own.
+    import isaac_mcp.sim_sessions as sessions
+
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+
+    def offline(_server):
+        raise ConnectionRefusedError("[Errno 111] Connection refused")
+
+    monkeypatch.setattr(gw, "discover_and_register_tools", offline)
+    monkeypatch.setattr(gw, "_screen_port", lambda state=None: 8766)
+    monkeypatch.setattr(sessions, "live_ports", lambda env=None: [(8766, 10), (8771, 342055)])
+    message = asyncio.run(gw._refresh_tools(server))
+    assert "port 8771 (PID 342055)" in message and "use_bridge(port)" in message
+    assert "port 8766 (PID 10)" not in message
+    monkeypatch.setattr(sessions, "live_ports", lambda env=None: [])
+    assert "Managed simulators" not in asyncio.run(gw._refresh_tools(server))
+
+
+def test_locked_screen_is_detected_from_loginctl_or_the_screensaver(monkeypatch):
+    from isaac_mcp import screen
+
+    outputs = {}
+    monkeypatch.setattr(screen.shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+    monkeypatch.setattr(screen.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(stdout=outputs.get(cmd[0], "")))
+    monkeypatch.setenv("XDG_SESSION_ID", "3")
+    outputs.update(loginctl="yes\n")
+    assert screen._screen_locked()
+    outputs.update(loginctl="no", gdbus="(true,)")
+    assert screen._screen_locked()
+    outputs.update(gdbus="(false,)")
+    assert not screen._screen_locked()
+    monkeypatch.setattr(screen.shutil, "which", lambda cmd: None)
+    assert not screen._screen_locked()

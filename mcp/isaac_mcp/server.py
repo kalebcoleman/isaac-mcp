@@ -814,7 +814,12 @@ async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None) -> str:
             return (f"Error: {e} Pick one with use_bridge(port) (`python -m isaac_mcp.client "
                     "--list-bridges` shows each one's port and PID); do not start another simulator.")
         if _needs_bridge_guidance(e):
-            return (f"Error: no Isaac Sim bridge is reachable ({e}). Isaac Sim is probably not "
+            from .sim_sessions import live_ports
+            managed = [p for p in live_ports() if p[0] != _screen_port(_state_for(server))]
+            hint = ("" if not managed else " Managed simulators started with sim__launch are running on "
+                    + ", ".join(f"port {port} (PID {pid})" for port, pid in managed)
+                    + ": this server dials its configured port, so call use_bridge(port) to select one.")
+            return (f"Error: no Isaac Sim bridge is reachable ({e}).{hint} Isaac Sim is probably not "
                     "running yet, or is still starting: start it (sim__launch when simulator launch "
                     "is enabled, or ./run.sh), wait until it is ready, then call refresh_tools again. "
                     "`python -m isaac_mcp.client --list-bridges` lists running bridges.")

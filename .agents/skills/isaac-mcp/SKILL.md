@@ -225,6 +225,8 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
 |---|---|---|
 | Only host and `isaaclab__*` tools listed | Connected before Kit, or bridge tools filtered | `refresh_tools`, then the `--list-bridges` CLI |
 | `refresh_tools` reports connection refused | No bridge on that port | Check the listing; start Kit with `isaac.mcp.bridge` only if none is advertised and the user agrees |
+| `refresh_tools` refused right after `sim__launch` | The server dials its configured port, not the new session's | `use_bridge(port=<the launched port>)` (sim__status's `next` says so) |
+| Monitor screenshot or recording is all black | Screen locked or blanked (nobody at a lab PC) | Capture the window (`window=`/`window_id=`); the tool warns when it detects a lock |
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use `python -m isaac_mcp.client list_tools --port <port>` |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |

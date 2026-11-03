@@ -523,6 +523,33 @@ def _primary_monitor_size() -> tuple[int, int]:
         return width, height
 
 
+LOCKED_NOTE = ("\nwarning: the screen is locked or blanked, so monitor captures are black. Capture a "
+               "window instead (window=... or window_id=...): window captures read the window's own pixels.")
+
+
+def _screen_locked() -> bool:
+    """True when the desktop session is locked or the screen saver is active (best effort, never raises).
+
+    Seen on a lab PC with nobody at the keyboard: every monitor capture was black while window
+    captures were fine."""
+    probes = [["gdbus", "call", "--session", "--dest", "org.gnome.ScreenSaver", "--object-path",
+               "/org/gnome/ScreenSaver", "--method", "org.gnome.ScreenSaver.GetActive"]]
+    session = os.environ.get("XDG_SESSION_ID")
+    if session:
+        probes.insert(0, ["loginctl", "show-session", session, "-p", "LockedHint", "--value"])
+    for cmd in probes:
+        if not shutil.which(cmd[0]):
+            continue
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=2,
+                                 stdin=subprocess.DEVNULL).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if out in ("yes", "(true,)"):
+            return True
+    return False
+
+
 def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
 
@@ -771,6 +798,8 @@ def register_screen_tools(
             f"source: {source}\n"
             f"window: {label}"
         )
+        if target is None and _screen_locked():
+            caption += LOCKED_NOTE
         buf = io.BytesIO()
         inline.save(buf, "PNG", optimize=True)
         return [Image(data=buf.getvalue(), format="png"), caption]
@@ -906,7 +935,7 @@ def register_screen_tools(
             f"source: {source} at {width}x{height}+{bbox['left']}+{bbox['top']}\n"
             f"output: {output}\n"
             f"fps: {fps}, limit: {max_seconds}s. Call stop_screen_recording when done."
-        )
+        ) + (LOCKED_NOTE if target is None and _screen_locked() else "")
 
     @mcp.tool(annotations=ADDITIVE)
     def stop_screen_recording() -> str:
