@@ -795,9 +795,10 @@ ADOPT_SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "buil
 
 
 def _private_dirs(path: Path) -> None:
-    """Create *path* (and missing parents) as 0755 and make sure the user's own store and
-    pack folders are not group- or world-writable (``assets__prepare_workstation`` refuses
-    such folders, and others must not be able to swap your assets)."""
+    """Create *path* (and missing parents) as 0755 and make sure *path* itself, the pack
+    folder, is not group- or world-writable when it is the user's own
+    (``assets__prepare_workstation`` refuses such folders, and others must not be able to
+    swap your assets). Folders above it are left as they are."""
     missing = []
     probe = path
     while not probe.exists():
@@ -805,14 +806,13 @@ def _private_dirs(path: Path) -> None:
         probe = probe.parent
     for folder in reversed(missing):
         os.mkdir(folder, 0o755)
-    for folder in (path.parent, path):
-        try:
-            st = folder.stat()
-        except OSError:
-            continue
-        if st.st_uid == os.getuid() and st.st_mode & 0o022:
-            os.chmod(folder, st.st_mode & ~0o022 & 0o7777)
-            print(f"note: removed group/world write permission from {folder}")
+    try:
+        st = path.stat()
+    except OSError:
+        return
+    if st.st_uid == os.getuid() and st.st_mode & 0o022:
+        os.chmod(path, st.st_mode & ~0o022 & 0o7777)
+        print(f"note: removed group/world write permission from {path}")
 
 
 def _install_many(sources: dict[str, Path], pack_dir: Path, force: bool, pin: bool) -> tuple[int, int]:
@@ -857,60 +857,101 @@ def _install_many(sources: dict[str, Path], pack_dir: Path, force: bool, pin: bo
     return added, identical
 
 
-def _legacy_checkout_assets(checkout: Path, rev: str | None, scratch: Path) -> Path | None:
-    """Return a folder with the checkout's old ``exts/ur5e-dt/assets`` content.
+LEGACY_REPO_ASSETS = "exts/ur5e-dt/assets"
 
-    The working tree is used when it still has files; otherwise the folder is extracted
-    from git history (``rev``, default: the last commit before it was removed).
+
+def _git_legacy_assets(checkout: Path, rev: str | None, scratch: Path) -> Path | None:
+    """Extract the checkout's old ``exts/ur5e-dt/assets`` from git history.
+
+    ``rev`` defaults to the last commit that still had the folder (the parent of the
+    commit that removed it). Returns None when the history never had it.
     """
-    folder = checkout / "exts" / "ur5e-dt" / "assets"
-    if folder.is_dir() and any(p.is_file() for p in folder.rglob("*")) and rev is None:
-        return folder
-    if not (checkout / ".git").exists():
-        return None
     try:
         if rev is None:
             last = subprocess.run(
-                ["git", "-C", str(checkout), "rev-list", "-n", "1", "HEAD", "--", "exts/ur5e-dt/assets"],
+                ["git", "-C", str(checkout), "rev-list", "-n", "1", "HEAD", "--", LEGACY_REPO_ASSETS],
                 capture_output=True, text=True, check=True,
             ).stdout.strip()
             if not last:
                 return None
             listed = subprocess.run(
-                ["git", "-C", str(checkout), "ls-tree", "-r", "--name-only", last, "--", "exts/ur5e-dt/assets"],
+                ["git", "-C", str(checkout), "ls-tree", "-r", "--name-only", last, "--", LEGACY_REPO_ASSETS],
                 capture_output=True, text=True, check=True,
             ).stdout.strip()
             rev = last if listed else f"{last}^"
         archive = scratch / "legacy.tar"
         with archive.open("wb") as out:
             subprocess.run(
-                ["git", "-C", str(checkout), "archive", "--format=tar", rev, "--", "exts/ur5e-dt/assets"],
-                stdout=out, check=True,
+                ["git", "-C", str(checkout), "archive", "--format=tar", rev, "--", LEGACY_REPO_ASSETS],
+                stdout=out, stderr=subprocess.PIPE, check=True,
             )
     except (subprocess.CalledProcessError, OSError) as exc:
         raise CliError(f"cannot read old assets from git history of {checkout}: {exc}") from exc
     target = scratch / "legacy"
     _extract_archive(archive, target, Limits(DEFAULT_MAX_MEMBERS, DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_TOTAL_BYTES))
-    found = target / "exts" / "ur5e-dt" / "assets"
+    found = target.joinpath(*LEGACY_REPO_ASSETS.split("/"))
     return found if found.is_dir() else None
 
 
-def _store_files(store: Path) -> dict[str, Path]:
-    """Files of an old store (pack folder and flat layout), keyed by their pack-relative path."""
-    found: dict[str, Path] = {}
+def _legacy_checkout_assets(checkout: Path, rev: str | None, scratch: Path) -> list[Path]:
+    """Return the folders holding the checkout's old ``exts/ur5e-dt/assets`` content,
+    lowest priority first.
+
+    After pulling the code-only repository, the tracked assets are gone from the working
+    tree while your untracked copies (a lab robot, the bench) are still there. So both are
+    read: the folder from git history (``rev``, default: the last commit that had it),
+    then the working tree, whose files win. With an explicit ``rev`` only history is read.
+    """
+    folders: list[Path] = []
+    tree = checkout.joinpath(*LEGACY_REPO_ASSETS.split("/"))
+    has_tree = rev is None and tree.is_dir() and any(p.is_file() for p in tree.rglob("*"))
+    if (checkout / ".git").exists():
+        try:
+            old = _git_legacy_assets(checkout, rev, scratch)
+        except CliError as exc:
+            if not has_tree:
+                raise
+            print(f"warning: {exc}; using only the files still in {tree}", file=sys.stderr)
+            old = None
+        if old is not None:
+            folders.append(old)
+    elif rev is not None:
+        raise CliError(f"--git-rev needs a git checkout: {checkout}")
+    if has_tree:
+        folders.append(tree)
+    return folders
+
+
+def _store_files(store: Path) -> tuple[dict[str, tuple[Path, str | None]], list[Path]]:
+    """Files of an old store keyed by their pack-relative path, each with the old store's
+    pin (or None), plus other packs found there (folders with their own ``SHA256SUMS``),
+    which are not part of this twin and are left alone."""
+    found: dict[str, tuple[Path, str | None]] = {}
+    others: list[Path] = []
     pack = store / asset_cache.PACK
-    for root, prefix in ((store, ""), (pack, "")):
+    for root in (store, pack):
         if not root.is_dir():
             continue
+        pinned = asset_cache.pins(root)
         for current, dirs, files in os.walk(root, followlinks=False):
-            dirs[:] = [d for d in dirs if not (Path(current) / d).is_symlink()
-                       and not (root == store and Path(current) == store and d == asset_cache.PACK)]
+            here = Path(current)
+            keep = []
+            for d in dirs:
+                sub = here / d
+                if sub.is_symlink() or (root == store and here == store and d == asset_cache.PACK):
+                    continue
+                if root == store and here == store and (sub / asset_cache.PINS_FILE).is_file():
+                    others.append(sub)
+                    continue
+                keep.append(d)
+            dirs[:] = keep
             for name in files:
-                path = Path(current) / name
+                path = here / name
                 if name == asset_cache.PINS_FILE or path.is_symlink() or not path.is_file():
                     continue
-                found[prefix + path.relative_to(root).as_posix()] = path
-    return found
+                rel = path.relative_to(root).as_posix()
+                found[rel] = (path, pinned.get(rel))
+    return found, others
 
 
 def cmd_migrate(args) -> int:
@@ -918,49 +959,72 @@ def cmd_migrate(args) -> int:
     checkout = Path(args.from_checkout).expanduser().resolve() if args.from_checkout else asset_cache.REPO_ROOT
     sources: dict[str, Path] = {}
     origins: dict[str, str] = {}
+    old_pins: dict[str, str] = {}  # pins the files had in an old asset folder
+    damaged: list[str] = []
     scratch = Path(tempfile.mkdtemp(prefix="isaac-assets-migrate-"))
     try:
-        legacy = _legacy_checkout_assets(checkout, args.git_rev, scratch)
-        if legacy is not None:
+        for legacy in _legacy_checkout_assets(checkout, args.git_rev, scratch):
+            label = "checkout" if checkout in legacy.parents else "checkout history"
             for current, dirs, files in os.walk(legacy, followlinks=False):
                 for name in files:
                     path = Path(current) / name
                     if path.is_symlink() or not path.is_file() or name.endswith(".pyc"):
                         continue
                     rel = _clean_relpath(path.relative_to(legacy).as_posix(), "file name")
-                    sources[rel], origins[rel] = path, "checkout"
+                    sources[rel], origins[rel] = path, label  # the working tree comes last and wins
         for old in [] if args.no_legacy_stores else asset_cache.legacy_stores():
             if old.resolve() == store.resolve():
                 continue
-            for rel, path in _store_files(old).items():
+            files, others = _store_files(old)
+            for other in others:
+                print(f"note: leaving {other} alone: it is a separate asset pack, not this twin's; "
+                      f"copy it with `isaac_assets.py adopt {other} --pack {other.name}`")
+            for rel, (path, pin) in files.items():
                 rel = _clean_relpath(rel, "file name")
-                sources.setdefault(rel, path)
-                origins.setdefault(rel, str(old))
+                if rel in sources:
+                    continue
+                if pin and sha256(path) != pin:
+                    damaged.append(f"{path} (does not match its pin in {old})")
+                    continue
+                sources[rel], origins[rel] = path, str(old)
+                if pin:
+                    old_pins[rel] = pin
+        if damaged:
+            print("skipping file(s) changed since they were pinned:\n  " + "\n  ".join(damaged), file=sys.stderr)
         if not sources:
             print("nothing to migrate: no old in-repo assets or old asset folders found")
             return 0
-        print(f"migrating {len(sources)} file(s) into {pack_dir}")
-        if args.dry_run:
-            for rel in sorted(sources):
-                print(f"  {rel}  (from {origins[rel]})")
-            return 0
-        # Files the manifest downloads from NVIDIA stay manifest-verified; everything else
-        # is pinned as the user's own copy.
-        nvidia = {e.get("cache_path", e["target"]) for g in asset_cache.manifest().get("fetch", []) for e in g.get("files", [])}
-        own = {rel: p for rel, p in sources.items() if rel not in nvidia}
-        # A file the user pinned (e.g. a lab-modified robot) always wins over NVIDIA's copy,
-        # exactly as in fetch_ur5e_assets.py.
+        # A file at a path the manifest downloads from NVIDIA stays manifest-verified (no pin)
+        # only when it is NVIDIA's exact file. Anything else there (a lab-modified robot, a
+        # copy from another Isaac release, or one an old folder pinned) is pinned as yours.
+        expected = {e.get("cache_path", e["target"]): e.get("sha256")
+                    for g in asset_cache.manifest().get("fetch", []) for e in g.get("files", [])}
         pinned = asset_cache.pins(pack_dir) if pack_dir.is_dir() else {}
-        public = {rel: p for rel, p in sources.items() if rel in nvidia and rel not in pinned}
-        kept = sum(1 for rel in sources if rel in nvidia and rel in pinned)
+        own, public, kept = {}, {}, 0
+        for rel, path in sources.items():
+            if rel not in expected:
+                own[rel] = path
+            elif rel in pinned:
+                kept += 1  # your pinned copy always wins over NVIDIA's, as in fetch_ur5e_assets.py
+            elif rel not in old_pins and expected[rel] and sha256(path) == expected[rel]:
+                public[rel] = path
+            else:
+                own[rel] = path
+        print(f"migrating {len(own) + len(public)} file(s) into {pack_dir}")
         if kept:
-            print(f"keeping {kept} file(s) you pinned yourself instead of NVIDIA's copy")
+            print(f"keeping {kept} file(s) you pinned yourself instead of the old copy")
+        if args.dry_run:
+            for rel in sorted(own):
+                print(f"  {rel}  (from {origins[rel]}, pinned as yours)")
+            for rel in sorted(public):
+                print(f"  {rel}  (from {origins[rel]}, NVIDIA's file)")
+            return 0
         a1, i1 = _install_many(own, pack_dir, args.force, pin=True)
         a2, i2 = _install_many(public, pack_dir, args.force, pin=False)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
     print(f"added {a1 + a2}, already present {i1 + i2}; check with `isaac_assets.py doctor`")
-    return 0
+    return 1 if damaged else 0
 
 
 def _adopt_sources(root: Path, suffixes: set[str]) -> dict[str, Path]:

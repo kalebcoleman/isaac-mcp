@@ -234,19 +234,16 @@ def default_store() -> Path:
 
 
 def workspace_store() -> Path | None:
-    """Return the workspace's asset folder when ``$ISAAC_MCP_WORKSPACE`` is set and one exists.
+    """Return ``<workspace>/isaac-mcp-assets`` when ``$ISAAC_MCP_WORKSPACE`` is set and it exists.
 
-    ``<workspace>/isaac-mcp-assets`` is preferred; ``<workspace>/assets`` (the older name)
-    is accepted when only it exists.
+    The older ``<workspace>/assets`` is never the write folder; it is only read as a
+    legacy store (see :func:`legacy_stores`) until ``isaac_assets.py migrate`` moves it.
     """
     raw = os.environ.get(WORKSPACE_ENV, "").strip()
     if not raw:
         return None
-    for name in (STORE_NAME, "assets"):
-        store = (Path(raw).expanduser() / name).resolve()
-        if store.is_dir():
-            return store
-    return None
+    store = (Path(raw).expanduser() / STORE_NAME).resolve()
+    return store if store.is_dir() else None
 
 
 def legacy_stores() -> list[Path]:
@@ -267,14 +264,14 @@ def user_stores() -> list[Path]:
     """Return the user's stores, the primary (write) store first.
 
     ``$ISAAC_MCP_ASSET_PATH`` (or its deprecated alias) replaces the defaults. Without it
-    the primary store is :func:`default_store` (or an existing workspace folder), followed
-    by any older locations that still exist.
+    the primary store is :func:`default_store`, followed by any older locations that
+    still exist (read only).
     """
     raw = _env(PATH_ENV, CACHE_ENV)
     found = [Path(p).expanduser().resolve() for p in raw.split(os.pathsep) if p.strip()]
     if found:
         return found
-    primary = workspace_store() or default_store()
+    primary = default_store()
     return [primary] + [p for p in legacy_stores() if p != primary]
 
 
@@ -355,7 +352,7 @@ def find_local(relpath: str) -> Path | None:
 
 
 def _store_base(path: Path) -> Path | None:
-    """Return the store folder that holds *path*, or None for a drop-in or stray file."""
+    """Return the store folder that holds *path*, or None for a file outside every store."""
     resolved = path.resolve()
     best: Path | None = None
     for store in stores():
@@ -370,7 +367,7 @@ def _store_base(path: Path) -> Path | None:
 
 
 def _from_cache(path: Path) -> bool:
-    """True when *path* is a store's copy rather than a drop-in."""
+    """True when *path* lies inside one of the stores."""
     return _store_base(path) is not None
 
 
@@ -537,8 +534,7 @@ def _verify_member(relpath: str, path: Path, base: Path, entry: dict | None) -> 
 def verify_local(relpath: str, path: Path, base: Path | None = None) -> None:
     """Check a stored file against its user pin or the manifest before use.
 
-    Drop-ins under ``exts/ur5e-dt/assets`` are the operator's own copies and are
-    not compared with the manifest.  A stored file listed in its folder's
+    A file outside every store is not checked.  A stored file listed in its folder's
     ``SHA256SUMS`` is checked against that pin only.  Any other stored file
     that the manifest tracks is checked, with every other file of the same
     fetch group, because USD loads the group's sublayers from the store without

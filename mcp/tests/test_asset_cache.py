@@ -800,7 +800,7 @@ def test_pin_lines_keep_unusual_but_valid_names(tmp_path):
 # --- workspace default store -------------------------------------------------------
 
 
-def test_workspace_assets_folder_is_searched_before_the_old_default(monkeypatch, tmp_path):
+def test_an_old_workspace_assets_folder_is_read_but_never_written(monkeypatch, tmp_path):
     workspace = tmp_path / "ws"
     (workspace / "assets" / "ur5e-dt" / "x").mkdir(parents=True)
     (workspace / "assets" / "ur5e-dt" / "x" / "one.usd").write_bytes(b"workspace")
@@ -811,13 +811,16 @@ def test_workspace_assets_folder_is_searched_before_the_old_default(monkeypatch,
     monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
     module = load_module()
     isolated(module, tmp_path)
+    assert module.workspace_store() is None
     assert module.user_stores() == [
+        (workspace / "isaac-mcp-assets").resolve(),
         (workspace / "assets").resolve(),
         (home / ".cache" / "ur5e-dt" / "assets").resolve(),
     ]
-    assert module.cache_dir() == (workspace / "assets").resolve()
+    # New files go into the new folder; the old one is only read until migrate moves it.
+    assert module.cache_dir() == (workspace / "isaac-mcp-assets").resolve()
     assert module.resolve_path("x/one.usd").read_bytes() == b"workspace"
-    assert module.resolve_path("x/two.usd").read_bytes() == b"default only"  # old cache still works
+    assert module.resolve_path("x/two.usd").read_bytes() == b"default only"
 
 
 def test_workspace_without_an_asset_folder_uses_its_default_location(monkeypatch, tmp_path):

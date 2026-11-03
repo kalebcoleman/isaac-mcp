@@ -1452,3 +1452,114 @@ def test_migrate_keeps_a_pinned_lab_robot_over_nvidias_cached_copy(cli, capsys, 
     assert code == 0, err
     assert "keeping 1 file(s) you pinned yourself" in out
     assert (pack / "robot" / "ur5e.usd").read_bytes() == b"lab robot"
+
+
+def _manifest_with_robot(cli, tmp_path, monkeypatch, nvidia=b"nvidia robot"):
+    import json as _json
+
+    manifest = tmp_path / "assets-manifest.json"
+    manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
+        {"target": "robot/ur5e.usd", "source": "x", "sha256": sha(nvidia), "size": len(nvidia)}]}]}))
+    monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
+
+
+def test_migrate_pins_a_lab_modified_robot_from_the_checkout(cli, capsys, tmp_path, monkeypatch):
+    # Review finding 1: a robot at NVIDIA's path that is not NVIDIA's file is the user's copy.
+    store = make_store(tmp_path, monkeypatch)
+    _manifest_with_robot(cli, tmp_path, monkeypatch)
+    checkout, assets = _old_checkout(tmp_path)
+    (assets / "robot").mkdir()
+    (assets / "robot" / "ur5e.usd").write_bytes(b"lab robot")
+    code, out, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    pack = store / "ur5e-dt"
+    assert read_pins(pack)["robot/ur5e.usd"] == sha(b"lab robot")
+    assert cli.asset_cache.resolve_info("robot/ur5e.usd")["status"] == "pinned"
+
+
+def test_migrate_leaves_nvidias_exact_file_unpinned(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    _manifest_with_robot(cli, tmp_path, monkeypatch)
+    checkout, assets = _old_checkout(tmp_path)
+    (assets / "robot").mkdir()
+    (assets / "robot" / "ur5e.usd").write_bytes(b"nvidia robot")
+    code, _, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    assert "robot/ur5e.usd" not in read_pins(store / "ur5e-dt")
+    assert (store / "ur5e-dt" / "robot" / "ur5e.usd").read_bytes() == b"nvidia robot"
+
+
+def test_migrate_keeps_a_pin_from_an_old_asset_folder(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    _manifest_with_robot(cli, tmp_path, monkeypatch, nvidia=b"lab robot")  # same bytes, still pinned
+    old = tmp_path / "old-cache"
+    (old / "ur5e-dt" / "robot").mkdir(parents=True)
+    (old / "ur5e-dt" / "robot" / "ur5e.usd").write_bytes(b"lab robot")
+    (old / "ur5e-dt" / "SHA256SUMS").write_text(f"{sha(b'lab robot')}  robot/ur5e.usd\n")
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 0, err
+    assert read_pins(store / "ur5e-dt")["robot/ur5e.usd"] == sha(b"lab robot")
+
+
+def test_migrate_skips_a_file_that_no_longer_matches_its_old_pin(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    old = tmp_path / "old-cache"
+    (old / "workstation").mkdir(parents=True)
+    (old / "workstation" / "vention.usd").write_bytes(b"damaged")
+    (old / "workstation" / "ok.usd").write_bytes(b"fine")
+    (old / "SHA256SUMS").write_text(f"{sha(b'bench')}  workstation/vention.usd\n")
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 1 and "changed since they were pinned" in err and "vention.usd" in err
+    assert not (store / "ur5e-dt" / "workstation" / "vention.usd").exists()
+    assert (store / "ur5e-dt" / "workstation" / "ok.usd").read_bytes() == b"fine"
+
+
+def test_migrate_reads_history_even_when_untracked_copies_remain(cli, capsys, tmp_path, monkeypatch):
+    # Review finding 2: after pulling the code-only repo, ignored copies stay in the folder.
+    store = make_store(tmp_path, monkeypatch)
+    checkout, assets = _old_checkout(tmp_path)
+    (checkout / ".gitignore").write_text("exts/ur5e-dt/assets/workstation/\n")
+    _git(checkout, "init", "-q")
+    _git(checkout, "-c", "user.email=t@t", "-c", "user.name=t", "add", "-A")
+    _git(checkout, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "with assets")
+    _git(checkout, "rm", "-r", "-q", "exts/ur5e-dt/assets")
+    _git(checkout, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "code only")
+    (assets / "workstation").mkdir(parents=True)
+    (assets / "workstation" / "vention.usd").write_bytes(b"bench")  # untracked
+    (assets / "fmb_assembly1.json").write_text('{"components": ["edited"]}')  # untracked edit wins
+    code, out, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    pack = store / "ur5e-dt"
+    assert (pack / "gripper" / "QuickChanger.usd").read_bytes() == b"gripper"
+    assert (pack / "workstation" / "vention.usd").read_bytes() == b"bench"
+    assert (pack / "fmb_assembly1.json").read_text() == '{"components": ["edited"]}'
+
+
+def test_migrate_leaves_other_packs_in_an_old_folder_alone(cli, capsys, tmp_path, monkeypatch):
+    # Review finding 4.
+    store = make_store(tmp_path, monkeypatch)
+    old = tmp_path / "old-cache"
+    (old / "mylab").mkdir(parents=True)
+    (old / "mylab" / "x.usd").write_bytes(b"x")
+    (old / "mylab" / "SHA256SUMS").write_text(f"{sha(b'x')}  x.usd\n")
+    (old / "workstation").mkdir()
+    (old / "workstation" / "vention.usd").write_bytes(b"bench")
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 0, err
+    assert "separate asset pack" in out and "adopt" in out
+    assert not (store / "ur5e-dt" / "mylab").exists()
+    assert (store / "ur5e-dt" / "workstation" / "vention.usd").is_file()
+
+
+def test_the_store_folder_itself_keeps_its_permissions(cli, capsys, tmp_path, monkeypatch):
+    # Review finding 5: only the pack folder is tightened.
+    store = make_store(tmp_path, monkeypatch)
+    store.chmod(0o775)
+    source = tmp_path / "a.usd"
+    source.write_bytes(b"a")
+    assert run(cli, capsys, "add", str(source))[0] == 0
+    assert store.stat().st_mode & 0o777 == 0o775
+    assert (store / "ur5e-dt").stat().st_mode & 0o022 == 0

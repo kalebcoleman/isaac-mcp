@@ -23,7 +23,7 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
 from .graph_compat import ensure_fixed_graph
-from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_path, resolve_uri
+from .asset_cache import AssetCorrupt, AssetMissing, cache_dir, resolve_dir, resolve_path, resolve_uri
 from .object_pose import read_local_pose, set_local_pose
 from .robot_visuals import prepare_robot_visuals
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
@@ -436,8 +436,8 @@ def _assembly_layout(relpath):
     """Return the local path of an assembly layout JSON in the asset folder, or ``""``."""
     try:
         return str(resolve_path(relpath))
-    except AssetMissing as exc:
-        print(f"Warning: assembly layout not available.\n{exc}")
+    except (AssetMissing, AssetCorrupt) as exc:
+        print(f"Warning: assembly layout {relpath} not available.\n{exc}")
         return ""
 
 
@@ -4690,7 +4690,7 @@ class DigitalTwin(omni.ext.IExt):
                     category = component.get('subtype', 'block')
                 type_map[component['name']] = category
         else:
-            print(f"Warning: Assembly file not found: {assembly_file}, defaulting all objects to 'block'")
+            print(f"Warning: Assembly file not found: {assembly_file or 'layout is not in the asset folder (run isaac_assets.py doctor)'}, defaulting all objects to 'block'")
         return type_map
 
     def _get_prim_params(self, category):
@@ -4781,7 +4781,7 @@ class DigitalTwin(omni.ext.IExt):
         """Assemble objects based on JSON assembly data, positioned relative to the current board pose."""
         assembly_file = self._assembly_file_path
         if not os.path.exists(assembly_file):
-            print(f"[assemble] Error: Assembly file not found: {assembly_file}")
+            print(f"[assemble] Error: Assembly file not found: {assembly_file or 'layout is not in the asset folder (run isaac_assets.py doctor)'}")
             return 0, 0
 
         with open(assembly_file, 'r') as f:
@@ -6065,7 +6065,7 @@ class DigitalTwin(omni.ext.IExt):
             if not os.path.exists(assembly_file):
                 return {
                     "status": "error",
-                    "message": f"Assembly file not found: {assembly_file}"
+                    "message": f"Assembly file not found: {assembly_file or 'layout is not in the asset folder (run isaac_assets.py doctor)'}"
                 }
 
             assembled, skipped = self.assemble_objects()

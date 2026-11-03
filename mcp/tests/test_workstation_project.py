@@ -333,7 +333,7 @@ def test_prepare_writes_to_the_first_store_of_asset_path(fixture, tmp_path, monk
     assert not (legacy_cache / "ur5e-dt" / "workstation").exists()
 
 
-def test_prepare_uses_the_workspace_assets_folder_when_nothing_else_is_set(
+def test_prepare_uses_the_workspace_asset_folder_and_never_the_old_name(
     fixture, tmp_path, monkeypatch
 ):
     project, legacy_cache, broker, scene = fixture
@@ -341,10 +341,11 @@ def test_prepare_uses_the_workspace_assets_folder_when_nothing_else_is_set(
     monkeypatch.delenv("ISAAC_MCP_ASSET_PATH", raising=False)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    (workspace / "assets").mkdir(mode=0o700)  # the tool refuses group/world-writable stores
+    (workspace / "assets").mkdir(mode=0o700)  # an older folder: read by the twin, never written
     monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
     assert _prepare(project, broker, scene)["prepared"]
-    assert (workspace / "assets" / "ur5e-dt" / "workstation" / "vention.usd").is_file()
+    assert (workspace / "isaac-mcp-assets" / "ur5e-dt" / "workstation" / "vention.usd").is_file()
+    assert not (workspace / "assets" / "ur5e-dt").exists()
     assert not (legacy_cache / "ur5e-dt" / "workstation").exists()
 
 

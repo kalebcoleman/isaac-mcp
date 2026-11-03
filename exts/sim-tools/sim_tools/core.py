@@ -826,7 +826,7 @@ class Scene:
         source_root = filename.parents[len(Path(manifest["entry"]).parts) - 1]
         # Same primary asset folder as the twin's resolver: the first entry of
         # ISAAC_MCP_ASSET_PATH (or its legacy name); else <ISAAC_MCP_WORKSPACE>/isaac-mcp-assets
-        # (or the older <workspace>/assets when only it exists); else the isaac-mcp-assets
+        # (an older <workspace>/assets is only read, never written); else the isaac-mcp-assets
         # folder next to the checkout. The bench goes into its ur5e-dt pack folder, where the
         # resolver looks first, so an existing copy is never silently shadowed.
         repo = Path(__file__).resolve().parents[3]
@@ -836,9 +836,7 @@ class Scene:
         if not override:
             workspace = os.getenv("ISAAC_MCP_WORKSPACE", "").strip()
             if workspace:
-                preferred = Path(workspace).expanduser() / "isaac-mcp-assets"
-                older = Path(workspace).expanduser() / "assets"
-                override = str(older if older.is_dir() and not preferred.is_dir() else preferred)
+                override = str(Path(workspace).expanduser() / "isaac-mcp-assets")
             else:
                 override = str(repo.parent / "isaac-mcp-assets")
         cache = Path(override).expanduser() / "ur5e-dt"
