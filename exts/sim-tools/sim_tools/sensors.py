@@ -274,9 +274,12 @@ def _create_config_lidar(stage, path, lidar_asset, tick_rate, sensor):
     except ImportError as e:
         refuse("SENSOR_API_UNAVAILABLE", "Config LiDARs need isaacsim.sensors.experimental.rtx (Isaac Sim 6.x): " + str(e))
     try:  # read the configured root without probing it: a remote probe can block Kit for its whole timeout
-        root = get_assets_root_path(skip_check=True)
-    except TypeError:  # older API without skip_check
-        root = get_assets_root_path()
+        try:
+            root = get_assets_root_path(skip_check=True)
+        except TypeError:  # older API without skip_check
+            root = get_assets_root_path()
+    except RuntimeError:  # raised (not returned empty) when no assets root is configured
+        root = None
     if not root:
         refuse("ASSETS_UNAVAILABLE", "Isaac Sim's assets root is not configured or unreachable, so the NVIDIA config cannot be loaded. Omit config for the local generic LiDAR.")
     sensor["config_asset"] = root + asset_path

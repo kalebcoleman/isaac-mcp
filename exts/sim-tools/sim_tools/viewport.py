@@ -245,6 +245,16 @@ def place(scene, stage, context, viewport, a, undo_disabled):
     return result, follow
 
 
+def _physics_time():
+    """The physics simulation time (advances on every step, paused or playing); None if unavailable."""
+    try:
+        from .physics import manager
+
+        return manager().get_simulation_time()
+    except Exception:  # noqa: BLE001 - no physics: the timeline time alone decides
+        return None
+
+
 class Follower:
     """Keeps one prim in view while the timeline runs. One Kit update subscription at most."""
 
@@ -291,15 +301,18 @@ class Follower:
         if spec is None or spec["timeline"].is_stopped():
             return  # paused stepping still moves bodies; Stop resets them, so keep the last view
         try:
-            now = spec["viewport"].time
-            if spec.get("last_time") == now:
-                return  # paused: nothing moved, skip the bounds pass
-            spec["last_time"] = now
-            spec["validate"]()
+            spec["validate"]()  # cheap; a camera switch must stop the follow even while paused
             prim = spec["prim"]
             if not prim or not prim.IsValid() or not prim.IsActive():
                 self.stop("followed prim was removed or deactivated")
                 return
+            # Skip the subtree bounds pass when nothing can have moved. Keyed on the physics clock as
+            # well as the timeline: paused sim.simulation.step moves bodies without advancing the
+            # timeline, and articulation links move while the followed root prim's own pose does not.
+            key = (spec["viewport"].time, _physics_time())
+            if spec.get("last_key") == key:
+                return
+            spec["last_key"] = key
             center, _ = _sphere(prim, spec["viewport"].time)
             set_camera(spec["stage"], spec["viewport"], spec["camera_path"],
                        center + spec["offset"], center + spec["target_offset"], spec["undo"])
