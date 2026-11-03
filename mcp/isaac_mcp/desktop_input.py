@@ -70,11 +70,25 @@ def _desktop_lock():
         os.close(fd)
 
 
+_call_lock_state: list = []  # the lock probe's answer, once per tool call (set inside _action_lock)
+
+
 @contextmanager
 def _action_lock():
     """Hold both locks across an entire action, including multi-step inputs."""
     with _input_lock, _desktop_lock():
-        yield
+        _call_lock_state.clear()
+        try:
+            yield
+        finally:
+            _call_lock_state.clear()
+
+
+def _lock_state():
+    """screen._probe_locked(), probed fresh once per tool call (a 10-step scroll probes once)."""
+    if not _call_lock_state:
+        _call_lock_state.append(screen._probe_locked())
+    return _call_lock_state[0]
 
 
 def _id(window) -> int:
@@ -122,14 +136,15 @@ def _keyboard_grabbed(disp) -> bool:
         disp.ungrab_keyboard(X.CurrentTime)
         disp.sync()
         return False
-    return status == X.AlreadyGrabbed
+    return True  # AlreadyGrabbed, or GrabFrozen (another client froze the keyboard)
 
 
 @contextmanager
 def _target(window_id: int, expected_pid: int):
     if window_id <= 0 or expected_pid <= 0:
         raise ValueError("window_id and expected_pid must be positive")
-    if screen._probe_locked():  # fresh, not cached: this guards where keystrokes go
+    locked = _lock_state()  # fresh for this call: it guards where keystrokes go
+    if locked:
         raise RuntimeError(_LOCKED)
     # Require a fresh, titled top-level window, not an arbitrary X resource ID.
     visible = screen._match_window(None, window_id)
@@ -145,6 +160,13 @@ def _target(window_id: int, expected_pid: int):
         disp.grab_server()
         grabbed = True
         disp.sync()
+        if locked is None and _keyboard_grabbed(disp):
+            # Fail closed: the lock state is unknown (no GNOME screen saver answered) and another
+            # client holds the keyboard, which is what a lock screen does.
+            raise RuntimeError("could not tell whether the desktop is locked, and another client holds the "
+                               "keyboard grab (a lock screen or an open menu), so input could go there. "
+                               "If it is a menu, wait for it to close and capture again; for Isaac Sim use "
+                               "sim__ui__act, which does not go through the desktop.")
         window = disp.create_resource_object("window", window_id)
         geometry = _window_geometry(disp, window, expected_pid)
         _check_idle(disp)

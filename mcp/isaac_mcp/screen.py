@@ -546,10 +546,11 @@ def _stacking() -> list[int]:
 
 def composite_order(windows: list[dict], stacking: list[int]) -> list[dict]:
     """Windows to paint bottom to top: WM frame windows dropped (their client is painted instead),
-    unknown windows below the stacked clients, stacked clients in the WM's order."""
+    stacked clients in the WM's order, then windows the WM does not stack (popups, tooltips and other
+    override-redirect windows, which sit above managed ones) on top."""
     rank = {wid: i for i, wid in enumerate(stacking)}
     keep = [w for w in windows if w.get("class") != "mutter-x11-frames"]
-    return sorted(keep, key=lambda w: rank.get(w["id"], -1))
+    return sorted(keep, key=lambda w: rank.get(w["id"], len(stacking)))
 
 
 def _composite(bbox: dict) -> tuple[PILImage.Image, int]:
@@ -580,11 +581,15 @@ def _screen_locked() -> bool:
     now = time.monotonic()
     if now - _LOCK_CACHE[0] < 5.0:
         return _LOCK_CACHE[1]
-    _LOCK_CACHE[:] = [now, _probe_locked()]
+    _LOCK_CACHE[:] = [now, bool(_probe_locked())]
     return _LOCK_CACHE[1]
 
 
-def _probe_locked() -> bool:
+def _probe_locked() -> bool | None:
+    """True locked, False unlocked, None unknown (no probe gave a definite answer).
+
+    loginctl "no" is not definite: when the server was started over SSH, XDG_SESSION_ID names that
+    session, which is never locked. GNOME's ScreenSaver.GetActive answers for the desktop itself."""
     runtime = os.environ.get("XDG_RUNTIME_DIR")
     # Without a session bus, gdbus would autolaunch a stray dbus-daemon (and find no screen saver).
     has_bus = bool(os.environ.get("DBUS_SESSION_BUS_ADDRESS")) or bool(runtime and os.path.exists(
@@ -594,6 +599,7 @@ def _probe_locked() -> bool:
     session = os.environ.get("XDG_SESSION_ID")
     if session:
         probes.insert(0, ["loginctl", "show-session", session, "-p", "LockedHint", "--value"])
+    answer = None
     for cmd in probes:
         if not shutil.which(cmd[0]):
             continue
@@ -604,9 +610,9 @@ def _probe_locked() -> bool:
             continue
         if out in ("yes", "(true,)"):
             return True
-    return False
-
-
+        if out == "(false,)":
+            answer = False
+    return answer
 def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
 

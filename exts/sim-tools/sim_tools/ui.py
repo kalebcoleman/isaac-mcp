@@ -159,12 +159,66 @@ def windows():
     return out
 
 
-def _records(window_filter=None, include_labels=True):
+def fingerprint(type_name, identifier="", name="", text=""):
+    """What a ref must still point at: Kit paths are positional (".../Button[2]"), so after the UI is
+    rebuilt (another prim in Property, a moved Stage row) the same path can name a different widget."""
+    label = identifier or name or ("" if type_name == "StringField" else str(text or "")[:40])
+    return f"{type_name}:{label}".replace("|", "/")
+
+
+def split_ref(ref):
+    """(path, fingerprint or None) from a sim.ui.find ref ("<kit path>|<type>:<label>")."""
+    path, sep, fp = ref.rpartition("|")
+    if not sep or ":" not in fp or "//" not in path:
+        return ref, None
+    return path, fp
+
+
+def inside(point, rect):
+    x, y = point
+    rx, ry, rw, rh = rect
+    return rx <= x < rx + rw and ry <= y < ry + rh
+
+
+def _widget_fingerprint(widget):
+    return fingerprint(type(widget).__name__, getattr(widget, "identifier", ""), getattr(widget, "name", ""),
+                       getattr(widget, "text", ""))
+
+
+def _shown(path, center, ui_test):
+    """None when the centre point (UI points) is really clickable, else why not: inside the owning
+    Kit window, inside every enclosing ScrollingFrame, and not under a floating Kit window."""
     import omni.ui as ui
 
+    title = path.split("//", 1)[0]
+    win = ui.Workspace.get_window(title)
+    if win is None:
+        return "its window is closed"
+    if not inside(center, (win.position_x, win.position_y, win.width, win.height)):
+        return f"it is outside the visible part of the '{title}' window"
+    parts = path.split("/")
+    for i, part in enumerate(parts):
+        if part.startswith("ScrollingFrame["):
+            try:
+                frame = ui_test.find("/".join(parts[: i + 1]))
+                pos, size = frame.position, frame.size
+            except Exception:  # noqa: BLE001
+                continue
+            if not inside(center, (pos.x, pos.y, size.x, size.y)):
+                return "it is scrolled out of view; scroll its panel first"
+    if getattr(win, "docked", False):
+        for other in ui.Workspace.get_windows():
+            if (other is not win and other.visible and not getattr(other, "docked", False) and other.title
+                    and other.title not in ("Main ToolBar", "Status Bar")
+                    and inside(center, (other.position_x, other.position_y, other.width, other.height))):
+                return f"the floating window '{other.title}' covers it"
+    return None
+
+
+def _candidates(window_filter, include_labels, query):
+    """Cheap pass: (title, ref, widget, type) that match, before computing paths (each realpath
+    walks the window tree again, so it is computed only for what is returned)."""
     ui_test = _ui_test()
-    dpi = ui.Workspace.get_dpi_scale()
-    records = []
     for win in windows():
         title = win["title"]
         if window_filter and window_filter.lower() not in title.lower():
@@ -180,22 +234,14 @@ def _records(window_filter=None, include_labels=True):
                 continue
             if not getattr(widget, "visible", True):
                 continue
-            try:
-                size = ref.size
-                center = ref.center
-            except Exception:  # noqa: BLE001 - stale or not yet laid out
-                continue
-            if size.x <= 0 or size.y <= 0:
-                continue
-            if type_name == "Image" and not (getattr(widget, "name", "") or getattr(widget, "tooltip", "")
-                                             or getattr(widget, "identifier", "")):
+            name, ident, tip = getattr(widget, "name", ""), getattr(widget, "identifier", ""), getattr(widget, "tooltip", "")
+            if type_name == "Image" and not (name or tip or ident):
                 continue  # decorative icon
             text = getattr(widget, "text", "") if type_name != "StringField" else ""
-            records.append(widget_record(
-                type_name, ref.realpath, title, getattr(widget, "name", ""), text,
-                getattr(widget, "tooltip", ""), _value(widget), (center.x, center.y), (size.x, size.y), dpi,
-                getattr(widget, "enabled", True), getattr(widget, "identifier", "")))
-    return records
+            value = _value(widget)
+            cheap = dict(type=type_name, name=name, identifier=ident, text=text, tooltip=tip, value=value)
+            if matches(cheap, query):
+                yield title, ref, widget, cheap
 
 
 def menu_children(path):
@@ -214,50 +260,80 @@ def menu_children(path):
 
 
 def find(a):
+    import json
+
+    import omni.ui as ui
+
     query = a.get("query", "") or ""
     window = a.get("window", "") or ""
     limit = a.get("limit", 40)
     if not isinstance(query, str) or len(query) > 120 or not isinstance(window, str) or len(window) > 120:
         raise UIRefusal("INVALID_VALUE", "query and window: strings of at most 120 characters.")
-    if type(limit) is not int or not 1 <= limit <= 200:
-        raise UIRefusal("LIMIT", "limit must be 1..200.")
-    import omni.ui as ui
-
-    found = [r for r in _records(window or None, include_labels=bool(query)) if matches(r, query)]
+    if type(limit) is not int or not 1 <= limit <= 100:
+        raise UIRefusal("LIMIT", "limit must be 1..100.")
+    ui_test = _ui_test()
+    dpi = ui.Workspace.get_dpi_scale()
+    widgets, matched, budget, hidden = [], 0, 48_000, 0  # stay well under the 64 KiB response cap
+    for title, ref, widget, cheap in _candidates(window or None, bool(query), query):
+        matched += 1
+        if len(widgets) >= limit or budget <= 0:
+            continue
+        try:
+            size, center, path = ref.size, ref.center, ref.realpath
+        except Exception:  # noqa: BLE001 - stale or not yet laid out
+            continue
+        if size.x <= 0 or size.y <= 0 or _shown(path, (center.x, center.y), ui_test) is not None:
+            hidden += 1
+            continue
+        record = widget_record(cheap["type"], f"{path}|{_widget_fingerprint(widget)}", title, cheap["name"],
+                               cheap["text"], cheap["tooltip"], cheap["value"], (center.x, center.y),
+                               (size.x, size.y), dpi, getattr(widget, "enabled", True), cheap["identifier"])
+        budget -= len(json.dumps(record))
+        widgets.append(record)
     return dict(
         main_window=dict(width=round(ui.Workspace.get_main_window_width()),
-                         height=round(ui.Workspace.get_main_window_height()),
-                         dpi_scale=ui.Workspace.get_dpi_scale()),
+                         height=round(ui.Workspace.get_main_window_height()), dpi_scale=dpi),
         windows=windows() if not window else [w for w in windows() if window.lower() in w["title"].lower()],
-        matches=len(found), widgets=found[:limit], truncated=len(found) > limit,
+        matches=matched, widgets=widgets, truncated=len(widgets) + hidden < matched,
+        skipped_not_shown=hidden,
         coordinates="x, y are the widget centre in pixels of the Isaac Sim main window, the same pixels as "
-                    "screenshot(window_id=<Isaac Sim window>). Pass ref to sim__ui__act to target a widget.",
+                    "screenshot(window_id=<Isaac Sim window>). Pass ref to sim__ui__act to target a widget; "
+                    "widgets scrolled out of view, outside their window or under a floating window are left out.",
     )
 
 
 def _resolve(a):
-    """(x, y) in window pixels, and the widget record targeted, from ref or x/y."""
+    """(x, y) in window pixels and the targeted widget, from ref or x/y. Sends nothing."""
     import omni.ui as ui
 
     dpi = ui.Workspace.get_dpi_scale()
     ref = a.get("ref")
     if ref:
-        if not isinstance(ref, str) or "//" not in ref or len(ref) > 600:
+        if not isinstance(ref, str) or "//" not in ref or len(ref) > 800:
             raise UIRefusal("INVALID_VALUE", "ref must be a widget ref from sim__ui__find.")
+        path, expected = split_ref(ref)
         ui_test = _ui_test()
         try:
-            found = ui_test.find(ref)
+            found = ui_test.find(path)
         except Exception:  # noqa: BLE001
             found = None
         if found is None or found.widget is None:
             raise UIRefusal("STALE_WIDGET", "That widget no longer exists (the UI was rebuilt); call sim__ui__find again.")
+        actual = _widget_fingerprint(found.widget)
+        if expected is not None and actual != expected:
+            raise UIRefusal("STALE_WIDGET", f"That ref now points at a different widget ({actual}, expected "
+                                            f"{expected}): the UI was rebuilt. Call sim__ui__find again.")
         if not getattr(found.widget, "visible", True):
             raise UIRefusal("NOT_VISIBLE", "That widget is hidden; open its window or panel first.")
         c, s = found.center, found.size
         if s.x <= 0 or s.y <= 0:
             raise UIRefusal("NOT_VISIBLE", "That widget has no size yet (not laid out or collapsed).")
-        return round(c.x * dpi), round(c.y * dpi), dict(ref=found.realpath, type=type(found.widget).__name__,
-                                                          name=getattr(found.widget, "name", ""))
+        why = _shown(path, (c.x, c.y), ui_test)
+        if why:
+            raise UIRefusal("NOT_VISIBLE", f"That widget cannot be clicked: {why}.")
+        enabled = bool(getattr(found.widget, "enabled", True))
+        return round(c.x * dpi), round(c.y * dpi), dict(ref=ref, type=type(found.widget).__name__,
+                                                          name=getattr(found.widget, "name", ""), enabled=enabled)
     x, y = a.get("x"), a.get("y")
     if type(x) is not int or type(y) is not int:
         raise UIRefusal("INVALID_VALUE", "Give ref (from sim__ui__find) or integer x and y window pixels.")
@@ -300,6 +376,34 @@ async def act(a):
     def mouse_event(kind, x, y, w, h):
         provider.buffer_mouse_event(mouse, kind, (x / w, y / h), 0, (float(x), float(y)))
 
+    # Validate everything before the first event, so a refusal really means nothing was sent.
+    text = keys = target = end = scroll = None
+    if action == "type":
+        text = a.get("text")
+        if not isinstance(text, str) or not 1 <= len(text) <= MAX_TEXT or any(c in "\r\n\t" or ord(c) < 32 for c in text):
+            raise UIRefusal("INVALID_VALUE", f"text: 1..{MAX_TEXT} characters without control characters; "
+                                             "send enter or tab with action=keypress.")
+    if action == "keypress":
+        keys = parse_keys(a.get("keys"))
+    if action == "scroll":
+        scroll = a.get("scroll_x", 0), a.get("scroll_y", 0)
+        sx, sy = scroll
+        if type(sx) is not int or type(sy) is not int or not (sx or sy) or abs(sx) > 20 or abs(sy) > 20:
+            raise UIRefusal("INVALID_VALUE", "scroll_x/scroll_y: wheel steps, -20..20, not both 0 (negative "
+                                             "scroll_y scrolls down).")
+    if action == "drag":
+        end = a.get("end_x"), a.get("end_y")
+        if type(end[0]) is not int or type(end[1]) is not int:
+            raise UIRefusal("INVALID_VALUE", "drag needs integer end_x and end_y window pixels.")
+        _check_point(*end)
+    focus_first = action in ("type", "keypress") and (a.get("ref") or a.get("x") is not None)
+    if action in ("click", "double_click", "right_click", "move", "drag", "scroll") or focus_first:
+        target = _resolve(a)
+        _check_point(target[0], target[1])
+        hit = target[2]
+        if hit is not None and not hit["enabled"] and action != "move":
+            raise UIRefusal("DISABLED", "That widget is disabled (greyed out); it would ignore the input.")
+
     result = dict(action=action)
     if action == "wait":
         await tick(max(frames, 1))
@@ -328,25 +432,21 @@ async def act(a):
                     note="menu clicks move Kit's cursor through the menu; verify with a screenshot")
 
     if action in ("type", "keypress"):
-        if a.get("ref") or a.get("x") is not None:  # focus the target first, like a person would
-            x, y, hit = _resolve(a)
+        if focus_first:  # focus the target first, like a person would
+            x, y, hit = target
             w, h = _check_point(x, y)
             for kind in (MouseEventType.MOVE, MouseEventType.LEFT_BUTTON_DOWN, MouseEventType.LEFT_BUTTON_UP):
                 mouse_event(kind, x, y, w, h)
                 await tick(2)
             result.update(focused_at=dict(x=x, y=y), widget=hit)
         if action == "type":
-            text = a.get("text")
-            if not isinstance(text, str) or not 1 <= len(text) <= MAX_TEXT or any(c in "\r\n\t" or ord(c) < 32 for c in text):
-                raise UIRefusal("INVALID_VALUE", f"text: 1..{MAX_TEXT} characters without control characters; "
-                                                 "send enter or tab with action=keypress.")
             for i, ch in enumerate(text):
                 provider.buffer_keyboard_char_event(keyboard, ch, 0)
                 if i % 20 == 19:
                     await tick(1)
             await tick(frames)
             return dict(result, typed=len(text), frames_waited=frames)
-        mods, key = parse_keys(a.get("keys"))
+        mods, key = keys
         flags = 0
         for m in mods:
             flags |= getattr(carb.input, f"KEYBOARD_MODIFIER_FLAG_{m}")
@@ -362,7 +462,7 @@ async def act(a):
         names = {"CONTROL": "ctrl", "SHIFT": "shift", "ALT": "alt", "SUPER": "super"}
         return dict(result, keys=[*(names[m] for m in mods), key.lower().removeprefix("key_")], frames_waited=frames)
 
-    x, y, hit = _resolve(a)
+    x, y, hit = target
     w, h = _check_point(x, y)
     result.update(at=dict(x=x, y=y), widget=hit)
     mouse_event(MouseEventType.MOVE, x, y, w, h)
@@ -381,19 +481,13 @@ async def act(a):
         await tick(frames)
         return dict(result, frames_waited=frames)
     if action == "scroll":
-        sx, sy = a.get("scroll_x", 0), a.get("scroll_y", 0)
-        if type(sx) is not int or type(sy) is not int or not (sx or sy) or abs(sx) > 20 or abs(sy) > 20:
-            raise UIRefusal("INVALID_VALUE", "scroll_x/scroll_y: wheel steps, -20..20, not both 0 (negative "
-                                             "scroll_y scrolls down).")
+        sx, sy = scroll
         # Same encoding as omni.kit.ui_test.emulate_mouse_scroll: the delta goes in both coordinate slots.
         provider.buffer_mouse_event(mouse, MouseEventType.SCROLL, (sx / w, sy / h), 0, (float(sx), float(sy)))
         await tick(frames)
         return dict(result, scroll=dict(x=sx, y=sy), frames_waited=frames)
     # drag
-    ex, ey = a.get("end_x"), a.get("end_y")
-    if type(ex) is not int or type(ey) is not int:
-        raise UIRefusal("INVALID_VALUE", "drag needs integer end_x and end_y window pixels.")
-    _check_point(ex, ey)
+    ex, ey = end
     mouse_event(MouseEventType.LEFT_BUTTON_DOWN, x, y, w, h)
     await tick(2)
     for i in range(1, 13):

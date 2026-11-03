@@ -2781,7 +2781,7 @@
         },
         "limit": {
           "type": "integer",
-          "description": "Maximum widgets returned, 1..200.",
+          "description": "Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).",
           "required": false,
           "default": 40
         }
@@ -2812,7 +2812,7 @@
           "required": false,
           "default": 40,
           "has_default": true,
-          "description": "Maximum widgets returned, 1..200."
+          "description": "Maximum widgets returned, 1..100 (the reply is also capped near 48 KB)."
         }
       ],
       "namespace": "sim",

@@ -301,3 +301,23 @@ def test_horizontal_scroll_and_alt_super_modifiers(desktop_setup):
     assert events(disp, X.ButtonPress) == [6, 7]
     with pytest.raises(ValueError, match="alt and super"):
         tools["window_key"](101, 22, "a", ["hyper"])
+
+
+def test_unknown_lock_state_fails_closed_when_the_keyboard_is_grabbed(desktop_setup, monkeypatch):
+    disp, tools = desktop_setup
+    monkeypatch.setattr(desktop.screen, "_probe_locked", lambda: None)  # no GNOME screen saver answered
+    disp.keyboard_owner = "locker"
+    with pytest.raises(RuntimeError, match="could not tell whether the desktop is locked"):
+        tools["window_click"](101, 22, 10, 10, 300, 200)
+    assert disp.events == []
+    disp.keyboard_owner = None  # unknown but nobody holds the keyboard: an unlocked desktop
+    tools["window_click"](101, 22, 10, 10, 300, 200)
+    assert events(disp, X.ButtonPress) == [1]
+
+
+def test_the_lock_probe_runs_once_per_tool_call(desktop_setup, monkeypatch):
+    disp, tools = desktop_setup
+    calls = []
+    monkeypatch.setattr(desktop.screen, "_probe_locked", lambda: calls.append(1) or False)
+    tools["window_scroll"](101, 22, 10, 10, 300, 200, "down", 5)
+    assert len(calls) == 1 and events(disp, X.ButtonPress) == [5] * 5

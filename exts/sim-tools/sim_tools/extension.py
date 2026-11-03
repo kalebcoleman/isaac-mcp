@@ -344,7 +344,7 @@ class Extension(omni.ext.IExt):
                             return dict(status="error", code=exc.code, message=str(exc),
                                         effects="No input was sent." if name == "sim.ui.find" or exc.code in (
                                             "INVALID_VALUE", "LIMIT", "STALE_WIDGET", "NOT_VISIBLE",
-                                            "OUT_OF_WINDOW", "NO_UI") else "Inspect the UI before retrying.")
+                                            "OUT_OF_WINDOW", "NO_UI", "DISABLED") else "Inspect the UI before retrying.")
                     elif name == "sim.timeline.control":
                         result = await self._timeline_control(args)
                     elif name == "sim.map.occupancy":

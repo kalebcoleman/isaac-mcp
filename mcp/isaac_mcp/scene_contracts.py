@@ -420,7 +420,7 @@ add(
     dict(
         query=field("string", "Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only.", False, default=""),
         window=field("string", "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.", False, default=""),
-        limit=field("integer", "Maximum widgets returned, 1..200.", False, default=40),
+        limit=field("integer", "Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).", False, default=40),
     ),
 )
 add(
