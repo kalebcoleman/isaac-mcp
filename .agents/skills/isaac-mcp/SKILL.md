@@ -168,6 +168,27 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   ScriptNode. Use them only when the user asked and Kit was launched with
   `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`; this is not a sandbox.
 
+### ROS 2 TF and RViz 2
+
+Never hand-build TF/clock graphs with `run_python`; use the tools so the tree is the same every
+time (full recipe: `docs/ROS2-RVIZ.md`).
+
+1. Stop the timeline, then `sim__ros2__tf_setup` with the robot prim. It publishes `/clock`,
+   `/joint_states`, a static `world -> base_link` (or `world -> odom` + odometry with
+   `base=mobile`) and the link frames, finds the articulation root itself, and reports
+   `rviz_fixed_frame`, the topics and the ROS domain. Call it again to change options: it
+   rebuilds its single graph instead of adding a second publisher.
+2. Choose who publishes the links: Isaac (`link_frames=isaac`, default) **or**
+   `robot_state_publisher` with the URDF (`link_frames=robot_state_publisher`, needed for
+   RViz's RobotModel). Never both: two publishers per frame is what makes RViz jump.
+3. If AMCL/SLAM provides `map -> odom`, pass `world_frame=""`. Add cameras/LiDARs/`tool0`
+   with `extra_frames`.
+4. Play, then `python3 scripts/ros2_rviz_config.py --fixed-frame <rviz_fixed_frame> --out <f>.rviz`
+   (add display topics) and `rviz2 -d <f>.rviz --ros-args -p use_sim_time:=true`, with
+   `config/ros_dds.env` sourced in that terminal. Every ROS node needs `use_sim_time:=true`.
+5. Before debugging RViz, run `python3 scripts/ros2_tf_doctor.py --fixed-frame <frame>`
+   (`--isaac-ros` without a system ROS 2) and fix every ERROR it prints.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Action |
@@ -178,6 +199,7 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed | Read `current_target`; resend its `session_id` and `stage_id` explicitly |
+| RViz frames jump, "Frame does not exist", extrapolation errors | Two TF publishers, wrong Fixed Frame or wall-clock node | `scripts/ros2_tf_doctor.py`; see the ROS 2 section above |
 | `TIMELINE_ACTIVE` on an edit | Timeline is playing or paused | `sim__timeline__control` with `stop`, then retry |
 | `NOT_READY` on a nonwaiting camera capture | No validated tool-acquired frame in this sensor's cache | Capture with default/`wait_for_render=true`; ordinary Play or waiting a few frames will not seed it |
 | `RENDER_TIMEOUT` on a fresh camera capture | Matching render completions or CPU transfer did not finish within five seconds | Check rendering and `sim__logs__tail`; no image or stale fallback was returned. A pending native transfer can cause `RENDER_BUSY` on retry; allow completion before another fresh request |
