@@ -42,7 +42,8 @@ def _namespace(namespace):
     # Segments may not start or end with '_' nor contain '__' (ROS 2 forbids repeated underscores),
     # so '__' in a flattened name can only come from '/': the '/' -> '__' mapping is one-to-one.
     if ns and not all(SEGMENT_RE.match(part) and "__" not in part for part in ns.split("/")):
-        raise ValueError(f"namespace {namespace!r} is not a valid ROS namespace")
+        raise ValueError(f"namespace {namespace!r}: each segment must start with a letter, end with a letter or "
+                         "digit and not contain '__' (isaac-mcp rule; keeps <ns>_odom and graph names one-to-one)")
     return ns
 
 

@@ -398,4 +398,4 @@ def test_a_parent_of_a_looped_fixed_frame_is_not_called_disconnected():
     edges = [e("world", "base", 0, True), e("base", "world"), e("map", "world"), e("c", "d")]
     errors, *_ = doctor.analyze(edges, "world", clock_seen=True)
     cut = [x for x in errors if "do not connect" in x]
-    assert cut and "map" not in cut[0].split(":")[1].split("(")[0] and "c" in cut[0]
+    assert cut and cut[0].split(": ", 1)[1].split(" (")[0] == "c, d"
