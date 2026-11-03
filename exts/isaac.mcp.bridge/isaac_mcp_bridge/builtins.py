@@ -15,6 +15,7 @@ or raise (``ToolError`` to attach diagnostics). The bridge owns the envelope.
 """
 
 import ast
+import contextvars
 import functools
 import inspect
 import traceback
@@ -79,13 +80,9 @@ def cmd_run_python(bridge, code: str, session_id: str = "default",
                "Usd": Usd, "UsdGeom": UsdGeom, "Sdf": Sdf, "Gf": Gf}
     assert set(preload) == set(PRELOADED)
     exec_globals = {**preload, "__builtins__": __builtins__}
-    reset = ""
     if persistent:
-        reset = bridge.sessions.take_reset(session_id)
         exec_globals.update(bridge.sessions.namespace(session_id))
-    reset_note = (f"Session {session_id!r} was reset because {reset}: variables, imports and "
-                  "functions from earlier calls are gone (prim references would be stale). "
-                  "Re-run your setup code." if reset else "")
+    generation = bridge.sessions.generation
 
     try:
         # Top-level `await` is allowed: such code compiles to a coroutine that the bridge
@@ -94,35 +91,56 @@ def cmd_run_python(bridge, code: str, session_id: str = "default",
     except SyntaxError as e:
         raise ToolError(f"SyntaxError: {e}", details={"traceback": traceback.format_exc()})
 
+    def reset_note() -> str:
+        # Consumed only when the call reports (finish/fail), so a cancelled call keeps it pending.
+        reason = bridge.sessions.take_reset(session_id) if persistent else ""
+        return (f"Session {session_id!r} was reset because {reason}: variables, imports and "
+                "functions from earlier calls are gone (prim references would be stale). "
+                "Re-run your setup code." if reason else "")
+
     def fail(e: BaseException, output: str):
+        note = reset_note()
         details = {"output": output, "traceback": traceback.format_exc()}
-        if reset_note:
-            details["session_reset"] = reset_note
+        if note:
+            details["session_reset"] = note
         elif persistent and isinstance(e, NameError):
             details["hint"] = ("Persistent sessions keep only the variables of successful calls; "
                                "names from a call that raised are not saved.")
-        raise ToolError((reset_note + " " if reset_note and isinstance(e, NameError) else "") + str(e),
+        raise ToolError((note + " " if note and isinstance(e, NameError) else "") + str(e),
                         details=details)
 
     def finish(output: str):
+        note = reset_note()
         payload = {"output": output, "result": exec_globals.get("result", None)}
         if persistent:
             payload["session_id"] = session_id
-            payload["session_vars"] = bridge.sessions.persist(session_id, exec_globals)
-            if reset_note:
-                payload["session_reset"] = reset_note
+            if bridge.sessions.generation != generation:
+                # A stage was opened while this call ran (e.g. it awaited open_stage_async): its
+                # namespace still holds references to the old stage, so it is not saved.
+                payload["session_vars"] = []
+                payload["session_reset"] = (
+                    f"A stage was opened during this call, so session {session_id!r} was not saved; "
+                    "variables from this and earlier calls are gone. Re-run your setup code.")
+                bridge.sessions.take_reset(session_id)
+            else:
+                payload["session_vars"] = bridge.sessions.persist(session_id, exec_globals)
+                if note:
+                    payload["session_reset"] = note
         return payload
 
     if compiled.co_flags & inspect.CO_COROUTINE:
         async def run_async():
-            old_stdout = sys.stdout
-            sys.stdout = capture = io.StringIO()
+            # Capture only this call's prints: a context-local buffer behind one proxy, so Kit
+            # output from other tasks during the await still reaches the console.
+            capture = io.StringIO()
+            token = _CAPTURE.set(capture)
+            _install_stdout_proxy()
             try:
                 await eval(compiled, exec_globals)
             except Exception as e:
                 fail(e, capture.getvalue())
             finally:
-                sys.stdout = old_stdout
+                _CAPTURE.reset(token)
             return finish(capture.getvalue())
         return run_async()
 
@@ -135,6 +153,35 @@ def cmd_run_python(bridge, code: str, session_id: str = "default",
     finally:
         sys.stdout = old_stdout
     return finish(capture.getvalue())
+
+
+_CAPTURE = contextvars.ContextVar("isaac_mcp_run_python_capture", default=None)
+
+
+class _StdoutProxy:
+    """sys.stdout stand-in: writes go to the awaiting run_python call's buffer when the current
+    asyncio context has one, else to the real stream."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def write(self, text):
+        buf = _CAPTURE.get()
+        return (buf if buf is not None else self._real).write(text)
+
+    def flush(self):
+        buf = _CAPTURE.get()
+        return (buf if buf is not None else self._real).flush()
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+def _install_stdout_proxy():
+    import sys
+
+    if not isinstance(sys.stdout, _StdoutProxy):
+        sys.stdout = _StdoutProxy(sys.stdout)
 
 
 _PUT_FILE_DESCRIPTION = (

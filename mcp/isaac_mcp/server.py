@@ -807,6 +807,9 @@ async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None) -> str:
     try:
         added = discover_and_register_tools(server)
     except Exception as e:
+        if isinstance(e, RuntimeError) and str(e).startswith("multiple bridges running"):
+            return (f"Error: {e} Pick one with use_bridge(port) (`python -m isaac_mcp.client "
+                    "--list-bridges` shows each one's port and PID); do not start another simulator.")
         if _needs_bridge_guidance(e):
             return (f"Error: no Isaac Sim bridge is reachable ({e}). Isaac Sim is probably not "
                     "running yet, or is still starting: start it (sim__launch when simulator launch "

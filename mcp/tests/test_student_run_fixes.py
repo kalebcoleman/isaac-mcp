@@ -112,10 +112,90 @@ def test_move_window_unmaximizes_moves_and_reports_geometry(monkeypatch):
     server = FastMCP("screen-test")
     screen.register_screen_tools(server, groups={"screen_control"})
     tool = server._tool_manager._tools["move_window"].fn
-    assert tool(x=960, y=40, width=900, height=1000, window_id=7) == "moved: RViz (id=7) now 900x1000+960+40"
+    assert tool(x=960, y=40, width=900, height=1000, window_id=7).startswith("moved: RViz (id=7) now 900x1000+960+40")
     sent = [c.args[0] for c in disp.screen.return_value.root.send_event.call_args_list]
     assert len(sent) == 2 and sent[1]["data"][1][1:] == [960, 40, 900, 1000]
     with pytest.raises(ValueError, match="PID"):
         tool(x=0, y=0, width=900, height=900, window_id=7, expected_pid=99)
     with pytest.raises(ValueError, match="100..16384"):
         tool(x=0, y=0, width=10, height=900, window_id=7)
+
+
+def test_a_stage_opened_during_an_awaiting_call_is_not_saved(kit_stubs):
+    run(kit_stubs, "old_prim = 'stale'", persistent=True, session_id="lab")
+    kit_stubs.trigger = kit_stubs.sessions.clear  # what the bridge does on a stage-open event
+    code = "import asyncio\nfresh = 'new'\nawait asyncio.sleep(0)\ntrigger()\nresult = old_prim"
+    kit_stubs.sessions._sessions["lab"]["trigger"] = kit_stubs.trigger
+    out = run(kit_stubs, code, persistent=True, session_id="lab")
+    assert out["session_vars"] == [] and "was not saved" in out["session_reset"]
+    with pytest.raises(ToolError) as err:  # nothing stale came back, and the reset was reported once
+        run(kit_stubs, "result = old_prim", persistent=True, session_id="lab")
+    assert "session_reset" not in err.value.details and "only the variables of successful calls" in err.value.details["hint"]
+
+
+def test_awaiting_code_captures_only_its_own_prints(kit_stubs, capsys):
+    import io
+
+    async def scenario():
+        other = []
+
+        async def kit_task():  # another task printing while run_python is suspended
+            await asyncio.sleep(0)
+            print("kit says hi")
+            other.append(True)
+
+        task = asyncio.ensure_future(kit_task())
+        out = await bi.cmd_run_python(kit_stubs, "import asyncio\nprint('mine')\nawait asyncio.sleep(0.01)\nresult=1")
+        await task
+        return out
+
+    out = asyncio.run(scenario())
+    assert out["output"] == "mine\n"
+    assert "kit says hi" in capsys.readouterr().out
+    print("after")  # stdout still works normally afterwards
+    assert "after" in capsys.readouterr().out
+
+
+def test_a_cancelled_call_keeps_the_reset_notice_for_the_next_one(kit_stubs):
+    run(kit_stubs, "x = 1", persistent=True, session_id="c")
+    kit_stubs.sessions.clear()
+
+    async def cancelled():
+        coro = bi.cmd_run_python(kit_stubs, "import asyncio\nawait asyncio.sleep(10)", persistent=True, session_id="c")
+        task = asyncio.ensure_future(coro)
+        await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(cancelled())
+    assert "was reset" in run(kit_stubs, "result = 2", persistent=True, session_id="c")["session_reset"]
+
+
+def test_refresh_tools_with_several_bridges_says_pick_one(monkeypatch):
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+
+    def several(_server):
+        raise RuntimeError("multiple bridges running: ports 8766, 8781.")
+
+    monkeypatch.setattr(gw, "discover_and_register_tools", several)
+    message = asyncio.run(gw._refresh_tools(server))
+    assert "use_bridge" in message and "do not start another" in message and "not reachable" not in message
+
+
+def test_move_window_waits_for_a_position_only_move(monkeypatch):
+    from mcp.server.fastmcp import FastMCP
+
+    disp = MagicMock()
+    obj = disp.create_resource_object.return_value
+    obj.get_geometry.return_value = types.SimpleNamespace(width=900, height=1000)
+    positions = iter([types.SimpleNamespace(x=0, y=0)] * 2 + [types.SimpleNamespace(x=960, y=40)] * 50)
+    disp.screen.return_value.root.translate_coords.side_effect = lambda *a: next(positions)
+    monkeypatch.setattr(screen, "_xdisplay", lambda: disp)
+    monkeypatch.setattr(screen, "_match_window", lambda *_: {"id": 7, "title": "RViz", "pid": 5})
+    monkeypatch.setattr(screen.xevent, "ClientMessage", lambda **kwargs: kwargs)
+    monkeypatch.setattr(screen.time, "sleep", lambda s: None)
+    server = FastMCP("screen-test")
+    screen.register_screen_tools(server, groups={"screen_control"})
+    out = server._tool_manager._tools["move_window"].fn(x=960, y=40, width=900, height=1000, window_id=7)
+    assert "now 900x1000+960+40" in out  # not the stale +0+0 read right after sending

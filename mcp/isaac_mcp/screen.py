@@ -678,6 +678,13 @@ def register_screen_tools(
             try:
                 obj = disp.create_resource_object("window", win["id"])
                 root = disp.screen().root
+
+                def geometry():
+                    g = obj.get_geometry()
+                    pos = root.translate_coords(obj, 0, 0)  # absolute (see list_windows)
+                    return (pos.x, pos.y, g.width, g.height)
+
+                before = geometry()
                 mask = X.SubstructureRedirectMask | X.SubstructureNotifyMask
                 state = disp.intern_atom("_NET_WM_STATE")
                 maxv = disp.intern_atom("_NET_WM_STATE_MAXIMIZED_VERT")
@@ -691,19 +698,22 @@ def register_screen_tools(
                     window=obj, client_type=disp.intern_atom("_NET_MOVERESIZE_WINDOW"),
                     data=(32, [flags, int(x), int(y), int(width), int(height)])), event_mask=mask)
                 disp.sync()
+                # Wait until the window manager has applied it: the size matches and the geometry
+                # changed (unless nothing had to change).
+                unchanged = before[2:] == (width, height) and abs(before[0] - x) <= 64 and abs(before[1] - y) <= 64
                 deadline = time.monotonic() + 1.0
-                geo = None
+                geo = before
                 while time.monotonic() < deadline:
-                    g = obj.get_geometry()
-                    pos = root.translate_coords(obj, 0, 0)  # absolute (see list_windows)
-                    geo = (pos.x, pos.y, g.width, g.height)
-                    if abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2:
-                        break
                     time.sleep(0.05)
-                return (f"moved: {win['title']} (id={win['id']}) now {geo[2]}x{geo[3]}+{geo[0]}+{geo[1]}"
-                        + ("" if geo and abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2 else
-                           f" (requested {width}x{height}+{x}+{y}; the window manager or the app "
-                           "limited it)"))
+                    geo = geometry()
+                    sized = abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2
+                    if sized and (geo != before or unchanged):
+                        break
+                sized = abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2
+                return (f"moved: {win['title']} (id={win['id']}) now {geo[2]}x{geo[3]}+{geo[0]}+{geo[1]} "
+                        "(client area; the frame's title bar sits above it)"
+                        + ("" if sized else f"; requested {width}x{height}+{x}+{y}, the window manager or "
+                           "the app limited it"))
             finally:
                 disp.close()
 
