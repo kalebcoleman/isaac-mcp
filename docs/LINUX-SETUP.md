@@ -63,6 +63,10 @@ Stop and inspect any dependency-check failure before treating the environment as
 
 The convenience installer:
 
+- When it finds an installed Isaac Sim 6.x and the checkout has no `.venv`, it installs only the MCP server and writes that
+  interpreter into the Claude entries it creates. If nothing is found, it continues to the checks below and **stops at the
+  EULA check unless `--accept-eula` was given**. An existing checkout `.venv` is re-synced unless you pass `--no-sim`, the
+  one form that never touches a simulator environment.
 - Runs **`uv sync --python 3.12` in the current directory**. It may update the lock/environment;
   it does not enforce `--locked` and does not use `ISAAC_MCP_PYTHON` (or its alias `UR5E_DT_PYTHON`) as its install target.
 - Runs `uv tool install --force --editable` for the host with the `isaaclab` metrics extra.
@@ -276,11 +280,15 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | `isaac-mcp` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
 | Interpreter missing | Run `python3 scripts/isaac_env.py find`, select a compatible `ISAAC_MCP_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
 | `uv pip check` fails | Record exact versions and conflicts. Use a new isolated locked environment for comparison; do not infer a native failure's cause from metadata alone |
-| 89 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
+| 102 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
 | `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
+| `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK: `uv run --isolated --project mcp --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
+| Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
+| `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; for the twin that is `/World/UR5e/root_joint`. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
+| `./verify.sh` fails `single_joint_motion` with `'NoneType' object has no attribute 'is_homogeneous'` | A pre-migration `checkpoints/*.usda` has dead references, so the reopened arm is empty. See [Verification](VERIFICATION.md#live-ur5e-baseline) |
 | `SAVE_UNSUPPORTED` | Inspect returned properties/retry guidance; pause and follow the explicit normalization contract in [scene tools](TOOLS-SCENE.md) |
 | `TIMELINE_BUSY` or a call stops responding | Preserve logs and identity; do not repeatedly replay Play or assume a client timeout cancels native work. See the known stall in [compatibility](COMPATIBILITY.md) |
 | No display / screenshot fails | Use the actual X11/XWayland display for window tools, or headless sensor capture; neither creates a desktop session |

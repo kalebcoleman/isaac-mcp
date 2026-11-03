@@ -5,7 +5,8 @@ Kit is disconnected. The 23 UR5e tools are also listed from a packaged catalog, 
 bridge is required to execute them. The seven bridge built-ins are listed the same way, from a packaged snapshot of the bridge's own
 verbs, and run on the selected bridge when called; they can be hidden from the host's MCP list with
 `ISAAC_MCP_BUILTINS=0`. Clients that ignore `tools/list_changed` (OpenCode) therefore see them from startup. Other packs are documented in the [UR5e](TOOLS-UR5E.md) and
-[Isaac Lab](TOOLS-ISAACLAB.md) references.
+[Isaac Lab](TOOLS-ISAACLAB.md) references. All arguments are listed in [Tool arguments](TOOLS-ARGUMENTS.md) and all settings in
+[Environment variables](ENVIRONMENT.md).
 
 Examples below show the **tool name** and a JSON object of **arguments**. Use the tool-calling interface of your MCP
 client; these objects are not standalone shell commands or complete MCP protocol messages.
@@ -20,12 +21,12 @@ bridge is unavailable.
 
 | MCP tool | Arguments | Use and effects |
 |---|---|---|
-| `refresh_tools` | `wait_s=0` (seconds, clamped to 0-180) | Rediscover the selected bridge's registry after a bridge starts or a module changes. Adds or updates visible tools and removes tools no longer advertised; catalog-listed tools remain visible as proxies. A failed or malformed discovery, or a collision between bridge tool names or with a host tool, leaves the existing list intact. The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after a refresh that changed the list; a client that ignores the notification still needs a reconnect (or `python -m isaac_mcp.client list_tools`). When no bridge answers, or one accepts the connection but `list_tools` times out, the error says Kit is probably still starting and names any managed `sim__launch` session with its age; with `wait_s` > 0 it polls every 3 s until the bridge answers or the time runs out (an ambiguous "multiple bridges" error is returned at once). A first Kit start took 172 s on a lab PC. |
+| `refresh_tools` | `wait_s=0` (seconds, clamped to 0-180) | Rediscover the selected bridge's registry after a bridge starts or a module changes. Adds or updates visible tools and removes tools no longer advertised; catalog-listed tools remain visible as proxies. A failed or malformed discovery, or a collision between bridge tool names or with a host tool, leaves the existing list intact. The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after a refresh that changed the list; a client that ignores the notification still needs a reconnect (or `python3 mcp/isaac_mcp/client.py list_tools`). When no bridge answers, or one accepts the connection but `list_tools` times out, the error says Kit is probably still starting and names any managed `sim__launch` session with its age; with `wait_s` > 0 it polls every 3 s until the bridge answers or the time runs out (an ambiguous "multiple bridges" error is returned at once). A first Kit start took 172 s on a lab PC. |
 | `use_bridge` | `port` (integer, required) | Connect to a different bridge on that port, report its identity, and replace the previously discovered bridge tools. The choice lasts until the host server restarts. Sends `notifications/tools/list_changed` after replacing the tools. |
 
 For a bridge already connected, `status` verifies its PID, port, app version and other identity data; `list_bridges`
 lists advertised bridge instances (they are bridge built-ins: listed unless `ISAAC_MCP_BUILTINS=0`, but they need a reachable bridge to answer;
-`python -m isaac_mcp.client --list-bridges` works either way). Example MCP calls: `use_bridge` with `{"port":8766}`, followed by `status` with
+`python3 mcp/isaac_mcp/client.py --list-bridges` works either way). Example MCP calls: `use_bridge` with `{"port":8766}`, followed by `status` with
 `{}` and `refresh_tools` with `{}`. Switching targets changes the selected simulation; verify the result before
 issuing scene-changing commands.
 
@@ -35,14 +36,14 @@ Catalog-listed tools, built-ins included, do not prove a live bridge is availabl
 
 The bridge also has an internal `list_tools` discovery operation. It is intentionally hidden from the bridge's own
 advertised tool list, so it is not normally a dynamically registered MCP tool. Ask the MCP client to list tools, or
-use the bridge CLI from an environment with `isaac_mcp` installed. Discover the advertised bridges first and use the
+use the standard-library bridge CLI from the checkout root. Discover the advertised bridges first and use the
 host and port from that listing; 8766 below is only the twin's default port:
 
 ```bash
-python -m isaac_mcp.client --list-bridges
-python -m isaac_mcp.client status --port 8766
-python -m isaac_mcp.client list_tools --port 8766
-python -m isaac_mcp.client ur5e_dt.play_scene '{}' --port 8766
+python3 mcp/isaac_mcp/client.py --list-bridges
+python3 mcp/isaac_mcp/client.py status --port 8766
+python3 mcp/isaac_mcp/client.py list_tools --port 8766
+python3 mcp/isaac_mcp/client.py ur5e_dt.play_scene '{}' --port 8766
 ```
 
 The CLI uses canonical bridge names with dots; the MCP server exposes namespaced tools using double underscores,
@@ -229,7 +230,7 @@ At server startup the operator may set these environment variables:
 | Variable | Default | Meaning |
 |---|---|---|
 | `ISAAC_MCP_SIM_ROOT` | repository root when available | Repository containing the executable `run.sh`. Set it explicitly if the host is installed outside a checkout. |
-| `UR5E_DT_PYTHON` | `<root>/.venv/bin/python` | Optional configured Isaac Sim interpreter used by `run.sh`. |
+| `ISAAC_MCP_PYTHON` | `<root>/.venv/bin/python`, else auto-detected | Isaac Sim interpreter used by `run.sh`. `UR5E_DT_PYTHON` is a deprecated alias. |
 | `ISAAC_MCP_SIM_SESSIONS_DIR` | `~/.local/share/isaac-mcp/sim-sessions` | Managed session metadata, logs and separate output directories. A relative path is resolved against the server's working directory. |
 | `ISAAC_MCP_SIM_MAX_INSTANCES` | `2` | Maximum known bridge, managed Sim and configured Lab-job processes. `0` disables this count limit. |
 | `ISAAC_MCP_SIM_MIN_FREE_VRAM_MIB` | `8192` | Minimum free GPU memory at launch. |

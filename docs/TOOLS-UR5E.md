@@ -1,9 +1,8 @@
 # UR5e Digital Twin MCP Tools (`ur5e_dt__*`)
 
 This document covers the 23 tools registered by `exts/ur5e-dt/ur5e_dt/extension.py`
-on the shared Kit bridge. It is the implementation reference; it documents the
-present implementation, not the proposed generic sim tool pack
-([GENERIC-SIM-TOOLS.md](GENERIC-SIM-TOOLS.md)).
+on the shared Kit bridge. It is the implementation reference. Generic tools are in
+[TOOLS-SCENE.md](TOOLS-SCENE.md), and every argument is listed in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#ur5e-twin-ur5e_dt__).
 
 ## Naming: bridge vs. MCP
 
@@ -14,6 +13,8 @@ present implementation, not the proposed generic sim tool pack
 - Bridge built-ins (`status`, `run_python`, `list_bridges`) and host gateway tools
   (`use_bridge`, `refresh_tools`) and desktop-capture tools
   (`screenshot`, `start_screen_recording`, …) carry **no** `ur5e_dt__` prefix.
+
+Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` before generic scene edits.
 
 The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 `ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
@@ -435,7 +436,7 @@ stays in that state; a replacement stage or concurrent Stop is never resumed.
 1. **Connect**: call `refresh_tools`, discover bridges and select the intended endpoint
    with `use_bridge`; verify its PID and port with `status` before changing a scene.
    `8766` is only the default. If discovery tools are filtered, use
-   `python -m isaac_mcp.client --list-bridges`, then probe the explicit host and port
+   `python3 mcp/isaac_mcp/client.py --list-bridges`, then probe the explicit host and port
    as described in [the agent guide](../AGENTS.md#getting-the-full-surface).
 2. **Fresh stage (optional)**: `ur5e_dt__new_stage` to free memory, then rebuild.
 3. **Build scene**: `ur5e_dt__quick_start_with_workstation` (or `quick_start` / `quick_start_with_workstation_and_simple_room`).

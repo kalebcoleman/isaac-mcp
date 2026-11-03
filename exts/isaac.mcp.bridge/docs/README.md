@@ -10,5 +10,5 @@ dispatched on Kit's main thread. Builtins: `run_python` (the escape hatch),
 (this box's advertised bridges), `put_file` / `get_file` / `stat_file` (remote file push/pull/verify),
 `status` (instance identity: pid, port, headless-vs-headful, app version — multi-instance verification).
 
-See the repository root `README.md` for setup and the project contract, and
-`docs/protocol.md` there for the protocol.
+See `mcp/README.md` at the repository root for setup and the project contract, and
+`mcp/docs/protocol.md` for the protocol.

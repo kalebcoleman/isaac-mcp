@@ -1,12 +1,12 @@
 # System Architecture
 
-This document describes the runtime architecture, naming conventions, port mapping, tool routing, ROS 2 / DDS transport rules, and transform tree interfaces for the UR5e digital twin repository on Isaac Sim 6.2.
+This document describes the runtime architecture, naming conventions, port mapping, tool routing, ROS 2 / DDS transport rules, and transform tree interfaces of isaac-mcp on Isaac Sim 6.2.
 
 ---
 
 ## 1. Four-Layer Map
 
-The project separates the host-side MCP interface, the generic Omniverse Kit bridge, the UR5e digital twin extension, and the underlying Isaac Sim runtime into four distinct layers:
+The project separates the host-side MCP interface, the generic Omniverse Kit bridge, the tool packs that register on it (generic scene tools and the UR5e digital twin), and the underlying Isaac Sim runtime into four distinct layers:
 
 ```
 +-------------------------------------------------------------------------------+
@@ -29,10 +29,11 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 +---------------------------------------+---------------------------------------+
                                         | Python registrar / event hook
 +---------------------------------------v---------------------------------------+
-| Layer 3: UR5e Digital Twin Extension (exts/ur5e-dt/)                          |
-| Package: ur5e_dt  |  Extension ID: ur5e-dt                                    |
-| - Runs inside Omniverse Kit                                                   |
-| - Registers ur5e_dt.* tools on the shared bridge (23 tools)                 |
+| Layer 3: Tool packs on the shared bridge                                      |
+| Generic scene tools (exts/sim-tools/), Extension ID: sim-tools                |
+| - Registers sim.* and assets.* tools (48), robot-agnostic                     |
+| UR5e Digital Twin (exts/ur5e-dt/), Package: ur5e_dt, Extension ID: ur5e-dt    |
+| - Registers ur5e_dt.* tools (23)                                              |
 | - Builds and manages the workstation scene (UR5e, RG2 gripper, QuickChanger)  |
 | - Provides motion control, joint drives, scene save/restore, camera setup     |
 | - Owns the OmniGraph pipelines for ROS 2 transforms and joint mirroring       |
@@ -50,10 +51,11 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 
 - **`mcp/`** must start instantly on the host and must never require loading or syncing a 20+ GB Isaac Sim simulation environment just to run desktop screen capture or manage processes.
 - **`exts/isaac.mcp.bridge`** is a generic, robot-agnostic transport layer. It can connect to any Kit application and exposes a uniform registration API for any tool package.
-- **`exts/ur5e-dt`** encapsulates the robot model, physics parameters, workstation USD assets (111 MB), and manipulation logic.
+- **`exts/sim-tools`** holds the robot-agnostic scene, asset, sensor, graph and UI tools. Nothing in it references the UR5e.
+- **`exts/ur5e-dt`** encapsulates the robot setup, physics parameters and manipulation logic. Its USD assets are not in the repository; they live in the local [asset folder](ASSETS.md).
 - **`exts/isaac.mcp.panel`** is vendored alongside the bridge to provide an in-editor GUI inspector for registered tools.
 
-The host also packages a snapshot of the twin's tool schemas. It lists those tools before Kit starts; calls still
+The host also packages snapshots of the bridge built-ins', generic tools' and twin's schemas. It lists those tools before Kit starts; calls still
 require a bridge serving the extension. Live bridge metadata replaces the snapshot after discovery. The supplied
 launcher enables the twin extension with its panel hidden unless `--ur5e-panel` is requested.
 
@@ -65,9 +67,9 @@ Consistency across extensions, packages, and CLI commands is strictly maintained
 
 | Entity | Format | Rule | Examples |
 |---|---|---|---|
-| Kit Extension ID | Dotted / Hyphenated | Matches Omniverse extension identifier | `ur5e-dt`, `isaac.mcp.bridge`, `isaac.mcp.panel` |
+| Kit Extension ID | Dotted / Hyphenated | Matches Omniverse extension identifier | `ur5e-dt`, `sim-tools`, `isaac.mcp.bridge`, `isaac.mcp.panel` |
 | Extension Folder | Exact Match | Directory under `exts/` matches Extension ID | `exts/ur5e-dt/`, `exts/isaac.mcp.bridge/` |
-| Python Package | Underscored | Standard valid Python import identifier | `ur5e_dt`, `isaac_mcp_bridge`, `isaac_mcp` |
+| Python Package | Underscored | Standard valid Python import identifier | `ur5e_dt`, `sim_tools`, `isaac_mcp_bridge`, `isaac_mcp` |
 | CLI / Server Name | Hyphenated | User-facing executable installed by `uv tool` | `isaac-mcp` |
 
 ---
@@ -131,7 +133,8 @@ Communication between the host MCP server and the Kit bridge uses JSON lines ove
   Examples: `ur5e_dt.play_scene`, `ur5e_dt.quick_start_with_workstation`, `ur5e_dt.setup_camera_tf_graph`.
 - Because dots (`.`) are not valid characters in MCP tool names per the Model Context Protocol specification, the host server (`isaac_mcp/server.py`) translates dots to double underscores (`__`).
 - Consequently, MCP clients see and invoke tools as: `ur5e_dt__<tool_name>` (e.g., `ur5e_dt__play_scene`).
-- Tools built into the bridge itself (such as `list_bridges`, `use_bridge`, `run_python`) and host desktop capture tools (`screenshot`, `start_screen_recording`, `stop_screen_recording`, `list_windows`) do not carry the `ur5e_dt__` prefix.
+- The generic pack follows the same rule: `sim.stage.info` becomes `sim__stage__info`.
+- Tools built into the bridge itself (such as `list_bridges`, `run_python`), the host gateway (`use_bridge`, `refresh_tools`) and host desktop tools (`screenshot`, `start_screen_recording`, `list_windows`) carry no prefix.
 
 ---
 

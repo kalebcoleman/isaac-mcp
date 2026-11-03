@@ -1,130 +1,83 @@
 # Project status and roadmap
 
-Last updated: 2026-10-31. This is the project-level overview; the tool references describe the current interfaces and
-the design documents contain the background. A checked item means work exists, not that every machine or version has
-been tested.
+Last updated: 2026-11-03. The tool references describe the current interfaces, and [Verification](VERIFICATION.md) holds the
+latest results. A checked item means work exists, not that every machine or version has been tested.
 
 ## Goal
 
 Give an agent one `isaac-mcp` server to inspect and operate an authorized Isaac Sim scene, use Isaac Lab, and see the
-result, while keeping workflows repeatable. The UR5e cell is the first supported robot; general scene tools and other
-robots are intended additions. Preserve the current UR5e tools and their behavior when generalizing the bridge.
+result, while keeping workflows repeatable and easy for other people to set up. The UR5e cell is the first supported
+robot; the generic tools work with other robots and scenes. Preserve the UR5e tools and their behavior when generalizing.
 
 ## What exists
 
-- [x] Host MCP server, local Kit socket bridge, tool discovery, multi-bridge selection, and the in-Kit panel.
-- [x] Shared bridge ownership: the UR5e pack and other registered packs can share a Kit endpoint and unload independently.
-- [x] UR5e tool pack: 23 tools for the robot's workstation, objects, scene state, ROS graphs and viewport recording.
-- [x] Desktop capture: screen and window screenshots, recordings, window listing and targeting.
-- [x] Isaac Lab host pack: 12 tools for installation and task discovery, jobs, checkpoints and TensorBoard data.
-- [x] Job guards for another Lab job and a reachable Kit bridge; explicit override flags are available.
-- [x] Installer, client configuration helpers, host wheel/sdist and an unpublished npm launcher.
-- [x] The October 2026 audit fixed verifier interpreter and exit-status handling, corrected the npm source, clarified
-  host installation, and stopped the installer from overwriting an unrelated ffmpeg executable.
+- [x] Host MCP server, local Kit socket bridge, tool discovery, multi-bridge selection and the in-Kit panel.
+- [x] Shared bridge ownership: packs share a Kit endpoint and unload independently.
+- [x] Generic scene and asset pack: 48 tools for stages, prims, physics, joints, cameras, LiDAR, OmniGraph, occupancy maps,
+  ROS 2 TF, Kit UI and trusted USD, URDF and USDZ projects. See [TOOLS-SCENE.md](TOOLS-SCENE.md).
+- [x] UR5e pack: 23 tools for the workstation, objects, scene state, ROS graphs and viewport recording.
+- [x] Desktop capture: screenshots, single and multi-window recording, window placement and clip joining, including on a locked desktop.
+- [x] Opt-in X11 desktop input and managed simulator sessions.
+- [x] Isaac Lab host pack: 12 tools for discovery, jobs, checkpoints and TensorBoard data, with guards against a running job or Kit bridge.
+- [x] Code-only repository with a local asset database, project files and an asset doctor. See [ASSETS.md](ASSETS.md).
+- [x] Installer that reuses an existing Isaac Sim, plus client configuration helpers, host wheel and sdist, and an unpublished npm launcher.
+- [x] ROS 2 helpers: RViz config writer, TF doctor and DDS environment script. See [ROS2-RVIZ.md](ROS2-RVIZ.md).
+- [x] Agent skill for Claude Code, Codex, OpenCode and Antigravity. See [AGENT-SKILLS.md](AGENT-SKILLS.md).
+- [x] CPU-only CI for host tests, documentation, package builds and the npm dry run.
 
 ## Verification and limits
 
-The 2026-10-30 GitHub Actions run for `66e84b4` passed 421 host tests, the documentation checks, Python package builds,
-and the npm package dry run. An isolated host wheel installation and npm launcher fetch also worked in the prior audit. On the
-home Ubuntu 24.04 / RTX 5080 machine, a headless Isaac Sim 6.2 run passed the UR5e smoke script's 20 checks and
-registered 23 twin tools; the Lab install probe found Isaac Lab 3.0 and the custom UR5e reach task. Earlier checks
-included windowed workflows and short training; see [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). The shared-bridge changes
-passed 481 local host tests and a new live UR5e baseline; no training was run.
+See the [latest live check](VERIFICATION.md#documentation-check-2026-11-03) for exact scope. On 2026-11-03 the host suite
+passed (1968 passed, 7 skipped), and on 6.2.0.0 headless PhysX, `./verify.sh` from a clean clone, `smoke_tools.py` and `validate_scene_tools.py`
+passed. A successful run is not proof of every physics invariant or of real-robot fidelity.
 
-The UR5e verifier now checks explicit scene, gravity, joint-limit, drive and motion baselines, but a successful run is
-not proof of every physics invariant or real-robot fidelity. A live Sim 6.2 run and a deliberately incorrect drive value
-were checked on the 5080 on 2026-10-30; see [VERIFICATION.md](VERIFICATION.md). `randomize_single_object` can fail
-with its fixed narrow placement strip. The GPU guards are per host process and the Kit guard only checks configured
-and advertised endpoints.
-
-The full twin launcher and environment are pinned to Isaac Sim 6.2.0.0 / Python 3.12, and current end-to-end evidence is
-for the documented Ubuntu/NVIDIA systems. The host server is separate from the simulator, but other operating systems,
-GPUs, Isaac Sim versions and installation layouts must be tested before claiming support. A prior isolated test of the
-generic bridge in Sim 5.1 is not proof that the complete twin and Lab stack support 5.1.
+Known limits: `randomize_single_object` can fail with its fixed narrow placement strip. The GPU guards are per host process, and the
+Kit guard checks only configured and advertised endpoints. Current end-to-end evidence is for the documented Ubuntu and
+NVIDIA systems; other operating systems, GPUs and builds must be tested before claiming support. Open issues per build are
+in the [compatibility matrix](COMPATIBILITY.md).
 
 ## Next work
 
-### 1. Reliable baseline and documentation
+### 1. Reliability
 
-- [x] Make the UR5e verifier assert meaningful scene, physics, drive and motion invariants; keep informational checks
-  such as regenerated checkpoint checksums clearly separate.
-- [x] Add a CPU-only CI workflow for host tests, package builds and documentation checks. The first run on `66e84b4`
-  passed. The live-simulator checklist is in [VERIFICATION.md](VERIFICATION.md).
-- [ ] Run and record the live-simulator baseline for changes to the bridge or twin, including the commit, machine and
-  dependencies. Expand the checklist as hardware and platform coverage grows.
+- [ ] Make `./verify.sh` detect a checkpoint with dead asset references instead of failing later in the motion check. See
+  [the failure it causes](VERIFICATION.md#live-ur5e-baseline).
 - [ ] Improve the `randomize_single_object` placement configuration without breaking existing defaults; test feasible
   and infeasible scenes.
-- [ ] Investigate the pre-existing `NoneType.GetCamera` viewport exception during stage reset without suppressing it.
-  The base/head reproduction and observed recovery are recorded in [VERIFICATION.md](VERIFICATION.md#windowed-viewport-reset-comparison).
-- [ ] Reconcile design notes as implementation evolves; treat the current tool references as the API
-  source of truth.
+- [ ] Investigate the `NoneType.GetCamera` viewport exception during stage reset without suppressing it. See
+  [the reproduction](VERIFICATION.md#windowed-viewport-reset-comparison).
+- [ ] Complete the final PhysX evidence review and the [unresolved fresh-Kit camera-reuse gap](evidence/project-usd-workstation/README.md).
+- [ ] Re-run the windowed workflows listed as not exercised in the latest live check.
 
-### 2. General Isaac Sim tools without breaking the twin
+### 2. General Isaac Sim tools
 
-- [x] Register the twin and other packs on one shared bridge. A temporary pack coexisted with the twin in a live 6.2
-  session, including a pack reload and twin disable/enable; see [VERIFICATION.md](VERIFICATION.md).
-- [ ] Verify each proposed API against a live headless Isaac Sim before implementation. Selected stage/prim inspection
-  building blocks passed in a non-robot 6.2 scene; other APIs and versions remain open. The
-  [generic tools draft](GENERIC-SIM-TOOLS.md) is a design, not an installed tool pack.
-- [ ] Implement and test general scene inspection, authoring, physics and capture in small stages. Re-run the UR5e
-  baseline after changes and test at least one non-UR5e scene.
-- [ ] Deliver project-folder USD discovery/import and generic scene tools using the
-  [end-to-end plan](plans/ASSET-SCENE-END-TO-END.md), with live screenshots, security checks and actual agent use.
+- [x] Register the twin and other packs on one shared bridge.
+- [x] Deliver project-folder USD discovery and import and generic scene tools.
+- [ ] Authenticated remote upload, named presets and isolation for untrusted assets remain unavailable. See the
+  [end-to-end plan](plans/ASSET-SCENE-END-TO-END.md) and [follow-ups](plans/SIM-TOOLS-FOLLOWUP.md).
 
 ### 3. Reproducibility and portability
 
-- [ ] Expand the [compatibility matrix](COMPATIBILITY.md) for the host, bridge, twin, desktop capture and Lab tools;
-  test clean installs and representative workflows on each selected target before documenting them as supported.
-- [x] Align the locked 6.2 NumPy version with the Isaac Sim kernel metadata and repeat the headless simulator and
-  ROS transform checks in a dependency-consistent environment; see the [compatibility evidence](evidence/compatibility-2026-10-31.md).
-- [ ] Repeat representative Isaac Lab jobs with installations using the updated 6.2 dependency lock.
-- [ ] Investigate asyncio task re-entry and destroyed pending tasks observed during the 6.0 and 6.1 scene checks;
-  repeat viewport and scene tests after a fix. See the [compatibility evidence](evidence/compatibility-2026-10-31.md).
-- [ ] Reproduce and address the 6.0.0.1 panel becoming undocked after an extension reload observed during the
-  compatibility checks; a fresh launch docked it normally.
-- [ ] Make Isaac Lab discovery and setup work cleanly with user-provided installations; document required paths and
-  task-module registration, and test an installation outside the developer's default layout.
-- [ ] Record the task, seed, versions, command, configuration and artifact locations needed to reproduce a Lab job;
-  check what the upstream framework already records before adding duplicate state.
-- [ ] Check downstream consumers without overwriting their local changes. Update them deliberately after the server
-  changes are verified.
+- [ ] Expand the [compatibility matrix](COMPATIBILITY.md); test clean installs and representative workflows on each
+  target before documenting it as supported. The full installer's download path has not been qualified on a clean machine.
+- [x] Align the locked 6.2 NumPy version with the Isaac Sim kernel metadata. See the [compatibility evidence](evidence/compatibility-2026-10-31.md).
+- [ ] Repeat representative Isaac Lab jobs with installations using the updated 6.2 lock.
+- [ ] Investigate asyncio task re-entry and destroyed pending tasks seen during the 6.0 and 6.1 scene checks.
+- [ ] Reproduce and address the 6.0.0.1 panel becoming undocked after an extension reload.
+- [ ] Test Isaac Lab discovery with an installation outside the developer's layout.
+- [ ] Record the task, seed, versions, command, configuration and artifacts needed to reproduce a Lab job; check what
+  the upstream framework already records first.
 - [ ] Review bridge trust boundaries and remote access before supporting shared or network-exposed deployments.
 
 ### 4. Release, when requested
 
-- [ ] Resolve the upstream `omni-kit-mcp` permission/license question and review third-party assets and notices; see
-  [VENDORING.md](VENDORING.md).
-- [ ] Decide the supported release scope, metadata and versions, and recheck package-name availability.
-- [ ] Test PyPI/npm installation paths and follow [PUBLISHING.md](PUBLISHING.md). Publishing and making the repository
-  public require the owner's instruction. Use branches and pull requests for code review.
+The repository is public. Publishing packages requires the owner's instruction.
 
-## Documents
+- [ ] Resolve the upstream `omni-kit-mcp` license question and review third-party notices. See [VENDORING.md](VENDORING.md).
+- [ ] Decide the supported release scope and versions, and recheck package-name availability.
+- [ ] Test PyPI and npm installation paths, following [PUBLISHING.md](PUBLISHING.md).
+- [ ] Publish the evidence release and demo video only after the [media checks](media/README.md#video-access-and-publication).
 
-- [UR5e tool reference](TOOLS-UR5E.md), [host and bridge tool reference](TOOLS-HOST.md), and
-  [Isaac Lab tool reference](TOOLS-ISAACLAB.md): current tools and calling examples.
-- [Architecture](ARCHITECTURE.md) and [MCP server setup](MCP-SERVER.md): processes, connection and client configuration.
-- [Isaac Lab design and implementation notes](ISAACLAB-TOOLS.md): history and job-guard details.
-- [Generic Sim tool draft](GENERIC-SIM-TOOLS.md): future design, not an implementation.
-- [Verification](VERIFICATION.md): automated and live checks, expected values, limits and the last live result.
+## Documents and entry points
 
-## Repository entry points
-
-Run these from the repository root unless noted. The default simulator launcher starts the twin tools with their
-panel hidden; opt in to the tab when needed. Use a separate port and avoid disturbing a user's existing scene when testing.
-
-| Entry point | Purpose |
-|---|---|
-| `./install.sh --no-sim` | Install the host server; `--accept-eula` without `--no-sim` also installs the pinned Sim environment. Client-registration options are in the [README](../README.md). |
-| `./run.sh --headless --port 8766` | Launch the UR5e tools and bridge; omit `--headless` for a graphical simulator, and add `--ur5e-panel` to show the twin tab. `UR5E_DT_PYTHON` selects an existing compatible Python environment. |
-| `./verify.sh` | Inspect a running UR5e scene and exercise a joint; it builds/reopens scene content. Set `UR5E_DT_PORT` to its bridge and `UR5E_DT_PYTHON` when not using the repo `.venv`. See the verification limits above. |
-| `.venv/bin/python scripts/smoke_tools.py` | Exercise the twin's bridge tools against a running sim. This changes and rebuilds the stage, so use a disposable session. |
-| `scripts/check_machine.sh` | Check the local OS, GPU, dependencies and environment for the pinned setup. |
-| `scripts/catch_hang.sh [count] [timeout]` | Repeatedly boot and quick-start the twin to investigate the historical startup hang; uses the GPU. |
-| `scripts/verify_tf.sh` / `scripts/tf_capture.py` | Inspect the twin's ROS transform topics with the matching DDS configuration. |
-| `python -m isaac_mcp.client status --port 8766` | Query a running bridge from a Python environment with `isaac_mcp` installed. See [host and bridge tools](TOOLS-HOST.md) for MCP and CLI differences. |
-| `mcp/examples/` | Examples for bridge integration and remote clients; not automatically registered as tools. |
-| `tools/` | Asset conversion and repair utilities for the RG2; inspect inputs and outputs before use. |
-
-`scripts/launch_ur_fake.sh` and `scripts/sim_bringup.sh` manage ROS driver processes and can affect the surrounding
-robot environment. Use them only for the intended authorized setup; a simulation-only task does not require starting
-a real robot driver. The `config/` directory contains the shared ROS/DDS profile and URSim configuration.
+See the [documentation index](README.md) for every page and script.

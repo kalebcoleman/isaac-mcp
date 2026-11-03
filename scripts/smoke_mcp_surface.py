@@ -6,7 +6,9 @@ tools, bridge forwarding), so it exercises the full registered surface.
     uv run --project mcp python scripts/smoke_mcp_surface.py offline
     UR5E_DT_PORT=8780 uv run --project mcp python scripts/smoke_mcp_surface.py live PLAN.json
 
-``offline`` calls the host/Isaac Lab tools that need no simulator. ``live`` runs a JSON plan
+``offline`` calls the host/Isaac Lab tools, then ``sim__stage__info`` and ``ur5e_dt__new_stage``. Those
+last two reach any lone advertised bridge, and ``new_stage`` clears its stage: stop or pin away from a
+simulator you care about first. ``live`` runs a JSON plan
 (list of {"tool": name, "args": {...}}) against the bridge selected by UR5E_DT_PORT; it changes
 the stage, so use a disposable simulator. Prints a markdown table.
 """

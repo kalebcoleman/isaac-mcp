@@ -1,7 +1,7 @@
 # Agent guide
 
 Start here if you are an AI agent working in or with this repository. It is a map; the
-per-tool reference lives in `docs/`.
+per-tool reference lives in `docs/` ([index](docs/README.md), [every tool's arguments](docs/TOOLS-ARGUMENTS.md)).
 
 ## Setup guide for agents
 
@@ -101,6 +101,10 @@ With otherwise standard settings this leaves 54 tools, offline or with a bridge.
 The 23 UR5e tools, Isaac Lab, desktop tools and optional managed `sim__launch/list/status/stop`
 tools retain their existing rules. This discovery preference is not a security boundary.
 
+`ur5e_dt__quick_start*` leaves the timeline playing, and generic edits refuse with `TIMELINE_ACTIVE` until an
+explicit `sim__timeline__control` stop. Joint tools take the articulation root (for the twin, `/World/UR5e/root_joint`,
+reported by `sim__ros2__tf_setup`), not the robot's parent Xform. See the [scene workflow](docs/TOOLS-SCENE.md#a-typical-session).
+
 Camera capture defaults to a fresh bounded renderer CPU readback. With
 `wait_for_render=false`, it writes the last validated tool-acquired image and reports its
 age; ordinary Play does not populate this cache. An unseeded camera returns `NOT_READY`.
@@ -112,13 +116,14 @@ Simulator and twin work (the bridge built-ins and `ur5e_dt__*`) needs a running 
 make sure one is up before relying on those tools. Host and Isaac Lab tools need no bridge.
 
 1. Call `refresh_tools` first. Do not start Kit yet: a reachable bridge may already exist.
-2. Discover bridges, then verify the one you mean. Do not assume a port: advertised bridges can
-   use other ports or hosts. `python -m isaac_mcp.client --list-bridges` prints every live
+2. Discover bridges, then verify the one you mean. The CLI below is standard-library only and runs from
+   the checkout root with any Python; `python -m isaac_mcp.client` works only with an interpreter that has the host installed. Do not assume a port: advertised bridges can
+   use other ports or hosts. `python3 mcp/isaac_mcp/client.py --list-bridges` prints every live
    advertised bridge as JSON (`pid`, `host`, `port`, `app`). It works even when `status` and
    `list_bridges` are hidden (they are bridge built-ins, so `ISAAC_MCP_BUILTINS=0` or
    `ISAAC_MCP_NAMESPACE` can remove them), and it exits 2 with `[]` when none is advertised.
    Probe the bridge you chose with the values from that listing:
-   `python -m isaac_mcp.client status --host <host> --port <port>` (PID, port, app version).
+   `python3 mcp/isaac_mcp/client.py status --host <host> --port <port>` (PID, port, app version).
    Without `--port` the CLI discovers a lone bridge but refuses when several are running, and an
    exported `UR5E_DT_PORT` or `ISAAC_MCP_PORT` overrides discovery. The host's `refresh_tools`
    resolves the endpoint the same way, so with several bridges or a pinned port, select the
@@ -132,7 +137,7 @@ make sure one is up before relying on those tools. Host and Isaac Lab tools need
 4. `refresh_tools` and `use_bridge` send `notifications/tools/list_changed` when they change the
    tool list (the host advertises `tools.listChanged`), so a client that honours it shows the new
    tools without a restart. If yours does not, restart the MCP connection or list the tools
-   directly: `python -m isaac_mcp.client list_tools --host <host> --port <port>` (the bridge you
+   directly: `python3 mcp/isaac_mcp/client.py list_tools --host <host> --port <port>` (the bridge you
    verified in step 2).
 
 Parallel instances are supported when explicitly requested and resource checks pass. Use distinct
@@ -190,10 +195,10 @@ See [docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md).
 ## Changing tools
 
 Every registered tool must be documented in its `docs/TOOLS-*.md` page, and the counts above
-(each tier's Tools cell, the 100 listed offline, the 7 built-ins and the 100 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
+(each tier's Tools cell, the totals and the built-ins count) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
 CI along with the host test suite (`pytest -q` from `mcp/`, see `.github/workflows/ci.yml`).
-After changing the twin tool registry, run `python3 scripts/gen_host_catalog.py --write` and commit the
-updated snapshot; `--check` and the host tests detect drift.
+After changing a tool registry or contract, run `python3 scripts/gen_host_catalog.py --write`, then
+`python3 scripts/gen_tool_reference.py --write`, and commit both results; `check_docs.py` and the host tests detect drift.
 
 Evidence must use neutral `<repo>`, `<worktree>`, `<home>` and `<sim-install>` placeholders.
 `check_docs.py` also scans tracked bytes and nested gzip/tar/zip members for private home and

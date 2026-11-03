@@ -15,7 +15,10 @@ Kit Process (Isaac Sim 6.2.0.0)
                           ├── ur5e_dt__*        catalog-listed; execute through the twin bridge
                           ├── list_bridges      running Kit bridge instances
                           ├── use_bridge        switch target port at runtime
-                          └── screenshot / screen_* / list_windows (host desktop capture)
+                          ├── sim__* / assets__*  generic scene tools, from the sim-tools extension
+                          ├── refresh_tools     rediscover tools; can wait for a starting Kit
+                          ├── isaaclab__*       Isaac Lab jobs, run on the host
+                          └── screenshot / screen_* / list_windows / move_window / tile_windows / join_videos
 ```
 
 Inside Kit, `exts/ur5e-dt` registers on the `isaac.mcp.bridge` singleton alongside other packs. The launcher sets
@@ -63,7 +66,7 @@ are not registered by this pack.
 
 ### Generic scene and assets (`sim__*`, `assets__*`)
 
-The 39 generic tools are catalog-listed by default. `assets__roots`, `assets__scan` and
+The generic tools are catalog-listed by default. `assets__roots`, `assets__scan` and
 `assets__search` execute on the host; the others require `sim-tools` in the selected Kit.
 See [scene tools](TOOLS-SCENE.md) for trusted-root configuration and runtime prerequisites,
 and [the agent tier map](../AGENTS.md#what-you-can-reach-by-tier) for counts and filters.
@@ -87,6 +90,8 @@ Set `ISAAC_MCP_ASSET_PATH` (deprecated alias `UR5E_DT_ASSET_CACHE`) and optional
 - `stop_screen_recording`: Finalizes recording and returns the path to the MP4.
 - `screen_recording_status`: Reports elapsed recording time and captured frames.
 - `screen_info`: Reports active display, attached monitors, capture directories, and recording state.
+- `move_window` / `tile_windows`: Place one window, or lay out two to six, for a recording.
+- `join_videos`: Join clips into one new MP4.
 
 Captures are written to `~/Pictures/screen-mcp/` and `~/Videos/screen-mcp/`. Screen recordings do not contain audio.
 See the [host and bridge reference](TOOLS-HOST.md) for the complete list and arguments. The separate
@@ -125,17 +130,18 @@ an Isaac Sim 5.1 process on 2026-10-30: after enabling it and setting
 The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after
 `refresh_tools` or `use_bridge` adds, updates or removes tools, so clients that honour it (Claude
 Code 2.1.314 does) show the change mid-session. If a client does not expose newly discovered tools
-after `refresh_tools`, reconnect it or use the installed host client's standard-library CLI against
+after `refresh_tools`, reconnect it or use the standard-library CLI against
 the verified bridge. List the advertised bridges first and use the host and port it reports; 8766
 below is only the twin's default port:
 
 ```bash
-python -m isaac_mcp.client --list-bridges
-python -m isaac_mcp.client status --port 8766
-python -m isaac_mcp.client run_python '{"code":"result = 1"}' --port 8766
+python3 mcp/isaac_mcp/client.py --list-bridges
+python3 mcp/isaac_mcp/client.py status --port 8766
+python3 mcp/isaac_mcp/client.py run_python '{"code":"result = 1"}' --port 8766
 ```
 
-Use the interpreter that has `isaac_mcp` installed. For a user-started Kit
+Run this from the checkout root; it needs no packages. `python -m isaac_mcp.client` is the same CLI, for an interpreter
+that has the host installed. For a user-started Kit
 process without the bridge, do not assume the host server can attach it; load
 the extension in an authorized session or start a separate process when the
 user and project rules permit it.
@@ -155,10 +161,10 @@ By default, the twin bridge binds to port **8766**. When running multiple concur
 
 ```bash
 # Terminal 1: Primary session
-UR5E_DT_PORT=8766 ./run.sh
+./run.sh --port 8766
 
 # Terminal 2: Secondary session
-UR5E_DT_PORT=8767 ./run.sh --port 8767
+./run.sh --port 8767
 ```
 
 An MCP client connected to port 8766 can switch to the second session at runtime:
@@ -182,9 +188,11 @@ variables for any client below:
   set it when the host is installed outside the checkout.
 - `ISAAC_MCP_PYTHON=<env>/bin/python` pins the Sim interpreter that `run.sh` uses.
 
+All settings are listed in [Environment variables](ENVIRONMENT.md).
+
 ### Claude Code
 
-Configure Claude Code using the `claude mcp` CLI:
+Run `./install.sh --no-sim --claude-code`, or configure it with the `claude mcp` CLI:
 
 ```bash
 claude mcp add --scope user isaac \
@@ -195,7 +203,7 @@ claude mcp add --scope user isaac \
 
 ### Claude Desktop
 
-Add the server to `~/.config/Claude/claude_desktop_config.json`:
+Add the server to `~/.config/Claude/claude_desktop_config.json`, or run `./install.sh --no-sim --claude-desktop`:
 
 ```json
 {
@@ -205,7 +213,7 @@ Add the server to `~/.config/Claude/claude_desktop_config.json`:
       "args": [],
       "env": {
         "UR5E_DT_PORT": "8766",
-        "DISPLAY": ":1"
+        "DISPLAY": ":0"
       }
     }
   }
@@ -215,7 +223,7 @@ Add the server to `~/.config/Claude/claude_desktop_config.json`:
 
 ### OpenCode
 
-Add the server to `~/.config/opencode/opencode.jsonc`:
+Add the server to `~/.config/opencode/opencode.jsonc` (`./install.sh --no-sim --print-opencode` prints an entry with your values):
 
 ```jsonc
 "isaac": {
@@ -223,7 +231,7 @@ Add the server to `~/.config/opencode/opencode.jsonc`:
   "command": ["isaac-mcp"],
   "environment": {
     "UR5E_DT_PORT": "8766",
-    "DISPLAY": ":1"
+    "DISPLAY": ":0"
   }
 }
 ```

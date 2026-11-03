@@ -365,15 +365,15 @@ qualification. Earlier CPU and native evidence retains its own source identity.
 
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
 confirm which bridge is selected before running them. This example reuses an already installed Sim 6.2 interpreter;
-set the path for your machine or omit `UR5E_DT_PYTHON` to use this repo's `.venv`.
+set the path for your machine or omit `ISAAC_MCP_PYTHON` to use this repo's `.venv`.
 
 ```bash
-export UR5E_DT_PYTHON=/path/to/isaacsim-env/bin/python
+export ISAAC_MCP_PYTHON=/path/to/isaacsim-env/bin/python
 export UR5E_DT_PORT=18766
 ./run.sh --headless --port "$UR5E_DT_PORT"
 # In another terminal after the app is ready, with the same environment:
 ./verify.sh
-"$UR5E_DT_PYTHON" scripts/smoke_tools.py
+"$ISAAC_MCP_PYTHON" scripts/smoke_tools.py
 ```
 
 `verify.sh` checks the workstation baseline: UR5e, RG2, QuickChanger and Vention scene prims; observed
@@ -410,7 +410,32 @@ The validator is [`scripts/validate_ur5e_check.py`](../scripts/validate_ur5e_che
 malformed, non-finite or out-of-range observations, and `verify.sh` exits nonzero if a check or its response fails.
 If a check fails, inspect the named result and the simulator log before changing limits.
 
+**If `single_joint_motion` fails with `'NoneType' object has no attribute 'is_homogeneous'`** on a checkout older than the
+code-only asset migration, a local git-ignored `checkpoints/ur5e-dt-workstation-person-view-portable-*.usda` still references
+`../exts/ur5e-dt/assets/...`. The verifier reuses an existing file, and the reopened `/World/UR5e` is empty. Inspect that
+file, move it aside and re-run: `./verify.sh` exports a new one from your current assets. A clean clone is not affected.
+
 ## Last live check
+
+### Documentation check (2026-11-03)
+
+Source `d721f91`, Ubuntu 24.04, RTX 5080, Isaac Sim 6.2.0.0, headless PhysX, disposable sessions on port 18766.
+
+- Host suite: **1968 passed, 7 skipped**. `check_docs.py`, a fresh-clone `./install.sh --claude-code --print-opencode` using an
+  existing Sim and a throwaway `HOME`, and the `client.py` terminal checks all worked.
+- `smoke_tools.py`: **20/20**, with the known `randomize_single_object` warning for its narrow default strip.
+- `./verify.sh` from a clean clone: **all checks passed**; elbow commanded -0.1 rad, achieved -0.0999992, returned to within 3e-9.
+  The same run from an older checkout failed as described above.
+- `validate_scene_tools.py` over real MCP: passed, 32 calls.
+- Further calls over real MCP returned the expected results: stage tree, save and open, prim create, clone, transform, find and delete,
+  graph node types, build and inspect, occupancy map, viewport frame, `sim__ui__find` and a `wait` action, lights, materials, camera create and capture,
+  LiDAR create, logs, ROS 2 TF setup, joint inspect, drive, state and command, exact stepping, body state, and URDF and path import.
+- Refusals seen as documented: `sim__graph__show` headless (`HEADLESS`), `sim__stage__open` outside home (`OUTSIDE_HOME`) and with
+  unsaved edits (`UNSAVED_CHANGES`), `sim__controller__create` without opt-in (`SCRIPT_DISABLED`).
+
+**Not exercised in this check:** windowed sessions, window input and screen recording on the desktop, `sim__lidar__read`,
+`sim__physics__configure`, `sim__stage__clear_owned`, `sim__controller__update`, `assets__prepare_workstation`, Isaac Lab jobs, external ROS 2 clients and RViz, Newton, and other Sim builds.
+The installer's `--download-sim` path was read, not run. Earlier records below remain the evidence for those areas.
 
 ### Windowed viewport reset comparison
 
@@ -433,7 +458,7 @@ was valid, rendered viewport captures succeeded, a separate ROS subscriber recei
 test cube dropped under gravity. After the third rebuild on each revision, selecting the workspace and person cameras
 produced distinct rendered images. This supports recovery for this sequence and machine; it is not proof that all
 stages, GPUs, recording states or Isaac versions recover. The exception is not suppressed, and its underlying cause
-remains [tracked in the roadmap](ROADMAP.md#1-reliable-baseline-and-documentation).
+remains [tracked in the roadmap](ROADMAP.md#1-reliability).
 
 The comparison also found that the existing real-time recorder sent every viewport redraw to ffmpeg: a roughly
 one-second recording at 10 fps produced an 11.8-second file on the base and an 8.8-second file on the original PR

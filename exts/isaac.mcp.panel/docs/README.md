@@ -10,4 +10,4 @@ Every button dispatches through `bridge.dispatch(...)` — the same entrance a
 socket request takes — so a human click and an agent call are the same code
 path by construction.
 
-See the repository root `README.md` for the full setup.
+See `mcp/README.md` at the repository root for the full setup.

@@ -1,17 +1,43 @@
 # Project USD and generic scene tools
 
-**Implementation preview; end-to-end acceptance incomplete.** Thirty-nine catalogued tools implement
+**Implementation preview; end-to-end acceptance incomplete.** These catalogued tools implement
 trusted local/shared-mount projects and explicit scene operations. Untrusted isolation, authenticated
 remote upload and named presets are **unavailable**, not silently substituted. Bounded USDZ support is available only in the trusted-project profile.
 See [evidence](evidence/project-scene/README.md) for actual tests and missing gates.
 The earlier [design](GENERIC-SIM-TOOLS.md) is broader than this implementation.
+This page describes behavior and limits. For each tool's arguments and defaults, see [Tool arguments](TOOLS-ARGUMENTS.md).
+
+## A typical session
+
+Most tools take the `session_id` and `stage_id` from `sim__stage__info`. Call it first, and again after
+anything that replaces the stage. The calls below ran against a live 6.2.0.0 headless PhysX session
+([record](VERIFICATION.md#documentation-check-2026-11-03)).
+
+1. **Identify:** `sim__stage__info`, then `sim__stage__tree` with `root="/"` and `depth=2`.
+2. **Author on a stopped timeline.** A parent must already exist, and a new stage has no `/World`, so create it first:
+   `sim__prim__create` with `path="/World"` and `kind="Xform"`, then `kind="PhysicsScene"`, `"Cube"`, and so on.
+3. **Look:** `sim__camera__create`, then `sim__camera__capture`. Output goes to `ISAAC_MCP_SCENE_OUTPUT`, which
+   defaults to a per-process temp directory; set it at Kit launch to keep results.
+4. **Run:** `sim__timeline__control` with `action="play"`, let frames pass, then `action="pause"`.
+   `sim__simulation__step` advances exact steps only while paused.
+5. **Read joints:** pass the **articulation root**, not the robot's parent Xform. On the twin that is
+   `/World/UR5e/root_joint`; `/World/UR5e` returns `PHYSICS_NOT_READY`. `sim__ros2__tf_setup` reports the root as
+   `articulation_root`.
+6. **Stop before editing again:** `action="stop"`. Authored edits refuse with `TIMELINE_ACTIVE` while playing or paused.
+7. **Keep it:** `sim__stage__save` with `filename`, and optionally a `directory` under your home. `sim__stage__open`
+   opens files under your home only.
+
+Two things to expect with the UR5e twin: `ur5e_dt__quick_start*` leaves the timeline **playing**, so call stop before generic
+edits. A first generic Play on a timeline something else started refuses with `TIMELINE_ALREADY_ACTIVE`, for the same fix.
+Helper scripts that speak MCP run as `uv run --isolated --project mcp --python 3.12 python scripts/<name>`.
 
 ## One-time approval
 
-The user runs this outside the model-facing tool interface, with the host package installed:
+The user runs this outside the model-facing tool interface:
 
 ```bash
-python -m isaac_mcp.project_assets --config /absolute/private/approval.json \
+# From the checkout root:
+uv run --isolated --project mcp --python 3.12 python -m isaac_mcp.project_assets --config /absolute/private/approval.json \
   --root-id project --root /absolute/project/assets \
   --staging /absolute/private/staging --trust-project
 ```
@@ -35,7 +61,7 @@ A missing/different mount produces an error, never an implicit transfer via `put
 
 All names below remain discoverable offline by default, subject to existing namespace filters.
 Set `ISAAC_MCP_SCENE_TOOLS=0` on the host server and restart that MCP connection to hide
-all 39 generic tools, including live bridge discovery. This per-server preference preserves
+all generic tools, including live bridge discovery. This per-server preference preserves
 UR5e, Isaac Lab, desktop and managed-session tools; it is not an enforcement boundary.
 `ISAAC_MCP_LOCAL_TOOLS` does not select these catalogued tools. `assets__roots` and
 `assets__scan` and `assets__search` execute in the host broker even without Kit. Other tools explain an absent
@@ -385,11 +411,12 @@ APIs fail explicitly. See [fork comparison](FORK-COMPARISON.md) for each narrowe
 ## Reproduce
 
 ```bash
-python scripts/make_scene_fixture.py /absolute/new-fixture
-# Approve new-fixture above, launch a disposable Sim on a free port, then:
-python scripts/scene_mcp_client.py --port 18861 assets__roots '{}'
-python scripts/scene_mcp_client.py --port 18861 sim__stage__info '{}'
-python scripts/validate_scene_tools.py --port 18861 --output /absolute/transcript.json
+python3 scripts/make_scene_fixture.py /absolute/new-fixture
+# Approve new-fixture above with --root-id fixture, launch a disposable Sim on a free port, then:
+MCPPY="uv run --isolated --project mcp --python 3.12 python"
+$MCPPY scripts/scene_mcp_client.py --port 18861 assets__roots '{}'
+$MCPPY scripts/scene_mcp_client.py --port 18861 sim__stage__info '{}'
+$MCPPY scripts/validate_scene_tools.py --port 18861 --output /absolute/transcript.json
 ```
 
 The validator expects the approved root ID `fixture`; it changes the selected disposable stage.

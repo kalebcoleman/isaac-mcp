@@ -1,11 +1,11 @@
 # Publishing isaac-mcp (PyPI and npm)
 
-Not published yet. Names `isaac-mcp` on PyPI and npm were both unclaimed on 2026-10-29: re-check first
+Not published to PyPI or npm yet. Names `isaac-mcp` on both were unclaimed on 2026-10-29: re-check first
 (`curl -s -o /dev/null -w "%{http_code}\n" https://pypi.org/pypi/isaac-mcp/json` and
 `https://registry.npmjs.org/isaac-mcp`; 404 = free).
 
 ## Before publishing
-1. `cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab pytest -q`.
+1. `cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab --extra scene-test pytest -q`.
    Record the current count and commit; see [ROADMAP.md](ROADMAP.md) for the last dated baseline.
    From the repo root also run `python3 scripts/check_docs.py` and review the latest CI result.
 2. Decide the version in `mcp/pyproject.toml` and `npm/package.json` (keep them equal).
@@ -15,8 +15,7 @@ Not published yet. Names `isaac-mcp` on PyPI and npm were both unclaimed on 2026
    sensor and material files, the Vention bench, the unused Kawasaki/RG2 scene and the Poliigon oak
    textures must not be in the public tree or its history. The Apache-2.0 and CC BY 4.0 notices are
    in `THIRD-PARTY-NOTICES.md`; see [`provenance/ASSETS.md`](provenance/ASSETS.md) for the audit.
-5. Fill in `project.urls` (repository, issues) in `mcp/pyproject.toml` once the repo is public.
-6. Make the GitHub repo public (it is private now) if the PyPI/npm pages should link to it.
+5. Fill in `project.urls` (repository, issues) in `mcp/pyproject.toml`; the repository is public.
 
 ## PyPI (Python host server)
 ```bash
@@ -41,6 +40,6 @@ npx -y isaac-mcp --version
 ## Client config after publishing
 ```json
 { "mcpServers": { "isaac": { "command": "uvx", "args": ["isaac-mcp"],
-  "env": { "DISPLAY": ":1", "UR5E_DT_PORT": "8766" } } } }
+  "env": { "DISPLAY": ":0", "UR5E_DT_PORT": "8766" } } } }
 ```
 (`DISPLAY` must match the desktop session; `UR5E_DT_PORT` is the Kit bridge port.)
