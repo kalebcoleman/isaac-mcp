@@ -234,3 +234,97 @@ def test_proxy_handles_writelines_and_is_removed_on_shutdown(kit_stubs, capsys):
     assert getattr(sys.stdout, "_isaac_mcp_proxy", False)
     bi.remove_stdout_proxy()
     assert not getattr(sys.stdout, "_isaac_mcp_proxy", False)
+
+
+def test_refresh_tools_names_managed_simulators_on_other_ports(monkeypatch):
+    # Student run 3 (lab PC): the config pinned port 8766, sim__launch used 8771, and refresh_tools
+    # kept saying "no bridge" until the agent found use_bridge on its own.
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+
+    def offline(_server):
+        raise ConnectionRefusedError("[Errno 111] Connection refused")
+
+    monkeypatch.setattr(gw, "discover_and_register_tools", offline)
+    monkeypatch.setattr(gw, "_screen_port", lambda state=None: 8766)
+    monkeypatch.setattr(gw, "live_ports", lambda env=None: [(8766, 10), (8771, 342055)])
+    message = asyncio.run(gw._refresh_tools(server))
+    assert "port 8771 (PID 342055)" in message and "use_bridge(port)" in message
+    assert "port 8766 (PID 10)" not in message
+    monkeypatch.setattr(gw, "live_ports", lambda env=None: [])
+    assert "Managed simulators" not in asyncio.run(gw._refresh_tools(server))
+
+
+def test_locked_screen_is_detected_from_loginctl_or_the_screensaver(monkeypatch):
+    import itertools
+
+    from isaac_mcp import screen
+
+    ticks = itertools.count(100, 10)  # each call is 10 s after the last: no cache hits
+
+    outputs = {}
+    monkeypatch.setattr(screen, "_LOCK_CACHE", [-1e9, False])
+    monkeypatch.setattr(screen.time, "monotonic", lambda: 0.0 + len(outputs) * 0 + next(ticks))
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1/bus")
+    monkeypatch.setattr(screen.shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+    monkeypatch.setattr(screen.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(stdout=outputs.get(cmd[0], "")))
+    monkeypatch.setenv("XDG_SESSION_ID", "3")
+    outputs.update(loginctl="yes\n")
+    assert screen._screen_locked()
+    outputs.update(loginctl="no", gdbus="(true,)")
+    assert screen._screen_locked()
+    outputs.update(gdbus="(false,)")
+    assert not screen._screen_locked()
+    monkeypatch.setattr(screen.shutil, "which", lambda cmd: None)
+    assert not screen._screen_locked()
+
+
+def test_lock_probe_is_cached_and_skips_gdbus_without_a_session_bus(monkeypatch):
+    from isaac_mcp import screen
+
+    calls = []
+    monkeypatch.setattr(screen.shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+    monkeypatch.setattr(screen.subprocess, "run",
+                        lambda cmd, **kw: calls.append(cmd[0]) or types.SimpleNamespace(stdout="(true,)"))
+    monkeypatch.delenv("XDG_SESSION_ID", raising=False)
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/nonexistent-runtime-dir")
+    monkeypatch.setattr(screen, "_LOCK_CACHE", [-1e9, False])
+    assert not screen._screen_locked() and calls == []  # no bus: no gdbus autolaunch
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1/bus")
+    assert not screen._screen_locked()  # cached for 5 s
+    monkeypatch.setattr(screen, "_LOCK_CACHE", [-1e9, False])
+    assert screen._screen_locked() and calls == ["gdbus"]
+
+
+def test_monitor_captures_warn_when_locked_and_window_captures_do_not(monkeypatch, tmp_path):
+    from mcp.server.fastmcp import FastMCP
+
+    from isaac_mcp import screen
+
+    class FakeShot:
+        size = (4, 2)
+        bgra = bytes(4 * 2 * 4)
+
+    class FakeMSS:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def grab(self, bbox):
+            return FakeShot()
+
+    monkeypatch.setattr(screen, "_screen_locked", lambda: True)
+    monkeypatch.setattr(screen, "SHOT_DIR", tmp_path)
+    monkeypatch.setattr(screen.mss, "MSS", FakeMSS)
+    monkeypatch.setattr(screen, "_bbox", lambda m=0: {"left": 0, "top": 0, "width": 4, "height": 2})
+    window = {"id": 7, "title": "Isaac Sim", "x": 0, "y": 0, "width": 4, "height": 2}
+    monkeypatch.setattr(screen, "_match_window", lambda *a, **k: window)
+    monkeypatch.setattr(screen, "_grab_window_image", lambda win: screen.PILImage.new("RGB", (4, 2)))
+    server = FastMCP("t")
+    screen.register_screen_tools(server)
+    shot = server._tool_manager._tools["screenshot"].fn
+    assert "screen is locked" in shot(monitor=1)[1]
+    assert "screen is locked" not in shot(window_id=7)[1]
