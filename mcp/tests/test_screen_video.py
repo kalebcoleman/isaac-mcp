@@ -156,14 +156,30 @@ def test_compose_cells_paints_each_window_and_survives_a_closed_one():
     red = types.SimpleNamespace(get_geometry=lambda: types.SimpleNamespace(width=4, height=2),
                                 get_image=lambda *a: types.SimpleNamespace(data=b"\x00\x00\xff\x00" * 8))
     bad = MagicMock()
-    bad.get_geometry.side_effect = XError(MagicMock(), b"\x00" * 32)
-    gone: set = set()
+    bad.get_geometry.side_effect = XError(MagicMock(), b"\x00" * 32)  # e.g. BadMatch while minimized
+    gone: dict = {}
     data = screen._compose_cells(rec, None, [red, bad], gone)
     assert len(data) == 8 * 2 * 4
     assert data[:4] == b"\x00\x00\xff\x00" and data[16:20] == b"\x00\x00\x00\x00"  # BGRX: red | black
-    assert gone == {1} and "could not be read" in rec.warnings[0]
+    assert list(gone) == [1] and gone[1] is not None and "could not be read" in rec.warnings[0]
+    # A transient failure is retried (not fatal); a destroyed window (BadWindow) is given up on.
+    screen._compose_cells(rec, None, [bad, bad], {0: 0.0, 1: 0.0})
+    from Xlib.error import BadWindow
+
+    dead = MagicMock()
+    dead.get_geometry.side_effect = BadWindow(MagicMock(), b"\x00" * 32)
     with pytest.raises(RuntimeError, match="none of the recorded windows"):
-        screen._compose_cells(rec, None, [bad, bad], {1})
+        screen._compose_cells(rec, None, [dead, dead], {})
+
+
+def test_compose_cells_skips_a_zero_pixel_cell():
+    # Review of #65: extreme aspect ratios gave a 0-wide cell and image.resize((0, 0)) ended the recording.
+    rec = screen.Recording(path=Path("x.mp4"), bbox={"width": 4, "height": 2}, fps=10, max_width=1920,
+                           proc=MagicMock(), stop=threading.Event(),
+                           windows=[{"id": 1, "title": "a"}], cells=[(0, 0, 0, 2)])
+    red = types.SimpleNamespace(get_geometry=lambda: types.SimpleNamespace(width=4, height=2),
+                                get_image=lambda *a: types.SimpleNamespace(data=b"\x00\x00\xff\x00" * 8))
+    assert len(screen._compose_cells(rec, None, [red], {})) == 4 * 2 * 4
 
 
 def test_record_loop_repeats_frames_to_keep_real_time(monkeypatch):

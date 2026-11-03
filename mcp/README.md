@@ -56,9 +56,10 @@ tool call with `window` (or `window_id`) reads that window's own pixels, so
 overlapping windows do not appear in the still or the video.
 `screenshot()` and `start_screen_recording()` with no target pick the Isaac Sim
 window when it is open (the one owned by the Kit process on the configured
-port), so the default is the sim, not the desktop. Recorded video is scaled and
-padded to the primary monitor (1920x1080 here) by default, so it is full-screen
-even when the window is covered; pass `full_screen=False` for native size.
+port), so the default is the sim, not the desktop. Window recordings keep the
+window's native size, capped at 1920 wide (`max_width`); pass `full_screen=True`
+to letterbox into the monitor's shape. Several windows can be recorded into one
+video with `window_ids=[...]` (works while the screen is locked).
 Monitor captures show the desktop as displayed, including whatever is on top.
 
 **One bridge, one port, per Kit process.** Projects register tools under a

@@ -208,26 +208,41 @@ def _read_window(disp, obj) -> tuple[int, int, bytes]:
     raise RuntimeError(f"unexpected X image layout: {len(data)} bytes for {width}x{height}")
 
 
-def _compose_cells(rec: Recording, disp, objs: list, gone: set[int]) -> bytes:
-    """One frame of a multi-window recording: each window's own pixels fitted into its cell."""
+GONE_RETRY_S = 1.0
+
+
+def _compose_cells(rec: Recording, disp, objs: list, gone: dict) -> bytes:
+    """One frame of a multi-window recording: each window's own pixels fitted into its cell.
+
+    ``gone`` maps a window index to the time it last failed, or to None once it is destroyed. A window
+    that is only minimized or on another workspace for a moment (BadMatch) is retried every second."""
+    from Xlib.error import BadDrawable, BadWindow
+
     canvas = PILImage.new("RGB", (rec.bbox["width"], rec.bbox["height"]), (0, 0, 0))
+    now = time.monotonic()
     for i, (obj, cell) in enumerate(zip(objs, rec.cells)):
-        if i in gone:
+        if i in gone and (gone[i] is None or now - gone[i] < GONE_RETRY_S):
             continue
         try:
             width, height, data = _read_window(disp, obj)
         except (XError, RuntimeError) as exc:
-            gone.add(i)
-            win = rec.windows[i]
-            rec.warnings.append(f"window {win['id']} ({win['title']}) could not be read after "
-                                f"{time.monotonic() - rec.started:.1f}s ({type(exc).__name__}); its cell is black")
+            first = i not in gone
+            gone[i] = None if isinstance(exc, (BadWindow, BadDrawable)) else now
+            if first:
+                win = rec.windows[i]
+                rec.warnings.append(f"window {win['id']} ({win['title']}) could not be read after "
+                                    f"{now - rec.started:.1f}s ({type(exc).__name__}); its cell is black"
+                                    + ("" if gone[i] is None else " until it can be read again"))
             continue
+        gone.pop(i, None)
         x, y, w, h = fit_into(width, height, cell[2], cell[3])
+        if w <= 0 or h <= 0:
+            continue  # an extreme aspect ratio left this cell no pixels
         image = _bgrx_image(width, height, data)
         if (w, h) != (width, height):
             image = image.resize((w, h), PILImage.BILINEAR)
         canvas.paste(image, (cell[0] + x, cell[1] + y))
-    if len(gone) == len(objs):
+    if len(gone) == len(objs) and all(v is None for v in gone.values()):
         raise RuntimeError("none of the recorded windows can be read any more (closed?)")
     return canvas.tobytes("raw", "BGRX")
 
@@ -239,7 +254,7 @@ def _record_loop(rec: Recording) -> None:
     disp = None
     obj = None
     objs: list = []
-    gone: set[int] = set()
+    gone: dict = {}
     windows_cache: tuple[float, list[dict]] = (0.0, [])
     try:
         if rec.windows:
@@ -251,6 +266,7 @@ def _record_loop(rec: Recording) -> None:
         else:
             sct = mss.MSS()
         width, height = rec.bbox["width"], rec.bbox["height"]
+        previous = None
         while not rec.stop.is_set():
             frame_start = time.monotonic()
             if objs:
@@ -267,18 +283,27 @@ def _record_loop(rec: Recording) -> None:
                 # Locked or blanked: the monitor is black, so compose it from the windows' own pixels.
                 if frame_start - windows_cache[0] > 1.0:
                     windows_cache = (frame_start, composite_order(_visible_windows(), _stacking()))
-                image, _painted = _composite(rec.bbox, windows_cache[1])
+                if disp is None:
+                    disp = _xdisplay()  # one connection for every window and frame
+                image, _painted = _composite(rec.bbox, windows_cache[1], disp)
                 data = image.tobytes("raw", "BGRX")
                 rec.composed_frames += 1
             else:
                 data = sct.grab(rec.bbox).bgra
             rec.captured += 1
+            # Frames due before this capture started show the previous image: repeating the new one
+            # there would make content appear early when a capture was slow.
+            before = int((frame_start - rec.started) * rec.fps)
             due = max(rec.frames + 1, int((time.monotonic() - rec.started) * rec.fps))
             try:
+                while previous is not None and rec.frames < min(before, due - 1):
+                    rec.proc.stdin.write(previous)
+                    rec.frames += 1
                 while rec.frames < due:
                     rec.proc.stdin.write(data)
                     rec.frames += 1
                 rec.proc.stdin.flush()
+                previous = data
             except (BrokenPipeError, ValueError):
                 rec.error = "ffmpeg closed the input pipe"
                 break
@@ -920,7 +945,7 @@ def composite_order(windows: list[dict], stacking: list[int]) -> list[dict]:
     return sorted(keep, key=lambda w: rank.get(w["id"], len(stacking)))
 
 
-def _composite(bbox: dict, ordered: list[dict] | None = None) -> tuple[PILImage.Image, int]:
+def _composite(bbox: dict, ordered: list[dict] | None = None, disp=None) -> tuple[PILImage.Image, int]:
     """The monitor area composed from each visible window's own pixels (works while locked).
 
     ``ordered`` is a window list already in composite_order (a recording caches it between frames)."""
@@ -933,8 +958,12 @@ def _composite(bbox: dict, ordered: list[dict] | None = None) -> tuple[PILImage.
                 or win["x"] + win["width"] <= bbox["left"] or win["y"] + win["height"] <= bbox["top"]):
             continue
         try:
-            image = _grab_window_image(win)
-        except RuntimeError:
+            if disp is not None:  # a recording passes its own connection: no new X connection per window
+                width, height, data = _read_window(disp, disp.create_resource_object("window", win["id"]))
+                image = _bgrx_image(width, height, data)
+            else:
+                image = _grab_window_image(win)
+        except (RuntimeError, XError):
             continue
         canvas.paste(image, (win["x"] - bbox["left"], win["y"] - bbox["top"]))
         painted += 1
@@ -1081,6 +1110,9 @@ def probe_video(ffmpeg: str, path: Path) -> dict:
         raise ValueError(f"{path}: ffmpeg took too long to read it") from exc
     info = parse_probe(out.stderr)
     if info is None:
+        if _VIDEO_SIZE.search(out.stderr) and "Duration: N/A" in out.stderr:
+            raise ValueError(f"{path}: the file has no duration (common for .webm from a browser recorder); "
+                             "re-encode it to mp4 first")
         raise ValueError(f"{path}: no video stream found (is it a video file?)")
     return info
 
@@ -1351,7 +1383,14 @@ def register_screen_tools(
                 for (_, _, w, h) in rects:
                     if w < 100 or h < 100:
                         raise ValueError(f"the work area {_fmt_geo(area)} is too small for {len(wins)} tiles")
-                results = [_place_window(disp, win, *rect, frame=True) for win, rect in zip(wins, rects)]
+                results = []
+                for win, rect in zip(wins, rects):
+                    try:
+                        results.append(_place_window(disp, win, *rect, frame=True))
+                    except (XError, ValueError, RuntimeError) as exc:
+                        moved = ", ".join(str(r.get("id", "?")) for r in results) or "none"
+                        raise RuntimeError(f"could not place window {win['id']} ({exc}); already moved: "
+                                           f"{moved}") from exc
             finally:
                 disp.close()
         lines = [f"tiled {len(results)} windows {layout} on monitor {monitor}, work area {_fmt_geo(area)}"
@@ -1622,10 +1661,15 @@ def register_screen_tools(
         if plan["duration"] > MAX_JOIN_SECONDS:
             raise ValueError(f"the result would be {plan['duration']:.0f} s; the limit is {MAX_JOIN_SECONDS} s")
         tmp = out.with_name(f".{out.stem}.partial-{os.getpid()}-{threading.get_ident()}.mp4")
+        try:  # claim the temporary name, so cleanup below can never delete someone else's file
+            os.close(os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+        except FileExistsError as exc:
+            raise RuntimeError(f"{tmp} already exists; remove it or retry") from exc
         timeout = join_timeout(plan["duration"])
         started = time.monotonic()
         try:
             try:
+                tmp.unlink()  # ffmpeg -n refuses an existing name; the claim only reserved it
                 proc = subprocess.run(join_command(ffmpeg, paths, plan, tmp), capture_output=True, text=True,
                                       timeout=timeout, stdin=subprocess.DEVNULL)
             except subprocess.TimeoutExpired as exc:
@@ -1637,6 +1681,12 @@ def register_screen_tools(
                 os.link(tmp, out)  # atomic and refuses an existing name, so a race cannot overwrite
             except FileExistsError as exc:
                 raise RuntimeError(f"{out} appeared while encoding; nothing was overwritten") from exc
+            except OSError:  # no hard links here (some network/AD homes, FUSE): exclusive create, then replace
+                try:
+                    os.close(os.open(out, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+                except FileExistsError as exc:
+                    raise RuntimeError(f"{out} appeared while encoding; nothing was overwritten") from exc
+                os.replace(tmp, out)
         finally:
             try:
                 tmp.unlink()
