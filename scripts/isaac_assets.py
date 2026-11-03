@@ -33,6 +33,7 @@ import os
 import secrets
 import shutil
 import struct
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -730,7 +731,7 @@ def cmd_add(args) -> int:
                         f"(needed for {rel})"
                     )
 
-        pack_dir.mkdir(parents=True, exist_ok=True)
+        _private_dirs(pack_dir)
         pins = dict(asset_cache.pins(pack_dir))
         installed = 0
         try:
@@ -781,6 +782,219 @@ def cmd_pin(args) -> int:
 # ---------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------- migrate / adopt
+
+# File types copied by ``adopt``: scene and robot descriptions, meshes, materials and
+# textures, plus layout JSON. Extend with --include.
+ADOPT_SUFFIXES = {
+    ".usd", ".usda", ".usdc", ".usdz", ".urdf", ".xacro", ".sdf", ".mjcf",
+    ".obj", ".stl", ".dae", ".fbx", ".glb", ".gltf", ".ply", ".mtl",
+    ".mdl", ".mtlx", ".png", ".jpg", ".jpeg", ".exr", ".hdr", ".tga", ".tif", ".tiff",
+}
+ADOPT_SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "build", "dist", ".tox"}
+
+
+def _private_dirs(path: Path) -> None:
+    """Create *path* (and missing parents) as 0755 and make sure the user's own store and
+    pack folders are not group- or world-writable (``assets__prepare_workstation`` refuses
+    such folders, and others must not be able to swap your assets)."""
+    missing = []
+    probe = path
+    while not probe.exists():
+        missing.append(probe)
+        probe = probe.parent
+    for folder in reversed(missing):
+        os.mkdir(folder, 0o755)
+    for folder in (path.parent, path):
+        try:
+            st = folder.stat()
+        except OSError:
+            continue
+        if st.st_uid == os.getuid() and st.st_mode & 0o022:
+            os.chmod(folder, st.st_mode & ~0o022 & 0o7777)
+            print(f"note: removed group/world write permission from {folder}")
+
+
+def _install_many(sources: dict[str, Path], pack_dir: Path, force: bool, pin: bool) -> tuple[int, int]:
+    """Copy ``rel -> source`` into ``pack_dir`` safely. Returns (added, identical).
+
+    A destination that already holds the same bytes is skipped. One that differs is a
+    conflict: everything is checked first, and nothing is copied unless ``force``.
+    """
+    conflicts, todo, identical = [], {}, 0
+    for rel in sorted(sources):
+        try:
+            rel.encode("utf-8")
+        except UnicodeEncodeError:
+            raise CliError(f"file name is not valid UTF-8: {rel!r}") from None
+        target = pack_dir / rel
+        if target.is_symlink() or _inside_repo(target.parent):
+            raise CliError(f"refusing unsafe destination: {target}")
+        if target.exists():
+            if not target.is_file():
+                raise CliError(f"refusing destination: {target} exists and is not a file")
+            if sha256(target) == sha256(sources[rel]):
+                identical += 1
+                continue
+            conflicts.append(rel)
+        todo[rel] = sources[rel]
+    if conflicts and not force:
+        shown = "\n".join(f"  {pack_dir / rel}" for rel in conflicts[:10])
+        more = f"\n  ... and {len(conflicts) - 10} more" if len(conflicts) > 10 else ""
+        raise CliError(f"different files already in the asset folder (use --force to replace):\n{shown}{more}")
+    _private_dirs(pack_dir)
+    pins = dict(asset_cache.pins(pack_dir))
+    added = 0
+    try:
+        for rel in sorted(todo):
+            _install_file(todo[rel], rel, pack_dir, force)
+            if pin:
+                pins[rel] = sha256(pack_dir / rel)
+            added += 1
+    finally:
+        if added and pin:
+            _write_pins(pack_dir, pins)
+    return added, identical
+
+
+def _legacy_checkout_assets(checkout: Path, rev: str | None, scratch: Path) -> Path | None:
+    """Return a folder with the checkout's old ``exts/ur5e-dt/assets`` content.
+
+    The working tree is used when it still has files; otherwise the folder is extracted
+    from git history (``rev``, default: the last commit before it was removed).
+    """
+    folder = checkout / "exts" / "ur5e-dt" / "assets"
+    if folder.is_dir() and any(p.is_file() for p in folder.rglob("*")) and rev is None:
+        return folder
+    if not (checkout / ".git").exists():
+        return None
+    try:
+        if rev is None:
+            last = subprocess.run(
+                ["git", "-C", str(checkout), "rev-list", "-n", "1", "HEAD", "--", "exts/ur5e-dt/assets"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            if not last:
+                return None
+            listed = subprocess.run(
+                ["git", "-C", str(checkout), "ls-tree", "-r", "--name-only", last, "--", "exts/ur5e-dt/assets"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            rev = last if listed else f"{last}^"
+        archive = scratch / "legacy.tar"
+        with archive.open("wb") as out:
+            subprocess.run(
+                ["git", "-C", str(checkout), "archive", "--format=tar", rev, "--", "exts/ur5e-dt/assets"],
+                stdout=out, check=True,
+            )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        raise CliError(f"cannot read old assets from git history of {checkout}: {exc}") from exc
+    target = scratch / "legacy"
+    _extract_archive(archive, target, Limits(DEFAULT_MAX_MEMBERS, DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_TOTAL_BYTES))
+    found = target / "exts" / "ur5e-dt" / "assets"
+    return found if found.is_dir() else None
+
+
+def _store_files(store: Path) -> dict[str, Path]:
+    """Files of an old store (pack folder and flat layout), keyed by their pack-relative path."""
+    found: dict[str, Path] = {}
+    pack = store / asset_cache.PACK
+    for root, prefix in ((store, ""), (pack, "")):
+        if not root.is_dir():
+            continue
+        for current, dirs, files in os.walk(root, followlinks=False):
+            dirs[:] = [d for d in dirs if not (Path(current) / d).is_symlink()
+                       and not (root == store and Path(current) == store and d == asset_cache.PACK)]
+            for name in files:
+                path = Path(current) / name
+                if name == asset_cache.PINS_FILE or path.is_symlink() or not path.is_file():
+                    continue
+                found[prefix + path.relative_to(root).as_posix()] = path
+    return found
+
+
+def cmd_migrate(args) -> int:
+    store, pack_dir = _pack_dir(args.store, asset_cache.PACK)
+    checkout = Path(args.from_checkout).expanduser().resolve() if args.from_checkout else asset_cache.REPO_ROOT
+    sources: dict[str, Path] = {}
+    origins: dict[str, str] = {}
+    scratch = Path(tempfile.mkdtemp(prefix="isaac-assets-migrate-"))
+    try:
+        legacy = _legacy_checkout_assets(checkout, args.git_rev, scratch)
+        if legacy is not None:
+            for current, dirs, files in os.walk(legacy, followlinks=False):
+                for name in files:
+                    path = Path(current) / name
+                    if path.is_symlink() or not path.is_file() or name.endswith(".pyc"):
+                        continue
+                    rel = _clean_relpath(path.relative_to(legacy).as_posix(), "file name")
+                    sources[rel], origins[rel] = path, "checkout"
+        for old in [] if args.no_legacy_stores else asset_cache.legacy_stores():
+            if old.resolve() == store.resolve():
+                continue
+            for rel, path in _store_files(old).items():
+                rel = _clean_relpath(rel, "file name")
+                sources.setdefault(rel, path)
+                origins.setdefault(rel, str(old))
+        if not sources:
+            print("nothing to migrate: no old in-repo assets or old asset folders found")
+            return 0
+        print(f"migrating {len(sources)} file(s) into {pack_dir}")
+        if args.dry_run:
+            for rel in sorted(sources):
+                print(f"  {rel}  (from {origins[rel]})")
+            return 0
+        # Files the manifest downloads from NVIDIA stay manifest-verified; everything else
+        # is pinned as the user's own copy.
+        nvidia = {e.get("cache_path", e["target"]) for g in asset_cache.manifest().get("fetch", []) for e in g.get("files", [])}
+        own = {rel: p for rel, p in sources.items() if rel not in nvidia}
+        public = {rel: p for rel, p in sources.items() if rel in nvidia}
+        a1, i1 = _install_many(own, pack_dir, args.force, pin=True)
+        a2, i2 = _install_many(public, pack_dir, args.force, pin=False)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    print(f"added {a1 + a2}, already present {i1 + i2}; check with `isaac_assets.py doctor`")
+    return 0
+
+
+def _adopt_sources(root: Path, suffixes: set[str]) -> dict[str, Path]:
+    found: dict[str, Path] = {}
+    for current, dirs, files in os.walk(root, followlinks=False):
+        dirs[:] = sorted(d for d in dirs if d not in ADOPT_SKIP_DIRS and not d.startswith(".")
+                         and not (Path(current) / d).is_symlink())
+        for name in files:
+            path = Path(current) / name
+            if path.suffix.lower() not in suffixes or path.is_symlink() or not path.is_file():
+                continue
+            found[_clean_relpath(path.relative_to(root).as_posix(), "file name")] = path
+    return found
+
+
+def cmd_adopt(args) -> int:
+    src = Path(args.src).expanduser().resolve()
+    if not src.is_dir():
+        raise CliError(f"not a folder: {src}")
+    pack = args.pack or src.name
+    _clean_relpath(pack, "pack name")
+    if pack != asset_cache.PACK and "/" in pack:
+        raise CliError("--pack must be a single folder name")
+    store, pack_dir = _pack_dir(args.store, pack)
+    suffixes = ADOPT_SUFFIXES | {("." + e.lstrip(".")).lower() for e in (args.include or [])}
+    sources = _adopt_sources(src, suffixes)
+    if not sources:
+        print(f"no asset files found in {src}")
+        return 0
+    total = sum(p.stat().st_size for p in sources.values())
+    print(f"{len(sources)} asset file(s), {total / 1048576:.1f} MB, from {src} into {pack_dir}")
+    if args.dry_run:
+        for rel in sorted(sources):
+            print(f"  {rel}")
+        return 0
+    added, identical = _install_many(sources, pack_dir, args.force, pin=True)
+    print(f"added {added}, already present {identical}; pins in {pack_dir / asset_cache.PINS_FILE}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="isaac_assets.py", description="Inspect and populate asset stores."
@@ -826,6 +1040,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="expanded size limit for the whole archive (default: %(default)s)",
     )
     add.set_defaults(func=cmd_add)
+
+    migrate = sub.add_parser(
+        "migrate", help="move assets from an older checkout and old asset folders into the asset folder"
+    )
+    migrate.add_argument("--from", dest="from_checkout", metavar="CHECKOUT",
+                         help="older isaac-mcp checkout (default: this one)")
+    migrate.add_argument("--git-rev", metavar="REV",
+                         help="read exts/ur5e-dt/assets from this commit instead of the working tree")
+    migrate.add_argument("--store", metavar="DIR", help="asset folder (default: the primary one)")
+    migrate.add_argument("--no-legacy-stores", action="store_true",
+                         help="skip ~/.cache/ur5e-dt/assets and <workspace>/assets")
+    migrate.add_argument("--dry-run", action="store_true")
+    migrate.add_argument("--force", action="store_true", help="replace different files")
+    migrate.set_defaults(func=cmd_migrate)
+
+    adopt = sub.add_parser("adopt", help="copy the asset files of a project folder (e.g. a cloned repo) into the asset folder")
+    adopt.add_argument("src", metavar="FOLDER")
+    adopt.add_argument("--pack", help="folder name inside the asset folder (default: the project folder's name)")
+    adopt.add_argument("--store", metavar="DIR", help="asset folder (default: the primary one)")
+    adopt.add_argument("--include", action="append", metavar="EXT", help="also copy files with this extension")
+    adopt.add_argument("--dry-run", action="store_true")
+    adopt.add_argument("--force", action="store_true", help="replace different files")
+    adopt.set_defaults(func=cmd_adopt)
 
     pin = sub.add_parser("pin", help="regenerate SHA256SUMS for a pack folder")
     pin.add_argument("--store", metavar="DIR")

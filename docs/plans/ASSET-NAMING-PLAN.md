@@ -94,3 +94,13 @@ Every step keeps `scripts/check_docs.py` and the tool counts passing.
    UR5e-specific (workstation, robot loading)? **[unverified]** I did not audit the modules.
 4. How long do deprecated aliases stay?
 5. Should the project file also set non-asset settings (port, pack list)?
+
+## Update: code-only repository (single local asset database)
+
+The repository no longer ships any assets. Each machine keeps one asset folder,
+`isaac-mcp-assets` next to the checkout (or `<workspace>/isaac-mcp-assets`), as its local asset
+database: the lab files, NVIDIA's public files, the gripper, objects and layouts all live there,
+and `scripts/isaac_assets.py` gains `migrate` (from an older checkout, even from git history,
+and from old asset folders) and `adopt` (copy a cloned project's assets into their own pack). The
+in-repo drop-in layer is gone; `<workspace>/assets` and `~/.cache/ur5e-dt/assets` are read only
+as fallbacks while they exist. See [ASSETS.md](../ASSETS.md).

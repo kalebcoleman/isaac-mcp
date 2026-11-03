@@ -61,7 +61,7 @@ def test_prepare_preserves_sources_and_relative_dependencies(fixture):
     result = scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
     assert result["prepared"] and result["loaded"] is False
     assert result["next_tool"] == "ur5e_dt__load_workstation"
-    output = cache / "workstation" / "vention.usd"
+    output = cache / "ur5e-dt" / "workstation" / "vention.usd"
     assert output.is_file()
     prepared = Usd.Stage.Open(str(output))
     assert prepared and prepared.GetDefaultPrim()
@@ -120,7 +120,7 @@ def test_missing_mdl_texture_is_not_reported_as_prepared(fixture):
             snap["manifest_sha256"],
             "/World/Imported",
         )
-    assert not (cache / "workstation" / "vention.usd").exists()
+    assert not (cache / "ur5e-dt" / "workstation" / "vention.usd").exists()
 
 
 def test_materialx_nested_include_and_texture_are_checked(fixture):
@@ -174,7 +174,7 @@ def test_missing_or_unsupported_nested_mdl_resources_fail(fixture, material, exp
     snap = broker.snapshot("project", "workstation.usda")
     with pytest.raises(AssetError, match=expected):
         scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
-    assert not (cache / "workstation" / "vention.usd").exists()
+    assert not (cache / "ur5e-dt" / "workstation" / "vention.usd").exists()
 
 
 def test_materialx_cannot_hide_unchecked_nested_mdl(fixture):
@@ -193,7 +193,7 @@ def test_materialx_cannot_hide_unchecked_nested_mdl(fixture):
     snap = broker.snapshot("project", "workstation.usda")
     with pytest.raises(AssetError, match="Nested material or scene"):
         scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
-    assert not (cache / "workstation" / "vention.usd").exists()
+    assert not (cache / "ur5e-dt" / "workstation" / "vention.usd").exists()
 
 
 def test_materialx_reported_as_usd_layer_is_still_checked(fixture, monkeypatch):
@@ -223,7 +223,7 @@ def test_materialx_reported_as_usd_layer_is_still_checked(fixture, monkeypatch):
     monkeypatch.setattr(UsdUtils, "ComputeAllDependencies", materialx_as_layer)
     with pytest.raises(AssetError, match="Missing MaterialX dependency"):
         scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
-    assert not (cache / "workstation" / "vention.usd").exists()
+    assert not (cache / "ur5e-dt" / "workstation" / "vention.usd").exists()
 
 
 @pytest.mark.parametrize("reported_as", ["resolved", "unresolved"])
@@ -274,7 +274,7 @@ def test_unsupported_mdl_texture_is_not_silently_accepted(fixture, expression):
     snap = broker.snapshot("project", "workstation.usda")
     with pytest.raises(AssetError, match="unsupported|validated|network"):
         scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
-    assert not (cache / "workstation" / "vention.usd").exists()
+    assert not (cache / "ur5e-dt" / "workstation" / "vention.usd").exists()
 
 
 def test_missing_dependency_never_publishes(fixture):
@@ -283,7 +283,7 @@ def test_missing_dependency_never_publishes(fixture):
     snap = broker.snapshot("project", "workstation.usda")
     with pytest.raises(AssetError, match="dependencies"):
         scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
-    assert not (cache / "workstation" / "vention.usd").exists()
+    assert not (cache / "ur5e-dt" / "workstation" / "vention.usd").exists()
 
 
 def test_unapproved_and_symlink_paths_are_rejected(fixture, tmp_path):
@@ -303,9 +303,10 @@ def test_existing_file_and_cache_inside_project_are_not_overwritten(
 ):
     project, cache, broker, scene = fixture
     snap = broker.snapshot("project", "workstation.usda")
-    existing = cache / "workstation" / "vention.usd"
+    existing = cache / "ur5e-dt" / "workstation" / "vention.usd"
     existing.parent.mkdir(mode=0o700, parents=True)
     cache.chmod(0o700)
+    (cache / "ur5e-dt").chmod(0o700)
     existing.write_bytes(b"keep me")
     with pytest.raises(AssetError, match="already exists"):
         scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
@@ -327,9 +328,9 @@ def test_prepare_writes_to_the_first_store_of_asset_path(fixture, tmp_path, monk
     first, second = tmp_path / "store-a", tmp_path / "store-b"
     monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", f"{first}{os.pathsep}{second}")
     assert _prepare(project, broker, scene)["prepared"]
-    assert (first / "workstation" / "vention.usd").is_file()
-    assert not (second / "workstation").exists()
-    assert not (legacy_cache / "workstation").exists()
+    assert (first / "ur5e-dt" / "workstation" / "vention.usd").is_file()
+    assert not (second / "ur5e-dt").exists()
+    assert not (legacy_cache / "ur5e-dt" / "workstation").exists()
 
 
 def test_prepare_uses_the_workspace_assets_folder_when_nothing_else_is_set(
@@ -343,5 +344,17 @@ def test_prepare_uses_the_workspace_assets_folder_when_nothing_else_is_set(
     (workspace / "assets").mkdir(mode=0o700)  # the tool refuses group/world-writable stores
     monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
     assert _prepare(project, broker, scene)["prepared"]
-    assert (workspace / "assets" / "workstation" / "vention.usd").is_file()
-    assert not (legacy_cache / "workstation").exists()
+    assert (workspace / "assets" / "ur5e-dt" / "workstation" / "vention.usd").is_file()
+    assert not (legacy_cache / "ur5e-dt" / "workstation").exists()
+
+
+def test_prepare_defaults_to_the_asset_folder_next_to_the_checkout(fixture, tmp_path, monkeypatch):
+    import sim_tools.core as core
+
+    project, legacy_cache, broker, scene = fixture
+    for name in ("UR5E_DT_ASSET_CACHE", "ISAAC_MCP_ASSET_PATH", "ISAAC_MCP_WORKSPACE"):
+        monkeypatch.delenv(name, raising=False)
+    fake_core = tmp_path / "checkout" / "exts" / "sim-tools" / "sim_tools" / "core.py"
+    monkeypatch.setattr(core, "__file__", str(fake_core))
+    assert _prepare(project, broker, scene)["prepared"]
+    assert (tmp_path / "isaac-mcp-assets" / "ur5e-dt" / "workstation" / "vention.usd").is_file()

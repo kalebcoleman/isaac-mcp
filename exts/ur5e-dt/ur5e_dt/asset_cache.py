@@ -1,37 +1,39 @@
-"""Resolve UR5e twin assets that cannot live in the public repository.
+"""Resolve UR5e twin assets from the user's local asset folder.
 
-The twin ships only assets whose licences permit redistribution (see
-``docs/provenance/ASSETS.md``).  The NVIDIA UR5e and RealSense models and the
-Vention bench are resolved in this order:
+The repository ships no assets. Every asset the twin uses (the lab robot and bench,
+NVIDIA's public robot and sensor files, the gripper, the FMB objects and their layouts)
+lives in a local asset folder that each user builds up and that is never pushed to
+GitHub. Lookup order:
 
-1. Project stores — the ``asset_path`` of the nearest ``isaac-mcp.json`` (see
-   ``docs/ASSETS.md``).  They let one project override an asset without touching
-   anything else.
-2. ``exts/ur5e-dt/assets/<path>`` — a local drop-in.  The excluded paths are
-   git-ignored, so an operator can place their own licensed copy here.  A
-   drop-in is used as-is: it may come from another Isaac Sim release, so it is
-   not compared with the manifest hashes.
-3. User stores — ``$ISAAC_MCP_ASSET_PATH`` (an ``os.pathsep``-separated list; without it,
-   ``<workspace>/assets`` when ``$ISAAC_MCP_WORKSPACE`` is set and that folder exists, then
-   the old default ``~/.cache/ur5e-dt/assets``), populated by
-   ``scripts/fetch_ur5e_assets.py`` or ``scripts/isaac_assets.py add``.  Inside
-   a store an asset is looked up under ``<store>/ur5e-dt/<path>`` (the pack
-   folder, preferred) and then ``<store>/<path>`` (the flat legacy layout).
-4. The pinned NVIDIA asset root for entries listed under ``remote`` in
-   ``assets-manifest.json``.
+1. Project stores: the ``asset_path`` of the nearest ``isaac-mcp.json`` (see
+   ``docs/ASSETS.md``), so one project can override an asset without touching anything
+   else.
+2. User stores: ``$ISAAC_MCP_ASSET_PATH`` (an ``os.pathsep``-separated list). Without it,
+   the asset folder ``isaac-mcp-assets`` next to the checkout (or
+   ``<workspace>/isaac-mcp-assets`` when ``$ISAAC_MCP_WORKSPACE`` is set), followed by
+   older locations that still exist (``<workspace>/assets``, ``~/.cache/ur5e-dt/assets``)
+   so nothing stops resolving while it is migrated. Inside a store an asset is looked up
+   under ``<store>/ur5e-dt/<path>`` (the pack folder, preferred) and then
+   ``<store>/<path>`` (the flat legacy layout). ``scripts/isaac_assets.py`` adds, adopts
+   and migrates files into the folder; ``scripts/fetch_ur5e_assets.py`` downloads NVIDIA's
+   public files into it.
+3. The pinned NVIDIA asset root for entries listed under ``remote`` in
+   ``assets-manifest.json``, unless strict mode refuses it.
 
 A file in a store is verified before use.  If the folder that holds it has a
-``SHA256SUMS`` file listing the file, that user pin decides (a lab-modified
-robot differs from NVIDIA's, so the NVIDIA manifest hash would wrongly reject
-it).  Otherwise a file listed in the manifest, and every file of the same
-fetch group, is checked against its recorded size and SHA-256.
+``SHA256SUMS`` file listing the file, that user pin decides (a lab-modified robot
+differs from NVIDIA's, so the NVIDIA manifest hash would wrongly reject it).  Otherwise
+a file listed in the manifest, and every file of the same fetch group, is checked
+against its recorded size and SHA-256.
 
-Set ``ISAAC_MCP_ASSET_STRICT=1`` (or ``"strict": true`` in the project file) to
-refuse the remote fallback: a missing asset then raises :class:`AssetMissing`
-with guidance instead of returning a URL.  The older ``UR5E_DT_ASSET_CACHE``,
-``UR5E_DT_ASSET_ROOT`` and ``UR5E_DT_OFFLINE`` names still work as deprecated
-aliases of ``ISAAC_MCP_ASSET_PATH``, ``ISAAC_MCP_ASSET_REMOTE_ROOT`` and
-``ISAAC_MCP_ASSET_STRICT``.
+Set ``ISAAC_MCP_ASSET_STRICT=1`` (or ``"strict": true`` in the project file) to refuse
+the remote fallback: a missing asset then raises :class:`AssetMissing` with guidance
+instead of returning a URL.  The older ``UR5E_DT_ASSET_CACHE``, ``UR5E_DT_ASSET_ROOT``
+and ``UR5E_DT_OFFLINE`` names still work as deprecated aliases of
+``ISAAC_MCP_ASSET_PATH``, ``ISAAC_MCP_ASSET_REMOTE_ROOT`` and ``ISAAC_MCP_ASSET_STRICT``.
+
+Files under the extension's own ``assets/`` folder are no longer used; run
+``scripts/isaac_assets.py migrate`` to move them into the asset folder.
 
 Local files are returned as ``file://`` URIs and the remote fallback as an
 ``https://`` URI.  Isaac Sim's asset resolver accepts both.  This module uses
@@ -51,7 +53,11 @@ LOG = logging.getLogger(__name__)
 
 # exts/ur5e-dt/ur5e_dt/asset_cache.py -> exts/ur5e-dt
 EXT_DIR = Path(__file__).resolve().parents[1]
+# Legacy in-repo asset folder: no longer searched; ``isaac_assets.py migrate`` reads it.
 ASSETS_DIR = EXT_DIR / "assets"
+# exts/ur5e-dt -> exts -> <checkout>
+REPO_ROOT = EXT_DIR.parents[1]
+STORE_NAME = "isaac-mcp-assets"
 MANIFEST_PATH = EXT_DIR / "assets-manifest.json"
 
 DEFAULT_ASSET_ROOT = (
@@ -81,36 +87,39 @@ _WARNED: set[str] = set()
 
 
 class AssetMissing(FileNotFoundError):
-    """Raised when an asset is neither bundled, stored, nor available remotely."""
+    """Raised when an asset is neither in the asset folder nor allowed to come from NVIDIA."""
 
     def __init__(self, relpath: str, *, offline: bool = False):
         self.relpath = relpath
-        candidates = [str(ASSETS_DIR / relpath), str(cached_path(relpath))]
+        primary = cache_dir()
         remote = remote_uri(relpath)
         heading = "Asset not available offline" if offline else "Asset not available"
         lines = [
             f"{heading}: {relpath}",
-            f"  bundled: {candidates[0]}",
-            f"  cache:   {candidates[1]}",
-            f"  stores:  {', '.join(str(s) for s in stores())}",
-            f"  remote:  {remote or '(none: this asset must be supplied locally)'}",
+            f"  expected at: {primary / PACK / relpath}",
+            f"  searched:    {', '.join(str(s) for s in stores())}",
+            f"  remote:      {remote or '(none: this asset must be supplied locally)'}",
         ]
         if offline:
             lines.append(
-                f"{STRICT_ENV} (or {OFFLINE_ENV}) is set but no local copy exists. Run "
-                "`python3 scripts/fetch_ur5e_assets.py` while online, or unset "
-                f"{STRICT_ENV} to allow the remote fallback."
+                f"Strict mode ({STRICT_ENV}=1, or {OFFLINE_ENV}) refuses loading it from "
+                "NVIDIA's server. Download NVIDIA's public copy into the asset folder with "
+                "`python3 scripts/fetch_ur5e_assets.py`, add your own copy with "
+                "`python3 scripts/isaac_assets.py add <file-or-archive>`, or set "
+                f"{STRICT_ENV}=0 to allow the online fallback."
             )
         elif remote:
             lines.append(
-                "Run `python3 scripts/fetch_ur5e_assets.py` to populate the cache, or set "
-                f"{PATH_ENV} to a directory that contains this file."
+                "Run `python3 scripts/fetch_ur5e_assets.py` to download it into the asset "
+                "folder, or `python3 scripts/isaac_assets.py add <file-or-archive>` to use your "
+                f"own copy (set {PATH_ENV} to choose another folder)."
             )
         else:
             lines.append(
-                f"Place your licensed copy at {PACK}/{relpath} inside a store, e.g. "
-                f"`python3 scripts/isaac_assets.py add <file-or-archive>` (stores are "
-                f"listed above; set {PATH_ENV} to choose one)."
+                "This asset must be supplied locally. Add it with "
+                "`python3 scripts/isaac_assets.py add <file-or-archive>` (it lands at "
+                f"{PACK}/{relpath} in the asset folder), or move assets from an older "
+                "checkout with `python3 scripts/isaac_assets.py migrate`."
             )
         super().__init__("\n".join(lines))
 
@@ -205,35 +214,68 @@ def project_stores() -> list[Path]:
     return [(root / Path(e).expanduser()).resolve() for e in entries if e.strip()]
 
 
-def _default_store() -> Path:
+def _legacy_cache() -> Path:
     xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
     base = Path(xdg).expanduser() if xdg else Path.home() / ".cache"
     return (base / "ur5e-dt" / "assets").resolve()
 
 
+def default_store() -> Path:
+    """Return the asset folder used when nothing is configured.
+
+    ``<workspace>/isaac-mcp-assets`` when ``$ISAAC_MCP_WORKSPACE`` is set, otherwise the
+    ``isaac-mcp-assets`` folder next to the checkout. It need not exist yet: ``add``,
+    ``migrate`` and the fetch script create it.
+    """
+    raw = os.environ.get(WORKSPACE_ENV, "").strip()
+    if raw:
+        return (Path(raw).expanduser() / STORE_NAME).resolve()
+    return (REPO_ROOT.parent / STORE_NAME).resolve()
+
+
 def workspace_store() -> Path | None:
-    """Return ``<workspace>/assets`` when ``$ISAAC_MCP_WORKSPACE`` names a folder that has one."""
+    """Return the workspace's asset folder when ``$ISAAC_MCP_WORKSPACE`` is set and one exists.
+
+    ``<workspace>/isaac-mcp-assets`` is preferred; ``<workspace>/assets`` (the older name)
+    is accepted when only it exists.
+    """
     raw = os.environ.get(WORKSPACE_ENV, "").strip()
     if not raw:
         return None
-    store = (Path(raw).expanduser() / "assets").resolve()
-    return store if store.is_dir() else None
+    for name in (STORE_NAME, "assets"):
+        store = (Path(raw).expanduser() / name).resolve()
+        if store.is_dir():
+            return store
+    return None
+
+
+def legacy_stores() -> list[Path]:
+    """Older default locations that still exist and are still read (never written)."""
+    found = []
+    raw = os.environ.get(WORKSPACE_ENV, "").strip()
+    if raw:
+        old = (Path(raw).expanduser() / "assets").resolve()
+        if old.is_dir():
+            found.append(old)
+    cache = _legacy_cache()
+    if cache.is_dir():
+        found.append(cache)
+    return found
 
 
 def user_stores() -> list[Path]:
-    """Return the user's stores.
+    """Return the user's stores, the primary (write) store first.
 
     ``$ISAAC_MCP_ASSET_PATH`` (or its deprecated alias) replaces the defaults. Without it
-    the stores are ``<workspace>/assets`` (if ``$ISAAC_MCP_WORKSPACE`` points at a
-    workspace that has one) followed by the old default cache, so nothing that already
-    lives in ``~/.cache/ur5e-dt/assets`` stops resolving.
+    the primary store is :func:`default_store` (or an existing workspace folder), followed
+    by any older locations that still exist.
     """
     raw = _env(PATH_ENV, CACHE_ENV)
     found = [Path(p).expanduser().resolve() for p in raw.split(os.pathsep) if p.strip()]
     if found:
         return found
-    workspace = workspace_store()
-    return ([workspace] if workspace else []) + [_default_store()]
+    primary = workspace_store() or default_store()
+    return [primary] + [p for p in legacy_stores() if p != primary]
 
 
 def stores() -> list[Path]:
@@ -242,9 +284,9 @@ def stores() -> list[Path]:
 
 
 def cache_dir() -> Path:
-    """Return the operator asset cache, the store the fetch script writes to.
+    """Return the primary asset folder: the first user store, where new files are written.
 
-    It is the first user store and is never inside the repository by default.
+    It is never inside the repository by default.
     """
     return user_stores()[0]
 
@@ -284,7 +326,6 @@ def _search_bases() -> list[tuple[Path, str]]:
     found: list[tuple[Path, str]] = []
     for store in project_stores():
         found.extend((base, "project") for base in _bases(store))
-    found.append((ASSETS_DIR, "dropin"))
     for store in user_stores():
         found.extend((base, "store") for base in _bases(store))
     return found
@@ -293,15 +334,13 @@ def _search_bases() -> list[tuple[Path, str]]:
 def _locate(relpath: str) -> tuple[Path, str, Path] | None:
     """Return ``(file, layer, base)`` for the first local copy of *relpath*."""
     for base, layer in _search_bases():
-        names = [relpath]
-        if layer != "dropin":
-            # A manifest-tracked asset must sit at its canonical layout, because its
-            # sublayers use relative references. A file at the logical name is only
-            # accepted when the user pinned it.
-            canonical = _cache_relative(relpath).as_posix()
-            names = [canonical]
-            if canonical != relpath and pins(base).get(relpath):
-                names.append(relpath)
+        # A manifest-tracked asset must sit at its canonical layout, because its
+        # sublayers use relative references. A file at the logical name is only
+        # accepted when the user pinned it.
+        canonical = _cache_relative(relpath).as_posix()
+        names = [canonical]
+        if canonical != relpath and pins(base).get(relpath):
+            names.append(relpath)
         for name in names:
             candidate = base / name
             if candidate.is_file():
@@ -455,7 +494,7 @@ def _recover_base(relpath: str, path: Path) -> Path | None:
     """
     located = _locate(relpath)
     if located is not None and located[0].resolve() == path.resolve():
-        return None if located[1] == "dropin" else located[2]
+        return located[2]
     bases = _containing_bases(path)
     if not bases:
         return None
@@ -532,9 +571,8 @@ def verify_local(relpath: str, path: Path, base: Path | None = None) -> None:
 
 
 def _verify_located(relpath: str, found: tuple[Path, str, Path]) -> None:
-    path, layer, base = found
-    if layer != "dropin":
-        verify_local(relpath, path, base)
+    path, _layer, base = found
+    verify_local(relpath, path, base)
 
 
 def _verify_entry(relpath: str, path: Path, entry: dict | None) -> None:
@@ -608,7 +646,7 @@ def resolve_dir(relpath: str) -> Path:
 def resolve_info(relpath: str) -> dict:
     """Describe where *relpath* resolves from, without raising.
 
-    Returns ``relpath``, ``layer`` (``project``, ``dropin``, ``store``,
+    Returns ``relpath``, ``layer`` (``project``, ``store``,
     ``remote`` or ``missing``), ``status`` (``ok``, ``pinned``, ``unpinned``,
     ``remote``, ``corrupt`` or ``missing``), and, when known, ``path`` or
     ``uri``, ``sha256`` and ``detail``.
@@ -623,9 +661,7 @@ def resolve_info(relpath: str) -> dict:
         except (AssetCorrupt, AssetMissing) as exc:
             info.update(status="corrupt", detail=str(exc))
             return info
-        if layer == "dropin":
-            info["status"] = "unpinned"
-        elif _pin_key(path, base) in pins(base):
+        if _pin_key(path, base) in pins(base):
             info["status"] = "pinned"
         else:
             info["status"] = "ok" if expected_asset(relpath) else "unpinned"

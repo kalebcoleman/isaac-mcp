@@ -1,5 +1,9 @@
 # Bundled asset provenance and redistribution audit
 
+> **Update:** the repository is now code-only and ships **no** assets; each user keeps them in a
+> local asset folder ([ASSETS.md](../ASSETS.md)). This audit is kept as the record of where each
+> asset comes from and under which licence.
+
 Scope: `exts/ur5e-dt/assets/` on `main` at `d8954ad`, 110.0 MB in 176 files.
 Audit date: 2026-11-01. This is an engineering provenance audit, not legal advice.
 
@@ -163,13 +167,13 @@ online or from a local mirror. The twin only needs to reference or fetch those f
 [ASSETS.md](../ASSETS.md)):
 
 1. **Project stores** — `asset_path` of the nearest `isaac-mcp.json`.
-2. **Bundled / drop-in** — `exts/ur5e-dt/assets/<path>`, for the redistributable files and
-   operator-supplied licensed copies. Used as-is, not hash-checked.
-3. **User stores** — `$ISAAC_MCP_ASSET_PATH` (default `~/.cache/ur5e-dt/assets`; deprecated alias
-   `UR5E_DT_ASSET_CACHE`), populated by `scripts/fetch_ur5e_assets.py` or
-   `scripts/isaac_assets.py add`. Each store is searched under `<store>/ur5e-dt/<path>`, then
-   `<store>/<path>`. A `SHA256SUMS` file beside an asset is a user pin that replaces the manifest hash.
-4. **Pinned NVIDIA asset root** — the HTTPS S3 URL recorded in
+2. **User stores** — `$ISAAC_MCP_ASSET_PATH` (default: the `isaac-mcp-assets` folder next to the
+   checkout; deprecated alias `UR5E_DT_ASSET_CACHE`), populated by
+   `scripts/fetch_ur5e_assets.py`, `scripts/isaac_assets.py add`/`adopt`/`migrate`. Each store is
+   searched under `<store>/ur5e-dt/<path>`, then `<store>/<path>`. A `SHA256SUMS` file beside an
+   asset is a user pin that replaces the manifest hash. The repository's own
+   `exts/ur5e-dt/assets/` folder is no longer shipped or searched.
+3. **Pinned NVIDIA asset root** — the HTTPS S3 URL recorded in
    `exts/ur5e-dt/assets-manifest.json` for `robot/ur5e.usd` and `sensors/rsd455.usd`. Isaac Sim's
    asset resolver accepts the URL directly, so a run with network needs no download step.
    `ISAAC_MCP_ASSET_STRICT=1` (or `"strict": true` in the project file) disables this step.

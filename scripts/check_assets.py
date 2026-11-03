@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Fail when a non-redistributable asset is tracked in the repository.
+"""Fail when an asset is tracked in the repository.
 
-Companion to ``docs/provenance/ASSETS.md`` and ``exts/ur5e-dt/assets-manifest.json``.
-The manifest names the files that must be fetched or supplied locally; this check
-also rejects leftover Poliigon textures and foreign home-directory paths.
+The repository is code-only: every asset the twin uses (robot, sensor, workstation,
+gripper, objects, layouts) lives in each user's local asset folder (see
+``docs/ASSETS.md``), so nothing with a redistribution question is ever pushed. This
+check fails when:
+
+* anything is tracked under ``exts/ur5e-dt/assets/`` (that folder is git-ignored and
+  only exists in old checkouts; ``scripts/isaac_assets.py migrate`` moves it out);
+* a 3D, robot-description or material file is tracked anywhere;
+* an image is tracked outside the documentation and the extensions' UI ``data/`` folders;
+* the manifest is malformed.
 """
 
 from __future__ import annotations
@@ -16,76 +23,51 @@ REPO = Path(__file__).resolve().parents[1]
 ASSETS = REPO / "exts" / "ur5e-dt" / "assets"
 MANIFEST = REPO / "exts" / "ur5e-dt" / "assets-manifest.json"
 
-EXCLUDED_EXTRA = (
-    "gripper/RG2.usd",
-    "gripper/husarion_rg2/husarion_rg2_fixed.usd",
-)
-EXCLUDED_PREFIXES = (
-    "exts/ur5e-dt/assets/robot/",
-    "exts/ur5e-dt/assets/sensors/",
-    "exts/ur5e-dt/assets/workstation/",
-    "exts/ur5e-dt/assets/objects/fmb4/materials/oak/",
-)
-TEXT_SUFFIXES = {".usda", ".json", ".md", ".mdl", ".mtlx", ".txt", ".xml", ".py"}
+ASSET_SUFFIXES = {
+    ".usd", ".usda", ".usdc", ".usdz", ".urdf", ".xacro", ".sdf", ".mjcf",
+    ".obj", ".stl", ".dae", ".fbx", ".glb", ".gltf", ".ply", ".mtl", ".mdl", ".mtlx",
+}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".exr", ".hdr", ".tga", ".tif", ".tiff"}
+IMAGE_ALLOWED_PREFIXES = ("docs/",)
+IMAGE_ALLOWED_PARTS = ("/data/",)  # extension UI icons and previews, e.g. exts/<ext>/data/icon.png
 
 
 def tracked_files() -> set[str]:
     result = subprocess.run(
-        ["git", "ls-files", "-z", "exts/ur5e-dt/assets"],
-        cwd=REPO,
-        check=True,
-        capture_output=True,
+        ["git", "ls-files", "-z"], cwd=REPO, check=True, capture_output=True
     )
     return {item.decode() for item in result.stdout.split(b"\0") if item}
 
 
 def main() -> int:
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    tracked = tracked_files()
     errors: list[str] = []
-
-    excluded = {item["target"] for item in manifest.get("fetch", []) for item in item["files"]}
-    excluded.update(item["target"] for item in manifest.get("manual", []))
-    excluded.update(EXCLUDED_EXTRA)
-    for path in sorted(excluded):
-        repo_path = f"exts/ur5e-dt/assets/{path}"
-        if repo_path in tracked:
-            errors.append(f"non-redistributable asset is tracked: {repo_path}")
+    try:
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        manifest = {}
+        errors.append(f"cannot read the asset manifest: {exc}")
+    tracked = tracked_files()
+    folder = "exts/ur5e-dt/assets/"
 
     for path in sorted(tracked):
-        lower = path.lower()
-        if path.startswith(EXCLUDED_PREFIXES):
-            errors.append(f"non-redistributable asset is tracked: {path}")
-        if "poliigon" in lower:
-            errors.append(f"Poliigon asset is tracked: {path}")
-        if lower.endswith((".usd", ".usda", ".usdc", ".usdz")) and not path.startswith(
-            "exts/ur5e-dt/assets/"
+        suffix = Path(path).suffix.lower()
+        if path.startswith(folder):
+            errors.append(f"asset tracked in the repository (assets live in the local asset folder): {path}")
+        elif suffix in ASSET_SUFFIXES:
+            errors.append(f"asset file tracked in the repository: {path}")
+        elif suffix in IMAGE_SUFFIXES and not (
+            path.startswith(IMAGE_ALLOWED_PREFIXES) or any(part in f"/{path}" for part in IMAGE_ALLOWED_PARTS)
         ):
-            errors.append(f"USD asset outside the audited folder: {path}")
+            errors.append(f"image tracked outside docs/ or an extension data/ folder: {path}")
 
-    for path in sorted(tracked):
-        if Path(path).suffix.lower() not in TEXT_SUFFIXES:
-            continue
-        try:
-            text = (REPO / path).read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        if "/home/" in text:
-            errors.append(f"embedded home-directory path in {path}")
-        if "poliigon" in text.lower():
-            errors.append(f"Poliigon reference in {path}")
-
-    for item in manifest.get("bundled", []):
-        path = ASSETS / item["path"]
-        if not path.exists():
-            errors.append(f"manifest lists a missing bundled asset: {item['path']}")
-        notice = item.get("notice")
-        if notice and not (REPO / notice).is_file():
-            errors.append(f"manifest notice is missing: {notice}")
-
-    for required in ("THIRD-PARTY-NOTICES.md", "docs/provenance/husarion-ur-onrobot-rg2-LICENSE"):
-        if not (REPO / required).is_file():
-            errors.append(f"required notice file is missing: {required}")
+    for group in manifest.get("fetch", []):
+        for entry in group.get("files", []):
+            for key in ("target", "source", "sha256"):
+                if not entry.get(key):
+                    errors.append(f"manifest fetch entry without {key}: {entry}")
+    for item in manifest.get("local", []):
+        if not item.get("path") or not item.get("licence"):
+            errors.append(f"manifest local entry needs path and licence: {item}")
 
     if errors:
         print("Asset checks failed:")
@@ -93,9 +75,10 @@ def main() -> int:
             print(f"  - {error}")
         return 1
     print(
-        "Asset checks passed "
-        f"({len(manifest.get('bundled', []))} bundled groups, "
-        f"{len(excluded)} excluded paths absent, {len(tracked)} tracked asset files)."
+        "Asset checks passed (repository is code-only: "
+        f"{len(tracked)} tracked files, no assets; "
+        f"{sum(len(g.get('files', [])) for g in manifest.get('fetch', []))} fetchable and "
+        f"{len(manifest.get('local', []))} locally supplied asset groups described)."
     )
     return 0
 

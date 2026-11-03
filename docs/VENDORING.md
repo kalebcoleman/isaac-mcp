@@ -42,7 +42,8 @@ This repository consolidates two previously submodule-managed codebases into a s
 
 - **`isaac-sim-mcp`:** MIT License. A copy of the upstream license is archived at `docs/provenance/isaac-sim-mcp-LICENSE`.
 - **`omni-kit-mcp`:** **Upstream has no LICENSE file.** The repository was published publicly on GitHub without an explicit license file. Users and redistributors should note that upstream `inbarajaldrin/omni-kit-mcp` omits an explicit license grant.
-- **Bundled assets:** not all of `exts/ur5e-dt/assets/` may be redistributed. The NVIDIA robot,
+- **Assets:** the repository ships none (it is code-only; see `docs/ASSETS.md`). Earlier revisions
+  carried `exts/ur5e-dt/assets/`, and not all of it could be redistributed. The NVIDIA robot,
   sensor and material files, the Vention bench and the Poliigon oak textures must stay out of a
   public repository; the Husarion gripper files (Apache-2.0) and the FMB objects (CC BY 4.0) may
   ship with notices. Per-group evidence, sizes and the fetch-on-demand plan are in
