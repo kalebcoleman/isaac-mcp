@@ -53,6 +53,21 @@ See the [tool tiers and filters](AGENTS.md#what-you-can-reach-by-tier).
 
 ## Quick start
 
+**Isaac Sim already installed (a lab PC, a shared machine)? Use it; do not download another.**
+
+```bash
+git clone https://github.com/kalebcoleman/isaac-mcp.git
+cd isaac-mcp
+python3 scripts/isaac_env.py find          # lists the Isaac Sim installs it can see
+./install.sh --claude-code                 # MCP server only: an installed Isaac Sim 6.x is used, never re-downloaded
+python3 scripts/fetch_ur5e_assets.py       # NVIDIA's robot/sensor files into the asset folder (~26 MB)
+```
+
+`run.sh` and the MCP's `sim__launch` find the same install at launch. If `find` lists nothing, point
+it at the install with `ISAACSIM_PATH=/path/to/isaac-sim` or `ISAAC_MCP_PYTHON=/path/to/python`.
+`install.sh` downloads the locked 6.2 environment only when no Isaac Sim 6.x is found, or when you
+pass `--download-sim`.
+
 **New Linux installation:** Ubuntu 24.04 or 22.04 x86_64, a compatible NVIDIA GPU/driver,
 [uv](https://docs.astral.sh/uv/getting-started/installation/), Git, internet access and at least
 40 GB free. Read the [prerequisites and installation effects](docs/LINUX-SETUP.md#new-pinned-62-installation)
@@ -60,7 +75,7 @@ before running. Windowed use also needs a working display.
 
 ```bash
 # Suggested location: <workspace>/isaac-mcp (see docs/WORKSPACE.md)
-git clone --branch integration/final-review-11-15 https://github.com/kalebcoleman/isaac-mcp.git
+git clone https://github.com/kalebcoleman/isaac-mcp.git
 cd isaac-mcp
 # All commands below run from this checkout root.
 ./install.sh --accept-eula
@@ -69,7 +84,7 @@ uv pip check --python .venv/bin/python
 ./run.sh --port 8766
 ```
 
-`--accept-eula` accepts NVIDIA's EULA. The installer creates/updates `.venv`, replaces the
+`--accept-eula` accepts NVIDIA's EULA. When no Isaac Sim 6.x is installed yet (or with `--download-sim`), the installer creates/updates `.venv`; otherwise it uses the existing install. It also replaces the
 user-level editable host tool, and may install an ffmpeg shim. It uses `uv sync`, **not
 `uv sync --locked`**. For an exact-source locked installation, use the separate
 [reproducible setup](docs/REPRODUCIBILITY.md#locked-simulator-setup). Neither path installs Isaac Lab or system ROS.

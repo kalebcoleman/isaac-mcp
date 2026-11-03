@@ -9,6 +9,7 @@
 #
 # Options:
 #   --no-sim          Skip the 20 GB Isaac Sim environment sync (installs host MCP server only)
+#   --download-sim    Create the locked 6.2 environment even when an Isaac Sim is already installed
 #   --claude          Configure both Claude Code and Claude Desktop
 #   --claude-code     Configure Claude Code only
 #   --claude-desktop  Configure Claude Desktop only
@@ -24,6 +25,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT=8766
 DISPLAY_NAME="${DISPLAY:-:0}"
 NO_SIM=0
+DOWNLOAD_SIM=0
 DO_CLAUDE_CODE=0
 DO_CLAUDE_DESKTOP=0
 DO_PRINT_OPENCODE=0
@@ -39,6 +41,8 @@ Idempotent setup for the UR5e digital twin repository.
 
 Options:
   --no-sim          Skip Isaac Sim environment sync (host MCP server only)
+  --download-sim    Download the locked Isaac Sim 6.2 environment into .venv even when an
+                    Isaac Sim 6.x is already installed (by default an existing install is used)
   --claude          Configure both Claude Code and Claude Desktop
   --claude-code     Configure Claude Code only
   --claude-desktop  Configure Claude Desktop only
@@ -56,6 +60,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --no-sim)
       NO_SIM=1
+      shift
+      ;;
+    --download-sim)
+      DOWNLOAD_SIM=1
       shift
       ;;
     --claude)
@@ -105,6 +113,24 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ "$NO_SIM" = 1 ] && [ "$DOWNLOAD_SIM" = 1 ]; then
+  echo "--no-sim and --download-sim cannot be combined" >&2
+  exit 2
+fi
+
+# Use an Isaac Sim that is already installed (a lab PC's, another environment's) instead of
+# downloading ~20 GB. Only the checkout's own .venv is re-synced without asking, because that is
+# this installer's environment. run.sh finds the same install at launch.
+if [ "$NO_SIM" = 0 ] && [ "$DOWNLOAD_SIM" = 0 ] && [ ! -x "$ROOT/.venv/bin/python" ]; then
+  if command -v python3 >/dev/null 2>&1 \
+     && EXISTING="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6 2>/dev/null)" \
+     && [ -n "$EXISTING" ]; then
+    echo "== using the Isaac Sim already installed: $EXISTING"
+    echo "   (no download; run.sh finds it at launch. Pass --download-sim to install the locked 6.2 environment instead.)"
+    NO_SIM=1
+  fi
+fi
 
 echo "== checking preconditions"
 

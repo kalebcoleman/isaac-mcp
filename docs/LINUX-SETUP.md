@@ -47,17 +47,17 @@ driver and free space; its 40 GB floor is not a promise that every asset/cache w
 
 ```bash
 mkdir -p <workspace>
-git clone --branch integration/final-review-11-15 https://github.com/kalebcoleman/isaac-mcp.git <workspace>/isaac-mcp
+git clone https://github.com/kalebcoleman/isaac-mcp.git <workspace>/isaac-mcp
 cd <workspace>/isaac-mcp
 uv --version
 nvidia-smi
-./install.sh --accept-eula
+./install.sh --accept-eula     # skips the download if an Isaac Sim 6.x is already installed; --download-sim forces it
 export PATH="$HOME/.local/bin:$PATH"
 uv pip check --python .venv/bin/python
 .venv/bin/python -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
 ```
 
-This branch is the current draft integration, not a released stable tag. Record its exact
+`main` is the development branch, not a released stable tag. Record its exact
 `git rev-parse HEAD` for reproducibility. Expect Sim **6.2.0.0** and Python **3.12**.
 Stop and inspect any dependency-check failure before treating the environment as ready.
 
@@ -142,7 +142,10 @@ and [scene reference](TOOLS-SCENE.md) for your actual task.
 
 ## Choose a simulator build
 
-**Existing Sim:** install only the host, inspect your interpreter, then select it explicitly.
+**Existing Sim (lab and shared PCs): use it, never download another one.** `./install.sh` detects
+an installed Isaac Sim 6.x and then installs only the MCP server (`--no-sim` does the same
+explicitly); it downloads the locked 6.2 environment only when nothing is found or with
+`--download-sim`. Install only the host, inspect your interpreter, then select it explicitly if needed.
 List what the tool can find with `python3 scripts/isaac_env.py find`. Replace `<env>` with your own
 compatible installation. Do not rename, relocate or reinstall an environment just to match this guide
 (a symlink into `<workspace>/envs/` is optional and changes nothing).
