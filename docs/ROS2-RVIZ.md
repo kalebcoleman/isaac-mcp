@@ -32,7 +32,8 @@ Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have
    connect to it is drawn nowhere.
 4. **`map -> odom` belongs to localization.** If AMCL or SLAM runs, it publishes `map -> odom`;
    then Isaac must publish only `odom -> base_link` (`world_frame=""`). A namespaced mobile base
-   uses `<ns>_odom` (`a/b` gives `a__b_odom`); set the localization node's `odom_frame_id` to it.
+   uses `<ns>_odom` (`a/b` gives `a__b_odom`; namespace segments may not start or end with `_`);
+   set the localization node's `odom_frame_id` to it.
 5. **Same DDS settings on both sides.** `run.sh` uses `config/ros_dds.env` (Cyclone DDS,
    localhost only, `ROS_DOMAIN_ID`). Source the same file in the RViz/ROS terminal, or nothing
    is discovered.
@@ -41,7 +42,7 @@ Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have
 
 Stop the timeline, then call the tool once per robot. Calling it again rebuilds that robot's
 graph (`/Graph/isaac_mcp_ros2`, or `/Graph/isaac_mcp_ros2_<namespace>_<hash>`), so nothing is ever
-published twice by it. The static `world -> base_link` (or `world -> odom`) is the pose at setup
+published twice by it. The static `world -> base_link` (or `world -> <odom>`) is the pose at setup
 time: call it again after moving the robot.
 
 Tool `sim__ros2__tf_setup`, with the IDs from `sim__stage__info`:
@@ -62,7 +63,7 @@ Tool `sim__ros2__tf_setup`, with the IDs from `sim__stage__info`:
 The tool finds the articulation root itself (often a fixed `root_joint` below the robot prim).
 It refuses a `base_link` that is not one of the robot's links, a `base_frame` that differs from
 the name Isaac publishes for it when Isaac publishes the links or extra frames (that would split
-the tree; with `robot_state_publisher` and no extra frames it must be the URDF root), and links or extra frames whose TF
+the tree; with `robot_state_publisher` and no extra frames it should be the URDF root), and links or extra frames whose TF
 names collide (TF name = `isaac:nameOverride`, else the prim name). It returns the frame tree, the
 topics, the ROS domain and the Fixed Frame to use (`rviz_fixed_frame`). Then play the timeline:
 it publishes on every playback tick.

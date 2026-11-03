@@ -348,7 +348,7 @@ def test_namespaced_mobile_robots_get_their_own_odom_frame():
     assert check(extras=[("/x/r1_odom", "r1_odom")], mode="mobile", namespace="r1")[0] == "DUPLICATE_FRAME_NAMES"
 
 
-@pytest.mark.parametrize("ns", ["a//b", "a/1b", "bad ns", "a__b"])
+@pytest.mark.parametrize("ns", ["a//b", "a/1b", "bad ns", "a__b", "a_/b", "a/_b", "a_"])
 def test_invalid_namespaces_are_refused(ns):
     with pytest.raises(ValueError):
         ros2.graph_path(ns)
@@ -392,3 +392,10 @@ def test_mismatch_advice_fits_the_layout():
     with_extras = check(base_frame="other", link_frames="robot_state_publisher", extras=[("/c", "cam")])[1]
     assert "link_frames=robot_state_publisher" not in with_extras and "isaac:nameOverride" in with_extras
     assert "link_frames=robot_state_publisher" in check(base_frame="other")[1]
+
+
+def test_a_parent_of_a_looped_fixed_frame_is_not_called_disconnected():
+    edges = [e("world", "base", 0, True), e("base", "world"), e("map", "world"), e("c", "d")]
+    errors, *_ = doctor.analyze(edges, "world", clock_seen=True)
+    cut = [x for x in errors if "do not connect" in x]
+    assert cut and "map" not in cut[0].split(":")[1].split("(")[0] and "c" in cut[0]

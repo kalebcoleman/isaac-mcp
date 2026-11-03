@@ -10,7 +10,8 @@ leaves a second publisher for the same frame behind.
 Frame tree (REP 105 names):
 
     <world_frame> --static--> <base_frame> --(Isaac link TF)--> every robot link
-    <world_frame> --static--> odom --(odometry)--> <base_frame>      (base="mobile")
+    <world_frame> --static--> odom --(odometry)--> <base_frame>      (base="mobile";
+                                                                      <ns>_odom with a namespace)
 
 ``planned_graph`` is pure (no Kit imports) so the layout can be unit-tested.
 """
@@ -24,6 +25,7 @@ import re
 
 GRAPH_PATH = "/Graph/isaac_mcp_ros2"
 FRAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+SEGMENT_RE = re.compile(r"^[A-Za-z](?:[A-Za-z0-9_]*[A-Za-z0-9])?$")
 TOPIC_RE = re.compile(r"^/?[A-Za-z_][A-Za-z0-9_/]*$")
 CLOCK, CONTEXT, TIME, TICK = "PublishClock", "Context", "ReadSimTime", "OnPlaybackTick"
 
@@ -37,8 +39,9 @@ def _frame(name, what):
 def _namespace(namespace):
     """Normalised namespace ('' or 'a/b'); every segment must be a valid ROS name."""
     ns = (namespace or "").strip("/")
-    # ROS 2 names also forbid repeated underscores, which keeps the '/' -> '__' mapping one-to-one.
-    if ns and not all(FRAME_RE.match(part) and "__" not in part for part in ns.split("/")):
+    # Segments may not start or end with '_' nor contain '__' (ROS 2 forbids repeated underscores),
+    # so '__' in a flattened name can only come from '/': the '/' -> '__' mapping is one-to-one.
+    if ns and not all(SEGMENT_RE.match(part) and "__" not in part for part in ns.split("/")):
         raise ValueError(f"namespace {namespace!r} is not a valid ROS namespace")
     return ns
 
