@@ -218,7 +218,7 @@ def test_no_data_says_check_playing_and_domain():
 
 
 def test_doctor_without_ros_exits_2(monkeypatch, capsys):
-    def no_ros(seconds):
+    def no_ros(seconds, topics=()):
         raise ImportError("No module named 'rclpy'")
 
     monkeypatch.setattr(doctor, "capture", no_ros)
@@ -435,6 +435,18 @@ def test_rviz_config_sets_a_usable_window_size(tmp_path):
     assert geometry["Width"] >= 1200 and geometry["Height"] >= 800
 
 
+def test_rviz_config_scan_is_flat_coloured_and_odometry_keeps_one_arrow(tmp_path):
+    # Student run 2: Isaac's 2D lidar sends zero intensities (scan invisible with Intensity colouring),
+    # and 50 default-size odometry arrows covered the view.
+    out = tmp_path / "s.rviz"
+    rviz.main(["--fixed-frame", "odom", "--out", str(out), "--scan", "/scan", "--odom", "/odom"])
+    yaml = pytest.importorskip("yaml")
+    shown = {d["Class"]: d for d in yaml.safe_load(out.read_text())["Visualization Manager"]["Displays"]}
+    assert shown["rviz_default_plugins/LaserScan"]["Color Transformer"] == "FlatColor"
+    odom = shown["rviz_default_plugins/Odometry"]
+    assert odom["Keep"] == 1 and odom["Shape"]["Value"] == "Arrow" and odom["Shape"]["Shaft Length"] <= 0.5
+
+
 def test_the_cyclone_profile_has_no_shared_memory_element():
     # Cyclone builds without iceoryx reject it and no ROS 2 client can start.
     text = (REPO / "config" / "cyclonedds.xml").read_text()
@@ -447,7 +459,7 @@ def test_doctor_command_reports_two_clocks_end_to_end(monkeypatch, capsys, as_js
     edges = [dict(parent="world", child="base_link", static=True, stamp=0.0),
              dict(parent="base_link", child="tool0", static=False, stamp=5.0)]
     clock = [5.0, 4.9, 5.1, 5.0]  # two publishers a few frames apart
-    monkeypatch.setattr(doctor, "capture", lambda seconds: (edges, clock, {"/isaac"}, {"/twin_clock", "/tool_clock"}))
+    monkeypatch.setattr(doctor, "capture", lambda seconds, topics: (edges, clock, {"/isaac"}, {"/twin_clock", "/tool_clock"}, {}))
     argv = ["--fixed-frame", "world"] + (["--json"] if as_json else [])
     assert doctor.main(argv) == 1
     out = capsys.readouterr().out
@@ -464,7 +476,7 @@ def test_doctor_command_reports_two_clocks_end_to_end(monkeypatch, capsys, as_js
 def test_doctor_counts_backward_clock_jumps(monkeypatch, capsys):
     edges = [dict(parent="world", child="base_link", static=True, stamp=0.0),
              dict(parent="base_link", child="tool0", static=False, stamp=5.0)]
-    monkeypatch.setattr(doctor, "capture", lambda seconds: (edges, [5.0, 4.0, 5.2], set(), {"/one"}))
+    monkeypatch.setattr(doctor, "capture", lambda seconds, topics: (edges, [5.0, 4.0, 5.2], set(), {"/one"}, {}))
     assert doctor.main(["--fixed-frame", "world"]) == 1
     assert "went backwards 1 time" in capsys.readouterr().out
 
@@ -472,7 +484,7 @@ def test_doctor_counts_backward_clock_jumps(monkeypatch, capsys):
 def test_a_timeline_restart_is_a_warning_not_an_error(monkeypatch, capsys):
     edges = [dict(parent="world", child="base_link", static=True, stamp=0.0),
              dict(parent="base_link", child="tool0", static=False, stamp=0.1)]
-    monkeypatch.setattr(doctor, "capture", lambda seconds: (edges, [5.0, 5.1, 0.0, 0.1], set(), {"/one"}))
+    monkeypatch.setattr(doctor, "capture", lambda seconds, topics: (edges, [5.0, 5.1, 0.0, 0.1], set(), {"/one"}, {}))
     assert doctor.main(["--fixed-frame", "world"]) == 0
     out = capsys.readouterr().out
     assert "restarted from 0 1 time" in out and "ERROR" not in out
@@ -621,3 +633,32 @@ def test_one_robot_on_the_wrong_time_base_is_not_hidden_by_another():
     errors, *_ = doctor.analyze(edges + [e("world", "r2_base", 0, True)], "world", clock_seen=True,
                                 clock_publishers=["/twin"], clock_times=[120.0])
     assert any("r2_tool" in x and "differ from /clock" in x for x in errors)
+
+
+def test_sensor_stamps_far_from_the_clock_are_an_error():
+    # Student run 2: the clock graph had resetOnStop=False, the lidar helper restarted at 0 on Stop,
+    # and RViz dropped every /scan. TF looked fine, so only a per-topic check finds it.
+    edges = GOOD[:1] + [e("base_link", "tool0", stamp=40.0)]
+    stamps = {"/scan": [(3.0, 39.9), (3.1, 40.0)], "/camera/image_raw": [(40.0, 40.0)], "/odom": []}
+    errors, warnings, info = doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/c"],
+                                            clock_times=[39.9, 40.0], topic_stamps=stamps)
+    assert any("1 topic(s) are stamped" in x and "/scan -36.9 s" in x and "resetOnStop" in x for x in errors)
+    assert any("no messages on /odom" in w for w in warnings)
+    assert info["topics"] == {"/camera/image_raw": 1, "/odom": 0, "/scan": 2}
+    # Newest sample only: a stop/play while listening is not reported.
+    ok = {"/scan": [(39.0, 39.0), (0.1, 0.1)]}
+    assert doctor.analyze(edges[:1], "world", clock_seen=True, clock_publishers=["/c"], clock_times=[0.1],
+                          topic_stamps=ok)[0] == []
+
+
+def test_doctor_passes_extra_topics_to_capture(monkeypatch, capsys):
+    seen = {}
+
+    def fake(seconds, topics):
+        seen["topics"] = topics
+        return ([dict(parent="world", child="base_link", static=True, stamp=0.0)], [1.0], set(), {"/c"},
+                {"/my_topic": [(1.0, 1.0)]})
+
+    monkeypatch.setattr(doctor, "capture", fake)
+    assert doctor.main(["--fixed-frame", "world", "--topic", "/my_topic"]) == 0
+    assert seen["topics"] == ["/my_topic"] and "topics checked ['/my_topic']" in capsys.readouterr().out

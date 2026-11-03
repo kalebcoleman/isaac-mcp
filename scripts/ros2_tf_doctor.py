@@ -2,7 +2,7 @@
 """Check a live ROS 2 TF tree before trusting RViz (run it with ROS 2 sourced).
 
     source /opt/ros/<distro>/setup.bash
-    python3 scripts/ros2_tf_doctor.py --fixed-frame world [--seconds 3] [--json]
+    python3 scripts/ros2_tf_doctor.py --fixed-frame world [--seconds 3] [--json] [--topic /my_topic]
 
     # no system ROS 2: use the ROS 2 libraries bundled with the installed Isaac Sim
     python3 scripts/ros2_tf_doctor.py --fixed-frame world --isaac-ros
@@ -17,7 +17,11 @@ playing) and reports the problems that make RViz show a wrong or flickering tree
   /clock (some node is missing use_sim_time:=true);
 - several /tf publishers, listed by node, when frames look duplicated;
 - more than one /clock publisher, or /clock going backwards (RViz then keeps resetting);
-- TF stamps far from /clock (two time sources, e.g. after a stop/play).
+- TF stamps far from /clock (two time sources, e.g. after a stop/play);
+- sensor message stamps (LaserScan, Image, CameraInfo, PointCloud2, Odometry, Imu, or any
+  --topic) far from /clock: RViz then drops every message ("timestamp on the message is
+  earlier than all the data in the transform cache"). A sensor helper that restarts at 0 on
+  Stop while the clock graph keeps counting (resetOnStop differs) does this.
 
 Exit status: 0 no errors, 1 errors found, 2 could not run (ROS 2 not sourced, no data).
 ``analyze`` is pure and unit-tested without ROS.
@@ -54,11 +58,17 @@ def clock_jumps(times):
     return resets, back
 
 
-def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publishers=(), clock_times=()):
+SENSOR_TYPES = ("sensor_msgs/msg/LaserScan", "sensor_msgs/msg/Image", "sensor_msgs/msg/CameraInfo",
+                "sensor_msgs/msg/PointCloud2", "sensor_msgs/msg/Imu", "nav_msgs/msg/Odometry")
+
+
+def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publishers=(), clock_times=(),
+            topic_stamps=None):
     """Return ``(errors, warnings, info)`` for observed TF edges.
 
     ``edges``: iterable of dicts ``{"parent", "child", "static", "stamp"}`` (stamp in seconds).
     ``tf_publishers``: node names publishing /tf or /tf_static.
+    ``topic_stamps``: ``{topic: [(header stamp, newest /clock when it arrived or None), ...]}``.
     """
     errors, warnings = [], []
     parents, kinds, stamps = {}, {}, {}
@@ -178,15 +188,41 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publisher
         if stale:
             warnings.append(f"frames not updated in the last second of sim time: {', '.join(stale[:8])}.")
 
+    topic_stamps = topic_stamps or {}
+    off, silent = {}, sorted(t for t, v in topic_stamps.items() if not v)
+    for topic, samples in sorted(topic_stamps.items()):
+        timed = [(stamp, clock) for stamp, clock in samples if clock is not None and stamp <= WALL_EPOCH]
+        if timed:
+            stamp, clock = timed[-1]  # newest only, as for TF: a stop/play while listening is not a fault
+            if abs(stamp - clock) > CLOCK_SKEW:
+                off[topic] = stamp - clock
+    if off:
+        worst = max(off, key=lambda t: abs(off[t]))
+        errors.append(f"{len(off)} topic(s) are stamped more than {CLOCK_SKEW:g} s of sim time away from /clock "
+                      f"(worst: {worst} {off[worst]:+.1f} s; {', '.join(sorted(off)[:8])}): RViz and Nav2 drop "
+                      "them ('timestamp on the message is earlier than all the data in the transform cache'). "
+                      "Their publisher and the /clock graph use different time bases: usually one Read "
+                      "Simulation Time node has resetOnStop=False while the sensor helper restarts at 0 on Stop. "
+                      "Use the same setting everywhere (True is the safe choice with sensor helpers), then Stop and Play.")
+    if silent:
+        warnings.append(f"no messages on {', '.join(silent[:8])} while listening.")
+
     info = dict(frames=len(frames), roots=roots, fixed_frame=fixed_frame,
                 static=sorted(c for c, k in kinds.items() if k == {"static"}),
                 time_source=sorted(domains), clock=clock_seen, tf_publishers=publishers, clock_publishers=clock_pubs,
-                tree={c: sorted(p) for c, p in sorted(parents.items())})
+                tree={c: sorted(p) for c, p in sorted(parents.items())},
+                topics={t: len(v) for t, v in sorted(topic_stamps.items())})
     return errors, warnings, info
 
 
-def capture(seconds):
-    """Listen to /tf, /tf_static and /clock; return (edges, clock times, TF publishers, clock publishers)."""
+def capture(seconds, topics=()):
+    """Listen to /tf, /tf_static, /clock and sensor topics.
+
+    Returns (edges, clock times, TF publishers, clock publishers, topic stamps). Sensor topics are
+    every topic of a SENSOR_TYPES type plus *topics*, subscribed after a short discovery pause.
+    """
+    import importlib
+
     import rclpy
     from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
     from rosgraph_msgs.msg import Clock
@@ -209,6 +245,33 @@ def capture(seconds):
     node.create_subscription(TFMessage, "/tf_static", on_tf(True), static_qos)
     node.create_subscription(Clock, "/clock", lambda m: clock.append(m.clock.sec + m.clock.nanosec * 1e-9), 10)
     end = time.monotonic() + seconds
+    discover = min(time.monotonic() + 0.5, end)
+    while time.monotonic() < discover:
+        rclpy.spin_once(node, timeout_sec=0.05)
+
+    topic_stamps = {}
+    sensor_qos = QoSProfile(depth=5, history=HistoryPolicy.KEEP_LAST,
+                            reliability=ReliabilityPolicy.BEST_EFFORT)  # matches reliable and best-effort publishers
+    wanted = {t if t.startswith("/") else "/" + t for t in topics}
+    for name, types in node.get_topic_names_and_types():
+        kind = next((t for t in types if t in SENSOR_TYPES or name in wanted), None)
+        if kind is None or name in ("/tf", "/tf_static", "/clock"):
+            continue
+        pkg, _, cls = kind.split("/")
+        try:
+            msg_type = getattr(importlib.import_module(f"{pkg}.msg"), cls)
+        except (ImportError, AttributeError):
+            continue
+        if "header" not in getattr(msg_type, "get_fields_and_field_types", dict)():
+            continue
+        topic_stamps[name] = []
+
+        def on_msg(msg, name=name):
+            s = msg.header.stamp
+            topic_stamps[name].append((s.sec + s.nanosec * 1e-9, clock[-1] if clock else None))
+        node.create_subscription(msg_type, name, on_msg, sensor_qos)
+    for name in wanted - set(topic_stamps):
+        topic_stamps[name] = []  # asked for but not found (or no header): reported as silent
     while time.monotonic() < end:
         rclpy.spin_once(node, timeout_sec=0.05)
     publishers = set()
@@ -220,7 +283,7 @@ def capture(seconds):
                         for i in node.get_publishers_info_by_topic("/clock")}
     node.destroy_node()
     rclpy.shutdown()
-    return edges, clock, publishers, clock_publishers
+    return edges, clock, publishers, clock_publishers, topic_stamps
 
 
 def dds_env(env):
@@ -277,6 +340,8 @@ def main(argv=None) -> int:
     p.add_argument("--fixed-frame", required=True, help="RViz Fixed Frame (sim__ros2__tf_setup: rviz_fixed_frame)")
     p.add_argument("--seconds", type=float, default=3.0, help="how long to listen (default 3)")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--topic", action="append", default=[], metavar="TOPIC",
+                   help="also check this topic's header stamps against /clock (sensor topics are checked anyway)")
     p.add_argument("--isaac-ros", action="store_true",
                    help="use the ROS 2 libraries bundled with Isaac Sim (no system ROS 2 needed)")
     args = p.parse_args(argv)
@@ -289,20 +354,23 @@ def main(argv=None) -> int:
         rest = [a for a in (argv if argv is not None else sys.argv[1:]) if a != "--isaac-ros"]
         return subprocess.run([python, str(Path(__file__).resolve()), *rest], env=env).returncode
     try:
-        edges, clock_times, publishers, clock_publishers = capture(max(0.5, min(args.seconds, 30.0)))
+        edges, clock_times, publishers, clock_publishers, topic_stamps = capture(
+            max(0.5, min(args.seconds, 30.0)), args.topic)
     except ImportError as exc:
         print(f"ROS 2 Python packages not found ({exc}). Source ROS 2 first "
               "(source /opt/ros/<distro>/setup.bash), or pass --isaac-ros to use Isaac Sim's bundled ROS 2.",
               file=sys.stderr)
         return 2
     errors, warnings, info = analyze(edges, args.fixed_frame, clock_seen=bool(clock_times), tf_publishers=publishers,
-                                     clock_publishers=clock_publishers, clock_times=clock_times)
+                                     clock_publishers=clock_publishers, clock_times=clock_times,
+                                     topic_stamps=topic_stamps)
     if args.json:
         print(json.dumps(dict(errors=errors, warnings=warnings, **info), indent=2))
     else:
         print(f"TF: {info['frames']} frames, roots {info['roots']}, time {info['time_source'] or 'none'}, "
               f"/clock {'yes' if clock_times else 'no'} ({len(info['clock_publishers'])} publisher(s)), "
-              f"TF publishers {info['tf_publishers'] or 'none'}")
+              f"TF publishers {info['tf_publishers'] or 'none'}"
+              + (f", topics checked {sorted(info['topics'])}" if info["topics"] else ""))
         for e in errors:
             print("ERROR:", e)
         for w in warnings:

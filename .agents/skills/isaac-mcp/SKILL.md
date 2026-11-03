@@ -212,7 +212,12 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
    (add display topics) and `rviz2 -d <f>.rviz --ros-args -p use_sim_time:=true`, with
    `config/ros_dds.env` sourced in that terminal. Every ROS node needs `use_sim_time:=true`.
 5. Before debugging RViz, run `python3 scripts/ros2_tf_doctor.py --fixed-frame <frame>`
-   (`--isaac-ros` without a system ROS 2) and fix every ERROR it prints.
+   (`--isaac-ros` without a system ROS 2) and fix every ERROR it prints. It also checks
+   sensor topics' stamps against `/clock`.
+6. Hand-built graphs (a lab that names its own graphs): give every Read Simulation Time node
+   the same `resetOnStop`. Sensor helpers (lidar, camera) restart at 0 on Stop, so with
+   `resetOnStop=False` on the clock graph RViz drops every scan after the first Stop/Play.
+   `True` everywhere is the safe choice when sensor helpers are present.
 
 ## Troubleshooting
 
@@ -226,6 +231,7 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed | Read `current_target`; resend its `session_id` and `stage_id` explicitly |
 | A cleanup command killed its own shell (exit 144) | `pkill -f`/`pgrep -f` patterns also match the shell running them | Stop processes by the exact PID you recorded when starting them |
 | RViz frames jump, "Frame does not exist", extrapolation errors | Two TF publishers, wrong Fixed Frame or wall-clock node | `scripts/ros2_tf_doctor.py`; see the ROS 2 section above |
+| RViz drops scans: "timestamp on the message is earlier than all the data in the transform cache" | Sensor stamps and `/clock` on different time bases (`resetOnStop` differs) | The doctor names the topic; use one `resetOnStop` setting everywhere, then Stop and Play |
 | `TIMELINE_ACTIVE` on an edit | Timeline is playing or paused | `sim__timeline__control` with `stop`, then retry |
 | `NOT_READY` on a nonwaiting camera capture | No validated tool-acquired frame in this sensor's cache | Capture with default/`wait_for_render=true`; ordinary Play or waiting a few frames will not seed it |
 | `RENDER_TIMEOUT` on a fresh camera capture | Matching render completions or CPU transfer did not finish within five seconds | Check rendering and `sim__logs__tail`; no image or stale fallback was returned. A pending native transfer can cause `RENDER_BUSY` on retry; allow completion before another fresh request |
