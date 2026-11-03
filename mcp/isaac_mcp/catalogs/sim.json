@@ -902,7 +902,7 @@
       "owner_id": "generic-sim"
     },
     "sim.viewport.frame": {
-      "description": "Select and frame visible geometry in the selected stage's active viewport. Edits the active camera in the session layer, preserving source layers and the prior edit target; no Kit undo entry. Refuses mismatched contexts, look-through targets, unsafe session-sublayer camera opinions and empty bounds. Does not wait for rendered pixels or prove visibility; allow ordinary render updates, then capture the verified app window using screenshot. Select a smaller subtree if surrounding geometry occludes it.",
+      "description": "Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. follow=true (with path): keep the prim in view while the timeline plays, moving the camera with it at the same offset (works for robots whose links move under a fixed root); follow=false stops it; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds. Does not wait for rendered pixels; then screenshot the app window or record.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -916,8 +916,29 @@
         },
         "path": {
           "type": "string",
-          "description": "Absolute prim path to frame.",
-          "required": true
+          "description": "Absolute prim path to frame or follow.",
+          "required": false,
+          "default": ""
+        },
+        "margin": {
+          "type": "number",
+          "description": "Extra radius in metres around the prim's bounding sphere (0..1000), e.g. 1.0 for a small robot that will drive around.",
+          "required": false
+        },
+        "eye": {
+          "type": "array",
+          "description": "Camera position [x, y, z] in world coordinates (stage units).",
+          "required": false
+        },
+        "target": {
+          "type": "array",
+          "description": "Point to look at [x, y, z] in world coordinates (stage units); default: the prim's centre.",
+          "required": false
+        },
+        "follow": {
+          "type": "boolean",
+          "description": "true: follow path while playing (until stopped); false: stop following.",
+          "required": false
         }
       },
       "fields": [
@@ -943,10 +964,46 @@
           "name": "path",
           "kind": "string",
           "enum": null,
-          "required": true,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "Absolute prim path to frame or follow."
+        },
+        {
+          "name": "margin",
+          "kind": "number",
+          "enum": null,
+          "required": false,
           "default": null,
           "has_default": false,
-          "description": "Absolute prim path to frame."
+          "description": "Extra radius in metres around the prim's bounding sphere (0..1000), e.g. 1.0 for a small robot that will drive around."
+        },
+        {
+          "name": "eye",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Camera position [x, y, z] in world coordinates (stage units)."
+        },
+        {
+          "name": "target",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Point to look at [x, y, z] in world coordinates (stage units); default: the prim's centre."
+        },
+        {
+          "name": "follow",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "true: follow path while playing (until stopped); false: stop following."
         }
       ],
       "namespace": "sim",
@@ -2004,7 +2061,7 @@
       "owner_id": "generic-sim"
     },
     "sim.camera.create": {
-      "description": "Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Near/far clipping is 0.01/1000 meters, converted to stage units and returned. Needs rendered frames; width/height capped at 1024.",
+      "description": "Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X), focal_length=18, clipping_range=[0.01,100]. USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2018,7 +2075,7 @@
         },
         "path": {
           "type": "string",
-          "description": "New camera path.",
+          "description": "New camera path; its parent prim (e.g. a robot link) must exist.",
           "required": true
         },
         "width": {
@@ -2060,6 +2117,30 @@
           "required": false,
           "default": "local"
         },
+        "rotate_xyz": {
+          "type": "array",
+          "description": "Orientation as USD rotateXYZ Euler angles in degrees (X, then Y, then Z), instead of the orientation quaternion. With frame=local it is authored as translate + rotateXYZ ops.",
+          "required": false
+        },
+        "focal_length": {
+          "type": "number",
+          "description": "Focal length in mm (0.1..1000); default USD 50.",
+          "required": false
+        },
+        "horizontal_aperture": {
+          "type": "number",
+          "description": "Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height.",
+          "required": false
+        },
+        "clipping_range": {
+          "type": "array",
+          "description": "[near, far] clipping distances in metres.",
+          "required": false,
+          "default": [
+            0.01,
+            1000.0
+          ]
+        },
         "target": {
           "type": "array",
           "description": "Optional world look-at point; requires frame=world and explicit position. Overrides orientation.",
@@ -2092,7 +2173,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "New camera path."
+          "description": "New camera path; its parent prim (e.g. a robot link) must exist."
         },
         {
           "name": "width",
@@ -2147,6 +2228,45 @@
           "default": "local",
           "has_default": true,
           "description": "Pose frame: local or world."
+        },
+        {
+          "name": "rotate_xyz",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Orientation as USD rotateXYZ Euler angles in degrees (X, then Y, then Z), instead of the orientation quaternion. With frame=local it is authored as translate + rotateXYZ ops."
+        },
+        {
+          "name": "focal_length",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Focal length in mm (0.1..1000); default USD 50."
+        },
+        {
+          "name": "horizontal_aperture",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height."
+        },
+        {
+          "name": "clipping_range",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": [
+            0.01,
+            1000.0
+          ],
+          "has_default": true,
+          "description": "[near, far] clipping distances in metres."
         },
         {
           "name": "target",
@@ -2242,7 +2362,7 @@
       "owner_id": "generic-sim"
     },
     "sim.lidar.create": {
-      "description": "Create generic RTX LiDAR while stopped using qualified installed 6.x APIs. Requires a session launched with enable_motion_bvh=true (run.sh --motion-bvh). No hardware preset promise. At most eight sensors; delete an exact owned sensor path to release resources.",
+      "description": "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D, as Create > Sensors > RTX Lidar does) or, without config, a local generic LiDAR. Config assets are referenced from Isaac's assets root (network or local mirror); an unknown name lists the valid ones. Motion BVH is not required (only motion distortion within a scan needs run.sh --motion-bvh); the result reports it. Returns prim type, sensor path and tick/scan rate. At most eight sensors; delete an exact owned sensor path to release resources.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2256,7 +2376,7 @@
         },
         "path": {
           "type": "string",
-          "description": "Unused LiDAR prim path.",
+          "description": "Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist.",
           "required": true
         },
         "position": {
@@ -2285,6 +2405,28 @@
           "description": "Pose frame: local or world.",
           "required": false,
           "default": "local"
+        },
+        "rotate_xyz": {
+          "type": "array",
+          "description": "Orientation as USD rotateXYZ Euler angles in degrees, instead of the orientation quaternion.",
+          "required": false
+        },
+        "config": {
+          "type": "string",
+          "description": "NVIDIA lidar config name, e.g. Example_Rotary_2D, Example_Rotary, OS1, RPLIDAR_S2E. Empty: local generic LiDAR.",
+          "required": false,
+          "default": ""
+        },
+        "variant": {
+          "type": "string",
+          "description": "Config variant, e.g. OS1_REV6_32ch10hz1024res (an invalid one lists the valid ones).",
+          "required": false,
+          "default": ""
+        },
+        "tick_rate": {
+          "type": "number",
+          "description": "Sensor tick rate in Hz (0..240]; default: the config's scan rate (10 Hz for Example_Rotary_2D). A rate other than the scan rate yields partial scans.",
+          "required": false
         }
       },
       "fields": [
@@ -2313,7 +2455,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Unused LiDAR prim path."
+          "description": "Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist."
         },
         {
           "name": "position",
@@ -2350,6 +2492,42 @@
           "default": "local",
           "has_default": true,
           "description": "Pose frame: local or world."
+        },
+        {
+          "name": "rotate_xyz",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Orientation as USD rotateXYZ Euler angles in degrees, instead of the orientation quaternion."
+        },
+        {
+          "name": "config",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "NVIDIA lidar config name, e.g. Example_Rotary_2D, Example_Rotary, OS1, RPLIDAR_S2E. Empty: local generic LiDAR."
+        },
+        {
+          "name": "variant",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "Config variant, e.g. OS1_REV6_32ch10hz1024res (an invalid one lists the valid ones)."
+        },
+        {
+          "name": "tick_rate",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Sensor tick rate in Hz (0..240]; default: the config's scan rate (10 Hz for Example_Rotary_2D). A rate other than the scan rate yields partial scans."
         }
       ],
       "namespace": "sim",
@@ -2924,7 +3102,7 @@
       "owner_id": "generic-sim"
     },
     "sim.graph.show": {
-      "description": "Open a graph in the Action Graph editor of a windowed Isaac Sim and frame its nodes, e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands the nodes (port names readable) and auto-arranges them, writing both into the stage. Uses the editor's internal API; refuses cleanly if it changed.",
+      "description": "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands the nodes (port names readable) and auto-arranges them, writing both into the stage; graphs already laid out are not re-arranged. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window (not a separate desktop window); it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2938,18 +3116,19 @@
         },
         "path": {
           "type": "string",
-          "description": "Graph prim path.",
-          "required": true
+          "description": "Graph prim path (not needed with close=true).",
+          "required": false,
+          "default": ""
         },
         "layout": {
           "type": "boolean",
-          "description": "Auto-arrange the nodes first (writes node positions).",
+          "description": "Expand and auto-arrange nodes that have no stored position yet (writes node positions).",
           "required": false,
           "default": false
         },
         "width": {
           "type": "integer",
-          "description": "Undock the editor window and size it (pixels); 0 keeps the docked layout.",
+          "description": "Undock the editor window and size it (pixels, clamped to the Isaac Sim window); 0 keeps the docked layout.",
           "required": false,
           "default": 0
         },
@@ -2958,6 +3137,12 @@
           "description": "Window height in pixels when width is set.",
           "required": false,
           "default": 0
+        },
+        "close": {
+          "type": "boolean",
+          "description": "Close the Action Graph editor window instead of showing a graph.",
+          "required": false,
+          "default": false
         }
       },
       "fields": [
@@ -2983,10 +3168,10 @@
           "name": "path",
           "kind": "string",
           "enum": null,
-          "required": true,
-          "default": null,
-          "has_default": false,
-          "description": "Graph prim path."
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "Graph prim path (not needed with close=true)."
         },
         {
           "name": "layout",
@@ -2995,7 +3180,7 @@
           "required": false,
           "default": false,
           "has_default": true,
-          "description": "Auto-arrange the nodes first (writes node positions)."
+          "description": "Expand and auto-arrange nodes that have no stored position yet (writes node positions)."
         },
         {
           "name": "width",
@@ -3004,7 +3189,7 @@
           "required": false,
           "default": 0,
           "has_default": true,
-          "description": "Undock the editor window and size it (pixels); 0 keeps the docked layout."
+          "description": "Undock the editor window and size it (pixels, clamped to the Isaac Sim window); 0 keeps the docked layout."
         },
         {
           "name": "height",
@@ -3014,6 +3199,15 @@
           "default": 0,
           "has_default": true,
           "description": "Window height in pixels when width is set."
+        },
+        {
+          "name": "close",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Close the Action Graph editor window instead of showing a graph."
         }
       ],
       "namespace": "sim",

@@ -78,7 +78,7 @@ def deletable(s, stage, p, direct_sensor=False, sensor_paths=()):
     if any(
         n.HasAPI(UsdPhysics.ArticulationRootAPI)
         or (
-            (not direct_sensor or n.GetPath() != prim.GetPath())
+            (not direct_sensor or str(n.GetPath()) not in (str(prim.GetPath()), direct_sensor))
             and (n.IsA(UsdGeom.Camera) or n.GetTypeName() == "OmniLidar")
         )
         or n.GetMetadata("no_delete")
@@ -241,7 +241,7 @@ class Advanced:
             if a["confirm"] is not True:
                 refuse("CONFIRM_REQUIRED", "confirm=true required.")
             p = a["path"]
-            direct_sensor = p in self.sensors
+            direct_sensor = (self.sensors[p][1].get("sensor_path") or p) if p in self.sensors else False
             deletable(
                 s, stage, p, direct_sensor=direct_sensor, sensor_paths=self.sensors
             )
@@ -675,6 +675,8 @@ class Advanced:
                 rendered=False,
             )
         if name in ("sim.camera.create", "sim.lidar.create"):
+            from . import placement
+
             p, parent = s.new_path(stage, a["path"])
             if str(p) in self.sensors:
                 refuse(
@@ -682,16 +684,35 @@ class Advanced:
                     "Path still has registered sensor resources after external USD changes. "
                     "Use a new stage to release them before reusing this path.",
                 )
-            pose = s.pose(
-                stage,
-                parent,
-                a.get("position", [0, 0, 0]),
-                a.get("orientation", [1, 0, 0, 0]),
-                a.get("frame", "local"),
-            )
+            kind = "camera" if name == "sim.camera.create" else "lidar"
+            frame = a.get("frame", "local")
+            lidar_asset = optics = None
+            try:
+                orientation, rotate_xyz = placement.orientation_args(a.get("orientation"), a.get("rotate_xyz"))
+                tick = placement.tick_rate(a.get("tick_rate")) if kind == "lidar" else None
+                if kind == "lidar" and a.get("config"):
+                    from isaacsim.sensors.experimental.rtx import SUPPORTED_LIDAR_CONFIGS
+
+                    lidar_asset = placement.resolve_lidar_config(
+                        a["config"], a.get("variant") or None, SUPPORTED_LIDAR_CONFIGS
+                    )
+                elif kind == "lidar" and a.get("variant"):
+                    refuse("INVALID_VALUE", "variant needs config.")
+                if kind == "camera":
+                    optics = placement.camera_optics(
+                        a.get("focal_length"), a.get("horizontal_aperture"),
+                        a.get("clipping_range"), UsdGeom.GetStageMetersPerUnit(stage),
+                    )
+            except placement.PlacementError as e:
+                refuse(e.code, str(e), **e.details)
+            except ImportError as e:
+                refuse("SENSOR_API_UNAVAILABLE", "Config LiDARs need isaacsim.sensors.experimental.rtx: " + str(e))
+            pose = s.pose(stage, parent, a.get("position", [0, 0, 0]), orientation, frame)
             if name == "sim.camera.create" and a.get("target") is not None:
-                if a.get("frame", "local") != "world":
+                if frame != "world":
                     refuse("INVALID_FRAME", "Camera target requires frame=world.")
+                if rotate_xyz is not None:
+                    refuse("INVALID_POSE", "target overrides the orientation; omit rotate_xyz.")
                 eye = Gf.Vec3d(*vector(a.get("position", [0, 0, 0]), 3))
                 target = Gf.Vec3d(*vector(a["target"], 3))
                 up = (
@@ -712,6 +733,7 @@ class Advanced:
                     Gf.Matrix4d().SetLookAt(eye, target, up).GetInverse()
                     * UsdGeom.XformCache().GetLocalToWorldTransform(parent).GetInverse()
                 )
+                rotate_xyz = None
             if len(self.sensors) >= 8:
                 refuse(
                     "LIMIT",
@@ -729,7 +751,6 @@ class Advanced:
                     refuse("LIMIT", "width/height must be integers 64..1024.")
             from .sensors import create as create_sensor
 
-            kind = "camera" if name == "sim.camera.create" else "lidar"
             with Usd.EditContext(stage, stage.GetSessionLayer()):
                 sensor = create_sensor(
                     stage,
@@ -737,24 +758,69 @@ class Advanced:
                     kind,
                     w if kind == "camera" else 128,
                     h if kind == "camera" else 128,
+                    lidar_asset=lidar_asset,
+                    tick_rate=tick,
+                    optics=optics,
                 )
                 xf = UsdGeom.Xformable(stage.GetPrimAtPath(p))
                 xf.ClearXformOpOrder()
-                xf.AddTransformOp().Set(pose)
+                if rotate_xyz is not None and frame == "local":
+                    # The ops a person authors in the Property panel: readable and editable there.
+                    xf.AddTranslateOp().Set(Gf.Vec3d(*a.get("position", [0, 0, 0])))
+                    xf.AddRotateXYZOp().Set(Gf.Vec3f(*rotate_xyz))
+                else:
+                    xf.AddTransformOp().Set(pose)
             self.sensors[str(p)] = (kind, sensor)
             s.owned.add(str(p))
-            return dict(
+            world = UsdGeom.Xformable(stage.GetPrimAtPath(p)).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+            result = dict(
                 path=str(p),
                 kind=kind,
+                prim_type=str(stage.GetPrimAtPath(sensor.get("sensor_path", str(p))).GetTypeName()),
+                parent=str(parent.GetPath()),
+                local_translate=list(pose.ExtractTranslation()),
+                local_orientation_wxyz=[pose.ExtractRotationQuat().GetReal(), *pose.ExtractRotationQuat().GetImaginary()],
+                **({"rotate_xyz_deg": rotate_xyz} if rotate_xyz is not None and frame == "local" else {}),
+                world_position=list(world.ExtractTranslation()),
                 ready=False,
                 adapter=sensor["adapter"],
                 release=sensor["release"],
                 build=sensor["build"],
-                **({"clipping_range_m": [0.01, 1000.0],
-                    "clipping_range_stage_units": sensor["clipping_range_stage_units"]}
-                   if kind == "camera" else {}),
                 note="Needs ordinary rendered warm-up; no implicit Play. Direct owned-sensor deletion releases render resources.",
             )
+            if kind == "camera":
+                hfov = placement.fov_degrees(sensor["focal_length_mm"], sensor["horizontal_aperture_mm"])
+                result.update(
+                    clipping_range_m=optics["clipping_range_m"],
+                    clipping_range_stage_units=sensor["clipping_range_stage_units"],
+                    resolution=[w, h],
+                    focal_length_mm=sensor["focal_length_mm"],
+                    horizontal_aperture_mm=sensor["horizontal_aperture_mm"],
+                    vertical_aperture_mm=sensor["vertical_aperture_mm"],
+                    horizontal_fov_deg=round(hfov, 3),
+                    rate="A USD camera has no tick rate: it renders every frame. Set a ROS publishing rate on the ROS2 Camera Helper (frameSkipCount).",
+                )
+            else:
+                import carb.settings
+
+                motion = bool(carb.settings.get_settings().get("/renderer/raytracingMotion/enabled"))
+                result.update(
+                    sensor_path=sensor["sensor_path"],
+                    tick_rate_hz=sensor["tick_rate_hz"],
+                    scan_rate_hz=sensor["scan_rate_hz"],
+                    config=a.get("config") or None,
+                    **({"config_asset": sensor["config_asset"]} if "config_asset" in sensor else {}),
+                    **({"variant": a.get("variant")} if a.get("variant") else {}),
+                    motion_bvh=motion,
+                    **({"warning": sensor["warning"]} if "warning" in sensor else {}),
+                )
+                if not motion:
+                    result["motion_note"] = (
+                        "Motion BVH is off: scans are correct, but motion distortion within one scan "
+                        "(sensor or objects moving during the sweep) is not modelled. Launch with "
+                        "run.sh --motion-bvh for that."
+                    )
+            return result
         if name in ("sim.camera.capture", "sim.lidar.read"):
             entry = self.sensors.get(a["path"])
             expected = "camera" if name == "sim.camera.capture" else "lidar"
@@ -883,14 +949,20 @@ class Advanced:
                     refuse("LIMIT", "limit must be 1..128.")
                 return graph.inspect_graph(stage, a["path"], limit)
             if name == "sim.graph.show":
+                if a.get("close"):
+                    if graph._headless():
+                        refuse("HEADLESS", "No Action Graph editor in a headless Isaac Sim.")
+                    return graph.close_editor()
+                if not a.get("path"):
+                    refuse("INVALID_VALUE", "path: the graph prim to show (or close=true).")
                 w, h = a.get("width", 0), a.get("height", 0)
                 if type(w) is not int or type(h) is not int or (w or h) and not (300 <= w <= 8000 and 200 <= h <= 8000):
                     refuse("INVALID_VALUE", "width 300..8000 and height 200..8000, or both 0.")
                 if a.get("layout") and not s.timeline.is_stopped():
                     refuse("TIMELINE_ACTIVE", "layout=true writes node positions into the stage: stop the timeline "
                            "first, or show the graph without layout.")
-                graph.show_graph_open(stage, a["path"], w, h)
-                return {"_finish": "sim.graph.show"}  # extension.py completes it after a few frames
+                ready = graph.show_graph_open(stage, a["path"], w, h)
+                return {"_finish": "sim.graph.show", "ready": ready}  # extension.py completes it
             return graph.occupancy_map(s, stage, a)
         if name == "sim.ros2.tf_setup":
             from .ros2 import setup

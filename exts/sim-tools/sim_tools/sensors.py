@@ -1,13 +1,14 @@
 """Owned render products and LiDAR CPU storage for released RTX APIs.
 
-Only typed, locally authored sensors. No model-selected config file, texture,
-URL, annotator, extension or code. Native creation may have partial effects;
+Typed sensors: a locally authored camera/generic LiDAR, or a LiDAR from NVIDIA's fixed
+config registry (referenced from the Isaac assets root, as the Create menu does). No
+model-selected file, texture, URL, annotator, extension or code. Native creation may have partial effects;
 cleanup is attempted and reported, never disguised as a successful creation.
 """
 
 import math
 
-from pxr import Gf, UsdGeom
+from pxr import Gf, Usd, UsdGeom
 from isaac_mcp.project_assets import refuse
 from .runtime import require_sensor_api
 
@@ -115,17 +116,20 @@ def camera_clipping_range(stage):
     return clipping
 
 
-def create(stage, path, kind, width=640, height=480):
-    clipping = camera_clipping_range(stage) if kind == "camera" else None
-    rep, identity = require_sensor_api(lidar=kind == "lidar")
-    if kind == "lidar":
-        import carb.settings
+def create(stage, path, kind, width=640, height=480, *, lidar_asset=None, tick_rate=None, optics=None):
+    """Create a camera or LiDAR and its owned render product.
 
-        if not carb.settings.get_settings().get("/renderer/raytracingMotion/enabled"):
-            refuse(
-                "SENSOR_SETUP_REQUIRED",
-                "RTX LiDAR requires Motion BVH for correct motion effects. Launch a separate managed session with enable_motion_bvh=true, or use run.sh --motion-bvh. Existing renderer settings were not changed.",
-            )
+    ``lidar_asset`` is a resolved NVIDIA registry entry (asset path, variant) from
+    placement.resolve_lidar_config; None creates the local generic LiDAR. ``optics`` comes from
+    placement.camera_optics.
+    """
+    if kind == "camera":
+        clipping = camera_clipping_range(stage)
+        if optics is not None:
+            clipping = Gf.Vec2f(*optics["clipping_range_stage_units"])
+            if not 0 < clipping[0] < clipping[1] or not all(math.isfinite(v) for v in clipping):
+                refuse("INVALID_STAGE_UNITS", "Camera clipping distances cannot be represented in this stage's units.")
+    rep, identity = require_sensor_api(lidar=kind == "lidar")
     sensor = dict(
         adapter=(
             "hydra-renderer-cpu-v1" if kind == "camera" else "replicator-owned-cpu-v1"
@@ -134,9 +138,14 @@ def create(stage, path, kind, width=640, height=480):
         build=identity["build"],
         stage=stage,
     )
+    product_path = str(path)
     try:
         if kind == "camera":
             camera = UsdGeom.Camera.Define(stage, path)
+            if optics and optics.get("focal_length") is not None:
+                camera.CreateFocalLengthAttr(optics["focal_length"])
+            if optics and optics.get("horizontal_aperture") is not None:
+                camera.CreateHorizontalApertureAttr(optics["horizontal_aperture"])
             camera.CreateVerticalApertureAttr(
                 camera.GetHorizontalApertureAttr().Get() * height / width
             )
@@ -144,24 +153,31 @@ def create(stage, path, kind, width=640, height=480):
                 refuse("SENSOR_CREATE_FAILED", "Could not author camera clipping range.")
             sensor["clipping_range_stage_units"] = list(clipping)
             sensor["resolution"] = (height, width)
+            sensor["focal_length_mm"] = camera.GetFocalLengthAttr().Get()
+            sensor["horizontal_aperture_mm"] = camera.GetHorizontalApertureAttr().Get()
+            sensor["vertical_aperture_mm"] = camera.GetVerticalApertureAttr().Get()
         else:
-            # This supported command exists before experimental.rtx was shipped.
-            # config=None creates a local default sensor, never fetches an asset.
-            try:
-                import omni.kit.commands
-                import isaacsim.sensors.rtx  # registers the native command/annotator
-            except ImportError as e:
-                refuse(
-                    "SENSOR_API_UNAVAILABLE", "Enable isaacsim.sensors.rtx: " + str(e)
+            if lidar_asset is not None:
+                prim = _create_config_lidar(stage, path, lidar_asset, tick_rate, sensor)
+            else:
+                # This supported command exists before experimental.rtx was shipped.
+                # config=None creates a local default sensor, never fetches an asset.
+                try:
+                    import omni.kit.commands
+                    import isaacsim.sensors.rtx  # registers the native command/annotator
+                except ImportError as e:
+                    refuse(
+                        "SENSOR_API_UNAVAILABLE", "Enable isaacsim.sensors.rtx: " + str(e)
+                    )
+                ok, prim = omni.kit.commands.execute(
+                    "IsaacSensorCreateRtxLidar", path=str(path), parent=None, config=None
                 )
-            ok, prim = omni.kit.commands.execute(
-                "IsaacSensorCreateRtxLidar", path=str(path), parent=None, config=None
-            )
-            if not ok or not prim or str(prim.GetPath()) != str(path):
-                refuse(
-                    "SENSOR_CREATE_FAILED",
-                    "Native LiDAR command did not create the exact requested path.",
-                )
+                if not ok or not prim or str(prim.GetPath()) != str(path):
+                    refuse(
+                        "SENSOR_CREATE_FAILED",
+                        "Native LiDAR command did not create the exact requested path.",
+                    )
+            sensor["sensor_path"] = product_path = str(prim.GetPath())
             attr = prim.GetAttribute("omni:sensor:Core:outputFrameOfReference")
             if not attr:
                 refuse(
@@ -174,10 +190,17 @@ def create(stage, path, kind, width=640, height=480):
             rate = prim.GetAttribute("omni:sensor:Core:scanRateBaseHz").Get()
             if not isinstance(rate, (float, int)) or not 0 < rate <= 240:
                 refuse(
-                    "SENSOR_FORMAT", "Default LiDAR scan rate is outside (0,240] Hz."
+                    "SENSOR_FORMAT", "LiDAR scan rate is outside (0,240] Hz."
                 )
-            if not prim.GetAttribute("omni:sensor:tickRate").Set(rate):
+            tick = prim.GetAttribute("omni:sensor:tickRate")
+            if not tick or not tick.Set(float(tick_rate if tick_rate is not None else rate)):
                 refuse("SENSOR_API_UNAVAILABLE", "LiDAR tick-rate schema unavailable.")
+            sensor["tick_rate_hz"] = tick.Get()
+            if abs(sensor["tick_rate_hz"] - rate) > 1e-6:
+                sensor["warning"] = (
+                    f"tick_rate {sensor['tick_rate_hz']:g} Hz differs from the scan rate {rate:g} Hz: "
+                    "each output can be a partial scan. Omit tick_rate to use the scan rate."
+                )
             accumulate = prim.GetAttribute("omni:sensor:Core:accumulateOutputs")
             if accumulate:
                 accumulate.Set(True)
@@ -205,7 +228,7 @@ def create(stage, path, kind, width=640, height=480):
             options["write_to_session_layer"] = False
 
         product = rep.create.render_product(
-            str(path),
+            product_path,
             resolution=(width, height),
             force_new=True,
             name="IsaacMCP_" + uuid.uuid4().hex,
@@ -218,7 +241,7 @@ def create(stage, path, kind, width=640, height=480):
 
         if omni.usd.get_context().get_stage() != stage:
             refuse("STALE_TARGET", "Stage changed during native sensor creation.")
-        sensor["prim"] = stage.GetPrimAtPath(path)
+        sensor["prim"] = stage.GetPrimAtPath(product_path)
         if kind == "camera":
             # On-demand renderer readback needs no continuously attached RGB
             # annotator. This removes a redundant SDG branch, but native ROS
@@ -240,6 +263,29 @@ def create(stage, path, kind, width=640, height=480):
             "SENSOR_CREATE_FAILED",
             f"Sensor creation failed: {e}. Native effects may remain at {path}; cleanup errors={cleanup_errors}",
         )
+
+
+def _create_config_lidar(stage, path, lidar_asset, tick_rate, sensor):
+    """NVIDIA's own 6.x creation path (the Create > Sensors menu): reference the vendor asset."""
+    asset_path, variant = lidar_asset
+    try:
+        from isaacsim.sensors.experimental.rtx import Lidar
+        from isaacsim.storage.native import get_assets_root_path
+    except ImportError as e:
+        refuse("SENSOR_API_UNAVAILABLE", "Config LiDARs need isaacsim.sensors.experimental.rtx (Isaac Sim 6.x): " + str(e))
+    root = get_assets_root_path()
+    if not root:
+        refuse("ASSETS_UNAVAILABLE", "Isaac Sim's assets root is not configured or unreachable, so the NVIDIA config cannot be loaded. Omit config for the local generic LiDAR.")
+    sensor["config_asset"] = root + asset_path
+    lidar = Lidar.create(str(path), usd_path=root + asset_path, variant=variant, tick_rate=tick_rate)
+    prim = None
+    for candidate in Usd.PrimRange(stage.GetPrimAtPath(path)):
+        if candidate.GetTypeName() == "OmniLidar":
+            prim = candidate
+            break
+    if prim is None or not lidar:
+        refuse("SENSOR_CREATE_FAILED", f"The NVIDIA asset {asset_path} has no OmniLidar prim.")
+    return prim
 
 
 def read(sensor):

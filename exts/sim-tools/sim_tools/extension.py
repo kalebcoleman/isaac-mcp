@@ -36,6 +36,9 @@ class Extension(omni.ext.IExt):
         from .advanced import Advanced
 
         self.advanced = Advanced(self.scene, self.dispatch)
+        from .viewport import Follower
+
+        self.follower = Follower()
         import asyncio
 
         self._operation_lock = asyncio.Lock()
@@ -88,6 +91,7 @@ class Extension(omni.ext.IExt):
                     )
 
     def on_shutdown(self):
+        self.follower.stop("extension shutdown")
         self._timeline_events = None
         self._runtime_edit_restorer.cancel()
         self._stage_events = None
@@ -98,6 +102,7 @@ class Extension(omni.ext.IExt):
 
     def _stage_event(self, event):
         if event.type == int(omni.usd.StageEventType.CLOSING):
+            self.follower.stop("stage closing")
             self._runtime_edit_restorer.cancel()
             self.advanced.close_sensors(stage_closing=True)
             self.scene.close_stage()
@@ -323,6 +328,39 @@ class Extension(omni.ext.IExt):
             "meaning": "matching render completed after request; not an atomic physics/sensor snapshot",
         }, None
 
+    async def _finish_graph_show(self, ready, ids, path, layout, size):
+        """Wait only as many frames as the editor needs. Each frame can take ~1 s while the
+        editor rebuilds on a loaded GPU, so fixed waits made every call slow."""
+        import time
+        import omni.kit.app as kit_app
+        from .graph import editor_ready, show_graph_finish, show_graph_refocus, store_positions
+        from .placement import bbox_settled
+
+        app = kit_app.get_app()
+        begin, frames = time.monotonic(), 0
+        while not ready and frames < 30:  # the editor builds its window on later frames
+            await app.next_update_async()
+            frames += 1
+            ready = editor_ready()
+        # Re-check the target: the stage may have changed during those frames.
+        stage = self.scene.target(*ids, layout)
+        result = show_graph_finish(stage, path, layout, *size)
+        # Zoom to fit on every call, once the nodes are drawn at their final size (the view
+        # reports a placeholder bbox until then, which left later graphs zoomed out).
+        previous, fitted = None, False
+        for _ in range(40):
+            await app.next_update_async()
+            frames += 1
+            state = show_graph_refocus()
+            if bbox_settled(previous, state):
+                fitted = True
+                break
+            previous = state
+        if result.get("laid_out"):
+            result["positions_stored"] = store_positions(path)
+        result.update(fitted=fitted, frames_waited=frames, seconds=round(time.monotonic() - begin, 2))
+        return result
+
     def handler(self, name):
         async def run(**args):
             try:
@@ -359,18 +397,7 @@ class Extension(omni.ext.IExt):
                         ids = (args.get("session_id"), args.get("stage_id"))
                         result = self.dispatch(name, args, camera_frame=camera_frame)
                         if isinstance(result, dict) and result.get("_finish") == "sim.graph.show":
-                            import omni.kit.app as kit_app
-                            from .graph import show_graph_finish, show_graph_refocus
-
-                            for _ in range(4):  # the editor builds its window on later frames
-                                await kit_app.get_app().next_update_async()
-                            # Re-check the target: the stage may have changed during those frames.
-                            stage = self.scene.target(*ids, bool(layout))
-                            result = show_graph_finish(stage, path, bool(layout), *size)
-                            for _ in range(3):
-                                await kit_app.get_app().next_update_async()
-                            show_graph_refocus()
-                            await kit_app.get_app().next_update_async()
+                            result = await self._finish_graph_show(result["ready"], ids, path, bool(layout), size)
                     if render_observation is not None:
                         result["render_observation"] = render_observation
                 import json
@@ -441,6 +468,7 @@ class Extension(omni.ext.IExt):
                 "count": len(self.advanced.sensors),
                 "cleanup_errors": self.advanced.cleanup_errors,
             }
+            result["viewport_follow"] = self.follower.status()
             return result
         mutations = {
             "assets.import_urdf",
@@ -583,10 +611,29 @@ class Extension(omni.ext.IExt):
                 frame_viewport_selection,
             )
             from omni.kit.undo import disabled
-            from .viewport import frame
+            from isaac_mcp.project_assets import refuse
+            from .viewport import frame, place
 
-            return frame(
-                s, stage, a["path"], omni.usd.get_context(), get_active_viewport(),
-                frame_viewport_selection, disabled,
-            )
+            follow = a.get("follow")
+            if follow is not None and type(follow) is not bool:
+                refuse("INVALID_VALUE", "follow must be true or false.")
+            if follow is False:
+                stopped = self.follower.stop("follow=false")
+                return dict(stopped=stopped, **self.follower.status())
+            # Any other viewport call takes the camera back from a running follow.
+            self.follower.stop("replaced by a new sim.viewport.frame call")
+            viewport = get_active_viewport()
+            if not any(a.get(k) is not None for k in ("margin", "eye", "target")) and not follow:
+                if not a.get("path"):
+                    refuse("INVALID_VALUE", "Give path to frame, or eye and target.")
+                return frame(
+                    s, stage, a["path"], omni.usd.get_context(), viewport,
+                    frame_viewport_selection, disabled,
+                )
+            result, spec = place(s, stage, omni.usd.get_context(), viewport, a, disabled)
+            if spec is not None:
+                self.follower.start(s, stage, viewport, s.timeline, spec, disabled)
+                result.update(following=True, note="The camera moves with the prim while the timeline runs; "
+                              "call again with follow=false to stop. sim.stage.info reports viewport_follow.")
+            return result
         return self.advanced.execute(name, stage, a, camera_frame=camera_frame)
