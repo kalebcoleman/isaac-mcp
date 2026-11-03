@@ -177,13 +177,12 @@ viewport and URDF follow-ups have superseded some early pending checks, while th
 ## Prepare the UR5e and sensor assets
 
 The host connection and `sim__stage__info` do not require a robot or workstation. A UR5e
-Quick Start does need the NVIDIA robot USD and its dependencies. The NVIDIA UR5e and
-RealSense D455 files are **not bundled** in this repository; redistributable gripper and
-object assets remain bundled with their notices. `install.sh` installs packages, not these
-cached models. Downloading models does not replace the MCP server or require downloading
-again on every launch.
-
-From the checkout root, before starting the UR workflow, prepare the operator cache:
+Quick Start does need the robot, gripper and object assets. The repository ships **no
+assets**: every asset lives in your local asset folder, `isaac-mcp-assets` next to the
+checkout (see [ASSETS.md](ASSETS.md)). `install.sh` installs packages, not assets. Add your
+own files with `python3 scripts/isaac_assets.py add`, move assets from an older checkout with
+`python3 scripts/isaac_assets.py migrate`, and download NVIDIA's public robot and sensor files
+once (they are not downloaded again on every launch):
 
 ```bash
 python3 scripts/fetch_ur5e_assets.py
@@ -201,20 +200,21 @@ and [vendoring](VENDORING.md). The fetcher has **no `--accept-eula` flag or inte
 acceptance step**. The installer's `--accept-eula` controls simulator setup; it is not an
 asset-redistribution license. Obtain the necessary permission before downloading or copying.
 
-### Cache location and supported options
+### Asset folder location and supported options
 
-When `ISAAC_MCP_WORKSPACE` is set and `<workspace>/assets` exists, that folder is a store.
-The remaining default is `$XDG_CACHE_HOME/ur5e-dt/assets` when `XDG_CACHE_HOME` is set, otherwise
-`~/.cache/ur5e-dt/assets`. You can override it: `ISAAC_MCP_ASSET_PATH` sets the stores (a list separated by `:`;
-`UR5E_DT_ASSET_CACHE` is a deprecated alias). Use the same stores in the
+The default asset folder is `isaac-mcp-assets` next to the checkout, or
+`<workspace>/isaac-mcp-assets` when `ISAAC_MCP_WORKSPACE` is set. Older locations
+(`<workspace>/assets`, `~/.cache/ur5e-dt/assets`) are still read if they exist. You can
+override it: `ISAAC_MCP_ASSET_PATH` sets the stores (a list separated by `:`, the first is
+where files are written; `UR5E_DT_ASSET_CACHE` is a deprecated alias). Use the same stores in the
 fetcher's environment and the selected **Kit process**; setting it only in the MCP client
 cannot change an already-running Kit process's environment. Stores, the per-project
 `isaac-mcp.json`, user pins and `scripts/isaac_assets.py doctor` are described in
 [ASSETS.md](ASSETS.md).
 
 ```bash
-# Choose your own writable cache, outside Git; prepare it before launching a new session.
-export ISAAC_MCP_ASSET_PATH=<workspace>/assets
+# Optional: choose another asset folder, outside Git; prepare it before launching a new session.
+export ISAAC_MCP_ASSET_PATH=<asset-folder>
 python3 scripts/fetch_ur5e_assets.py --check
 # If preparation is needed and authorized, fetch into this same cache:
 python3 scripts/fetch_ur5e_assets.py
@@ -241,10 +241,10 @@ rather than moving only `rsd455.usd` into a different folder.
 
 ### Local reuse, remote fallback and failures
 
-Resolution prefers a local file in a project store (`isaac-mcp.json`), then under
-`exts/ur5e-dt/assets`, then the user stores, then
-an allowed configured NVIDIA URL for supported robot/sensor entries. Operator drop-ins
-under the repository asset directory are not manifest-verified; keep private files out of Git.
+Resolution prefers a local file in a project store (`isaac-mcp.json`), then the user stores
+(the asset folder), then an allowed configured NVIDIA URL for supported robot/sensor entries.
+Files under an old checkout's `exts/ur5e-dt/assets` are not used; `isaac_assets.py migrate`
+moves them.
 Cached manifest entries **and their fetch-group dependencies** are verified before use.
 Valid local files are reused. Missing/corrupt group members refuse instead of silently
 bypassing verification with a network URL.

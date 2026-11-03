@@ -329,12 +329,12 @@ def test_init_creates_layout_idempotent_and_never_overwrites(world):
     r = run_cli(world, "init", "--workspace", str(target))
     assert r.returncode == 0 and f'export ISAAC_MCP_WORKSPACE="{target}"' in r.stdout
     assert "asset_path" in r.stdout
-    for d in ("assets", "envs", "projects", "runs"):
+    for d in ("isaac-mcp-assets", "envs", "projects", "runs"):
         assert (target / d).is_dir()
     (target / "README.md").write_text("mine")
-    (target / "assets" / "keep.txt").write_text("x")
+    (target / "isaac-mcp-assets" / "keep.txt").write_text("x")
     assert run_cli(world, "init", "--workspace", str(target)).returncode == 0
-    assert (target / "README.md").read_text() == "mine" and (target / "assets" / "keep.txt").exists()
+    assert (target / "README.md").read_text() == "mine" and (target / "isaac-mcp-assets" / "keep.txt").exists()
 
 
 def test_init_does_not_create_group_writable_folders(world):
@@ -345,7 +345,7 @@ def test_init_does_not_create_group_writable_folders(world):
         assert run_cli(world, "init", "--workspace", str(target)).returncode == 0
     finally:
         os.umask(old)
-    for d in ("assets", "envs", "projects", "runs"):
+    for d in ("isaac-mcp-assets", "envs", "projects", "runs"):
         assert (target / d).stat().st_mode & 0o022 == 0, d
 
 
@@ -353,7 +353,7 @@ def test_init_default_workspace_uses_env_then_home(world):
     r = run_cli(world, "init")
     assert r.returncode == 0 and (world.home / "isaac-workspace" / "runs").is_dir()
     r = run_cli(world, "init", env={"ISAAC_MCP_WORKSPACE": str(world.tmp / "viaenv")})
-    assert (world.tmp / "viaenv" / "assets").is_dir()
+    assert (world.tmp / "viaenv" / "isaac-mcp-assets").is_dir()
 
 
 def test_init_refuses_workspace_inside_checkout(world):

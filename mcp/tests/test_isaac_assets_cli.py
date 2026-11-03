@@ -41,6 +41,9 @@ def cli(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location("isaac_assets_cli_test", SCRIPT)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Point the "checkout" at a temp folder so the default asset folder (next to it) is
+    # never created beside the real checkout.
+    module.asset_cache.REPO_ROOT = tmp_path / "isaac-mcp"
     return module
 
 
@@ -91,7 +94,7 @@ def test_where_defaults(cli, capsys, tmp_path, monkeypatch):
     assert code == 0
     assert "project file: none" in out
     assert "off" in out
-    assert str(tmp_path / "home@host" / ".cache" / "ur5e-dt" / "assets") in out
+    assert str(tmp_path / "isaac-mcp-assets") in out
 
 
 def test_where_json_schema(cli, capsys, tmp_path, monkeypatch):
@@ -1272,3 +1275,352 @@ def test_b1_force_does_not_half_install_when_a_folder_blocks_a_file(cli, capsys,
     code, _, err = run(cli, capsys, "add", str(source), "--force")
     assert code == 2 and "is not a file" in err and "Errno" not in err
     assert not (pack / "a.txt").exists()
+
+
+# ------------------------------------------------------------------- migrate / adopt
+
+
+def _git(repo, *args):
+    import subprocess
+
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+
+def _old_checkout(tmp_path):
+    """A checkout that still has the old in-repo exts/ur5e-dt/assets folder."""
+    checkout = tmp_path / "old-checkout"
+    assets = checkout / "exts" / "ur5e-dt" / "assets"
+    (assets / "gripper").mkdir(parents=True)
+    (assets / "gripper" / "QuickChanger.usd").write_bytes(b"gripper")
+    (assets / "fmb_assembly1.json").write_text('{"components": []}')
+    return checkout, assets
+
+
+def test_migrate_copies_old_in_repo_assets_and_pins_them(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    checkout, _ = _old_checkout(tmp_path)
+    code, out, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    pack = store / "ur5e-dt"
+    assert (pack / "gripper" / "QuickChanger.usd").read_bytes() == b"gripper"
+    assert read_pins(pack) == {
+        "fmb_assembly1.json": sha(b'{"components": []}'),
+        "gripper/QuickChanger.usd": sha(b"gripper"),
+    }
+    # Running it again changes nothing.
+    code, out, _ = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0 and "added 0, already present 2" in out
+
+
+def test_migrate_reads_git_history_when_the_folder_is_gone(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    checkout, assets = _old_checkout(tmp_path)
+    _git(checkout, "init", "-q")
+    _git(checkout, "-c", "user.email=t@t", "-c", "user.name=t", "add", "-A")
+    _git(checkout, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "with assets")
+    _git(checkout, "rm", "-r", "-q", "exts/ur5e-dt/assets")
+    _git(checkout, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "code only")
+    assert not assets.exists()
+    code, out, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    assert (store / "ur5e-dt" / "gripper" / "QuickChanger.usd").read_bytes() == b"gripper"
+
+
+def test_migrate_moves_an_old_cache_and_keeps_nvidia_files_unpinned(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    old = tmp_path / "home@host" / ".cache" / "ur5e-dt" / "assets"
+    (old / "workstation").mkdir(parents=True)
+    (old / "workstation" / "vention.usd").write_bytes(b"bench")
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 0, err
+    pack = store / "ur5e-dt"
+    assert (pack / "workstation" / "vention.usd").read_bytes() == b"bench"
+    assert "workstation/vention.usd" in read_pins(pack)
+
+
+def test_migrate_refuses_to_replace_a_different_file(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    checkout, _ = _old_checkout(tmp_path)
+    mine = store / "ur5e-dt" / "gripper" / "QuickChanger.usd"
+    mine.parent.mkdir(parents=True)
+    mine.write_bytes(b"my newer gripper")
+    code, _, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 2 and "different files already" in err
+    assert mine.read_bytes() == b"my newer gripper"
+    assert not (store / "ur5e-dt" / "fmb_assembly1.json").exists()  # nothing half-done
+
+
+def test_migrate_dry_run_changes_nothing(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    checkout, _ = _old_checkout(tmp_path)
+    code, out, _ = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores", "--dry-run")
+    assert code == 0 and "gripper/QuickChanger.usd" in out
+    assert not (store / "ur5e-dt").exists()
+
+
+def _project(tmp_path):
+    repo = tmp_path / "cool-robot-project"
+    (repo / "models" / "arm").mkdir(parents=True)
+    (repo / "models" / "arm" / "arm.urdf").write_text("<robot/>")
+    (repo / "models" / "arm" / "link.STL").write_bytes(b"mesh")
+    (repo / "scenes").mkdir()
+    (repo / "scenes" / "cell.usda").write_text("#usda 1.0\n")
+    (repo / "src").mkdir()
+    (repo / "src" / "main.py").write_text("print()")
+    (repo / ".git").mkdir()
+    (repo / ".git" / "ignored.usd").write_bytes(b"x")
+    (repo / "node_modules" / "pkg").mkdir(parents=True)
+    (repo / "node_modules" / "pkg" / "x.png").write_bytes(b"x")
+    return repo
+
+
+def test_adopt_copies_only_asset_files_into_a_pack_named_after_the_project(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    repo = _project(tmp_path)
+    code, out, err = run(cli, capsys, "adopt", str(repo))
+    assert code == 0, err
+    pack = store / "cool-robot-project"
+    assert sorted(read_pins(pack)) == ["models/arm/arm.urdf", "models/arm/link.STL", "scenes/cell.usda"]
+    assert not (pack / "src").exists() and not (pack / ".git").exists()
+    assert_sha256sum_compatible(pack)
+
+
+def test_adopt_dry_run_include_and_pack_name(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    repo = _project(tmp_path)
+    code, out, _ = run(cli, capsys, "adopt", str(repo), "--dry-run", "--include", "py")
+    assert code == 0 and "src/main.py" in out
+    assert not store.joinpath("cool-robot-project").exists()
+    code, _, err = run(cli, capsys, "adopt", str(repo), "--pack", "cell")
+    assert code == 0, err
+    assert (store / "cell" / "scenes" / "cell.usda").is_file()
+
+
+def test_adopt_refuses_a_bad_pack_name(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    repo = _project(tmp_path)
+    code, _, err = run(cli, capsys, "adopt", str(repo), "--pack", "../escape")
+    assert code == 2
+
+
+def test_new_folders_are_not_group_writable_even_with_umask_002(cli, capsys, tmp_path, monkeypatch):
+    import os
+
+    store = tmp_path / "fresh-store"
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    source = tmp_path / "a.usd"
+    source.write_bytes(b"a")
+    old = os.umask(0o002)
+    try:
+        assert run(cli, capsys, "add", str(source))[0] == 0
+    finally:
+        os.umask(old)
+    for folder in (store, store / "ur5e-dt"):
+        assert folder.stat().st_mode & 0o022 == 0, folder
+
+
+def test_an_existing_group_writable_pack_folder_is_tightened(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    pack.mkdir()
+    pack.chmod(0o775)
+    source = tmp_path / "a.usd"
+    source.write_bytes(b"a")
+    code, out, _ = run(cli, capsys, "add", str(source))
+    assert code == 0 and "removed group/world write permission" in out
+    assert pack.stat().st_mode & 0o022 == 0
+
+
+def test_migrate_keeps_a_pinned_lab_robot_over_nvidias_cached_copy(cli, capsys, tmp_path, monkeypatch):
+    import json as _json
+
+    store = make_store(tmp_path, monkeypatch)
+    pack = store / "ur5e-dt"
+    (pack / "robot").mkdir(parents=True)
+    (pack / "robot" / "ur5e.usd").write_bytes(b"lab robot")
+    (pack / "SHA256SUMS").write_text(f"{sha(b'lab robot')}  robot/ur5e.usd\n")
+    old = tmp_path / "old-cache"
+    (old / "robot").mkdir(parents=True)
+    (old / "robot" / "ur5e.usd").write_bytes(b"nvidia robot")
+    manifest = tmp_path / "assets-manifest.json"
+    manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
+        {"target": "robot/ur5e.usd", "source": "x", "sha256": sha(b"nvidia robot"), "size": 12}]}]}))
+    monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 0, err
+    assert "keeping 1 file(s) you pinned yourself" in out
+    assert (pack / "robot" / "ur5e.usd").read_bytes() == b"lab robot"
+
+
+def _manifest_with_robot(cli, tmp_path, monkeypatch, nvidia=b"nvidia robot"):
+    import json as _json
+
+    manifest = tmp_path / "assets-manifest.json"
+    manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
+        {"target": "robot/ur5e.usd", "source": "x", "sha256": sha(nvidia), "size": len(nvidia)}]}]}))
+    monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
+
+
+def test_migrate_pins_a_lab_modified_robot_from_the_checkout(cli, capsys, tmp_path, monkeypatch):
+    # Review finding 1: a robot at NVIDIA's path that is not NVIDIA's file is the user's copy.
+    store = make_store(tmp_path, monkeypatch)
+    _manifest_with_robot(cli, tmp_path, monkeypatch)
+    checkout, assets = _old_checkout(tmp_path)
+    (assets / "robot").mkdir()
+    (assets / "robot" / "ur5e.usd").write_bytes(b"lab robot")
+    code, out, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    pack = store / "ur5e-dt"
+    assert read_pins(pack)["robot/ur5e.usd"] == sha(b"lab robot")
+    assert cli.asset_cache.resolve_info("robot/ur5e.usd")["status"] == "pinned"
+
+
+def test_migrate_leaves_nvidias_exact_file_unpinned(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    _manifest_with_robot(cli, tmp_path, monkeypatch)
+    checkout, assets = _old_checkout(tmp_path)
+    (assets / "robot").mkdir()
+    (assets / "robot" / "ur5e.usd").write_bytes(b"nvidia robot")
+    code, _, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    assert "robot/ur5e.usd" not in read_pins(store / "ur5e-dt")
+    assert (store / "ur5e-dt" / "robot" / "ur5e.usd").read_bytes() == b"nvidia robot"
+
+
+def test_migrate_keeps_a_pin_from_an_old_asset_folder(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    _manifest_with_robot(cli, tmp_path, monkeypatch, nvidia=b"lab robot")  # same bytes, still pinned
+    old = tmp_path / "old-cache"
+    (old / "ur5e-dt" / "robot").mkdir(parents=True)
+    (old / "ur5e-dt" / "robot" / "ur5e.usd").write_bytes(b"lab robot")
+    (old / "ur5e-dt" / "SHA256SUMS").write_text(f"{sha(b'lab robot')}  robot/ur5e.usd\n")
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 0, err
+    assert read_pins(store / "ur5e-dt")["robot/ur5e.usd"] == sha(b"lab robot")
+
+
+def test_migrate_skips_a_file_that_no_longer_matches_its_old_pin(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    old = tmp_path / "old-cache"
+    (old / "workstation").mkdir(parents=True)
+    (old / "workstation" / "vention.usd").write_bytes(b"damaged")
+    (old / "workstation" / "ok.usd").write_bytes(b"fine")
+    (old / "SHA256SUMS").write_text(f"{sha(b'bench')}  workstation/vention.usd\n")
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 1 and "does not match its pin" in err and "vention.usd" in err
+    assert not (store / "ur5e-dt" / "workstation" / "vention.usd").exists()
+    assert (store / "ur5e-dt" / "workstation" / "ok.usd").read_bytes() == b"fine"
+
+
+def test_migrate_reads_history_even_when_untracked_copies_remain(cli, capsys, tmp_path, monkeypatch):
+    # Review finding 2: after pulling the code-only repo, ignored copies stay in the folder.
+    store = make_store(tmp_path, monkeypatch)
+    checkout, assets = _old_checkout(tmp_path)
+    (checkout / ".gitignore").write_text("exts/ur5e-dt/assets/workstation/\n")
+    _git(checkout, "init", "-q")
+    _git(checkout, "-c", "user.email=t@t", "-c", "user.name=t", "add", "-A")
+    _git(checkout, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "with assets")
+    _git(checkout, "rm", "-r", "-q", "exts/ur5e-dt/assets")
+    _git(checkout, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "code only")
+    (assets / "workstation").mkdir(parents=True)
+    (assets / "workstation" / "vention.usd").write_bytes(b"bench")  # untracked
+    (assets / "fmb_assembly1.json").write_text('{"components": ["edited"]}')  # untracked edit wins
+    code, out, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    pack = store / "ur5e-dt"
+    assert (pack / "gripper" / "QuickChanger.usd").read_bytes() == b"gripper"
+    assert (pack / "workstation" / "vention.usd").read_bytes() == b"bench"
+    assert (pack / "fmb_assembly1.json").read_text() == '{"components": ["edited"]}'
+
+
+def test_migrate_leaves_other_packs_in_an_old_folder_alone(cli, capsys, tmp_path, monkeypatch):
+    # Review finding 4.
+    store = make_store(tmp_path, monkeypatch)
+    old = tmp_path / "old-cache"
+    (old / "mylab").mkdir(parents=True)
+    (old / "mylab" / "x.usd").write_bytes(b"x")
+    (old / "mylab" / "SHA256SUMS").write_text(f"{sha(b'x')}  x.usd\n")
+    (old / "workstation").mkdir()
+    (old / "workstation" / "vention.usd").write_bytes(b"bench")
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 0, err
+    assert "separate asset pack" in out and "adopt" in out
+    assert not (store / "ur5e-dt" / "mylab").exists()
+    assert (store / "ur5e-dt" / "workstation" / "vention.usd").is_file()
+
+
+def test_the_store_folder_itself_keeps_its_permissions(cli, capsys, tmp_path, monkeypatch):
+    # Review finding 5: only the pack folder is tightened.
+    store = make_store(tmp_path, monkeypatch)
+    store.chmod(0o775)
+    source = tmp_path / "a.usd"
+    source.write_bytes(b"a")
+    assert run(cli, capsys, "add", str(source))[0] == 0
+    assert store.stat().st_mode & 0o777 == 0o775
+    assert (store / "ur5e-dt").stat().st_mode & 0o022 == 0
+
+
+def test_migrate_skips_an_unpinned_old_nvidia_file_with_the_wrong_bytes(cli, capsys, tmp_path, monkeypatch):
+    # Round 2 finding 1: the old resolver refused it, so it must not become "yours".
+    store = make_store(tmp_path, monkeypatch)
+    _manifest_with_robot(cli, tmp_path, monkeypatch)
+    old = tmp_path / "old-cache"
+    (old / "robot").mkdir(parents=True)
+    (old / "robot" / "ur5e.usd").write_bytes(b"truncated")
+    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
+    assert code == 1 and "never pinned" in err  # nothing else to migrate, still an error
+    assert not (store / "ur5e-dt" / "robot" / "ur5e.usd").exists()
+    code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"), "--dry-run")
+    assert code == 1
+
+
+def test_migrate_reports_a_git_failure_and_exits_nonzero(cli, capsys, tmp_path, monkeypatch):
+    import subprocess
+
+    store = make_store(tmp_path, monkeypatch)
+    checkout, _ = _old_checkout(tmp_path)
+    _git(checkout, "init", "-q")
+    real = subprocess.run
+
+    def broken(cmd, *a, **k):
+        if cmd[:1] == ["git"] and "rev-list" in cmd:
+            raise subprocess.CalledProcessError(128, cmd, output="", stderr="fatal: detected dubious ownership\n")
+        return real(cmd, *a, **k)
+
+    monkeypatch.setattr(cli.subprocess, "run", broken)
+    code, out, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 1 and "dubious ownership" in err and "history could not be read" in err
+    assert (store / "ur5e-dt" / "gripper" / "QuickChanger.usd").is_file()  # working tree still copied
+
+
+def test_migrate_git_rev_needs_a_git_checkout(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    checkout, _ = _old_checkout(tmp_path)
+    code, _, err = run(cli, capsys, "migrate", "--from", str(checkout), "--git-rev", "HEAD", "--no-legacy-stores")
+    assert code == 2 and "needs a git checkout" in err
+
+
+def test_migrate_moves_nvidias_sensor_from_its_old_name_to_its_canonical_place(cli, capsys, tmp_path, monkeypatch):
+    import json as _json
+
+    store = make_store(tmp_path, monkeypatch)
+    manifest = tmp_path / "assets-manifest.json"
+    manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
+        {"target": "sensors/rsd455.usd", "source": "x", "sha256": sha(b"sensor"), "size": 6,
+         "cache_path": "Isaac/Sensors/rsd455.usd"}]}]}))
+    monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
+    checkout, assets = _old_checkout(tmp_path)
+    (assets / "sensors").mkdir()
+    (assets / "sensors" / "rsd455.usd").write_bytes(b"sensor")
+    code, _, err = run(cli, capsys, "migrate", "--from", str(checkout), "--no-legacy-stores")
+    assert code == 0, err
+    pack = store / "ur5e-dt"
+    assert (pack / "Isaac" / "Sensors" / "rsd455.usd").read_bytes() == b"sensor"
+    assert not (pack / "sensors").exists()
+    assert "Isaac/Sensors/rsd455.usd" not in read_pins(pack)

@@ -55,18 +55,34 @@ def test_cache_dir_honours_environment(monkeypatch, tmp_path):
     assert module.cache_dir() == tmp_path.resolve()
 
 
-def test_bundled_asset_resolves_to_file_uri():
+def test_asset_in_the_asset_folder_resolves_to_a_file_uri(monkeypatch, tmp_path):
+    store = tmp_path / "home with space@x" / "isaac-mcp-assets"
+    target = store / "ur5e-dt" / "gripper" / "QuickChanger.usd"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"gripper")
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
     module = load_module()
     uri = module.resolve_uri("gripper/QuickChanger.usd")
     assert uri.startswith("file://")
-    assert Path(unquote(urlparse(uri).path)).is_file()
+    assert Path(unquote(urlparse(uri).path)) == target.resolve()
 
 
-def test_bundled_directory_resolves():
+def test_directory_in_the_asset_folder_resolves(monkeypatch, tmp_path):
+    store = tmp_path / "isaac-mcp-assets"
+    (store / "ur5e-dt" / "objects" / "fmb1").mkdir(parents=True)
+    (store / "ur5e-dt" / "objects" / "fmb1" / "a.usda").write_text("#usda 1.0\n")
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
     module = load_module()
     directory = module.resolve_dir("objects/fmb1")
-    assert directory.is_dir()
-    assert any(directory.glob("*.usda"))
+    assert directory.is_dir() and any(directory.glob("*.usda"))
+
+
+def test_the_repository_ships_no_assets():
+    module = load_module()
+    tracked = __import__("subprocess").run(
+        ["git", "ls-files", "exts/ur5e-dt/assets"], cwd=REPO, capture_output=True, text=True, check=True
+    ).stdout.split()
+    assert tracked == []
 
 
 def test_remote_fallback_comes_from_the_manifest():
@@ -185,18 +201,19 @@ def test_manifest_is_complete_and_fetch_targets_are_absent():
         assert entry["target"] not in sources
 
 
-def test_operator_drop_in_is_used_without_hash_check(monkeypatch, tmp_path):
-    """A licensed copy from another Isaac release must not be refused as corrupt."""
-    cache = tmp_path / "cache"
-    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(cache))
+def test_files_in_the_old_in_repo_folder_are_not_used(monkeypatch, tmp_path):
+    """Assets live only in the asset folder; leftovers in exts/ur5e-dt/assets are ignored."""
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path / "empty-store"))
     module = load_module()
     fake_manifest(module, tmp_path)
     module.ASSETS_DIR = tmp_path / "assets"
-    drop_in = module.ASSETS_DIR / "robot" / "test.usd"
-    drop_in.parent.mkdir(parents=True)
-    drop_in.write_bytes(b"operator copy from Isaac 6.2")
-    assert module.resolve_uri("robot/test.usd") == drop_in.as_uri()
-    assert module.resolve_path("robot/test.usd") == drop_in
+    leftover = module.ASSETS_DIR / "robot" / "test.usd"
+    leftover.parent.mkdir(parents=True)
+    leftover.write_bytes(b"old in-repo copy")
+    assert module.resolve_uri("robot/test.usd").startswith("https://")  # remote, not the leftover
+    monkeypatch.setenv("ISAAC_MCP_ASSET_STRICT", "1")
+    with pytest.raises(module.AssetMissing, match="isaac_assets.py"):
+        module.resolve_path("robot/test.usd")
 
 
 def group_manifest(module, tmp_path, root=b"root", layer=b"layer"):
@@ -302,13 +319,14 @@ def test_old_flat_sensor_cache_requires_refetch(monkeypatch, tmp_path):
     assert old.read_bytes() == b"cached"
 
 
-def test_relocated_sensor_still_prefers_operator_drop_in(monkeypatch, tmp_path):
+def test_relocated_sensor_in_the_asset_folder_uses_its_canonical_layout(monkeypatch, tmp_path):
     module = load_module()
-    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(tmp_path / "cache"))
+    store = tmp_path / "cache"
+    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(store))
     relocated_manifest(module, tmp_path)
-    drop_in = module.ASSETS_DIR / "sensors/test.usd"
-    write(drop_in, b"different licensed release with collected materials")
-    assert module.resolve_uri("sensors/test.usd") == drop_in.as_uri()
+    module.ASSETS_DIR = tmp_path / "old-in-repo"
+    write(module.ASSETS_DIR / "sensors/test.usd", b"ignored leftover")
+    assert module.find_local("sensors/test.usd") is None
 
 
 def test_manifest_cache_location_cannot_escape(monkeypatch, tmp_path):
@@ -782,7 +800,7 @@ def test_pin_lines_keep_unusual_but_valid_names(tmp_path):
 # --- workspace default store -------------------------------------------------------
 
 
-def test_workspace_assets_folder_is_searched_before_the_old_default(monkeypatch, tmp_path):
+def test_an_old_workspace_assets_folder_is_read_but_never_written(monkeypatch, tmp_path):
     workspace = tmp_path / "ws"
     (workspace / "assets" / "ur5e-dt" / "x").mkdir(parents=True)
     (workspace / "assets" / "ur5e-dt" / "x" / "one.usd").write_bytes(b"workspace")
@@ -793,23 +811,59 @@ def test_workspace_assets_folder_is_searched_before_the_old_default(monkeypatch,
     monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
     module = load_module()
     isolated(module, tmp_path)
+    assert module.workspace_store() is None
     assert module.user_stores() == [
+        (workspace / "isaac-mcp-assets").resolve(),
         (workspace / "assets").resolve(),
         (home / ".cache" / "ur5e-dt" / "assets").resolve(),
     ]
-    assert module.cache_dir() == (workspace / "assets").resolve()
+    # New files go into the new folder; the old one is only read until migrate moves it.
+    assert module.cache_dir() == (workspace / "isaac-mcp-assets").resolve()
     assert module.resolve_path("x/one.usd").read_bytes() == b"workspace"
-    assert module.resolve_path("x/two.usd").read_bytes() == b"default only"  # old cache still works
+    assert module.resolve_path("x/two.usd").read_bytes() == b"default only"
 
 
-def test_workspace_without_an_assets_folder_changes_nothing(monkeypatch, tmp_path):
+def test_workspace_without_an_asset_folder_uses_its_default_location(monkeypatch, tmp_path):
     workspace = tmp_path / "ws"
     workspace.mkdir()
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
     module = load_module()
     assert module.workspace_store() is None
-    assert module.user_stores() == [(tmp_path / "cache" / "ur5e-dt" / "assets").resolve()]
+    # Nothing exists yet: the primary store is where add/migrate/fetch will create it.
+    assert module.user_stores() == [(workspace / "isaac-mcp-assets").resolve()]
+
+
+def test_default_asset_folder_is_next_to_the_checkout(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "no-cache"))
+    module = load_module()
+    module.REPO_ROOT = tmp_path / "isaac-mcp"
+    assert module.default_store() == (tmp_path / "isaac-mcp-assets").resolve()
+    assert module.user_stores() == [(tmp_path / "isaac-mcp-assets").resolve()]
+    assert module.cache_dir() == (tmp_path / "isaac-mcp-assets").resolve()
+
+
+def test_old_default_cache_is_still_read_after_the_new_folder(monkeypatch, tmp_path):
+    old = tmp_path / "cache" / "ur5e-dt" / "assets"
+    put(old / "robot" / "old.usd", b"old")
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    module = load_module()
+    module.REPO_ROOT = tmp_path / "isaac-mcp"
+    isolated(module, tmp_path)
+    assert module.user_stores() == [(tmp_path / "isaac-mcp-assets").resolve(), old.resolve()]
+    assert module.resolve_path("robot/old.usd").read_bytes() == b"old"
+
+
+def test_workspace_prefers_isaac_mcp_assets_over_the_older_name(monkeypatch, tmp_path):
+    workspace = tmp_path / "ws"
+    (workspace / "assets").mkdir(parents=True)
+    (workspace / "isaac-mcp-assets").mkdir()
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "no-cache"))
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
+    module = load_module()
+    stores = module.user_stores()
+    assert stores[0] == (workspace / "isaac-mcp-assets").resolve()
+    assert (workspace / "assets").resolve() in stores  # still read, never written
 
 
 def test_explicit_asset_path_beats_the_workspace(monkeypatch, tmp_path):

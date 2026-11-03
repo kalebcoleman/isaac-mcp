@@ -24,7 +24,7 @@ untested.
 ```text
 <workspace>/
   isaac-mcp/     the checkout (code only, never edited by projects)
-  assets/        asset stores (<workspace>/assets/ur5e-dt/..., SHA256SUMS)
+  isaac-mcp-assets/  your local asset database (isaac-mcp-assets/ur5e-dt/..., SHA256SUMS); never pushed
   envs/          Isaac Sim / Isaac Lab Python environments (e.g. sim-6.2/, lab-3.0/)
   projects/      your projects, each may hold an isaac-mcp.json
   runs/          logs, job outputs, captures
@@ -67,8 +67,10 @@ untested.
    `<repo>/.venv`, which is found automatically. If you already have Isaac Sim, see
    [I already have Isaac Sim installed](#i-already-have-isaac-sim-installed).
 
-5. **Add your assets and check.** Stores under `<workspace>/assets` are used when
-   `ISAAC_MCP_WORKSPACE` is set and that folder exists.
+5. **Add your assets and check.** `<workspace>/isaac-mcp-assets` is the asset folder when
+   `ISAAC_MCP_WORKSPACE` is set (otherwise `isaac-mcp-assets` next to the checkout, which is
+   the same folder in this layout). Fill it with `scripts/isaac_assets.py add`, `adopt` or
+   `migrate` and `scripts/fetch_ur5e_assets.py` (see [ASSETS.md](ASSETS.md)).
 
    ```bash
    python3 scripts/isaac_assets.py add /path/to/lab-assets.tar.gz --store "$ISAAC_MCP_WORKSPACE/assets"
@@ -145,9 +147,10 @@ list; the version only filters. `run.sh` asks for any Isaac Sim 6.x
    `/isaac-sim`.
 
 The asset stores are searched in this order (see [ASSETS.md](ASSETS.md#lookup-order)):
-project stores, then either `ISAAC_MCP_ASSET_PATH` (when set, it **replaces** the next two) or
-`<workspace>/assets` (only when `ISAAC_MCP_WORKSPACE` is set and the folder exists) followed by
-the old default `~/.cache/ur5e-dt/assets`. Nothing existing is moved.
+project stores, then either `ISAAC_MCP_ASSET_PATH` (when set, it **replaces** the defaults) or
+the asset folder (`<workspace>/isaac-mcp-assets`, or `isaac-mcp-assets` next to the checkout)
+followed by older locations that still exist (`<workspace>/assets`,
+`~/.cache/ur5e-dt/assets`), read only. `isaac_assets.py migrate` moves them.
 
 ## What is not auto-detected
 
@@ -166,12 +169,12 @@ the old default `~/.cache/ur5e-dt/assets`. Nothing existing is moved.
 
 | Variable | What it does | Default |
 |---|---|---|
-| `ISAAC_MCP_WORKSPACE` | The workspace folder for `isaac_env.py` and the asset-store lookup. | `~/isaac-workspace` for `isaac_env.py`. The asset lookup uses `<workspace>/assets` only when this is set and the folder exists. |
+| `ISAAC_MCP_WORKSPACE` | The workspace folder for `isaac_env.py` and the asset-store lookup. | `~/isaac-workspace` for `isaac_env.py`. The asset folder becomes `<workspace>/isaac-mcp-assets`. |
 | `ISAAC_MCP_PYTHON` | Simulator interpreter for `run.sh`. Highest priority. | unset (auto-detect) |
 | `UR5E_DT_PYTHON` | Deprecated alias of `ISAAC_MCP_PYTHON`. | unset |
 | `ISAAC_SIM_PYTHON` | Lowest-priority explicit interpreter. Honoured by `scripts/isaac_env.py` auto-detection only: `run.sh` itself checks `ISAAC_MCP_PYTHON`, `UR5E_DT_PYTHON` and `<repo>/.venv` first, so an existing `.venv` wins over it. | unset |
 | `ISAACSIM_PATH`, `ISAAC_SIM_PATH`, `ISAAC_PATH` | A standalone Isaac Sim install folder to search. | unset |
-| `ISAAC_MCP_ASSET_PATH` | Asset stores, separated by `:`. Alias `UR5E_DT_ASSET_CACHE`. | `~/.cache/ur5e-dt/assets` (`$XDG_CACHE_HOME/ur5e-dt/assets` when that is set) |
+| `ISAAC_MCP_ASSET_PATH` | Asset stores, separated by `:`. Alias `UR5E_DT_ASSET_CACHE`. | `isaac-mcp-assets` next to the checkout (or `<workspace>/isaac-mcp-assets`) |
 | `ISAAC_MCP_PROJECT` | A project directory, or its `isaac-mcp.json`. | walk up from the working directory |
 | `ISAAC_MCP_SIM_ROOT` | Checkout (with `run.sh`) that managed `sim__launch` sessions use. Set it when the host is installed outside a checkout. | the repository root when available |
 
@@ -183,7 +186,7 @@ Setting one only in the client does not change an already-running Kit process.
 Paths differ between machines. The bytes must not.
 
 1. On the second machine, do [the setup above](#set-up-a-new-machine) steps 1 to 4.
-2. Copy `<workspace>/assets/` (it includes the `SHA256SUMS` pin files) to the same place.
+2. Copy the asset folder `isaac-mcp-assets/` (it includes the `SHA256SUMS` pin files) to the same place.
    Keep each pack folder whole.
 3. Run on both machines and compare:
 
@@ -207,8 +210,8 @@ Paths differ between machines. The bytes must not.
 with `ISAAC_MCP_PYTHON`. `python3 scripts/isaac_env.py where` shows the effective workspace
 and interpreter.
 
-**Assets are not found in `<workspace>/assets`.** `ISAAC_MCP_WORKSPACE` must be set in the
-environment of the Kit process, and the `assets` folder must exist. Run
+**Assets are not found.** The asset folder must be the one the Kit process sees: check
+`ISAAC_MCP_ASSET_PATH` / `ISAAC_MCP_WORKSPACE` in the Kit process's environment. Run
 `python3 scripts/isaac_assets.py where` to see the stores in order.
 
 **Found but broken.** An interpreter listed by `find` can still be incompatible. Run the

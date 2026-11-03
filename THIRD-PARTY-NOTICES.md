@@ -1,6 +1,9 @@
 # Third-party notices
 
-This repository ships only assets whose licences permit redistribution. The
+This repository ships **no assets**. The twin is designed to use the third-party assets
+below, which each user keeps in their local asset folder (paths are relative to
+`<asset-folder>/ur5e-dt/`; see `docs/ASSETS.md`). Older revisions of the repository carried
+them; these notices apply to anyone who obtains or redistributes them. The
 provenance audit is in [`docs/provenance/ASSETS.md`](docs/provenance/ASSETS.md).
 NVIDIA Isaac Sim assets and the Vention workstation are **not** redistributed;
 they are fetched from their official source or supplied by the operator.
@@ -9,10 +12,10 @@ they are fetched from their official source or supplied by the operator.
 
 Files:
 
-- `exts/ur5e-dt/assets/adapter_ref/`
-- `exts/ur5e-dt/assets/gripper/husarion_rg2/`
-- `exts/ur5e-dt/assets/gripper/QuickChanger.usd`
-- `exts/ur5e-dt/assets/gripper/configuration/QuickChanger_*.usd`
+- `<asset-folder>/ur5e-dt/adapter_ref/`
+- `<asset-folder>/ur5e-dt/gripper/husarion_rg2/`
+- `<asset-folder>/ur5e-dt/gripper/QuickChanger.usd`
+- `<asset-folder>/ur5e-dt/gripper/configuration/QuickChanger_*.usd`
 
 Source: <https://github.com/husarion/ur_onrobot_rg2_ros> (`onrobot_rg2_description`).
 
@@ -29,12 +32,12 @@ Quick-Changer was converted and reoriented for the flange mount. The files in
 
 Files:
 
-- `exts/ur5e-dt/assets/objects/fmb1/`
-- `exts/ur5e-dt/assets/objects/fmb2/`
-- `exts/ur5e-dt/assets/objects/fmb3/`
-- `exts/ur5e-dt/assets/fmb_assembly1.json`
-- `exts/ur5e-dt/assets/fmb_assembly2.json`
-- `exts/ur5e-dt/assets/fmb_assembly3.json`
+- `<asset-folder>/ur5e-dt/objects/fmb1/`
+- `<asset-folder>/ur5e-dt/objects/fmb2/`
+- `<asset-folder>/ur5e-dt/objects/fmb3/`
+- `<asset-folder>/ur5e-dt/fmb_assembly1.json`
+- `<asset-folder>/ur5e-dt/fmb_assembly2.json`
+- `<asset-folder>/ur5e-dt/fmb_assembly3.json`
 
 Source: *FMB: A Functional Manipulation Benchmark for Generalizable Robotic
 Learning*, Jianlan Luo, Charles Xu, Xinyang Geng, Gilbert Feng, Kuan Fang,
@@ -52,7 +55,7 @@ original workstation path was removed.
 
 ## Generated ArUco markers
 
-`exts/ur5e-dt/assets/objects/aruco/` contains marker images generated from the
+`<asset-folder>/ur5e-dt/objects/aruco/` contains marker images generated from the
 standard OpenCV 4x4 and 5x5 ArUco dictionaries, plus pose JSON produced by the
 twin's tooling. OpenCV is Apache-2.0; the generated dictionary patterns are not
 copyrightable.

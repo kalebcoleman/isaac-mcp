@@ -9,7 +9,7 @@ Commands:
   find [--json]                      list every distinct candidate found
   resolve-python [--require-version X.Y[.Z]] [--lab]
                                      print exactly one interpreter path
-  init [--workspace DIR]             create <workspace>/{assets,envs,projects,runs}
+  init [--workspace DIR]             create <workspace>/{isaac-mcp-assets,envs,projects,runs}
   where [--json]                     show the workspace and the chosen interpreter
 """
 from __future__ import annotations
@@ -30,7 +30,7 @@ STANDALONE_ENV_VARS = ("ISAACSIM_PATH", "ISAAC_SIM_PATH", "ISAAC_PATH")
 STANDALONE_HOME_DIRS = ("isaacsim", "isaac-sim")
 SYSTEM_ROOT_GLOBS = ("/opt/nvidia/isaac-sim*", "/isaac-sim")
 DEFAULT_WORKSPACE_NAME = "isaac-workspace"
-WORKSPACE_DIRS = ("assets", "envs", "projects", "runs")
+WORKSPACE_DIRS = ("isaac-mcp-assets", "envs", "projects", "runs")
 
 README = """\
 # Isaac workspace
@@ -38,7 +38,9 @@ README = """\
 Created by `scripts/isaac_env.py init`.  Nothing here is deleted or overwritten
 by the tools.
 
-- `assets/`   simulation assets (USD, URDF, meshes) shared by your projects.
+- `isaac-mcp-assets/`   your local asset database (USD, URDF, meshes, textures), shared by
+  every project and never pushed to GitHub. Fill it with `scripts/isaac_assets.py`
+  (`add`, `adopt`, `migrate`) and `scripts/fetch_ur5e_assets.py`.
 - `envs/`     Python environments, one folder each (`envs/<name>/bin/python`).
               `scripts/isaac_env.py find` picks them up automatically.
 - `projects/` one folder per project; put an `isaac-mcp.json` in each.
@@ -376,9 +378,9 @@ def cmd_init(args, env, repo=REPO):
     print(f"workspace ready: {ws}\n")
     print("Add to your shell profile:")
     print(f"  export ISAAC_MCP_WORKSPACE=\"{ws}\"")
-    print(f"  export ISAAC_MCP_ASSET_PATH=\"{ws}/assets\"\n")
+    print(f"  export ISAAC_MCP_ASSET_PATH=\"{ws}/isaac-mcp-assets\"\n")
     print(f"Example {ws}/projects/<name>/isaac-mcp.json:")
-    print(json.dumps({"asset_path": ["../../assets", "./assets"], "strict": False}, indent=2))
+    print(json.dumps({"asset_path": ["./assets"], "strict": False}, indent=2))
     return 0
 
 

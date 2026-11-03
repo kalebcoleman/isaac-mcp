@@ -23,8 +23,8 @@ table exactly). So gap/depth/arc geometry (gap 0.21mm, depth 0.01mm, R=55.0) is 
 
 Usage:
     <env>/bin/python tools/rewire_husarion_rg2_usd.py \
-        --src exts/ur5e-dt/assets/gripper/husarion_rg2/configuration/husarion_rg2_physics.usd \
-        --out exts/ur5e-dt/assets/gripper/husarion_rg2/husarion_rg2_fixed.usd
+        --src <asset-folder>/ur5e-dt/gripper/husarion_rg2/configuration/husarion_rg2_physics.usd \
+        --out <asset-folder>/ur5e-dt/gripper/husarion_rg2/husarion_rg2_fixed.usd
 
 physics.usd is the richest single layer (it carries /onrobot_rg2 + the joints + the /visuals and
 /colliders sibling scopes together), so flattening IT resolves the internal absolute refs.

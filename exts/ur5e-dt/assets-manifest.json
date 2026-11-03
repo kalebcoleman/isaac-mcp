@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Assets used by the UR5e twin. Only entries under 'bundled' are redistributed with the repository; 'fetch' entries are downloaded from NVIDIA's public asset root into UR5E_DT_ASSET_CACHE, and 'manual' entries must be supplied by the operator. See docs/provenance/ASSETS.md.",
+  "description": "Assets used by the UR5e twin. The repository ships none of them: every asset lives in the user's local asset folder (see docs/ASSETS.md). 'fetch' entries are NVIDIA's public files, downloaded by scripts/fetch_ur5e_assets.py and checked against these hashes; 'manual' entries have no public source; 'local' entries describe the gripper, objects and layouts the twin expects, with their origin and licence. Older checkouts carried them in exts/ur5e-dt/assets; scripts/isaac_assets.py migrate moves them into the asset folder.",
   "asset_root": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1",
   "cache_env": "ISAAC_MCP_ASSET_PATH",
   "remote": {
@@ -124,61 +124,52 @@
       "hint": "Export your own Vention assembly and add it with `python3 scripts/isaac_assets.py add <file-or-archive>` (it lands at <store>/ur5e-dt/workstation/vention.usd with any collected materials beside it), or put the folder that contains it on ISAAC_MCP_ASSET_PATH (UR5E_DT_ASSET_CACHE is a deprecated alias). The twin builds a simple placeholder bench when it is absent."
     }
   ],
-  "bundled": [
+  "local": [
     {
       "path": "adapter_ref",
       "licence": "Apache-2.0",
-      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros",
-      "notice": "THIRD-PARTY-NOTICES.md"
+      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros"
     },
     {
       "path": "gripper/husarion_rg2",
       "licence": "Apache-2.0",
       "origin": "https://github.com/husarion/ur_onrobot_rg2_ros",
-      "notice": "THIRD-PARTY-NOTICES.md",
       "note": "USD conversion; the old husarion_rg2_fixed.usd rollback is not shipped."
     },
     {
       "path": "gripper/QuickChanger.usd",
       "licence": "Apache-2.0",
-      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros",
-      "notice": "THIRD-PARTY-NOTICES.md"
+      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros"
     },
     {
       "path": "gripper/configuration",
       "licence": "Apache-2.0",
-      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros",
-      "notice": "THIRD-PARTY-NOTICES.md"
+      "origin": "https://github.com/husarion/ur_onrobot_rg2_ros"
     },
     {
       "path": "objects/fmb1",
       "licence": "CC-BY-4.0",
-      "origin": "https://functional-manipulation-benchmark.github.io/",
-      "notice": "THIRD-PARTY-NOTICES.md"
+      "origin": "https://functional-manipulation-benchmark.github.io/"
     },
     {
       "path": "objects/fmb2",
       "licence": "CC-BY-4.0",
-      "origin": "https://functional-manipulation-benchmark.github.io/",
-      "notice": "THIRD-PARTY-NOTICES.md"
+      "origin": "https://functional-manipulation-benchmark.github.io/"
     },
     {
       "path": "objects/fmb3",
       "licence": "CC-BY-4.0",
-      "origin": "https://functional-manipulation-benchmark.github.io/",
-      "notice": "THIRD-PARTY-NOTICES.md"
+      "origin": "https://functional-manipulation-benchmark.github.io/"
     },
     {
       "path": "objects/fmb4",
       "licence": "repository",
-      "origin": "twin authoring",
-      "notice": "THIRD-PARTY-NOTICES.md"
+      "origin": "twin authoring"
     },
     {
       "path": "objects/aruco",
       "licence": "generated",
-      "origin": "OpenCV ArUco dictionaries",
-      "notice": "THIRD-PARTY-NOTICES.md"
+      "origin": "OpenCV ArUco dictionaries"
     },
     {
       "path": "objects/materials/Plastic.mdl",

@@ -23,7 +23,7 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
 from .graph_compat import ensure_fixed_graph
-from .asset_cache import AssetMissing, cache_dir, resolve_dir, resolve_uri
+from .asset_cache import AssetCorrupt, AssetMissing, cache_dir, resolve_dir, resolve_path, resolve_uri
 from .object_pose import read_local_pose, set_local_pose
 from .robot_visuals import prepare_robot_visuals
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
@@ -64,7 +64,6 @@ else:
 _ext_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if not VIDEOS_DIR:
     VIDEOS_DIR = os.path.join(_ext_dir, "videos")
-_assets_dir = os.path.join(_ext_dir, "assets")
 
 # Environment scene USDs (relative to Isaac assets root). Verified against Isaac 5.0.
 ENVIRONMENTS = {
@@ -433,6 +432,15 @@ def _local_asset(relpath):
     return resolve_uri(relpath)
 
 
+def _assembly_layout(relpath):
+    """Return the local path of an assembly layout JSON in the asset folder, or ``""``."""
+    try:
+        return str(resolve_path(relpath))
+    except (AssetMissing, AssetCorrupt) as exc:
+        print(f"Warning: assembly layout {relpath} not available.\n{exc}")
+        return ""
+
+
 def _local_asset_dir(relpath):
     """Resolve a local asset directory path (no file:// prefix, for os.listdir)."""
     return str(resolve_dir(relpath))
@@ -442,21 +450,21 @@ def _local_asset_dir(relpath):
 ASSEMBLIES = {
     "fmb1": {
         "folder": "objects/fmb1",
-        "assembly_file": os.path.join(_assets_dir, "fmb_assembly1.json"),
+        "assembly_file": "fmb_assembly1.json",
     },
     "fmb2": {
         "folder": "objects/fmb2",
-        "assembly_file": os.path.join(_assets_dir, "fmb_assembly2.json"),
+        "assembly_file": "fmb_assembly2.json",
     },
     "fmb3": {
         "folder": "objects/fmb3",
-        "assembly_file": os.path.join(_assets_dir, "fmb_assembly3.json"),
+        "assembly_file": "fmb_assembly3.json",
     },
     # fmb4 = jenga (assembly_id fmb_assembly_4): 3-2-1 pyramid of authoritative 24x72x14 blocks
     # (base4 = a static jenga-block anchor; base* prefix → randomize skips it).
     "fmb4": {
         "folder": "objects/fmb4",
-        "assembly_file": os.path.join(_assets_dir, "fmb_assembly4.json"),
+        "assembly_file": "fmb_assembly4.json",
     },
 }
 # Aliases — the operator refers to jenga as 'fmb_jenga'/'jenga'; map both to fmb4.
@@ -1487,7 +1495,7 @@ class DigitalTwin(omni.ext.IExt):
 
     @property
     def _assembly_file_path(self):
-        return ASSEMBLIES[self._selected_assembly]["assembly_file"]
+        return _assembly_layout(ASSEMBLIES[self._selected_assembly]["assembly_file"])
 
     # ==================== Lighting & Environment ====================
 
@@ -2720,8 +2728,8 @@ class DigitalTwin(omni.ext.IExt):
             self._build_placeholder_workstation(stage, parent_path)
             print(
                 "Vention workstation asset not installed; using a placeholder bench. "
-                f"Place a licensed vention.usd under {cache_dir() / 'workstation'} "
-                "to use the real model."
+                f"Add your licensed copy with `python3 scripts/isaac_assets.py add <file-or-archive>` "
+                f"(it lands at {cache_dir() / 'ur5e-dt' / 'workstation'}) to use the real model."
             )
             return
 
@@ -4649,7 +4657,7 @@ class DigitalTwin(omni.ext.IExt):
             return
         scene_names = {child.GetName() for child in objects_root.GetChildren()}
         for key, assembly_def in ASSEMBLIES.items():
-            assembly_file = assembly_def["assembly_file"]
+            assembly_file = _assembly_layout(assembly_def["assembly_file"])
             if assembly_file and os.path.exists(assembly_file):
                 with open(assembly_file, 'r') as f:
                     components = json.load(f).get('components', [])
@@ -4682,7 +4690,7 @@ class DigitalTwin(omni.ext.IExt):
                     category = component.get('subtype', 'block')
                 type_map[component['name']] = category
         else:
-            print(f"Warning: Assembly file not found: {assembly_file}, defaulting all objects to 'block'")
+            print(f"Warning: Assembly file not found: {assembly_file or 'layout is not in the asset folder (run isaac_assets.py doctor)'}, defaulting all objects to 'block'")
         return type_map
 
     def _get_prim_params(self, category):
@@ -4773,7 +4781,7 @@ class DigitalTwin(omni.ext.IExt):
         """Assemble objects based on JSON assembly data, positioned relative to the current board pose."""
         assembly_file = self._assembly_file_path
         if not os.path.exists(assembly_file):
-            print(f"[assemble] Error: Assembly file not found: {assembly_file}")
+            print(f"[assemble] Error: Assembly file not found: {assembly_file or 'layout is not in the asset folder (run isaac_assets.py doctor)'}")
             return 0, 0
 
         with open(assembly_file, 'r') as f:
@@ -5185,7 +5193,11 @@ class DigitalTwin(omni.ext.IExt):
         import omni.kit.commands
         from pxr import Sdf, UsdShade, UsdGeom, Gf
 
-        ARUCO_DIR = os.path.join(_assets_dir, "objects", "aruco")
+        try:
+            ARUCO_DIR = str(resolve_dir("objects/aruco"))
+        except AssetMissing as exc:
+            print(f"Error: ArUco marker data not available.\n{exc}")
+            return
         ARUCO_PNG_DIR = os.path.join(ARUCO_DIR, "pngs")
 
         stage = omni.usd.get_context().get_stage()
@@ -6053,7 +6065,7 @@ class DigitalTwin(omni.ext.IExt):
             if not os.path.exists(assembly_file):
                 return {
                     "status": "error",
-                    "message": f"Assembly file not found: {assembly_file}"
+                    "message": f"Assembly file not found: {assembly_file or 'layout is not in the asset folder (run isaac_assets.py doctor)'}"
                 }
 
             assembled, skipped = self.assemble_objects()
