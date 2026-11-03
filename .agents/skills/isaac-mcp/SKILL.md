@@ -102,6 +102,18 @@ Details: [references/isaac-sim.md](references/isaac-sim.md).
 
 - `run_python` runs on Kit's main thread with `omni`, `carb`, `Usd`, `UsdGeom`, `Sdf` and `Gf`
   preloaded. Assign `result` to return a JSON-serialisable value. Read first, then write.
+  Top-level `await` works, e.g. play, `for _ in range(60): await omni.kit.app.get_app().next_update_async()`,
+  then read the pose in one call. Persistent sessions (`persistent=true`, `session_id`) keep the
+  variables of successful calls only, and opening a stage (including `save_as_stage`) resets every
+  session: the next call reports `session_reset`, so re-run your setup code.
+- **Saving your work:** edits made with `sim__*` tools go to the session layer, which
+  `omni.usd` `save_as_stage` does not write; export them with `sim__stage__save`, or make edits you
+  want in a checkpoint file with `run_python` on the root layer. Stop the timeline before saving:
+  while it plays, physics writes moved link poses back into the USD, so a "start" checkpoint can
+  save the robot wherever it drove.
+- **Demo videos:** lay windows out with `move_window` (for example Isaac Sim left, RViz 2 right),
+  then record a monitor or one window with `start_screen_recording`. A window that closes can hand
+  focus to another one, which then covers RViz; raise it again or record RViz's window by id.
 - Prefer a pack's named tools (for example `ur5e_dt__play_scene`) over hand-written `run_python`
   when one exists; they carry the project's checks.
 - `screenshot` with no selector auto-targets the Isaac Sim / Isaac Lab window, even if covered. For
@@ -199,6 +211,7 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed | Read `current_target`; resend its `session_id` and `stage_id` explicitly |
+| A cleanup command killed its own shell (exit 144) | `pkill -f`/`pgrep -f` patterns also match the shell running them | Stop processes by the exact PID you recorded when starting them |
 | RViz frames jump, "Frame does not exist", extrapolation errors | Two TF publishers, wrong Fixed Frame or wall-clock node | `scripts/ros2_tf_doctor.py`; see the ROS 2 section above |
 | `TIMELINE_ACTIVE` on an edit | Timeline is playing or paused | `sim__timeline__control` with `stop`, then retry |
 | `NOT_READY` on a nonwaiting camera capture | No validated tool-acquired frame in this sensor's cache | Capture with default/`wait_for_render=true`; ordinary Play or waiting a few frames will not seed it |

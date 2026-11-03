@@ -82,7 +82,7 @@ SERVER_INSTRUCTIONS = os.getenv(
     "Find advertised bridges with the isaac_mcp.client CLI (--list-bridges) and "
     "confirm the chosen bridge's PID and port (status) before scene-changing calls, "
     "and start an additional Kit only when explicitly requested and resource checks permit. "
-    "screenshot, list_windows, raise_window and the screen "
+    "screenshot, list_windows, raise_window, move_window and the screen "
     "recording tools capture this Linux desktop. screenshot() and "
     "start_screen_recording() with no target pick the Isaac Sim or Isaac Lab "
     "window when one is open, so they capture the sim alone even if it is covered. "
@@ -418,6 +418,11 @@ def _sync_offline(server: Any, state: _BridgeState) -> Dict[str, str]:
     return changed
 
 
+# Catalogued tools this host server runs itself (filename-only project discovery); a bridge never
+# serves them, so their absence from a bridge is expected and not worth a note.
+HOST_RUN_TOOLS = frozenset({"assets.roots", "assets.scan", "assets.search"})
+
+
 def _offline_note(server: Any) -> str:
     """One line for refresh/use_bridge results: which listed tools the bridge does not serve."""
     offline = _offline_for(server)
@@ -425,8 +430,12 @@ def _offline_note(server: Any) -> str:
         return ""
     spaces: Dict[str, int] = {}
     for canonical in offline.names.values():
+        if canonical in HOST_RUN_TOOLS:   # served by this host server, never by a bridge
+            continue
         space = canonical.split(".", 1)[0]
         spaces[space] = spaces.get(space, 0) + 1
+    if not spaces:
+        return ""
     counts = ", ".join(f"{space}: {count}" for space, count in sorted(spaces.items()))
     return ("\nNote: " + counts + " tool(s) are listed from the packaged catalog but have not "
             "been confirmed on the selected bridge. Select a bridge that loaded the extension "
@@ -798,6 +807,11 @@ async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None) -> str:
     try:
         added = discover_and_register_tools(server)
     except Exception as e:
+        if _needs_bridge_guidance(e):
+            return (f"Error: no Isaac Sim bridge is reachable ({e}). Isaac Sim is probably not "
+                    "running yet, or is still starting: start it (sim__launch when simulator launch "
+                    "is enabled, or ./run.sh), wait until it is ready, then call refresh_tools again. "
+                    "`python -m isaac_mcp.client --list-bridges` lists running bridges.")
         return f"Error: {e}"
     if added:
         await _notify_tools_changed(ctx)

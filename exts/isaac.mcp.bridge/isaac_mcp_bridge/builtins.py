@@ -14,7 +14,9 @@ Handlers here follow the same contract as any tool: return the payload dict,
 or raise (``ToolError`` to attach diagnostics). The bridge owns the envelope.
 """
 
+import ast
 import functools
+import inspect
 import traceback
 from typing import Any, Dict, List
 
@@ -23,9 +25,10 @@ from .protocol import ToolError
 _RUN_PYTHON_DESCRIPTION = (
     "Execute Python code on the Kit main thread with full access to the "
     "Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a "
-    "value). Set persistent=True with a session_id to keep variables alive "
-    "between calls — useful for multi-step workflows where later calls need "
-    "results from earlier ones."
+    "value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` "
+    "to let frames run between steps). Set persistent=True with a session_id to keep variables "
+    "alive between calls — useful for multi-step workflows where later calls need results from "
+    "earlier ones. Opening a stage (including save-as) resets every session; the next call says so."
 )
 _RUN_PYTHON_PARAMETERS = {
     "code": {"type": "string", "required": True,
@@ -76,29 +79,62 @@ def cmd_run_python(bridge, code: str, session_id: str = "default",
                "Usd": Usd, "UsdGeom": UsdGeom, "Sdf": Sdf, "Gf": Gf}
     assert set(preload) == set(PRELOADED)
     exec_globals = {**preload, "__builtins__": __builtins__}
+    reset = ""
     if persistent:
+        reset = bridge.sessions.take_reset(session_id)
         exec_globals.update(bridge.sessions.namespace(session_id))
+    reset_note = (f"Session {session_id!r} was reset because {reset}: variables, imports and "
+                  "functions from earlier calls are gone (prim references would be stale). "
+                  "Re-run your setup code." if reset else "")
+
+    try:
+        # Top-level `await` is allowed: such code compiles to a coroutine that the bridge
+        # awaits on Kit's event loop, so it can wait for app updates, renders or timers.
+        compiled = compile(code, "<run_python>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+    except SyntaxError as e:
+        raise ToolError(f"SyntaxError: {e}", details={"traceback": traceback.format_exc()})
+
+    def fail(e: BaseException, output: str):
+        details = {"output": output, "traceback": traceback.format_exc()}
+        if reset_note:
+            details["session_reset"] = reset_note
+        elif persistent and isinstance(e, NameError):
+            details["hint"] = ("Persistent sessions keep only the variables of successful calls; "
+                               "names from a call that raised are not saved.")
+        raise ToolError((reset_note + " " if reset_note and isinstance(e, NameError) else "") + str(e),
+                        details=details)
+
+    def finish(output: str):
+        payload = {"output": output, "result": exec_globals.get("result", None)}
+        if persistent:
+            payload["session_id"] = session_id
+            payload["session_vars"] = bridge.sessions.persist(session_id, exec_globals)
+            if reset_note:
+                payload["session_reset"] = reset_note
+        return payload
+
+    if compiled.co_flags & inspect.CO_COROUTINE:
+        async def run_async():
+            old_stdout = sys.stdout
+            sys.stdout = capture = io.StringIO()
+            try:
+                await eval(compiled, exec_globals)
+            except Exception as e:
+                fail(e, capture.getvalue())
+            finally:
+                sys.stdout = old_stdout
+            return finish(capture.getvalue())
+        return run_async()
 
     old_stdout = sys.stdout
     sys.stdout = capture = io.StringIO()
     try:
-        exec(code, exec_globals)
+        exec(compiled, exec_globals)
     except Exception as e:
-        raise ToolError(str(e), details={
-            "output": capture.getvalue(),
-            "traceback": traceback.format_exc(),
-        })
+        fail(e, capture.getvalue())
     finally:
         sys.stdout = old_stdout
-
-    payload = {
-        "output": capture.getvalue(),
-        "result": exec_globals.get("result", None),
-    }
-    if persistent:
-        payload["session_id"] = session_id
-        payload["session_vars"] = bridge.sessions.persist(session_id, exec_globals)
-    return payload
+    return finish(capture.getvalue())
 
 
 _PUT_FILE_DESCRIPTION = (
