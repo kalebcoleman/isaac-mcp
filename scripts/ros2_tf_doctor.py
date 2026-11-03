@@ -15,7 +15,9 @@ playing) and reports the problems that make RViz show a wrong or flickering tree
 - frames that do not connect to the Fixed Frame, or a Fixed Frame nobody publishes;
 - simulation-time and wall-clock stamps mixed in one tree, or sim-time stamps with no
   /clock (some node is missing use_sim_time:=true);
-- several /tf publishers, listed by node, when frames look duplicated.
+- several /tf publishers, listed by node, when frames look duplicated;
+- more than one /clock publisher, or /clock going backwards (RViz then keeps resetting);
+- TF stamps far from /clock (two time sources, e.g. after a stop/play).
 
 Exit status: 0 no errors, 1 errors found, 2 could not run (ROS 2 not sourced, no data).
 ``analyze`` is pure and unit-tested without ROS.
@@ -36,7 +38,23 @@ ROOT = Path(__file__).resolve().parent.parent
 WALL_EPOCH = 1e9  # stamps above this are wall-clock time (2001+); simulation time starts at 0
 
 
-def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=()):
+RESET_TO = 0.5  # a /clock jump to below this many seconds is a timeline stop/play, not a second clock
+CLOCK_SKEW = 1.0  # TF this far from /clock (sim seconds) cannot be looked up by use_sim_time nodes
+
+
+def clock_jumps(times):
+    """Return (resets, backward_steps) in a /clock sample sequence."""
+    resets = back = 0
+    for a, b in zip(times, times[1:]):
+        if b < a:
+            if b < RESET_TO and a - b > RESET_TO:
+                resets += 1
+            else:
+                back += 1
+    return resets, back
+
+
+def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publishers=(), clock_times=()):
     """Return ``(errors, warnings, info)`` for observed TF edges.
 
     ``edges``: iterable of dicts ``{"parent", "child", "static", "stamp"}`` (stamp in seconds).
@@ -118,6 +136,31 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=()):
     if "sim" in domains and not clock_seen:
         errors.append("TF uses simulation time but nothing publishes /clock; nodes with use_sim_time:=true "
                       "will wait forever. sim__ros2__tf_setup publishes /clock.")
+    clock_pubs = sorted(set(clock_publishers))
+    if len(clock_pubs) > 1:
+        errors.append(f"{len(clock_pubs)} nodes publish /clock ({', '.join(clock_pubs)}): time jumps back and forth, "
+                      "so RViz keeps resetting ('Detected jump back in time') and TF is cleared. Keep one; "
+                      "sim__ros2__tf_setup reuses an existing clock.")
+    else:
+        resets, back = clock_jumps(list(clock_times))
+        if back:
+            errors.append(f"/clock went backwards {back} time(s) while listening (not a reset to 0): two clock "
+                          "sources; RViz clears TF on every jump.")
+        if resets:
+            warnings.append(f"/clock restarted from 0 {resets} time(s): the timeline was stopped and played. "
+                            "RViz resets once per restart; that is expected.")
+    # Newest sample of each frame only (lists are in arrival order), so a stop/play while
+    # listening does not compare pre-reset TF with the post-reset clock.
+    # Each frame on its own: one robot on the wrong time base must not hide behind another.
+    newest = {c: v[-1] for c, v in stamps.items() if v[-1] <= WALL_EPOCH}
+    if newest and clock_times:
+        off = {c: t - clock_times[-1] for c, t in newest.items() if abs(t - clock_times[-1]) > CLOCK_SKEW}
+        if off:
+            worst = max(off, key=lambda c: abs(off[c]))
+            errors.append(f"{len(off)} frame(s) differ from /clock by more than {CLOCK_SKEW:g} s of sim time "
+                          f"(worst: {worst} {off[worst]:+.1f} s; {', '.join(sorted(off)[:8])}): they use a different "
+                          "time source (one restarts at 0 on stop/play, the other keeps counting), so use_sim_time "
+                          "nodes cannot look them up. Re-run sim__ros2__tf_setup (clock=auto).")
     if "wall" in domains and "sim" not in domains and clock_seen:
         warnings.append("/clock is published but TF uses wall-clock time; the TF publishers are not using "
                         "simulation time.")
@@ -137,13 +180,13 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=()):
 
     info = dict(frames=len(frames), roots=roots, fixed_frame=fixed_frame,
                 static=sorted(c for c, k in kinds.items() if k == {"static"}),
-                time_source=sorted(domains), clock=clock_seen, tf_publishers=publishers,
+                time_source=sorted(domains), clock=clock_seen, tf_publishers=publishers, clock_publishers=clock_pubs,
                 tree={c: sorted(p) for c, p in sorted(parents.items())})
     return errors, warnings, info
 
 
 def capture(seconds):
-    """Listen to /tf, /tf_static and /clock; return (edges, clock_seen, publishers)."""
+    """Listen to /tf, /tf_static and /clock; return (edges, clock times, TF publishers, clock publishers)."""
     import rclpy
     from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
     from rosgraph_msgs.msg import Clock
@@ -164,7 +207,7 @@ def capture(seconds):
                             durability=DurabilityPolicy.TRANSIENT_LOCAL, reliability=ReliabilityPolicy.RELIABLE)
     node.create_subscription(TFMessage, "/tf", on_tf(False), 100)
     node.create_subscription(TFMessage, "/tf_static", on_tf(True), static_qos)
-    node.create_subscription(Clock, "/clock", lambda m: clock.append(m), 10)
+    node.create_subscription(Clock, "/clock", lambda m: clock.append(m.clock.sec + m.clock.nanosec * 1e-9), 10)
     end = time.monotonic() + seconds
     while time.monotonic() < end:
         rclpy.spin_once(node, timeout_sec=0.05)
@@ -173,9 +216,11 @@ def capture(seconds):
         for info in node.get_publishers_info_by_topic(topic):
             publishers.add(f"{info.node_namespace.rstrip('/')}/{info.node_name}")
     publishers.discard("/isaac_mcp_tf_doctor")
+    clock_publishers = {f"{i.node_namespace.rstrip('/')}/{i.node_name}"
+                        for i in node.get_publishers_info_by_topic("/clock")}
     node.destroy_node()
     rclpy.shutdown()
-    return edges, bool(clock), publishers
+    return edges, clock, publishers, clock_publishers
 
 
 def dds_env(env):
@@ -244,18 +289,20 @@ def main(argv=None) -> int:
         rest = [a for a in (argv if argv is not None else sys.argv[1:]) if a != "--isaac-ros"]
         return subprocess.run([python, str(Path(__file__).resolve()), *rest], env=env).returncode
     try:
-        edges, clock_seen, publishers = capture(max(0.5, min(args.seconds, 30.0)))
+        edges, clock_times, publishers, clock_publishers = capture(max(0.5, min(args.seconds, 30.0)))
     except ImportError as exc:
         print(f"ROS 2 Python packages not found ({exc}). Source ROS 2 first "
               "(source /opt/ros/<distro>/setup.bash), or pass --isaac-ros to use Isaac Sim's bundled ROS 2.",
               file=sys.stderr)
         return 2
-    errors, warnings, info = analyze(edges, args.fixed_frame, clock_seen=clock_seen, tf_publishers=publishers)
+    errors, warnings, info = analyze(edges, args.fixed_frame, clock_seen=bool(clock_times), tf_publishers=publishers,
+                                     clock_publishers=clock_publishers, clock_times=clock_times)
     if args.json:
         print(json.dumps(dict(errors=errors, warnings=warnings, **info), indent=2))
     else:
         print(f"TF: {info['frames']} frames, roots {info['roots']}, time {info['time_source'] or 'none'}, "
-              f"/clock {'yes' if clock_seen else 'no'}, publishers {info['tf_publishers'] or 'none'}")
+              f"/clock {'yes' if clock_times else 'no'} ({len(info['clock_publishers'])} publisher(s)), "
+              f"TF publishers {info['tf_publishers'] or 'none'}")
         for e in errors:
             print("ERROR:", e)
         for w in warnings:

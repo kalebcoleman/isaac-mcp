@@ -16,6 +16,33 @@ and the RViz layout follows NVIDIA's `isaac_tutorials` configs in
 [IsaacSim-ros_workspaces](https://github.com/isaac-sim/IsaacSim-ros_workspaces). Frame names
 follow [REP 105](https://www.ros.org/reps/rep-0105.html) (`map`, `odom`, `base_link`).
 
+## Installing ROS 2 (for RViz 2 and the doctor)
+
+Isaac Sim ships its own ROS 2 libraries for the bridge, but RViz 2 needs a ROS 2 installation.
+
+- **With sudo:** the official packages for your Ubuntu release (Humble on 22.04, Jazzy on 24.04):
+  `sudo apt install ros-<distro>-ros-base ros-<distro>-rviz2 ros-<distro>-robot-state-publisher
+  ros-<distro>-tf2-tools ros-<distro>-rmw-cyclonedds-cpp ros-<distro>-xacro`, then
+  `source /opt/ros/<distro>/setup.bash`.
+- **Without sudo** (lab and university accounts): [RoboStack](https://robostack.github.io/)
+  installs ROS 2 into your home folder with micromamba:
+
+  ```bash
+  mkdir -p ~/.local && curl -fsSL https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C ~/.local bin/micromamba
+  ~/.local/bin/micromamba create -y -p ~/ros2/humble -c conda-forge -c robostack-staging \
+      ros-humble-desktop ros-humble-rmw-cyclonedds-cpp ros-humble-tf2-tools ros-humble-xacro
+  ~/.local/bin/micromamba run -p ~/ros2/humble rviz2
+  # or, per shell: eval "$(~/.local/bin/micromamba shell hook -s bash)"; micromamba activate ~/ros2/humble
+  ```
+
+  About 5.5 GB. Validated on Ubuntu 22.04 with Isaac Sim 6.2: the doctor and RViz 2 see the
+  simulator's TF with `config/ros_dds.env` sourced.
+- **Only the doctor:** `--isaac-ros` uses Isaac Sim's bundled ROS 2; no install needed.
+- **Use the same distro as the simulator's bridge.** `run.sh` loads Isaac's bundled Humble on
+  Ubuntu 22.04 and Jazzy on 24.04 (`ROS_DISTRO` overrides it). Humble and Jazzy nodes did not
+  discover each other with `ROS_LOCALHOST_ONLY=1` in local tests, so install the matching distro
+  (or point `ROS_DISTRO` at the one you have) rather than mixing them.
+
 ## The rules that keep RViz stable
 
 Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have seen comes from one of these:
@@ -24,9 +51,17 @@ Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have
    Isaac publishing the robot's links *and* `robot_state_publisher` publishing them from the
    URDF gives every link two sources, so RViz jumps between them. Pick one
    (`link_frames=isaac` or `link_frames=robot_state_publisher`).
-2. **One clock.** Isaac stamps everything with simulation time and publishes `/clock`. Every
-   other node, RViz included, must run with `use_sim_time:=true`; mixing wall-clock and sim
-   stamps makes TF lookups fail or extrapolate.
+2. **One clock.** Isaac stamps everything with simulation time and publishes `/clock`, from
+   exactly one node. Two `/clock` publishers (for example the UR5e twin's graph plus a
+   hand-built one) disagree by a few frames, so time keeps jumping back: RViz logs "Detected
+   jump back in time", resets and clears TF many times a second. `sim__ros2__tf_setup` reuses
+   an existing clock (`clock=auto`), or else publishes one shared clock
+   (`/Graph/isaac_mcp_ros2_clock`) for every robot it sets up, and matches its TF stamps to that
+   clock's stop/play behaviour. Running the twin's own setup (`quick_start`) afterwards adds a second
+   clock: call the tool again with `clock=auto`; it drops its clock and updates every robot it
+   set up. The shared clock stays after the last robot graph is deleted (`sim__stage__clear_owned`
+   removes it). Every other node, RViz included, must run with
+   `use_sim_time:=true`; mixing wall-clock and sim stamps makes TF lookups fail or extrapolate.
 3. **One root.** RViz's *Fixed Frame* must be the root of a single connected tree
    (`world` for an arm on a table, `map` or `odom` for a mobile base). A frame that does not
    connect to it is drawn nowhere.
@@ -111,7 +146,10 @@ WARNING: several nodes publish TF: /_Graph_isaac_mcp_ros2_TFRobotLinks, ..., /ro
 | No topics at all | DDS or domain mismatch | source `config/ros_dds.env` and use the simulator's `ROS_DOMAIN_ID` (the tool reports it) |
 | TF shows only the robot's top prim | targeted the robot Xform, not its articulation | the tool resolves the articulation root; for hand-built graphs target that prim |
 | RobotModel white/missing | no `/robot_description` | `link_frames=robot_state_publisher` + `robot_state_publisher` with the URDF |
-| Frames stop after reset | timeline stopped | play again; `/clock` restarts from 0, so restart RViz or press Reset |
+| RViz log floods "Detected jump back in time. Resetting RViz" | two `/clock` publishers | doctor lists them; keep one (`clock=auto` reuses the existing one) |
+| ROS 2 node fails: "SharedMemory: unknown element" / "rmw handle is invalid" | an old `cyclonedds.xml` with `<SharedMemory>` and a Cyclone build without it | use this repository's current `config/cyclonedds.xml` |
+| Frames stop after reset | timeline stopped | play again; RViz resets once if `/clock` restarts from 0 (the twin's clock keeps counting) |
+| Robot vanishes after stop/play, "extrapolation into the past" | TF and `/clock` from different time sources | doctor reports the skew; re-run `sim__ros2__tf_setup` (`clock=auto`) |
 
 Validated on Isaac Sim 6.2 (UR5e + RG2 + camera: 17 frames, one root; NVIDIA Jetbot mobile
 base: `map -> odom -> chassis -> wheels` with `/odom`), with the doctor using the bundled ROS 2.

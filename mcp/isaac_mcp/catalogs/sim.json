@@ -2328,7 +2328,7 @@
       "owner_id": "generic-sim"
     },
     "sim.ros2.tf_setup": {
-      "description": "Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /joint_states, the static world->base_link (or world->odom + odometry for a mobile base) and the robot's link TF from Isaac. Rebuilds its own graph on each call, so no frame is ever published twice by this tool. Timeline must be stopped; publishes while playing. Then use scripts/ros2_rviz_config.py and scripts/ros2_tf_doctor.py (docs/ROS2-RVIZ.md).",
+      "description": "Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /joint_states, the static world->base_link (or world->odom + odometry for a mobile base) and the robot's link TF from Isaac. Rebuilds its own graph on each call, so no frame is ever published twice by this tool; reuses an existing /clock and reports other ROS 2 publishers in the scene. Timeline must be stopped; publishes while playing. Then use scripts/ros2_rviz_config.py and scripts/ros2_tf_doctor.py (docs/ROS2-RVIZ.md).",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2392,6 +2392,17 @@
           "description": "Joint state topic.",
           "required": false,
           "default": "joint_states"
+        },
+        "clock": {
+          "type": "string",
+          "description": "auto: reuse an existing /clock, else publish one shared clock for all robots (two clocks make RViz reset constantly); publish: always keep the tool's clock; skip: never create one.",
+          "required": false,
+          "default": "auto",
+          "enum": [
+            "auto",
+            "publish",
+            "skip"
+          ]
         }
       },
       "fields": [
@@ -2493,6 +2504,19 @@
           "default": "joint_states",
           "has_default": true,
           "description": "Joint state topic."
+        },
+        {
+          "name": "clock",
+          "kind": "enum",
+          "enum": [
+            "auto",
+            "publish",
+            "skip"
+          ],
+          "required": false,
+          "default": "auto",
+          "has_default": true,
+          "description": "auto: reuse an existing /clock, else publish one shared clock for all robots (two clocks make RViz reset constantly); publish: always keep the tool's clock; skip: never create one."
         }
       ],
       "namespace": "sim",
