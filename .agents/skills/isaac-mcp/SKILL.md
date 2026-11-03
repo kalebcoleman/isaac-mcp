@@ -152,9 +152,13 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   `sim__joints__state` require initialized physics; `sim__joints__command` sets targets and
   returns acknowledgment, not the achieved pose.
 - **Sensors and capture:** `sim__camera__create` then `sim__camera__capture` (RTX, PNG in the
-  configured output root); `sim__lidar__*` needs Kit launched with `--motion-bvh`.
+  configured output root); the camera takes a parent path, `rotate_xyz` degrees or a quaternion,
+  `focal_length` and `clipping_range`. `sim__lidar__create` with `config=Example_Rotary_2D`
+  builds NVIDIA's named lidar (an unknown name lists the valid ones); no `--motion-bvh` needed.
   `sim__viewport__frame` selects visible geometry and edits the active camera in the session
-  layer; it is a scene edit, with no Kit undo entry. `render_complete=false` means allow
+  layer; it is a scene edit, with no Kit undo entry. For videos of a moving robot use
+  `margin` (metres) or `eye`/`target`, and `follow=true` to keep it in view while playing
+  (`follow=false` stops). `render_complete=false` means allow
   ordinary rendering before inspecting the verified application window. A native failure can
   leave selection or session-camera changes; inspect before retrying. Prefer a smaller subtree
   when surrounding geometry occludes the target. See `docs/TOOLS-SCENE.md` for context,
@@ -191,7 +195,8 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   node's compute errors (a wrong token makes a node silently output zeros).
 - Save checkpoints into your own folder: `sim__stage__save` with `directory=<folder under home>`.
 - For a video or screenshot of a graph, `sim__graph__show` (windowed Kit, `layout=true`, a
-  `width`/`height` to undock it) opens it readable in the Action Graph editor.
+  `width`/`height` to undock it) opens it readable and fitted in the Action Graph editor;
+  `close=true` closes it. The undocked editor floats inside the Isaac Sim window.
 - No map files for Nav2? `sim__map__occupancy` writes a `map_server` PGM + YAML from the scene's
   colliders (centre `z` on the lidar height; put `start` in open floor; `clear` the robot's own
   footprint). It plays 8 frames itself, so `/clock` restarts: generate the map before starting RViz.

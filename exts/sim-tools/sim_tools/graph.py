@@ -311,8 +311,27 @@ def inspect_graph(stage, path, limit=64):
                    if failing else {}))
 
 
+def _editor():
+    import omni.graph.window.action.action_graph_extension as editor
+
+    return editor
+
+
+def editor_ready():
+    """True once the Action Graph window and its graph widget exist (built on later frames)."""
+    try:
+        import omni.ui as ui
+
+        window = ui.Workspace.get_window("Action Graph")
+        ext = _editor()._extension_instance  # noqa: SLF001
+        return bool(window is not None and window.visible and ext._window._main_widget is not None)  # noqa: SLF001
+    except (ImportError, AttributeError):
+        return False
+
+
 def show_graph_open(stage, path, width=0, height=0):
-    """Step 1 of sim.graph.show: open the editor on *path* (its window is built on a later frame)."""
+    """Step 1 of sim.graph.show: open the editor on *path*. Returns True when the editor was
+    already built, so no frames need to pass before step 2."""
     from isaac_mcp.project_assets import refuse
 
     if _headless():
@@ -323,52 +342,123 @@ def show_graph_open(stage, path, width=0, height=0):
     if graph is None or not graph.is_valid():
         refuse("NOT_A_GRAPH", f"No OmniGraph at {path}.")
     _enable("omni.graph.window.action")
+    ready = editor_ready()
     try:
-        import omni.graph.window.action.action_graph_extension as editor
-        import omni.ui as ui
-
-        editor.ActionGraphExtension.show_graph([stage.GetPrimAtPath(path)])
+        _editor().ActionGraphExtension.show_graph([stage.GetPrimAtPath(path)])
     except (ImportError, AttributeError) as exc:
         _editor_changed(exc)
+    return ready
+
+
+def close_editor():
+    """Hide the Action Graph editor window (Kit keeps it for the next show)."""
+    import omni.ui as ui
+
+    window = ui.Workspace.get_window("Action Graph")
+    was_visible = bool(window is not None and window.visible)
+    if window is not None:
+        window.visible = False
+    return dict(closed=was_visible, note="The editor window was hidden." if was_visible else "The editor was not open.")
+
+
+def _place_window(window, width, height):
+    """Undock/size on request, and keep any floating editor inside the main window: a Kit
+    window floats inside the Isaac Sim window, so a stale size can push its close button off it."""
+    import omni.ui as ui
+    from .placement import clamp_window
+
+    if window is None:
+        return None
+    if width and height:
+        window.undock()
+        w, h, x, y = float(width), float(height), 40.0, 60.0
+    elif getattr(window, "docked", True):
+        return None
+    else:
+        w, h, x, y = window.width, window.height, window.position_x, window.position_y
+    main_w, main_h = ui.Workspace.get_main_window_width(), ui.Workspace.get_main_window_height()
+    wanted = (w, h, x, y)
+    w, h, x, y = clamp_window(w, h, x, y, main_w, main_h)
+    window.width, window.height = w, h
+    window.position_x, window.position_y = x, y
+    return dict(width=int(w), height=int(h), x=int(x), y=int(y), main_window=[int(main_w), int(main_h)],
+                clamped=any(abs(a - b) > 0.5 for a, b in zip(wanted, (w, h, x, y))))
+
+
+def _needs_layout(stage, path):
+    """Nodes without a stored editor position or expansion; re-arranging laid-out graphs costs
+    editor rebuild frames (seconds on a loaded GPU) and moves nodes a person placed."""
+    from pxr import Usd
+
+    nodes = [p for p in Usd.PrimRange(stage.GetPrimAtPath(path)) if p.GetTypeName() == "OmniGraphNode"]
+    missing = [p for p in nodes if not (p.GetAttribute("ui:nodegraph:node:pos") and p.GetAttribute("ui:nodegraph:node:pos").HasAuthoredValue())]
+    closed = [p for p in nodes if (p.GetAttribute("ui:nodegraph:node:expansionState").Get()
+                                   if p.HasAttribute("ui:nodegraph:node:expansionState") else None) != "open"]
+    return nodes, missing, closed
+
+
+def store_positions(path):
+    """The editor's auto-layout only updates its in-memory model (it writes
+    ui:nodegraph:node:pos after a mouse drag). Store the positions in the stage so the layout
+    survives reopening the editor or saving, and the next call can skip re-arranging.
+    Returns the number of nodes stored."""
+    from pxr import Gf, Sdf, Usd, UsdUI
+
+    try:
+        model = _editor()._extension_instance._actions._get_view()._model  # noqa: SLF001
+    except (ImportError, AttributeError):
+        return 0
+    root, stored = Sdf.Path(path), 0
+    for node in list(model.nodes):
+        if not (isinstance(node, Usd.Prim) and node.IsValid() and node.GetPath().HasPrefix(root)):
+            continue
+        position = model[node].position
+        if position is not None:
+            UsdUI.NodeGraphNodeAPI.Apply(node).CreatePosAttr().Set(Gf.Vec2f(*position[:2]))
+            stored += 1
+    return stored
 
 
 def show_graph_finish(stage, path, layout=False, width=0, height=0):
-    """Step 2 of sim.graph.show, a few frames later: size the window, load the graph, lay it out
-    with expanded (readable) nodes, frame them."""
+    """Step 2 of sim.graph.show: size the window, load the graph, lay out only what needs it."""
+    laid_out = False
     try:
-        import omni.graph.window.action.action_graph_extension as editor
         import omni.ui as ui
-        from pxr import Sdf, Usd
+        from pxr import Sdf
 
-        window = ui.Workspace.get_window("Action Graph")
-        if window is not None and width and height:
-            window.undock()
-            window.width, window.height = float(width), float(height)
-            window.position_x, window.position_y = 40.0, 60.0
-        if layout:  # expanded nodes show their port names in a video
-            for prim in Usd.PrimRange(stage.GetPrimAtPath(path)):
-                if prim.HasAttribute("ui:nodegraph:node:pos") or prim.GetTypeName() == "OmniGraphNode":
-                    prim.CreateAttribute("ui:nodegraph:node:expansionState", Sdf.ValueTypeNames.Token).Set("open")
-        ext = editor._extension_instance  # noqa: SLF001 - the editor has no public API for this
+        window_info = _place_window(ui.Workspace.get_window("Action Graph"), width, height)
+        nodes, missing, closed = _needs_layout(stage, path) if layout else ([], [], [])
+        for prim in closed:  # expanded nodes show their port names in a video
+            prim.CreateAttribute("ui:nodegraph:node:expansionState", Sdf.ValueTypeNames.Token).Set("open")
+        ext = _editor()._extension_instance  # noqa: SLF001 - the editor has no public API for this
         ext._window._main_widget._open_graph(path)  # noqa: SLF001
         view = ext._actions._get_view()  # noqa: SLF001
-        if layout:
-            view.layout_all()  # writes node positions (ui:nodegraph:node:pos) into the stage
+        if layout and (missing or closed):
+            view.layout_all()  # positions land in the editor model on later frames: store_positions
+            laid_out = True
         view.focus_on_nodes()
     except (ImportError, AttributeError) as exc:
         _editor_changed(exc)
-    return dict(graph=path, shown=True, laid_out=bool(layout),
-                note="Take a screenshot or record the window to capture it.")
+    result = dict(graph=path, shown=True, laid_out=laid_out,
+                  note="Take a screenshot or record the window to capture it.")
+    if layout and not laid_out:
+        result["layout_skipped"] = "Every node already has a stored position and is expanded."
+    if window_info:
+        result["window"] = window_info
+    return result
 
 
 def show_graph_refocus():
-    """Frame all nodes again once expanded nodes have been drawn at their final size."""
+    """Zoom to fit all nodes; returns the view state so the caller can wait until it settles
+    (node sizes are known only after the editor has drawn them)."""
     try:
-        import omni.graph.window.action.action_graph_extension as editor
-
-        editor._extension_instance._actions._get_view().focus_on_nodes()  # noqa: SLF001
+        view = _editor()._extension_instance._actions._get_view()  # noqa: SLF001
+        view.focus_on_nodes()
+        model = getattr(view, "_model", None)
+        bbox = tuple(view.get_bbox_of_nodes(model.nodes)) if model is not None and model.nodes else None
+        return (*bbox, round(view.zoom, 4), round(view.pan_x, 1), round(view.pan_y, 1)) if bbox else None
     except (ImportError, AttributeError):
-        pass
+        return None
 
 
 def _editor_changed(exc):

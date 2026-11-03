@@ -197,8 +197,15 @@ add(
 )
 add(
     "sim.viewport.frame",
-    "Select and frame visible geometry in the selected stage's active viewport. Edits the active camera in the session layer, preserving source layers and the prior edit target; no Kit undo entry. Refuses mismatched contexts, look-through targets, unsafe session-sublayer camera opinions and empty bounds. Does not wait for rendered pixels or prove visibility; allow ordinary render updates, then capture the verified app window using screenshot. Select a smaller subtree if surrounding geometry occludes it.",
-    dict(**TARGET, path=field("string", "Absolute prim path to frame.")),
+    "Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. follow=true (with path): keep the prim in view while the timeline plays, moving the camera with it at the same offset (works for robots whose links move under a fixed root); follow=false stops it; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds. Does not wait for rendered pixels; then screenshot the app window or record.",
+    dict(
+        **TARGET,
+        path=field("string", "Absolute prim path to frame or follow.", False, default=""),
+        margin=field("number", "Extra radius in metres around the prim's bounding sphere (0..1000), e.g. 1.0 for a small robot that will drive around.", False),
+        eye=field("array", "Camera position [x, y, z] in world coordinates (stage units).", False),
+        target=field("array", "Point to look at [x, y, z] in world coordinates (stage units); default: the prim's centre.", False),
+        follow=field("boolean", "true: follow path while playing (until stopped); false: stop following.", False),
+    ),
 )
 
 DISABLED = {
@@ -347,13 +354,17 @@ add(
 )
 add(
     "sim.camera.create",
-    "Create a persistent RTX camera on a stopped timeline. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Near/far clipping is 0.01/1000 meters, converted to stage units and returned. Needs rendered frames; width/height capped at 1024.",
+    "Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X), focal_length=18, clipping_range=[0.01,100]. USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper.",
     dict(
         **TARGET,
-        path=field("string", "New camera path."),
+        path=field("string", "New camera path; its parent prim (e.g. a robot link) must exist."),
         width=field("integer", "Image width 64..1024.", False, default=640),
         height=field("integer", "Image height 64..1024.", False, default=480),
         **POSE,
+        rotate_xyz=field("array", "Orientation as USD rotateXYZ Euler angles in degrees (X, then Y, then Z), instead of the orientation quaternion. With frame=local it is authored as translate + rotateXYZ ops.", False),
+        focal_length=field("number", "Focal length in mm (0.1..1000); default USD 50.", False),
+        horizontal_aperture=field("number", "Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height.", False),
+        clipping_range=field("array", "[near, far] clipping distances in metres.", False, default=[0.01, 1000.0]),
     ),
 )
 add(
@@ -367,8 +378,16 @@ add(
 )
 add(
     "sim.lidar.create",
-    "Create generic RTX LiDAR while stopped using qualified installed 6.x APIs. Requires a session launched with enable_motion_bvh=true (run.sh --motion-bvh). No hardware preset promise. At most eight sensors; delete an exact owned sensor path to release resources.",
-    dict(**TARGET, path=field("string", "Unused LiDAR prim path."), **POSE),
+    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D, as Create > Sensors > RTX Lidar does) or, without config, a local generic LiDAR. Config assets are referenced from Isaac's assets root (network or local mirror); an unknown name lists the valid ones. Motion BVH is not required (only motion distortion within a scan needs run.sh --motion-bvh); the result reports it. Returns prim type, sensor path and tick/scan rate. At most eight sensors; delete an exact owned sensor path to release resources.",
+    dict(
+        **TARGET,
+        path=field("string", "Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist."),
+        **POSE,
+        rotate_xyz=field("array", "Orientation as USD rotateXYZ Euler angles in degrees, instead of the orientation quaternion.", False),
+        config=field("string", "NVIDIA lidar config name, e.g. Example_Rotary_2D, Example_Rotary, OS1, RPLIDAR_S2E. Empty: local generic LiDAR.", False, default=""),
+        variant=field("string", "Config variant, e.g. OS1_REV6_32ch10hz1024res (an invalid one lists the valid ones).", False, default=""),
+        tick_rate=field("number", "Sensor tick rate in Hz (0..240]; default: the config's scan rate (10 Hz for Example_Rotary_2D). A rate other than the scan rate yields partial scans.", False),
+    ),
 )
 add(
     "sim.lidar.read",
@@ -431,13 +450,14 @@ add(
 )
 add(
     "sim.graph.show",
-    "Open a graph in the Action Graph editor of a windowed Isaac Sim and frame its nodes, e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands the nodes (port names readable) and auto-arranges them, writing both into the stage. Uses the editor's internal API; refuses cleanly if it changed.",
+    "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands the nodes (port names readable) and auto-arranges them, writing both into the stage; graphs already laid out are not re-arranged. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window (not a separate desktop window); it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed.",
     dict(
         **TARGET,
-        path=field("string", "Graph prim path."),
-        layout=field("boolean", "Auto-arrange the nodes first (writes node positions).", False, default=False),
-        width=field("integer", "Undock the editor window and size it (pixels); 0 keeps the docked layout.", False, default=0),
+        path=field("string", "Graph prim path (not needed with close=true).", False, default=""),
+        layout=field("boolean", "Expand and auto-arrange nodes that have no stored position yet (writes node positions).", False, default=False),
+        width=field("integer", "Undock the editor window and size it (pixels, clamped to the Isaac Sim window); 0 keeps the docked layout.", False, default=0),
         height=field("integer", "Window height in pixels when width is set.", False, default=0),
+        close=field("boolean", "Close the Action Graph editor window instead of showing a graph.", False, default=False),
     ),
 )
 add(

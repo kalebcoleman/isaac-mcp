@@ -18,13 +18,15 @@ def test_sensor_recreation_refuses_registered_path_after_external_removal(
     created, disposed = [], []
     path = "/World/Sensor"
 
-    def create(stage, prim_path, kind, width, height):
+    def create(stage, prim_path, kind, width, height, **_options):
         index = len(created)
         stage.DefinePrim(prim_path, "Camera" if kind == "camera" else "OmniLidar")
         result = dict(
             product=SimpleNamespace(destroy=lambda: disposed.append(index)),
             adapter="test", release="test", build="test",
             clipping_range_stage_units=[0.01, 1000.0],
+            focal_length_mm=50.0, horizontal_aperture_mm=20.955, vertical_aperture_mm=15.7,
+            sensor_path=str(prim_path), tick_rate_hz=10.0, scan_rate_hz=10.0,
         )
         created.append(result)
         return result
