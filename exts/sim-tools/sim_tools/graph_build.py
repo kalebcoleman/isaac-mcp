@@ -172,7 +172,7 @@ def build(stage, a, stopped):
         stage.RemovePrim(path)
         if stage.GetPrimAtPath(path):
             return _refuse(SpecError("NOT_REPLACEABLE", f"{path} is still defined after removing it from the edit "
-                                     "layer; build at another path."))
+                                     "layer; build at another path.", replaced_graph_lost=True))
         replaced = True
     if not stage.GetPrimAtPath(Sdf.Path(path).GetParentPath()):
         return _refuse(SpecError("NOT_FOUND", f"The parent of {path} does not exist."))
