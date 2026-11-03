@@ -87,7 +87,7 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=()):
         fixed_root = root_of(fixed_frame)
         # Frames in or below a loop are reported as the loop; others must reach the Fixed Frame's root.
         rooted = {f: root_of(f) for f in frames}
-        cut = [] if fixed_root is None else sorted(f for f, r in rooted.items() if r is not None and r != fixed_root)
+        cut = sorted(f for f, r in rooted.items() if r is not None and (fixed_root is None or r != fixed_root))
         for loop in sorted(cycles):
             errors.append(f"TF loop {loop}: a frame is its own ancestor, so nothing in it can be placed. "
                           "Two publishers disagree about which frame is the parent; keep one.")

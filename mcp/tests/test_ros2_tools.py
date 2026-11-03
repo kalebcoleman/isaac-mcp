@@ -348,7 +348,7 @@ def test_namespaced_mobile_robots_get_their_own_odom_frame():
     assert check(extras=[("/x/r1_odom", "r1_odom")], mode="mobile", namespace="r1")[0] == "DUPLICATE_FRAME_NAMES"
 
 
-@pytest.mark.parametrize("ns", ["a//b", "a/1b", "bad ns"])
+@pytest.mark.parametrize("ns", ["a//b", "a/1b", "bad ns", "a__b"])
 def test_invalid_namespaces_are_refused(ns):
     with pytest.raises(ValueError):
         ros2.graph_path(ns)
@@ -375,3 +375,20 @@ def test_doctor_loop_does_not_hide_an_orphan_and_is_reported_once():
 def test_isaac_ros_env_points_cyclone_at_the_repository_profile(tmp_path, monkeypatch):
     env = doctor.dds_env({"PATH": "/usr/bin:/bin"})
     assert env["CYCLONEDDS_URI"].endswith("config/cyclonedds.xml") and env["ROS_DOMAIN_ID"] == "0"
+
+
+def test_odom_frames_are_one_to_one_across_namespaces():
+    assert ros2.odom_frame("a/b") == "a__b_odom" and ros2.odom_frame("a_b") == "a_b_odom"
+
+
+def test_doctor_reports_orphans_even_when_the_fixed_frame_is_in_a_loop():
+    edges = [e("world", "base", 0, True), e("base", "world"), e("c", "d")]
+    errors, *_ = doctor.analyze(edges, "world", clock_seen=True)
+    assert any("TF loop" in x for x in errors)
+    assert any("do not connect to 'world'" in x and "c" in x for x in errors)
+
+
+def test_mismatch_advice_fits_the_layout():
+    with_extras = check(base_frame="other", link_frames="robot_state_publisher", extras=[("/c", "cam")])[1]
+    assert "link_frames=robot_state_publisher" not in with_extras and "isaac:nameOverride" in with_extras
+    assert "link_frames=robot_state_publisher" in check(base_frame="other")[1]

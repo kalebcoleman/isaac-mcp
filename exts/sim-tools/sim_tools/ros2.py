@@ -37,7 +37,8 @@ def _frame(name, what):
 def _namespace(namespace):
     """Normalised namespace ('' or 'a/b'); every segment must be a valid ROS name."""
     ns = (namespace or "").strip("/")
-    if ns and not all(FRAME_RE.match(part) for part in ns.split("/")):
+    # ROS 2 names also forbid repeated underscores, which keeps the '/' -> '__' mapping one-to-one.
+    if ns and not all(FRAME_RE.match(part) and "__" not in part for part in ns.split("/")):
         raise ValueError(f"namespace {namespace!r} is not a valid ROS namespace")
     return ns
 
@@ -45,7 +46,7 @@ def _namespace(namespace):
 def odom_frame(namespace=""):
     """Odometry frame: 'odom', or '<ns>_odom' so several mobile robots never share one."""
     ns = _namespace(namespace)
-    return f"{ns.replace('/', '_')}_odom" if ns else "odom"
+    return f"{ns.replace('/', '__')}_odom" if ns else "odom"  # a/b -> a__b_odom; a_b -> a_b_odom
 
 
 def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", world_frame="world",
@@ -194,9 +195,11 @@ def check_frames(links, base_path, base_frame, base_tf_name, extras, world_frame
                 "pass its root link (the one the robot is mounted or driven by).")
     if base_frame != base_tf_name and (link_frames == "isaac" or extras):
         # Isaac names the parent of the link TF and of extra frames after the base prim.
+        hint = ("Extra frames are parented to the base prim's TF name, so base_frame must match it: leave "
+                "base_frame empty or set isaac:nameOverride on the prim." if extras else
+                "Leave base_frame empty, set isaac:nameOverride on the prim, or use link_frames=robot_state_publisher.")
         return ("BASE_FRAME_MISMATCH", f"base_frame {base_frame!r} differs from the name Isaac publishes for "
-                f"{base_path} ({base_tf_name!r}), which would split the tree in two. Leave base_frame empty, "
-                "set isaac:nameOverride on the prim, or use link_frames=robot_state_publisher.")
+                f"{base_path} ({base_tf_name!r}), which would split the tree in two. " + hint)
     names = {}
     for p, n in links:
         names.setdefault(n, []).append(p)
@@ -393,8 +396,9 @@ def setup(scene, stage, a):
             "and two publishers for the same frames make RViz jump. Use link_frames=robot_state_publisher instead "
             "if you need a URDF RobotModel in RViz.",
         ]) + ([
-            "Do not run AMCL/SLAM with world_frame='map': they publish map->odom themselves. Use world_frame='' "
-            "(Isaac publishes only odom->base) when a localization node provides map->odom.",
+            f"Do not run AMCL/SLAM with world_frame='map': they publish map->{frames['odom']} themselves. Use "
+            f"world_frame='' (Isaac publishes only {frames['odom']}->base) when a localization node provides it, "
+            f"and set that node's odom_frame_id to {frames['odom']}.",
         ] if a.get("base", "fixed") == "mobile" else []),
         rebuilt=existing,
     )
