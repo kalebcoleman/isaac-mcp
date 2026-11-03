@@ -229,7 +229,8 @@ keyboard and would receive the keystrokes. Isaac Sim's own UI still works throug
    and their centre in Isaac Sim window pixels.
 2. `sim__ui__act` with that `ref` (or `x`, `y`): `click`, `double_click`, `right_click`, `move`,
    `drag`, `scroll`, `type` (ref first focuses the field), `keypress` (`["ctrl", "s"]`, `["enter"]`),
-   `menu` (`"Create/Mesh/Cube"`; a wrong path lists the real items), or `wait`.
+   `menu` (`"Create/Mesh/Cube"`; a wrong path lists the real items), `tab` (`window="Console"`:
+   bring a docked tab to the front; `sim__ui__find` lists `hidden_tabs`), or `wait`.
 3. Check the result: `screenshot(window_id=<Isaac Sim window>)` (its pixels are the same as
    `sim__ui__find`'s; a downscaled image's caption gives the scale factor), or `sim__ui__find`.
 
