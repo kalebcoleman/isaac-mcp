@@ -8,6 +8,15 @@ from .core import vector
 NEWTON_QUALIFIED = True
 
 
+def body_path(args):
+    paths = [args[key] for key in ("path", "prim", "prim_path") if args.get(key) is not None]
+    if not paths or any(not isinstance(path, str) or not path for path in paths):
+        refuse("INVALID_VALUE", "Supply path (or its alias prim or prim_path) as an absolute rigid body path.")
+    if len(set(paths)) != 1:
+        refuse("INVALID_VALUE", "path, prim and prim_path refer to the same body; supply only one path or matching values.")
+    return paths[0]
+
+
 def manager():
     try:
         from isaacsim.core.simulation_manager import SimulationManager as sm

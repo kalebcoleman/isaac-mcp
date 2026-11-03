@@ -6,7 +6,7 @@ follow mode (a Kit update subscription, released on stop, stage close, camera ch
 
 import math
 
-from pxr import Gf, Usd, UsdGeom
+from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
 from isaac_mcp.project_assets import refuse
 from .core import CAP, matrix
@@ -74,27 +74,96 @@ def check_subtree(prim):
             refuse("LIMIT", f"Viewport framing is limited to {CAP} composed prims; select a smaller subtree.")
 
 
-def world_bounds(prim, time):
+def _is_visible(prim, time):
+    # A query root may be a non-imageable Scope; its nearest imageable parent
+    # still supplies visibility inherited from the rest of the namespace.
+    while prim and not prim.IsPseudoRoot():
+        imageable = UsdGeom.Imageable(prim)
+        if imageable:
+            return imageable.ComputeVisibility(time) != UsdGeom.Tokens.invisible
+        prim = prim.GetParent()
+    return True
+
+
+def _finite_bounds(prim, time):
     """Current world-aligned bounds of visible geometry. PhysX writes simulated link poses to
     USD while playing, so this follows a robot whose links move under a fixed root prim."""
+    if not _is_visible(prim, time):
+        return None
     bounds = UsdGeom.BBoxCache(
         time, [UsdGeom.Tokens.default_, UsdGeom.Tokens.render, UsdGeom.Tokens.proxy]
     ).ComputeWorldBound(prim).ComputeAlignedRange()
     if bounds.IsEmpty() or not all(
         math.isfinite(v) for p in (bounds.GetMin(), bounds.GetMax()) for v in p
     ):
-        refuse("NO_BOUNDS", "Selected prim has no finite visible geometry to frame; select a geometry subtree.")
+        return None
     return bounds
+
+
+def world_bounds(prim, time):
+    bounds = _finite_bounds(prim, time)
+    if bounds is None:
+        refuse("NO_BOUNDS", "Selected prim has no finite visible geometry to frame.", candidates=[])
+    return bounds
+
+
+def frame_prim(stage, prim, time):
+    """Use the requested subtree, or a nearby robot subtree when it has no bounds."""
+    check_subtree(prim)
+    if _finite_bounds(prim, time) is not None:
+        return prim
+    parent = prim.GetParent()
+    if not parent or parent.IsPseudoRoot():
+        refuse("NO_BOUNDS", "No finite visible geometry found near the requested prim.", candidates=[])
+    # A geometry-free robot footprint often has a base_link sibling. Require
+    # physics evidence on the robot or either link so ordinary scene siblings
+    # are never selected silently. Check this small subtree before scanning a
+    # potentially large parent.
+    if prim.GetName() == "base_footprint":
+        base = parent.GetChild("base_link")
+        robot = base and any(
+            p.HasAPI(UsdPhysics.RigidBodyAPI) or p.HasAPI(UsdPhysics.ArticulationRootAPI)
+            for p in (prim, parent, base)
+        )
+        if robot:
+            check_subtree(base)
+            if _finite_bounds(base, time) is not None:
+                return base
+    # Bound the search even if the surrounding environment is very large.
+    # Offer visible geometry paths for an explicit retry, without guessing that
+    # any sibling (or the entire parent) is the requested object.
+    candidates = []
+    truncated = False
+    traversal = iter(Usd.PrimRange(parent, Usd.TraverseInstanceProxies(Usd.PrimDefaultPredicate)))
+    for index, candidate in enumerate(traversal):
+        if index >= CAP:
+            truncated = True
+            break
+        # Prune invisible branches so they cannot exhaust the bounded search
+        # before visible siblings are reached. Compute inherited visibility at
+        # the search root; below it a local invisible opinion hides the subtree.
+        imageable = UsdGeom.Imageable(candidate)
+        if ((index == 0 and not _is_visible(candidate, time))
+                or (imageable and imageable.GetVisibilityAttr().Get(time) == UsdGeom.Tokens.invisible)):
+            traversal.PruneChildren()
+            continue
+        if candidate.IsA(UsdGeom.Gprim) and _finite_bounds(candidate, time) is not None:
+            if len(candidates) == 20:
+                truncated = True
+                break
+            candidates.append(str(candidate.GetPath()))
+    refuse("NO_BOUNDS", "No unambiguous visible geometry subtree near the requested prim; select a candidate.",
+           candidates=candidates, candidates_truncated=truncated)
 
 
 def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled):
     prim = scene.prim(stage, path)
     camera_path, camera, validate = checked_camera(scene, stage, context, viewport)
     # The native utility otherwise returns True even for an empty bounding box.
-    check_subtree(prim)
-    world_bounds(prim, viewport.time)
+    prim = frame_prim(stage, prim, viewport.time)
+    selected_path = str(prim.GetPath())
 
-    context.get_selection().set_selected_prim_paths([path], False)
+    context.get_selection().set_selected_prim_paths([selected_path], False)
     try:
         # These Kit commands otherwise store undo callbacks which can re-author
         # using a later edit target. Do not enqueue such callbacks for this tool.
@@ -106,7 +175,7 @@ def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled)
             "VIEWPORT_FRAME_FAILED",
             f"Native framing failed: {str(exc)[:500]}",
             camera=camera_path,
-            selected_path=path,
+            selected_path=selected_path,
             effects="Selection and session camera edits may have occurred. Inspect before retrying; the prior edit target was restored.",
         )
     if accepted is not True:
@@ -114,7 +183,7 @@ def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled)
             "VIEWPORT_FRAME_FAILED",
             "The native viewport utility did not confirm framing.",
             camera=camera_path,
-            selected_path=path,
+            selected_path=selected_path,
             effects="Selection and session camera edits may have occurred; inspect before retrying.",
         )
     validate()
@@ -129,7 +198,8 @@ def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled)
             effects="Selection and session camera edits occurred; source layers and the prior edit target were preserved.",
         )
     return dict(
-        selected_path=path,
+        requested_path=path,
+        selected_path=selected_path,
         camera=camera_path,
         camera_world_matrix=camera_matrix,
         authored_layer="session",
@@ -188,6 +258,7 @@ def place(scene, stage, context, viewport, a, undo_disabled):
 
     camera_path, camera, validate = checked_camera(scene, stage, context, viewport)
     path = a.get("path") or ""
+    requested_path = path
     margin = a.get("margin")
     eye, target = a.get("eye"), a.get("target")
     mpu = UsdGeom.GetStageMetersPerUnit(stage) or 1.0
@@ -196,7 +267,8 @@ def place(scene, stage, context, viewport, a, undo_disabled):
     prim = center = radius = None
     if path:
         prim = scene.prim(stage, path)
-        check_subtree(prim)
+        prim = frame_prim(stage, prim, viewport.time)
+        path = str(prim.GetPath())
         center, radius = _sphere(prim, viewport.time, (margin or 0.0) / mpu)
     elif target is None or eye is None:
         refuse("INVALID_VALUE", "Give path, or both eye and target.")
@@ -236,7 +308,8 @@ def place(scene, stage, context, viewport, a, undo_disabled):
         capture="Allow ordinary render updates, then use screenshot with this application PID/window ID.",
     )
     if prim is not None:
-        result.update(path=path, prim_center=list(center), bounding_radius=radius,
+        result.update(path=path, requested_path=requested_path, selected_path=path,
+                      prim_center=list(center), bounding_radius=radius,
                       margin_m=margin or 0.0)
     follow = None
     if a.get("follow"):

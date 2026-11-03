@@ -428,6 +428,10 @@ def camera_pipeline(stage, kind="Image"):
 
     stage.DefinePrim("/Graph/Camera", "OmniGraph")
     producer = node("/Graph/Camera/RenderProduct", "isaacsim.core.nodes.IsaacCreateRenderProduct")
+    UsdGeom.Camera.Define(stage, "/World/Camera")
+    producer.CreateRelationship("inputs:cameraPrim").SetTargets(["/World/Camera"])
+    producer.CreateAttribute("inputs:width", Sdf.ValueTypeNames.Int).Set(1280)
+    producer.CreateAttribute("inputs:height", Sdf.ValueTypeNames.Int).Set(720)
     helper = node("/Graph/Camera/Helper", "isaacsim.ros2.bridge.ROS2Camera" +
                   ("InfoHelper" if kind == "CameraInfo" else "Helper"))
     helper.CreateAttribute("inputs:renderProductPath", Sdf.ValueTypeNames.String).SetConnections(

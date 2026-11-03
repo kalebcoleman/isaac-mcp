@@ -503,7 +503,8 @@ class Extension(omni.ext.IExt):
                     "APP_STARTING",
                     "Kit startup is still running. Wait until sim.stage.info reports app_ready=true; no scene action was issued.",
                 )
-        stage = s.target(a.pop("session_id"), a.pop("stage_id"), name in mutations)
+        session_id, stage_id = a.pop("session_id"), a.pop("stage_id")
+        stage = s.target(session_id, stage_id, name in mutations)
         if name == "sim.prim.get":
             return s.get(stage, **a)
         if name in ("sim.stage.tree", "sim.physics.inspect"):
@@ -578,6 +579,9 @@ class Extension(omni.ext.IExt):
             from isaac_mcp.project_assets import refuse
             from pxr import UsdPhysics
 
+            from .physics import body_path
+
+            a["path"] = body_path(a)
             prim = s.prim(stage, a["path"])
             if s.timeline.is_stopped():
                 refuse("PHYSICS_NOT_READY", "The timeline is stopped, so there is no runtime body state. Play "
@@ -647,4 +651,6 @@ class Extension(omni.ext.IExt):
                 result.update(following=True, note="The camera moves with the prim while the timeline runs; "
                               "call again with follow=false to stop. sim.stage.info reports viewport_follow.")
             return result
+        if name == "sim.graph.show":
+            a.update(session_id=session_id, stage_id=stage_id)
         return self.advanced.execute(name, stage, a, camera_frame=camera_frame)

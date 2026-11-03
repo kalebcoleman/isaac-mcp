@@ -12,6 +12,7 @@ created nodes, fixes what it safely can (and says so), and rolls the graph back 
 
 from __future__ import annotations
 
+import json
 import re
 
 NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -20,6 +21,8 @@ DYNAMIC_INPUT = re.compile(r"^inputs:input(\d{1,2})$")
 EVALUATORS = ("execution", "push", "dirty_push")
 MAX_NODES = 64
 MAX_EDGES = 256
+MAX_JSON = 1024 * 1024
+MAX_JSON_DEPTH = 64
 
 
 class SpecError(ValueError):
@@ -27,6 +30,51 @@ class SpecError(ValueError):
         super().__init__(message)
         self.code = code
         self.details = details
+
+
+def _json_container(value, field, shape):
+    """Decode only structural JSON, never ordinary scalar input values."""
+    if isinstance(value, str):
+        if len(value) > MAX_JSON:
+            raise SpecError("INVALID_VALUE", f"{field}: JSON exceeds {MAX_JSON} characters.")
+        def reject_constant(constant):
+            raise ValueError(f"invalid JSON constant: {constant}")
+
+        try:
+            value = json.loads(value, parse_constant=reject_constant)
+        except (ValueError, RecursionError) as exc:
+            raise SpecError("INVALID_VALUE", f"{field}: expected {shape}, or its JSON-encoded string.") from exc
+    # Bound nesting for both decoded and native containers before validation or
+    # formatting an error. JSON parsers and Python repr have recursion limits.
+    pending = [(value, 0)]
+    while pending:
+        item, depth = pending.pop()
+        if isinstance(item, (list, dict)):
+            if depth >= MAX_JSON_DEPTH:
+                raise SpecError("INVALID_VALUE", f"{field}: expected {shape}; nesting is limited to {MAX_JSON_DEPTH} levels.")
+            pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
+    return value
+
+
+def _sequence(value, field):
+    shape = ('a list of [name, node_type] pairs or {"name", "type"} objects' if field == "nodes"
+             else 'a list of [from, to] pairs or {"from", "to"} objects')
+    value = _json_container(value, field, shape)
+    if not isinstance(value, list):
+        raise SpecError("INVALID_VALUE", f"{field}: expected {shape}, or its JSON-encoded string.")
+    limit = MAX_NODES if field == "nodes" else MAX_EDGES
+    if len(value) > 2 * limit:
+        raise SpecError("INVALID_VALUE", f"{field}: at most {limit} pairs are allowed.")
+    # Some clients flatten pairs into alternating strings. A JSON-encoded pair
+    # starts with '[' or '{'; ordinary names/ports remain literal strings.
+    if value and all(isinstance(x, str) and not x.lstrip().startswith(("[", "{")) for x in value):
+        if len(value) % 2:
+            raise SpecError("INVALID_VALUE", f"{field}: a flat alternating list must contain an even number of strings; expected {shape}.")
+        value = [value[i:i + 2] for i in range(0, len(value), 2)]
+    if len(value) > limit:
+        raise SpecError("INVALID_VALUE", f"{field}: at most {limit} pairs are allowed.")
+    return [_json_container(x, f"{field}[{i}]", shape) if isinstance(x, str) else x
+            for i, x in enumerate(value)]
 
 
 def split_port(ref, names, graph_path=""):
@@ -83,7 +131,7 @@ def _edge(item):
 def parse_spec(a):
     """Validate and normalize the tool arguments (no Kit needed)."""
     notes = []
-    nodes = a.get("nodes")
+    nodes = _sequence(a.get("nodes"), "nodes")
     if not isinstance(nodes, list) or not 1 <= len(nodes) <= MAX_NODES:
         raise SpecError("INVALID_VALUE", f"nodes: 1..{MAX_NODES} [name, node_type] pairs, e.g. "
                         "[\"tick\", \"omni.graph.action.OnPlaybackTick\"].")
@@ -100,7 +148,7 @@ def parse_spec(a):
         names.add(name)
         pairs.append((name, kind))
     graph_path = a.get("path", "")
-    values = a.get("values") or {}
+    values = _json_container(a.get("values") if a.get("values") is not None else {}, "values", "an object of '<node>.inputs:<port>': value")
     if not isinstance(values, dict) or len(values) > MAX_EDGES:
         raise SpecError("INVALID_VALUE", "values: an object of '<node>.inputs:<port>': value.")
     norm_values = []
@@ -111,7 +159,7 @@ def parse_spec(a):
         if not port.startswith("inputs:"):
             raise SpecError("INVALID_VALUE", f"{ref!r}: only inputs can be set.")
         norm_values.append((node, port, value))
-    connections = a.get("connections") or []
+    connections = _sequence(a.get("connections") if a.get("connections") is not None else [], "connections")
     if not isinstance(connections, list) or len(connections) > MAX_EDGES:
         raise SpecError("INVALID_VALUE", f"connections: up to {MAX_EDGES} [from, to] pairs.")
     edges = []
@@ -122,7 +170,7 @@ def parse_spec(a):
         if not dst[1].startswith("inputs:"):
             raise SpecError("INVALID_VALUE", f"connection {item!r}: the second end must be an input.")
         edges.append((src, dst))
-    targets = a.get("targets") or {}
+    targets = _json_container(a.get("targets") if a.get("targets") is not None else {}, "targets", "an object of '<node>.inputs:<port>': [prim paths]")
     if not isinstance(targets, dict) or len(targets) > MAX_EDGES:
         raise SpecError("INVALID_VALUE", "targets: an object of '<node>.inputs:<port>': [prim paths].")
     norm_targets = []
@@ -131,7 +179,8 @@ def parse_spec(a):
         if port.startswith("?"):
             port = "inputs:" + port[1:]
         if isinstance(paths, str):
-            paths = [paths]
+            paths = (_json_container(paths, f"targets[{ref!r}]", "a prim path or list of prim paths")
+                     if paths.lstrip().startswith("[") else [paths])
         if (not isinstance(paths, list) or not 1 <= len(paths) <= 64
                 or not all(isinstance(p, str) and p.startswith("/") for p in paths)):
             raise SpecError("INVALID_VALUE", f"targets[{ref!r}]: absolute prim path(s), e.g. \"/World/robot\".")

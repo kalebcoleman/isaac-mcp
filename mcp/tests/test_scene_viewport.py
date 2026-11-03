@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-from pxr import Gf, Sdf, Usd, UsdGeom
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 from isaac_mcp.project_assets import AssetError
 from sim_tools.viewport import frame
 from test_scene_usd import scene  # noqa: F401
@@ -156,10 +156,166 @@ def test_empty_and_bounded_geometry_refuse_without_false_success(scene, view, mo
     with pytest.raises(AssetError) as error:
         view.call("/World/Empty")
     assert error.value.code == "NO_BOUNDS"
+    assert "/World/Box" in error.value.details["candidates"]
     monkeypatch.setattr("sim_tools.viewport.CAP", 1)
     with pytest.raises(AssetError) as error:
         view.call("/World")
     assert error.value.code == "LIMIT"
+    assert not view.selected and view.calls == 0
+
+
+def test_frame_and_follow_geometry_free_footprint_use_base_link(scene, view, monkeypatch):
+    from sim_tools import viewport as vp
+
+    stage = scene.stage()
+    footprint = UsdGeom.Xform.Define(stage, "/World/Robot/base_footprint")
+    UsdPhysics.RigidBodyAPI.Apply(footprint.GetPrim())
+    UsdGeom.Xform.Define(stage, "/World/Robot/base_link")
+    UsdGeom.Cube.Define(stage, "/World/Robot/base_link/Visual")
+    requested = "/World/Robot/base_footprint"
+    result = view.call(requested)
+    assert result["requested_path"] == requested
+    assert result["selected_path"] == "/World/Robot/base_link"
+    assert view.selected[-1] == result["selected_path"]
+    monkeypatch.setattr(vp, "set_camera", lambda *args: 5.0)
+    result, follow = vp.place(scene, stage, view.context, view.viewport,
+                              {"path": requested, "follow": True, "eye": [5, 5, 5]}, lambda: None)
+    assert result["requested_path"] == requested and result["path"] == "/World/Robot/base_link"
+    assert result["selected_path"] == result["path"] == follow["path"]
+
+
+@pytest.mark.parametrize("siblings", [1, 2])
+def test_empty_scene_prim_does_not_frame_unrelated_geometry(scene, view, siblings):
+    stage = scene.stage()
+    UsdGeom.Xform.Define(stage, "/World/Environment/Sensor")
+    for i in range(siblings):
+        UsdGeom.Cube.Define(stage, f"/World/Environment/Object{i}")
+    with pytest.raises(AssetError) as error:
+        view.call("/World/Environment/Sensor")
+    assert error.value.code == "NO_BOUNDS"
+    assert error.value.details["candidates"] == [f"/World/Environment/Object{i}" for i in range(siblings)]
+    assert not view.selected and view.calls == 0
+
+
+def test_hidden_geometry_does_not_crowd_visible_candidates(scene, view, monkeypatch):
+    from sim_tools import viewport as vp
+
+    stage = scene.stage()
+    UsdGeom.Xform.Define(stage, "/World/Environment/Sensor")
+    hidden = UsdGeom.Xform.Define(stage, "/World/Environment/Hidden")
+    hidden.GetVisibilityAttr().Set(UsdGeom.Tokens.invisible)
+    for i in range(25):
+        UsdGeom.Cube.Define(stage, f"/World/Environment/Hidden/Cube{i:02}")
+    UsdGeom.Cube.Define(stage, "/World/Environment/ZVisible")
+    monkeypatch.setattr(vp, "CAP", 6)
+
+    with pytest.raises(AssetError) as error:
+        view.call("/World/Environment/Sensor")
+    assert error.value.code == "NO_BOUNDS"
+    assert error.value.details["candidates"] == ["/World/Environment/ZVisible"]
+    assert error.value.details["candidates_truncated"] is False
+    assert not view.selected and view.calls == 0
+
+
+
+@pytest.mark.parametrize("time,visible", [(1, False), (2, True)])
+def test_time_sampled_visibility_controls_framing_and_candidates(scene, view, time, visible):
+    stage = scene.stage()
+    UsdGeom.Xform.Define(stage, "/World/Environment/Sensor")
+    animated = UsdGeom.Xform.Define(stage, "/World/Environment/Animated")
+    animated.GetVisibilityAttr().Set(UsdGeom.Tokens.invisible, Usd.TimeCode(1))
+    animated.GetVisibilityAttr().Set(UsdGeom.Tokens.inherited, Usd.TimeCode(2))
+    cube = UsdGeom.Cube.Define(stage, "/World/Environment/Animated/Cube")
+    UsdGeom.Cube.Define(stage, "/World/Environment/ZVisible")
+    view.viewport.time = Usd.TimeCode(time)
+
+    with pytest.raises(AssetError) as error:
+        view.call("/World/Environment/Sensor")
+    expected = ["/World/Environment/ZVisible"]
+    if visible:
+        expected.insert(0, str(cube.GetPath()))
+    assert error.value.details["candidates"] == expected
+    assert not view.selected and view.calls == 0
+
+    if visible:
+        result = view.call(str(cube.GetPath()))
+        assert result["selected_path"] == str(cube.GetPath())
+        assert view.selected == [str(cube.GetPath())] and view.calls == 1
+    else:
+        with pytest.raises(AssetError) as hidden_error:
+            view.call(str(cube.GetPath()))
+        assert hidden_error.value.code == "NO_BOUNDS"
+        assert not view.selected and view.calls == 0
+
+
+def test_direct_prim_below_invisible_ancestor_is_not_framed(scene, view):
+    stage = scene.stage()
+    hidden = UsdGeom.Xform.Define(stage, "/World/Environment/Hidden")
+    hidden.GetVisibilityAttr().Set(UsdGeom.Tokens.invisible)
+    stage.DefinePrim("/World/Environment/Hidden/Scope", "Scope")
+    UsdGeom.Cube.Define(stage, "/World/Environment/Hidden/Scope/Cube")
+
+    with pytest.raises(AssetError) as error:
+        view.call("/World/Environment/Hidden/Scope")
+    assert error.value.code == "NO_BOUNDS"
+    assert error.value.details["candidates"] == []
+    assert not view.selected and view.calls == 0
+
+
+def test_invisible_robot_base_link_is_not_selected(scene, view):
+    stage = scene.stage()
+    footprint = UsdGeom.Xform.Define(stage, "/World/Robot/base_footprint")
+    UsdPhysics.RigidBodyAPI.Apply(footprint.GetPrim())
+    base = UsdGeom.Xform.Define(stage, "/World/Robot/base_link")
+    base.GetVisibilityAttr().Set(UsdGeom.Tokens.invisible)
+    UsdGeom.Cube.Define(stage, "/World/Robot/base_link/Visual")
+
+    with pytest.raises(AssetError) as error:
+        view.call("/World/Robot/base_footprint")
+    assert error.value.code == "NO_BOUNDS"
+    assert error.value.details["candidates"] == []
+    assert not view.selected and view.calls == 0
+
+
+def test_named_footprint_without_robot_physics_does_not_select_sibling(scene, view):
+    stage = scene.stage()
+    UsdGeom.Xform.Define(stage, "/World/Environment/base_footprint")
+    UsdGeom.Cube.Define(stage, "/World/Environment/base_link")
+    with pytest.raises(AssetError) as error:
+        view.call("/World/Environment/base_footprint")
+    assert error.value.code == "NO_BOUNDS"
+    assert "/World/Environment/base_link" in error.value.details["candidates"]
+    assert not view.selected and view.calls == 0
+
+
+def test_small_robot_link_framed_before_oversized_parent_scan(scene, view, monkeypatch):
+    from sim_tools import viewport as vp
+
+    stage = scene.stage()
+    robot = UsdGeom.Xform.Define(stage, "/World/Robot")
+    UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+    UsdGeom.Xform.Define(stage, "/World/Robot/base_footprint")
+    UsdGeom.Cube.Define(stage, "/World/Robot/base_link")
+    for i in range(10):
+        UsdGeom.Xform.Define(stage, f"/World/Robot/unrelated{i}")
+    monkeypatch.setattr(vp, "CAP", 4)
+    result = view.call("/World/Robot/base_footprint")
+    assert result["selected_path"] == "/World/Robot/base_link"
+
+
+def test_oversized_parent_returns_bounded_candidates(scene, view, monkeypatch):
+    from sim_tools import viewport as vp
+
+    stage = scene.stage()
+    UsdGeom.Xform.Define(stage, "/World/Environment/Sensor")
+    for i in range(10):
+        UsdGeom.Cube.Define(stage, f"/World/Environment/Object{i}")
+    monkeypatch.setattr(vp, "CAP", 4)
+    with pytest.raises(AssetError) as error:
+        view.call("/World/Environment/Sensor")
+    assert error.value.code == "NO_BOUNDS"
+    assert error.value.details["candidates"]
+    assert error.value.details["candidates_truncated"] is True
     assert not view.selected and view.calls == 0
 
 

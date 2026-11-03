@@ -26,6 +26,9 @@ An affected export reports `SAVE_UNSUPPORTED` with `properties` and `retry_with`
 before explicitly opting in to normalization with `true`. Successful exports report exact
 `omitted_runtime_render_properties`. Ambiguous, authored or unavailable bindings still refuse.
 This changes the private export only; it does not repair an already-stale scene or prove authorship.
+For a missing active, concrete camera producer relationship, save restores a runtime target in
+the export only when the observed render product confirms the camera and resolution; see
+`restored_camera_targets`.
 Pause before saving and check the exported scene after reopening in a fresh process.
 
 ## Ground rules
@@ -181,7 +184,8 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   See `docs/TOOLS-SCENE.md` for approval, staging, dependency limitations and cache placement.
 - **Playback and runtime state:** `sim__timeline__control` (play/pause/stop) and
   `sim__simulation__step` (1–120 exact steps while paused). `sim__body__state` and
-  `sim__joints__state` require initialized physics; `sim__joints__command` sets targets and
+  `sim__joints__state` require initialized physics; body state accepts `path`, `prim` or
+  `prim_path`. `sim__joints__command` sets targets and
   returns acknowledgment, not the achieved pose.
 - **Sensors and capture:** `sim__camera__create` then `sim__camera__capture` (RTX, PNG in the
   configured output root); the camera takes a parent path, `rotate_xyz` degrees or a quaternion,
@@ -190,7 +194,10 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   `sim__viewport__frame` selects visible geometry and edits the active camera in the session
   layer; it is a scene edit, with no Kit undo entry. For videos of a moving robot use
   `margin` (metres) or `eye`/`target`, and `follow=true` to keep it in view while playing
-  (`follow=false` stops). `render_complete=false` means allow
+  (`follow=false` stops). For a geometry-free `base_footprint`, the tool can select a visible
+  `base_link` sibling when either link or their parent has a rigid-body or articulation API.
+  Otherwise it returns nearby geometry candidates for an explicit retry. Check the returned
+  selected path, which is also used for follow. `render_complete=false` means allow
   ordinary rendering before inspecting the verified application window. A native failure can
   leave selection or session-camera changes; inspect before retrying. Prefer a smaller subtree
   when surrounding geometry occludes the target. See `docs/TOOLS-SCENE.md` for context,
@@ -225,12 +232,20 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   version, which often differ from tutorials. The build checks every port, adds Make Array inputs,
   stores token values, and rolls back on errors. Then play and `sim__graph__inspect`: it lists each
   node's compute errors (a wrong token makes a node silently output zeros).
+  Pairs/objects, JSON-encoded entries or whole containers, and flat alternating pairs are
+  accepted. For example `nodes=['["tick", "omni.graph.action.OnPlaybackTick"]']` works;
+  `values` may be `'{"clock.inputs:topicName": "/clock"}'`. Node types and ports
+  are still checked. For manual `run_python` work, use `og.get_registered_nodes()` and reacquire
+  `og.Controller.attribute(full_port_path)` before `og.Controller.get`; use
+  `og.Controller.edit(graph_path, {og.Controller.Keys.SET_VALUES: [(full_port_path, value)]})`
+  for an authored value. Prefer `sim__graph__node_types` / `sim__graph__inspect`.
 - Save checkpoints into your own folder: `sim__stage__save` with `directory=<folder under home>`.
 - For a video or screenshot of a graph, `sim__graph__show` (windowed Kit, `layout=true`, a
   `width`/`height` to undock it) opens it readable and fitted in the Action Graph editor;
-  `close=true` closes it. The undocked editor floats inside the Isaac Sim window.
-- No map files for Nav2? `sim__map__occupancy` writes a `map_server` PGM + YAML from the scene's
-  colliders (centre `z` on the lidar height; put `start` in open floor; `clear` the robot's own
+  `close=true` closes it. Stop before `layout=true`; while playing, use `layout=false` or follow
+  the `retry_with` in the `TIMELINE_ACTIVE` response. The undocked editor floats inside Isaac Sim.
+- No map files for Nav2, or an empty course maps folder? `sim__map__occupancy` writes a `map_server`
+  PGM + YAML from scene colliders such as `/SimpleRoom` (centre `z` on the lidar height; put `start` in open floor; `clear` the robot's own
   footprint). It plays 8 frames itself, so `/clock` restarts: generate the map before starting RViz.
 
 ### ROS 2 TF and RViz 2
@@ -271,8 +286,12 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
   DDS settings makes `ros2 topic list` / `node list` empty while data flows; otherwise use
   `--no-daemon` (`ros2 topic hz` has no such flag).
 - Kit's bridge nodes do not show in `ros2 node list`; verify with topics and `/tf`.
+- Background RViz needs a valid desktop `DISPLAY` exported in the launching shell alongside
+  `ros_env.sh` (for example `export DISPLAY=:0` when that is the desktop's display).
 - The harness kills a tool call's process group when it ends: start RViz and other long-lived
   processes with `setsid nohup <cmd> > log 2>&1 < /dev/null &`, record `$!`, stop that PID.
+- Save your scene before stopping a managed simulator, then call
+  `sim__stop(session_id=<managed session id>, expected_pid=<its pid>, confirm_discard=true)`.
 - Bound every ROS command: `ros2 topic pub --times N`, `timeout -s KILL <s> ...`. A plain
   `timeout 6 ros2 topic pub ... | tail` hung 120 s while the robot drove into a wall.
 - Keyboard teleop needs a TTY. Drive with `python3 scripts/cmd_vel_sequence.py "0.15,0,5;0,0.5,3"`

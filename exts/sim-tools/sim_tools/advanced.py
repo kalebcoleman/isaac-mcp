@@ -963,7 +963,9 @@ class Advanced:
                     refuse("INVALID_VALUE", "width 300..8000 and height 200..8000, or both 0.")
                 if a.get("layout") and not s.timeline.is_stopped():
                     refuse("TIMELINE_ACTIVE", "layout=true writes node positions into the stage: stop the timeline "
-                           "first, or show the graph without layout.")
+                           "first, or retry sim__graph__show with the same arguments and layout=false.",
+                           retry_with={"session_id": a.get("session_id"), "stage_id": a.get("stage_id"),
+                                       "path": a["path"], "width": w, "height": h, "layout": False})
                 ready = graph.show_graph_open(stage, a["path"], w, h)
                 return {"_finish": "sim.graph.show", "ready": ready}  # extension.py completes it
             return graph.occupancy_map(s, stage, a)

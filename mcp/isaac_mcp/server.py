@@ -524,19 +524,37 @@ def _build_tool_function(name: str, canonical: str, description: str,
             annotation = Annotated[annotation, Field(description=f.get("description") or "")]
         elif canonical in REGISTRY:
             from typing import Annotated
-            from pydantic import Field
+            from pydantic import Field, PlainValidator, WithJsonSchema
             spec = REGISTRY[canonical]["parameters"][f["name"]]
             bounds = {}
-            if f["kind"] == "array":
+            graph_container = canonical == "sim.graph.build" and f["name"] in (
+                "nodes", "connections", "values", "targets")
+            if graph_container:
+                # FastMCP pre-parses strings for non-string annotations; that can
+                # fail before the bridge can explain a malformed serialized spec.
+                # Keep the underlying annotation str, but let the bridge validate
+                # all shapes and publish the supported shapes to clients.
+                field_name = f["name"]
+                if field_name in ("nodes", "connections"):
+                    container = {"type": "array", "items": {"anyOf": [
+                        {"type": "array", "items": {"type": "string"}},
+                        {"type": "object", "additionalProperties": {"type": "string"}},
+                        {"type": "string"},
+                    ]}}
+                elif field_name == "targets":
+                    container = {"type": "object", "additionalProperties": {"anyOf": [
+                        {"type": "string"}, {"type": "array", "items": {"type": "string"}},
+                    ]}}
+                else:
+                    container = {"type": "object", "additionalProperties": True}
+                variants = [container, {"type": "string"}]
+                if not f["required"]:
+                    variants.append({"type": "null"})
+                schema = {"anyOf": variants, "description": spec["description"]}
+                annotation = Annotated[str, PlainValidator(lambda value: value), WithJsonSchema(schema)]
+            elif f["kind"] == "array":
                 strings = f["name"] in {"observe_prims", "observe_joints"} or (canonical == "sim.ui.act" and f["name"] == "keys")
                 annotation = list[str] if strings else list[float]
-                if canonical == "sim.graph.build" and f["name"] in ("nodes", "connections"):
-                    # [name, type] / [from, to] pairs, and the shapes weak models reach for first:
-                    # {"name","type"} / {"from","to"} objects and [srcNode, srcPort, dstNode, dstPort].
-                    # The bridge normalizes them (graph_build.parse_spec) and says what it did.
-                    from typing import Union
-                    annotation = list[Union[Annotated[list[str], Field(min_length=2, max_length=4)],
-                                            dict[str, str]]]
                 if canonical == "sim.map.occupancy" and f["name"] == "clear":
                     # A list of [x, y, radius] circles; list[float] rejected every valid value.
                     annotation = list[Annotated[list[float], Field(min_length=3, max_length=3)]]
@@ -547,12 +565,14 @@ def _build_tool_function(name: str, canonical: str, description: str,
                     bounds = {"min_length": lengths[f["name"]], "max_length": lengths[f["name"]]}
                 else:
                     bounds = {"max_length": {"observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256}.get(f["name"], 128)}
-            annotation = Annotated[annotation, Field(description=spec["description"], **bounds)]
+            if not graph_container:
+                annotation = Annotated[annotation, Field(description=spec["description"], **bounds)]
         if f["required"] and not f["has_default"]:
             param_list.append(f["name"])
         else:
             default = f["default"] if f["has_default"] else None
-            if default is None:
+            if default is None and not (canonical == "sim.graph.build" and f["name"] in (
+                    "nodes", "connections", "values", "targets")):
                 annotation = Optional[annotation]
             param_list.append(f"{f['name']}={default!r}")
         annotations[f["name"]] = annotation

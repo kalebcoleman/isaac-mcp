@@ -234,8 +234,11 @@ def test_stop_requires_confirmation_matching_pid_and_process_group(setup, monkey
     monkeypatch.setattr(sim.os, "pidfd_open", lambda pid, flags: os.open("/dev/null", os.O_RDONLY))
     monkeypatch.setattr(sim.signal, "pidfd_send_signal",
                         lambda fd, sig, info=None, flags=0: signals.append((sig, flags)))
-    with pytest.raises(ValueError, match="confirm_discard"):
+    with pytest.raises(ValueError, match="confirm_discard=true") as error:
         sim._stop(setup, record["id"], 510, False)
+    assert f"session_id={record['id']!r}" in str(error.value) and "expected_pid=510" in str(error.value)
+    with pytest.raises(ValueError, match="force=true"):
+        sim._stop(setup, record["id"], 510, False, force=True)
     with pytest.raises(ValueError, match="expected PID"):
         sim._stop(setup, record["id"], 511, True)
     monkeypatch.setattr(sim.os, "getpgid", lambda pid: 500)
