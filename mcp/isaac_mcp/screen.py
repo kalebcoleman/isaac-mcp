@@ -660,6 +660,67 @@ def register_screen_tools(
             finally:
                 disp.close()
 
+    @mcp.tool(annotations=IDEMPOTENT_WRITE)
+    def move_window(x: int, y: int, width: int, height: int, window: str | None = None,
+                    window_id: int | None = None, expected_pid: int | None = None) -> str:
+        """Move and resize a window (pixels, top-left origin), e.g. to put Isaac Sim and RViz side
+        by side before a screen recording. Un-maximizes it first; returns the geometry the window
+        manager actually applied. expected_pid rejects an unexpected owner."""
+        from .desktop_input import _action_lock
+
+        if width < 100 or height < 100 or width > 16384 or height > 16384:
+            raise ValueError("width and height must be 100..16384 pixels")
+        with _action_lock():
+            win = _match_window(window, window_id, True)
+            if expected_pid is not None and win.get("pid") != expected_pid:
+                raise ValueError("target window PID is missing or changed; list windows again")
+            disp = _xdisplay()
+            try:
+                obj = disp.create_resource_object("window", win["id"])
+                root = disp.screen().root
+
+                def geometry():
+                    g = obj.get_geometry()
+                    pos = root.translate_coords(obj, 0, 0)  # absolute (see list_windows)
+                    return (pos.x, pos.y, g.width, g.height)
+
+                before = geometry()
+                mask = X.SubstructureRedirectMask | X.SubstructureNotifyMask
+                state = disp.intern_atom("_NET_WM_STATE")
+                maxv = disp.intern_atom("_NET_WM_STATE_MAXIMIZED_VERT")
+                maxh = disp.intern_atom("_NET_WM_STATE_MAXIMIZED_HORZ")
+                # EWMH: remove (0) both maximized states, then _NET_MOVERESIZE_WINDOW with
+                # x, y, width and height present (bits 8-11) from a pager-like source (2 << 12).
+                root.send_event(xevent.ClientMessage(window=obj, client_type=state,
+                                                     data=(32, [0, maxv, maxh, 2, 0])), event_mask=mask)
+                flags = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11) | (2 << 12)
+                root.send_event(xevent.ClientMessage(
+                    window=obj, client_type=disp.intern_atom("_NET_MOVERESIZE_WINDOW"),
+                    data=(32, [flags, int(x), int(y), int(width), int(height)])), event_mask=mask)
+                disp.sync()
+                # The requested x/y place the frame while we read the client area, so instead of
+                # guessing an offset, accept the geometry once it is the right size and two
+                # readings in a row agree after it changed (or after 0.3 s of no change).
+                deadline = time.monotonic() + 1.0
+                # Already the right size: only the position changes, so wait for that (a busy window
+                # manager can take longer than 0.3 s) up to the deadline.
+                settle = deadline if before[2:] == (width, height) else time.monotonic() + 0.3
+                geo, last = before, None
+                while time.monotonic() < deadline:
+                    time.sleep(0.05)
+                    geo = geometry()
+                    sized = abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2
+                    if sized and geo == last and (geo != before or time.monotonic() >= settle):
+                        break
+                    last = geo
+                sized = abs(geo[2] - width) <= 2 and abs(geo[3] - height) <= 2
+                return (f"moved: {win['title']} (id={win['id']}) now {geo[2]}x{geo[3]}+{geo[0]}+{geo[1]} "
+                        "(client area; the frame's title bar sits above it)"
+                        + ("" if sized else f"; requested {width}x{height}+{x}+{y}, the window manager or "
+                           "the app limited it"))
+            finally:
+                disp.close()
+
     @mcp.tool(annotations=ADDITIVE)
     def screenshot(
         monitor: int | None = None,

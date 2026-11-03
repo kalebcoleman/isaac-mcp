@@ -30,6 +30,12 @@ class SessionStore:
 
     def __init__(self):
         self._sessions: Dict[str, Dict[str, Any]] = {}
+        # Sessions dropped by clear(): the next call with that id is told why its
+        # variables are gone instead of failing with a bare NameError.
+        self._reset: Dict[str, str] = {}
+        # Bumped by every clear(): a call that saw it change while it ran (e.g. it awaited a
+        # stage open) must not save its namespace, which still points at the old stage.
+        self.generation = 0
 
     def namespace(self, session_id: str) -> Dict[str, Any]:
         """The saved namespace for a session (a copy; {} when unknown)."""
@@ -44,9 +50,16 @@ class SessionStore:
         self._sessions[session_id] = kept
         return sorted(kept)
 
-    def clear(self) -> None:
+    def clear(self, reason: str = "a stage was opened") -> None:
         """Drop every session (stage-open staleness guard; see module doc)."""
+        for session_id in self._sessions:
+            self._reset[session_id] = reason
         self._sessions.clear()
+        self.generation += 1
+
+    def take_reset(self, session_id: str) -> str:
+        """Why this session's variables were dropped since its last call ('' if they were not)."""
+        return self._reset.pop(session_id, "")
 
     def __len__(self) -> int:
         return len(self._sessions)

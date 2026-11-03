@@ -110,6 +110,9 @@ class McpBridgeExtension(omni.ext.IExt):
     def on_shutdown(self):
         carb.log_info("[isaac.mcp.bridge] shutdown")
         self._stage_sub = None   # release the stage-event subscription
+        from .builtins import remove_stdout_proxy
+
+        remove_stdout_proxy()    # run_python's capture proxy, if an awaiting call installed it
         _destroy_bridge()
 
 
