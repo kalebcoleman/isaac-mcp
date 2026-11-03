@@ -256,5 +256,14 @@ def test_a_newer_bridge_parameter_does_not_break_discovery():
                    description="What to do."),
               dict(name="brand_new", kind="string", enum=None, required=False, default=None, has_default=False,
                    description="A parameter this host does not know yet.")]
+    fields.append(dict(name="titles", kind="array", enum=None, required=False, default=None, has_default=False,
+                       description="An unknown list of strings."))
+    fields.append(dict(name="future", kind="hyperthing", enum=None, required=False, default=None,
+                       has_default=False, description="An unknown kind."))
     fn = gw._build_tool_function("sim__ui__act", "sim.ui.act", "d", fields)
-    assert "brand_new" in fn.__annotations__
+    assert {"brand_new", "titles", "future"} <= set(fn.__annotations__)
+    import pydantic
+
+    # Unknown arrays keep the bridge's plain list type: strings are not rejected as non-numbers.
+    pydantic.TypeAdapter(fn.__annotations__["titles"]).validate_python(["Console"])
+    pydantic.TypeAdapter(fn.__annotations__["brand_new"]).validate_python("x")

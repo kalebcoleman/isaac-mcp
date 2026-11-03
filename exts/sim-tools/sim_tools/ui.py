@@ -361,7 +361,7 @@ def find(a):
         main_window=dict(width=round(ui.Workspace.get_main_window_width()),
                          height=round(ui.Workspace.get_main_window_height()), dpi_scale=dpi),
         windows=windows() if not window else [w for w in windows() if window.lower() in w["title"].lower()],
-        hidden_tabs=hidden_tabs(),
+        hidden_tabs=[t for t in hidden_tabs() if not window or window.lower() in t.lower()],
         matches=matched, widgets=widgets, truncated=len(widgets) + hidden < matched,
         skipped_not_shown=hidden,
         coordinates="x, y are the widget centre in pixels of the Isaac Sim main window, the same pixels as "
@@ -502,7 +502,9 @@ async def act(a):
         win.focus()
         await tick(max(frames, 2))
         selected = bool(win.visible) and (not win.docked or win.is_selected_in_dock())
-        return dict(result, window=title, shown=selected, frames_waited=max(frames, 2))
+        return dict(result, window=title, shown=selected, docked=bool(win.docked), frames_waited=max(frames, 2),
+                    **({} if win.docked else {"note": "a floating window can still be covered by another one; "
+                                                       "check with a screenshot"}))
     if action == "wait":
         await tick(max(frames, 1))
         return dict(result, frames_waited=max(frames, 1))
