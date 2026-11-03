@@ -64,14 +64,16 @@ JavaScript functions there, not Python:
 ```js
 ;(async () => {
   const info = await tools.isaac.sim__stage__info({});
-  const ids = JSON.parse(info.result ?? JSON.stringify(info));   // session_id, stage_id
-  return JSON.stringify(info);
+  const r = info.result ?? info;                       // a JSON string or already an object
+  const target = typeof r === "string" ? JSON.parse(r) : r;
+  return JSON.stringify({session_id: target.session_id, stage_id: target.stage_id});
 })()
 ```
 
 Pass Python for `run_python` in a template literal so `\n` and quotes survive:
 ``await tools.isaac.run_python({code: String.raw`import omni.usd
-result = omni.usd.get_context().get_stage().GetRootLayer().identifier`})``.
+result = omni.usd.get_context().get_stage().GetRootLayer().identifier`})``
+(the code must not contain a backtick or `${`).
 `python -m isaac_mcp.client` only works with the MCP server's own Python; do not import
 `omni`/`pxr` outside Kit (use `run_python`), and never `pip install` into the system Python
 (`--break-system-packages`) to make a script run.

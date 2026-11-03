@@ -36,10 +36,12 @@ def split_port(ref, names, graph_path=""):
     if graph_path and ref.startswith(graph_path.rstrip("/") + "/"):
         ref = ref[len(graph_path.rstrip("/")) + 1:]
     node, _, port = ref.partition(".")
+    if NAME.match(port) and ":" not in port:
+        port = "?" + port  # bare port name: build() picks outputs:/inputs:/state: from the real node
     if node not in names:
         raise SpecError("UNKNOWN_NODE", f"{ref!r} names node {node!r}, which is not in nodes "
                         f"({', '.join(sorted(names)) or 'none'}).")
-    if not PORT.match(port):
+    if not port.startswith("?") and not PORT.match(port):
         raise SpecError("INVALID_VALUE", f"{ref!r}: the port must look like inputs:name or outputs:name.")
     return node, port
 
@@ -72,10 +74,8 @@ def _edge(item):
     elif isinstance(item, (list, tuple)) and all(isinstance(x, str) for x in item):
         if len(item) == 2:
             return item[0], item[1]
-        if len(item) == 4:
-            src_port = item[1] if ":" in item[1] else f"outputs:{item[1]}"
-            dst_port = item[3] if ":" in item[3] else f"inputs:{item[3]}"
-            return f"{item[0]}.{src_port}", f"{item[2]}.{dst_port}"
+        if len(item) == 4:  # a bare port name is resolved against the created node in build()
+            return f"{item[0]}.{item[1]}", f"{item[2]}.{item[3]}"
     raise SpecError("INVALID_VALUE", f"connection {item!r}: use [\"node.outputs:x\", \"node.inputs:y\"] "
                     "(or [srcNode, srcPort, dstNode, dstPort], or {\"from\": ..., \"to\": ...}).")
 
@@ -106,6 +106,8 @@ def parse_spec(a):
     norm_values = []
     for ref, value in values.items():
         node, port = split_port(ref, names, graph_path)
+        if port.startswith("?"):
+            port = "inputs:" + port[1:]
         if not port.startswith("inputs:"):
             raise SpecError("INVALID_VALUE", f"{ref!r}: only inputs can be set.")
         norm_values.append((node, port, value))
@@ -115,6 +117,8 @@ def parse_spec(a):
     edges = []
     for item in connections:
         src, dst = (split_port(x, names, graph_path) for x in _edge(item))
+        if dst[1].startswith("?"):
+            dst = (dst[0], "inputs:" + dst[1][1:])
         if not dst[1].startswith("inputs:"):
             raise SpecError("INVALID_VALUE", f"connection {item!r}: the second end must be an input.")
         edges.append((src, dst))
@@ -124,6 +128,8 @@ def parse_spec(a):
     norm_targets = []
     for ref, paths in targets.items():
         node, port = split_port(ref, names, graph_path)
+        if port.startswith("?"):
+            port = "inputs:" + port[1:]
         if isinstance(paths, str):
             paths = [paths]
         if (not isinstance(paths, list) or not 1 <= len(paths) <= 64
@@ -253,8 +259,20 @@ def build(stage, a, stopped):
                 set_value(node, port, value)
             except Exception:  # noqa: BLE001 - extended ("any") inputs resolve their type once connected
                 deferred.append((node, port, value))
+        def source_port(node, port):
+            # A bare source port: outputs: first, then a constant node's inputs:value, then state:.
+            if not port.startswith("?"):
+                return port
+            n = og.Controller.node(f"{path}/{node}")
+            for prefix in ("outputs:", "inputs:", "state:"):
+                if n.get_attribute_exists(prefix + port[1:]):
+                    if prefix != "outputs:":
+                        notes.append(f"{node}.{port[1:]}: no output of that name; connected from {prefix}{port[1:]}")
+                    return prefix + port[1:]
+            return "outputs:" + port[1:]  # attr() then refuses with the node's real ports
+
         for (s_node, s_port), (d_node, d_port) in spec["connections"]:
-            og.Controller.connect(attr(s_node, s_port, False), attr(d_node, d_port, True))
+            og.Controller.connect(attr(s_node, source_port(s_node, s_port), False), attr(d_node, d_port, True))
         for node, port, value in deferred:
             try:
                 attr(node, port, False)

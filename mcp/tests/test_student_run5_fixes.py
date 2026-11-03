@@ -32,7 +32,10 @@ def test_graph_spec_accepts_the_shapes_weak_models_send():
                               connections=[["tick", "tick", "pub", "execIn"],          # 4 parts, bare ports
                                            {"from": "tick.outputs:tick", "to": "pub.inputs:execIn"}]))
     assert spec["nodes"] == [("tick", TICK), ("pub", PUB)]
-    assert spec["connections"] == [(("tick", "outputs:tick"), ("pub", "inputs:execIn"))] * 2
+    # A bare source port stays unresolved until build() sees the real node (constant nodes have
+    # only inputs:value); a bare destination is always an input.
+    assert spec["connections"] == [(("tick", "?tick"), ("pub", "inputs:execIn")),
+                                   (("tick", "outputs:tick"), ("pub", "inputs:execIn"))]
     assert any("type first" in n for n in spec["notes"])
     with pytest.raises(gb.SpecError, match="name, node_type"):
         gb.parse_spec(dict(path="/G", nodes=[{"kind": TICK}]))
@@ -50,6 +53,15 @@ def test_ros_environment_gives_a_matching_shell_line(tmp_path):
     plain = ros_env.describe({}, tmp_path / "nowhere")
     assert "ros_dds.env" in plain["shell"] and "ROS_DOMAIN_ID=0" in plain["shell"]
     assert "DDS settings" in ros_env.shell_hint({}, tmp_path)
+    # Review of #68: every captured setting is re-exported (Kit may not use the repo profile), quoted.
+    odd = ros_env.describe({"ROS_DOMAIN_ID": "7", "ROS_DISTRO": "jazzy", "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp",
+                            "CYCLONEDDS_URI": "file:///a b/c.xml"}, tmp_path)
+    assert odd["shell"].startswith("export ROS_DISTRO=jazzy; export ROS_DOMAIN_ID=7; source ")
+    assert "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp" in odd["shell"]
+    assert "export CYCLONEDDS_URI='file:///a b/c.xml'" in odd["shell"]
+    assert odd["shell"].count("ROS_DOMAIN_ID") == 1
+    fallback = ros_env.describe({"ROS_DISTRO": "humble"}, tmp_path / "nowhere")
+    assert "/opt/ros/humble/setup.bash" in fallback["shell"]
 
 
 def test_scene_tools_refuse_unknown_arguments():
@@ -65,5 +77,7 @@ def test_scene_tools_refuse_unknown_arguments():
             ok = await client.call_tool("sim__graph__build", {"session_id": "s", "stage_id": "t", "path": "/G",
                                                               "nodes": [{"name": "tick", "type": TICK}]})
             assert "xtra" not in ok.content[0].text   # reaches dispatch (fails offline, not on validation)
+            listed = {t.name: t for t in (await client.list_tools()).tools}
+            assert listed["sim__graph__build"].inputSchema.get("additionalProperties") is False
 
     asyncio.run(run())

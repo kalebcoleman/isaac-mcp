@@ -764,6 +764,8 @@ def _forbid_unknown_arguments(server: FastMCP, name: str) -> None:
         return
     model.model_config["extra"] = "forbid"
     model.model_rebuild(force=True)
+    if isinstance(getattr(tool, "parameters", None), dict):
+        tool.parameters["additionalProperties"] = False   # so clients can see the rule up front
 
 
 # ==================== Server ====================
