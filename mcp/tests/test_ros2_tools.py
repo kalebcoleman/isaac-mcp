@@ -97,12 +97,20 @@ def test_extra_frames_are_published_relative_to_the_base():
     assert v["TFExtraFrames.inputs:parentPrim"] == "/World/ur5e/base_link"
 
 
-def test_namespace_is_applied_to_every_publisher():
-    nodes, values, *_ = plan(namespace="robot1", mode="mobile")
+def test_namespace_applies_to_joint_states_and_odometry_but_tf_stays_global():
+    nodes, values, *_ = plan(namespace="/robot1/", mode="mobile")  # slashes are accepted
     v = dict(values)
+    assert v["PublishJointState.inputs:nodeNamespace"] == "robot1"
+    assert v["PublishOdometry.inputs:nodeNamespace"] == "robot1"
     for name, t in nodes:
-        if t.startswith("isaacsim.ros2.bridge.ROS2Publish") and name != "PublishClock":
-            assert v[f"{name}.inputs:nodeNamespace"] == "robot1", name
+        if "TransformTree" in t:
+            assert f"{name}.inputs:nodeNamespace" not in v, name  # /tf, /tf_static for RViz and tf2
+
+
+def test_each_namespace_gets_its_own_graph():
+    assert ros2.graph_path("") == "/Graph/isaac_mcp_ros2"
+    assert ros2.graph_path("/robot1/") == "/Graph/isaac_mcp_ros2_robot1"
+    assert ros2.graph_path("a/b") != ros2.graph_path("a")
 
 
 @pytest.mark.parametrize("kw", [
@@ -221,3 +229,108 @@ def test_a_frame_that_stopped_updating_is_reported():
     edges = GOOD + [e("base_link", "camera_link", stamp=1.0), e("base_link", "shoulder_link", stamp=9.0)]
     _, warnings, _ = doctor.analyze(edges, "world", clock_seen=True)
     assert any("not updated" in w and "camera_link" in w for w in warnings)
+
+
+# --------------------------------------------------------------- frame-name checks
+
+LINKS = [("/r/base_link", "base_link"), ("/r/shoulder", "shoulder"), ("/r/wrist", "wrist")]
+
+
+def check(**kw):
+    args = dict(links=LINKS, base_path="/r/base_link", base_frame="base_link", base_tf_name="base_link",
+                extras=[], world_frame="world", mode="fixed", link_frames="isaac")
+    args.update(kw)
+    return ros2.check_frames(**args)
+
+
+def test_a_consistent_layout_passes():
+    assert check() is None
+    assert check(extras=[("/World/cam", "cam"), ("/r/wrist/tool0", "tool0")]) is None
+
+
+def test_base_frame_override_that_splits_the_tree_is_refused():
+    # Isaac names the links' parent after the prim, so a different static child splits the tree.
+    assert check(base_frame="base_footprint")[0] == "BASE_FRAME_MISMATCH"
+    assert check(base_frame="base_footprint", link_frames="robot_state_publisher") is None
+
+
+def test_base_must_be_one_of_the_links():
+    assert check(base_path="/r/flange")[0] == "BASE_NOT_A_LINK"
+
+
+def test_link_and_extra_frame_name_collisions_are_refused():
+    assert check(links=LINKS + [("/r/other/wrist", "wrist")])[0] == "DUPLICATE_FRAME_NAMES"
+    assert check(links=LINKS + [("/r/other/wrist", "wrist")], link_frames="robot_state_publisher") is None
+    for extras in ([("/a/Camera", "Camera"), ("/b/Camera", "Camera")], [("/x/wrist", "wrist")],
+                   [("/x/world", "world")], [("/x/base_link", "base_link")]):
+        assert check(extras=extras)[0] == "DUPLICATE_FRAME_NAMES", extras
+    assert check(extras=[("/x/odom", "odom")], mode="mobile")[0] == "DUPLICATE_FRAME_NAMES"
+
+
+def test_tf_name_uses_isaac_name_override():
+    Usd = pytest.importorskip("pxr.Usd")
+    from pxr import Sdf
+
+    stage = Usd.Stage.CreateInMemory()
+    plain = stage.DefinePrim("/r/link_a")
+    renamed = stage.DefinePrim("/r/link_b")
+    renamed.CreateAttribute(ros2.NAME_OVERRIDE, Sdf.ValueTypeNames.String).Set("left_link")
+    assert ros2.tf_name(plain) == "link_a" and ros2.tf_name(renamed) == "left_link"
+
+
+def test_doctor_reports_a_tf_loop():
+    edges = [e("world", "base_link", 0, True), e("base_link", "world")]
+    errors, *_ = doctor.analyze(edges, "world", clock_seen=True)
+    assert any("TF loop" in x for x in errors)
+
+
+def test_doctor_names_publishers_for_tf_and_tf_static_duplicates():
+    edges = GOOD + [e("world", "base_link", 5.0, False)]
+    _, warnings, _ = doctor.analyze(edges, "world", clock_seen=True, tf_publishers=["/a", "/b"])
+    assert any("several nodes publish TF" in w for w in warnings)
+
+
+@pytest.mark.parametrize("layout", ["venv", "python.sh", "kit"])
+def test_isaac_ros_env_finds_the_bundled_ros_for_each_install_layout(tmp_path, monkeypatch, layout):
+    import subprocess as sp
+
+    if layout == "venv":
+        root = tmp_path / "venv" / "lib" / "python3.12" / "site-packages" / "isaacsim"
+        python = tmp_path / "venv" / "bin" / "python"
+    elif layout == "python.sh":
+        root = tmp_path / "isaac-sim"
+        python = root / "python.sh"
+    else:
+        root = tmp_path / "isaac-sim"
+        python = root / "kit" / "python" / "bin" / "python3"
+    (root / "exts" / "isaacsim.ros2.core" / "jazzy" / "rclpy").mkdir(parents=True)
+    real = sp.run
+
+    def fake(cmd, *a, **k):
+        if "resolve-python" in cmd:
+            return sp.CompletedProcess(cmd, 0, stdout=f"{python}\n", stderr="")
+        if "sysconfig" in " ".join(map(str, cmd)):
+            return sp.CompletedProcess(cmd, 0, stdout=f"{root.parent}\n", stderr="")
+        return real(cmd, *a, **k)
+
+    monkeypatch.setattr(doctor.subprocess, "run", fake)
+    got, env = doctor.isaac_ros_env({"ROS_DISTRO": "jazzy", "ROS_DOMAIN_ID": "7", "PATH": "/usr/bin:/bin",
+                                     "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp"})
+    assert got == str(python)
+    assert env["PYTHONPATH"].split(":")[0] == str(root / "exts" / "isaacsim.ros2.core" / "jazzy" / "rclpy")
+    assert env["ROS_DOMAIN_ID"] == "7"  # kept, as run.sh does
+    assert env["RMW_IMPLEMENTATION"] == "rmw_cyclonedds_cpp" and env["ROS_LOCALHOST_ONLY"] == "1"
+    assert env["ISAAC_MCP_TF_DOCTOR_REEXEC"] == "1"
+
+
+def test_isaac_ros_reexec_drops_the_flag_and_returns_the_child_status(monkeypatch):
+    import subprocess as sp
+
+    calls = []
+    monkeypatch.delenv("ISAAC_MCP_TF_DOCTOR_REEXEC", raising=False)
+    monkeypatch.setattr(doctor, "isaac_ros_env", lambda: ("/isaac/python", {"X": "1"}))
+    monkeypatch.setattr(doctor.subprocess, "run",
+                        lambda cmd, env=None: calls.append((cmd, env)) or sp.CompletedProcess(cmd, 1))
+    assert doctor.main(["--fixed-frame", "world", "--isaac-ros", "--seconds", "1"]) == 1
+    cmd, env = calls[0]
+    assert cmd[0] == "/isaac/python" and "--isaac-ros" not in cmd and cmd[-3:] == ["world", "--seconds", "1"]

@@ -38,8 +38,10 @@ Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have
 
 ## 1. Publish the robot from Isaac Sim
 
-Stop the timeline, then call the tool once per scene (calling it again rebuilds its one graph,
-`/Graph/isaac_mcp_ros2`, so nothing is ever published twice by it):
+Stop the timeline, then call the tool once per robot. Calling it again rebuilds that robot's
+graph (`/Graph/isaac_mcp_ros2`, or `/Graph/isaac_mcp_ros2_<namespace>`), so nothing is ever
+published twice by it. The static `world -> base_link` (or `world -> odom`) is the pose at setup
+time: call it again after moving the robot.
 
 Tool `sim__ros2__tf_setup`, with the IDs from `sim__stage__info`:
 
@@ -54,10 +56,12 @@ Tool `sim__ros2__tf_setup`, with the IDs from `sim__stage__info`:
 | Mobile base, no localization | `base=mobile`, `base_link=<chassis prim>`, `world_frame=map` |
 | Mobile base with AMCL/SLAM | `base=mobile`, `base_link=<chassis prim>`, `world_frame=""` |
 | Cameras, LiDARs, `tool0` | `extra_frames=["/World/.../tool0", "/World/camera"]` (published relative to the base link) |
-| Several robots | one `namespace` per robot |
+| Several robots | one call per robot, each with its own `namespace` (its own graph; `/joint_states` and `/odom` are namespaced, TF stays on `/tf`). Their link names must differ: set `isaac:nameOverride` |
 
-The tool finds the articulation root itself (often a fixed `root_joint` below the robot prim),
-refuses links that share a name (their frames would collide), and returns the frame tree, the
+The tool finds the articulation root itself (often a fixed `root_joint` below the robot prim).
+It refuses a `base_link` that is not one of the robot's links, a `base_frame` that differs from
+the name Isaac publishes for it (that would split the tree), and links or extra frames whose TF
+names collide (TF name = `isaac:nameOverride`, else the prim name). It returns the frame tree, the
 topics, the ROS domain and the Fixed Frame to use (`rviz_fixed_frame`). Then play the timeline:
 it publishes on every playback tick.
 

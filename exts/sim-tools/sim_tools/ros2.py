@@ -4,7 +4,7 @@ The layout follows NVIDIA's own graph helpers shipped with Isaac Sim 6.2
 (``isaacsim.ros2.nodes`` ``impl/graph_api.py``: ``create_ros2_clock_graph``,
 ``create_ros2_tf_graph``, ``create_ros2_odometry_graph``) but only uses node
 types and inputs that exist in every Isaac Sim 6.x release, so it also works on
-6.0/6.1. One graph, rebuilt from scratch on every call, so repeated setup never
+6.0/6.1. One graph per robot namespace, rebuilt from scratch on every call, so repeated setup never
 leaves a second publisher for the same frame behind.
 
 Frame tree (REP 105 names):
@@ -50,6 +50,7 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
         _frame(world_frame, "world_frame")
         if world_frame in (base_frame, "odom" if mode == "mobile" else None):
             raise ValueError("world_frame must differ from the base frame (and from 'odom' for a mobile base)")
+    namespace = (namespace or "").strip("/")
     if namespace and not re.match(r"^[A-Za-z_][A-Za-z0-9_/]*$", namespace):
         raise ValueError(f"namespace {namespace!r} is not a valid ROS namespace")
     if not TOPIC_RE.match(joint_states_topic or ""):
@@ -83,7 +84,8 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
             (f"{name}.inputs:parentFrameId", parent),
             (f"{name}.inputs:childFrameId", child),
             (f"{name}.inputs:staticPublisher", static),
-            (f"{name}.inputs:nodeNamespace", namespace),
+            # TF stays on the global /tf and /tf_static (namespace only applies to joint states and
+            # odometry), so RViz, tf2 and the doctor see every robot's frames without remapping.
             (f"{name}.inputs:topicName", "tf_static" if static else "tf"),
         ])
         if translation is not None:
@@ -130,7 +132,6 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
             ("TFRobotLinks.inputs:parentPrim", base_prim),
             ("TFRobotLinks.inputs:targetPrims", [robot]),
             ("TFRobotLinks.inputs:topicName", "tf"),
-            ("TFRobotLinks.inputs:nodeNamespace", namespace),
         ])
         publishers.append("TFRobotLinks")
         edges.append(dict(parent=base_frame, child="<robot links>", static=False, source="TFRobotLinks"))
@@ -140,7 +141,6 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
             ("TFExtraFrames.inputs:parentPrim", base_prim),
             ("TFExtraFrames.inputs:targetPrims", list(extra_prims)),
             ("TFExtraFrames.inputs:topicName", "tf"),
-            ("TFExtraFrames.inputs:nodeNamespace", namespace),
         ])
         publishers.append("TFExtraFrames")
         edges.append(dict(parent=base_frame, child="<extra prims>", static=False, source="TFExtraFrames"))
@@ -155,7 +155,54 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
     return nodes, values, connects, frames
 
 
+def graph_path(namespace=""):
+    """One graph per robot namespace, so a second robot never replaces the first one's graph."""
+    ns = (namespace or "").strip("/").replace("/", "_")
+    return f"{GRAPH_PATH}_{ns}" if ns else GRAPH_PATH
+
+
+def check_frames(links, base_path, base_frame, base_tf_name, extras, world_frame, mode, link_frames):
+    """Return ``(code, message)`` for a frame layout that would break the TF tree, else None.
+
+    ``links`` and ``extras`` are ``(prim path, TF name)`` pairs; the TF name is what Isaac
+    publishes (``isaac:nameOverride`` or the prim name).
+    """
+    paths = {p for p, _ in links}
+    if base_path not in paths:
+        return ("BASE_NOT_A_LINK", f"base_link {base_path} is not one of the robot's rigid-body links; "
+                "pass its root link (the one the robot is mounted or driven by).")
+    if link_frames == "isaac" and base_frame != base_tf_name:
+        return ("BASE_FRAME_MISMATCH", f"base_frame {base_frame!r} differs from the name Isaac publishes for "
+                f"{base_path} ({base_tf_name!r}), which would split the tree in two. Leave base_frame empty, "
+                "set isaac:nameOverride on the prim, or use link_frames=robot_state_publisher.")
+    names = {}
+    for p, n in links:
+        names.setdefault(n, []).append(p)
+    duplicates = {n: ps for n, ps in names.items() if len(ps) > 1}
+    if duplicates and link_frames == "isaac":
+        return ("DUPLICATE_FRAME_NAMES", "Several links share a TF name, so their frames would collide: "
+                + "; ".join(f"{n}: {', '.join(ps[:3])}" for n, ps in list(duplicates.items())[:5])
+                + ". Rename them or set isaac:nameOverride.")
+    reserved = {world_frame, base_frame} | ({"odom"} if mode == "mobile" else set())
+    seen = {}
+    for p, n in extras:
+        if n in names or n in reserved or n in seen:
+            other = names.get(n, [seen.get(n)])[0] or "a frame this tool publishes"
+            return ("DUPLICATE_FRAME_NAMES", f"extra frame {p} would publish TF name {n!r}, already used by {other}.")
+        seen[n] = p
+    return None
+
+
 # ----------------------------------------------------------------- Kit side
+
+NAME_OVERRIDE = "isaac:nameOverride"
+
+
+def tf_name(prim):
+    """The frame name Isaac publishes for *prim*: its isaac:nameOverride, else its prim name."""
+    attr = prim.GetAttribute(NAME_OVERRIDE)
+    value = attr.Get() if attr and attr.HasAuthoredValue() else None
+    return value if isinstance(value, str) and value else prim.GetName()
 
 def _links(stage, robot_prim, limit=512):
     """Rigid-body link prims below *robot_prim* (bounded), as (path, name)."""
@@ -164,7 +211,7 @@ def _links(stage, robot_prim, limit=512):
     found = []
     for prim in Usd.PrimRange(robot_prim):
         if prim.HasAPI(UsdPhysics.RigidBodyAPI):
-            found.append((str(prim.GetPath()), prim.GetName()))
+            found.append((str(prim.GetPath()), tf_name(prim)))
             if len(found) >= limit:
                 break
     return found
@@ -205,30 +252,25 @@ def setup(scene, stage, a):
         refuse("NO_LINKS", f"No rigid-body links found below {robot_path}.")
     base_path = a.get("base_link") or ""
     if not base_path:
-        named = [p for p, n in links if n in ("base_link", "base_footprint", "base")]
+        by_name = {n: p for p, n in reversed(links)}
+        named = [by_name[n] for n in ("base_link", "base_footprint", "base") if n in by_name]
         if not named:
             refuse("BASE_LINK_REQUIRED", "Pass base_link: the robot's root link prim. Links found: "
                    + ", ".join(n for _, n in links[:12]))
         base_path = named[0]
     base = scene.prim(stage, base_path)
-    base_frame = a.get("base_frame") or base.GetName()
-
-    names = {}
-    for p, n in links:
-        names.setdefault(n, []).append(p)
-    duplicates = {n: ps for n, ps in names.items() if len(ps) > 1}
-    if duplicates and a.get("link_frames", "isaac") == "isaac":
-        refuse("DUPLICATE_FRAME_NAMES", "Several links share a name, so their TF frames would collide: "
-               + "; ".join(f"{n}: {', '.join(ps[:3])}" for n, ps in list(duplicates.items())[:5])
-               + ". Rename them (or set isaac:nameOverride) first.")
+    base_tf_name = tf_name(base)
+    link_mode = a.get("link_frames", "isaac")
+    base_frame = a.get("base_frame") or base_tf_name
 
     extra = list(a.get("extra_frames") or [])
     if len(extra) > 16:
         refuse("LIMIT", "At most 16 extra_frames.")
-    for p in extra:
-        prim = scene.prim(stage, p)
-        if prim.GetName() in names:
-            refuse("DUPLICATE_FRAME_NAMES", f"extra frame {p} has the same name as a robot link.")
+    extras = [(p, tf_name(scene.prim(stage, p))) for p in extra]
+    problem = check_frames(links, base_path, base_frame, base_tf_name, extras,
+                           a.get("world_frame", "world"), a.get("base", "fixed"), link_mode)
+    if problem:
+        refuse(*problem)
 
     world = UsdGeom.XformCache().GetLocalToWorldTransform(base)
     mpu = UsdGeom.GetStageMetersPerUnit(stage) or 1.0
@@ -247,13 +289,15 @@ def setup(scene, stage, a):
 
     import omni.graph.core as og
 
-    existing = bool(stage.GetPrimAtPath(GRAPH_PATH))  # read before removal: a removed prim is falsy
+    graph = graph_path(a.get("namespace", ""))
+    had_scope = bool(stage.GetPrimAtPath("/Graph"))
+    existing = bool(stage.GetPrimAtPath(graph))  # read before removal: a removed prim is falsy
     if existing:
-        if GRAPH_PATH not in scene.owned:
-            refuse("CONFLICT", f"{GRAPH_PATH} exists and was not created by this tool in this session; "
+        if graph not in scene.owned:
+            refuse("CONFLICT", f"{graph} exists and was not created by this tool in this session; "
                    "remove it or start a new stage.")
         with Usd.EditContext(stage, stage.GetSessionLayer()):
-            stage.RemovePrim(GRAPH_PATH)
+            stage.RemovePrim(graph)
     from pxr import Sdf
 
     keys = og.Controller.Keys
@@ -266,26 +310,30 @@ def setup(scene, stage, a):
     try:
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             og.Controller.edit(
-                {"graph_path": GRAPH_PATH, "evaluator_name": "execution"},
+                {"graph_path": graph, "evaluator_name": "execution"},
                 {keys.CREATE_NODES: nodes, keys.CONNECT: connects, keys.SET_VALUES: set_values},
             )
-    except Exception as exc:  # node types missing: the ROS 2 bridge extension is not enabled
+    except Exception as exc:
         with Usd.EditContext(stage, stage.GetSessionLayer()):
-            if stage.GetPrimAtPath(GRAPH_PATH):
-                stage.RemovePrim(GRAPH_PATH)
-        scene.owned.discard(GRAPH_PATH)
-        refuse("ROS2_UNAVAILABLE", f"Could not build the ROS 2 graph ({str(exc)[:300]}). Launch Kit with "
-               "isaacsim.ros2.bridge enabled (run.sh does) and a ROS 2 environment it can load.")
-    scene.owned.add(GRAPH_PATH)
+            if stage.GetPrimAtPath(graph):
+                stage.RemovePrim(graph)
+            scope = stage.GetPrimAtPath("/Graph")
+            if scope and not had_scope and not scope.GetChildren():
+                stage.RemovePrim("/Graph")
+        scene.owned.discard(graph)
+        refuse("ROS2_GRAPH_FAILED", f"Could not build the ROS 2 graph: {type(exc).__name__}: {str(exc)[:300]}. "
+               "If a node type is unknown, launch Kit with isaacsim.ros2.bridge enabled (run.sh does); "
+               "nothing was left behind.")
+    scene.owned.add(graph)
 
-    ns = ("/" + a.get("namespace").strip("/")) if a.get("namespace") else ""
-    topics = ["/clock", f"{ns}/tf", f"{ns}/tf_static", ns + "/" + a.get("joint_states_topic", "joint_states").lstrip("/")]
+    ns = ("/" + a.get("namespace").strip("/")) if (a.get("namespace") or "").strip("/") else ""
+    topics = ["/clock", "/tf", "/tf_static", ns + "/" + a.get("joint_states_topic", "joint_states").lstrip("/")]
     if a.get("base", "fixed") == "mobile":
         topics.append(f"{ns}/odom")
     fixed = frames["root"]
     rsp = a.get("link_frames", "isaac") == "robot_state_publisher"
     return dict(
-        graph=GRAPH_PATH,
+        graph=graph,
         robot=robot_path,
         articulation_root=articulation,
         base_link=base_path,
@@ -301,7 +349,10 @@ def setup(scene, stage, a):
             "Every ROS 2 node, RViz included, must use use_sim_time:=true and the same ROS_DOMAIN_ID.",
             f"python3 scripts/ros2_rviz_config.py --fixed-frame {fixed} --out <file>.rviz "
             + ("--robot-model " if rsp else "") + "then: rviz2 -d <file>.rviz --ros-args -p use_sim_time:=true",
-            f"python3 scripts/ros2_tf_doctor.py --fixed-frame {fixed}  (with ROS 2 sourced) before trusting RViz",
+            f"python3 scripts/ros2_tf_doctor.py --fixed-frame {fixed}  (ROS 2 sourced, or add --isaac-ros) "
+            "before trusting RViz",
+            "The world->base (or world->odom) transform is the pose at setup time: stop and call this tool "
+            "again after moving the robot.",
         ] + ([
             "Run robot_state_publisher with the robot's URDF and use_sim_time:=true; it turns /joint_states "
             "into the link frames. Isaac does not publish them in this mode, so nothing is published twice.",

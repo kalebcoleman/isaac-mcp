@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WALL_EPOCH = 1e9  # stamps above this are wall-clock time (2001+); simulation time starts at 0
 
 
-def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), now=None):
+def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=()):
     """Return ``(errors, warnings, info)`` for observed TF edges.
 
     ``edges``: iterable of dicts ``{"parent", "child", "static", "stamp"}`` (stamp in seconds).
@@ -70,12 +70,24 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), now=None):
     elif fixed_frame not in frames:
         errors.append(f"the Fixed Frame '{fixed_frame}' is not in the tree; roots are: {', '.join(roots)}.")
     else:
-        def root_of(f, seen=()):
-            while f in parents and f not in seen:
-                seen = seen + (f,)
+        cycles = set()
+
+        def root_of(f):
+            seen = []
+            while f in parents:
+                if f in seen:  # a loop: two publishers made a frame its own ancestor
+                    cycles.add(" -> ".join(seen[seen.index(f):] + [f]))
+                    return None
+                seen.append(f)
                 f = sorted(parents[f])[0]
             return f
-        cut = sorted(f for f in frames if root_of(f) != root_of(fixed_frame))
+        fixed_root = root_of(fixed_frame)
+        cut = sorted(f for f in frames if root_of(f) != fixed_root or fixed_root is None)
+        for loop in sorted(cycles):
+            errors.append(f"TF loop {loop}: a frame is its own ancestor, so nothing in it can be placed. "
+                          "Two publishers disagree about which frame is the parent; keep one.")
+        if cycles:
+            cut = []
         if cut:
             errors.append(f"{len(cut)} frame(s) do not connect to '{fixed_frame}': {', '.join(cut[:12])}"
                           + (" ..." if len(cut) > 12 else "") + f" (separate roots: {', '.join(roots)}).")
@@ -96,10 +108,10 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), now=None):
                         "simulation time.")
 
     publishers = sorted(set(tf_publishers))
-    if len(publishers) > 1 and any("parents" in e for e in errors):
+    if len(publishers) > 1 and any(("parents" in e or "/tf_static" in e or "TF loop" in e) for e in errors):
         warnings.append("several nodes publish TF: " + ", ".join(publishers)
                         + ". If Isaac publishes the robot's links, do not also run robot_state_publisher for it.")
-    if "sim" in domains:
+    if "sim" in domains:  # compare
         # Compare within simulation time only: wall-clock stamps are a different clock.
         sim = {c: [x for x in v if x <= WALL_EPOCH] for c, v in stamps.items()}
         sim = {c: v for c, v in sim.items() if v}
@@ -151,6 +163,19 @@ def capture(seconds):
     return edges, bool(clock), publishers
 
 
+def dds_env(env):
+    """The DDS settings run.sh gives the simulator: config/ros_dds.env, sourced exactly as run.sh
+    does (it keeps an exported ROS_DOMAIN_ID and forces the rest), so both sides agree."""
+    keys = ("ROS_DOMAIN_ID", "ROS_LOCALHOST_ONLY", "RMW_IMPLEMENTATION", "CYCLONEDDS_URI")
+    script = ROOT / "config" / "ros_dds.env"
+    out = subprocess.run(["bash", "-c", 'set -a; . "$1"; for k in "${@:2}"; do printf "%s=%s\\0" "$k" "${!k-}"; done',
+                          "bash", str(script), *keys], capture_output=True, text=True, env=env,
+                         stdin=subprocess.DEVNULL, timeout=30)
+    if out.returncode:
+        raise RuntimeError(f"could not read {script}: {out.stderr.strip()[:200]}")
+    return dict(item.split("=", 1) for item in out.stdout.split("\0") if "=" in item and item.split("=", 1)[1])
+
+
 def isaac_ros_env(env=None):
     """``(python, env)`` to run this script on the ROS 2 libraries bundled with Isaac Sim.
 
@@ -166,8 +191,11 @@ def isaac_ros_env(env=None):
         raise RuntimeError("no Isaac Sim 6.x found (python3 scripts/isaac_env.py find)")
     # Locate the install from its file layout. Never `import isaacsim` here: that can stop and
     # wait for the EULA prompt.
-    if Path(python).name == "python.sh":  # standalone install root
-        roots = [Path(python).parent]
+    interp = Path(python)
+    if interp.name == "python.sh":  # standalone install root
+        roots = [interp.parent]
+    elif interp.parts[-4:-1] == ("kit", "python", "bin"):  # standalone <root>/kit/python/bin/python3
+        roots = [interp.parents[3]]
     else:
         purelib = subprocess.run([python, "-I", "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
                                  **run).stdout.strip()
@@ -179,9 +207,7 @@ def isaac_ros_env(env=None):
         raise RuntimeError(f"Isaac Sim has no bundled ROS 2 {distro} at {base}")
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(base / "rclpy"), env.get("PYTHONPATH")]))
     env["LD_LIBRARY_PATH"] = os.pathsep.join(filter(None, [str(base / "lib"), env.get("LD_LIBRARY_PATH")]))
-    env.setdefault("ROS_LOCALHOST_ONLY", "1")
-    env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
-    env.setdefault("CYCLONEDDS_URI", "file://" + str(ROOT / "config" / "cyclonedds.xml"))
+    env.update(dds_env(env))
     env["ISAAC_MCP_TF_DOCTOR_REEXEC"] = "1"
     return python, env
 
@@ -209,8 +235,7 @@ def main(argv=None) -> int:
               "(source /opt/ros/<distro>/setup.bash), or pass --isaac-ros to use Isaac Sim's bundled ROS 2.",
               file=sys.stderr)
         return 2
-    errors, warnings, info = analyze(edges, args.fixed_frame, clock_seen=clock_seen,
-                                     tf_publishers=publishers, now=time.time())
+    errors, warnings, info = analyze(edges, args.fixed_frame, clock_seen=clock_seen, tf_publishers=publishers)
     if args.json:
         print(json.dumps(dict(errors=errors, warnings=warnings, **info), indent=2))
     else:
