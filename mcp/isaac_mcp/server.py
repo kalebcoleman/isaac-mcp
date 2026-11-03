@@ -508,7 +508,9 @@ def _build_tool_function(name: str, canonical: str, description: str,
         if canonical in REGISTRY:
             from typing import Annotated
             from pydantic import Field
-            spec = REGISTRY[canonical]["parameters"][f["name"]]
+            # A newer bridge can serve a parameter this host's registry does not know yet (the two
+            # checkouts sync separately): use the bridge's own description instead of failing discovery.
+            spec = REGISTRY[canonical]["parameters"].get(f["name"]) or {"description": f.get("description") or ""}
             bounds = {}
             if f["kind"] == "array":
                 strings = f["name"] in {"observe_prims", "observe_joints"} or (canonical == "sim.ui.act" and f["name"] == "keys")

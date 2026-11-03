@@ -25,7 +25,7 @@ INTERACTIVE = {
 TEXTUAL = {"Label"}
 MAX_TEXT = 500
 MAX_WIDGETS_PER_WINDOW = 6000
-ACTIONS = ("click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "wait")
+ACTIONS = ("click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "tab", "wait")
 
 # Key names (OpenAI-style, case-insensitive) -> carb.input.KeyboardInput attribute names.
 KEY_NAMES = {
@@ -134,6 +134,20 @@ def _value(widget):
     except Exception:  # noqa: BLE001 - models differ; a value is a convenience, not a contract
         return None
     return None
+
+
+def hidden_tabs():
+    """Titles of docked windows behind another tab (Console behind Content): open with action=tab."""
+    import omni.ui as ui
+
+    out = []
+    for win in ui.Workspace.get_windows():
+        try:
+            if win.visible and win.title and win.docked and not win.is_selected_in_dock():
+                out.append(win.title)
+        except Exception:  # noqa: BLE001
+            continue
+    return out
 
 
 def windows():
@@ -347,6 +361,7 @@ def find(a):
         main_window=dict(width=round(ui.Workspace.get_main_window_width()),
                          height=round(ui.Workspace.get_main_window_height()), dpi_scale=dpi),
         windows=windows() if not window else [w for w in windows() if window.lower() in w["title"].lower()],
+        hidden_tabs=hidden_tabs(),
         matches=matched, widgets=widgets, truncated=len(widgets) + hidden < matched,
         skipped_not_shown=hidden,
         coordinates="x, y are the widget centre in pixels of the Isaac Sim main window, the same pixels as "
@@ -469,6 +484,25 @@ async def act(a):
             raise UIRefusal("DISABLED", "That widget is disabled (greyed out); it would ignore the input.")
 
     result = dict(action=action)
+    if action == "tab":
+        # Dock tab headers are drawn by the dock, not widgets: bring the window to the front the way a
+        # tab click does (selected in its dock, focused).
+        title = a.get("window")
+        if not isinstance(title, str) or not title:
+            raise UIRefusal("INVALID_VALUE", "window: the title of a Kit window or tab, e.g. 'Console'.")
+        import omni.ui as ui
+
+        win = ui.Workspace.get_window(title)
+        if win is None:
+            names = sorted({w.title for w in ui.Workspace.get_windows() if w.title})
+            raise UIRefusal("NO_WINDOW", f"No Kit window titled {title!r}. Known windows: {', '.join(names[:40])}. "
+                                         "Closed windows open from the Window menu (action=menu).")
+        ui.Workspace.show_window(title, True)
+        await tick(1)
+        win.focus()
+        await tick(max(frames, 2))
+        selected = bool(win.visible) and (not win.docked or win.is_selected_in_dock())
+        return dict(result, window=title, shown=selected, frames_waited=max(frames, 2))
     if action == "wait":
         await tick(max(frames, 1))
         return dict(result, frames_waited=max(frames, 1))
