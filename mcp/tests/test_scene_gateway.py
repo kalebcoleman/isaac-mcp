@@ -139,7 +139,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
         gw._state_for(visible).client = BridgeClient(port=bridge.port)
 
         async def run():
-            for server, enabled, count in ((hidden, False, 52), (visible, True, 96)):
+            for server, enabled, count in ((hidden, False, 52), (visible, True, 98)):
                 async with create_connected_server_and_client_session(
                     server._mcp_server
                 ) as client:
