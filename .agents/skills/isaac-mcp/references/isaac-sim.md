@@ -119,8 +119,9 @@ not access control.
 - Runtime state: `sim__timeline__control`, `sim__simulation__step` while paused,
   `sim__body__state`, `sim__joints__state` and `sim__joints__command` after physics is initialized.
 - Capture and sensors: `sim__camera__create` / `sim__camera__capture` (RTX), `sim__lidar__*`
-  (requires `--motion-bvh`). `sim__viewport__frame` edits the active camera in the session
-  layer and changes selection, with no Kit undo entry. Its `render_complete=false` is not
+  (`config=` an NVIDIA name such as `Example_Rotary_2D`; Motion BVH optional).
+  `sim__viewport__frame` (native framing, `margin`, `eye`/`target`, `follow`) edits the active
+  camera in the session layer and, for native framing, changes selection, with no Kit undo entry. Its `render_complete=false` is not
   proof of a rendered view: allow ordinary rendering, then inspect the verified application
   window. Native failures can leave partial selection/session-camera effects; inspect before
   retrying. A smaller geometry subtree may avoid surrounding occluders. See
