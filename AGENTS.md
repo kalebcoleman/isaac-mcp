@@ -117,7 +117,7 @@ make sure one is up before relying on those tools. Host and Isaac Lab tools need
 
 1. Call `refresh_tools` first. Do not start Kit yet: a reachable bridge may already exist.
 2. Discover bridges, then verify the one you mean. The CLI below is standard-library only and runs from
-   the checkout root with any Python; `python -m isaac_mcp.client` works only with an interpreter that has the host installed. Do not assume a port: advertised bridges can
+   the checkout root with any Python. From another directory, use `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client`. Do not assume a port: advertised bridges can
    use other ports or hosts. `python3 mcp/isaac_mcp/client.py --list-bridges` prints every live
    advertised bridge as JSON (`pid`, `host`, `port`, `app`). It works even when `status` and
    `list_bridges` are hidden (they are bridge built-ins, so `ISAAC_MCP_BUILTINS=0` or

@@ -65,8 +65,9 @@ The convenience installer:
 
 - When it finds an installed Isaac Sim 6.x and the checkout has no `.venv`, it installs only the MCP server and writes that
   interpreter into the Claude entries it creates. If nothing is found, it continues to the checks below and **stops at the
-  EULA check unless `--accept-eula` was given**. An existing checkout `.venv` is re-synced unless you pass `--no-sim`, the
-  one form that never touches a simulator environment.
+  EULA check unless `--accept-eula` was given or `OMNI_KIT_ACCEPT_EULA=YES` is already exported; in those two cases it
+  downloads the environment**. An existing checkout `.venv` is re-synced unless you pass `--no-sim`, the one form that never
+  touches a simulator environment. `--no-sim` does not look for a Sim, so it records no interpreter in client entries.
 - Runs **`uv sync --python 3.12` in the current directory**. It may update the lock/environment;
   it does not enforce `--locked` and does not use `ISAAC_MCP_PYTHON` (or its alias `UR5E_DT_PYTHON`) as its install target.
 - Runs `uv tool install --force --editable` for the host with the `isaaclab` metrics extra.
@@ -156,6 +157,7 @@ compatible installation. Do not rename, relocate or reinstall an environment jus
 
 ```bash
 # From checkout root; this replaces only the user-level host tool and may create its ffmpeg shim.
+# --no-sim records no interpreter: for sim__launch, also set ISAAC_MCP_PYTHON in the client's isaac entry.
 ./install.sh --no-sim
 ISAAC_SIM_PYTHON=<env>/bin/python
 "$ISAAC_SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'

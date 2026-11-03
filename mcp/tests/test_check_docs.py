@@ -228,3 +228,10 @@ def test_stale_tool_reference_is_reported(tmp_path, monkeypatch):
     errors = []
     check_docs.check_tool_reference(errors)
     assert errors == []
+
+
+def test_stale_readme_row_is_reported():
+    text = (ROOT / "README.md").read_text().replace("| UR5e digital twin | 23 |", "| UR5e digital twin | 99 |")
+    errors = []
+    check_docs.check_readme_counts(errors, text=text)
+    assert any("'UR5e digital twin' row" in error for error in errors)

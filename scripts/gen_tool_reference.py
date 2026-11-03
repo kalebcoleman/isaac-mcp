@@ -52,7 +52,12 @@ def one_line(text):
 def local_tools(path):
     """Return {tool name: (description, [(arg, type, required, default)])} for one host module."""
     tools = {}
-    for node in ast.walk(ast.parse(path.read_text())):
+    tree = ast.parse(path.read_text())
+    # A default such as DEFAULT_MAX_WIDTH reads better, and matches the MCP schema, as its value.
+    constants = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
+                 and isinstance(node.value, ast.Constant)
+                 for target in node.targets if isinstance(target, ast.Name)}
+    for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         decorators = [d for d in node.decorator_list if isinstance(d, ast.Call)
@@ -69,6 +74,8 @@ def local_tools(path):
             if arg.arg in ("self", "ctx"):
                 continue
             kind = ast.unparse(arg.annotation) if arg.annotation is not None else "any"
+            if isinstance(default, ast.Name):
+                default = constants.get(default.id, default)
             arguments.append((arg.arg, kind, default is None,
                               None if default is None else ast.unparse(default)))
         doc = ast.get_docstring(node) or ""

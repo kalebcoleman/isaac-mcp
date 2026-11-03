@@ -77,7 +77,7 @@ Pass Python for `run_python` in a template literal so `\n` and quotes survive:
 ``await tools.isaac.run_python({code: String.raw`import omni.usd
 result = omni.usd.get_context().get_stage().GetRootLayer().identifier`})``
 (the code must not contain a backtick or `${`).
-From the checkout root, `python3 mcp/isaac_mcp/client.py` runs with any Python (`python -m isaac_mcp.client` needs the MCP server's own); do not import
+The bridge CLI is `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client` from any directory, or `python3 mcp/isaac_mcp/client.py` from the isaac-mcp checkout root (a plain `python -m isaac_mcp.client` needs the MCP server's own Python); do not import
 `omni`/`pxr` outside Kit (use `run_python`), and never `pip install` into the system Python
 (`--break-system-packages`) to make a script run.
 
@@ -88,7 +88,7 @@ From the checkout root, `python3 mcp/isaac_mcp/client.py` runs with any Python (
    mean Kit is up: `status` tells you. Kit can take 2-3 minutes to start; while it boots, call
    `refresh_tools(wait_s=120)` (max 180) instead of retrying by hand.
 2. Find bridges. Use `list_bridges` if it is listed. Otherwise run the CLI in a shell
-   (`python3 mcp/isaac_mcp/client.py --list-bridges`), which works even when bridge built-ins are hidden
+   (`"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client --list-bridges`, or the checkout form above), which works even when bridge built-ins are hidden
    by `ISAAC_MCP_BUILTINS=0` or `ISAAC_MCP_NAMESPACE`. It exits 2 with `[]` when none is advertised.
 3. With several bridges, call `use_bridge` with the listed port, then `status`, and check that the
    PID and app version are the process you mean.
@@ -335,7 +335,7 @@ worked while locked on GNOME.
 | `refresh_tools` refused right after `sim__launch` | The server dials its configured port, not the new session's | `use_bridge(port=<the launched port>)` (sim__status's `next` says so) |
 | Monitor recording looks choppy; result says "composed" | Screen locked or blanked (PC used remotely): frames are composed from window pixels | Record the windows that matter with `window_id=` or `window_ids=[...]` |
 | `window_*` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find`/`sim__ui__act`; other apps need the desktop unlocked |
-| New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use `python3 mcp/isaac_mcp/client.py list_tools --port <port>` |
+| New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use the bridge CLI: `... list_tools --port <port>` |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed (Kit restarted, stage opened) | The message names the current `session_id` and `stage_id`: resend with those, never the old ones |

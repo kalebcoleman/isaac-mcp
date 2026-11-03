@@ -73,17 +73,23 @@ You need Ubuntu 24.04 or 22.04, [uv](https://docs.astral.sh/uv/getting-started/i
 
 ### 1. Install
 
-**Already have Isaac Sim 6.x?** Use it. `--no-sim` installs only the MCP server and never downloads a simulator:
+**Already have Isaac Sim 6.x?** Use it. The installer finds it, installs only the MCP server and records that
+interpreter in the Claude entry, so `sim__launch` uses it too:
 
 ```bash
 git clone https://github.com/kalebcoleman/isaac-mcp.git
 cd isaac-mcp
-python3 scripts/isaac_env.py find     # lists the Isaac Sim installs it can see
-./install.sh --no-sim --claude-code   # omit --claude-code to skip client registration
+python3 scripts/isaac_env.py find     # check this lists your Isaac Sim first
+./install.sh --claude-code            # omit --claude-code to skip client registration
 ```
 
-If `find` shows nothing, set `ISAAC_MCP_PYTHON=/path/to/python` or `ISAACSIM_PATH=/path/to/isaac-sim`.
-See [existing installs and older builds](docs/LINUX-SETUP.md#choose-a-simulator-build).
+If `find` shows nothing, export `ISAAC_MCP_PYTHON=/path/to/python` or `ISAACSIM_PATH=/path/to/isaac-sim` and run it again.
+
+> [!IMPORTANT]
+> If no Isaac Sim is found, `./install.sh` stops at the EULA check. But if `OMNI_KIT_ACCEPT_EULA=YES` is already exported, it goes on
+> to download about 20 GB. `./install.sh --no-sim` never downloads, but records no interpreter: put `ISAAC_MCP_PYTHON` in the
+> client's `isaac` entry yourself, and in the shell that starts `run.sh` if it is not auto-detected.
+> See [existing installs and older builds](docs/LINUX-SETUP.md#choose-a-simulator-build).
 
 <details>
 <summary><b>No Isaac Sim yet? Install the pinned 6.2 environment (about 20 GB)</b></summary>

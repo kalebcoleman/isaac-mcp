@@ -166,10 +166,20 @@ README_COUNTS = (
 )
 
 
+README_ROWS = {"Generic scene and assets": ("generic",), "UR5e digital twin": ("ur5e",), "Isaac Lab": ("isaaclab",),
+               "Host gateway and desktop": ("host",), "Bridge built-ins": ("builtins",),
+               "Optional: desktop input, managed sessions": ("desktop_input", "sim_sessions")}
+
+
 def check_readme_counts(errors, text=None, counts=None):
-    """The README states the totals; keep them equal to the code like the agent guide's."""
+    """The README states the totals and a count per row; keep them equal to the code."""
     text = (ROOT / "README.md").read_text() if text is None else text
     actual = counts or tier_counts()
+    for label, tiers in README_ROWS.items():
+        found = re.findall(r"^\| " + re.escape(label) + r" \| (\d+) \|", text, re.M)
+        value = sum(actual[tier] for tier in tiers)
+        if found != [str(value)]:
+            errors.append(f"README.md: '{label}' row says {found}, the code has {value}")
     for pattern, value in README_COUNTS:
         found = re.findall(pattern, text)
         if len(found) != 1:

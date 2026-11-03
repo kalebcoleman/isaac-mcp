@@ -19,7 +19,7 @@ Join 2-8 video clips into one new MP4 with the bundled ffmpeg: mode=concat plays
 - `inputs` (list[str], required)
 - `mode` (str, default `'concat'`)
 - `output` (str | None, default `None`)
-- `max_width` (int, default `DEFAULT_MAX_WIDTH`)
+- `max_width` (int, default `1920`)
 - `fps` (int | None, default `None`)
 - `shortest` (bool, default `False`)
 

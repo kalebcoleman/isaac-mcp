@@ -26,7 +26,7 @@ or see [client configuration](../docs/MCP-SERVER.md#4-client-configuration) for 
 
 ## Tools
 
-The host lists 102 tools from startup, even before a simulator is running. Those that act on a scene execute through
+The host lists its tools from startup, even before a simulator is running. Those that act on a scene execute through
 a bridge, and return an error with connection guidance when none is available. See
 [Tool arguments](../docs/TOOLS-ARGUMENTS.md) for all of them.
 
@@ -87,7 +87,8 @@ search path, auto-enables `isaac.mcp.bridge` + `isaac.mcp.panel`, and sets the
 bridge port (default **8766**). Restart the app; the bridge binds with the
 built-in tools. `--remove` undoes it.
 
-Run it while the app is **down**; a running app overwrites the file on exit
+Run `python3 scripts/install.py status` first: it auto-detects a Kit app's config, which may not be the one you mean. Pass
+`--config <path/to/user.config.json>` to choose. Run it while the app is **down**; a running app overwrites the file on exit
 ([why](docs/configuration.md#register-while-the-app-is-down)).
 
 Connect an agent or IDE: install the host as above and add it to `.mcp.json` (Claude Code, Cursor, etc.):
