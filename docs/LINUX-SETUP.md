@@ -51,7 +51,7 @@ git clone https://github.com/kalebcoleman/isaac-mcp.git <workspace>/isaac-mcp
 cd <workspace>/isaac-mcp
 uv --version
 nvidia-smi
-./install.sh --accept-eula     # skips the download if an Isaac Sim 6.x is already installed; --download-sim forces it
+./install.sh --accept-eula --download-sim   # this section is the pinned 6.2 download; without --download-sim an installed Isaac Sim 6.x is used instead
 export PATH="$HOME/.local/bin:$PATH"
 uv pip check --python .venv/bin/python
 .venv/bin/python -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'

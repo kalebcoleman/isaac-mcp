@@ -32,7 +32,8 @@ Pause before saving and check the exported scene after reopening in a fresh proc
 
 0. **Use the Isaac Sim already on the machine; never download one unasked.** `sim__launch` and
    `run.sh` find the installed Isaac Sim 6.x (`python3 scripts/isaac_env.py find` lists them).
-   Do not run `./install.sh --download-sim`, `uv sync` or `pip install isaacsim`, and do not
+   Do not run `./install.sh --download-sim`, `uv sync`, `pip install isaacsim`, or `uv run`/`uv lock`/
+   `uv add` in the repository root (they create a ~20 GB `.venv`), and do not
    replace or upgrade an existing Isaac Sim or Isaac Lab environment, unless the user explicitly
    asks. If none is found, ask where it is installed (`ISAACSIM_PATH` or `ISAAC_MCP_PYTHON`).
 1. **Ask before GPU work.** `isaaclab__train`, `isaaclab__eval`, `isaaclab__play` and `sim__launch`

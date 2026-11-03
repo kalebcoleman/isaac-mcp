@@ -9,7 +9,9 @@ per-tool reference lives in `docs/`.
   user explicitly asks for it.** Lab and shared PCs have their own install: find it with
   `python3 scripts/isaac_env.py find` and install only the MCP server with `./install.sh`
   (it uses an installed Isaac Sim 6.x and skips the download; `--no-sim` forces that). Do not run
-  `./install.sh --download-sim`, `uv sync`, or `pip install isaacsim` without the user asking, and
+  `./install.sh --download-sim`, `uv sync`, `pip install isaacsim`, or `uv run`/`uv lock`/`uv add` in
+  the repository root (the root project depends on Isaac Sim, so they create a ~20 GB `.venv`) without
+  the user asking; run tools with `python3 scripts/...` or `cd mcp && uv run --isolated ...`, and
   do not replace or upgrade their Isaac Sim or Isaac Lab environment. If `find` shows nothing,
   stop and ask where Isaac Sim is installed (`ISAACSIM_PATH` or `ISAAC_MCP_PYTHON`) instead of
   installing one.

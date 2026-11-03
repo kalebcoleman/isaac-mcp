@@ -121,14 +121,64 @@ fi
 
 # Use an Isaac Sim that is already installed (a lab PC's, another environment's) instead of
 # downloading ~20 GB. Only the checkout's own .venv is re-synced without asking, because that is
-# this installer's environment. run.sh finds the same install at launch.
+# this installer's environment. The interpreter found here is written into the client
+# configuration (ISAAC_MCP_PYTHON), so sim__launch/run.sh use it even from a shell where the
+# variables that found it (VIRTUAL_ENV, CONDA_PREFIX, ISAACSIM_PATH, ...) are not set.
+SIM_PYTHON=""
 if [ "$NO_SIM" = 0 ] && [ "$DOWNLOAD_SIM" = 0 ] && [ ! -x "$ROOT/.venv/bin/python" ]; then
-  if command -v python3 >/dev/null 2>&1 \
-     && EXISTING="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6 2>/dev/null)" \
-     && [ -n "$EXISTING" ]; then
-    echo "== using the Isaac Sim already installed: $EXISTING"
-    echo "   (no download; run.sh finds it at launch. Pass --download-sim to install the locked 6.2 environment instead.)"
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 is required to look for an installed Isaac Sim (or pass --download-sim)" >&2
+    exit 1
+  fi
+  set +e
+  FOUND="$(python3 - "$ROOT/scripts/isaac_env.py" <<'PY'
+import json, os, subprocess, sys
+tool = sys.argv[1]
+EXPLICIT = ("ISAAC_MCP_PYTHON", "UR5E_DT_PYTHON", "ISAAC_SIM_PYTHON", "ISAACSIM_PATH", "ISAAC_SIM_PATH", "ISAAC_PATH")
+listed = subprocess.run([sys.executable, tool, "find", "--json"], capture_output=True, text=True)
+if listed.returncode:
+    print(listed.stderr.strip() or "isaac_env.py find failed", file=sys.stderr)
+    sys.exit(3)
+cands = [c for c in json.loads(listed.stdout or "[]")
+         if str(c.get("isaacsim") or "").split(".")[0] == "6"]
+named = [v for v in EXPLICIT if os.environ.get(v, "").strip()]
+if named:
+    # The user chose an install: it must be Isaac Sim 6.x; never fall back to a download.
+    chosen = [c for c in cands if c.get("source", "").startswith("env:")]
+    if not chosen:
+        print(f"{', '.join(named)} is set but does not point at an Isaac Sim 6.x install "
+              "(check it with: python3 scripts/isaac_env.py find). Fix or unset it; "
+              "pass --download-sim only if you want the locked 6.2 download.", file=sys.stderr)
+        sys.exit(3)
+    cands = chosen
+if not cands:
+    sys.exit(4)
+c = cands[0]
+print(f"{c['path']}\t{c['isaacsim']}\t{c.get('source', '')}")
+PY
+)"
+  rc=$?
+  set -e
+  if [ "$rc" = 3 ]; then
+    exit 1
+  elif [ "$rc" = 0 ] && [ -n "$FOUND" ]; then
+    IFS=$'\t' read -r SIM_PYTHON SIM_VERSION SIM_SOURCE <<<"$FOUND"
+    echo "== using the Isaac Sim already installed: $SIM_PYTHON (Isaac Sim $SIM_VERSION, found via $SIM_SOURCE)"
+    echo "   no download. Client configurations written by this installer get ISAAC_MCP_PYTHON=$SIM_PYTHON;"
+    echo "   for other clients, set it in their isaac entry so sim__launch uses this install."
+    echo "   Pass --download-sim to install the locked 6.2 environment instead."
+    case "$SIM_VERSION" in
+      6.2*) ;;
+      *) echo "WARNING: Isaac Sim $SIM_VERSION is not the tested 6.2 release; see docs/COMPATIBILITY.md" >&2 ;;
+    esac
+    case "$SIM_SOURCE" in
+      project-venv|sibling-venv)
+        echo "NOTE: this is another checkout's environment ($SIM_PYTHON); keep it in place, or set ISAAC_MCP_PYTHON to choose another" >&2 ;;
+    esac
     NO_SIM=1
+  elif [ "$rc" != 4 ]; then
+    echo "could not check for an installed Isaac Sim (exit $rc); not downloading. Pass --no-sim or --download-sim." >&2
+    exit 1
   fi
 fi
 
@@ -253,6 +303,7 @@ if [ "$DO_CLAUDE_CODE" = 1 ]; then
     lab_env=()
     [ -n "$LAB_PYTHON" ] && lab_env+=(-e "ISAACLAB_PYTHON=$LAB_PYTHON")
     [ -n "$LAB_ROOT" ] && lab_env+=(-e "ISAACLAB_ROOT=$LAB_ROOT")
+    [ -n "$SIM_PYTHON" ] && lab_env+=(-e "ISAAC_MCP_PYTHON=$SIM_PYTHON")
     claude mcp add --scope user isaac \
       -e "DISPLAY=$DISPLAY_NAME" -e "UR5E_DT_PORT=$PORT" "${lab_env[@]}" \
       -- "$CLI_BIN"
@@ -263,7 +314,7 @@ fi
 
 if [ "$DO_CLAUDE_DESKTOP" = 1 ]; then
   echo "== configuring Claude Desktop (isaac on port $PORT)"
-  PORT="$PORT" DISPLAY_NAME="$DISPLAY_NAME" CLI_PATH="$CLI_BIN" LAB_PYTHON="$LAB_PYTHON" LAB_ROOT="$LAB_ROOT" python3 - <<'PY'
+  PORT="$PORT" DISPLAY_NAME="$DISPLAY_NAME" CLI_PATH="$CLI_BIN" LAB_PYTHON="$LAB_PYTHON" LAB_ROOT="$LAB_ROOT" SIM_PYTHON="$SIM_PYTHON" python3 - <<'PY'
 import json
 import os
 import shutil
@@ -285,6 +336,8 @@ if os.environ.get("LAB_PYTHON"):
     env["ISAACLAB_PYTHON"] = os.environ["LAB_PYTHON"]
 if os.environ.get("LAB_ROOT"):
     env["ISAACLAB_ROOT"] = os.environ["LAB_ROOT"]
+if os.environ.get("SIM_PYTHON"):
+    env["ISAAC_MCP_PYTHON"] = os.environ["SIM_PYTHON"]
 config.setdefault("mcpServers", {})["isaac"] = {
     "command": cli_path,
     "args": [],
@@ -307,6 +360,7 @@ if [ "$DO_PRINT_OPENCODE" = 1 ]; then
   lab_json=""
   [ -n "$LAB_PYTHON" ] && lab_json+=", \"ISAACLAB_PYTHON\": \"$LAB_PYTHON\""
   [ -n "$LAB_ROOT" ] && lab_json+=", \"ISAACLAB_ROOT\": \"$LAB_ROOT\""
+  [ -n "$SIM_PYTHON" ] && lab_json+=", \"ISAAC_MCP_PYTHON\": \"$SIM_PYTHON\""
   cat <<EOF
 
 OpenCode entry (~/.config/opencode/opencode.jsonc):

@@ -63,10 +63,12 @@ python3 scripts/isaac_env.py find          # lists the Isaac Sim installs it can
 python3 scripts/fetch_ur5e_assets.py       # NVIDIA's robot/sensor files into the asset folder (~26 MB)
 ```
 
-`run.sh` and the MCP's `sim__launch` find the same install at launch. If `find` lists nothing, point
-it at the install with `ISAACSIM_PATH=/path/to/isaac-sim` or `ISAAC_MCP_PYTHON=/path/to/python`.
-`install.sh` downloads the locked 6.2 environment only when no Isaac Sim 6.x is found, or when you
-pass `--download-sim`.
+The installer saves the interpreter it found as `ISAAC_MCP_PYTHON` in the Claude Code/Desktop
+entry it writes, so the MCP's `sim__launch` (which runs `run.sh`) uses that install; for other clients,
+set `ISAAC_MCP_PYTHON` in their `isaac` entry. If `find` lists nothing, point it at the install with
+`ISAACSIM_PATH=/path/to/isaac-sim` or `ISAAC_MCP_PYTHON=/path/to/python`; a variable that does not
+point at Isaac Sim 6.x stops the installer instead of downloading. `install.sh` downloads the locked
+6.2 environment only when no Isaac Sim 6.x is found, or when you pass `--download-sim`.
 
 **New Linux installation:** Ubuntu 24.04 or 22.04 x86_64, a compatible NVIDIA GPU/driver,
 [uv](https://docs.astral.sh/uv/getting-started/installation/), Git, internet access and at least
@@ -78,13 +80,13 @@ before running. Windowed use also needs a working display.
 git clone https://github.com/kalebcoleman/isaac-mcp.git
 cd isaac-mcp
 # All commands below run from this checkout root.
-./install.sh --accept-eula
+./install.sh --accept-eula --download-sim   # creates .venv with the locked 6.2 (~20 GB)
 export PATH="$HOME/.local/bin:$PATH"
 uv pip check --python .venv/bin/python
 ./run.sh --port 8766
 ```
 
-`--accept-eula` accepts NVIDIA's EULA. When no Isaac Sim 6.x is installed yet (or with `--download-sim`), the installer creates/updates `.venv`; otherwise it uses the existing install. It also replaces the
+`--accept-eula` accepts NVIDIA's EULA. `--download-sim` makes the installer create/update `.venv` even if another Isaac Sim is installed (without it, an installed Isaac Sim 6.x is used and the `.venv` checks above do not apply). It also replaces the
 user-level editable host tool, and may install an ffmpeg shim. It uses `uv sync`, **not
 `uv sync --locked`**. For an exact-source locked installation, use the separate
 [reproducible setup](docs/REPRODUCIBILITY.md#locked-simulator-setup). Neither path installs Isaac Lab or system ROS.
