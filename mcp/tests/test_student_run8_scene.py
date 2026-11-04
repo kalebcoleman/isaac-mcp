@@ -499,3 +499,8 @@ def test_reading_a_sensor_that_was_never_created_says_not_found():
     # A failed create leaves nothing: suggesting adopt=true would send the caller after a prim that isn't there.
     text = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/extension.py").read_text(encoding="utf-8")
     assert text.index('refuse("NOT_FOUND", f"No prim at {args[\'path\']}') < text.index('"NOT_OWNED",\n                    f"{args[\'path\']} has no {expected}')
+
+
+def test_lidar_scan_wait_does_not_stop_on_an_all_zero_first_scan():
+    source = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/sensors.py").read_text(encoding="utf-8")
+    assert 'getattr(data, "size", 0) > 0 and bool(data.any())' in source

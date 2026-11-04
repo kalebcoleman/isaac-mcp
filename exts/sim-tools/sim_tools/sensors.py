@@ -450,7 +450,8 @@ LIDAR_SCAN_WAIT_FRAMES, LIDAR_SCAN_WAIT_S = 60, 1.5
 
 
 def lidar_has_data(sensor):
-    """Whether the annotator holds any points now. Never refuses: the read that follows does that."""
+    """Whether the annotator holds any real points now: a partial first scan can be all zeros. Never refuses: the read
+    that follows does that."""
     annotator = sensor.get("annotator")
     if annotator is None:
         return True
@@ -459,7 +460,7 @@ def lidar_has_data(sensor):
     except Exception:  # noqa: BLE001 - the read that follows reports this properly
         return True
     data = data.get("data") if isinstance(data, dict) else data
-    return data is not None and getattr(data, "size", 0) > 0
+    return data is not None and getattr(data, "size", 0) > 0 and bool(data.any())
 
 
 def lidar_points(sensor, limit):
