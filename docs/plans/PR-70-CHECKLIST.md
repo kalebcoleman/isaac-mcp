@@ -10,9 +10,9 @@ When PR 70 merges, move what is left to the roadmap and delete this file.
 Claude codes and reviews. DeepSeek V4.1 Flash on OpenCode Go scouts and tests, as a deliberately weaker user.
 
 - [x] First round on the ASU PC, reporting to `<home>/isaac-mcp-test-logs/pr70-fleet/`: host and docs, generic scene, windowed, UR5e twin, ROS 2, 6.0.1, Isaac Lab, sessions, then 6.0.0.0, 6.0.0.1 and 6.1.0.0
-- [ ] Fix what the fleet found (in progress)
-- [ ] Re-test round on every build at the pushed commit, including goal-only briefs with no hand-holding
-- [ ] Run `validate_scene_equivalents.py` and `validate_scene_clear.py`, which need the Agilebot pack
+- [x] Fix what the fleet found (in progress)
+- [x] Re-test round on every build at the pushed commit, including goal-only briefs with no hand-holding
+- [x] Run `validate_scene_equivalents.py` and `validate_scene_clear.py`, which need the Agilebot pack
 - [ ] End-to-end asset pack test with public GitHub assets. First run: the build tool failed for the chess set. A pass means no workaround:
   - [x] `assets__pack_build` alone makes a pack that imports and renders with textures, with the source hidden
   - [ ] The same for a real robot with physics: build, import, Play, and move a joint with universal tools
@@ -25,9 +25,9 @@ Claude codes and reviews. DeepSeek V4.1 Flash on OpenCode Go scouts and tests, a
   - [x] `assets__pack_adopt` records entry files
   - [x] Axis lines in `sim__camera__capture` images: exclude them, or document why not
 - [ ] Stable Isaac Lab pairs only: 5.1 with Lab 2.3.x, and 6.2 with Lab 3.0.0 (done). Tiny real jobs passed through the tools on both pairs, with all four RL libraries on 2.3.2; `tested` stays false for 5.1 + 2.3.2
-- [ ] Old stale LiDAR files: the repair failed on 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1, and passed on 6.2. Fix or scope it, then re-test per build
+- [x] Old stale LiDAR files: the repair failed on 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1, and passed on 6.2. Fix or scope it, then re-test per build
 - [ ] `sim__map__occupancy` all-free map on 6.0.0.1
-- [ ] Standalone install launcher crash on 6.0.1
+- [x] Standalone install launcher crash on 6.0.1
 
 ## Isaac Sim 5.1 (on this desktop)
 
@@ -36,7 +36,7 @@ Claude codes and reviews. DeepSeek V4.1 Flash on OpenCode Go scouts and tests, a
 - [x] Headless walk, `/scan` across a new Kit, `smoke_tools.py` 20/20, `verify.sh`
 - [x] Windowed: Quick Start, panel, `sim__graph__show`, recording, UI tools
 - [x] `sim__launch` with a 5.1 interpreter; `install.sh` accepting a pinned 5.1 (with fakes)
-- [ ] Update `docs/COMPATIBILITY.md` and the "6.x" wording in the docs with what was actually tested
+- [x] Update `docs/COMPATIBILITY.md` and the "6.x" wording in the docs with what was actually tested
 - [x] Retest on BrickSim's baseplate scene
 
 ## Universal tools and the UR5e twin

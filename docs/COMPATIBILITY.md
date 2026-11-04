@@ -98,6 +98,8 @@ records a failed assembled workflow and unsuccessful private collider controls.
 The [focused camera clipping checks](#new-camera-clipping-across-five-builds-2026-11-02)
 qualify rendering and units on a later source, without advancing physics or backend qualification.
 
+The newest short universal checks on each build are in the [PR 70 retest](evidence/pr70-build-retest-2026-11-04.md), including what remains unexplained on 6.0.0.0 and 6.0.0.1.
+
 | Isaac Sim Python package | Project status | Evidence and limits |
 |---|---|---|
 | `6.2.0.0` | Pinned baseline; selected workflows tested | The 6.2 twin, bridge, desktop controls and managed sessions were exercised on Ubuntu 24.04.5 / RTX 5080. Historical Isaac Lab tests used Lab 3.0.0 with this Sim version. See the [desktop evidence](evidence/desktop-control-2026-10-31.md) and [Lab guide](TOOLS-ISAACLAB.md#verified-vs-version-and-platform-limitations). |
@@ -106,7 +108,7 @@ qualify rendering and units on a later source, without advancing physics or back
 | `6.0.0.1` | Partial test; further validation needed | Headless and windowed 20-check smoke runs completed, including a decodable recording. A fresh window had the panel docked, and simulated object and camera transforms were received. Kit logged asynchronous task errors; a panel was undocked after one extension reload. Lab and physical hardware were not tested. |
 | `6.0.0.0` | Partial test; further validation needed | The initial object-pose graph failed because this release uses an older ROS publisher. With the compatibility fix, headless and windowed 20-check smoke runs passed, the optional panel was docked, and simulated object and camera transforms were received. Kit logged asynchronous task errors; Lab and physical hardware were not tested. |
 | Other 6.x releases | Not tested | A shared major version does not establish that this bridge, the twin or Lab jobs work on a new release. |
-| `5.1.0.0` | Experimental; not auto-detected, so name its interpreter with `ISAAC_MCP_PYTHON`. `run.sh` finds its bundled ROS libraries and `sim-tools` has adapters for its older APIs | Earlier result, before those adapters: The bridge and twin registered, but Quick Start failed with the default 6.2 ROS library path. With a temporary 5.1 ROS library path, Quick Start and stop returned success and the panel was checked, but Kit logged asynchronous task errors. The complete workflow was not verified. |
+| `5.1.0.0` | Experimental; not auto-detected, so name its interpreter with `ISAAC_MCP_PYTHON`. `run.sh` finds its bundled ROS libraries and `sim-tools` has adapters for its older APIs | Tested through the [PR 70 retest](evidence/pr70-build-retest-2026-11-04.md) and on one project scene: most generic tools work, and `verify.sh` passed. Earlier result, before those adapters: The bridge and twin registered, but Quick Start failed with the default 6.2 ROS library path. With a temporary 5.1 ROS library path, Quick Start and stop returned success and the panel was checked, but Kit logged asynchronous task errors. The complete workflow was not verified. |
 | Earlier releases | Not tested | No compatibility claim. |
 
 `scripts/smoke_tools.py` is a scoped check: it does not exercise a physical robot, a real pose publisher or every
