@@ -118,7 +118,7 @@ The bridge CLI is `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client` fr
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__quick_start` for a new scene, or
    `sim__stage__info` on an existing one, and `assets__roots` for your own files. The
-   62-tool pack (48 `sim`, 14 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   68-tool pack (54 `sim`, 14 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan`, `assets__search` and `assets__packs` / `assets__pack_*` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -183,11 +183,13 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   `current_target`; resend those IDs explicitly. Never assume the target was retargeted.
 - **Inspect:** `sim__stage__tree`, `sim__prim__get`, `sim__prim__find` (literal substring, not
   regex), `sim__physics__inspect`, `sim__joints__inspect`.
-- **Edit only while stopped:** `sim__prim__create`, `sim__prim__set_transform`,
-  `sim__prim__clone`, `sim__prim__delete` (`confirm=true`), `sim__stage__clear_owned`,
-  `sim__light__*`, `sim__material__*`, `sim__physics__configure`, `sim__joints__drive`.
-  Changes go to the session layer; source USD files are not rewritten. `TIMELINE_ACTIVE` means
-  stop the timeline first.
+- **Edit only while stopped:** `sim__prim__create` (also `Plane`, `mass`, `density`),
+  `sim__prim__set_transform` (any Xformable prim), `sim__prim__set_attribute`, `sim__physics__apply`
+  (collider, rigid body, kinematic, mass, density), `sim__prim__revert`, `sim__prim__clone`,
+  `sim__prim__delete` (`confirm=true`), `sim__stage__clear_owned`, `sim__light__*`,
+  `sim__material__*`, `sim__physics__configure`, `sim__joints__drive`.
+  Changes go to the session layer; source USD files are not rewritten, and `sim__prim__revert`
+  removes only what these tools recorded. `TIMELINE_ACTIVE` means stop the timeline first.
 - **Asset packs:** each project has a subfolder in the user's `isaac-mcp-assets`. `assets__packs` and
   `assets__pack_doctor` read; `assets__pack_adopt`, `assets__pack_pin` and `assets__pack_build` write
   only to the primary asset folder and need `force=true` to replace anything. Read refusals such as
@@ -208,8 +210,11 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
 - **Playback and runtime state:** `sim__timeline__control` (play/pause/stop) and
   `sim__simulation__step` (1–120 exact steps while paused). `sim__body__state` and
   `sim__joints__state` require initialized physics; body state accepts `path`, `prim` or
-  `prim_path`. `sim__joints__command` sets targets and
-  returns acknowledgment, not the achieved pose.
+  `prim_path`. `sim__joints__command` sets position targets by name or DOF order, with optional
+  velocity targets and clamp, and returns the applied targets, not the achieved pose;
+  `sim__joints__gains` reads/sets runtime gains, `sim__joints__move` settles while paused and reports
+  every joint's error (`settled=false` means a contact, a weak drive or a step limit),
+  `sim__joints__teleport` is a state reset. All of them are runtime-only and lost on Stop.
 - **Sensors and capture:** `sim__camera__create` then `sim__camera__capture` (RTX, PNG in the
   configured output root); the camera takes a parent path, `rotate_xyz` degrees or a quaternion,
   `focal_length` and `clipping_range`. `sim__lidar__create` with `config=Example_Rotary_2D`
@@ -354,5 +359,5 @@ worked while locked on GNOME.
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 62 generic tools: 48 `sim` and 14 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 68 generic tools: 54 `sim` and 14 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.

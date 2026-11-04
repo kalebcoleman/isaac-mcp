@@ -64,6 +64,8 @@ def path(value, root=False):
 
 
 RUNTIME_ROOTS = ("/Render",)  # Replicator/render-product prims Kit adds at runtime; they crowded out the scene
+# Kit's own viewport and render prims: never a scene edit target.
+KIT_ROOTS = ("Render", "OmniverseKit_Persp", "OmniverseKit_Front", "OmniverseKit_Top", "OmniverseKit_Right")
 
 
 def _ros_environment():
@@ -108,16 +110,22 @@ def matrix(m):
 
 
 def facts(prim):
+    mass = prim.GetAttribute("physics:mass") if prim.HasAttribute("physics:mass") else None
+    density = prim.GetAttribute("physics:density") if prim.HasAttribute("physics:density") else None
     return dict(
         rigid_body=prim.HasAPI(UsdPhysics.RigidBodyAPI),
         collision=prim.HasAPI(UsdPhysics.CollisionAPI),
         articulation_root=prim.HasAPI(UsdPhysics.ArticulationRootAPI),
         joint=prim.IsA(UsdPhysics.Joint),
-        mass_authored=prim.HasAttribute("physics:mass")
-        and prim.GetAttribute("physics:mass").HasAuthoredValueOpinion(),
-        mass=prim.GetAttribute("physics:mass").Get()
-        if prim.HasAttribute("physics:mass")
-        else None,
+        mass_authored=mass is not None and mass.HasAuthoredValueOpinion(),
+        mass=mass.Get() if mass is not None else None,
+        density_authored=density is not None and density.HasAuthoredValueOpinion(),
+        density=density.Get() if density is not None else None,
+        kinematic=(
+            prim.GetAttribute("physics:kinematicEnabled").Get()
+            if prim.HasAttribute("physics:kinematicEnabled")
+            else None
+        ),
         runtime_readiness="unknown",
     )
 
@@ -187,6 +195,8 @@ class Scene:
         self._stage = None
         self.stage_id = None
         self.owned = set()
+        # Session-layer opinions these tools authored, per prim: what sim.prim.revert undoes.
+        self.edits = {}
         self.runtime_assets = {}
         self._runtime_edit_target = None
         self.device_error = None
@@ -321,6 +331,7 @@ class Scene:
             self._stage = st
             self.stage_id = uuid.uuid4().hex
             self.owned.clear()
+            self.edits.clear()
         return st
 
     def _current_target(self, stage):
@@ -374,6 +385,7 @@ class Scene:
         self._stage = None
         self.stage_id = None
         self.owned.clear()
+        self.edits.clear()
 
     def stage_info(self):
         stage = self.stage()
@@ -492,20 +504,15 @@ class Scene:
         frame="local",
         collision=False,
         scale=(1, 1, 1),
+        mass=None,
+        density=None,
     ):
         p, parent = self.new_path(stage, path)
-        if kind not in (
-            "Cube",
-            "Sphere",
-            "Cylinder",
-            "Capsule",
-            "Cone",
-            "Xform",
-            "PhysicsScene",
-        ):
+        volume = ("Cube", "Sphere", "Cylinder", "Capsule", "Cone")
+        if kind not in (*volume, "Plane", "Xform", "PhysicsScene"):
             refuse(
                 "UNSUPPORTED_TYPE",
-                "Supported types: Cube, Sphere, Cylinder, Capsule, Cone, Xform, PhysicsScene.",
+                "Supported types: Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform, PhysicsScene.",
             )
         if (
             type(size) not in (int, float)
@@ -513,12 +520,28 @@ class Scene:
             or not 0 < size <= 10000
         ):
             refuse("INVALID_SIZE", "size must be finite and 0<size<=10000.")
-        if (
-            type(rigid) is not bool
-            or rigid
-            and kind not in ("Cube", "Sphere", "Cylinder", "Capsule", "Cone")
-        ):
-            refuse("INVALID_PHYSICS", "rigid requires Cube or Sphere.")
+        if type(rigid) is not bool:
+            refuse("INVALID_PHYSICS", "rigid must be true or false.")
+        if rigid and kind not in volume:
+            refuse(
+                "INVALID_PHYSICS",
+                "rigid needs volume geometry: Cube, Sphere, Cylinder, Capsule or Cone. A Plane can be a "
+                "static collider with collision=true.",
+            )
+        if mass is not None and density is not None:
+            refuse("CONFLICT", "Give mass or density, not both: a mass overrides the density-derived one. "
+                   "Nothing was created.", retry_with={"path": path, "kind": kind, "mass": mass})
+        for label, value in (("mass", mass), ("density", density)):
+            if value is None:
+                continue
+            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+                refuse("INVALID_PHYSICS", f"{label} must be a finite number greater than 0.")
+            if kind not in volume:
+                refuse(
+                    "INVALID_PHYSICS",
+                    f"{label} needs volume geometry (Cube, Sphere, Cylinder, Capsule or Cone): a "
+                    f"{kind} has none to derive it from. Nothing was created.",
+                )
         if kind == "PhysicsScene" and any(
             p.IsA(UsdPhysics.Scene) for p in stage.Traverse()
         ):
@@ -543,6 +566,16 @@ class Scene:
                         UsdGeom.Cube(prim).CreateSizeAttr(size)
                     if kind == "Sphere":
                         UsdGeom.Sphere(prim).CreateRadiusAttr(size / 2)
+                    if kind == "Plane":
+                        plane = UsdGeom.Plane(prim)
+                        plane.CreateWidthAttr(size)
+                        plane.CreateLengthAttr(size)
+                        plane.CreateAxisAttr(
+                            UsdGeom.Tokens.z
+                            if UsdGeom.GetStageUpAxis(stage) == "Z"
+                            else UsdGeom.Tokens.y
+                        )
+                        plane.CreateDoubleSidedAttr(True)
                     UsdGeom.Xformable(prim).AddTransformOp().Set(m)
                     if kind in ("Cylinder", "Capsule", "Cone"):
                         geometry = getattr(UsdGeom, kind)(prim)
@@ -559,12 +592,129 @@ class Scene:
                             PhysxSchema.PhysxContactReportAPI.Apply(prim).CreateThresholdAttr().Set(0)
                         except ImportError:  # no PhysX schema on this build; contacts will refuse
                             pass
+                    if mass is not None or density is not None:
+                        self.remember_api(stage, str(p), ["PhysicsMassAPI"])
+                        mass_api = UsdPhysics.MassAPI.Apply(prim)
+                        if mass is not None:
+                            self.remember_properties(stage, str(p), ["physics:mass"])
+                            mass_api.CreateMassAttr(float(mass))
+                        else:
+                            self.remember_properties(stage, str(p), ["physics:density"])
+                            mass_api.CreateDensityAttr(float(density))
             self.owned.add(str(p))
             return self.get(stage, str(p))
         except Exception:
             with Usd.EditContext(stage, stage.GetSessionLayer()):
                 stage.RemovePrim(p)
             raise
+
+    def _edit(self, prim_path):
+        return self.edits.setdefault(prim_path, {"properties": {}, "api": {}})
+
+    def remember_properties(self, stage, prim_path, names):
+        """Record the session layer's state before this pack authors these attributes.
+
+        sim.prim.revert restores a prior session opinion or removes the one this pack added;
+        without the record it could not tell either from a source-layer value.
+        """
+        layer = stage.GetSessionLayer()
+        entry = self._edit(prim_path)
+        for name in names:
+            prop = str(Sdf.Path(prim_path).AppendProperty(name))
+            if prop in entry["properties"]:
+                continue
+            spec = layer.GetPropertyAtPath(prop)
+            has_default = spec is not None and spec.HasDefaultValue()
+            entry["properties"][prop] = dict(
+                existed=spec is not None,
+                had_default=has_default,
+                default=spec.default if has_default else None,
+            )
+
+    def remember_api(self, stage, prim_path, tokens):
+        """Record whether the session layer already applied these API schemas."""
+        entry = self._edit(prim_path)
+        spec = stage.GetSessionLayer().GetPrimAtPath(prim_path)
+        value = spec.GetInfo("apiSchemas") if spec is not None else None
+        prepended = list(value.prependedItems) if value is not None else []
+        for token in tokens:
+            if token not in entry["api"]:
+                entry["api"][token] = token in prepended
+
+    def revert(self, stage, path, subtree=True):
+        """Undo only this pack's session-layer opinions on one prim (and optionally its subtree)."""
+        target = Sdf.Path(path)
+        layer = stage.GetSessionLayer()
+        if not layer.permissionToEdit:
+            refuse("READ_ONLY", "Session layer is not editable.")
+        paths = sorted(
+            (p for p in self.edits if p == path or (subtree and Sdf.Path(p).HasPrefix(target))),
+            key=lambda p: p.count("/"),
+            reverse=True,
+        )
+        composed_before = {p: self.get(stage, p) for p in paths if stage.GetPrimAtPath(p)}
+        removed, restored, not_reverted = [], [], []
+        with Usd.EditContext(stage, layer):
+            for prim_path in paths:
+                entry = self.edits.pop(prim_path)
+                spec = layer.GetPrimAtPath(prim_path)
+                if spec is None:
+                    continue
+                for prop, prior in entry["properties"].items():
+                    prop_spec = layer.GetPropertyAtPath(prop)
+                    if prop_spec is None:
+                        continue
+                    if prior["existed"]:
+                        if prior["had_default"]:
+                            prop_spec.default = prior["default"]
+                            restored.append(prop)
+                        else:
+                            not_reverted.append(
+                                dict(property=prop, reason="the session layer already had this opinion "
+                                     "with no static default, so it was left alone")
+                            )
+                        continue
+                    spec.RemoveProperty(prop_spec)
+                    removed.append(prop)
+                if entry["api"]:
+                    value = spec.GetInfo("apiSchemas")
+                    prepended = list(value.prependedItems) if value is not None else []
+                    drop = [token for token, existed in entry["api"].items() if not existed]
+                    keep = [token for token in prepended if token not in drop]
+                    if drop:
+                        if keep:
+                            spec.SetInfo("apiSchemas", Sdf.TokenListOp.Create(prependedItems=tuple(str(item) for item in keep)))
+                        else:
+                            spec.ClearInfo("apiSchemas")
+                        removed.extend("apiSchemas:" + token for token in drop)
+                    restored.extend(
+                        "apiSchemas:" + token
+                        for token, existed in entry["api"].items()
+                        if existed
+                    )
+        after = {}
+        for prim_path in paths:
+            if stage.GetPrimAtPath(prim_path):
+                after[prim_path] = self.get(stage, prim_path)
+        report = [dict(path=p, before=composed_before.get(p), after=after.get(p)) for p in paths[:16]]
+        return dict(
+            path=path,
+            subtree=subtree,
+            reverted_paths=paths,
+            reverted_path_count=len(paths),
+            removed=removed[:200],
+            removed_count=len(removed),
+            restored=restored[:200],
+            restored_count=len(restored),
+            not_reverted=not_reverted[:20],
+            prims=report,
+            prims_truncated=len(paths) > 16,
+            created_by_pack=[prim_path for prim_path in paths[:16] if prim_path in self.owned],
+            layer="session",
+            source_files_changed=False,
+            note="Only session-layer opinions these tools recorded were touched; source layers and the "
+                 "current stage are unchanged.",
+        )
 
     def transform(
         self,
@@ -573,30 +723,137 @@ class Scene:
         position=(0, 0, 0),
         orientation=(1, 0, 0, 0),
         frame="local",
-        scale=(1, 1, 1),
+        scale=None,
     ):
         prim = self.prim(stage, path)
-        if path not in self.owned or not prim.IsActive() or prim.IsInstanceProxy():
+        if prim.IsPseudoRoot() or prim.GetPath() == Sdf.Path("/"):
+            refuse("INVALID_PRIM_PATH", "The stage root has no pose to set.")
+        if prim.IsInstanceProxy():
             refuse(
-                "NOT_OWNED",
-                "Only active wrapper/primitives created by this pack may be transformed.",
+                "INSTANCE_PROXY",
+                f"{path} is an instance proxy inside an instance and cannot be edited directly. Edit the "
+                "instance root instead: find it with sim__stage__tree root=\"/\" (it composes the proxy), and "
+                "pass that path.",
             )
+        if prim.GetPath().GetPrefixes()[0].name in KIT_ROOTS:
+            refuse("PROTECTED_PRIM", "Kit's runtime render and viewport prims are protected.")
         xf = UsdGeom.Xformable(prim)
-        ops = xf.GetOrderedXformOps() if xf else []
-        if (
-            len(ops) != 1
-            or ops[0].GetOpType() != UsdGeom.XformOp.TypeTransform
-            or ops[0].GetNumTimeSamples()
-            or xf.GetResetXformStack()
-        ):
+        if not xf:
             refuse(
-                "UNSUPPORTED_TRANSFORM",
-                "Expected one static transform op and no reset stack.",
+                "WRONG_TYPE",
+                f"{path} is a {prim.GetTypeName() or 'prim'} with no Xformable schema, so it has no pose. "
+                "Move or wrap it under an Xform parent instead.",
             )
+        root = self.articulation_root_for(stage, prim)
+        if root is not None:
+            movable = root.get("move_instead")
+            refuse(
+                "ARTICULATION_LINK",
+                f"{path} is attached by a joint, so it is a link of the articulation at {root['root']}; moving it "
+                "would break its joints."
+                + (f" Move the robot instead: call sim__prim__set_transform with path=\"{movable}\"." if movable
+                   else " Move the Xform above the joints instead."),
+                articulation_root=root["root"],
+                **({"retry_with": dict(session_id=self.session_id, stage_id=self.stage_id, path=movable,
+                                       position=list(position), orientation=list(orientation),
+                                       frame=frame, **({"scale": list(scale)} if scale is not None else {}))}
+                   if movable else {}),
+            )
+        ops = xf.GetOrderedXformOps()
+        animated = [op.GetName() for op in ops if op.GetAttr().GetNumTimeSamples()]
+        if animated:
+            refuse(
+                "ANIMATED_TRANSFORM",
+                f"{path} has a time-sampled transform ({', '.join(animated)}); a static override would remove "
+                "the animation. Animate or offset a parent Xform instead, or edit the source clip.",
+            )
+        before = self.get(stage, path)
+        if scale is None:
+            # Keep the prim's own scale: moving a scaled table must not resize it.
+            try:
+                scale = list(Gf.Transform(xf.GetLocalTransformation(Usd.TimeCode.Default())).GetScale())
+            except (RuntimeError, ValueError):
+                scale = [1, 1, 1]
         m = self.pose(stage, prim.GetParent(), position, orientation, frame, scale)
+        if xf.GetResetXformStack() and frame == "local":
+            m = m * UsdGeom.XformCache().GetLocalToWorldTransform(prim.GetParent())
+        single = len(ops) == 1 and ops[0].GetOpType() == UsdGeom.XformOp.TypeTransform
         with Usd.EditContext(stage, stage.GetSessionLayer()):
-            ops[0].Set(m)
-        return self.get(stage, path)
+            if single:
+                op = ops[0]
+                self.remember_properties(stage, path, [op.GetAttr().GetName()])
+                op.Set(m)
+                authored = [op.GetAttr().GetName()]
+            else:
+                existing = next(
+                    (op for op in ops if op.GetOpType() == UsdGeom.XformOp.TypeTransform), None
+                )
+                name = existing.GetName() if existing is not None else "xformOp:transform"
+                self.remember_properties(stage, path, [name, "xformOpOrder"])
+                op = existing if existing is not None else xf.AddTransformOp()
+                op.Set(m)
+                xf.SetXformOpOrder([op])
+                authored = [op.GetName(), "xformOpOrder"]
+        result = self.get(stage, path)
+        result.update(
+            before=before,
+            authored=authored,
+            transform_override=(
+                "one transform op replaces the composed op order"
+                if not single
+                else "the existing transform op now has a session-layer value"
+            ),
+            layer="session",
+            source_files_changed=False,
+            revert="sim__prim__revert",
+        )
+        return result
+
+    def articulation_root_for(self, stage, prim):
+        """What to move instead of a joint-attached link: {'root': articulation root, 'move_instead': Xform}.
+
+        None when this prim is not a joint body, or is itself the articulation root. An articulation's
+        root is often a joint sibling (``<robot>/root_joint``) that has no pose of its own, so the
+        useful target is the Xform above it.
+        """
+        target = prim.GetPath()
+        attached = False
+        for index, candidate in enumerate(Usd.PrimRange.Stage(stage, Usd.PrimAllPrimsPredicate)):
+            if index >= 20000:
+                break
+            if not candidate.IsA(UsdPhysics.Joint):
+                continue
+            joint = UsdPhysics.Joint(candidate)
+            bodies = {
+                path
+                for relationship in (joint.GetBody0Rel(), joint.GetBody1Rel())
+                for path in relationship.GetTargets()
+            }
+            if target in bodies:
+                attached = True
+                break
+        if not attached or prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+            return None
+        parent = prim.GetParent()
+        scope = stage.GetPseudoRoot() if parent.IsPseudoRoot() else parent
+        root_prim = None
+        for index, candidate in enumerate(Usd.PrimRange(scope)):
+            if index >= 20000:
+                break
+            if candidate.HasAPI(UsdPhysics.ArticulationRootAPI):
+                root_prim = candidate
+                break
+        root_path = str((root_prim or parent).GetPath())
+        if root_prim is not None and UsdGeom.Xformable(root_prim):
+            movable = root_prim  # the robot Xform itself is the articulation root
+        else:
+            movable = root_prim.GetParent() if root_prim is not None else parent
+        while movable and not movable.IsPseudoRoot() and not UsdGeom.Xformable(movable):
+            movable = movable.GetParent()
+        return dict(
+            root=root_path,
+            move_instead=str(movable.GetPath()) if movable and not movable.IsPseudoRoot() else None,
+        )
 
     def inspect_asset(self, snapshot_id, manifest_sha256):
         filename, manifest = self.broker.verify(snapshot_id, manifest_sha256)

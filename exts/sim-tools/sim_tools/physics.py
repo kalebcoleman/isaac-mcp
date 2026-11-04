@@ -50,9 +50,133 @@ def manager():
 
 
 def array(value):
+    """Observed tensor data as NumPy, whatever frontend this build's view returned."""
+    if hasattr(value, "detach"):  # torch
+        return value.detach().cpu().numpy()
     if hasattr(value, "numpy"):
         value = value.numpy()
     return value
+
+
+def _frontend_data(view, row):
+    """One (1, DOFs) row in the same frontend and on the same device as the view's own arrays."""
+    module = type(view.get_dof_positions()).__module__
+    if module.startswith("warp"):
+        import warp as wp
+
+        return wp.array(row, dtype=wp.float32, device=view.get_dof_positions().device)
+    if module.startswith("torch"):
+        import torch
+
+        return torch.from_numpy(row).to(device=view.get_dof_positions().device)
+    return row
+
+
+def _frontend_indices(view):
+    """The articulation index in the view's own frontend."""
+    import numpy as np
+
+    module = type(view.get_dof_positions()).__module__
+    if module.startswith("warp"):
+        import warp as wp
+
+        return wp.array(np.array([0], dtype=np.uint32), dtype=wp.uint32,
+                        device=view.get_dof_positions().device)
+    if module.startswith("torch"):
+        import torch
+
+        return torch.tensor([0], dtype=torch.int32, device=view.get_dof_positions().device)
+    return np.array([0], dtype=np.uint32)
+
+
+def dof_names(view):
+    return list(view.shared_metatype.dof_names)
+
+
+def dof_units(view):
+    """Per-DOF position units: 'rad' for a revolute DOF, stage units for a prismatic one."""
+    names = dof_names(view)
+    try:
+        from omni.physics.tensors import DofType
+
+        types = list(view.shared_metatype.dof_types)
+        return ["stage units" if t == DofType.Translation else "rad" for t in types]
+    except Exception:  # noqa: BLE001 - informational only; the value is still valid
+        return ["rad, or stage units for a prismatic DOF"] * len(names)
+
+
+def dof_limits(view):
+    """[[low, high], ...] for one articulation, from either build's return shape.
+
+    The tensor view used here returns one ``(1, DOFs, 2)`` array on both Isaac Sim 5.1 and 6.x;
+    the experimental wrapper on some builds returns ``(lower, upper)`` instead.
+    """
+    value = view.get_dof_limits()
+    if isinstance(value, tuple):
+        if len(value) != 2:
+            refuse("PHYSICS_FORMAT", "Runtime DOF limits must be a pair of bounds.")
+        lower, upper = (array(part).reshape(-1).tolist() for part in value)
+        return [[float(lo), float(hi)] for lo, hi in zip(lower, upper)]
+    data = array(value)
+    if getattr(data, "ndim", None) != 3 or data.shape[0] != 1 or data.shape[2] != 2:
+        refuse(
+            "PHYSICS_FORMAT",
+            "Runtime DOF limits have an unexpected shape on this build; no targets were changed.",
+        )
+    return [[float(lo), float(hi)] for lo, hi in data[0].tolist()]
+
+
+def dof_gains(view):
+    """(stiffnesses, dampings) for one articulation, from either build's gain API."""
+    try:
+        stiffnesses, dampings = view.get_dof_stiffnesses(), view.get_dof_dampings()
+    except AttributeError:
+        value = view.get_dof_gains()
+        if not isinstance(value, tuple) or len(value) != 2:
+            refuse(
+                "PHYSICS_API_UNAVAILABLE",
+                "This build exposes neither get_dof_stiffnesses/get_dof_dampings nor a gain pair; no gains were changed.",
+            )
+        stiffnesses, dampings = value
+    return (
+        array(stiffnesses).reshape(-1).tolist(),
+        array(dampings).reshape(-1).tolist(),
+    )
+
+
+def dof_max_forces(view):
+    """Drive caps, under this build's own name for them."""
+    try:
+        value = view.get_dof_max_forces()
+    except AttributeError:
+        try:
+            value = view.get_dof_max_efforts()
+        except AttributeError:
+            refuse(
+                "PHYSICS_API_UNAVAILABLE",
+                "This build exposes neither get_dof_max_forces nor get_dof_max_efforts; no gains were changed.",
+            )
+    return array(value).reshape(-1).tolist()
+
+
+def dof_row(view, value):
+    """One articulation's DOF row as the frontend this build uses (warp on 6.x, NumPy/other below)."""
+    import numpy as np
+
+    return np.array(array(value), dtype=np.float32, copy=True).reshape(1, -1)
+
+
+def dof_write(view, setter, row):
+    """Call a tensor setter with the (1, DOFs) row and this view's own frontend/device."""
+    getattr(view, setter)(_frontend_data(view, row), _frontend_indices(view))
+
+
+def dof_set(view, getter, setter, values):
+    """Write only the given per-DOF values, leaving the rest of the row untouched."""
+    row = dof_row(view, getattr(view, getter)())
+    for index, value in values.items():
+        row[0, index] = value
+    dof_write(view, setter, row)
 
 
 def runtime_vector(value, count, *, path, field, backend):

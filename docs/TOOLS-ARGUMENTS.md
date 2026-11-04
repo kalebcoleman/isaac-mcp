@@ -376,7 +376,7 @@ No arguments.
 
 ## Generic scene (`sim__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 48 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 54 tools.
 
 ### `sim__body__state`
 
@@ -492,12 +492,15 @@ Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit,
 
 ### `sim__joints__command`
 
-Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure. Targets are runtime only and are lost on Stop; to keep one, use sim__joints__drive. Requires session_id and stage_id from sim__stage__info.
+Command initialized articulation position targets by name (targets) or in DOF order (positions), and/or velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless clamp=true, which reports what it clamped; unknown names list the valid ones. Returns applied targets and previous values, not achieved poses: compare sim__joints__state. Runtime only and lost on Stop; sim__joints__drive authors USD targets. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Exact initialized articulation root path.
-- `positions` (array, required): One finite position per DOF, in sim.joints.state order.
+- `positions` (array, optional): One finite position per DOF, in sim.joints.state order. Give this or targets, not both.
+- `targets` (object, optional): {dof name: position}; names come from sim__joints__state. An unknown name is refused with the valid ones.
+- `velocities` (object, optional): {dof name: velocity target}, rad/s for revolute and stage units/s for prismatic. A velocity drive needs damping (a wheel usually stiffness 0), so check the response.
+- `clamp` (boolean, default `false`): Use the runtime limit for an out-of-limit value and report it, instead of refusing.
 
 ### `sim__joints__drive`
 
@@ -511,6 +514,18 @@ Set one revolute/prismatic joint drive target and gains in session layer; stoppe
 - `damping` (number, required): Nonnegative USD drive damping.
 - `max_force` (number, default `1000`): Positive force/torque cap.
 
+### `sim__joints__gains`
+
+Read or set an initialized articulation's runtime drive gains: stiffness, damping and max_effort (the drive's torque/force cap) for named dofs or every DOF. These are PhysX/Newton runtime values, not USD: they are lost on Stop and never saved; sim__joints__drive authors USD gains. Omit every value to only read. Returns each DOF's values before and after. Needs a playing or paused timeline and a valid tensor view. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Exact initialized articulation root path.
+- `dofs` (array, default `[]`): DOF names; empty applies to every DOF. An unknown name is refused with the valid ones.
+- `stiffness` (number, optional): Nonnegative position-drive stiffness (torque per radian, or force per stage unit).
+- `damping` (number, optional): Nonnegative position-drive damping (torque per rad/s, or force per stage unit/s).
+- `max_effort` (number, optional): Positive drive cap in torque (revolute) or force (prismatic).
+
 ### `sim__joints__inspect`
 
 Inspect bounded authored joint limits/drives of an articulation, reporting USD degrees versus stage units. No runtime-state claim. The path may be the articulation root (a joint such as <robot>/root_joint, or the link carrying the articulation API): the joints are then the ones reached through its rigid bodies. Requires session_id and stage_id from sim__stage__info.
@@ -520,6 +535,18 @@ Inspect bounded authored joint limits/drives of an articulation, reporting USD d
 - `path` (string, required): Subtree, articulation root (joint or link), or the robot prim.
 - `limit` (integer, default `200`): Visited prim cap 1..200.
 
+### `sim__joints__move`
+
+Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and every joint's error. A joint held by a contact or a weak drive reports settled=false with its remaining error: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only, like sim__joints__command; never pumps the app loop. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Exact initialized articulation root path.
+- `targets` (object, required): {dof name: position}, radians or stage units. An unknown name is refused with the valid ones.
+- `max_steps` (integer, default `600`): Physics steps to try, 1..600.
+- `tolerance` (number, default `0.01`): Per-joint position error that counts as settled, >0 (radians or stage units).
+- `clamp` (boolean, default `false`): Use the runtime limit for an out-of-limit target and report it, instead of refusing.
+
 ### `sim__joints__state`
 
 While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.
@@ -527,6 +554,15 @@ While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized arti
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Exact articulation root path, e.g. /World/UR5e/root_joint: robot.articulation_root from sim__quick_start, or sim__physics__inspect.
+
+### `sim__joints__teleport`
+
+Set joint positions directly as a state reset, not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are {dof name: value}, radians for revolute and stage units for prismatic. Needs an initialized (playing or paused) articulation and returns each joint's value before and after. Out-of-limit values are refused. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Exact initialized articulation root path.
+- `positions` (object, required): {dof name: position}. Unknown names are refused with the valid ones.
 
 ### `sim__lidar__create`
 
@@ -643,6 +679,20 @@ Create a UsdPreviewSurface or physics material with finite numeric parameters. N
 - `dynamic_friction` (number, default `0.5`): Physics material dynamic friction 0..10.
 - `restitution` (number, default `0`): Physics material restitution 0..1.
 
+### `sim__physics__apply`
+
+Add or remove a collider, rigid body and kinematic state, or set mass / density, on any prim; session layer only, and undo with sim__prim__revert. collider can set an approximation (convexHull, convexDecomposition, boundingSphere, boundingCube, meshSimplification, none). Refuses a rigid body under an existing rigid-body ancestor, a joint or articulation root as a body, both mass and density, and any change while the timeline is active. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Absolute prim path.
+- `collider` (boolean, optional): Add (true) or remove (false) UsdPhysics CollisionAPI.
+- `approximation` (convexHull|convexDecomposition|boundingSphere|boundingCube|meshSimplification|none, default `""`): Collider approximation, with collider=true; empty keeps the current one.
+- `rigid_body` (boolean, optional): Add (true) or remove (false) UsdPhysics RigidBodyAPI.
+- `kinematic` (boolean, optional): Kinematic flag (physics:kinematicEnabled); needs a rigid body on this prim.
+- `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density.
+- `density` (number, optional): Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.
+
 ### `sim__physics__configure`
 
 Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch. Requires session_id and stage_id from sim__stage__info.
@@ -701,19 +751,21 @@ Clone a pack-created simple leaf primitive into a new path, preserving session-l
 
 ### `sim__prim__create`
 
-Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.
+Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): New absolute prim path; every ancestor must already exist (create them with kind=Xform).
-- `kind` (string, required): Cube, Sphere, Cylinder, Capsule, Cone, Xform or PhysicsScene.
-- `size` (number, default `1`): Positive cube edge or sphere diameter.
+- `kind` (string, required): Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene.
+- `size` (number, default `1`): Positive cube edge, sphere/cylinder/capsule/cone diameter or height, or Plane width and length.
 - `rigid` (boolean, default `false`): Author rigid body AND collider on geometry.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
 - `collision` (boolean, default `false`): Author static collision without rigid-body dynamics.
 - `scale` (array, default `[1, 1, 1]`): Positive local XYZ scale, 1e-6..1e4.
+- `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.
+- `density` (number, optional): Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.
 
 ### `sim__prim__delete`
 
@@ -752,17 +804,37 @@ Distance between two prims' world bounds at default USD time: centre-to-centre a
 - `path_a` (string, required): First absolute prim path.
 - `path_b` (string, required): Second absolute prim path.
 
-### `sim__prim__set_transform`
+### `sim__prim__revert`
 
-Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation. Requires session_id and stage_id from sim__stage__info.
+Remove the session-layer opinions these tools authored on one prim or its subtree, restoring composed values from the source files, and report what was removed and the values before and after. Source files never change. Prims the pack created stay: delete them with sim__prim__delete. Nothing recorded is a no-op, not an error. Only edits recorded in this session and stage can be undone. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Pack-owned prim path.
+- `path` (string, required): Absolute prim path whose recorded edits are undone.
+- `subtree` (boolean, default `true`): Also revert recorded edits on descendants.
+
+### `sim__prim__set_attribute`
+
+Set one typed attribute on any prim in the session layer, reporting the composed value before and after, and undo it with sim__prim__revert. Refuses engine- and schema-owned attributes (points, normals, faceVertexIndices, faceVertexCounts, extent, xformOpOrder, xformOp:*, physics:*, physx*:*), instance proxies and Kit runtime prims. type creates a missing attribute; without it the attribute must exist. Values are JSON; quaternions are [w,x,y,z]. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Absolute prim path.
+- `attribute` (string, required): Attribute name, e.g. visibility, purposes, user:owner or a namespaced name.
+- `value` (any, required): New value as JSON: true/false, a number, a string, or a flat list for a vector/quaternion. Converted to the attribute's USD type.
+- `type` (string, optional): USD type for a new attribute: bool, int, uint, int64, uint64, float, double, string, token, float2/3/4, double2/3/4, int2/3, color3f/4f, normal3f, point3f, vector3f, quatf, quatd.
+
+### `sim__prim__set_transform`
+
+Set a static local or world pose on any Xformable prim in the session layer, and report the pose before and after; undo with sim__prim__revert. Refuses instance proxies (name the instance root), articulation links other than the root (moving a link breaks its joints), animated transforms, Kit runtime prims and a running or paused timeline. Authors one transform override, so source files never change. No claim of runtime teleportation. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Absolute Xformable prim path.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
-- `scale` (array, default `[1, 1, 1]`): Positive XYZ scale in the requested pose frame.
+- `scale` (array, optional): Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.
 
 ### `sim__quick_start`
 

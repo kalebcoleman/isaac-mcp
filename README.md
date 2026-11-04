@@ -49,14 +49,14 @@ scene needs a live bridge, and a call without one returns an error that says wha
 
 | Tools | Count | Examples | Needs |
 |---|--:|---|---|
-| Generic scene and assets | 62 | `sim__quick_start`, `sim__stage__info`, `sim__graph__build`, `assets__import_path` | Any robot. Kit with `sim-tools` (eight asset tools run on the host) |
+| Generic scene and assets | 68 | `sim__quick_start`, `sim__stage__info`, `sim__graph__build`, `assets__import_path` | Any robot. Kit with `sim-tools` (eight asset tools run on the host) |
 | UR5e digital twin | 23 | `ur5e_dt__quick_start`, `ur5e_dt__add_objects` | RISE lab's twin, Kaleb's work with that robot. Kit with `ur5e-dt`; [some need lab files](docs/ASSETS.md#public-files-and-lab-files) |
 | Isaac Lab | 12 | `isaaclab__train`, `isaaclab__metrics_summary` | An Isaac Lab install for job tools |
 | Host gateway and desktop | 12 | `refresh_tools`, `screenshot`, `tile_windows` | A display for the desktop tools |
 | Bridge built-ins | 7 | `status`, `run_python`, `put_file` | Any Kit with the bridge |
 | Optional: desktop input, managed sessions | 9 | `window_click`, `sim__launch` | Explicit opt-in |
 
-A client lists **116 tools** by default, or **125** with both optional groups.
+A client lists **122 tools** by default, or **131** with both optional groups.
 [Filters and tiers](AGENTS.md#what-you-can-reach-by-tier) explain any other number.
 
 > [!NOTE]

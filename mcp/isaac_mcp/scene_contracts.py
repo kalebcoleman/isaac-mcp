@@ -180,15 +180,18 @@ add(
 )
 add(
     "sim.prim.create",
-    "Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units.",
+    "Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes.",
     dict(
         **TARGET,
         path=field("string", "New absolute prim path; every ancestor must already exist (create them with kind=Xform)."),
         kind=field(
-            "string", "Cube, Sphere, Cylinder, Capsule, Cone, Xform or PhysicsScene."
+            "string", "Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene."
         ),
         size=field(
-            "number", "Positive cube edge or sphere diameter.", False, default=1
+            "number",
+            "Positive cube edge, sphere/cylinder/capsule/cone diameter or height, or Plane width and length.",
+            False,
+            default=1,
         ),
         rigid=field(
             "boolean",
@@ -201,8 +204,8 @@ add(
 )
 add(
     "sim.prim.set_transform",
-    "Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation.",
-    dict(**TARGET, path=field("string", "Pack-owned prim path."), **POSE),
+    "Set a static local or world pose on any Xformable prim in the session layer, and report the pose before and after; undo with sim__prim__revert. Refuses instance proxies (name the instance root), articulation links other than the root (moving a link breaks its joints), animated transforms, Kit runtime prims and a running or paused timeline. Authors one transform override, so source files never change. No claim of runtime teleportation.",
+    dict(**TARGET, path=field("string", "Absolute Xformable prim path."), **POSE),
 )
 add(
     "sim.physics.inspect",
@@ -723,12 +726,142 @@ add(
 
 add(
     "sim.joints.command",
-    "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure. Targets are runtime only and are lost on Stop; to keep one, use sim__joints__drive.",
+    "Command initialized articulation position targets by name (targets) or in DOF order (positions), and/or velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless clamp=true, which reports what it clamped; unknown names list the valid ones. Returns applied targets and previous values, not achieved poses: compare sim__joints__state. Runtime only and lost on Stop; sim__joints__drive authors USD targets.",
     dict(
         **TARGET,
         path=field("string", "Exact initialized articulation root path."),
         positions=field(
-            "array", "One finite position per DOF, in sim.joints.state order."
+            "array",
+            "One finite position per DOF, in sim.joints.state order. Give this or targets, not both.",
+            False,
+        ),
+        targets=field(
+            "object",
+            "{dof name: position}; names come from sim__joints__state. An unknown name is refused with the valid ones.",
+            False,
+        ),
+        velocities=field(
+            "object",
+            "{dof name: velocity target}, rad/s for revolute and stage units/s for prismatic. A velocity drive needs damping (a wheel usually stiffness 0), so check the response.",
+            False,
+        ),
+        clamp=field(
+            "boolean",
+            "Use the runtime limit for an out-of-limit value and report it, instead of refusing.",
+            False,
+            default=False,
+        ),
+    ),
+)
+add(
+    "sim.joints.gains",
+    "Read or set an initialized articulation's runtime drive gains: stiffness, damping and max_effort (the drive's torque/force cap) for named dofs or every DOF. These are PhysX/Newton runtime values, not USD: they are lost on Stop and never saved; sim__joints__drive authors USD gains. Omit every value to only read. Returns each DOF's values before and after. Needs a playing or paused timeline and a valid tensor view.",
+    dict(
+        **TARGET,
+        path=field("string", "Exact initialized articulation root path."),
+        dofs=field(
+            "array", "DOF names; empty applies to every DOF. An unknown name is refused with the valid ones.", False, default=[]
+        ),
+        stiffness=field(
+            "number", "Nonnegative position-drive stiffness (torque per radian, or force per stage unit).", False
+        ),
+        damping=field(
+            "number", "Nonnegative position-drive damping (torque per rad/s, or force per stage unit/s).", False
+        ),
+        max_effort=field(
+            "number", "Positive drive cap in torque (revolute) or force (prismatic).", False
+        ),
+    ),
+)
+add(
+    "sim.joints.move",
+    "Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and every joint's error. A joint held by a contact or a weak drive reports settled=false with its remaining error: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only, like sim__joints__command; never pumps the app loop.",
+    dict(
+        **TARGET,
+        path=field("string", "Exact initialized articulation root path."),
+        targets=field(
+            "object", "{dof name: position}, radians or stage units. An unknown name is refused with the valid ones."
+        ),
+        max_steps=field("integer", "Physics steps to try, 1..600.", False, default=600),
+        tolerance=field(
+            "number", "Per-joint position error that counts as settled, >0 (radians or stage units).", False, default=0.01
+        ),
+        clamp=field(
+            "boolean", "Use the runtime limit for an out-of-limit target and report it, instead of refusing.",
+            False, default=False,
+        ),
+    ),
+)
+add(
+    "sim.joints.teleport",
+    "Set joint positions directly as a state reset, not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are {dof name: value}, radians for revolute and stage units for prismatic. Needs an initialized (playing or paused) articulation and returns each joint's value before and after. Out-of-limit values are refused.",
+    dict(
+        **TARGET,
+        path=field("string", "Exact initialized articulation root path."),
+        positions=field(
+            "object", "{dof name: position}. Unknown names are refused with the valid ones."
+        ),
+    ),
+)
+add(
+    "sim.prim.set_attribute",
+    "Set one typed attribute on any prim in the session layer, reporting the composed value before and after, and undo it with sim__prim__revert. Refuses engine- and schema-owned attributes (points, normals, faceVertexIndices, faceVertexCounts, extent, xformOpOrder, xformOp:*, physics:*, physx*:*), instance proxies and Kit runtime prims. type creates a missing attribute; without it the attribute must exist. Values are JSON; quaternions are [w,x,y,z].",
+    dict(
+        **TARGET,
+        path=field("string", "Absolute prim path."),
+        attribute=field("string", "Attribute name, e.g. visibility, purposes, user:owner or a namespaced name."),
+        value=field(
+            "any",
+            "New value as JSON: true/false, a number, a string, or a flat list for a vector/quaternion. Converted to the attribute's USD type.",
+        ),
+        type=field(
+            "string",
+            "USD type for a new attribute: bool, int, uint, int64, uint64, float, double, string, token, float2/3/4, double2/3/4, int2/3, color3f/4f, normal3f, point3f, vector3f, quatf, quatd.",
+            False,
+        ),
+    ),
+)
+add(
+    "sim.physics.apply",
+    "Add or remove a collider, rigid body and kinematic state, or set mass / density, on any prim; session layer only, and undo with sim__prim__revert. collider can set an approximation (convexHull, convexDecomposition, boundingSphere, boundingCube, meshSimplification, none). Refuses a rigid body under an existing rigid-body ancestor, a joint or articulation root as a body, both mass and density, and any change while the timeline is active.",
+    dict(
+        **TARGET,
+        path=field("string", "Absolute prim path."),
+        collider=field("boolean", "Add (true) or remove (false) UsdPhysics CollisionAPI.", False),
+        approximation=field(
+            "string",
+            "Collider approximation, with collider=true; empty keeps the current one.",
+            False,
+            default="",
+            enum=[
+                "convexHull",
+                "convexDecomposition",
+                "boundingSphere",
+                "boundingCube",
+                "meshSimplification",
+                "none",
+            ],
+        ),
+        rigid_body=field("boolean", "Add (true) or remove (false) UsdPhysics RigidBodyAPI.", False),
+        kinematic=field(
+            "boolean", "Kinematic flag (physics:kinematicEnabled); needs a rigid body on this prim.", False
+        ),
+        mass=field(
+            "number", "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density.", False
+        ),
+        density=field(
+            "number", "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.", False
+        ),
+    ),
+)
+add(
+    "sim.prim.revert",
+    "Remove the session-layer opinions these tools authored on one prim or its subtree, restoring composed values from the source files, and report what was removed and the values before and after. Source files never change. Prims the pack created stay: delete them with sim__prim__delete. Nothing recorded is a no-op, not an error. Only edits recorded in this session and stage can be undone.",
+    dict(
+        **TARGET,
+        path=field("string", "Absolute prim path whose recorded edits are undone."),
+        subtree=field(
+            "boolean", "Also revert recorded edits on descendants.", False, default=True
         ),
     ),
 )
@@ -759,8 +892,20 @@ REGISTRY["sim.prim.create"]["parameters"]["collision"] = field(
 REGISTRY["sim.prim.create"]["parameters"]["scale"] = field(
     "array", "Positive local XYZ scale, 1e-6..1e4.", False, default=[1, 1, 1]
 )
+REGISTRY["sim.prim.create"]["parameters"]["mass"] = field(
+    "number",
+    "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.",
+    False,
+)
+REGISTRY["sim.prim.create"]["parameters"]["density"] = field(
+    "number",
+    "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.",
+    False,
+)
 REGISTRY["sim.prim.set_transform"]["parameters"]["scale"] = field(
-    "array", "Positive XYZ scale in the requested pose frame.", False, default=[1, 1, 1]
+    "array",
+    "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.",
+    False,
 )
 REGISTRY["sim.camera.create"]["parameters"]["target"] = field(
     "array",
