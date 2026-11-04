@@ -29,6 +29,8 @@ The filters are visibility preferences, not a security boundary. See
 | `ISAAC_MCP_PYTHON` | auto-detect | Simulator interpreter passed to `run.sh`. The installer writes it into the Claude entries it creates. |
 | `ISAAC_MCP_SIM_ROOT` | repository root when available | Checkout containing `run.sh`. Set it when the host is installed outside a checkout. |
 | `ISAAC_MCP_SIM_SESSIONS_DIR` | `~/.local/share/isaac-mcp/sim-sessions` | Session metadata, logs and output. |
+| `ISAAC_MCP_PORT_RANGE` | unset | Ports `sim__launch` may use, as `18800-18899`. An omitted port is chosen inside it; a stated port outside it is refused. |
+| `ISAAC_MCP_ROS_DOMAIN_RANGE` | unset | ROS domains `sim__launch` may use, as `40-49`. An omitted domain is chosen inside it; a stated domain outside it is refused. |
 | `ISAAC_MCP_SIM_MAX_INSTANCES` | `2` | Maximum known bridge, managed Sim and Lab-job processes. `0` disables the limit. |
 | `ISAAC_MCP_SIM_MIN_FREE_VRAM_MIB` | `8192` | Minimum free GPU memory at launch. |
 | `ISAAC_MCP_SIM_MIN_FREE_RAM_MIB` | `4096` | Minimum available system RAM at launch. |

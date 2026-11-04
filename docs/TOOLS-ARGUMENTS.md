@@ -181,10 +181,10 @@ Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-simulator-sessions). 4 tools.
 
 ### `sim__launch`
 
-Launch a separate managed Isaac Sim instance on its own port and ROS domain, when explicitly asked.
+Launch a separate managed Isaac Sim instance, when explicitly asked.
 
-- `port` (int, required): A free local TCP port for its bridge, e.g. 18766.
-- `ros_domain` (int, required): ROS_DOMAIN_ID 0-231, distinct from other sessions.
+- `port` (int | None, default `None`): Bridge TCP port 1024-65535. Omit for the first free, unclaimed port in ISAAC_MCP_PORT_RANGE, or upward from the configured port.
+- `ros_domain` (int | None, default `None`): ROS_DOMAIN_ID 0-231. Omit for the first free, unclaimed domain in ISAAC_MCP_ROS_DOMAIN_RANGE, or upward from this server's domain.
 - `headless` (bool, default `False`): true: no window.
 - `allow_shared_domain` (bool, default `False`): true: allow a ROS domain another session already uses.
 - `show_ur5e_panel` (bool, default `False`): true: show the UR5e twin's panel in a graphical session.
