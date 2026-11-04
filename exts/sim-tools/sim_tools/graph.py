@@ -627,11 +627,14 @@ def cells_at(pgm, width, height, origin, res, x, y):
     return [body[r * width + c] for r in rows for c in cols if 0 <= c < width and 0 <= r < height]
 
 
-def start_blocked(counts, start_cells, start_in_collider=False):
+def start_blocked(counts, start_cells, start_in_collider=False, start_occupied=False):
     """Why the flood-fill start makes the map unusable, or None. Pure, so it is unit-tested."""
     total = max(1, sum(counts.values()))
     if start_in_collider:
         return "is inside a collider (PhysX overlap at the start point)"
+    if start_occupied and counts["occupied"]:
+        # The fill erased whatever touches the start and left the rest: a wall with a hole looks like a good map.
+        return "is on an occupied cell in this z slice, so the obstacle under it would be mapped as free"
     if counts["occupied"] == 0 and counts["unknown"] > 0.5 * total:
         # Seen live: with start inside a solid collider the generator marks that collider's
         # interior free, finds no walls, and leaves everything else unknown.
@@ -693,7 +696,7 @@ def buffer_from_occupied(points, min_xy, max_xy, cell, start_xy):
     rows), then writes every occupied leaf with no bounds check: a leaf on the last row overruns the heap block and Kit
     aborts in malloc. Measured on 6.0.0.0 through 6.2, and the code is the same in omap 2.2.1 to 2.3.5. Layout matches
     native: x descending, y ascending, 1.0 occupied, 0.0 free, 0.5 unknown. Like native, the flood fill replaces whatever
-    value the start cell holds."""
+    value the start cell holds, so the fourth value says whether that erased the occupied cells joined to it."""
     width = int(round((max_xy[0] - min_xy[0]) / cell))
     height = int(round((max_xy[1] - min_xy[1]) / cell))
     grid = [0.5] * (width * height)
@@ -706,6 +709,7 @@ def buffer_from_occupied(points, min_xy, max_xy, cell, start_xy):
         grid[index(x, y)] = 1.0
     first = index(*start_xy)
     target, stack = grid[first], [first]
+    start_occupied = target == 1.0
     if target != 0.0:
         while stack:
             i = stack.pop()
@@ -720,7 +724,7 @@ def buffer_from_occupied(points, min_xy, max_xy, cell, start_xy):
                 stack.append(i - width)
             if i + width < len(grid):
                 stack.append(i + width)
-    return grid, width, height
+    return grid, width, height, start_occupied
 
 
 FLOOR_RETRIES = 3
@@ -764,20 +768,20 @@ def occupancy_map(scene, stage, a):
             om.update()
             om.generate()
             min_bound, top = om.get_min_bound(), om.get_max_bound()
-            buffer, width, height = buffer_from_occupied(
+            buffer, width, height, start_occupied = buffer_from_occupied(
                 [(p.x, p.y) for p in om.get_occupied_positions()], (min_bound[0], min_bound[1]), (top[0], top[1]),
                 cell * to_su, (cx, cy))
             if not len(buffer) or width * height != len(buffer):
                 refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) "
                        "inside the bounds and a UsdPhysics.Scene on the stage.")
             pgm, origin, counts = pgm_and_origin(buffer, width, height, min_bound, cell * to_su, mpu, clear)
-            next_low = raised_slice(z_low, z[1], cell, counts["occupied"], attempt)
+            next_low = raised_slice(z_low, z[1], cell, counts["occupied"] and not start_occupied, attempt)
             if next_low is None or not _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su):
                 break
             z_low = next_low
     finally:
         _omap.release_omap_interface(om)
-    reason = start_blocked(counts, cells_at(pgm, width, height, origin, cell, start[0], start[1]), in_collider)
+    reason = start_blocked(counts, cells_at(pgm, width, height, origin, cell, start[0], start[1]), in_collider, start_occupied)
     if reason:
         refuse("START_BLOCKED", f"start {start} {reason}. The generator flood-fills free space from it, so the "
                "map would be empty or wrong. Move start to open floor next to (not on) the robot; `clear` only "

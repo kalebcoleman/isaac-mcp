@@ -97,7 +97,7 @@ add(
 )
 add(
     "sim.stage.open",
-    "Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's output folder) as the current stage, like File > Open, with the timeline stopped. Refuses to drop unsaved edits unless discard_changes=true. Reports stale saved LiDAR render products and never changes the file. Returns the new session_id and stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info.",
+    "Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's output folder) as the current stage, like File > Open, with the timeline stopped. Refuses to drop unsaved edits unless discard_changes=true. Reports stale saved LiDAR render products and never changes the file. Returns the new session_id and stage_id for later sim__* calls; run_python sessions reset.",
     dict(
         **TARGET,
         path=field("string", "Absolute path of the USD file to open, under your home or this simulator's output folder, where sim__stage__save writes by default (a leading tilde for your home is expanded)."),
@@ -135,7 +135,7 @@ add(
 )
 add(
     "sim.prim.find",
-    "Bounded literal path substring/type search (not regex). Includes inactive prims.",
+    "Bounded search of prim paths: `contains` is a literal substring (not a regex), `type_name` an exact type. Includes inactive prims.",
     dict(
         **TARGET,
         contains=field(
@@ -203,7 +203,7 @@ add(
 )
 add(
     "sim.stage.save",
-    "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info.",
+    "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses.",
     dict(
         **TARGET,
         filename=field("string", "New basename ending .usda; no directories."),
@@ -218,7 +218,7 @@ add(
 )
 add(
     "sim.viewport.frame",
-    "Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info.",
+    "Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels.",
     dict(
         **TARGET,
         path=field("string", "Absolute prim path to frame or follow.", False, default=""),
@@ -444,11 +444,11 @@ add(
 add(
     "sim.joints.state",
     "Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data.",
-    dict(**TARGET, path=field("string", "Exact articulation root path.")),
+    dict(**TARGET, path=field("string", "Exact articulation root path, e.g. /World/UR5e/root_joint: robot.articulation_root from sim__quick_start, or sim__physics__inspect.")),
 )
 add(
     "sim.simulation.step",
-    "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.",
+    "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.",
     dict(
         **TARGET,
         steps=field("integer", "Number of physics steps 1..120."),
@@ -483,7 +483,7 @@ add(
 )
 add(
     "sim.lidar.create",
-    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. Config assets come from Isaac's assets root; an unknown name lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.",
+    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan): on 6.2 set its targetPrim; on 6.0 and 6.1 wire IsaacCreateRenderProduct (cameraPrim = the LiDAR) to its renderProductPath.",
     dict(
         **TARGET,
         path=field("string", "Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist."),
@@ -534,7 +534,7 @@ add(
 )
 add(
     "sim.graph.build",
-    "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Find node types and ports first with sim__graph__node_types. Checks every port, lists the real ones on a typo, and rolls the graph back on any error. Timeline stopped. Returns it as sim__graph__inspect does. Requires session_id and stage_id from sim__stage__info.",
+    "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Find node types and ports first with sim__graph__node_types. Checks every port, lists the real ones on a typo, and rolls the graph back on any error. Timeline stopped. Returns it as sim__graph__inspect does.",
     dict(
         **TARGET,
         path=field("string", "Graph prim path to create, e.g. /World/ROS_Clock or /turtlebot3_burger/ROS_Drive."),
@@ -557,7 +557,7 @@ add(
 )
 add(
     "sim.graph.show",
-    "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit, e.g. for a demo video. layout=true arranges nodes and writes positions into the stage, so stop first or use layout=false while playing; TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. Uses the editor's internal API and refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info.",
+    "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit, e.g. for a demo video. layout=true arranges nodes and writes positions into the stage, so stop first or use layout=false while playing; TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. Uses the editor's internal API and refuses cleanly if it changed.",
     dict(
         **TARGET,
         path=field("string", "Graph prim path (not needed with close=true).", False, default=""),

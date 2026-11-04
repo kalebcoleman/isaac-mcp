@@ -243,7 +243,7 @@ def next_steps(ids, robot_path, root, play):
         steps.append(f"Play: sim__timeline__control with {ids_text}, action=\"play\".")
     if root:
         steps += [
-            "A robot starts at its all-zero joint pose. For an arm that can be low and stretched out, which can look collapsed; check the joint state before assuming a fault.",
+            "A robot starts at its all-zero joint pose. For an arm that can be low and stretched out, which can look collapsed; check the joint state before assuming a fault. A joint driven toward the ground stops when the arm reaches it, so lift the shoulder first.",
             f"Read joints while playing or paused: sim__joints__state with path=\"{root}\".",
             f"Move: sim__joints__command with path=\"{root}\" and one position per joint, in radians.",
             "Exact steps: pause with sim__timeline__control, then sim__simulation__step.",

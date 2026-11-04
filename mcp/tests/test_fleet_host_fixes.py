@@ -972,3 +972,27 @@ def test_a_job_record_cannot_name_a_process_group_or_everything(pid):
     from isaac_mcp.isaaclab import jobs
 
     assert jobs._pid_alive(pid) is False
+
+
+def test_a_flag_after_its_short_alias_is_still_seen():
+    from isaac_mcp.isaaclab.install import _ADD_ARGUMENT_RE
+
+    text = 'p.add_argument("-n", "--num_envs", type=int)\np.add_argument(\n    "--video")\np.add_argument("-x", dest="y")'
+    assert _ADD_ARGUMENT_RE.findall(text) == ["--num_envs", "--video"]
+
+
+def test_cancel_survives_a_job_that_exits_between_the_liveness_check_and_the_group_lookup(monkeypatch, tmp_path):
+    import os
+
+    from isaac_mcp.isaaclab import jobs
+
+    monkeypatch.setattr(jobs, "_job_path", lambda _: tmp_path)
+    monkeypatch.setattr(jobs, "_read_job", lambda _: {"status": "running", "pid": 123456})
+    monkeypatch.setattr(jobs, "_update_job", lambda *a, **k: None)
+    monkeypatch.setattr(jobs, "_job_alive", lambda _: True)
+
+    def gone(_):
+        raise ProcessLookupError
+
+    monkeypatch.setattr(os, "getpgid", gone)
+    assert jobs.runs_cancel("job")["cancelled"] is False

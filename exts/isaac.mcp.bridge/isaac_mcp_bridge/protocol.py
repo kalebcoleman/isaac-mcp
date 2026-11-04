@@ -105,6 +105,9 @@ class FrameDecoder:
             scanned = 0
             if not line:
                 continue
+            if len(line) > self._max_frame:  # the whole frame can arrive in one chunk, before the check below
+                yield None, f"frame longer than the {self._max_frame // (1 << 20)} MiB limit was dropped"
+                continue
             try:
                 yield json.loads(line.decode("utf-8")), None
             except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as e:

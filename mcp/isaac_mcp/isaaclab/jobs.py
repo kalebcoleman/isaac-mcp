@@ -973,8 +973,12 @@ def runs_cancel(job_id: str, grace_s: int = 10) -> dict[str, Any]:
         _update_job(jd, status="cancelled", cancel_requested=True, finished_at=_now())
     pid = data.get("pid")
     cancelled = False
-    if _job_alive(data):
-        if os.getpgid(int(pid)) != int(pid):  # jobs lead their own group; a killpg here would miss, or hit another
+    try:
+        group = os.getpgid(int(pid)) if _job_alive(data) else None
+    except ProcessLookupError:  # it exited between those two calls
+        group = None
+    if group is not None:
+        if group != int(pid):  # jobs lead their own group; a killpg here would miss, or hit another
             return {"cancelled": False, "state": "cancelled", "note": f"pid {pid} does not lead a process group, so this record is not from a job this tool started. Nothing was signalled."}
         try:
             os.killpg(int(pid), signal.SIGTERM)

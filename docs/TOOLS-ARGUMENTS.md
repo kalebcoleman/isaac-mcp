@@ -233,7 +233,7 @@ List registered Isaac Lab task ids (optionally filtered by substring).
 
 Run a policy checkpoint (headless by default) as a job and return its job_id.
 
-- `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole-v0.
+- `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
 - `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
 - `num_envs` (int | None, default `None`): Parallel environments. Default: the task's own.
 - `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
@@ -260,7 +260,7 @@ Summarise TensorBoard scalars of a run (last, min, max, step, count per tag).
 
 Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel.
 
-- `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole-v0.
+- `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
 - `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
 - `num_envs` (int, default `1`): Parallel environments.
 - `headless` (bool, default `False`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
@@ -309,7 +309,7 @@ Last points of one TensorBoard scalar (a training curve). Find tags with isaacla
 
 Start a training job and return its job_id immediately; follow it with isaaclab__runs_status/tail.
 
-- `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole-v0.
+- `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
 - `num_envs` (int, default `64`): Parallel environments.
 - `max_iterations` (int | None, default `None`): Training iterations. Default: the task's own.
 - `seed` (int | None, default `None`): Random seed.
@@ -436,7 +436,7 @@ OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request
 
 ### `sim__graph__build`
 
-Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Find node types and ports first with sim__graph__node_types. Checks every port, lists the real ones on a typo, and rolls the graph back on any error. Timeline stopped. Returns it as sim__graph__inspect does. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
+Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Find node types and ports first with sim__graph__node_types. Checks every port, lists the real ones on a typo, and rolls the graph back on any error. Timeline stopped. Returns it as sim__graph__inspect does. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -469,7 +469,7 @@ Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e
 
 ### `sim__graph__show`
 
-Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit, e.g. for a demo video. layout=true arranges nodes and writes positions into the stage, so stop first or use layout=false while playing; TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. Uses the editor's internal API and refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
+Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit, e.g. for a demo video. layout=true arranges nodes and writes positions into the stage, so stop first or use layout=false while playing; TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. Uses the editor's internal API and refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -515,11 +515,11 @@ Read initialized articulation DOF positions/velocities on selected PhysX or qual
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Exact articulation root path.
+- `path` (string, required): Exact articulation root path, e.g. /World/UR5e/root_joint: robot.articulation_root from sim__quick_start, or sim__physics__inspect.
 
 ### `sim__lidar__create`
 
-Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. Config assets come from Isaac's assets root; an unknown name lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
+Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan): on 6.2 set its targetPrim; on 6.0 and 6.1 wire IsaacCreateRenderProduct (cameraPrim = the LiDAR) to its renderProductPath. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -669,7 +669,7 @@ Delete one pack-owned subtree from the session layer only. Requires stopped phys
 
 ### `sim__prim__find`
 
-Bounded literal path substring/type search (not regex). Includes inactive prims. Requires session_id and stage_id from sim__stage__info.
+Bounded search of prim paths: `contains` is a literal substring (not a regex), `type_name` an exact type. Includes inactive prims. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -729,7 +729,7 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 
 ### `sim__simulation__step`
 
-Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.
+Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -753,7 +753,7 @@ No arguments.
 
 ### `sim__stage__open`
 
-Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's output folder) as the current stage, like File > Open, with the timeline stopped. Refuses to drop unsaved edits unless discard_changes=true. Reports stale saved LiDAR render products and never changes the file. Returns the new session_id and stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
+Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's output folder) as the current stage, like File > Open, with the timeline stopped. Refuses to drop unsaved edits unless discard_changes=true. Reports stale saved LiDAR render products and never changes the file. Returns the new session_id and stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -762,7 +762,7 @@ Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's out
 
 ### `sim__stage__save`
 
-Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
+Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -817,7 +817,7 @@ List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree 
 
 ### `sim__viewport__frame`
 
-Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
+Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.

@@ -19,7 +19,7 @@ from . import metrics as _metrics
 
 _NO_INSTALL = {
     "error": "no Isaac Lab install found",
-    "hint": "set ISAACLAB_PYTHON (and optionally ISAACLAB_ROOT) to the interpreter of an Isaac Lab 3.0 env",
+    "hint": "set ISAACLAB_PYTHON (and optionally ISAACLAB_ROOT) to the interpreter of an Isaac Lab env (3.0, or 2.3.x with Isaac Sim 5.1)",
 }
 
 
@@ -31,7 +31,7 @@ def _not_a_bool(value: Any) -> Any:
 
 
 _LastN = Annotated[int | None, BeforeValidator(_not_a_bool), Field(description="How many of the newest points to return.")]
-_Task = Annotated[str, Field(description="Task id from isaaclab__envs_list, e.g. Isaac-Cartpole-v0.")]
+_Task = Annotated[str, Field(description="Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.")]
 _Checkpoint = Annotated[str, Field(description="Checkpoint file from isaaclab__checkpoints_list.")]
 _JobId = Annotated[str, Field(description="job_id from isaaclab__train, eval or play, or isaaclab__runs_list.")]
 _RunDir = Annotated[str, Field(description="Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status.")]

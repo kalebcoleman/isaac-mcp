@@ -883,7 +883,7 @@ class Advanced:
             if s.timeline.is_stopped() or s.timeline.is_playing():
                 refuse(
                     "PHYSICS_NOT_READY",
-                    "Pause an initialized simulation first. Step does not initialize by playing or pumping frames.",
+                    "Pause an initialized simulation first: from a stopped timeline, sim__timeline__control action=play and then action=pause. Step does not initialize by playing or pumping frames.",
                 )
             s.check_runtime_edit(stage)
             steps = a["steps"]

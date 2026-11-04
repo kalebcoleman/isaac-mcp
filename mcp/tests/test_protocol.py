@@ -63,7 +63,8 @@ def test_frame_decoder_drops_an_oversized_frame_and_keeps_going():
     assert list(decoder.feed(b"yyy")) == []  # still inside the dropped frame
     assert [o for o, _ in decoder.feed(b'yyy\n{"a": 1}\n')] == [{"a": 1}]
     assert list(decoder.feed(b'{"b"')) == [] and [o for o, _ in decoder.feed(b': 2}\n')] == [{"b": 2}]
-    assert b"NaN" not in encode_frame({"x": float("nan")}) or b'"nan"' in encode_frame({"x": float("nan")})
+    assert encode_frame({"x": float("nan")}) == b'{"x": "nan"}\n'
+    assert [e for _, e in FrameDecoder(max_frame=8).feed(b'{"a": 11111}\n')] == ["frame longer than the 0 MiB limit was dropped"]
 
 
 def test_a_deeply_nested_frame_is_refused_and_the_decoder_keeps_working():

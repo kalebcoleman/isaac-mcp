@@ -64,7 +64,7 @@ PER_LIBRARY = "per_library"
 NO_SCRIPTS = "none"
 EXPECTED_SCRIPTS = ("scripts/reinforcement_learning/{train,play}.py (Isaac Lab 3) or "
                     "scripts/reinforcement_learning/<library>/{train,play}.py (Isaac Lab 2.3)")
-_ADD_ARGUMENT_RE = re.compile(r"""\badd_argument\(\s*["'](--[A-Za-z0-9_-]+)["']""")
+_ADD_ARGUMENT_RE = re.compile(r"""\badd_argument\(\s*(?:["']-[A-Za-z0-9]["']\s*,\s*)?["'](--[A-Za-z0-9_-]+)["']""")
 _APP_LAUNCHER = ("source", "isaaclab", "isaaclab", "app", "app_launcher.py")
 _profiles: dict[str, tuple[Any, dict]] = {}
 

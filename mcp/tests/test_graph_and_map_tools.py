@@ -175,7 +175,8 @@ def test_buffer_from_occupied_keeps_last_row_and_floods_from_start():
     cell = 0.05
     lo, hi = (-3.0, -3.0), (2.95, 2.95)
     wall = [(-3.0 + (i + 0.5) * cell, 2.925) for i in range(119)]  # the whole last row
-    buf, w, h = graph.buffer_from_occupied(wall, lo, hi, cell, (-2.0, -2.0))
+    buf, w, h, on_wall = graph.buffer_from_occupied(wall, lo, hi, cell, (-2.0, -2.0))
+    assert not on_wall
     assert (w, h, len(buf)) == (119, 119, 119 * 119)
     assert buf.count(1.0) == 119 and buf[118 * 119:] == [1.0] * 119
     assert buf.count(0.0) == 118 * 119 and buf.count(0.5) == 0
@@ -183,8 +184,19 @@ def test_buffer_from_occupied_keeps_last_row_and_floods_from_start():
 
 def test_buffer_from_occupied_leaves_unreachable_cells_unknown():
     wall = [(0.25, 0.05 + i * 0.1) for i in range(4)]  # a column that splits the 4x4 map
-    buf, w, h = graph.buffer_from_occupied(wall, (0.0, 0.0), (0.4, 0.4), 0.1, (0.05, 0.05))
+    buf, w, h, _ = graph.buffer_from_occupied(wall, (0.0, 0.0), (0.4, 0.4), 0.1, (0.05, 0.05))
     assert (w, h) == (4, 4) and buf.count(1.0) == 4 and buf.count(0.0) == 8 and buf.count(0.5) == 4
+
+
+def test_a_start_on_a_wall_is_reported_instead_of_erasing_the_wall():
+    wall = [(0.05 + i * 0.1, 0.05) for i in range(3)]  # touches the start
+    other = [(0.35, 0.35)]
+    buf, _, _, on_wall = graph.buffer_from_occupied(wall + other, (0.0, 0.0), (0.4, 0.4), 0.1, (0.05, 0.05))
+    assert on_wall and buf.count(1.0) == 1  # the wall was erased, the far cell was not
+    counts = {"occupied": 1, "free": 15, "unknown": 0}
+    assert "occupied cell" in graph.start_blocked(counts, [254], False, on_wall)
+    # A floor filling the slice erases everything: that stays the raise-the-slice case, not a blocked start.
+    assert graph.start_blocked({"occupied": 0, "free": 16, "unknown": 0}, [254], False, True) is None
 
 
 def test_start_blocked_decisions():
