@@ -179,7 +179,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [ ] `timeout_s` with no host running waits until the next status call
 - [ ] Real-robot mode is not enabled; `ursim` needs Docker
 - [ ] `randomize_single_object` often can't fit: a 4 cm by 20 cm strip with 0.18 m separation, not configurable
-- [ ] `sim__launch` suggests a free port, which may belong to another agent on a shared machine: it can't know
+- [x] `sim__launch` suggests a free port, which may belong to another agent on a shared machine: it now suggests only inside `ISAAC_MCP_PORT_RANGE`, skips ports a launch claims or a live bridge advertises, and with no range its message says a free port may still be someone else's and how to set a range
 
 ### Windowed coverage
 

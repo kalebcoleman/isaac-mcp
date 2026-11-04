@@ -204,17 +204,36 @@ creates files, and can affect the GPU and network. All four tools have conservat
 
 | MCP tool | Arguments | Use |
 |---|---|---|
-| `sim__launch` | `port`, `ros_domain`, `headless=false`, `allow_shared_domain=false`, `show_ur5e_panel=false`, `enable_motion_bvh=false`, `physics_backend="physx"` | Start a new process with a local bridge, UR5e tools, chosen ROS domain and separate output/log and persistent Kit settings. Set `show_ur5e_panel=true` to show the panel in a graphical session. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the new process’s installed Newton engine with no fallback. Returns a session ID and PID before the bridge is ready. |
+| `sim__launch` | `port=null`, `ros_domain=null`, `headless=false`, `allow_shared_domain=false`, `show_ur5e_panel=false`, `enable_motion_bvh=false`, `physics_backend="physx"` | Start a new process with a local bridge, UR5e tools, chosen ROS domain and separate output/log and persistent Kit settings. Omit `port` and `ros_domain` to take the first free, unclaimed values inside the configured ranges (or upward from the configured port and domain); the result reports what was chosen. Set `show_ur5e_panel=true` to show the panel in a graphical session. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the new process’s installed Newton engine with no fallback. Returns a session ID and PID before the bridge is ready. |
 | `sim__list` | `include_exited=false` | List simulators. Managed sessions have `managed: true`, including those started by an earlier server process; only the 3 newest exited ones are listed unless `include_exited=true` (their records and logs stay on disk). Advertised bridges started some other way have `managed: false`, an ID `external-<pid>-<port>`, and their PID, port, app and version from the portfile; the listing does not call them. |
 | `sim__status` | `session_id` | Managed session: check the original PID's identity, bridge and Kit readiness, and current memory snapshot. External ID: call that bridge's `status`, report its app, version and readiness, and report `port_conflict` if another PID answers. |
 | `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Without it, the error includes the exact retry call. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. It always refuses an external bridge, because isaac-mcp did not start it. |
 
-Example calls: `sim__launch` with `{"port":18766,"ros_domain":42}`, then `sim__status` with
-`{"session_id":"<id returned by launch>"}`. Wait until `state` is `running`, select that port with `use_bridge`, and
-verify its PID before operating the scene. If necessary, identify its graphical client with `list_windows` by PID.
-A refused port or ROS domain message suggests the next free port, or says to use another `ros_domain` (exporting the same `ROS_DOMAIN_ID` in ROS shells) or `allow_shared_domain=true`. The port check uses `SO_REUSEADDR` like the bridge, so a port in TIME_WAIT after `sim__stop` is accepted.
+Example calls: `sim__launch` with `{}` (both values chosen), or `{"port":18766,"ros_domain":42}`, then
+`sim__status` with `{"session_id":"<id returned by launch>"}`. Wait until `state` is `running`, select that
+port with `use_bridge`, and verify its PID before operating the scene. If necessary, identify its
+graphical client with `list_windows` by PID.
+With no `port` or `ros_domain`, the launch takes the first value that is free, unclaimed by another
+launch and not advertised by a live bridge: inside `ISAAC_MCP_PORT_RANGE` and
+`ISAAC_MCP_ROS_DOMAIN_RANGE` when they are set, otherwise from the configured port
+(`ISAAC_MCP_PORT` or `UR5E_DT_PORT`, else 8766) over the next 64 ports, and from this server's
+`ROS_DOMAIN_ID` (else 0) up to 231. The result's `port` and `ros_domain` are the chosen values, and
+`auto_selected` names the ones chosen for you. A stated port or domain outside its range is refused as
+`PORT_OUT_OF_RANGE` or `ROS_DOMAIN_OUT_OF_RANGE`, naming the range.
+A refused port or ROS domain message suggests a port that is free, unclaimed and not advertised, or
+says to use another `ros_domain` (exporting the same `ROS_DOMAIN_ID` in ROS shells) or
+`allow_shared_domain=true`. The port check uses `SO_REUSEADDR` like the bridge, so a port in TIME_WAIT
+after `sim__stop` is accepted.
 Managed launches accept ROS domains 0–231. With the bundled Cyclone DDS profile's participant-index range, domain
 232 would make discovery probe beyond UDP port 65535.
+Each launch claims its port and ROS domain in the bridge runtime folder (`$XDG_RUNTIME_DIR/isaac-mcp`, else
+`/tmp/isaac-mcp-<uid>`): one file per value, created exclusively and holding the claiming host's PID, start
+time and boot ID. A second launch is refused while that claim is live, including one from another host
+process with a different sessions directory. A claim whose owner has died is removed. Claims are released
+when the launch returns or fails; from then on the bridge's portfile and its process environment make its
+port, PID and ROS domain visible to later launches on this machine. The folder must belong to you and not be
+writable by group or others, and a symlink planted at a claim path is refused. A program that does not make
+claims can still take a port or domain.
 Each session has its own fake-driver PID file and log. Stop that driver before stopping the session; `sim__stop`
 does not stop its separate process group. The fake launcher still prevents startup alongside another detected UR
 driver. The shared-resource URSim backend is unavailable in managed sessions. These protections apply to newly
@@ -236,6 +255,8 @@ At server startup the operator may set these environment variables:
 | `ISAAC_MCP_PYTHON` | `<root>/.venv/bin/python`, else auto-detected | Isaac Sim interpreter used by `run.sh`. `UR5E_DT_PYTHON` is a deprecated alias. Auto-detection only finds 6.x; a 5.1 interpreter works when named here. `physics_backend="newton"` refuses before starting anything when the interpreter's Isaac Sim has no Newton adapter, such as 5.1. |
 | `ISAAC_MCP_SIM_LAUNCHER` | unset, so `<root>/run.sh` | [A project's own launcher](#a-projects-own-launcher): an absolute path to an executable. |
 | `ISAAC_MCP_SIM_SESSIONS_DIR` | `~/.local/share/isaac-mcp/sim-sessions` | Managed session metadata, logs and separate output directories. A relative path is resolved against the server's working directory. |
+| `ISAAC_MCP_PORT_RANGE` | unset | Ports `sim__launch` may use, as `18800-18899`. An omitted port is chosen inside it; a stated port outside it is refused. |
+| `ISAAC_MCP_ROS_DOMAIN_RANGE` | unset | `ROS_DOMAIN_ID` values `sim__launch` may use, as `40-49`. An omitted domain is chosen inside it; a stated domain outside it is refused. |
 | `ISAAC_MCP_SIM_MAX_INSTANCES` | `2` | Maximum known bridge, managed Sim and configured Lab-job processes. `0` disables this count limit. |
 | `ISAAC_MCP_SIM_MIN_FREE_VRAM_MIB` | `8192` | Minimum free GPU memory at launch. |
 | `ISAAC_MCP_SIM_MIN_FREE_RAM_MIB` | `4096` | Minimum available system RAM at launch. |
@@ -248,7 +269,8 @@ passes `ISAAC_MCP_PYTHON`, `UR5E_DT_PYTHON` and `ISAAC_MCP_WORKSPACE` only from 
 The count includes advertised local bridges, managed sessions still starting, and running jobs in the configured
 `ISAACLAB_JOBS_DIR`; processes outside those sources may not be counted. Port availability and ROS domains of known
 processes are checked, but other unadvertised ROS nodes may share a domain. Host servers using the same sessions
-directory serialize their launches; other programs or differently configured servers can race the checks. Current resource checks require Linux,
+directory serialize their launches, and each launch claims its port and ROS domain across host processes; other
+programs or differently configured servers that do not claim them can still race the checks. Current resource checks require Linux,
 `nvidia-smi`, and exactly one NVIDIA GPU. The memory thresholds and instance limit are operator settings, not guarantees:
 they do not reserve memory or predict scene, renderer, sensor or training peaks. There is no automatic termination if
 memory later runs low. Monitor workloads and tune the limits only after testing. Isaac Lab jobs have their own

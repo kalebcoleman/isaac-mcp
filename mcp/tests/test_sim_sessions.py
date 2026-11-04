@@ -5,6 +5,10 @@ import errno
 import os
 import signal
 import socket
+import subprocess
+import sys
+import textwrap
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +18,15 @@ import pytest
 from isaac_mcp import sim_sessions as sim
 
 _REAL_CHECK_PORT = sim._check_port   # the setup fixture replaces it
+
+
+@pytest.fixture(autouse=True)
+def runtime(tmp_path, monkeypatch):
+    """The trusted runtime folder claims live in; XDG_RUNTIME_DIR names its parent for children."""
+    folder = tmp_path / "isaac-mcp"
+    folder.mkdir(mode=0o700)
+    monkeypatch.setattr(sim.client, "_runtime_dir", lambda: str(folder))
+    return folder
 
 
 @pytest.fixture
@@ -29,7 +42,7 @@ def setup(monkeypatch, tmp_path):
     monkeypatch.setattr(sim.client, "discover_bridges", lambda: [])
     monkeypatch.setattr(sim, "_boot_id", lambda: "test-boot")
     monkeypatch.setattr(sim, "_lab_pids", lambda env: set())
-    monkeypatch.setattr(sim, "_check_port", lambda port, reserved=(): None)
+    monkeypatch.setattr(sim, "_check_port", lambda port, reserved=(), allowed=None: None)
     monkeypatch.setattr(sim, "_resources", lambda: {"gpu_total_mib": 16000, "gpu_free_mib": 12000,
                                                      "ram_available_mib": 24000})
     return env
@@ -178,8 +191,10 @@ def test_failed_identity_check_stops_child_instead_of_waiting_indefinitely(setup
     calls = []
     proc = SimpleNamespace(pid=510, terminate=lambda: calls.append("terminate"),
                            wait=lambda timeout: calls.append(("wait", timeout)))
+    real_identity = sim._process_identity
     monkeypatch.setattr(sim.subprocess, "Popen", lambda *args, **kwargs: proc)
-    monkeypatch.setattr(sim, "_process_identity", lambda pid: None)
+    monkeypatch.setattr(sim, "_process_identity",
+                        lambda pid: None if pid == 510 else real_identity(pid))
     with pytest.raises(RuntimeError, match="could not record simulator process identity"):
         sim._launch(setup, 18766, 197, False, False)
     assert calls == ["terminate", ("wait", 5)]
@@ -699,3 +714,298 @@ def test_a_launch_inherits_the_servers_environment_and_scrubs_the_documented_key
     for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_SHOW_PANEL", "ISAAC_MCP_HOLD_TOKEN", "ISAAC_MCP_HOLD_TOKEN_FILE"):
         assert key not in seen
     assert seen["ISAAC_MCP_PYTHON"] == setup["ISAAC_MCP_PYTHON"]  # scrubbed, then set from the server's settings
+
+
+# ---- allowed ranges: which ports and ROS domains a launch may use ---------------------------------
+
+def test_a_configured_range_is_parsed_and_a_blank_one_is_unset():
+    env = {"ISAAC_MCP_PORT_RANGE": "18800-18899", "ISAAC_MCP_ROS_DOMAIN_RANGE": " 40-49 "}
+    assert sim._launch_range(env, "ISAAC_MCP_PORT_RANGE", 1024, 65535) == (18800, 18899)
+    assert sim._launch_range(env, "ISAAC_MCP_ROS_DOMAIN_RANGE", 0, 231) == (40, 49)
+    assert sim._launch_range({}, "ISAAC_MCP_PORT_RANGE", 1024, 65535) is None
+    assert sim._launch_range({"ISAAC_MCP_PORT_RANGE": "  "}, "ISAAC_MCP_PORT_RANGE", 1024, 65535) is None
+
+
+@pytest.mark.parametrize("value", ["18800", "18800-", "-18899", "eighteen", "18899-18800", "80-90", "1-70000"])
+def test_a_malformed_port_range_is_an_error_not_ignored(value):
+    with pytest.raises(ValueError, match="ISAAC_MCP_PORT_RANGE"):
+        sim._launch_range({"ISAAC_MCP_PORT_RANGE": value}, "ISAAC_MCP_PORT_RANGE", 1024, 65535)
+
+
+@pytest.mark.parametrize("value", ["40", "49-40", "0-232", "abc"])
+def test_a_malformed_domain_range_is_an_error_not_ignored(value):
+    with pytest.raises(ValueError, match="ISAAC_MCP_ROS_DOMAIN_RANGE"):
+        sim._launch_range({"ISAAC_MCP_ROS_DOMAIN_RANGE": value}, "ISAAC_MCP_ROS_DOMAIN_RANGE", 0, 231)
+
+
+def test_a_malformed_range_refuses_before_starting_anything(setup, monkeypatch):
+    setup["ISAAC_MCP_PORT_RANGE"] = "eighteen-thousand"
+    monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
+    with pytest.raises(ValueError, match="must be a range like 1024-65535"):
+        sim._launch(setup, 18766, 9, True, False)
+    assert not Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"]).exists()
+
+
+def test_a_port_outside_the_range_is_refused_with_a_code_and_the_range(setup, monkeypatch):
+    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18899"
+    monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
+    with pytest.raises(ValueError) as caught:
+        sim._launch(setup, 19000, 9, True, False)
+    assert caught.value.code == "PORT_OUT_OF_RANGE"
+    assert "19000" in str(caught.value) and "ISAAC_MCP_PORT_RANGE 18800-18899" in str(caught.value)
+    assert not Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"]).exists()
+
+
+def test_a_ros_domain_outside_the_range_is_refused_with_a_code_and_the_range(setup, monkeypatch):
+    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
+    with pytest.raises(ValueError) as caught:
+        sim._launch(setup, 18766, 50, True, False)
+    assert caught.value.code == "ROS_DOMAIN_OUT_OF_RANGE"
+    assert "ISAAC_MCP_ROS_DOMAIN_RANGE 40-49" in str(caught.value)
+
+
+# ---- claims: one exclusive file per port and per ROS domain --------------------------------------
+
+def test_two_threads_cannot_claim_the_same_port(runtime):
+    owner = sim._claim_owner()
+    barrier = threading.Barrier(2)
+    results = []
+
+    def take():
+        barrier.wait()
+        try:
+            sim._claim("port", 18800, owner)
+            results.append("claimed")
+        except sim._Refusal as exc:
+            results.append(exc.code)
+
+    threads = [threading.Thread(target=take) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert sorted(results) == ["PORT_CLAIMED", "claimed"]
+    claim = json.loads((runtime / "port-18800.claim").read_text())
+    assert claim["pid"] == os.getpid() and claim["start_ticks"] == owner["start_ticks"]
+
+
+def test_two_host_processes_cannot_claim_the_same_port(runtime, tmp_path):
+    """Two real host processes, released together: only one gets the port."""
+    go = tmp_path / "go"
+    script = textwrap.dedent("""
+        import os, sys, time
+        from isaac_mcp import sim_sessions as sim
+        deadline = time.monotonic() + 20
+        while not os.path.exists(sys.argv[1]):
+            if time.monotonic() > deadline:
+                print("never started")
+                sys.exit(3)
+            time.sleep(0.002)
+        owner = sim._claim_owner()
+        try:
+            sim._claim("port", 18800, owner)
+        except sim._Refusal as exc:
+            print(exc.code)
+            sys.exit(0)
+        print("claimed")
+        time.sleep(0.5)
+        sim._release_claim(sim._claim_folder() / "port-18800.claim", owner)
+    """)
+    env = {**os.environ, "XDG_RUNTIME_DIR": str(tmp_path)}
+    procs = [subprocess.Popen([sys.executable, "-c", script, str(go)], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, text=True, env=env) for _ in range(2)]
+    go.write_text("go")
+    outputs = [proc.communicate(timeout=30)[0].strip() for proc in procs]
+    assert sorted(outputs) == ["PORT_CLAIMED", "claimed"], outputs
+
+
+def test_a_claim_whose_owner_died_is_removed(runtime):
+    gone = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"],
+                          capture_output=True, text=True, check=True)
+    path = runtime / "port-18800.claim"
+    path.write_text(json.dumps({"pid": int(gone.stdout), "start_ticks": 1, "boot_id": sim._boot_id()}))
+    owner = sim._claim_owner()
+    assert sim._claim("port", 18800, owner) == path
+    assert json.loads(path.read_text())["pid"] == os.getpid()
+
+
+def test_a_claim_with_a_reused_pid_is_stale(runtime):
+    owner = sim._claim_owner()
+    path = runtime / "ros_domain-40.claim"
+    path.write_text(json.dumps({**owner, "start_ticks": owner["start_ticks"] + 1}))
+    assert sim._claim("ros_domain", 40, owner) == path
+
+
+def test_a_claim_from_another_boot_is_stale(runtime):
+    owner = sim._claim_owner()
+    path = runtime / "ros_domain-41.claim"
+    path.write_text(json.dumps({**owner, "boot_id": "another-boot"}))
+    assert sim._claim("ros_domain", 41, owner) == path
+
+
+def test_a_symlink_at_a_claim_path_is_refused_and_left_alone(runtime, tmp_path):
+    target = tmp_path / "elsewhere.json"
+    target.write_text("{}")
+    planted = runtime / "port-18800.claim"
+    planted.symlink_to(target)
+    with pytest.raises(RuntimeError, match="not a regular file"):
+        sim._claim("port", 18800, sim._claim_owner())
+    assert planted.is_symlink() and target.read_text() == "{}"
+
+
+def test_an_untrusted_runtime_folder_is_refused(runtime):
+    runtime.chmod(0o777)
+    try:
+        with pytest.raises(RuntimeError, match="not be writable by group or others"):
+            sim._claim("port", 18800, sim._claim_owner())
+    finally:
+        runtime.chmod(0o700)
+
+
+def test_a_stated_port_claimed_by_another_launch_is_refused(setup, runtime):
+    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18899"
+    sim._claim("port", 18800, sim._claim_owner())
+    with pytest.raises(ValueError) as caught:
+        sim._launch(setup, 18800, 40, True, False)
+    assert caught.value.code == "PORT_CLAIMED" and "18800" in str(caught.value)
+
+
+def test_a_stated_domain_claimed_by_another_launch_is_refused(setup, runtime):
+    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    sim._claim("ros_domain", 41, sim._claim_owner())
+    with pytest.raises(ValueError) as caught:
+        sim._launch(setup, 18766, 41, True, False)
+    assert caught.value.code == "ROS_DOMAIN_CLAIMED" and "41" in str(caught.value)
+
+
+def test_allow_shared_domain_skips_the_domain_claim(setup, runtime, monkeypatch):
+    sim._claim("ros_domain", 41, sim._claim_owner())
+    _fake_spawn(monkeypatch)
+    assert sim._launch(setup, 18766, 41, True, True)["ros_domain"] == 41
+
+
+def test_a_failed_launch_releases_its_claims(setup, runtime, monkeypatch):
+    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18899"
+    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    monkeypatch.setattr(sim, "_resources", lambda: {"gpu_total_mib": 16000, "gpu_free_mib": 100,
+                                                     "ram_available_mib": 24000})
+    with pytest.raises(RuntimeError, match="headroom"):
+        sim._launch(setup, 18800, 40, True, False)
+    assert not list(runtime.glob("*.claim"))
+
+
+def test_a_domain_refusal_releases_the_port_claim(setup, runtime, monkeypatch):
+    _record(setup)
+    monkeypatch.setattr(sim, "_alive", lambda data: True)
+    with pytest.raises(ValueError, match="domain 197"):
+        sim._launch(setup, 18770, 197, False, False)
+    assert not list(runtime.glob("*.claim"))
+
+
+# ---- what a refusal suggests ---------------------------------------------------------------------
+
+def test_the_hint_only_suggests_ports_inside_the_range(runtime, monkeypatch):
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    message = sim._next_free_port_hint(18999, (), (18800, 18899))
+    assert "port=18800" in message and "ISAAC_MCP_PORT_RANGE 18800-18899" in message
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: OSError(errno.EADDRINUSE, "in use"))
+    assert "No free, unclaimed port found in 18800-18899" in sim._next_free_port_hint(18999, (), (18800, 18899))
+
+
+def test_the_hint_skips_claimed_ports_and_advertised_bridges(runtime, monkeypatch):
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    sim._claim("port", 18800, sim._claim_owner())
+    assert "port=18801" in sim._next_free_port_hint(18805, (), (18800, 18810))
+    assert "port=18802" in sim._next_free_port_hint(18805, {18801}, (18800, 18810))
+
+
+def test_without_a_range_the_hint_says_a_port_may_be_someone_elses(runtime, monkeypatch):
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    message = sim._next_free_port_hint(18766, {18767})
+    assert "port=18768" in message
+    assert "another agent" in message and "ISAAC_MCP_PORT_RANGE" in message
+
+
+# ---- choosing an omitted port and ROS domain -----------------------------------------------------
+
+def _fake_spawn(monkeypatch, captured=None):
+    captured = {} if captured is None else captured
+    real_identity = sim._process_identity
+
+    def popen(args, **kwargs):
+        captured.update(args=args, env=kwargs["env"])
+        return SimpleNamespace(pid=510, wait=lambda: 0)
+
+    monkeypatch.setattr(sim.subprocess, "Popen", popen)
+    monkeypatch.setattr(sim, "_process_identity",
+                        lambda pid: ("S", 12345) if pid == 510 else real_identity(pid))
+    monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
+    return captured
+
+
+def test_an_omitted_port_and_domain_take_the_first_free_unclaimed_values(setup, monkeypatch):
+    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18810"
+    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    owner = sim._claim_owner()
+    sim._claim("port", 18800, owner)      # another launch already holds these two
+    sim._claim("ros_domain", 40, owner)
+    captured = _fake_spawn(monkeypatch)
+    result = sim._launch(setup, headless=True)
+    assert (result["port"], result["ros_domain"]) == (18801, 41)
+    assert result["auto_selected"] == ["port", "ros_domain"]
+    assert captured["env"]["ISAAC_MCP_PORT"] == "18801" and captured["env"]["ROS_DOMAIN_ID"] == "41"
+    assert captured["args"][captured["args"].index("--port") + 1] == "18801"
+    assert not list(Path(sim.client._runtime_dir()).glob("port-18801.claim"))  # released after launch
+
+
+def test_an_omitted_port_skips_a_live_session_and_an_advertised_bridge(setup, monkeypatch):
+    setup["ISAAC_MCP_PORT"] = "18766"
+    setup["ISAAC_MCP_SIM_MAX_INSTANCES"] = "3"
+    _record(setup)
+    monkeypatch.setattr(sim, "_alive", lambda data: True)
+    monkeypatch.setattr(sim.client, "discover_bridges", lambda: [{"pid": 10, "port": 18767}])
+    monkeypatch.setattr(sim, "_domain_of", lambda pid: 99)
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    _fake_spawn(monkeypatch)
+    result = sim._launch(setup, ros_domain=5, headless=True)
+    assert result["port"] == 18768 and result["auto_selected"] == ["port"]
+
+
+def test_without_a_range_an_omitted_port_starts_at_the_configured_one(setup, monkeypatch):
+    setup["ISAAC_MCP_PORT"] = "18800"
+    setup["ROS_DOMAIN_ID"] = "40"
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    _fake_spawn(monkeypatch)
+    result = sim._launch(setup, headless=True)
+    assert (result["port"], result["ros_domain"]) == (18800, 40)
+    assert result["auto_selected"] == ["port", "ros_domain"]
+
+
+def test_without_a_range_a_stated_port_and_domain_still_work(setup, runtime, monkeypatch):
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    _fake_spawn(monkeypatch)
+    result = sim._launch(setup, 18766, 197, True, False)
+    assert (result["port"], result["ros_domain"]) == (18766, 197)
+    assert "auto_selected" not in result
+    assert not list(runtime.glob("*.claim"))
+
+
+def test_a_stated_port_and_domain_inside_the_range_are_claimed_and_used(setup, monkeypatch):
+    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18899"
+    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    captured = _fake_spawn(monkeypatch)
+    result = sim._launch(setup, 18850, 45, True, False)
+    assert (result["port"], result["ros_domain"]) == (18850, 45) and "auto_selected" not in result
+    assert captured["env"]["ROS_DOMAIN_ID"] == "45"
+
+
+def test_an_exhausted_range_says_so(setup, monkeypatch):
+    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18800"
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: OSError(errno.EADDRINUSE, "in use"))
+    with pytest.raises(ValueError) as caught:
+        sim._launch(setup, headless=True)
+    assert caught.value.code == "PORT_RANGE_EXHAUSTED" and "18800-18800" in str(caught.value)
+    assert "ISAAC_MCP_PORT_RANGE" in str(caught.value)

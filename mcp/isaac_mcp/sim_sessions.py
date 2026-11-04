@@ -12,6 +12,7 @@ import os
 import re
 import signal
 import socket
+import stat
 import subprocess
 import threading
 import time
@@ -45,6 +46,20 @@ _PIDFD_SIGNAL_PROCESS_GROUP = 1 << 2
 _PORT_SEARCH_SPAN = 64
 # sim__list shows this many exited sessions by default, newest first.
 _RECENT_EXITED_LISTED = 3
+# Where an automatic port search starts with no ISAAC_MCP_PORT_RANGE: the bridge's own default.
+_DEFAULT_PORT = 8766
+# A configured range such as 18800-18899 or 40-49.
+_RANGE = re.compile(r"^(\d+)-(\d+)$")
+# How often to retry a claim after removing one whose owner is gone.
+_CLAIM_ATTEMPTS = 5
+
+
+class _Refusal(ValueError):
+    """A launch refused before starting anything; ``code`` is stable for clients."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(f"{code}: {message}")
+        self.code = code
 
 
 def _config_int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -64,6 +79,231 @@ def _sessions_dir(env: Mapping[str, str]) -> Path:
     # The launcher runs in the simulator checkout, which may differ from the
     # server's working directory. Persist and pass the same paths to both.
     return path.resolve()
+
+
+def _launch_range(env: Mapping[str, str], name: str, low: int, high: int) -> tuple[int, int] | None:
+    """The ports or ROS domains launches may use, or None when the operator set no range.
+
+    It comes only from the server's environment: on a shared machine the range is how an
+    operator says which ports and domains are an agent's. A malformed value is an error, not
+    something to ignore.
+    """
+    raw = (env.get(name) or "").strip()
+    if not raw:
+        return None
+    match = _RANGE.fullmatch(raw)
+    if not match:
+        raise ValueError(f"{name} must be a range like {low}-{high}, not {raw!r}")
+    first, last = int(match.group(1)), int(match.group(2))
+    if not low <= first <= last <= high:
+        raise ValueError(f"{name} must be an ascending range within {low}-{high}, not {raw!r}")
+    return first, last
+
+
+def _refuse_outside(value: int, allowed: tuple[int, int] | None, code: str, label: str,
+                    setting: str, omission: str) -> None:
+    if allowed and not allowed[0] <= value <= allowed[1]:
+        raise _Refusal(code, f"{label} {value} is outside {setting} {allowed[0]}-{allowed[1]}. {omission}")
+
+
+def _port_start(env: Mapping[str, str]) -> int:
+    """Where an automatic port search begins with no range: the port this server was pinned to."""
+    for name in ("UR5E_DT_PORT", "ISAAC_MCP_PORT"):
+        raw = (env.get(name) or "").strip()
+        if raw:
+            try:
+                return int(raw)
+            except ValueError as exc:
+                raise ValueError(f"{name} must be an integer port, not {raw!r}") from exc
+    return _DEFAULT_PORT
+
+
+def _domain_start(env: Mapping[str, str]) -> int:
+    """Where an automatic ROS domain search begins with no range: this server's own domain."""
+    raw = (env.get("ROS_DOMAIN_ID") or "").strip()
+    if not raw:
+        return 0
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"ROS_DOMAIN_ID must be an integer, not {raw!r}") from exc
+
+
+# ---- launch claims: one file per port and per ROS domain, in the bridge runtime folder ----
+# A bind test alone cannot tell a port another agent was told to use, or one another launch is
+# about to take. These claims are exclusive across host processes on this machine.
+
+
+def _claim_owner() -> dict:
+    identity = _process_identity(os.getpid())
+    if identity is None:
+        raise RuntimeError("cannot read this process's identity to claim a port or ROS domain")
+    return {"pid": os.getpid(), "start_ticks": identity[1], "boot_id": _boot_id()}
+
+
+def _claim_folder() -> Path:
+    folder = Path(client._runtime_dir())
+    try:
+        folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeError(f"cannot create the bridge runtime folder {folder}: {exc}") from exc
+    if not client._runtime_dir_trusted(str(folder)):
+        raise RuntimeError(f"{folder} must belong to you and not be writable by group or others "
+                           "before a launch can claim a port or ROS domain in it")
+    return folder
+
+
+def _read_claim(path: Path) -> dict | None:
+    """A claim's contents, or None if it is gone. Never follows a symlink."""
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(info.st_mode):
+        raise RuntimeError(f"{path} is not a regular file; refusing to use it as a launch claim")
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as exc:
+        raise RuntimeError(f"cannot read the launch claim {path}: {exc}") from exc
+    try:
+        with os.fdopen(fd, "rb") as stream:
+            raw = stream.read(4096)
+    except OSError as exc:
+        raise RuntimeError(f"cannot read the launch claim {path}: {exc}") from exc
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _claim_is_live(data) -> bool:
+    """The claiming host is still the same process; a dead owner's claim is stale."""
+    if not isinstance(data, dict):
+        return False
+    try:
+        if data.get("boot_id") != _boot_id():
+            return False
+        pid, ticks = int(data["pid"]), int(data["start_ticks"])
+    except (KeyError, TypeError, ValueError, RuntimeError):
+        return False
+    identity = _process_identity(pid)
+    return bool(identity and identity[0] != "Z" and identity[1] == ticks)
+
+
+def _claimed(kind: str) -> set[int]:
+    """Ports or ROS domains a live launch holds, best effort; a hint must not fail."""
+    folder = Path(client._runtime_dir())
+    if not client._runtime_dir_trusted(str(folder)):
+        return set()
+    pattern = re.compile(rf"^{kind}-(\d+)\.claim$")
+    found = set()
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return found
+    for name in names:
+        match = pattern.fullmatch(name)
+        if not match:
+            continue
+        try:
+            if _claim_is_live(_read_claim(folder / name)):
+                found.add(int(match.group(1)))
+        except (OSError, RuntimeError, ValueError):
+            continue
+    return found
+
+
+def _claim_fresh(path: Path, seconds: float = 5.0) -> bool:
+    """True for a claim file created moments ago, whose owner may not have written it yet."""
+    try:
+        return time.time() - os.lstat(path).st_mtime < seconds
+    except OSError:
+        return False
+
+
+def _claim(kind: str, value: int, owner: Mapping) -> Path:
+    """Create this process's exclusive claim on one port or ROS domain."""
+    folder = _claim_folder()
+    path = folder / f"{kind}-{value}.claim"
+    payload = json.dumps(dict(owner)).encode()
+    for _ in range(_CLAIM_ATTEMPTS):
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            # A planted symlink also lands here: O_EXCL refuses it, and _read_claim refuses to
+            # follow it, so it is never treated as a claim or removed.
+            try:
+                before = os.lstat(path)
+            except FileNotFoundError:
+                continue
+            data = _read_claim(path)
+            if data is None:
+                continue
+            if _claim_is_live(data):
+                raise _Refusal(f"{kind.upper()}_CLAIMED",
+                               f"{kind} {value} is claimed by another launch (PID {data.get('pid')}). "
+                               f"Omit {kind} to take the first free, unclaimed one, or choose another.")
+            if not data.get("pid") and _claim_fresh(path):
+                # Created, but its owner has not written the payload yet: refuse rather than
+                # delete a claim that is being made right now.
+                raise _Refusal(f"{kind.upper()}_CLAIMED",
+                               f"{kind} {value} is being claimed by another launch right now. Retry.")
+            try:
+                if os.lstat(path).st_ino != before.st_ino:  # replaced since it was read
+                    continue
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                raise RuntimeError(f"cannot remove the stale launch claim {path}: {exc}") from exc
+            continue
+        except OSError as exc:
+            raise RuntimeError(f"cannot claim {kind} {value} in {folder}: {exc}") from exc
+        try:
+            os.write(fd, payload)
+        except OSError as exc:
+            os.close(fd)
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            raise RuntimeError(f"cannot write the launch claim {path}: {exc}") from exc
+        os.close(fd)
+        return path
+    raise RuntimeError(f"cannot claim {kind} {value} in {folder}: another process keeps replacing the claim")
+
+
+def _release_claim(path: Path, owner: Mapping) -> None:
+    """Remove this process's claim, and leave a claim another process made alone."""
+    try:
+        data = _read_claim(path)
+    except RuntimeError:
+        return
+    if not isinstance(data, dict) or data.get("pid") != owner["pid"] or data.get("start_ticks") != owner["start_ticks"]:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+@contextmanager
+def _claims():
+    """Yield a claim(kind, value) function; every claim is released on the way out."""
+    owner = _claim_owner()
+    held: list[Path] = []
+
+    def take(kind: str, value: int) -> Path:
+        path = _claim(kind, value, owner)
+        held.append(path)
+        return path
+
+    try:
+        yield take
+    finally:
+        for path in held:
+            _release_claim(path, owner)
 
 
 @contextmanager
@@ -221,22 +461,92 @@ def _port_bind_error(port: int) -> OSError | None:
     return None
 
 
-def _next_free_port_hint(port: int, reserved: Collection[int] = ()) -> str:
-    """Suggest the next port up that a bridge could bind right now (a snapshot, not a reservation)."""
-    for candidate in range(port + 1, min(port + _PORT_SEARCH_SPAN, 65535) + 1):
-        if candidate not in reserved and _port_bind_error(candidate) is None:
-            return f" Port {candidate} is free right now: retry with port={candidate}."
-    return f" No free port found in {port + 1}-{min(port + _PORT_SEARCH_SPAN, 65535)}; choose another port."
+def _next_free_port_hint(port: int, reserved: Collection[int] = (),
+                         allowed: tuple[int, int] | None = None) -> str:
+    """Suggest a port a bridge could bind, no live launch claims and no live bridge advertises.
+
+    Still a snapshot, not a reservation: without a range another agent on this machine may have
+    been told to use the port, so the message says how to claim a range.
+    """
+    if allowed:
+        first, last = allowed
+    else:
+        first, last = port + 1, min(port + _PORT_SEARCH_SPAN, 65535)
+    claimed = _claimed("port")
+    for candidate in range(first, last + 1):
+        if candidate in reserved or candidate in claimed or _port_bind_error(candidate) is not None:
+            continue
+        if allowed:
+            return (f" Port {candidate} is free and unclaimed in ISAAC_MCP_PORT_RANGE {first}-{last}: "
+                    f"retry with port={candidate}.")
+        return (f" On a shared machine another agent may have been told to use it: set "
+                "ISAAC_MCP_PORT_RANGE=18800-18899 in this server's environment so launches claim "
+                f"ports in a range. Port {candidate} is free right now: retry with port={candidate}.")
+    if first > last:
+        return f" No free port found at or above {port}; choose another port."
+    if allowed:
+        return (f" No free, unclaimed port found in {first}-{last}; stop a session or widen "
+                "ISAAC_MCP_PORT_RANGE.")
+    return f" No free port found in {first}-{last}; choose another port."
 
 
-def _check_port(port: int, reserved: Collection[int] = ()) -> None:
+def _check_port(port: int, reserved: Collection[int] = (),
+                allowed: tuple[int, int] | None = None) -> None:
     error = _port_bind_error(port)
     if error is not None:
         raise ValueError(f"bridge port {port} is already in use or cannot be bound ({error}). "
                          "A port that only has recently closed bridge connections does not cause "
                          "this; another process holds it, or holds connections closed without "
                          "SO_REUSEADDR (those clear within about a minute)."
-                         + _next_free_port_hint(port, reserved)) from error
+                         + _next_free_port_hint(port, reserved, allowed)) from error
+
+
+def _pick_port(claim: Callable[[str, int], Path], port_range: tuple[int, int] | None, start: int,
+               reserved: Collection[int]) -> int:
+    """The first port in range that is free, unclaimed and not advertised by a live bridge."""
+    first, last = port_range or (start, min(start + _PORT_SEARCH_SPAN, 65535))
+    for candidate in range(first, last + 1):
+        if candidate in reserved or _port_bind_error(candidate) is not None:
+            continue
+        try:
+            claim("port", candidate)
+        except _Refusal:  # another launch took it between the bind test and the claim
+            continue
+        return candidate
+    raise _Refusal("PORT_RANGE_EXHAUSTED",
+                   f"no free, unclaimed port in {first}-{last}. "
+                   + ("Stop a session or widen ISAAC_MCP_PORT_RANGE."
+                      if port_range else "Pass port=... explicitly, or set ISAAC_MCP_PORT_RANGE."))
+
+
+def _pick_domain(claim: Callable[[str, int], Path], domain_range: tuple[int, int] | None, start: int,
+                 taken: Collection[int]) -> int:
+    """The first ROS domain in range that no known process uses and no launch claims."""
+    first, last = domain_range or (start, 231)
+    for candidate in range(first, last + 1):
+        if candidate in taken:
+            continue
+        try:
+            claim("ros_domain", candidate)
+        except _Refusal:  # another launch took it
+            continue
+        return candidate
+    raise _Refusal("ROS_DOMAIN_RANGE_EXHAUSTED",
+                   f"no free, unclaimed ROS domain in {first}-{last}. "
+                   + ("Stop a session or widen ISAAC_MCP_ROS_DOMAIN_RANGE."
+                      if domain_range else "Pass ros_domain=... explicitly, or set ISAAC_MCP_ROS_DOMAIN_RANGE."))
+
+
+def _known_domains(active: Iterable[dict], bridges: Iterable[Mapping], lab_pids: Collection[int]) -> dict[int, str]:
+    """ROS domains known processes use, with what holds each."""
+    found: dict[int, str] = {}
+    for item in active:
+        found.setdefault(int(item["ros_domain"]), "a managed session")
+    for bridge in bridges:
+        found.setdefault(_domain_of(int(bridge["pid"])), f"bridge PID {bridge['pid']}")
+    for pid in lab_pids:
+        found.setdefault(_domain_of(pid), f"Lab job PID {pid}")
+    return found
 
 
 def _domain_refusal(ros_domain: int, holder: str) -> ValueError:
@@ -285,17 +595,29 @@ def _interpreter_release(env: Mapping[str, str], root: Path) -> str | None:
     return None
 
 
-def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
-            allow_shared_domain: bool, show_ur5e_panel: bool = False,
-            enable_motion_bvh: bool = False, physics_backend: Literal["physx", "newton"] = "physx") -> dict:
+def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | None = None,
+            headless: bool = False, allow_shared_domain: bool = False,
+            show_ur5e_panel: bool = False, enable_motion_bvh: bool = False,
+            physics_backend: Literal["physx", "newton"] = "physx") -> dict:
     if physics_backend not in ("physx", "newton"):
         raise ValueError("physics_backend must be physx or newton")
-    if not 1024 <= port <= 65535:
-        raise ValueError("port must be between 1024 and 65535")
+    port_range = _launch_range(env, "ISAAC_MCP_PORT_RANGE", 1024, 65535)
+    domain_range = _launch_range(env, "ISAAC_MCP_ROS_DOMAIN_RANGE", 0, 231)
+    auto_selected = [name for name, value in (("port", port), ("ros_domain", ros_domain)) if value is None]
+    if port is not None:
+        if not 1024 <= port <= 65535:
+            raise ValueError("port must be between 1024 and 65535")
+        _refuse_outside(port, port_range, "PORT_OUT_OF_RANGE", "port", "ISAAC_MCP_PORT_RANGE",
+                        "Omit port to take the first free, unclaimed port in the range.")
     # The bundled Cyclone profile probes participant indices 0..100. At
     # domain 232 those discovery ports extend beyond UDP's 65535 limit.
-    if not 0 <= ros_domain <= 231:
-        raise ValueError("ros_domain must be between 0 and 231 for the bundled Cyclone DDS profile")
+    if ros_domain is not None:
+        if not 0 <= ros_domain <= 231:
+            raise ValueError("ros_domain must be between 0 and 231 for the bundled Cyclone DDS profile")
+        _refuse_outside(ros_domain, domain_range, "ROS_DOMAIN_OUT_OF_RANGE", "ROS domain",
+                        "ISAAC_MCP_ROS_DOMAIN_RANGE",
+                        "Omit ros_domain to take the first free, unclaimed domain in the range.")
+
     custom = _configured_launcher(env)
     if custom is not None:
         launcher, root = custom, custom.parent
@@ -314,7 +636,7 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
     max_instances = _config_int(env, "ISAAC_MCP_SIM_MAX_INSTANCES", 2)
     boot_id = _boot_id()
     base = _sessions_dir(env)
-    with _launch_lock(base):
+    with _launch_lock(base), _claims() as claim:
         active = [item for item in _sessions(base) if _alive(item)]
         bridges = client.discover_bridges()
         lab_pids = _lab_pids(env)
@@ -324,19 +646,22 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
             raise RuntimeError(f"{len(existing_pids)} known simulator/Lab process(es) are already active; "
                                f"ISAAC_MCP_SIM_MAX_INSTANCES is {max_instances}")
         reserved = {int(item["port"]) for item in active} | {int(b["port"]) for b in bridges}
-        if any(item["port"] == port for item in active):
-            raise ValueError(f"port {port} is reserved by a starting or running managed session."
-                             + _next_free_port_hint(port, reserved))
-        _check_port(port, reserved)
-        if not allow_shared_domain:
-            if any(item["ros_domain"] == ros_domain for item in active):
-                raise _domain_refusal(ros_domain, "a managed session")
-            for bridge in bridges:
-                if _domain_of(int(bridge["pid"])) == ros_domain:
-                    raise _domain_refusal(ros_domain, f"bridge PID {bridge['pid']}")
-            for pid in lab_pids:
-                if _domain_of(pid) == ros_domain:
-                    raise _domain_refusal(ros_domain, f"Lab job PID {pid}")
+        if port is None:
+            port = _pick_port(claim, port_range, _port_start(env), reserved)
+        else:
+            claim("port", port)
+            if any(item["port"] == port for item in active):
+                raise ValueError(f"port {port} is reserved by a starting or running managed session."
+                                 + _next_free_port_hint(port, reserved, port_range))
+            _check_port(port, reserved, port_range)
+        if ros_domain is None:
+            taken = _known_domains(active, bridges, lab_pids)
+            ros_domain = _pick_domain(claim, domain_range, _domain_start(env), set(taken))
+        elif not allow_shared_domain:
+            holder = _known_domains(active, bridges, lab_pids).get(ros_domain)
+            if holder:
+                raise _domain_refusal(ros_domain, holder)
+            claim("ros_domain", ros_domain)
         resources = _resources()
         if resources["gpu_free_mib"] < min_gpu or resources["ram_available_mib"] < min_ram:
             raise RuntimeError(f"insufficient headroom: {resources}; require at least "
@@ -387,6 +712,7 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
                   "enable_motion_bvh": enable_motion_bvh,
                   "physics_backend": physics_backend,
                   **({"launcher": str(custom)} if custom is not None else {}),
+                  **({"auto_selected": auto_selected} if auto_selected else {}),
                   "started_at": time.time(),
                   "log": str(log), "output_dir": str(output), "user_config": str(user_config),
                   "initial_resources": resources}
@@ -517,18 +843,19 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
     settings = dict(os.environ if env is None else env)
 
     @mcp.tool(name="sim__launch", annotations=PYTHON_EXECUTION)
-    def sim_launch(port: Annotated[int, Field(description="A free local TCP port for its bridge, e.g. 18766.")],
-                   ros_domain: Annotated[int, Field(description="ROS_DOMAIN_ID 0-231, distinct from other sessions.")],
+    def sim_launch(port: Annotated[int | None, Field(description="Bridge TCP port 1024-65535. Omit for the first free, unclaimed port in ISAAC_MCP_PORT_RANGE, or upward from the configured port.")] = None,
+                   ros_domain: Annotated[int | None, Field(description="ROS_DOMAIN_ID 0-231. Omit for the first free, unclaimed domain in ISAAC_MCP_ROS_DOMAIN_RANGE, or upward from this server's domain.")] = None,
                    headless: Annotated[bool, Field(description="true: no window.")] = False,
                    allow_shared_domain: Annotated[bool, Field(description="true: allow a ROS domain another session already uses.")] = False,
                    show_ur5e_panel: Annotated[bool, Field(description="true: show the UR5e twin's panel in a graphical session.")] = False,
                    enable_motion_bvh: Annotated[bool, Field(description="true: accurate RTX LiDAR motion compensation; costs rendering time and GPU memory.")] = False,
                    physics_backend: Annotated[Literal["physx", "newton"], Field(description="Engine for this new process. Missing Newton dependencies fail with no fallback.")] = "physx") -> dict:
-        """Launch a separate managed Isaac Sim instance on its own port and ROS domain, when explicitly asked.
+        """Launch a separate managed Isaac Sim instance, when explicitly asked.
 
-        Checks an instance limit, the port, known ROS domains and free resources; these are snapshots,
-        not reservations. Returns before the bridge is ready: poll sim__status, then use_bridge. Stop a
-        fake ROS driver before stopping the session; URSim is unavailable here.
+        Omit port and ros_domain to take the first free, unclaimed value inside the configured range;
+        the result says what was chosen, and a value outside its range is refused. Checks an instance
+        limit, the port, known ROS domains and free resources; these are snapshots, not reservations.
+        Returns before the bridge is ready: poll sim__status, then use_bridge.
         Launching runs configured local code: run.sh, or the launcher in the server's
         ISAAC_MCP_SIM_LAUNCHER setting. No tool argument can name a command.
         """
