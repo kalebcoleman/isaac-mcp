@@ -18,7 +18,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Literal, Iterable, Mapping
+from typing import Callable, Collection, Literal, Iterable, Mapping
 
 try:
     import fcntl
@@ -36,6 +36,8 @@ _DEFAULT_ROOT = Path(__file__).resolve().parents[2]
 # Linux 6.9 added a pidfd signal scope for an entire process group. Older
 # kernels get a race-safe signal to the leader only.
 _PIDFD_SIGNAL_PROCESS_GROUP = 1 << 2
+# How far above a refused bridge port to look for a free one to suggest.
+_PORT_SEARCH_SPAN = 64
 
 
 def _config_int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -195,12 +197,48 @@ def _resources() -> dict[str, int]:
         raise RuntimeError("cannot check NVIDIA GPU and system memory; install nvidia-smi and use Linux") from exc
 
 
-def _check_port(port: int) -> None:
+def _port_bind_error(port: int) -> OSError | None:
+    """Try the bridge's own bind sequence (SO_REUSEADDR, bind, listen; bridge.py) on the managed
+    bind address, and return what stopped it.
+
+    A plain bind is the wrong test: after the previous bridge's process exits, its closed
+    connections keep the port in TIME_WAIT for about a minute, a plain bind fails with EADDRINUSE,
+    and yet the bridge could bind it. SO_REUSEADDR does not get past a socket in LISTEN."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("127.0.0.1", port))
+            sock.listen(1)
     except OSError as exc:
-        raise ValueError(f"bridge port {port} is already in use or cannot be bound") from exc
+        return exc
+    return None
+
+
+def _next_free_port_hint(port: int, reserved: Collection[int] = ()) -> str:
+    """Suggest the next port up that a bridge could bind right now (a snapshot, not a reservation)."""
+    for candidate in range(port + 1, min(port + _PORT_SEARCH_SPAN, 65535) + 1):
+        if candidate not in reserved and _port_bind_error(candidate) is None:
+            return f" Port {candidate} is free right now: retry with port={candidate}."
+    return f" No free port found in {port + 1}-{min(port + _PORT_SEARCH_SPAN, 65535)}; choose another port."
+
+
+def _check_port(port: int, reserved: Collection[int] = ()) -> None:
+    error = _port_bind_error(port)
+    if error is not None:
+        raise ValueError(f"bridge port {port} is already in use or cannot be bound ({error}). "
+                         "A port that only has recently closed bridge connections does not cause "
+                         "this; another process holds it, or holds connections closed without "
+                         "SO_REUSEADDR (those clear within about a minute)."
+                         + _next_free_port_hint(port, reserved)) from error
+
+
+def _domain_refusal(ros_domain: int, holder: str) -> ValueError:
+    """The ROS domain guard's refusal, with the ways to proceed."""
+    return ValueError(f"ROS domain {ros_domain} is already used by {holder}. To proceed, pass another "
+                      "ros_domain and export the same ROS_DOMAIN_ID in every ROS shell that talks to "
+                      "this simulator, or pass allow_shared_domain=true if sharing the domain is "
+                      "intended. Lab instructions that assume domain 0 need adapting to the domain "
+                      "you choose.")
 
 
 def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
@@ -232,18 +270,20 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
         if max_instances and len(existing_pids) >= max_instances:
             raise RuntimeError(f"{len(existing_pids)} known simulator/Lab process(es) are already active; "
                                f"ISAAC_MCP_SIM_MAX_INSTANCES is {max_instances}")
+        reserved = {int(item["port"]) for item in active} | {int(b["port"]) for b in bridges}
         if any(item["port"] == port for item in active):
-            raise ValueError(f"port {port} is reserved by a starting or running managed session")
-        _check_port(port)
+            raise ValueError(f"port {port} is reserved by a starting or running managed session."
+                             + _next_free_port_hint(port, reserved))
+        _check_port(port, reserved)
         if not allow_shared_domain:
             if any(item["ros_domain"] == ros_domain for item in active):
-                raise ValueError(f"ROS domain {ros_domain} is already used by a managed session")
+                raise _domain_refusal(ros_domain, "a managed session")
             for bridge in bridges:
                 if _domain_of(int(bridge["pid"])) == ros_domain:
-                    raise ValueError(f"ROS domain {ros_domain} is already used by bridge PID {bridge['pid']}")
+                    raise _domain_refusal(ros_domain, f"bridge PID {bridge['pid']}")
             for pid in lab_pids:
                 if _domain_of(pid) == ros_domain:
-                    raise ValueError(f"ROS domain {ros_domain} is already used by Lab job PID {pid}")
+                    raise _domain_refusal(ros_domain, f"Lab job PID {pid}")
         resources = _resources()
         if resources["gpu_free_mib"] < min_gpu or resources["ram_available_mib"] < min_ram:
             raise RuntimeError(f"insufficient headroom: {resources}; require at least "
@@ -308,7 +348,9 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
         threading.Thread(target=proc.wait, daemon=True).start()
         return {**_public(record), "state": "starting",
                 "note": (f"Use sim__status to confirm bridge readiness, then use_bridge(port={port}) "
-                         "to send tool calls to this simulator.")}
+                         "to send tool calls to this simulator. If this is the only managed session "
+                         "and the configured port does not answer, refresh_tools(wait_s=120) waits "
+                         "for this session and selects it instead.")}
 
 
 def _status(env: Mapping[str, str], session_id: str) -> dict:
@@ -334,11 +376,11 @@ def _status(env: Mapping[str, str], session_id: str) -> dict:
         resources = {"error": str(exc)}
     result = {**_public(session), "state": state, "current_resources": resources}
     if state in ("running", "readiness_unknown"):
-        # The MCP server keeps dialling its configured port (UR5E_DT_PORT/ISAAC_MCP_PORT) and
-        # refresh_tools does not switch: a student run on a lab PC lost time here.
+        # The MCP server keeps dialling its configured port (UR5E_DT_PORT/ISAAC_MCP_PORT) while it
+        # answers, and refresh_tools then does not switch: a student run on a lab PC lost time here.
         result["next"] = (f"if this MCP server is not already using port {session['port']}, call "
                           f"use_bridge(port={session['port']}) so sim__* and run_python go to this simulator; "
-                          "refresh_tools alone reconnects to the configured port.")
+                          "refresh_tools alone stays on the configured port while that port answers.")
     return result
 
 
@@ -365,7 +407,10 @@ def _stop(env: Mapping[str, str], session_id: str, expected_pid: int, confirm_di
 
 
 def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = None,
-                               env: Mapping[str, str] | None = None) -> None:
+                               env: Mapping[str, str] | None = None,
+                               on_launch: Callable[[dict], None] | None = None) -> None:
+    """``on_launch`` receives each record sim__launch creates, so the host can tell the sessions it
+    launched from others in the shared session directory."""
     mcp = ScopedTools(server, groups)
     settings = dict(os.environ if env is None else env)
 
@@ -387,7 +432,10 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
         The URSim driver backend is unavailable because its resources are host-wide.
         Launching runs configured local code.
         """
-        return _launch(settings, port, ros_domain, headless, allow_shared_domain, show_ur5e_panel, enable_motion_bvh, physics_backend)
+        record = _launch(settings, port, ros_domain, headless, allow_shared_domain, show_ur5e_panel, enable_motion_bvh, physics_backend)
+        if on_launch is not None:
+            on_launch(record)
+        return record
 
     @mcp.tool(name="sim__list", annotations=PYTHON_EXECUTION)
     def sim_list() -> dict:
@@ -411,9 +459,9 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
 
 
 def live_sessions(env: Mapping[str, str] | None = None) -> list[dict]:
-    """``{port, pid, started_at}`` of managed simulator sessions that are still alive (best effort)."""
+    """``{id, port, pid, started_at}`` of managed simulator sessions that are still alive (best effort)."""
     try:
-        return sorted(({"port": int(x["port"]), "pid": int(x["pid"]),
+        return sorted(({"id": x.get("id"), "port": int(x["port"]), "pid": int(x["pid"]),
                         "started_at": float(x["started_at"]) if x.get("started_at") is not None else None}
                        for x in _sessions(_sessions_dir(os.environ if env is None else env)) if _alive(x)),
                       key=lambda x: (x["port"], x["pid"]))

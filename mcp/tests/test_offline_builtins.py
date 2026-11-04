@@ -60,6 +60,7 @@ def test_builtins_are_listed_and_callable_through_an_mcp_client_before_discovery
 
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
+    monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])   # not this machine's real ones
     server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
     state = gw._state_for(server)
     state.client = _Offline()

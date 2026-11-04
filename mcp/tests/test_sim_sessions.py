@@ -4,12 +4,16 @@ import json
 import errno
 import os
 import signal
+import socket
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from isaac_mcp import sim_sessions as sim
+
+_REAL_CHECK_PORT = sim._check_port   # the setup fixture replaces it
 
 
 @pytest.fixture
@@ -25,7 +29,7 @@ def setup(monkeypatch, tmp_path):
     monkeypatch.setattr(sim.client, "discover_bridges", lambda: [])
     monkeypatch.setattr(sim, "_boot_id", lambda: "test-boot")
     monkeypatch.setattr(sim, "_lab_pids", lambda env: set())
-    monkeypatch.setattr(sim, "_check_port", lambda port: None)
+    monkeypatch.setattr(sim, "_check_port", lambda port, reserved=(): None)
     monkeypatch.setattr(sim, "_resources", lambda: {"gpu_total_mib": 16000, "gpu_free_mib": 12000,
                                                      "ram_available_mib": 24000})
     return env
@@ -291,3 +295,189 @@ def test_session_lock_reports_non_linux_support(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="require Linux"):
         with sim._launch_lock(tmp_path / "sessions"):
             pass
+
+
+# ---- Lab 3 run 8: sim__launch refused a free port after sim__stop --------------------------------
+
+TIME_WAIT, FIN_WAIT2, LISTEN = "06", "05", "0A"
+
+
+def _plain_bind_refuses(port):
+    """The check before the fix: a bind with no SO_REUSEADDR."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError as exc:
+            assert exc.errno == errno.EADDRINUSE
+            return True
+    return False
+
+
+def _tcp_states(port):
+    rows = Path("/proc/net/tcp").read_text().splitlines()[1:]
+    return {row.split()[3] for row in rows if int(row.split()[1].split(":")[1], 16) == port}
+
+
+def _leftover_connection(reuse=True):
+    """A served connection the server closed first, as when a bridge process exits. The bridge's
+    listener sets SO_REUSEADDR (reuse=True), and accepted sockets inherit it. Returns the port and
+    the still-open client socket."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        if reuse:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        peer = socket.create_connection(("127.0.0.1", port), timeout=2)
+        accepted, _ = listener.accept()
+        accepted.close()
+    assert peer.recv(1) == b""   # the client has seen the server's FIN
+    return port, peer
+
+
+def _wait_for_state(port, state):
+    deadline = time.monotonic() + 2
+    while state not in _tcp_states(port) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert state in _tcp_states(port), f"the test must really reach TCP state {state} on the server port"
+
+
+def _time_wait_port(reuse=True):
+    port, peer = _leftover_connection(reuse)
+    peer.close()
+    _wait_for_state(port, TIME_WAIT)
+    return port
+
+
+def test_time_wait_failed_the_old_check_and_passes_the_new_one():
+    port = _time_wait_port()
+    assert LISTEN not in _tcp_states(port)
+    assert _plain_bind_refuses(port), "the reported failure: nothing listens, yet the old check refused"
+    sim._check_port(port)
+
+
+def test_a_connection_the_client_has_not_closed_yet_does_not_block_the_port():
+    # The host keeps a persistent socket to its bridge, so after sim__stop the server side can sit
+    # in FIN_WAIT2 until the host next uses it.
+    port, peer = _leftover_connection()
+    with peer:
+        _wait_for_state(port, FIN_WAIT2)
+        assert _plain_bind_refuses(port)
+        sim._check_port(port)
+
+
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "0.0.0.0"])
+@pytest.mark.parametrize("reuse", [False, True])
+def test_a_live_listener_is_still_refused_and_a_free_port_is_suggested(address, reuse):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        if reuse:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind((address, 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        with pytest.raises(ValueError, match=f"bridge port {port} is already in use or cannot be bound") as caught:
+            sim._check_port(port)
+        message = str(caught.value)
+        suggested = int(message.split("retry with port=")[1].rstrip("."))
+        assert suggested != port
+        assert sim._port_bind_error(suggested) is None
+
+
+def test_the_real_bridge_can_bind_a_port_in_time_wait():
+    # The check must not pass a port the launch then cannot use.
+    import asyncio
+    import threading
+
+    from isaac_mcp.client import call
+    from test_bridge import make_bridge
+
+    port = _time_wait_port()
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+    bridge = make_bridge(loop)
+    try:
+        bridge.start(port)
+        assert call("status", host="127.0.0.1", port=port, timeout=5)["port"] == port
+    finally:
+        bridge.stop()
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=2)
+        loop.close()
+
+
+def test_time_wait_from_a_listener_without_reuseaddr_stays_refused_and_says_why():
+    # Not the bridge's case (it sets SO_REUSEADDR). The bridge could not bind this port either, so
+    # refusing is correct, and the message must not claim a process is certainly holding it.
+    port = _time_wait_port(reuse=False)
+    with pytest.raises(ValueError, match="closed without SO_REUSEADDR"):
+        sim._check_port(port)
+
+
+def test_suggested_port_skips_reserved_ports_and_stays_in_range(monkeypatch):
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    assert "port=40003" in sim._next_free_port_hint(40000, {40001, 40002})
+    assert "port=65535" in sim._next_free_port_hint(65534)
+    assert "No free port" in sim._next_free_port_hint(65535)
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: OSError(errno.EADDRINUSE, "in use"))
+    assert "No free port found in 40001-40064" in sim._next_free_port_hint(40000)
+
+
+def test_launch_accepts_a_time_wait_port(setup, monkeypatch):
+    monkeypatch.setattr(sim, "_check_port", _REAL_CHECK_PORT)
+    monkeypatch.setattr(sim.subprocess, "Popen", lambda args, **kw: SimpleNamespace(pid=510, wait=lambda: 0))
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
+    monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
+    port = _time_wait_port()
+    assert sim._launch(setup, port, 9, True, False)["port"] == port
+
+
+def test_a_reserved_port_refusal_suggests_a_port_too(setup, monkeypatch):
+    _record(setup)
+    monkeypatch.setattr(sim, "_alive", lambda data: True)
+    monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
+    with pytest.raises(ValueError, match="port 18766 is reserved.*retry with port=18767"):
+        sim._launch(setup, 18766, 198, False, False)
+
+
+# ---- the ROS domain refusal says how to proceed ---------------------------------------------------
+
+@pytest.mark.parametrize("holder", ["bridge", "session", "lab"])
+def test_ros_domain_refusal_says_how_to_proceed(setup, monkeypatch, holder):
+    monkeypatch.setattr(sim, "_domain_of", lambda pid: 0)
+    if holder == "bridge":
+        monkeypatch.setattr(sim.client, "discover_bridges", lambda: [{"pid": 48526, "port": 8766}])
+        named = "bridge PID 48526"
+    elif holder == "session":
+        data = _record(setup)
+        (Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"]) / data["id"] / "session.json").write_text(
+            json.dumps({**data, "ros_domain": 0}))
+        monkeypatch.setattr(sim, "_alive", lambda data: True)
+        named = "a managed session"
+    else:
+        monkeypatch.setattr(sim, "_lab_pids", lambda env: {77})
+        named = "Lab job PID 77"
+    with pytest.raises(ValueError) as caught:
+        sim._launch(setup, 18770, 0, False, False)
+    message = str(caught.value)
+    assert f"ROS domain 0 is already used by {named}" in message
+    assert "another ros_domain" in message and "ROS_DOMAIN_ID" in message
+    assert "allow_shared_domain=true" in message and "assume domain 0" in message
+
+
+def test_allow_shared_domain_still_passes_the_guard(setup, monkeypatch):
+    monkeypatch.setattr(sim.client, "discover_bridges", lambda: [{"pid": 48526, "port": 8766}])
+    monkeypatch.setattr(sim, "_domain_of", lambda pid: 0)
+    monkeypatch.setattr(sim.subprocess, "Popen", lambda args, **kw: SimpleNamespace(pid=510, wait=lambda: 0))
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
+    monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
+    assert sim._launch(setup, 18770, 0, True, True)["ros_domain"] == 0
+
+
+def test_live_sessions_reports_the_session_id(setup, monkeypatch):
+    data = _record(setup)
+    monkeypatch.setattr(sim, "_alive", lambda data: True)
+    assert sim.live_sessions(setup) == [
+        {"id": data["id"], "port": data["port"], "pid": data["pid"], "started_at": None}]

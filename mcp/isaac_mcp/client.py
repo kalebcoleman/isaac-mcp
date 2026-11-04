@@ -31,6 +31,11 @@ CLI (replaces printf|nc recipes):
     python3 -m isaac_mcp.client <tool> ['{"json":"params"}'] [--port N] [--host H] [--timeout S]
     python3 -m isaac_mcp.client --list-bridges     # bridges advertised on this box
 
+`-m` needs a Python with the isaac_mcp package installed, which a stock python3 does not
+have. This file is stdlib-only, so from a checkout run it directly instead:
+
+    python3 mcp/isaac_mcp/client.py --list-bridges
+
 Endpoint resolution — host and port resolve together, from the same portfile
 when discovery is the source (a bridge bound to a tailnet IP advertises that
 IP; dialing loopback for its port would be wrong):
@@ -466,9 +471,11 @@ def call(tool: str, params: Optional[Dict[str, Any]] = None, *,
 
 def main(argv=None) -> int:
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(
-        prog="python3 -m isaac_mcp.client",
+        # `__package__` is empty when this file is run directly, which needs no installed package.
+        prog="python3 -m isaac_mcp.client" if __package__ else f"python3 {sys.argv[0]}",
         description="Call one tool on the isaac.mcp.bridge bridge. "
                     "Exit codes: 0 success, 1 bridge error, 2 unreachable/usage.")
     parser.add_argument("tool", nargs="?",
@@ -485,7 +492,6 @@ def main(argv=None) -> int:
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     args = parser.parse_args(argv)
 
-    import sys
     if args.list_bridges:
         bridges = discover_bridges()
         print(json.dumps(bridges, indent=2))
