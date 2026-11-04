@@ -3706,7 +3706,7 @@
         },
         "z": {
           "type": "array",
-          "description": "World [z_min, z_max] in metres; Isaac's generator samples one cell-thick layer at the middle of this range, so centre it on the lidar height.",
+          "description": "World [z_min, z_max] in metres. A collider anywhere in this range marks its cells occupied, so keep z_min above the floor and z_max below anything the robot passes under",
           "required": false,
           "default": [
             0.05,
@@ -3784,7 +3784,7 @@
             0.3
           ],
           "has_default": true,
-          "description": "World [z_min, z_max] in metres; Isaac's generator samples one cell-thick layer at the middle of this range, so centre it on the lidar height."
+          "description": "World [z_min, z_max] in metres. A collider anywhere in this range marks its cells occupied, so keep z_min above the floor and z_max below anything the robot passes under"
         },
         {
           "name": "clear",

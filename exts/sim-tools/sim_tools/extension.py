@@ -374,6 +374,7 @@ class Extension(omni.ext.IExt):
                 )
             entry = self.advanced.adopt(s.stage(), args["path"], expected)
         if not wait and expected == "lidar":
+            await self._wait_for_scan(entry[1], time.monotonic(), lambda: s.target(args["session_id"], args["stage_id"]))
             return {
                 "waited": False,
                 "meaning": "latest completed LiDAR scan; freshness not established by this call",
@@ -437,7 +438,6 @@ class Extension(omni.ext.IExt):
             )
             return observation, CameraFrame(data, fresh=wait)
         from .camera_capture import wait_for_frames
-        from .sensors import LIDAR_SCAN_WAIT_FRAMES, LIDAR_SCAN_WAIT_S, lidar_has_data
 
         def validate_lidar():
             s.target(args["session_id"], args["stage_id"])
@@ -446,13 +446,7 @@ class Extension(omni.ext.IExt):
 
         observation = await wait_for_frames(texture, validate_lidar)
         validate_lidar()
-        # A finished render is not always a finished scan: on 6.0.0.0 only about 1 read in 3 found points right after
-        # one. Wait a little for the next scan, then let the read report honestly if there is still none.
-        for _ in range(LIDAR_SCAN_WAIT_FRAMES):
-            if time.monotonic() - begin > LIDAR_SCAN_WAIT_S or lidar_has_data(entry[1]):
-                break
-            await omni.kit.app.get_app().next_update_async()
-        validate_lidar()
+        await self._wait_for_scan(entry[1], begin, validate_lidar)
         return {
             "waited": True,
             "render_product": entry[1]["product_path"],
@@ -462,6 +456,21 @@ class Extension(omni.ext.IExt):
             "timeline_time_after": s.timeline.get_current_time(),
             "meaning": "matching render completed after request; not an atomic physics/sensor snapshot",
         }, None
+
+    async def _wait_for_scan(self, sensor, begin, validate):
+        """While playing, wait a moment for points. A finished render is not always a finished scan: on 6.0.0.0 only about
+        1 read in 3 found any. The read that follows still reports honestly if there are none."""
+        import time
+
+        import omni.kit.app
+
+        from .sensors import LIDAR_SCAN_WAIT_FRAMES, LIDAR_SCAN_WAIT_S, lidar_has_data
+
+        for _ in range(LIDAR_SCAN_WAIT_FRAMES):
+            if not self.scene.timeline.is_playing() or time.monotonic() - begin > LIDAR_SCAN_WAIT_S or lidar_has_data(sensor):
+                break
+            await omni.kit.app.get_app().next_update_async()
+            validate()
 
     async def _finish_graph_show(self, ready, ids, path, layout, size):
         """Wait only as many frames as the editor needs. Each frame can take ~1 s while the

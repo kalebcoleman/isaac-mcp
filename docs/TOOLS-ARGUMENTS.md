@@ -583,7 +583,7 @@ Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map ge
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `min` (array, required): World [x, y] lower corner of the map in metres.
 - `max` (array, required): World [x, y] upper corner of the map in metres.
-- `z` (array, default `[0.05, 0.3]`): World [z_min, z_max] in metres; Isaac's generator samples one cell-thick layer at the middle of this range, so centre it on the lidar height.
+- `z` (array, default `[0.05, 0.3]`): World [z_min, z_max] in metres. A collider anywhere in this range marks its cells occupied, so keep z_min above the floor and z_max below anything the robot passes under
 - `clear` (array, default `[]`): Up to 16 [x, y, radius] circles (metres) to mark free, e.g. the robot's own footprint at its start pose.
 - `start` (array, optional): World [x, y] in free space the generator flood-fills from; cells it cannot reach are unknown. Default: the centre of the bounds (move it if a table or pillar is there).
 - `cell_size` (number, default `0.05`): Cell size in metres (map resolution).

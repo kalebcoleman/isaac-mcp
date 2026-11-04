@@ -236,6 +236,16 @@ def type_mismatch(source, target):
     return None
 
 
+def wire_dropped(source, target):
+    """Whether Kit left this connection out. Its connect call can't tell: on 6.0.0.0 it returns false even when the wire
+    is made, and only logs a warning when it refuses. No way to read the wire on this build counts as made."""
+    try:
+        upstream = target.get_upstream_connections()
+    except AttributeError:
+        return False
+    return not any(attr.get_path() == source.get_path() for attr in upstream)
+
+
 def token_value(value, allowed_raw):
     """(value to store, note) for a token input with allowed tokens; raises on a bad value."""
     allowed_raw = token_map(allowed_raw)
@@ -367,6 +377,10 @@ def build(stage, a, stopped):
                                 f"({source.get_resolved_type()} to {target.get_resolved_type()}). Nothing was built. "
                                 "sim__graph__node_types lists each node's ports and types.")
             og.Controller.connect(source, target)
+            if wire_dropped(source, target):
+                raise SpecError("CONNECTION_REFUSED", f"Kit did not connect {s_node}.{s_port} to {d_node}.{d_port} "
+                                f"({source.get_resolved_type()} to {target.get_resolved_type()}); it only logs a warning. "
+                                "Nothing was built. For text, set the input's value in values instead of wiring it.")
         for node, port, value in deferred:
             try:
                 attr(node, port, False)

@@ -283,3 +283,22 @@ def test_type_mismatch_names_a_wire_kit_would_only_warn_about(source, target, wh
 ])
 def test_type_mismatch_leaves_compatible_wires_alone(source, target):
     assert gb.type_mismatch(source, target) is None
+
+
+class _Attr:
+    def __init__(self, path, upstream=()):
+        self.path, self.upstream = path, upstream
+
+    def get_path(self):
+        return self.path
+
+    def get_upstream_connections(self):
+        return self.upstream
+
+
+def test_wire_dropped_tells_a_refused_connection_from_a_made_one():
+    source = _Attr("/g/a.outputs:x")
+    assert not gb.wire_dropped(source, _Attr("/g/b.inputs:y", [source]))
+    assert gb.wire_dropped(source, _Attr("/g/b.inputs:y", []))
+    assert gb.wire_dropped(source, _Attr("/g/b.inputs:y", [_Attr("/g/other.outputs:z")]))
+    assert not gb.wire_dropped(source, object())  # nothing to read on this build: Kit's choice stands

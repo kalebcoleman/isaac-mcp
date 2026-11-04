@@ -88,15 +88,16 @@ fi
 
 # ---- boot --------------------------------------------------------------------------
 echo "== boot"
-"$PY" "$ROOT/scripts/run_ur5e_dt.py" \
+setsid "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
   "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt \
   --enable isaacsim.ros2.bridge > "$LOG" 2>&1 &
 APP_PID=$!
 cleanup() {
-  kill "$APP_PID" 2>/dev/null; pkill -P "$APP_PID" 2>/dev/null
+  # The whole group: a standalone app's python.sh does not exec, so its Kit outlives the wrapper.
+  kill -- "-$APP_PID" 2>/dev/null
   # Kit ignores SIGTERM while it is busy shutting down; escalate so the probe cannot hang on exit.
   for _ in 1 2 3 4 5; do kill -0 "$APP_PID" 2>/dev/null || break; sleep 1; done
-  kill -9 "$APP_PID" 2>/dev/null; pkill -9 -P "$APP_PID" 2>/dev/null
+  kill -9 -- "-$APP_PID" 2>/dev/null
   wait "$APP_PID" 2>/dev/null
 }
 trap cleanup EXIT

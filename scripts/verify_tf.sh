@@ -12,10 +12,10 @@ SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))')
 . "$ROOT/scripts/isaac_ros_libs.sh"
 ROS_LIB="$(isaac_ros_lib_dir "$SITE" "$ROS_DISTRO")" && export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROS_LIB"
 mkdir -p "$OUT"; LOG="$OUT/verify_tf_app.log"
-"$PY" "$ROOT/scripts/run_ur5e_dt.py" --ext-folder "$ROOT/exts" --enable isaac.mcp.bridge --enable ur5e-dt --enable isaacsim.ros2.bridge > "$LOG" 2>&1 &
+setsid "$PY" "$ROOT/scripts/run_ur5e_dt.py" --ext-folder "$ROOT/exts" --enable isaac.mcp.bridge --enable ur5e-dt --enable isaacsim.ros2.bridge > "$LOG" 2>&1 &
 APP=$!
-# Children too: a standalone app's python.sh does not exec, so its Kit outlives the wrapper.
-trap 'pkill -P $APP 2>/dev/null; kill $APP 2>/dev/null; sleep 3; pkill -9 -P $APP 2>/dev/null; kill -9 $APP 2>/dev/null; wait $APP 2>/dev/null' EXIT
+# The whole group: a standalone app's python.sh does not exec, so its Kit outlives the wrapper, and can ignore SIGTERM.
+trap 'kill -- -$APP 2>/dev/null; sleep 3; kill -9 -- -$APP 2>/dev/null; wait $APP 2>/dev/null' EXIT
 for _ in $(seq 1 45); do (exec 3<>/dev/tcp/127.0.0.1/"$PORT") 2>/dev/null && break; sleep 2; done
 c() { ( cd "$ROOT/mcp" && PYTHONPATH="$PWD" timeout 200 "$PY" -m isaac_mcp.client "$@" 2>&1 | tail -4 ); }
 c ur5e_dt.quick_start_with_workstation '{}' --timeout 150
