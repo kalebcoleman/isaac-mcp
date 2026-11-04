@@ -252,11 +252,11 @@ To state in the docs:
 
 ### Early-phase proposals still to build (`SIM-TOOLS-FOLLOWUP.md`)
 
-- [ ] M1: `sim__prim__bounds`, `sim__prim__measure`, `sim__camera__list`
-- [ ] M2: `sim__logs__tail` filters and cursors, `sim__logs__mark`, `sim__logs__summary`
-- [ ] M3: `sim__physics__raycast`, `sim__physics__contacts`
-- [ ] M4: `sim__joints__command` by name with clamp, `sim__joints__gains`, `sim__joints__move`, `sim__joints__teleport`
-- [ ] M5: `sim__prim__set_attribute`, `sim__physics__apply` (colliders, rigid body, mass, density), `sim__prim__revert`, `sim__prim__set_transform` on any prim, `Plane`
+- [x] M1 (6.2 and 5.1 live; 6.0 and 6.1 not run): `sim__prim__bounds`, `sim__prim__measure`, `sim__camera__list`
+- [x] M2 (6.2 and 5.1 live): `sim__logs__tail` filters and cursors, `sim__logs__mark`, `sim__logs__summary`
+- [x] M3 (6.2 and 5.1 live; Newton refusals unit tested only): `sim__physics__raycast`, `sim__physics__contacts`
+- [x] M4 (6.2 and 5.1 live on ur5e and franka): `sim__joints__command` by name with clamp, `sim__joints__gains`, `sim__joints__move`, `sim__joints__teleport`
+- [x] M5 (6.2 and 5.1 live; mass 2.5 and 5.0 kg read back exactly): `sim__prim__set_attribute`, `sim__physics__apply` (colliders, rigid body, mass, density), `sim__prim__revert`, `sim__prim__set_transform` on any prim, `Plane`
 - [ ] M6: `assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources
 - [ ] M7: `sim__viewport__screenshot`, `sim__viewport__record_start`, `sim__viewport__record_stop`, and the final demo
 - [ ] Twin: `SCENE-TOOLS-AGENT-UX.md` proposals still unbuilt: to be listed by a scout
@@ -278,3 +278,7 @@ Scores track training: rsl_rl cartpole -5.99 early, +4.92 trained; rl_games -4.8
 - [ ] Mark Lab 2.3.2 with Sim 5.1 as `tested` after the final retest passes
 - [ ] Keep "Kaleb's work with RISE lab" in the docs (kept, no action)
 - [ ] `sim__lidar__read` `NOT_READY` text should mention a sensor inside its own robot's body. The empty-scan rewrite covers a robot at the origin; Carter's was on a chassis link
+- [ ] M1 to M5 on 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1, and Newton: only the API adapters and unit tests cover them. Include in the final retest
+- [ ] Re-merged M1 to M5 smoke on 6.2: bounds, raycast, contacts, logs and two masses worked together. `sim__joints__move` refused after Stop, as it should; not re-run with the timeline playing on the merged tree
+- [ ] Have a plain-request tester use the new tools (build a tower with light blocks, measure, raycast) and fix whatever it fumbles
+
