@@ -515,3 +515,17 @@ def test_host_passes_names_and_packs_straight_through(monkeypatch):
     client = SimpleNamespace(call=lambda name, params=None: calls.append((name, params)) or dict(status="ok"))
     gw._dispatch("sim.quick_start", {"robot": "ur5e"}, SimpleNamespace(get_client=lambda: client))
     assert calls == [("sim.quick_start", {"robot": "ur5e"})]
+
+
+def test_next_steps_send_inspect_to_the_articulation_root_not_a_link():
+    steps = qs.next_steps({"session_id": "s", "stage_id": "g"}, "/World/Robot", "/World/Robot/root_joint", False)
+    inspect = [step for step in steps if "sim__joints__inspect" in step]
+    assert inspect and 'path="/World/Robot/root_joint"' in inspect[0]
+    assert "articulation root" in inspect[0]
+
+
+def test_public_robot_next_steps_never_name_a_link_for_joint_inspection(kit):
+    out = kit.run(robot="ur5e")
+    root = out["robot"]["articulation_root"]
+    inspect = [step for step in out["next_steps"] if "sim__joints__inspect" in step]
+    assert inspect and f'path="{root}"' in inspect[0]

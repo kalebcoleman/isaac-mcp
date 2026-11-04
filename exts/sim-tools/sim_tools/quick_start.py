@@ -252,6 +252,8 @@ def next_steps(ids, robot_path, root, play, wheels=None):
         steps += [
             "A robot starts at its all-zero joint pose. For an arm that can be low and stretched out, which can look collapsed; check the joint state before assuming a fault. A joint driven into the ground just stops, with no error, so raise a low arm first (on a UR5e, shoulder_lift_joint to about -1.57).",
             f"Read joints while playing or paused: sim__joints__state with path=\"{root}\".",
+            f"Authored joint limits and drives: sim__joints__inspect with path=\"{root}\" (the articulation root, "
+            f"not a link of it).",
             f"Move: sim__joints__command with path=\"{root}\" and one position per joint, in radians.",
             "Exact steps: pause with sim__timeline__control, then sim__simulation__step.",
             f"ROS 2 TF and joint states: sim__ros2__tf_setup with robot=\"{robot_path}\" on a stopped timeline.",

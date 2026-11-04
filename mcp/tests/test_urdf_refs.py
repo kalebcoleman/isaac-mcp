@@ -424,7 +424,8 @@ def test_a_build_with_a_missing_mesh_copies_nothing_unless_allowed(env, broker):
     assert caught.value.code == "UNRESOLVED_DEPENDENCIES" and "gone.stl" in str(caught.value)
     assert "package://nowhere/x.stl" in str(caught.value) and not (env / "bot").exists()
     report = build(broker, str(path), allow_unresolved=True)
-    assert report["verified"]["self_contained"] is True and report["verified"]["accepted_unresolved"]
+    assert report["verified"]["self_contained"] is False and report["verified"]["accepted_unresolved"]
+    assert report["importable"] is False and "package://nowhere/x.stl" in " ".join(report["import_blockers"])
     assert (env / "bot/r.urdf").is_file()
 
 
@@ -590,3 +591,66 @@ def test_nothing_here_writes_outside_a_given_folder(tmp_path):
     before = sorted(os.listdir(tmp_path / "urdf"))
     resolve(tmp_path)
     assert sorted(os.listdir(tmp_path / "urdf")) == before
+
+
+# ---------------------------------------------------------------- one missing mesh among many
+
+
+def test_one_missing_mesh_does_not_condemn_the_packages_other_meshes(tmp_path):
+    put(tmp_path, "pkg/package.xml", package_xml("pkg"))
+    put(tmp_path, "pkg/meshes/a.stl", "a")
+    put(tmp_path, "pkg/meshes/b.stl", "b")
+    put(tmp_path, "urdf/r.urdf", urdf(
+        "package://pkg/meshes/a.stl", "package://pkg/meshes/b.stl", "package://pkg/meshes/gone.stl"))
+    found = resolve(tmp_path)
+    assert set(found["mapped"]) == {
+        "package://pkg/meshes/a.stl", "package://pkg/meshes/b.stl"}
+    assert [p["reference"] for p in found["problems"]] == ["package://pkg/meshes/gone.stl"]
+    problem = found["problems"][0]
+    assert problem["code"] == "MESH_MISSING" and "pkg/meshes/gone.stl" in problem["reason"]
+
+
+def test_doctor_names_only_the_missing_package_mesh(tmp_path):
+    root = tmp_path / "bot"
+    put(root, "pkg/package.xml", package_xml("pkg"))
+    put(root, "pkg/meshes/a.stl", "a")
+    put(root, "pkg/meshes/b.stl", "b")
+    put(root, "urdf/r.urdf", urdf(
+        "package://pkg/meshes/a.stl", "package://pkg/meshes/b.stl", "package://pkg/meshes/gone.stl"))
+    packs.pin_pack(root)
+    calls = []
+
+    def no_usd(paths):
+        calls.append(paths)
+        raise AssertionError("a URDF-only pack needs no USD parser")
+
+    report = packs.doctor_folder(root, closure=no_usd)
+    assert not calls
+    unresolved = report["dependencies"]["unresolved"]
+    assert [u["reference"] for u in unresolved] == ["package://pkg/meshes/gone.stl"]
+    assert any("pkg/meshes/gone.stl" in p for p in report["problems"])
+    assert not any("needs a folder named" in p for p in report["problems"])
+    assert report["ok"] is False
+
+
+def test_dependency_tool_returns_a_urdfs_real_references(env, broker):
+    root = broker.roots["p"][0]
+    path = put(root, "r.urdf", urdf("package://pkg/meshes/a.stl", "gone.stl"))
+    put(root, "pkg/package.xml", package_xml("pkg"))
+    mesh = put(root, "pkg/meshes/a.stl", "a")
+    out = packs.run_tool("assets.dependencies", {"paths": [str(path)]}, broker)
+    result = out["results"][0]
+    assert result["urdf"] is True and "error" not in result
+    assert str(mesh.resolve()) in result["assets"]
+    assert [p["reference"] for p in result["problems"]] == ["gone.stl"]
+    assert result["problems"][0]["code"] == "MESH_MISSING"
+
+
+def test_dependency_tool_explains_an_unresolved_package_instead_of_a_parser_error(env, broker):
+    root = broker.roots["p"][0]
+    path = put(root, "r.urdf", urdf("package://nowhere/m.stl"))
+    out = packs.run_tool("assets.dependencies", {"paths": [str(path)]}, broker)
+    result = out["results"][0]
+    assert "error" not in result
+    problem = result["problems"][0]
+    assert problem["code"] == "PACKAGE_UNRESOLVED" and "nothing outside" in problem["reason"]

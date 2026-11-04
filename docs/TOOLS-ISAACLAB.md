@@ -175,7 +175,7 @@ before anything starts, naming the flag and the alternative; otherwise a per-lib
 `isaaclab__envs_list` can't list tasks on this pair: importing `isaaclab_tasks` needs `pxr`, which exists only once Kit has started. It
 reports `isaac_tasks_unavailable` and lists the ids it can read from the checkout's source, marked `source: "scanned"`. `train` and `play` work with those.
 
-A job records its own exit code in its folder, so one that finishes after the host that started it has gone still reports `succeeded` or `failed` correctly. `failed` with `note: "host restarted"` now means it left no code: it was killed, or predates this. `timeout_s` is enforced by the host that started the job and, if that has gone, by the next `runs_status` or `runs_list`.
+A job records its own exit code in its folder, so one that finishes after the host that started it has gone still reports `succeeded` or `failed` correctly. `failed` with `note: "host restarted"` now means it left no code: it was killed, or predates this. `timeout_s` is enforced by the host that started the job and, if that has gone, by the next `runs_status` or `runs_list`; `runs_status` echoes it as `timeout_s` when one was set.
 
 **A crash can exit 0.** Kit's shutdown can hide an uncaught exception: seen on Lab 2.3.2 with an unknown task. A job that exits 0 with a traceback at the end of stderr reports `failed` with a note.
 One exception: a `train` job whose run folder already has a checkpoint still reports `succeeded`, so check its log and iteration count if it stopped early.
@@ -230,9 +230,9 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `device` | string | no | `null` | Sets `CUDA_VISIBLE_DEVICES` when not `cpu`. |
   | `headless` | boolean | no | `true` | No window. Normally `--viz none`; `--video` selects Kit with child-only `HEADLESS=1`. `false` selects Kit with `HEADLESS=0`. |
   | `checkpoint` | string | no | `null` | Path to resume from (must be under allowed roots). |
-  | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. `isaaclab__install_info`'s `rl_libraries` lists the installed ones. One that isn't installed fails after launch. |
+  | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. Before launching, the tool runs `isaaclab__install_info`'s `rl_libraries` check in the same interpreter and refuses a library that is not importable there, naming the installed ones. If that check cannot run, the launch is not blocked. |
   | `extra_args` | array[string] | no | `null` | Validated flags/Hydra overrides. |
-  | `timeout_s` | number | no | `null` | The host that started the job kills its process group after this many seconds. If that host has gone, the job runs on until the next `runs_status` or `runs_list`. |
+  | `timeout_s` | number | no | `null` | The host that started the job kills its process group after this many seconds. If that host has gone, the job runs on until the next `runs_status` or `runs_list`, and `runs_status` echoes it. |
   | `allow_concurrent` | boolean | no | `false` | Override the job-vs-job guard. |
   | `allow_concurrent_gpu` | boolean | no | `false` | Override the Kit-bridge (GPU) guard. |
 - Returns on success: `{job_id, log_dir, command}`. A guard refusal includes `error` and `hint`, along with `running_job_id`/`running_pid` (job guard) or `kit_bridges` (Kit guard). On no install: `{"error": "no Isaac Lab install found", "hint": ...}`.
@@ -341,7 +341,7 @@ verified; an unscoreable script shows up as `episodes: 0` / no score, not a numb
   `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, log_dir, pid}`
   plus `window: {id, title, width, height}` when the job is live and owns a window, and `eval_result`
   (`episodes`, `mean_return`, ...) for an `isaaclab__eval` job whose runner has written it, including after the
-  host that started the job has gone (it is read from `eval_result.json` in the job folder). `last_log_lines` is the last 20 lines of `stdout.log`; a failed job also has `last_stderr_lines`, the last 20 of `stderr.log`, where launch and import failures go. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
+  host that started the job has gone (it is read from `eval_result.json` in the job folder). `last_log_lines` is the last 20 useful lines of `stdout.log` (a progress-bar line keeps only its newest text after a carriage return, and a line that is only a bar is dropped, so skrl and sb3 tails show log text rather than bars); a failed job also has `last_stderr_lines`, the last 20 of `stderr.log`, where launch and import failures go. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
 - Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10"}`
 
 ### `isaaclab__runs_tail`
@@ -493,11 +493,31 @@ before spawning. The job-vs-job guard runs first.
    The refusal includes `error`, `kit_bridges`, and `hint`.
    Pass `allow_concurrent_gpu=true` to start anyway.
 
+Each refusal's own `hint` is returned unchanged: it names the override (`allow_concurrent=true` or `allow_concurrent_gpu=true`), and the window paragraph is only added to a job that actually started.
+
 The two flags are independent: `allow_concurrent` covers other Lab jobs only,
 `allow_concurrent_gpu` covers the Kit app only. The probe is a TCP connect with a 0.3 s
 timeout and does not touch the GPU. The guard is atomic only within one host process; two
 separate host processes can still race. The Kit guard checks the configured port plus advertised portfiles. It does not independently scan port 8767
 unless that port is configured or advertised.
+
+### Checks before anything is launched
+
+Three launch-time mistakes would otherwise surface tens of seconds later, after Kit has loaded,
+so the tools check them first and refuse with a clear message. Each uses a short-lived probe of
+the same Lab interpreter, cached for five minutes; if a probe cannot run, the check is skipped and
+the launch proceeds as before.
+
+- **`rl_library` not installed.** `isaaclab__install_info`'s `rl_libraries` check (importlib finding
+  the package behind each library) is applied to the chosen library, and the refusal names the
+  installed ones.
+- **`--video` without its packages.** MoviePy and imageio-ffmpeg must be importable in the Lab
+  interpreter; the refusal says `pip install moviepy imageio-ffmpeg` for that interpreter.
+- **A task id this checkout does not register.** When no `ISAACLAB_TASK_MODULES` are configured,
+  the ids in the checkout's `source/isaaclab_tasks` text are read (the same source scan
+  `isaaclab__envs_list` uses) and an id whose family is there but whose exact name is not is refused
+  with close matches. An id from an unscanned family is left to Lab, and configured task modules
+  disable the check entirely, because they can register any id.
 
 ## Job model and state
 

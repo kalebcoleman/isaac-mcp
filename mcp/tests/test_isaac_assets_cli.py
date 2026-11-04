@@ -1724,8 +1724,45 @@ def test_pack_build_and_doctor_on_real_usd(cli, capsys, tmp_path, monkeypatch):
     code, out, _ = run(cli, capsys, "pack-build", *args, "--dry-run", "--allow-unresolved")
     assert code == 0 and "would copy" in out and "gone.usda" in out and not (store / "bricksim").exists()
     code, out, _ = run(cli, capsys, "pack-build", *args, "--allow-unresolved")
-    assert code == 0 and "self-contained" in out
+    assert code == 0 and "self-contained" in out and "will not import" in out
     code, out, _ = run(cli, capsys, "doctor", "--pack", "bricksim", "--usd-python", _sys.executable)
-    assert code == 0 and "accepted unresolved: robot/SubUSDs/gone.usda" in out
+    assert code == 1 and "accepted unresolved: robot/SubUSDs/gone.usda" in out
+    assert "assets__import_path refuses" in out
     code, out, _ = run(cli, capsys, "doctor", "--pack", "ur5e-dt", "--entry", "robot/ur5e.usda", "--usd-python", _sys.executable)
     assert code == 1 and "UNRESOLVED: robot/SubUSDs/gone.usda" in out
+
+
+def test_doctor_store_selects_the_pack_folder(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    other = tmp_path / "other"
+    pack = other / "p"
+    pack.mkdir(parents=True)
+    (pack / "a.usd").write_text("#usda 1.0\n")
+
+    code, out, _ = run(cli, capsys, "doctor", "--pack", "p", "--store", str(other), "--pins-only")
+    assert code == 0 and str(pack) in out
+    code, _, err = run(cli, capsys, "doctor", "--pack", "p", "--store", str(store))
+    assert code == 2 and "is in no store" in err
+    code, _, err = run(cli, capsys, "doctor", "--pack", "p", "--store", str(tmp_path / "absent"))
+    assert code == 2 and "not a folder" in err
+
+
+def test_doctor_store_limits_the_plain_check_and_packs_lists_one_store(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    other = tmp_path / "other"
+    (other / "ur5e-dt" / "robot").mkdir(parents=True)
+    (other / "ur5e-dt" / "robot" / "ur5e.usd").write_text("#usda 1.0\n")
+    assert run(cli, capsys, "pin", "--store", str(other), "--pack", "ur5e-dt")[0] == 0
+
+    code, out, _ = run(cli, capsys, "doctor", "--json", "--store", str(other))
+    assert code == 0
+    data = json.loads(out)
+    user_stores = [Path(e["path"]) for e in data["stores"] if e["origin"] == "user"]
+    assert user_stores == [other.resolve()]
+    assert store.resolve() not in user_stores
+    assert any(Path(item["path"]).is_relative_to(other.resolve()) for item in data["assets"]
+               if item.get("path"))
+
+    code, out, _ = run(cli, capsys, "packs", "--json", "--store", str(other))
+    assert code == 0
+    assert [entry["store"] for entry in json.loads(out)["listing"]] == [str(other.resolve())]

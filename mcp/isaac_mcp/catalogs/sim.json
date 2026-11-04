@@ -1050,7 +1050,7 @@
       "owner_id": "generic-sim"
     },
     "sim.viewport.frame": {
-      "description": "Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. framed_path is the prim this call framed; the Stage selection is put back afterwards, so the Stage and Property panels keep their own selection. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -1918,7 +1918,7 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.inspect": {
-      "description": "Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Inspect bounded authored joint limits/drives of an articulation, reporting USD degrees versus stage units. No runtime-state claim. The path may be the articulation root (a joint such as <robot>/root_joint, or the link carrying the articulation API): the joints are then the ones reached through its rigid bodies. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -1932,7 +1932,7 @@
         },
         "path": {
           "type": "string",
-          "description": "Subtree or articulation root.",
+          "description": "Subtree, articulation root (joint or link), or the robot prim.",
           "required": true
         },
         "limit": {
@@ -1968,7 +1968,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Subtree or articulation root."
+          "description": "Subtree, articulation root (joint or link), or the robot prim."
         },
         {
           "name": "limit",

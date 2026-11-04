@@ -225,3 +225,27 @@ def test_search_refresh_and_bounds(broker):
     assert broker.search("", 1)["truncated"]
     with pytest.raises(a.AssetError):
         broker.search("", 0)
+
+
+def test_scan_and_search_skip_a_too_deep_folder_and_name_it(broker):
+    root = broker.roots["demo"][0]
+    deep = root.joinpath(*[f"d{i}" for i in range(1, 10)])
+    deep.mkdir(parents=True)
+    (deep / "deep.usda").write_text("#usda 1.0")
+    skipped = "d1/d2/d3/d4/d5/d6/d7/d8/"
+
+    scan = broker.scan("demo")
+    assert "robot.usda" in [item["relative_path"] for item in scan["files"]]
+    assert scan["depth_limit"] == a.MAX_DEPTH == 8
+    assert scan["skipped_deep"] == [skipped]
+    assert "deeper than 8" in scan["note"]
+
+    found = broker.search("deep")
+    assert found["files"] == []
+    assert found["skipped_deep"] == [dict(root_id="demo", path=skipped)]
+    assert found["depth_limit"] == 8
+
+    # A snapshot copies the whole project, so it still refuses rather than copy it short.
+    with pytest.raises(a.AssetError, match="depth exceeds 8") as caught:
+        broker.snapshot("demo", "robot.usda")
+    assert caught.value.code == "LIMIT" and skipped in str(caught.value)

@@ -225,6 +225,16 @@ cmd_down() {
 }
 
 cmd_status() {
+  if ! command -v docker >/dev/null 2>&1; then
+    err "Docker is not installed or not on PATH, so URSim (backend='ursim') cannot run."
+    err "Use backend='fake' for a sim-only driver, or install Docker to use URSim."
+    exit 4
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    err "Docker is installed but not reachable (is dockerd running, and is this user allowed to use it?), so URSim (backend='ursim') cannot run."
+    err "Use backend='fake' for a sim-only driver, or fix Docker access to use URSim."
+    exit 4
+  fi
   source_ros
   echo "container: $(docker ps --format '{{.Names}} {{.Status}}' | grep "$CONTAINER" || echo 'not running')"
   echo "driver:    $(driver_running && echo running || echo 'not running')"

@@ -504,11 +504,11 @@ Set one revolute/prismatic joint drive target and gains in session layer; stoppe
 
 ### `sim__joints__inspect`
 
-Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim. Requires session_id and stage_id from sim__stage__info.
+Inspect bounded authored joint limits/drives of an articulation, reporting USD degrees versus stage units. No runtime-state claim. The path may be the articulation root (a joint such as <robot>/root_joint, or the link carrying the articulation API): the joints are then the ones reached through its rigid bodies. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Subtree or articulation root.
+- `path` (string, required): Subtree, articulation root (joint or link), or the robot prim.
 - `limit` (integer, default `200`): Visited prim cap 1..200.
 
 ### `sim__joints__state`
@@ -819,7 +819,7 @@ List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree 
 
 ### `sim__viewport__frame`
 
-Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info.
+Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. framed_path is the prim this call framed; the Stage selection is put back afterwards, so the Stage and Property panels keep their own selection. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -835,9 +835,9 @@ Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 14 tools.
 
 ### `assets__dependencies`
 
-Compute USD dependency closures with UsdUtils.ComputeAllDependencies for files under an approved root or a user asset store. Uses a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit. Native USD parsing is NOT sandboxed. Copies nothing.
+Compute dependency closures for files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.
 
-- `paths` (array, required): Absolute USD file paths, 1 to 64.
+- `paths` (array, required): Absolute USD or URDF file paths, 1 to 64.
 
 ### `assets__import_path`
 
@@ -891,7 +891,7 @@ Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD pars
 
 ### `assets__pack_adopt`
 
-Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A different file already there is refused unless force=true; nothing is written inside the repository.
+Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in skipped_symlinks with a note. A different file already there is refused unless force=true; nothing is written inside the repository.
 
 - `pack` (string, required): Pack name: one folder name, no path separators.
 - `source_path` (string, optional): Absolute folder under an approved root. Omit to create an empty pack.
@@ -903,7 +903,7 @@ Create a pack in the primary asset folder, or copy a folder's asset files into i
 
 ### `assets__pack_build`
 
-Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them. Files that differ need force=true. Checks the new pack afterwards.
+Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, so the result says importable=false with import_blockers. Files that differ need force=true. Checks the new pack afterwards.
 
 - `pack` (string, required): Destination pack name: one folder name.
 - `sources` (array, required): USD or URDF files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.
@@ -915,7 +915,7 @@ Copy USD or URDF files and only what they depend on into a pack in the primary a
 
 ### `assets__pack_doctor`
 
-Check a pack without changing it: corrupt, missing and unpinned files, then the USD dependencies of its entry files (unresolved, unreadable, remote, outside the pack). Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false.
+Check a pack without changing it: corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until the file is added: assets__import_path refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.
 
 - `pack` (string, optional): Pack name. Default: the selected pack.
 - `entries` (array, optional): Files in the pack that are its roots. Default: recorded in the pack, or the twin's known names for ur5e-dt.
@@ -950,7 +950,7 @@ No arguments.
 
 ### `assets__scan`
 
-Bounded filename-only USD and URDF discovery on the MCP host. No USD parser. Results are untrusted data.
+Bounded filename-only USD and URDF discovery on the MCP host. No USD parser. Results are untrusted data. Folders deeper than eight levels are skipped and named in skipped_deep; the rest of the root is still scanned.
 
 - `root_id` (string, required): Approved root ID, never an absolute path.
 - `offset` (integer, default `0`): Page offset into the sorted bounded scan.
@@ -958,7 +958,7 @@ Bounded filename-only USD and URDF discovery on the MCP host. No USD parser. Res
 
 ### `assets__search`
 
-Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again.
+Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. Folders deeper than eight levels are skipped and named in skipped_deep.
 
 - `query` (string, default `""`): Case-insensitive filename substring <=128 characters.
 - `limit` (integer, default `50`): Maximum results 1..100.

@@ -175,9 +175,13 @@ case "$ACTION" in
       echo "[ur-fake] driver NOT running"
     fi
     echo "--- controllers ---"; _controllers || echo "  (controller_manager not reachable)"
-    echo "--- /joint_states (1 msg) ---"
-    timeout 5 ros2 topic echo --once /joint_states 2>/dev/null | grep -E "name:|position:" | head -3 \
-      || echo "  (no /joint_states)"
+    if _joint_states="$(timeout 5 ros2 topic echo --once /joint_states 2>/dev/null)"; then
+      echo "--- /joint_states (1 msg) ---"
+      printf '%s\n' "$_joint_states" | grep -E "name:|position:" | head -3 || true
+    else
+      echo "--- /joint_states ---"
+      echo "  (no /joint_states)"
+    fi
     ;;
 
   down)

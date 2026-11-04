@@ -177,11 +177,12 @@ def _print_pack_report(report: dict) -> None:
                 print(f"    {rel}")
 
 
-def _doctor_pack(args) -> int:
+def _doctor_pack(args, stores: list[Path] | None = None) -> int:
     pack = args.pack
     manifest = asset_cache.manifest() if pack == asset_cache.PACK else None
     closure = None if args.pins_only else packs.ClosureBackend(args.usd_python)
-    report = packs.doctor_pack(pack, asset_cache.stores(), closure=closure, entries=args.entry, manifest=manifest)
+    report = packs.doctor_pack(pack, stores or asset_cache.stores(), closure=closure, entries=args.entry,
+                               manifest=manifest)
     problems = [p for folder in report["folders"] for p in folder["problems"]]
     if args.json:
         print(json.dumps(report, indent=2))
@@ -201,9 +202,21 @@ def _doctor_pack(args) -> int:
     return 0
 
 
+def _store_arg(args, what: str = "asset folder") -> Path | None:
+    """The ``--store`` folder a command names, or None for the resolved stores."""
+    raw = getattr(args, "store", None)
+    if not raw:
+        return None
+    store = Path(raw).expanduser().resolve()
+    if not store.is_dir():
+        raise CliError(f"{what} is not a folder: {store}")
+    return store
+
+
 def cmd_packs(args) -> int:
     pack, source = asset_cache.selected_pack_info()
-    listing = packs.list_packs(asset_cache.stores())
+    store = _store_arg(args)
+    listing = packs.list_packs([store] if store else asset_cache.stores())
     if args.json:
         print(json.dumps(dict(selected_pack=pack, pack_source=source, listing=listing), indent=2))
         return 0
@@ -267,8 +280,12 @@ def cmd_pack_build(args) -> int:
 
 
 def cmd_doctor(args) -> int:
+    store = _store_arg(args)
     if args.pack:
-        return _doctor_pack(args)
+        return _doctor_pack(args, [store] if store else None)
+    if store is not None:
+        # The plain check follows the same store order as every other command: one asset folder.
+        os.environ[asset_cache.PATH_ENV] = str(store)
     names = list(asset_cache.known_assets())
     for required in args.require or []:
         if required not in names:
@@ -1016,6 +1033,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--local-only", action="store_true", help="fail if any asset resolves remotely"
     )
     doctor.add_argument("--pack", help="check this pack's files and USD dependencies")
+    doctor.add_argument("--store", metavar="DIR",
+                        help="check this asset folder (default: the project and user stores; with --pack, every store)")
     doctor.add_argument("--entry", action="append", metavar="RELPATH",
                         help="with --pack: an entry file (default: from the pack, else the twin's names)")
     doctor.add_argument("--usd-python", metavar="PYTHON",
@@ -1025,6 +1044,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     listing = sub.add_parser("packs", help="list the packs in every store")
     listing.add_argument("--json", action="store_true")
+    listing.add_argument("--store", metavar="DIR", help="list only this asset folder")
     listing.set_defaults(func=cmd_packs)
 
     create = sub.add_parser("create", help="create an empty pack folder")

@@ -308,20 +308,34 @@ def install_many(
     return added, identical
 
 
-def adopt_sources(root: Path, suffixes: set[str]) -> dict[str, Path]:
+def adopt_sources(root: Path, suffixes: set[str], skipped: list | None = None) -> dict[str, Path]:
+    """Every asset file below *root*, never following a symlink.
+
+    A symbolic link is not copied, and is named in *skipped* when the caller passes a list: a source
+    folder silently missing part of its tree would produce a pack that is not what it looks like.
+    """
     found: dict[str, Path] = {}
     for current, dirs, files in os.walk(root, followlinks=False):
+        here = Path(current)
+        for name in sorted(dirs):
+            if (here / name).is_symlink() and skipped is not None:
+                skipped.append((here / name).relative_to(root).as_posix() + "/")
         dirs[:] = sorted(d for d in dirs if d not in ADOPT_SKIP_DIRS and not d.startswith(".")
-                         and not (Path(current) / d).is_symlink())
+                         and not (here / d).is_symlink())
         for name in files:
-            path = Path(current) / name
-            if path.suffix.lower() not in suffixes or path.is_symlink() or not path.is_file():
+            path = here / name
+            rel = path.relative_to(root).as_posix()
+            if path.is_symlink():
+                if skipped is not None:
+                    skipped.append(rel)
                 continue
-            found[clean_relpath(path.relative_to(root).as_posix(), "file name")] = path
+            if path.suffix.lower() not in suffixes or not path.is_file():
+                continue
+            found[clean_relpath(rel, "file name")] = path
     return found
 
 
-def named_sources(root: Path, names: list[str], suffixes: set[str]) -> dict[str, Path]:
+def named_sources(root: Path, names: list[str], suffixes: set[str], skipped: list | None = None) -> dict[str, Path]:
     """Only these files or folders, relative to *root*. A named file is copied whatever its type."""
     found: dict[str, Path] = {}
     for raw in names:
@@ -330,7 +344,7 @@ def named_sources(root: Path, names: list[str], suffixes: set[str]) -> dict[str,
         if path.is_symlink() or any(_is_symlink_part(root, rel)):
             raise PackError(f"refusing symlink: {rel}", "UNSAFE_ENTRY")
         if path.is_dir():
-            found.update({f"{rel}/{k}": v for k, v in adopt_sources(path, suffixes).items()})
+            found.update({f"{rel}/{k}": v for k, v in adopt_sources(path, suffixes, skipped).items()})
         elif path.is_file():
             found[rel] = path
         else:
@@ -834,8 +848,15 @@ def build_pack(
         verified.pop("used", None)
     except PackError as exc:
         verified = dict(checked=False, reason=str(exc))
+    blockers = _import_blockers(verified)
+    if blockers:
+        notes.append(
+            "This pack will not import with assets__import_path until these files are added: "
+            + ", ".join(blockers[:10]) + (" ..." if len(blockers) > 10 else "")
+        )
     return {**report, "dry_run": False, "copied": added, "identical": identical, "pack_dir": str(pack_folder),
-            "verified": verified}
+            "verified": verified, "importable": None if blockers is None else not blockers,
+            **({"import_blockers": blockers} if blockers else {})}
 
 
 def _accepted_name(reference: str, base_of: dict) -> str:
@@ -845,6 +866,20 @@ def _accepted_name(reference: str, base_of: dict) -> str:
         if rel is not None:
             return rel
     return reference
+
+
+def _import_blockers(verified: dict) -> list[str] | None:
+    """What would make assets__import_path refuse this pack, or None if the check itself did not run."""
+    if not verified.get("checked"):
+        return None
+    labels: set[str] = set()
+    for key in ("missing_entries", "unresolved", "remote", "outside_pack", "unreadable"):
+        for item in verified.get(key, []):
+            label = (item.get("reference") or item.get("file")) if isinstance(item, dict) else item
+            if label:
+                labels.add(str(label))
+    labels.update(verified.get("accepted_unresolved", []))
+    return sorted(labels)
 
 
 UNFOLLOWABLE_NOTE = (
@@ -867,12 +902,17 @@ def check_closure(folder: Path, entries: list[str], closure) -> dict:
     urdf_projects: dict = {}
     missing_textures: list[dict] = []
 
-    def add_unresolved(reference: str, holder: str) -> None:
+    def add_unresolved(reference: str, holder: str, code: str | None = None, reason: str | None = None) -> None:
         rel = _under(Path(plain_path(reference)), root) or reference
         if rel in accepted:
             accepted_found.add(rel)
         else:
-            out["unresolved"].append(dict(reference=rel, referenced_by=_short(holder, root)))
+            item = dict(reference=rel, referenced_by=_short(holder, root))
+            if code:
+                item["code"] = code
+            if reason:
+                item["reason"] = reason
+            out["unresolved"].append(item)
 
     results = run_closure(closure, [str(root / rel) for rel in present], lambda _: root, urdf_projects) if present else []
     for result in results:
@@ -883,7 +923,7 @@ def check_closure(folder: Path, entries: list[str], closure) -> dict:
         runtime.update(result.get("runtime", []))
         for item in result.get("problems", []):
             if item["kind"] == "unresolved":
-                add_unresolved(item["reference"], origin)
+                add_unresolved(item["reference"], origin, item.get("code"), item.get("reason"))
             elif item["kind"] == "remote":
                 out["remote"].append(dict(reference=item["reference"], referenced_by=_short(origin, root)))
             else:
@@ -929,7 +969,7 @@ def check_closure(folder: Path, entries: list[str], closure) -> dict:
     return dict(
         checked=True, entries=entries, missing_entries=missing, used=sorted(used),
         accepted_unresolved=sorted(accepted_found), runtime_materials=sorted(runtime),
-        self_contained=not (missing or any(out.values())), **out,
+        self_contained=not (missing or any(out.values()) or accepted_found), **out,
     )
 
 
@@ -1039,11 +1079,17 @@ def doctor_folder(folder: Path, *, closure=None, entries: list | None = None, ma
     if deps["checked"]:
         problems += [f"{rel}: entry file is missing" for rel in deps["missing_entries"]]
         problems += [f"{u['reference']}: unresolved, referenced by {u['referenced_by']}"
-                     + (f". The pack needs a folder named {u['reference'].split('/')[2]}, or a package.xml naming it"
-                        if u["reference"].startswith("package://") else "") for u in deps["unresolved"]]
+                     + (f". {u['reason']}" if u.get("reason") else "")
+                     + (" The pack needs a folder named " + u["reference"].split("/")[2]
+                        + ", or a package.xml naming it"
+                        if u.get("code") == "PACKAGE_UNRESOLVED" and u["reference"].startswith("package://") else "")
+                     for u in deps["unresolved"]]
         problems += [f"{u['reference']}: unreadable USD" for u in deps["unreadable"]]
         problems += [f"{u['reference']}: remote, referenced by {u['referenced_by']}" for u in deps["remote"]]
         problems += [f"{u['file']}: outside the pack, referenced by {u['referenced_by']}" for u in deps["outside_pack"]]
+    if deps["checked"]:
+        problems += [f"{rel}: accepted as unresolved when the pack was built, so assets__import_path refuses "
+                     "this pack until the file is added" for rel in deps["accepted_unresolved"]]
     problems += [f"{rel}: symlink; an import refuses this pack" for rel in _pack_symlinks(folder)]
     if deps["checked"] and deps["unfollowable"]:
         result["warnings"] = [UNFOLLOWABLE_NOTE]
@@ -1174,7 +1220,22 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
                 raise PackError(
                     f"path is outside approved roots and user stores: {path}", "ROOT_NOT_APPROVED"
                 )
-        return dict(status="ok", backend=closure.name, results=closure([str(p.resolve()) for p in checked]))
+
+        def urdf_folder(path: str) -> Path:
+            """Where a URDF's packages are looked for: its pack, its approved root, or its own folder."""
+            resolved = Path(path).resolve()
+            for store in resolver.user_stores():
+                rel = _under(resolved, store.resolve())
+                if rel and "/" in rel:
+                    return store.resolve() / rel.split("/")[0]
+            try:
+                return _approved_root(resolved, broker).resolve()
+            except PackError:
+                return resolved.parent
+
+        results = run_closure(closure, [str(p.resolve()) for p in checked], urdf_folder)
+        backend = closure.name or ("urdf" if all(urdf_refs.is_urdf(p) for p in checked) else None)
+        return dict(status="ok", backend=backend, results=results)
 
     if canonical == "assets.pack_adopt":
         folder = _write_pack(params.get("pack"), resolver)
@@ -1200,24 +1261,32 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
         extra = params.get("include") or []
         suffixes = ADOPT_SUFFIXES | {("." + str(e).lstrip(".")).lower() for e in extra}
         named = params.get("files")
-        sources = named_sources(real, named, suffixes) if named else adopt_sources(real, suffixes)
+        skipped: list[str] = []
+        sources = named_sources(real, named, suffixes, skipped) if named else adopt_sources(real, suffixes, skipped)
         if len(sources) > MAX_ADOPT_FILES:
             raise PackError(f"more than {MAX_ADOPT_FILES} files; narrow the folder", "LIMIT")
         entries, entries_how = adopted_entries(sources, params.get("entries"))
+        if skipped:
+            notes.append(
+                f"{len(skipped)} symbolic link(s) were not copied (they are never followed): "
+                + ", ".join(sorted(skipped)[:10]) + (" ..." if len(skipped) > 10 else ""))
         if dry_run:
             return dict(status="ok", **context, pack_dir=str(folder), dry_run=True, files=len(sources),
                         planned=sorted(sources)[:MAX_REPORTED], truncated=len(sources) > MAX_REPORTED,
-                        entries=entries, entries_source=entries_how)
+                        entries=entries, entries_source=entries_how,
+                        **({"skipped_symlinks": sorted(skipped)} if skipped else {}))
         if not sources:
             return dict(status="ok", **context, pack_dir=str(folder), added=0, identical=0,
-                        notes=[f"no asset files found in {real}"])
+                        notes=[f"no asset files found in {real}", *notes],
+                        **({"skipped_symlinks": sorted(skipped)} if skipped else {}))
         added, identical = install_many(sources, folder, force, pin=True, notes=notes)
         if entries:
             write_pack_file(folder, entries)
         else:
             notes.append("No entry files recorded: pass entries so assets__pack_doctor can tell what is unused.")
         return dict(status="ok", **context, pack_dir=str(folder), added=added, identical=identical,
-                    entries=entries, entries_source=entries_how, notes=notes)
+                    entries=entries, entries_source=entries_how, notes=notes,
+                    **({"skipped_symlinks": sorted(skipped)} if skipped else {}))
 
     if canonical == "assets.pack_pin":
         folder = _write_pack(params.get("pack") or context["selected_pack"], resolver)

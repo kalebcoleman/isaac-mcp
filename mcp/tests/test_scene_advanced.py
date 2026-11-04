@@ -552,3 +552,22 @@ def test_joints_past_limits_names_only_joints_clearly_outside():
     assert joints_past_limits(names, [0.0, 1.01, 5.0], limits) == []  # a drive can press slightly past one
     assert joints_past_limits(names, [-1.5, 3.0, -0.5], limits) == ["a", "b", "c"]
     assert joints_past_limits(names, [9.0, 9.0, 9.0], None) == []  # can't say on this build
+
+
+LINK_ARTICULATION_USDA = ARM_USDA.replace(
+    'def Xform "base" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}',
+    'def Xform "base" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsArticulationRootAPI"]) {}',
+).replace(
+    'def PhysicsFixedJoint "root_joint" (prepend apiSchemas = ["PhysicsArticulationRootAPI"])',
+    'def PhysicsFixedJoint "root_joint"',
+)
+
+
+def test_inspect_on_a_link_carrying_the_articulation_api_finds_its_joints(advanced, tmp_path):
+    file = tmp_path / "link_root.usda"
+    file.write_text(LINK_ARTICULATION_USDA)
+    stage = advanced.s.stage()
+    stage.GetRootLayer().subLayerPaths.append(str(file))
+    out = advanced.execute("sim.joints.inspect", stage, dict(path="/World/arm/base"))
+    assert [j["path"].rsplit("/", 1)[-1] for j in out["joints"]] == ["root_joint", "j1", "j2"]
+    assert out["scope"] == "articulation" and out["articulation_root"] == "/World/arm/base"

@@ -439,6 +439,17 @@ def _local_asset(relpath):
     return resolve_uri(relpath)
 
 
+def _last_error_line(output: str) -> str:
+    """The last non-empty line of a subprocess's output, for a refusal's message. ANSI colors removed."""
+    import re
+
+    for line in reversed((output or "").splitlines()):
+        cleaned = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
+        if cleaned:
+            return cleaned[:300]
+    return ""
+
+
 def _failure_detail(exc):
     """A missing asset is an expected refusal whose message already names the fix."""
     return {} if isinstance(exc, AssetMissing) else {"traceback": traceback.format_exc()}
@@ -879,6 +890,36 @@ class DigitalTwin(omni.ext.IExt):
                 self._window.deferred_dock_in("Console", ui.DockPolicy.CURRENT_WINDOW_IS_ACTIVE)
             except Exception as exc:
                 carb.log_warn(f"[DigitalTwin] could not dock the twin panel: {exc}")
+            self._focus_panel_soon()
+
+    def _focus_panel_soon(self):
+        """Show and focus the panel once its deferred docking has run.
+
+        A newly created window can open behind another tab of its dock. Focusing it is the same
+        call sim__ui__act action=tab makes, and it is skipped if anything goes wrong: the panel is
+        still usable from the Window menu or by that tool.
+        """
+        async def focus():
+            try:
+                import omni.kit.app
+
+                app = omni.kit.app.get_app()
+                for _ in range(4):
+                    await app.next_update_async()
+                    window = self._window
+                    if window is None or not window.visible:
+                        return
+                    ui.Workspace.show_window("UR5e Digital Twin", True)
+                    window.focus()
+                    if not window.docked or window.is_selected_in_dock():
+                        return
+            except Exception as exc:  # noqa: BLE001 - a hidden tab is cosmetic, never a startup failure
+                carb.log_warn(f"[DigitalTwin] could not focus the twin panel: {exc}")
+
+        try:
+            asyncio.ensure_future(focus())
+        except Exception as exc:  # noqa: BLE001
+            carb.log_warn(f"[DigitalTwin] could not schedule the twin panel focus: {exc}")
 
     def _attach_bridge(self):
         try:
@@ -5098,10 +5139,11 @@ class DigitalTwin(omni.ext.IExt):
         print(f"[randomize_single] Placed '{object_name}' at world ({pose['position'][0]:.3f}, {pose['position'][1]:.3f}, {pose['position'][2]:.4f}), yaw={pose['yaw_deg']:.1f}°")
 
     def set_object_pose(self, object_name, position, orientation=None, yaw_deg=None, folder_path="/World/Objects"):
-        """Teleport an object to an EXACT world pose. Mirrors randomize_single_object's apply path
+        """Request an EXACT world pose for an object. Mirrors randomize_single_object's apply path
         (resolve parent-local pose, set xformOp:translate/orient via _set_obj_prim_pose) so the pose
         persists under physics. Orientation precedence: orientation=[w,x,y,z] quat > yaw_deg about z >
-        identity. position is [x,y,z] in METERS (world). Returns the applied world position."""
+        identity. position is [x,y,z] in METERS (world). Returns the requested world position; physics
+        settles the object from there, so read its pose again to see where it ended up."""
         import numpy as np
         stage = omni.usd.get_context().get_stage()
         target_child_path = self._get_prim_path(object_name, folder_path)
@@ -5123,7 +5165,7 @@ class DigitalTwin(omni.ext.IExt):
             quat_wxyz = np.roll(quat_xyzw, 1)
 
         self._set_obj_prim_pose(target_child_path, local_pos, quat_wxyz)
-        print(f"[set_object_pose] '{object_name}' -> world ({target_world[0]:.3f}, {target_world[1]:.3f}, {target_world[2]:.4f})")
+        print(f"[set_object_pose] requested '{object_name}' at world ({target_world[0]:.3f}, {target_world[1]:.3f}, {target_world[2]:.4f})")
         return target_world
 
     def sync_real_poses(self):
@@ -6167,7 +6209,10 @@ class DigitalTwin(omni.ext.IExt):
             world = self.set_object_pose(object_name, position, orientation=orientation, yaw_deg=yaw_deg)
             return {
                 "status": "success",
-                "message": f"Set '{object_name}' to world ({float(world[0]):.3f}, {float(world[1]):.3f}, {float(world[2]):.4f})"
+                "message": f"Requested '{object_name}' at world ({float(world[0]):.3f}, {float(world[1]):.3f}, "
+                           f"{float(world[2]):.4f}); physics settles it from there, so read the pose again to see "
+                           "where it ended up",
+                "requested_world": [float(world[0]), float(world[1]), float(world[2])],
             }
         except Exception as e:
             traceback.print_exc()
@@ -6794,7 +6839,7 @@ class DigitalTwin(omni.ext.IExt):
             }
         return {
             "status": "error",
-            "message": f"{label} exited {proc.returncode}",
+            "message": f"{label} exited {proc.returncode}" + (f": {_last_error_line(output)}" if _last_error_line(output) else ""),
             "output": output,
         }
 
@@ -6806,7 +6851,12 @@ class DigitalTwin(omni.ext.IExt):
                 return {"status": "error", "message": "No pose message received on /objects_poses_real within 3 seconds.", **result}
             if not result["updated"]:
                 return {"status": "error", "message": "Received a pose message, but no matching scene objects were updated.", **result}
-            return {"status": "success", "message": f"Synced {len(result['updated'])} object poses to sim", **result}
+            return {
+                "status": "success",
+                "message": f"Requested {len(result['updated'])} object pose(s) in sim from /objects_poses_real; "
+                           "physics settles them from there, so read the poses again to see where they ended up",
+                **result,
+            }
         except Exception as e:
             carb.log_error(f"Error in sync_real_poses: {e}")
             traceback.print_exc()

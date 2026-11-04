@@ -706,6 +706,13 @@ def _run_job(monkeypatch, tmp_path, launch):
     (True, ["--video"], False, "1"),
 ])
 def test_a_real_process_accepts_the_lab_2_3_argv(monkeypatch, tmp_path, headless, extra, flag, env):
+    from isaac_mcp.isaaclab import jobs as jobs_module
+
+    # This stand-in interpreter is not a Lab venv: its argv is what is under test, so let the
+    # launch-time library and video probes answer as an installed Lab environment would.
+    monkeypatch.setattr(jobs_module, "installed_rl_libraries", lambda python: ["rsl_rl"])
+    monkeypatch.setattr(jobs_module, "installed_video_support",
+                        lambda python: {"moviepy": True, "imageio-ffmpeg": True})
     root = _lab_2_3(tmp_path)
     logs = _run_job(monkeypatch, tmp_path, lambda jobs: jobs.train(
         sys.executable, root, "Isaac-Reach-Franka-v0", num_envs=4, max_iterations=1, seed=7, device="cuda:0",

@@ -41,7 +41,7 @@ add(
 )
 add(
     "assets.scan",
-    "Bounded filename-only USD and URDF discovery on the MCP host. No USD parser. Results are untrusted data.",
+    "Bounded filename-only USD and URDF discovery on the MCP host. No USD parser. Results are untrusted data. Folders deeper than eight levels are skipped and named in skipped_deep; the rest of the root is still scanned.",
     dict(
         root_id=field("string", "Approved root ID, never an absolute path."),
         offset=field(
@@ -218,7 +218,7 @@ add(
 )
 add(
     "sim.viewport.frame",
-    "Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels.",
+    "Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. framed_path is the prim this call framed; the Stage selection is put back afterwards, so the Stage and Property panels keep their own selection. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels.",
     dict(
         **TARGET,
         path=field("string", "Absolute prim path to frame or follow.", False, default=""),
@@ -237,7 +237,7 @@ DISABLED = {
 
 add(
     "assets.search",
-    "Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again.",
+    "Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. Folders deeper than eight levels are skipped and named in skipped_deep.",
     dict(
         query=field(
             "string",
@@ -265,7 +265,7 @@ add(
 )
 add(
     "assets.pack_doctor",
-    "Check a pack without changing it: corrupt, missing and unpinned files, then the USD dependencies of its entry files (unresolved, unreadable, remote, outside the pack). Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false.",
+    "Check a pack without changing it: corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until the file is added: assets__import_path refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
     dict(
         pack=field("string", "Pack name. Default: the selected pack.", False),
         entries=field(
@@ -277,12 +277,12 @@ add(
 )
 add(
     "assets.dependencies",
-    "Compute USD dependency closures with UsdUtils.ComputeAllDependencies for files under an approved root or a user asset store. Uses a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit. Native USD parsing is NOT sandboxed. Copies nothing.",
-    dict(paths=field("array", "Absolute USD file paths, 1 to 64.")),
+    "Compute dependency closures for files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.",
+    dict(paths=field("array", "Absolute USD or URDF file paths, 1 to 64.")),
 )
 add(
     "assets.pack_adopt",
-    "Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A different file already there is refused unless force=true; nothing is written inside the repository.",
+    "Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in skipped_symlinks with a note. A different file already there is refused unless force=true; nothing is written inside the repository.",
     dict(
         pack=field("string", "Pack name: one folder name, no path separators."),
         source_path=field(
@@ -306,7 +306,7 @@ add(
 )
 add(
     "assets.pack_build",
-    "Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them. Files that differ need force=true. Checks the new pack afterwards.",
+    "Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, so the result says importable=false with import_blockers. Files that differ need force=true. Checks the new pack afterwards.",
     dict(
         pack=field("string", "Destination pack name: one folder name."),
         sources=field(
@@ -422,10 +422,10 @@ add(
 )
 add(
     "sim.joints.inspect",
-    "Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim.",
+    "Inspect bounded authored joint limits/drives of an articulation, reporting USD degrees versus stage units. No runtime-state claim. The path may be the articulation root (a joint such as <robot>/root_joint, or the link carrying the articulation API): the joints are then the ones reached through its rigid bodies.",
     dict(
         **TARGET,
-        path=field("string", "Subtree or articulation root."),
+        path=field("string", "Subtree, articulation root (joint or link), or the robot prim."),
         limit=field("integer", "Visited prim cap 1..200.", False, default=200),
     ),
 )

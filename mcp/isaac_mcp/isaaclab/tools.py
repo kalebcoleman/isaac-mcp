@@ -72,6 +72,8 @@ def _launch(fn: Callable[..., Any], **kwargs: Any) -> str:
 
     def run() -> dict:
         out = fn(python=inst["python"], root=inst["isaaclab_root"], **kwargs)
+        if out.get("error") or not out.get("job_id"):
+            return out  # a refusal keeps its own hint, e.g. allow_concurrent=true
         overrides = [arg for arg in kwargs.get("extra_args") or []
                      if isinstance(arg, str) and arg.split('=', 1)[0] in ('--viz', '--visualizer')]
         if overrides:

@@ -232,7 +232,122 @@ def _job_path(job_id: Any) -> Path:
 
 # What Isaac Lab 3.0.0 accepts for --rl_library; its logs are written under logs/<library>/.
 _RL_LIBRARIES = ("rsl_rl", "rl_games", "skrl", "sb3", "rlinf", "torchrl")
+# The importable module behind each library name, as install_info's rl_libraries check uses.
+RL_LIBRARY_MODULES = {"rsl_rl": "rsl_rl", "rl_games": "rl_games", "skrl": "skrl", "sb3": "stable_baselines3"}
 RUN_STATES = ("running", "finished", "all")
+
+# Probes run the Lab interpreter once (a few seconds at most) and are remembered for a while: a
+# package can be installed between launches, but not on every call. A failed probe is remembered
+# too, and every caller treats None as "cannot tell" and lets the job start as before.
+_PROBE_TTL_S = 300.0
+_PROBE_TIMEOUT_S = 20.0
+_probe_cache: dict[tuple[str, str], tuple[float, Any]] = {}
+
+
+def _probe_json(python: str, key: str, code: str, timeout: float = _PROBE_TIMEOUT_S) -> Any:
+    """JSON from a short program in *python*, or None when it cannot be determined."""
+    stamp = time.monotonic()
+    cache_key = (str(python), key)
+    if cache_key in _probe_cache and stamp - _probe_cache[cache_key][0] < _PROBE_TTL_S:
+        return _probe_cache[cache_key][1]
+    env = os.environ.copy()
+    env["OMNI_KIT_ACCEPT_EULA"] = "YES"
+    try:
+        done = subprocess.run(
+            [str(python), "-c", code], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+            timeout=timeout, env=env,
+        )
+        lines = [line for line in (done.stdout or "").splitlines() if line.strip()]
+        value = json.loads(lines[-1]) if done.returncode == 0 and lines else None
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        value = None
+    _probe_cache[cache_key] = (stamp, value)
+    return value
+
+
+def installed_rl_libraries(python: str) -> list[str] | None:
+    """The RL libraries importable in *python*, or None. The same check isaaclab__install_info reports."""
+    code = (
+        "import importlib.util as u, json\n"
+        f"_libs = {RL_LIBRARY_MODULES!r}\n"
+        "print(json.dumps(sorted(k for k, m in _libs.items() if u.find_spec(m))))\n"
+    )
+    value = _probe_json(python, "rl_libraries", code)
+    return value if isinstance(value, list) else None
+
+
+def _require_library_installed(python: str, library: str | None) -> None:
+    """Refuse a library that is not installed, before Kit starts (its import used to fail much later)."""
+    if not library:
+        return
+    installed = installed_rl_libraries(python)
+    if installed is None:
+        return  # cannot tell here: do not block a launch that may work
+    if library not in installed:
+        have = ", ".join(installed) or "none"
+        raise ValueError(
+            f"rl_library {library} is not installed in {python}: the installed libraries are {have}. "
+            f"Install {library} in that environment (Isaac Lab's installation docs list the extra), or choose "
+            f"one of the installed libraries."
+        )
+
+
+_VIDEO_MODULES = {"moviepy": "moviepy", "imageio-ffmpeg": "imageio_ffmpeg"}
+
+
+def installed_video_support(python: str) -> dict | None:
+    """Which of MoviePy and imageio-ffmpeg are importable in *python*, or None."""
+    code = (
+        "import importlib.util as u, json\n"
+        f"_mods = {_VIDEO_MODULES!r}\n"
+        "print(json.dumps({name: bool(u.find_spec(module)) for name, module in _mods.items()}))\n"
+    )
+    value = _probe_json(python, "video_support", code)
+    return value if isinstance(value, dict) else None
+
+
+def _require_video_support(python: str, extras: list[str]) -> None:
+    """Refuse --video at once when MoviePy or imageio-ffmpeg is missing; it used to fail after launch."""
+    if not any(arg.split("=", 1)[0] == "--video" for arg in extras):
+        return
+    found = installed_video_support(python)
+    if found is None:
+        return  # cannot tell here: do not block a launch that may work
+    missing = [name for name, present in found.items() if not present]
+    if missing:
+        raise ValueError(
+            "--video needs " + " and ".join(missing) + " in the Lab interpreter, which "
+            f"{python} does not have. Install with: {python} -m pip install moviepy imageio-ffmpeg, "
+            "or drop --video and use isaaclab__runs_status's window with a screen recording."
+        )
+
+
+def _require_known_task(root: Any, task: str, modules: list[str]) -> None:
+    """Refuse an Isaac-*-vN id the checkout's own source does not register, before the ~50 s launch.
+
+    The scan is only source text (isaaclab__envs_list uses it too). A configured task module can
+    register any id, so nothing is refused when one is set; and an id whose family is not in the
+    scan at all could still be registered another way, so it is left to Lab to decide.
+    """
+    if modules:
+        return
+    try:
+        scanned = _install.scan_task_ids(root)
+    except OSError:
+        return
+    if not scanned or task in scanned:
+        return
+    family = re.sub(r"-v\d+$", "", task)
+    related = [known for known in scanned if re.sub(r"-v\d+$", "", known) == family]
+    if not related:
+        return
+    import difflib
+
+    matches = difflib.get_close_matches(task, scanned, n=5, cutoff=0.6) or related[:5]
+    raise ValueError(
+        f"{task} is not a task id this Isaac Lab checkout registers. Close matches: {', '.join(matches)}. "
+        "isaaclab__envs_list lists the ids (Isaac Lab 3 often has no -v0). Nothing was started."
+    )
 
 
 def _per_library(root: Any) -> list[str] | None:
@@ -428,7 +543,7 @@ def _concurrency_guard() -> dict[str, Any] | None:
         "running_pid": pid,
         "hint": (
             "wait for it to finish, cancel it with isaaclab__runs_cancel, "
-            "or pass allow_concurrent=True to start anyway"
+            "or pass allow_concurrent=true to start anyway"
         ),
     }
 
@@ -479,7 +594,7 @@ def _kit_bridge_guard() -> dict[str, Any] | None:
         "error": f"a Kit bridge (Isaac Sim app) is running at {where}; it shares the GPU with this job",
         "kit_bridges": bridges,
         "hint": (
-            "stop the Isaac Sim app first, or pass allow_concurrent_gpu=True to start anyway"
+            "stop the Isaac Sim app first, or pass allow_concurrent_gpu=true to start anyway"
         ),
     }
 
@@ -565,16 +680,40 @@ def _checkpoint_from_log(log_path: Path) -> str | None:
     return None
 
 
+def _progress_bar_only(text: str) -> bool:
+    """A line that is only a progress bar (tqdm, skrl and stable-baselines3 render these)."""
+    line = text.strip()
+    if "|" not in line or not line.endswith("]"):
+        return False
+    return bool(re.search(r"(\d+%|\d+(?:\.\d+)?/\d+(?:\.\d+)?)\s*\[[^\]]*\]\s*$", line))
+
+
 def _tail_file(path: Path, lines: int) -> list[str]:
+    """The last *lines* useful lines of a log.
+
+    A log written with carriage returns (progress bars) keeps only the newest text of each line, and
+    a line that is only a bar is dropped: otherwise skrl and sb3 jobs show nothing but bars.
+    """
     if not path.exists():
         return []
     try:
-        with path.open("r", errors="replace") as f:
-            all_lines = f.readlines()
+        # Read bytes and split on newlines only: a text-mode reader also splits a progress bar's
+        # carriage returns into separate lines, and then its newest text cannot be kept.
+        data = path.read_bytes()
     except Exception:
         return []
-    out = [ln.rstrip("\n") for ln in all_lines[-lines:]]
-    return out
+    all_lines = data.decode("utf-8", errors="replace").split("\n")
+    if all_lines and all_lines[-1] == "":
+        all_lines.pop()  # the newline that ends the file starts no line
+    out = []
+    for raw in reversed(all_lines):
+        text = raw.rsplit("\r", 1)[-1].rstrip()
+        if _progress_bar_only(text):
+            continue
+        out.append(text)
+        if len(out) >= lines:
+            break
+    return list(reversed(out))
 
 
 def _rehydrate() -> None:
@@ -700,6 +839,7 @@ def _start_job_locked(
     allow_concurrent_gpu: bool = False,
     headless: bool | None = None,
     library: str | None = None,
+    rl_library_check: str | None = None,
     eval_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
@@ -713,6 +853,10 @@ def _start_job_locked(
             return blocked
     if extra_validated is None:
         extra_validated = []
+    # Cheap interpreter probes, so a missing library or video encoder refuses now rather than
+    # after Kit has started. Both return without an answer when they cannot tell.
+    _require_library_installed(python, rl_library_check)
+    _require_video_support(python, extra_validated)
     root_path = Path(root).resolve()
     # script selection
     script_rel = "train.py" if kind == "train" else "play.py"
@@ -722,6 +866,7 @@ def _start_job_locked(
                          f"{script_path.relative_to(root_path)}, so no job could start. "
                          f"Expected {_install.EXPECTED_SCRIPTS}.")
     task_modules, task_paths = _install.resolve_task_modules(root_path)
+    _require_known_task(root_path, task, task_modules)
     job_id = _job_id(task)
     jd = jobs_dir() / job_id
     jd.mkdir(parents=True, exist_ok=True)
@@ -840,7 +985,8 @@ def train(
     return _start_job(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-        headless=headless, **({} if libraries is None else {"library": lib}),
+        headless=headless, rl_library_check=lib, extra_validated=extras,
+        **({} if libraries is None else {"library": lib}),
     )
 
 
@@ -884,7 +1030,8 @@ def eval_(
     argv += _crash_upload_args(root, extras)  # after the check: its value looks like a flag
     result = _start_job(python, root, "eval", task, argv, timeout_s=timeout_s,
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-                        headless=headless, eval_options={"num_episodes": num_episodes, "max_steps": max_steps},
+                        headless=headless, rl_library_check=lib, extra_validated=extras,
+                        eval_options={"num_episodes": num_episodes, "max_steps": max_steps},
                         **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
@@ -922,7 +1069,8 @@ def play(
     argv += _crash_upload_args(root, extras)  # after the check: its value looks like a flag
     result = _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-                        headless=headless, **({} if libraries is None else {"library": lib}))
+                        headless=headless, rl_library_check=lib, extra_validated=extras,
+                        **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
 
@@ -1009,6 +1157,8 @@ def runs_status(job_id: str) -> dict[str, Any]:
         "log_dir": data.get("log_dir", str(jd)),
         "pid": data.get("pid"),
     }
+    if data.get("timeout_s") is not None:
+        out["timeout_s"] = data["timeout_s"]
     if data.get("kind") == "eval":
         result = _eval_result(jd)
         if result is not None:
