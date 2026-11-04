@@ -90,7 +90,7 @@ Keep as they are: `run_python`, `use_bridge` with `status`, `sim__ros2__tf_setup
 
 - [ ] Local CI gate passes on the final commit, and GitHub CI is green
 - [ ] Docs match behavior: `AGENTS.md`, tool references, generated arguments, skill, compatibility, verification record
-- [ ] PR description is current
+- [x] PR description is current (rewritten 2026-11-04; old body backed up)
 
 ## Open after the 2026-11-04 push
 
