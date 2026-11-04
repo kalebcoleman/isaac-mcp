@@ -41,13 +41,15 @@ per-tool reference lives in `docs/` ([index](docs/README.md), [every tool's argu
   `scripts/check_machine.sh` is a **6.2-specific** preflight and can run a real CUDA kernel; use the
   version-specific checks for earlier builds. `./verify.sh` changes the UR5e scene and is 6.2-specific.
 
-When saving a scene with native ROS camera render handles, `sim__stage__save` defaults to
+When saving a scene with native ROS camera or LiDAR render handles, `sim__stage__save` defaults to
 `reset_camera_render_handles=false`. An affected save refuses with `SAVE_UNSUPPORTED`, exact
 `properties` and `retry_with`. After inspecting that response, explicitly retry with the flag set
 to `true` only if normalization of those runtime fields in the exported copy is intended. The
 result reports `omitted_runtime_render_properties`; cameras and source/live layers remain intact.
 The flag does not bypass ambiguous, authored, dependent or unavailable-binding refusals, prove
-property authorship, or repair an already-stale opened file. Pause before saving and verify the
+property authorship, or repair an already-stale opened file. This tool's own `IsaacMCP_*` capture products need no flag.
+`sim__stage__open` deactivates stale saved LiDAR products in the session layer, so `/scan` returns; see
+[why a saved LiDAR lost its topic](docs/TOOLS-SCENE.md#saved-lidar-scenes-and-scan). Pause before saving and verify the
 new file in a fresh process. See [save limitations](docs/TOOLS-SCENE.md).
 
 When a physics read or step returns `PHYSICS_STATE_INVALID`, inspect its backend, path and
@@ -104,6 +106,9 @@ tools retain their existing rules. This discovery preference is not a security b
 `ur5e_dt__quick_start*` leaves the timeline playing, and generic edits refuse with `TIMELINE_ACTIVE` until an
 explicit `sim__timeline__control` stop. Joint tools take the articulation root (for the twin, `/World/UR5e/root_joint`,
 reported by `sim__ros2__tf_setup`), not the robot's parent Xform. See the [scene workflow](docs/TOOLS-SCENE.md#a-typical-session).
+
+After reopening a scene, its sensors and prims are not pack-owned: pass `adopt=true` to `sim__lidar__read` or `sim__camera__capture`, and
+`allow_foreign=true` to `sim__prim__delete`, which deactivates rather than removes. See the [scene reference](docs/TOOLS-SCENE.md#reopened-scenes).
 
 Camera capture defaults to a fresh bounded renderer CPU readback. With
 `wait_for_render=false`, it writes the last validated tool-acquired image and reports its

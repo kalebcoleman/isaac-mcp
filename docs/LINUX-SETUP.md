@@ -295,6 +295,9 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
 | `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; for the twin that is `/World/UR5e/root_joint`. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
 | `./verify.sh` stops with `FAILED: checkpoint` | A pre-migration `checkpoints/*.usda` has dead references. Inspect it and move it aside. See [Verification](VERIFICATION.md#live-ur5e-baseline) |
+| `/scan` missing after reopening a saved scene | Open it with `sim__stage__open`, which repairs stale LiDAR products. See [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan) |
+| `refresh_tools` selected another port | It found no bridge on the pinned port and one session this server launched. The result names it; verify with `status` |
+| `status` shows `host.stale: true` | This MCP server predates your `git pull`. Restart the MCP connection |
 | `SAVE_UNSUPPORTED` | Inspect returned properties/retry guidance; pause and follow the explicit normalization contract in [scene tools](TOOLS-SCENE.md) |
 | `TIMELINE_BUSY` or a call stops responding | Preserve logs and identity; do not repeatedly replay Play or assume a client timeout cancels native work. See the known stall in [compatibility](COMPATIBILITY.md) |
 | No display / screenshot fails | Use the actual X11/XWayland display for window tools, or headless sensor capture; neither creates a desktop session |

@@ -71,7 +71,7 @@ so do not use them as an API reference.
 
 ## Evidence
 
-[`docs/evidence/`](evidence/project-scene/README.md) holds dated test records. They describe what was observed at that
+[`docs/evidence/`](evidence/project-scene/README.md) holds dated test records, including the [Lab 3 run 8 record](evidence/lab3-run8-2026-11-03.md). They describe what was observed at that
 time and are not rewritten later, so paths, counts and versions in them can be out of date on purpose.
 
 ## Scripts

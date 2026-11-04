@@ -9,7 +9,7 @@ This page describes behavior and limits. For each tool's arguments and defaults,
 
 ## A typical session
 
-Most tools take the `session_id` and `stage_id` from `sim__stage__info`. Call it first, and again after
+Most tools take the `session_id` and `stage_id` from `sim__stage__info`; `sim__graph__node_types`, `sim__logs__tail` and the `sim__ui__*` tools do not. Call it first, and again after
 anything that replaces the stage. The calls below ran against a live 6.2.0.0 headless PhysX session
 ([record](VERIFICATION.md#documentation-check-2026-11-03)).
 
@@ -225,6 +225,41 @@ so asset-authored transforms survive. Parents must exist. Failure after an appli
 reports unknown effects, and failed creations/imports attempt to remove their new session-layer
 prim. Deletion/clear only touch pack-owned session-layer subtrees; sensors/articulations are protected.
 No generic attribute setter or arbitrary asset-valued entry point is provided. Reloading the pack loses pack ownership and invalidates its session token.
+
+## Saved LiDAR scenes and `/scan`
+
+A flattening save used to write a LiDAR render product's session-only `viewportHandle` into the file. On reopen, `IsaacCreateRenderProduct` reuses that
+product, and Replicator's `attach_hydra_texture` returns early because the attribute exists. No texture is created, the writer never runs and `/scan` is
+not advertised, while `sim__lidar__read` (a separate private product) and `sim__graph__inspect`'s wiring look fine. Deleting only that line from a saved file brought `/scan`
+back, and any flatten-based save does this, including a stock `Stage.Export`.
+
+- **New saves:** a LiDAR handle behaves like a camera's: `SAVE_UNSUPPORTED` with `retry_with`, and `reset_camera_render_handles=true` removes it. A lidar save that used to succeed
+  with a broken file now refuses until retried.
+- **Existing files:** `sim__stage__open` deactivates a stale LiDAR product in the session layer before the first Play and reports `stale_render_products`, so a new product is created.
+  The file on disk is unchanged. Pinned, connected or live products are reported and left alone.
+- **Opened another way** (GUI File > Open, `run_python`): no repair runs. `sim__graph__inspect` reports `stale_handle`, and a save warns in `warnings` and `stale_render_handles`, rather than refusing and losing work.
+- **Without the tools:** rebuild the graph at another width or height before the first Play. Removing the handle after a Play in the same session does not help, because the node has cached the path.
+- **Diagnosing:** `sim__graph__inspect` adds `ros_render_status` per helper, `writer_computes`, `ros_helpers_with_problems` and `ros_publisher_note`. It reports render facts, **not publisher count**, which could not be read reliably from inside Kit. Confirm with `ros2 topic info`.
+
+Stale **camera** handles fail the same way in principle but have no open-time repair, because the camera contract is unchanged. A LiDAR with no geometry in range advertises `/scan` but sent no
+message in testing, and `sim__lidar__read` returns `NOT_READY`. Results are from 6.2.0.0 headless PhysX only; see the [run 8 record](evidence/lab3-run8-2026-11-03.md). 6.0, 6.1 and windowed sessions were not tested.
+
+Saves now accept a bare basename and add `.usda`, and report `graphs` (at most 32), `graph_count` and `graphs_truncated`, so a mislabeled checkpoint shows up. A tool's own `IsaacMCP_*` capture
+product needs no flag and is listed in the usual fields.
+
+## Reopened scenes
+
+Prims and sensors from an opened file are not pack-owned, even ones you made earlier, so guarded tools refuse with `NOT_OWNED` and name the option below in `retry_with`:
+
+- **Reading sensors:** `adopt=true` on `sim__lidar__read` or `sim__camera__capture` creates render resources for the sensor at that exact path. It never happens automatically, because it costs GPU. An adopted sensor stays non-owned, counts toward the eight-sensor limit and is released on stage change. LiDAR frame and accumulation settings that differ are overridden in the session layer and listed in `session_overrides`. Cameras render at width 640. Kit's render product also lands in the in-memory root layer (`root_layer_note`): nothing reaches disk, but a person's File > Save would write it.
+- **Deleting:** `allow_foreign=true` on `sim__prim__delete`. USD cannot remove a root-layer opinion from the session layer, so session-only prims are removed and anything else is **deactivated**. The path stays taken, so recreating there gives `CONFLICT`: use a new path, or open a saved copy, which omits the prim. Reopening the source restores it. World or default prims, articulations, registered-sensor subtrees, Kit runtime prims, instance proxies and single graph nodes still refuse. Source files are never changed.
+
+## Changes from outside this session
+
+Stage opens and closes and timeline play, pause and stop go to the Kit log tagged `[sim-tools]`, and `sim__logs__tail` returns the tagged lines and `scene_events` (the last 32 changes). A tool is credited only when it alone was running. If another tool that could have done it ran within 2 s the source is `unattributed`; "outside" is claimed only when no such tool was active.
+`STALE_TARGET` names the current stage and adds `stage_change`. `TIMELINE_ALREADY_ACTIVE` and `TIMELINE_ACTIVE` name the stop call in `before_retry` and warn that Stop rewinds physics. `MISSING_TARGET` covers direct bridge callers with no IDs. The `assets__*` ID check runs on the host, so it does not get this explanation.
+
+`sim__stage__open`'s `UNSAVED_CHANGES` now compares real content. Kit marks every opened file dirty by rewriting `customLayerData` and its own viewport cameras, which made the guard always fire, so those are ignored. Session-layer edits from tools and real root-layer edits still refuse. Files over 512 MiB keep Kit's dirty flag and can still over-report.
 
 ## Bounds and security limits
 

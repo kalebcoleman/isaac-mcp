@@ -420,6 +420,15 @@ it, move it aside and re-run: `./verify.sh` exports a new one from your current 
 
 ## Last live check
 
+### Lab 3 run 8 fixes (2026-11-03)
+
+Live on 6.2.0.0 headless PhysX. Run 8's own observations, and what it did not exercise, are in the [run 8 record](evidence/lab3-run8-2026-11-03.md).
+
+- `/scan`: save and reopen experiments in new Kits established the cause and verified the fix, with real messages received. See the [explanation](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
+- `UNSAVED_CHANGES`: opening a clean file no longer refuses; a tool edit, an unsaved graph and a root-layer edit all still do.
+- `ISAAC_MCP_ASSET_STRICT=1` with a complete asset folder: Quick Start with the RG2 loaded, and every asset reported `source: store`.
+- Adoption, `allow_foreign` and outside-change reporting were checked with a delayed Kit script standing in for a person. A real GUI click and a real OpenCode client were not.
+
 ### Documentation check (2026-11-03)
 
 Source `d721f91`, Ubuntu 24.04, RTX 5080, Isaac Sim 6.2.0.0, headless PhysX, disposable sessions on port 18766.

@@ -40,6 +40,11 @@ in the [compatibility matrix](COMPATIBILITY.md).
 
 ### 1. Reliability
 
+- [x] `/scan` lost after reopening a saved scene. See [the explanation](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
+- [ ] Repeat the `/scan` fix on 6.0, 6.1 and windowed sessions, and add an open-time repair for stale camera handles if they prove to fail the same way.
+- [ ] Nav2 and Parts G-J of Lab 3 were not attempted in run 8.
+- [ ] Hot reload: when an edit reloads `sim-tools` in a running Kit, it fails with `owner 'generic-sim' is already registered` and the tools disappear from that Kit.
+- [ ] Saved copies can list a removed `IsaacMCP_*` product in `RenderSettings.products` after an adopted LiDAR is deleted. No reopen failure was seen.
 - [x] Make Quick Start work from a clean clone using public files, with lab files [optional and clearly labelled](ASSETS.md#public-files-and-lab-files).
 - [x] Make `./verify.sh` detect a checkpoint with dead asset references up front. See [the message](VERIFICATION.md#live-ur5e-baseline).
 - [ ] Improve the `randomize_single_object` placement configuration without breaking existing defaults; test feasible

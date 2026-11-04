@@ -91,6 +91,15 @@ as the parent; leaving `parentPrim` empty (World) avoided the warning.
 `sim__ros2__tf_setup` builds its own TF graphs and reports the frames; prefer it over hand-built
 graphs unless the lab asks for its own graph.
 
+## Other things labs run into
+
+- The `PoseTree` warning naming a camera can repeat every frame. It is harmless, but it floods the log.
+- A flattened checkpoint is large (about 97 MB for the RAS545 scene), because saves flatten everything.
+- A LiDAR topic missing after reopening a saved scene has a known cause and fix; see [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
+- In the RAS545 starter, the ground plane is at z=-0.75, and it reports `composition_errors: 2` on opening. Neither was a fault in run 8.
+- Lab instructions that assume ROS domain 0 need adapting if another simulator holds it. `Lab3_05` from run 8 authors `domain_id = 1` with the environment option off, so a shell on another domain sees no topics.
+- OpenCode Code Mode has no timers, so agents use shell sleeps, and tool results arrive as JSON inside a `result` string.
+
 ## ROS 2 distro
 
 Isaac Sim 6.2 bundles both Humble and Jazzy bridge libraries. `run.sh` picks Humble on Ubuntu

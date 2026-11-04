@@ -21,11 +21,14 @@ extensions, including HydraTexture; its `.pyi` API descriptions are not an extra
 External system ROS and Isaac Lab are separate and only needed for the workflows that use them.
 The supplied launcher enables its bundled ROS bridge even without an external ROS installation.
 
-For ROS camera saves, `sim__stage__save` defaults `reset_camera_render_handles` to `false`.
+For ROS camera and LiDAR saves, `sim__stage__save` defaults `reset_camera_render_handles` to `false`.
 An affected export reports `SAVE_UNSUPPORTED` with `properties` and `retry_with`; inspect these
 before explicitly opting in to normalization with `true`. Successful exports report exact
 `omitted_runtime_render_properties`. Ambiguous, authored or unavailable bindings still refuse.
 This changes the private export only; it does not repair an already-stale scene or prove authorship.
+Open saved scenes with `sim__stage__open`, which repairs stale LiDAR products so `/scan` returns. Most scene tools need `session_id` and `stage_id`
+from `sim__stage__info`; `sim__graph__node_types` and `sim__logs__tail` do not. `sim__logs__tail` also lists recent stage and timeline changes
+(`scene_events`), including ones from outside this session. If `/scan` is missing, check `ros_render_status` from `sim__graph__inspect` and confirm with `ros2 topic info`.
 For a missing active, concrete camera producer relationship, save restores a runtime target in
 the export only when the observed render product confirms the camera and resolution; see
 `restored_camera_targets`.
