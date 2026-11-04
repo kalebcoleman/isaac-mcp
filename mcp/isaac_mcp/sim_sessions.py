@@ -222,9 +222,28 @@ def _claim_fresh(path: Path, seconds: float = 5.0) -> bool:
         return False
 
 
+@contextmanager
+def _claim_lock(folder: Path):
+    """Serialise claim creation and stale-claim removal across every host sharing the runtime folder, whatever
+    its sessions folder: the inode check alone leaves a gap between looking and unlinking."""
+    if fcntl is None:
+        raise RuntimeError("managed simulator sessions require Linux")
+    fd = os.open(folder / ".claims.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
 def _claim(kind: str, value: int, owner: Mapping) -> Path:
     """Create this process's exclusive claim on one port or ROS domain."""
     folder = _claim_folder()
+    with _claim_lock(folder):
+        return _claim_locked(kind, value, owner, folder)
+
+
+def _claim_locked(kind: str, value: int, owner: Mapping, folder: Path) -> Path:
     path = folder / f"{kind}-{value}.claim"
     payload = json.dumps(dict(owner)).encode()
     for _ in range(_CLAIM_ATTEMPTS):
@@ -299,6 +318,24 @@ def _claims():
         held.append(path)
         return path
 
+    def handover(new_owner: Mapping) -> None:
+        """The simulator now holds what the launch claimed, until it exits: a host that returns while Kit is
+        still starting must not free the port and domain before the bridge advertises them."""
+        for path in held:
+            tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+            try:
+                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(json.dumps(dict(new_owner)).encode())
+                os.replace(tmp, path)
+            except OSError:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+        held.clear()
+
+    take.handover = handover
     try:
         yield take
     finally:
@@ -769,6 +806,7 @@ def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | N
                                    f"inspect {log}: {cleanup}") from exc
             raise
         threading.Thread(target=proc.wait, daemon=True).start()
+        claim.handover({"pid": proc.pid, "start_ticks": identity[1], "boot_id": boot_id})
         return {**_public(record), "managed": True, "state": "starting",
                 # Inherited, and deliberately not an argument: a pack in a store imports without approval.
                 "asset_stores": os.environ.get("ISAAC_MCP_ASSET_PATH") or "default; set ISAAC_MCP_ASSET_PATH in the MCP server's environment",

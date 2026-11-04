@@ -551,3 +551,18 @@ def test_atomic_job_write_does_not_follow_existing_destination_symlink(tmp_path)
     assert other.read_text() == "preserve this file"
     assert not (jd / "job.json").is_symlink()
     assert jobs._read_job(jd) == record
+
+
+def test_orphan_timeout_leaves_a_finished_job_to_settle(tmp_path, monkeypatch):
+    """Review fix: a job that ended cleanly before anyone looked is not recorded as timed out."""
+    d = tmp_path / "job"
+    d.mkdir()
+    (d / jobs.EXIT_FILE).write_text("0")
+    data = {"status": "running", "pid": 2 ** 22 + 12345, "started_at": time.time() - 100, "timeout_s": 5, "command": ["x", "y"]}
+    monkeypatch.setattr(jobs, "_job_alive", lambda _d: False)
+    killed = []
+    monkeypatch.setattr(jobs, "_kill_orphan_group", lambda _d: killed.append(1))
+    jobs._enforce_orphan_timeout("j1", d, data)
+    assert data["status"] == "running" and not killed
+    jobs._settle_orphan(d, data)
+    assert data["status"] == "succeeded" and data["exit_code"] == 0

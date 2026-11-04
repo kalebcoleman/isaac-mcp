@@ -957,7 +957,8 @@ def test_an_omitted_port_and_domain_take_the_first_free_unclaimed_values(setup, 
     assert result["auto_selected"] == ["port", "ros_domain"]
     assert captured["env"]["ISAAC_MCP_PORT"] == "18801" and captured["env"]["ROS_DOMAIN_ID"] == "41"
     assert captured["args"][captured["args"].index("--port") + 1] == "18801"
-    assert not list(Path(sim.client._runtime_dir()).glob("port-18801.claim"))  # released after launch
+    held = json.loads((Path(sim.client._runtime_dir()) / "port-18801.claim").read_text())
+    assert held["pid"] != os.getpid()  # handed to the simulator, so it outlives the launching call
 
 
 def test_an_omitted_port_skips_a_live_session_and_an_advertised_bridge(setup, monkeypatch):
@@ -989,7 +990,7 @@ def test_without_a_range_a_stated_port_and_domain_still_work(setup, runtime, mon
     result = sim._launch(setup, 18766, 197, True, False)
     assert (result["port"], result["ros_domain"]) == (18766, 197)
     assert "auto_selected" not in result
-    assert not list(runtime.glob("*.claim"))
+    assert all(json.loads(p.read_text())["pid"] != os.getpid() for p in runtime.glob("*.claim"))
 
 
 def test_a_stated_port_and_domain_inside_the_range_are_claimed_and_used(setup, monkeypatch):
@@ -1009,3 +1010,21 @@ def test_an_exhausted_range_says_so(setup, monkeypatch):
         sim._launch(setup, headless=True)
     assert caught.value.code == "PORT_RANGE_EXHAUSTED" and "18800-18800" in str(caught.value)
     assert "ISAAC_MCP_PORT_RANGE" in str(caught.value)
+
+
+def test_claims_handed_to_the_simulator_outlive_the_launching_host(runtime):
+    """Review fix: a host that returns while Kit is starting must not free the port before the bridge advertises it."""
+    owner = sim._claim_owner()
+    sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        ticks = sim._process_identity(sleeper.pid)[1]
+        with sim._claims() as claim:
+            claim("port", 18810)
+            claim.handover({"pid": sleeper.pid, "start_ticks": ticks, "boot_id": sim._boot_id()})
+        assert json.loads((runtime / "port-18810.claim").read_text())["pid"] == sleeper.pid
+        with pytest.raises(sim._Refusal):
+            sim._claim("port", 18810, owner)
+    finally:
+        sleeper.kill()
+        sleeper.wait()
+    assert sim._claim("port", 18810, owner)  # simulator gone: stale, so taken

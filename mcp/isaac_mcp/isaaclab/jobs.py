@@ -496,17 +496,37 @@ def _settle_orphan(job_dir: Path, data: dict) -> None:
     _write_job(job_dir, data)
 
 
+def _kill_orphan_group(data: dict) -> None:
+    """SIGKILL the job's group through a pidfd, so a pid reused after the check cannot redirect the signal."""
+    from .. import sim_sessions
+
+    pid = int(data["pid"])
+    try:
+        fd = os.pidfd_open(pid, 0)
+    except (OSError, AttributeError):
+        return  # gone, or no pidfd support: never fall back to a bare killpg
+    try:
+        if not _job_alive(data) or os.getpgid(pid) != pid:
+            return
+        try:
+            signal.pidfd_send_signal(fd, signal.SIGKILL, None, sim_sessions._PIDFD_SIGNAL_PROCESS_GROUP)
+        except OSError:  # a kernel before 6.9 cannot signal a group by pidfd: members first, then the leader
+            sim_sessions._signal_group_members(pid, signal.SIGKILL)
+            signal.pidfd_send_signal(fd, signal.SIGKILL)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def _enforce_orphan_timeout(job_id: str, job_dir: Path, data: dict) -> None:
     """A watchdog dies with its host, so whoever looks next enforces timeout_s."""
     limit, started = data.get("timeout_s"), data.get("started_at")
     if data.get("status") != "running" or job_id in _active or not limit or not started or _now() - float(started) <= float(limit):
         return
-    if _job_alive(data):
-        try:
-            if os.getpgid(int(data["pid"])) == int(data["pid"]):
-                os.killpg(int(data["pid"]), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+    if not _job_alive(data):
+        return  # already gone: _settle_orphan records how it really ended, including a clean finish
+    _kill_orphan_group(data)
     data.update(status="timeout", finished_at=_now())
     _write_job(job_dir, data)
 

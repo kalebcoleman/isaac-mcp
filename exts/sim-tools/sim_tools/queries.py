@@ -9,6 +9,7 @@ import math
 from isaac_mcp.project_assets import refuse
 
 MAX_HITS = 32
+MAX_CAPTURE = 1024  # contact pairs kept per report before filtering by the caller's paths
 MAX_PATHS = 32
 
 
@@ -161,7 +162,7 @@ def _pairs(headers, data, paths, to_path, limit=MAX_HITS):
 
 # The last report PhysX delivered. A subscription is the documented way to receive contact
 # reports; it is passive (no app update, no step) and stores only bounded plain data.
-_LAST_REPORT = {"pairs": [], "reports": 0, "error": None}
+_LAST_REPORT = {"pairs": [], "reports": 0, "error": None, "capped": False}
 _SUBSCRIPTION = None
 _SUBSCRIPTION_ERROR = None
 
@@ -170,7 +171,9 @@ def _receive_contact_report(headers, data):
     try:
         from pxr import PhysicsSchemaTools
 
-        _LAST_REPORT["pairs"] = _pairs(headers, data, None, PhysicsSchemaTools.intToSdfPath)
+        pairs = _pairs(headers, data, None, PhysicsSchemaTools.intToSdfPath, limit=MAX_CAPTURE + 1)
+        _LAST_REPORT["capped"] = len(pairs) > MAX_CAPTURE  # more pairs than kept: a requested body may be missing
+        _LAST_REPORT["pairs"] = pairs[:MAX_CAPTURE]
         _LAST_REPORT["reports"] += 1
         _LAST_REPORT["error"] = None
     except Exception as exc:  # noqa: BLE001 - a physics callback must never raise into Kit
@@ -272,8 +275,8 @@ def contacts(paths, stage, timeline=None):
         )
     result = dict(
         paths=paths,
-        pairs=pairs,
-        truncated=len(pairs) == MAX_HITS,
+        pairs=pairs[:MAX_HITS],
+        truncated=len(pairs) > MAX_HITS or bool(_LAST_REPORT.get("capped")),
         reporting_paths=reporting,
         paths_without_reporting=not_reporting,
         reports_seen=_LAST_REPORT["reports"],

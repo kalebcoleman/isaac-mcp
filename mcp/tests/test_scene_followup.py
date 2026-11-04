@@ -445,3 +445,13 @@ def test_create_rigid_body_enables_contact_reports(scene, monkeypatch):
     stage = scene.stage()
     created = scene.create(stage, "/World/Body", "Cube", rigid=True)
     assert created["physics"]["rigid_body"] is True
+
+
+def test_contact_capture_keeps_pairs_beyond_the_reply_limit():
+    """Review fix: pair 33 of a report is kept, not dropped before the caller's paths are applied."""
+    names = {i: f"/World/B{i}" for i in range(1, 40)}
+    names[100] = "/World/Ground"
+    headers = [SimpleNamespace(type=0, actor0=i, actor1=100, collider0=i, collider1=100,
+                               contact_data_offset=0, num_contact_data=0) for i in range(1, 40)]
+    pairs = queries._pairs(headers, [], None, lambda v: names[v], limit=queries.MAX_CAPTURE + 1)
+    assert len(pairs) == 39 and pairs[-1]["body_a"] == "/World/B39"
