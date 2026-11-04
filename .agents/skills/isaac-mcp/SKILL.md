@@ -118,7 +118,7 @@ The bridge CLI is `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client` fr
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__quick_start` for a new scene, or
    `sim__stage__info` on an existing one, and `assets__roots` for your own files. The
-   55-tool pack (41 `sim`, 14 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   62-tool pack (48 `sim`, 14 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan`, `assets__search` and `assets__packs` / `assets__pack_*` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -354,5 +354,5 @@ worked while locked on GNOME.
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 55 generic tools: 41 `sim` and 14 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 62 generic tools: 48 `sim` and 14 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.

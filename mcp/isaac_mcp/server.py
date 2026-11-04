@@ -668,7 +668,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 schema = {"anyOf": variants, "description": spec["description"]}
                 annotation = Annotated[str, PlainValidator(lambda value: value), WithJsonSchema(schema)]
             elif f["kind"] == "array":
-                strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames"}
+                strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames", "paths"}
                            or (canonical == "sim.ui.act" and f["name"] == "keys")
                            or canonical in _PACK_TOOLS)  # every array in these tools holds paths or names
                 annotation = list[str] if strings else list[float]
@@ -955,7 +955,7 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
     if canonical in CATALOG_HINTS:
         options["annotations"] = ToolAnnotations(**CATALOG_HINTS[canonical])
     if canonical in REGISTRY:
-        read_only = canonical in {"assets.roots", "assets.scan", "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.physics.inspect", "sim.body.state", "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "assets.search", "assets.packs", "assets.pack_doctor", "assets.dependencies", "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find"}
+        read_only = canonical in {"assets.roots", "assets.scan", "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.prim.bounds", "sim.prim.measure", "sim.camera.list", "sim.physics.inspect", "sim.physics.raycast", "sim.physics.contacts", "sim.body.state", "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "sim.logs.mark", "sim.logs.summary", "assets.search", "assets.packs", "assets.pack_doctor", "assets.dependencies", "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find"}
         options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.ui.act", "sim.stage.open", "sim.quick_start", "sim.graph.build", "assets.pack_adopt", "assets.pack_pin", "assets.pack_build"},
                                                  idempotentHint=read_only, openWorldHint=canonical.startswith(("assets.", "sim.controller.")))
     server.tool(**options)(handler)
