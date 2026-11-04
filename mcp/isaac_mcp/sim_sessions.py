@@ -407,7 +407,7 @@ def _group_members(leader: int) -> list[int]:
                 fields = stream.read().rsplit(b")", 1)[1].split()
         except (OSError, IndexError):
             continue
-        if len(fields) > 2 and fields[2] == str(leader).encode():
+        if len(fields) > 2 and fields[2] == str(leader).encode() and fields[0] != b"Z":  # a zombie holds nothing
             found.append(int(name))
     return found
 
