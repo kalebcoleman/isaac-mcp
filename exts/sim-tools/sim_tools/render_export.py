@@ -9,8 +9,6 @@ import re
 from pxr import Sdf, Usd, UsdGeom
 from isaac_mcp.project_assets import refuse
 
-from .compat import composition_errors
-
 PRODUCER = "isaacsim.core.nodes.IsaacCreateRenderProduct"
 _ROS_NAMESPACES = ("isaacsim.ros2.bridge.", "isaacsim.ros2.nodes.")
 CAMERA_HELPERS = {ns + name for ns in _ROS_NAMESPACES for name in ("ROS2CameraHelper", "ROS2CameraInfoHelper")}
@@ -229,6 +227,8 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
             native[0], properties=native,
             retry_with={"reset_camera_render_handles": True})
     # A masked/unloaded composition cannot establish that all dependencies were inspected.
+    from .compat import composition_errors
+
     blocking = blocking_composition_errors(composition_errors(stage))
     if (stage.GetPopulationMask().GetPaths() != [Sdf.Path.absoluteRootPath]
             or blocking
