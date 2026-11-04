@@ -106,9 +106,9 @@ add(
 )
 add(
     "sim.quick_start",
-    "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns the new session_id and stage_id, paths, each asset's source and next steps. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
+    "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
     dict(
-        robot=field("string", "Optional robot: a public name (ur5e, from your local copy first, then NVIDIA, honoring strict mode), <pack>/<file.usd> from an asset pack in your asset folder, or an absolute path under an approved root (same rules as assets__import_path). A file found only through a project file's asset_path is refused.", False),
+        robot=field("string", "Optional robot: a public name, <pack>/<file.usd> from your asset folder, or an absolute path under an approved root (same rules as assets__import_path). Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (from this simulator's own assets root). A file found only through a project file's asset_path is refused.", False),
         ros=field("boolean", "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.", False, default=False),
         up_axis=field("string", "The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass.", False, default="Z", enum=["Z", "Y"]),
         meters_per_unit=field("number", "The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match.", False, default=1.0),
@@ -482,7 +482,7 @@ add(
 )
 add(
     "sim.lidar.create",
-    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. Config assets come from Isaac's assets root; an unknown name lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.",
+    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. Config assets come from Isaac's assets root; an unknown name lists the valid ones. Returns prim type, sensor path, rates and ros2_scan_graph for /scan. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.",
     dict(
         **TARGET,
         path=field("string", "Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist."),
@@ -636,7 +636,7 @@ add(
 
 add(
     "sim.joints.command",
-    "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure.",
+    "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure. Targets are runtime only and are lost on Stop; to keep one, use sim__joints__drive.",
     dict(
         **TARGET,
         path=field("string", "Exact initialized articulation root path."),

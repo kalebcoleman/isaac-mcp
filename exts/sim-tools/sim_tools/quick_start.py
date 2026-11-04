@@ -17,9 +17,11 @@ import re
 from isaac_mcp.project_assets import AssetError, refuse
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics
 
+from .public_robots import NVIDIA_ROBOTS
 from .stage_open import KIT_DEFAULT_ROOTS, SUFFIXES, stage_has_unsaved_work
 
-# Name -> (file in the twin's pack, prim name). Only robots the asset manifest can fetch from NVIDIA.
+# Name -> (file in the twin's pack, prim name): the local copy wins, then NVIDIA. NVIDIA_ROBOTS come from the
+# running build's own assets root instead.
 PUBLIC_ROBOTS = {"ur5e": ("robot/ur5e.usd", "UR5e")}
 PUBLIC_PACK = "ur5e-dt"
 WORLD, GROUND, PHYSICS_SCENE = "/World", "/World/GroundPlane", "/World/PhysicsScene"
@@ -63,7 +65,10 @@ def resolve_robot(robot, snapshot_id=None):
     if robot in PUBLIC_ROBOTS:
         relpath, name = PUBLIC_ROBOTS[robot]
         return _resolved(relpath, PUBLIC_PACK, f"The {robot} robot ({relpath})", name)
-    known = ", ".join(sorted(PUBLIC_ROBOTS))
+    known = ", ".join(sorted({*PUBLIC_ROBOTS, *NVIDIA_ROBOTS}))
+    if isinstance(robot, str) and "://" in robot:
+        refuse("INVALID_VALUE", f"robot {robot!r} is a URL, and this tool does not load URLs. Public names: {known}. For your own "
+               "file: <pack>/<file.usd>, or an absolute path under an approved root. Nothing was changed.")
     if not isinstance(robot, str) or not robot.strip():
         refuse("INVALID_VALUE", f"robot: a public name ({known}), <pack>/<file.usd> or an absolute path under an approved root.")
     if os.path.isabs(os.path.expanduser(robot)):
@@ -230,7 +235,7 @@ def expand_visuals(stage, root_path):
     return changed
 
 
-def next_steps(ids, robot_path, root, play):
+def next_steps(ids, robot_path, root, play, wheels=None):
     ids_text = f'session_id="{ids["session_id"]}", stage_id="{ids["stage_id"]}"'
     steps = []
     if not play:
@@ -242,6 +247,14 @@ def next_steps(ids, robot_path, root, play):
             f"Move: sim__joints__command with path=\"{root}\" and one position per joint, in radians.",
             "Exact steps: pause with sim__timeline__control, then sim__simulation__step.",
             f"ROS 2 TF and joint states: sim__ros2__tf_setup with robot=\"{robot_path}\" on a stopped timeline.",
+        ]
+    if wheels:
+        steps = [step for step in steps if not step.startswith(("A robot starts", "Move:"))]
+        steps += [
+            "Drive from ROS 2: on a stopped timeline, pass robot.cmd_vel_graph to sim__graph__build, then Play and publish "
+            "geometry_msgs/Twist on /cmd_vel.",
+            f"For a wheeled base, sim__ros2__tf_setup takes base=\"mobile\", world_frame=\"\" and base_link=\"{wheels['base_link']}\" "
+            "with localization, which publishes map->odom. Use Quick Start's ground as the floor: see docs/ROS2-RVIZ.md.",
         ]
     steps += [
         f"Look: sim__camera__capture with path=\"{CAMERA}\", filename=\"scene.png\", adopt=true, then read the file.",
@@ -257,6 +270,8 @@ async def run(ext, args):
 
     from .compat import composition_errors
     from .core import stop_call
+    from .public_robots import assets_root, client_stat, locate
+    from .ros2 import cmd_vel_graph_args
     from .ros2 import _articulation_roots
     from .ros2 import setup as ros_setup
 
@@ -277,7 +292,12 @@ async def run(ext, args):
         refuse("TIMELINE_ACTIVE", "Stop the timeline first: call sim__timeline__control action=stop, then resend this call.",
                before_retry=stop_call(info["session_id"], info["stage_id"]))
     snapshot = args.get("snapshot_id"), args.get("manifest_sha256")
-    wanted = resolve_robot(robot, snapshot[0]) if robot else None
+    if robot in NVIDIA_ROBOTS:
+        from isaac_mcp import assets
+
+        wanted = await locate(robot, assets_root(), client_stat, offline=assets.resolver(PUBLIC_PACK).offline())
+    else:
+        wanted = resolve_robot(robot, snapshot[0]) if robot else None
     if wanted and wanted.get("snapshot"):
         info = scene.inspect_asset(*snapshot)[2]
         if info["up_axis"] != up_axis or not math.isclose(info["meters_per_unit"], meters_per_unit, rel_tol=1e-9):
@@ -316,7 +336,7 @@ async def run(ext, args):
         wiring="none: no mirror graph, gripper or /joint_states subscriber. For the RISE lab UR5e twin see ur5e_dt__quick_start.",
     )
     owned = [WORLD]
-    root = robot_path = None
+    root = robot_path = wheels = None
     if wanted:
         if wanted.get("snapshot"):
             robot_path = f"{WORLD}/{wanted['name']}"
@@ -334,11 +354,14 @@ async def run(ext, args):
         expanded = expand_visuals(stage, robot_path)
         frame_camera_on(stage, robot_path)
         root = roots[0] if roots else None
+        wheels = wanted.get("wheels")
         result["robot"] = dict(prim=robot_path, articulation_root=root, articulation_roots=roots,
                                expanded_visuals=expanded, composition_errors=len(errors),
                                **({"composition_error_samples": [str(e)[:200] for e in errors[:3]]} if errors else {}),
                                **({} if root else {"note": "No articulation root found, so the joint tools will not work on it."}))
         result["assets"] = wanted["assets"]
+        if wheels and root:
+            result["robot"].update(wheels=wheels, cmd_vel_graph=cmd_vel_graph_args(root, wheels))
         if not units_checked:
             result["robot"]["units_note"] = "The remote file's up axis and units could not be read beforehand; check the result."
     # stage_info first: on a new stage it resets the owned set, and this registration must come after that.
@@ -348,7 +371,8 @@ async def run(ext, args):
     if ros:
         shell = (info.get("ros") or {}).get("shell")
         try:
-            done = ros_setup(scene, stage, dict(robot=robot_path))
+            mobile = dict(base="mobile", world_frame="", base_link=wheels["base_link"]) if wanted.get("wheels") else {}
+            done = ros_setup(scene, stage, dict(robot=robot_path, **mobile))
             result["ros"] = dict(graph=done["graph"], topics=done["topics"], rviz_fixed_frame=done["rviz_fixed_frame"],
                                  clock=done["clock"]["source"], warnings=done["warnings"], shell=shell)
         except AssetError as exc:  # the scene exists: say why ROS is not up, and keep it
@@ -359,5 +383,5 @@ async def run(ext, args):
         for _ in range(4):  # articulations initialize on the frames after Play
             await app.next_update_async()
     result.update(ids, playing=scene.timeline.is_playing(), stopped=scene.timeline.is_stopped(),
-                  next_steps=next_steps(ids, robot_path, root, play))
+                  next_steps=next_steps(ids, robot_path, root, play, wanted.get("wheels") if wanted else None))
     return result

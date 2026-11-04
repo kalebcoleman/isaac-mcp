@@ -176,7 +176,18 @@ async def open_stage(scene, args):
         note="Use the new session_id and stage_id for later sim__* calls. run_python sessions were reset.",
         **stale,
         **loop,
+        **time_code_report(ctx.get_stage()),
     )
+
+
+def time_code_report(stage):
+    """A result field for a root layer with no time-code range, like a hand-written wrapper. Changes nothing."""
+    start, end = stage.GetStartTimeCode(), stage.GetEndTimeCode()
+    if start != end:
+        return {}
+    return dict(time_code_note="This file has no time-code range, so NVIDIA logs \"no usable time-code range\" at Play, and says playback "
+                               "loops over one frame. Measured on 6.2: driving and /scan still worked. Author startTimeCode = 0 and "
+                               "endTimeCode = 1000000 in the file's header, as new stages have.")
 
 
 def _joint_state_loop(stage):

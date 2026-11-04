@@ -33,6 +33,11 @@ while [ "$#" -gt 0 ]; do
       HEADLESS=1
       shift
       ;;
+    --realtime)
+      # Headless Kit otherwise runs as fast as it can, so sim time outruns the wall clock and Nav2 misses its control rate.
+      EXTRA_ARGS+=("--/app/runLoops/main/rateLimitEnabled=true" "--/app/runLoops/main/rateLimitFrequency=60")
+      shift
+      ;;
     --motion-bvh)
       EXTRA_ARGS+=("--/renderer/raytracingMotion/enabled=true"
                    "--/renderer/raytracingMotion/enableHydraEngineMasking=true"
@@ -118,6 +123,7 @@ Configuration:
 Options:
   --headless     Run without visible window (sets UR5E_DT_HEADLESS=1)
   --motion-bvh   Enable RTX sensor motion compensation (increases GPU memory use)
+  --realtime     Cap the app at 60 frames per second, so sim time keeps to wall-clock time (for Nav2 with a headless app)
   --physics-backend physx|newton  Select this new session's engine (default: physx)
   --no-hot-reload  Do not reload extensions when their files change (or set ISAAC_MCP_NO_HOT_RELOAD=1)
   --ur5e-panel   Show the UR5e panel (the tools are always enabled)
