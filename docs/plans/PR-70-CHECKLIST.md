@@ -5,11 +5,11 @@ When PR 70 merges, move what is left to the roadmap and delete this file.
 
 ## Fleet and version testing
 
-- [x] Install Isaac Sim 6.0.0.0, 6.0.0.1 and 6.1.0.0 on the ASU PC
-- [x] ROS 2 on every machine, matching the OS: Humble system install on the ASU PC, Jazzy on this desktop
+- [x] Install Isaac Sim 6.0.0.0, 6.0.0.1 and 6.1.0.0 on the lab PC
+- [x] ROS 2 on every machine, matching the OS: Humble system install on the lab PC, Jazzy on this desktop
 Claude codes and reviews. DeepSeek V4.1 Flash on OpenCode Go scouts and tests, as a deliberately weaker user.
 
-- [x] First round on the ASU PC, reporting to `<home>/isaac-mcp-test-logs/pr70-fleet/`: host and docs, generic scene, windowed, UR5e twin, ROS 2, 6.0.1, Isaac Lab, sessions, then 6.0.0.0, 6.0.0.1 and 6.1.0.0
+- [x] First round on the lab PC, reporting to `<home>/isaac-mcp-test-logs/pr70-fleet/`: host and docs, generic scene, windowed, UR5e twin, ROS 2, 6.0.1, Isaac Lab, sessions, then 6.0.0.0, 6.0.0.1 and 6.1.0.0
 - [ ] Fix what the fleet found (in progress)
 - [x] Re-test round on every build at the pushed commit, including goal-only briefs with no hand-holding
 - [x] Run `validate_scene_equivalents.py` and `validate_scene_clear.py`, which need the Agilebot pack
@@ -100,7 +100,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] Non-finite physics after reopening: a collider overlapping the robot, not save or reopen. Documented
 - [x] `/scan` on 6.0.0.0, and the config LiDAR on 6.1: both work with a target beyond the 1 m near range
 - [x] `start_ros_driver up` on a cold first launch: passes on all five builds. `status` still always exits 0
-- [x] `verify.sh` version gate fails on the standalone layout (needs the ASU retest)
+- [x] `verify.sh` version gate fails on the standalone layout (needs a retest on the lab PC)
 - [x] Host needs `python-xlib` when run from the Isaac venv: documented
 - [x] Selection outline appears in `sim__camera__capture` after `sim__viewport__frame`, windowed: selection restored after framing
 - [x] URDF packs: pack route, `package://` and holding drives, on 6.2 and 5.1 with Panda, UR5, xArm7, TIAGo and Go2. Go2 flips (zero pose outside limits); TIAGo's base does not drive. 6.0 and 6.1 not run

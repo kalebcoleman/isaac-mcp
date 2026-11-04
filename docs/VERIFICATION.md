@@ -57,8 +57,9 @@ current head or declare the candidate merge-ready.
 The [bounded PhysX assessment](evidence/project-scene/PHYSX-STALL-DISPOSITION.md) is complete,
 with **non-reproduction, not a fix**, as its outcome. The
 [compact](evidence/project-scene/RECENT-PHYSX-STALL-BOUNDED-0163-20261102.json) has SHA-256
-`03abcf27844de64873a5cf52236caf3ab502e874ce1e0bfee8afd69db3533f9b`;
+`8d458ac8137daade2738462af4d72b10a74e583d2aaed42401453cfa8486b4ab`;
 all 35 key original record hashes and sizes were verified for this documentation update.
+This copy differs from the draft release's `COMPACT.json` by one location label in its limitations list.
 It separates the original `20f2953` failure from two exact `0163b3f` 6.0.1.0 windowed replays,
 including retained setup/history errors, 132 total calls and 30 scoped assertions. The
 original cause remains unresolved; passing later calls do not erase it or certify readiness.
