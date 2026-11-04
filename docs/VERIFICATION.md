@@ -363,6 +363,8 @@ qualification. Earlier CPU and native evidence retains its own source identity.
 
 ## Live UR5e baseline
 
+These checks need the [complete UR5e assets](ASSETS.md#what-the-ur5e-twin-needs), which a clean clone does not have, so without them
+`verify.sh` fails at `quick_start`. Kit uses the asset folder next to its checkout unless `ISAAC_MCP_ASSET_PATH` says otherwise.
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
 confirm which bridge is selected before running them. This example reuses an already installed Sim 6.2 interpreter;
 set the path for your machine or omit `ISAAC_MCP_PYTHON` to use this repo's `.venv`.
@@ -425,8 +427,10 @@ Source `d721f91`, Ubuntu 24.04, RTX 5080, Isaac Sim 6.2.0.0, headless PhysX, dis
 - Host suite: **1968 passed, 7 skipped**. `check_docs.py`, a fresh-clone `./install.sh --claude-code --print-opencode` using an
   existing Sim and a throwaway `HOME`, and the `client.py` terminal checks all worked.
 - `smoke_tools.py`: **20/20**, with the known `randomize_single_object` warning for its narrow default strip.
-- `./verify.sh` from a clean clone: **all checks passed**; elbow commanded -0.1 rad, achieved -0.0999992, returned to within 3e-9.
+- `./verify.sh` from a clean clone, with Kit using an existing complete asset folder: **all checks passed**; elbow commanded -0.1 rad, achieved -0.0999992, returned to within 3e-9.
   The same run from an older checkout failed in the motion check, which `verify.sh` now reports up front as described above.
+- With a truly empty asset folder and only `fetch_ur5e_assets.py` (15 files, `--check` OK), `ur5e_dt__quick_start` and
+  `ur5e_dt__quick_start_with_workstation` both **failed** with `Asset not available: gripper/husarion_rg2/rg2_gripper_fixed.usd`.
 - `validate_scene_tools.py` over real MCP: passed, 32 calls.
 - Further calls over real MCP returned the expected results: stage tree, save and open, prim create, clone, transform, find and delete,
   graph node types, build and inspect, occupancy map, viewport frame, `sim__ui__find` and a `wait` action, lights, materials, camera create and capture,

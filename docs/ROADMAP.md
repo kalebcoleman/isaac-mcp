@@ -28,7 +28,7 @@ robot; the generic tools work with other robots and scenes. Preserve the UR5e to
 ## Verification and limits
 
 See the [latest live check](VERIFICATION.md#documentation-check-2026-11-03) for exact scope. On 2026-11-03 the host suite
-passed (1968 passed, 7 skipped), and on 6.2.0.0 headless PhysX, `./verify.sh` from a clean clone, `smoke_tools.py` and `validate_scene_tools.py`
+passed (1968 passed, 7 skipped), and on 6.2.0.0 headless PhysX, `./verify.sh` from a clean clone with existing assets, `smoke_tools.py` and `validate_scene_tools.py`
 passed. A successful run is not proof of every physics invariant or of real-robot fidelity.
 
 Known limits: `randomize_single_object` can fail with its fixed narrow placement strip. The GPU guards are per host process, and the
@@ -40,6 +40,9 @@ in the [compatibility matrix](COMPATIBILITY.md).
 
 ### 1. Reliability
 
+- [ ] **Make the UR5e demo work from a clean clone.** The Apache-2.0 and CC BY 4.0 gripper and object files have no download, so
+  Quick Start fails for a new user. Decide how to publish them, for example a release asset pack checked by the fetcher.
+  See [what the twin needs](ASSETS.md#what-the-ur5e-twin-needs).
 - [x] Make `./verify.sh` detect a checkpoint with dead asset references up front. See [the message](VERIFICATION.md#live-ur5e-baseline).
 - [ ] Improve the `randomize_single_object` placement configuration without breaking existing defaults; test feasible
   and infeasible scenes.

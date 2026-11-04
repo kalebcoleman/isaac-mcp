@@ -15,6 +15,20 @@ workstation, gripper, objects, layouts) and how to build up and move your own as
 Where each asset originally comes from, and under which licence, is in
 [asset notices](provenance/ASSETS.md).
 
+## What the UR5e twin needs
+
+Generic scene tools need none of this. Quick Start needs all of the first two rows. On a clean clone only the first can be
+downloaded, so **Quick Start stops with `Asset not available` until you add the others**.
+
+| Files | Source | How to get them |
+|---|---|---|
+| `robot/`, `sensors/` and their materials (15 files, about 26 MB) | NVIDIA | `python3 scripts/fetch_ur5e_assets.py` |
+| `gripper/husarion_rg2/`, `gripper/QuickChanger.usd`, `gripper/configuration/`, `objects/` and the `fmb_assembly*.json` layouts | Apache-2.0 and CC BY 4.0 upstreams, plus project files; see [notices](provenance/ASSETS.md#what-a-public-copy-can-ship) | No download yet. Copy them from a machine that has them, then run `isaac_assets.py add`, or `migrate` from an old checkout. The gripper USD is converted from [husarion/ur_onrobot_rg2_ros](https://github.com/husarion/ur_onrobot_rg2_ros) by `tools/convert_husarion_rg2_urdf.py` and `tools/rewire_husarion_rg2_usd.py` |
+| `workstation/vention.usd` | Your own Vention export; not redistributable | `isaac_assets.py add`. Optional: a placeholder bench is used when it is absent |
+
+`python3 scripts/isaac_assets.py doctor` shows what is found. Publishing the redistributable second row as a download is
+[on the roadmap](ROADMAP.md#1-reliability).
+
 ## Layout
 
 ```text

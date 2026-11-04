@@ -186,7 +186,8 @@ viewport and URDF follow-ups have superseded some early pending checks, while th
 ## Prepare the UR5e and sensor assets
 
 The host connection and `sim__stage__info` do not require a robot or workstation. A UR5e
-Quick Start does need the robot, gripper and object assets. The repository ships **no
+Quick Start does need the robot, gripper and object assets, and **the gripper and object files have no download yet**, so
+Quick Start fails on a clean machine until you [supply them](ASSETS.md#what-the-ur5e-twin-needs). The repository ships **no
 assets**: every asset lives in your local asset folder, `isaac-mcp-assets` next to the
 checkout (see [ASSETS.md](ASSETS.md)). `install.sh` installs packages, not assets. Add your
 own files with `python3 scripts/isaac_assets.py add`, move assets from an older checkout with
@@ -286,6 +287,7 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
+| `Asset not available: gripper/...` from Quick Start | The fetcher does not supply the gripper or objects. See [what the twin needs](ASSETS.md#what-the-ur5e-twin-needs) |
 | `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
 | `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK: `uv run --isolated --project mcp --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |

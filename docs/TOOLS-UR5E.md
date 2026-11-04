@@ -14,7 +14,7 @@ on the shared Kit bridge. It is the implementation reference. Generic tools are 
   (`use_bridge`, `refresh_tools`) and desktop-capture tools
   (`screenshot`, `start_screen_recording`, …) carry **no** `ur5e_dt__` prefix.
 
-Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` before generic scene edits.
+Quick Start needs [assets you must supply](ASSETS.md#what-the-ur5e-twin-needs) and fails on a clean clone without them. It leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` before generic scene edits.
 
 The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 `ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
