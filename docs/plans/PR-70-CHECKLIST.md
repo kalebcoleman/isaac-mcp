@@ -84,7 +84,7 @@ Keep as they are: `run_python`, `use_bridge` with `status`, `sim__ros2__tf_setup
 - [ ] Stale camera handles have no repair on open
 - [ ] A saved copy can list a removed capture product in `RenderSettings.products`
 - [ ] `assets__*` `STALE_TARGET` is checked on the host, so it lacks the outside-change explanation
-- [ ] Kaleb moves aside the stale `checkpoints/*.usda` in the main checkout
+- [x] Stale `checkpoints/*.usda` moved aside in the main checkout, to `~/.cache/isaac-mcp-moved-checkpoints`
 
 ## Before asking for review
 
@@ -106,4 +106,4 @@ Found by the fleet at `e658289`; not fixed yet:
 - [ ] URDF packs: no pack route in `assets__import_urdf` (documented, approve the folder). `package://` text fixed; `sim__joints__state` warns past limits. A real robot through the pack path is still untested
 - [x] Approval helper silently keeps one of several roots: now refuses
 - [x] A client exiting mid-recording leaves a tiny MP4: documented
-- [ ] Kit uploads crash minidumps to NVIDIA by default: decide whether `run.sh` turns this off, and document it
+- [x] Kit uploads crash minidumps to NVIDIA by default: off for `run.sh` and Lab jobs, `ISAAC_MCP_CRASH_UPLOAD=1` opts in

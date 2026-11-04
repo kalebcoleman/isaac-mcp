@@ -59,6 +59,7 @@ Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).
 | `ISAAC_MCP_NO_HOT_RELOAD` | unset | `1` stops Kit reloading extensions when their files change, same as `--no-hot-reload`. `run.sh` passes `--/app/extensions/fsWatcherEnabled=0`. Use it for recorded runs, or when another process edits this checkout. `status` reports `extension.hot_reload`. See [hot reload](TOOLS-SCENE.md#extension-hot-reload). |
 | `UR5E_DT_HEADLESS` | `0` | Set by `run.sh --headless`. |
 | `OMNI_KIT_ACCEPT_EULA` | unset | `YES` accepts NVIDIA's EULA, same as the installer's `--accept-eula`. |
+| `ISAAC_MCP_CRASH_UPLOAD` | unset | `1` keeps Kit's default of uploading a crash's minidump to NVIDIA. Otherwise `run.sh` and Isaac Lab jobs keep dumps on this machine, in Kit's data folder, because a minidump can contain process memory. |
 | `ISAAC_MCP_PRINT_PYTHON` | unset | `1` makes `run.sh` print its chosen interpreter and exit. |
 | `ISAAC_MCP_SCENE_OUTPUT` | a per-process temp directory | Output root for `sim__stage__save`, `sim__camera__capture`, `sim__map__occupancy` and, in a `videos` folder, `ur5e_dt__start_recording`. **Set it to keep results across restarts.** |
 | `ISAAC_MCP_ENABLE_SCENE_SCRIPTS` | unset | `1` enables `sim__controller__*`, which run arbitrary Python. |

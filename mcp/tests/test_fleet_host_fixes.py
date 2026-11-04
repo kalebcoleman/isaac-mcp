@@ -862,3 +862,18 @@ def test_stable_baselines_models_count_as_checkpoints_only_in_its_runs(tmp_path)
     (other / "bundle.zip").write_bytes(b"x")
     assert _latest_checkpoint(sb3).endswith("model.zip") and _latest_checkpoint(other) is None
     assert [c["path"] for c in checkpoints_list(search_roots=[str(tmp_path)])["checkpoints"]] == [str((sb3 / "model.zip").resolve())]
+
+
+def test_lab_jobs_keep_crash_dumps_local_unless_asked(monkeypatch, tmp_path):
+    from isaac_mcp.isaaclab import jobs
+
+    app = tmp_path / "source/isaaclab/isaaclab/app"
+    app.mkdir(parents=True)
+    assert jobs._crash_upload_args(tmp_path, []) == []  # this Lab's launcher can't take it
+    (app / "app_launcher.py").write_text('add_argument("--kit_args")')
+    monkeypatch.delenv("ISAAC_MCP_CRASH_UPLOAD", raising=False)
+    args = jobs._crash_upload_args(tmp_path, [])
+    assert args[0] == "--kit_args" and "--/crashreporter/url= " in args[1]
+    assert jobs._crash_upload_args(tmp_path, ["--kit_args=x"]) == []  # the caller's choice stands
+    monkeypatch.setenv("ISAAC_MCP_CRASH_UPLOAD", "1")
+    assert jobs._crash_upload_args(tmp_path, []) == []

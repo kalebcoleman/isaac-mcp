@@ -203,6 +203,13 @@ case "${ISAAC_MCP_NO_HOT_RELOAD:-0}" in
   1|true|yes) EXT_ARGS+=("--/app/extensions/fsWatcherEnabled=0") ;;
 esac
 
+# Kit uploads a crash's minidump to NVIDIA by default, and a minidump can contain process memory. Keep it on this
+# machine for debugging instead, unless the user opts in.
+case "${ISAAC_MCP_CRASH_UPLOAD:-0}" in
+  1|true|yes) ;;
+  *) EXT_ARGS+=("--/crashreporter/url=" "--/crashreporter/skipOldDumpUpload=true" "--/crashreporter/preserveDump=true") ;;
+esac
+
 exec "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
   "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt --enable sim-tools \
   --enable isaacsim.ros2.bridge "${EXTRA_ARGS[@]}"

@@ -245,6 +245,27 @@ _FLAG_ALTERNATIVES = {"--viz": "Use the headless argument.", "--visualizer": "Us
                       "--rl_library": "Use the rl_library argument."}
 
 
+# Kit uploads a crash's minidump to NVIDIA by default, and a minidump can contain process memory. run.sh turns that
+# off for simulators; jobs do not go through it. ISAAC_MCP_CRASH_UPLOAD=1 leaves Kit's default.
+_NO_CRASH_UPLOAD = "--/crashreporter/url= --/crashreporter/skipOldDumpUpload=true --/crashreporter/preserveDump=true"
+
+
+def _crash_upload_args(root: Any, extras: list[str]) -> list[str]:
+    """--kit_args keeping crash dumps local, when this Lab's launcher takes that flag and the caller did not pass it."""
+    if os.environ.get("ISAAC_MCP_CRASH_UPLOAD", "0").lower() in ("1", "true", "yes"):
+        return []
+    if any(arg.split("=", 1)[0] == "--kit_args" for arg in extras):
+        return []
+    app = Path(root) / "source" / "isaaclab" / "isaaclab" / "app"
+    for launcher in ("sim_launcher.py", "app_launcher.py"):
+        try:
+            if "--kit_args" in (app / launcher).read_text(errors="replace"):
+                return ["--kit_args", _NO_CRASH_UPLOAD]
+        except OSError:
+            continue
+    return []
+
+
 def _require_accepted(root: Any, library: str | None, script: str, argv: list[str]) -> None:
     """Refuse a flag the script does not declare, which it might otherwise hand to Hydra after Kit starts."""
     profile = _install.lab_profile(root)
@@ -737,6 +758,7 @@ def train(
     argv += _visualizer_args(headless, extras) if libraries is None else _per_library_display_args(root, lib, "train", headless, extras)
     argv += extras
     _require_accepted(root, lib if libraries is not None else None, "train", argv)
+    argv += _crash_upload_args(root, extras)  # after the check: its value looks like a flag
     return _start_job(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
@@ -776,6 +798,7 @@ def eval_(
     argv += _visualizer_args(headless, extras) if libraries is None else _per_library_display_args(root, lib, "play", headless, extras)
     argv += extras
     _require_accepted(root, lib if libraries is not None else None, "play", argv)
+    argv += _crash_upload_args(root, extras)  # after the check: its value looks like a flag
     result = _start_job(python, root, "eval", task, argv, timeout_s=timeout_s,
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, **({} if libraries is None else {"library": lib}))
@@ -812,6 +835,7 @@ def play(
     argv += _visualizer_args(headless, extras) if libraries is None else _per_library_display_args(root, lib, "play", headless, extras)
     argv += extras
     _require_accepted(root, lib if libraries is not None else None, "play", argv)
+    argv += _crash_upload_args(root, extras)  # after the check: its value looks like a flag
     result = _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, **({} if libraries is None else {"library": lib}))
