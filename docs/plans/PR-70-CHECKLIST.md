@@ -108,7 +108,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] A client exiting mid-recording leaves a tiny MP4: documented
 - [x] Kit uploads crash minidumps to NVIDIA by default: off for `run.sh` and Lab jobs, `ISAAC_MCP_CRASH_UPLOAD=1` opts in
 - [ ] Git history: Kaleb chose variant B. **Run last**, after the tool work, all builds, Lab setup and the merge. Plan: `~/.cache/isaac-mcp-history-scrub/PLAN.md`
-- [ ] Windowed `sim__graph__show` on 6.0.0.1 logs a Kit `ZeroDivisionError` in its own zoom-to-fit, with the graph still fitted. Kit's code
+- [x] Windowed `sim__graph__show` on 6.0.0.1: the earlier `ZeroDivisionError` did not come back in small and large graphs, layout on and off, docked and undocked
 - [ ] License: `mcp/` and the bridge derive from `omni-kit-mcp`, whose upstream has no license file. Kaleb is asking its author himself; update VENDORING, README and LICENSE when he reports the answer
 - [ ] Public cleanup, **last, with the history rewrite**: Kaleb wants anything that shouldn't be public removed. Take out `docs/plans` (keep a local copy and fix its links), course names and "student run" wording, and the private strings in `scripts/check_private_paths.py`. "Kaleb's work with RISE lab" stays unless he says otherwise. List: memory `history-scrub-pending`
 - [ ] Enable private vulnerability reporting on the repository, which SECURITY.md points to
