@@ -543,3 +543,12 @@ def test_inspect_on_a_subtree_is_unchanged(arm):
     out = advanced.execute("sim.joints.inspect", stage, dict(path="/World/arm/joints"))
     assert {j["path"].rsplit("/", 1)[-1] for j in out["joints"]} == {"j1", "j2", "to_gripper"}
     assert "scope" not in out
+
+
+def test_joints_past_limits_names_only_joints_clearly_outside():
+    from sim_tools.advanced import joints_past_limits
+
+    names, limits = ["a", "b", "c"], [[-1, 1], [-1, 1], [0, float("inf")]]
+    assert joints_past_limits(names, [0.0, 1.01, 5.0], limits) == []  # a drive can press slightly past one
+    assert joints_past_limits(names, [-1.5, 3.0, -0.5], limits) == ["a", "b", "c"]
+    assert joints_past_limits(names, [9.0, 9.0, 9.0], None) == []  # can't say on this build

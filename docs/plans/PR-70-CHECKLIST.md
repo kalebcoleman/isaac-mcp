@@ -96,14 +96,14 @@ Keep as they are: `run_python`, `use_bridge` with `status`, `sim__ros2__tf_setup
 
 Found by the fleet at `e658289`; not fixed yet:
 
-- [x] `sim__map__occupancy` crashes: NVIDIA `getBuffer()` heap overrun on all 6.x builds; the tool no longer calls it. Older-build retest of the crash scenes pending
+- [x] `sim__map__occupancy` crashes: NVIDIA `getBuffer()` heap overrun on all 6.x builds; the tool no longer calls it. 26 clean runs on the older builds
 - [x] Non-finite physics after reopening: a collider overlapping the robot, not save or reopen. Documented
 - [x] `/scan` on 6.0.0.0, and the config LiDAR on 6.1: both work with a target beyond the 1 m near range
 - [ ] `start_ros_driver up` fails on a cold first launch and leaves a healthy driver; `status` always exits 0
 - [x] `verify.sh` version gate fails on the standalone layout (needs the ASU retest)
 - [ ] Host needs `python-xlib` when run from the Isaac venv
-- [ ] Selection outline appears in `sim__camera__capture` after `sim__viewport__frame`, windowed
-- [ ] URDF packs: `assets__import_urdf` has no pack route, the `package://` fix text is incomplete, and an unstable robot reads `status: ok`
-- [ ] Approval helper silently keeps one of several roots
-- [ ] A client exiting mid-recording leaves a tiny MP4
+- [x] Selection outline appears in `sim__camera__capture` after `sim__viewport__frame`, windowed: selection restored after framing
+- [ ] URDF packs: no pack route in `assets__import_urdf` (documented, approve the folder). `package://` text fixed; `sim__joints__state` warns past limits. A real robot through the pack path is still untested
+- [x] Approval helper silently keeps one of several roots: now refuses
+- [x] A client exiting mid-recording leaves a tiny MP4: documented
 - [ ] Kit uploads crash minidumps to NVIDIA by default: decide whether `run.sh` turns this off, and document it

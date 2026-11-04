@@ -74,7 +74,7 @@ def urdf_dependency(entry, value):
         why = "package:// needs ROS package lookup, which this importer does not do" if value.startswith(
             "package:") else str(exc)
         refuse(exc.code, f"{entry} references mesh {value!r}: {why}. Rewrite it relative to the URDF, for "
-               "example meshes/part.stl, and keep the file under the approved root.")
+               "example meshes/part.stl, with the file below the URDF's own folder: . and .. are not allowed.")
 
 
 def units_mismatch_message(asset_up, asset_mpu, stage_up, stage_mpu):
@@ -590,8 +590,14 @@ def main(argv=None):
         description="Approve a trusted project for the local OS user. NOT a sandbox. Set ISAAC_MCP_ASSET_CONFIG for both MCP host and Kit after this command."
     )
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--root-id", help="name for --root; give both, or neither for staging only")
-    parser.add_argument("--root", type=Path)
+    class Once(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            if getattr(namespace, self.dest, None) is not None:
+                parser.error(f"{option_string} can be given once. Run this again to add another root.")
+            setattr(namespace, self.dest, values)
+
+    parser.add_argument("--root-id", action=Once, help="name for --root; give both, or neither for staging only")
+    parser.add_argument("--root", action=Once, type=Path)
     parser.add_argument("--staging", type=Path, help="required when creating the file")
     parser.add_argument(
         "--trust-project",

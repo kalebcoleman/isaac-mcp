@@ -855,7 +855,7 @@ Convert a trusted approved relative URDF project using the installed importer. S
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
-- `relative_path` (string, required): Relative USD file path within that root.
+- `relative_path` (string, required): Relative path of the USD or URDF file within that root.
 - `prim_path` (string, required): New wrapper prim path.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
@@ -868,7 +868,7 @@ Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
-- `relative_path` (string, required): Relative USD file path within that root.
+- `relative_path` (string, required): Relative path of the USD or URDF file within that root.
 - `prim_path` (string, required): New absolute wrapper path; parent must exist.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
@@ -881,7 +881,7 @@ Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD pars
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
-- `relative_path` (string, required): Relative USD file path within that root.
+- `relative_path` (string, required): Relative path of the USD or URDF file within that root.
 
 ### `assets__pack_adopt`
 

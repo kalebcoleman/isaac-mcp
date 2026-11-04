@@ -52,7 +52,7 @@ add(
 )
 ASSET = dict(
     root_id=field("string", "Approved trusted project root ID."),
-    relative_path=field("string", "Relative USD file path within that root."),
+    relative_path=field("string", "Relative path of the USD or URDF file within that root."),
 )
 add(
     "assets.info",

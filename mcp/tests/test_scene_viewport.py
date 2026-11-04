@@ -344,3 +344,10 @@ def test_nonfinite_native_camera_result_is_not_success(scene, view):
     with pytest.raises(AssetError) as error:
         view.call()
     assert error.value.code == "VIEWPORT_FRAME_FAILED"
+
+
+def test_framing_puts_the_selection_back_so_captures_show_no_outline():
+    from sim_tools import viewport as module
+
+    source = Path(module.__file__).read_text(encoding="utf-8")
+    assert source.index("selection.set_selected_prim_paths([selected_path], False)") < source.index("frame_selection(viewport)") < source.index("selection.set_selected_prim_paths(previous, False)")

@@ -1240,3 +1240,15 @@ def test_a_units_mismatch_says_what_to_change():
     assert "upAxis=Y" in message and "upAxis=Z" in message and "metersPerUnit=0.01" in message
     assert 'sim__quick_start with up_axis="Y" and meters_per_unit=0.01' in message and "must match" in message
     assert "run_python" not in message
+
+
+def test_approval_helper_refuses_a_second_root_rather_than_dropping_the_first(tmp_path, capsys):
+    import pytest as _pytest
+
+    from isaac_mcp import project_assets as _assets
+
+    with _pytest.raises(SystemExit):
+        _assets.main(["--config", str(tmp_path / "c.json"), "--trust-project", "--root-id", "a", "--root", str(tmp_path),
+                      "--root-id", "b", "--root", str(tmp_path)])
+    assert "can be given once" in capsys.readouterr().err
+    assert not (tmp_path / "c.json").exists()

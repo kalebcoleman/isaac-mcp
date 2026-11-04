@@ -214,7 +214,7 @@ the rules marked *both*.
   directory, so a cloned repository could name any folder. The resolver still searches it, and
   `assets__pack_doctor` still checks its pins, but the tools do not parse USD there or copy from it
   until you approve that folder as a root.
-- **A pack in a user store can be imported without approving it as a root.** You put it there, and
+- **A USD in a pack in a user store can be imported with `assets__import_path` without approving it as a root.** `assets__import_urdf` takes only an approved root, so a URDF pack still needs its folder approved. You put it there, and
   the pack tools already read it. `assets__import_path` still needs shared staging, refuses a pack
   whose files differ from their pins with `PACK_CORRUPT`, and refuses symlinks inside it.
 - **No overwrite without `force=true`** (*both*). A different file in the pack is a refusal, with

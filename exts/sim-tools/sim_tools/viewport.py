@@ -163,7 +163,9 @@ def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled)
     prim = frame_prim(stage, prim, viewport.time)
     selected_path = str(prim.GetPath())
 
-    context.get_selection().set_selected_prim_paths([selected_path], False)
+    selection = context.get_selection()
+    previous = list(selection.get_selected_prim_paths()) if hasattr(selection, "get_selected_prim_paths") else None
+    selection.set_selected_prim_paths([selected_path], False)
     try:
         # These Kit commands otherwise store undo callbacks which can re-author
         # using a later edit target. Do not enqueue such callbacks for this tool.
@@ -178,6 +180,8 @@ def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled)
             selected_path=selected_path,
             effects="Selection and session camera edits may have occurred. Inspect before retrying; the prior edit target was restored.",
         )
+    if previous is not None:  # framing needs the selection only here; left on, its outline shows in later camera captures
+        selection.set_selected_prim_paths(previous, False)
     if accepted is not True:
         refuse(
             "VIEWPORT_FRAME_FAILED",

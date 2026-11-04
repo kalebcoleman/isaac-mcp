@@ -82,7 +82,7 @@
         },
         "relative_path": {
           "type": "string",
-          "description": "Relative USD file path within that root.",
+          "description": "Relative path of the USD or URDF file within that root.",
           "required": true
         }
       },
@@ -121,7 +121,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Relative USD file path within that root."
+          "description": "Relative path of the USD or URDF file within that root."
         }
       ],
       "namespace": "assets",
@@ -147,7 +147,7 @@
         },
         "relative_path": {
           "type": "string",
-          "description": "Relative USD file path within that root.",
+          "description": "Relative path of the USD or URDF file within that root.",
           "required": true
         },
         "prim_path": {
@@ -218,7 +218,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Relative USD file path within that root."
+          "description": "Relative path of the USD or URDF file within that root."
         },
         {
           "name": "prim_path",
@@ -845,7 +845,7 @@
         },
         "relative_path": {
           "type": "string",
-          "description": "Relative USD file path within that root.",
+          "description": "Relative path of the USD or URDF file within that root.",
           "required": true
         },
         "prim_path": {
@@ -916,7 +916,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Relative USD file path within that root."
+          "description": "Relative path of the USD or URDF file within that root."
         },
         {
           "name": "prim_path",

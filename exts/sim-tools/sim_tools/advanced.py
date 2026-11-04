@@ -38,6 +38,26 @@ def scalar(x, lo=0, hi=1e8):
     return x
 
 
+def runtime_dof_limits(path):
+    """This articulation's [[low, high], ...], or None if this build or backend can't say."""
+    from .physics import view_for
+
+    try:
+        limits = view_for(path, articulation=True).get_dof_limits()
+        limits = limits.numpy() if hasattr(limits, "numpy") else limits
+        return limits.tolist()[0]
+    except (AttributeError, IndexError, TypeError):
+        return None
+
+
+def joints_past_limits(names, positions, limits, slack=0.02):
+    """The DOFs clearly outside their limits. A drive can press slightly past one, so a small slack is allowed."""
+    if not limits or len(limits) != len(positions):
+        return []
+    return [name for name, value, (low, high) in zip(names, positions, limits)
+            if value < low - slack or value > high + slack]
+
+
 # Joint limits are stored as float32, and a radian target is converted to degrees as float64, so a
 # target exactly at a limit can land a few float32 steps past it (RG2: 1.0 rad is 57.29577951 degrees,
 # authored as 57.29577637). About 8 float32 steps, relative to the limit's size.
@@ -771,7 +791,12 @@ class Advanced:
                 warning="Active controllers may replace these targets; inspect runtime joints after stepping.",
             )
         if name == "sim.joints.state":
-            return self.joints(stage, a["path"])
+            state = self.joints(stage, a["path"])
+            past = joints_past_limits(state["names"], state["positions"], runtime_dof_limits(a["path"]))
+            if past:
+                state["warning"] = (f"Past their limits: {', '.join(past)}. Physics is probably unstable, and drive targets "
+                                    "may not be reached. Check overlapping colliders, very small inertias and the timestep.")
+            return state
         if name == "sim.simulation.step":
             if s.timeline.is_stopped() or s.timeline.is_playing():
                 refuse(
