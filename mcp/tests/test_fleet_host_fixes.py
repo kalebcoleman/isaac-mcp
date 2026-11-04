@@ -996,3 +996,51 @@ def test_cancel_survives_a_job_that_exits_between_the_liveness_check_and_the_gro
 
     monkeypatch.setattr(os, "getpgid", gone)
     assert jobs.runs_cancel("job")["cancelled"] is False
+
+
+def test_a_garbled_bridge_reply_disconnects_instead_of_desynchronising():
+    from isaac_mcp import client
+
+    class Sock:
+        def __init__(self):
+            self.chunks = [b'{"status":', b' \xff\n{"status": "success", "result": {}}\n']
+
+        def settimeout(self, _):
+            pass
+
+        def sendall(self, _):
+            pass
+
+        def recv(self, _):
+            return self.chunks.pop(0)
+
+        def close(self):
+            pass
+
+    bridge = client.BridgeClient.__new__(client.BridgeClient)
+    bridge._sock, bridge._buffer, bridge._hold_token = Sock(), b"", None
+    bridge.close = lambda: setattr(bridge, "closed", True)
+    with pytest.raises(client.BridgeError, match="unreadable reply"):
+        bridge._roundtrip("status", {}, 1.0)
+    assert bridge.closed
+
+
+def test_discovery_skips_a_fifo_without_hanging(monkeypatch, tmp_path):
+    import os
+
+    from isaac_mcp import client
+
+    folder = tmp_path / "isaac-mcp"
+    folder.mkdir(mode=0o700)
+    os.mkfifo(folder / "12345-18000.json")
+    monkeypatch.setattr(client, "_runtime_dir", lambda: str(folder))
+    assert client.discover_bridges() == []
+
+
+def test_a_job_record_with_nothing_tying_it_to_its_pid_is_not_alive():
+    import os
+
+    from isaac_mcp.isaaclab import jobs
+
+    assert not jobs._job_alive({"pid": os.getpid()})
+    assert jobs._job_alive({"pid": os.getpid(), "pid_start": jobs._process_start(os.getpid())})

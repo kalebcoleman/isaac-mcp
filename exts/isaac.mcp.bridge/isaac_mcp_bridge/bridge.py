@@ -1912,7 +1912,8 @@ def _write_portfile(host: str, port: int) -> None:
         dial_host = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
         payload = {"pid": os.getpid(), "port": port, "host": dial_host,
                    "started": time.time(), **_app_identity()}
-        with open(_portfile_path(port), "w") as f:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_NONBLOCK
+        with os.fdopen(os.open(_portfile_path(port), flags, 0o600), "w") as f:
             json.dump(payload, f)
         # Cleanup is layered — no single hook covers every exit path:
         #   stop()   -> removes on graceful extension shutdown;
@@ -1951,6 +1952,8 @@ def _sweep_stale_portfiles() -> None:
             continue
         path = os.path.join(_runtime_dir(), name)
         try:
+            if not stat.S_ISREG(os.lstat(path).st_mode):  # opening a FIFO here would hang Kit's startup
+                raise OSError("not a regular file")
             with open(path) as f:
                 info = json.load(f)
             if not _valid_portfile(name, info):

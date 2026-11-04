@@ -323,6 +323,8 @@ def _job_alive(data: dict) -> bool:
         return False
     cmd = data.get("command") or []
     marker = cmd[1] if len(cmd) > 1 else None
+    if marker is None and started is None:
+        return False  # nothing ties this pid to the job, and a yes here can signal a stranger
     try:
         with open(f"/proc/{int(pid)}/cmdline", "rb") as f:
             argv = f.read().split(b"\0")

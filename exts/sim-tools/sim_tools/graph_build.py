@@ -297,11 +297,11 @@ def build(stage, a, stopped):
             return _refuse(SpecError("UNKNOWN_NODE_TYPE", f"No node type {kind!r} is registered. Look it up with "
                                      f"sim__graph__node_types contains={short!r}."))
     existing = stage.GetPrimAtPath(path)
-    replaced = False
+    replaced, backup = False, None
     if existing:
         if not a.get("replace"):
             return _refuse(SpecError("ALREADY_EXISTS", f"{path} exists. Pass replace=true to rebuild it (the old "
-                                     "graph is deleted first), or choose another path."))
+                                     "graph is put back if the rebuild is refused), or choose another path."))
         if existing.GetTypeName() != "OmniGraph":
             return _refuse(SpecError("NOT_A_GRAPH", f"{path} is a {existing.GetTypeName() or 'typeless'} prim, "
                                      "not a graph; refusing to replace it."))
@@ -310,6 +310,9 @@ def build(stage, a, stopped):
             return _refuse(SpecError("NOT_REPLACEABLE", f"{path} comes (partly) from another layer, a reference or a "
                                      "payload, so it cannot be deleted from here. Deactivate it, or build at "
                                      "another path."))
+        backup = Sdf.Layer.CreateAnonymous()  # so a refused rebuild puts the old graph back instead of losing it
+        Sdf.CreatePrimInLayer(backup, path)
+        Sdf.CopySpec(target_layer, path, backup, path)
         stage.RemovePrim(path)
         if stage.GetPrimAtPath(path):
             return _refuse(SpecError("NOT_REPLACEABLE", f"{path} is still defined after removing it from the edit "
@@ -415,14 +418,11 @@ def build(stage, a, stopped):
                 notes.append(f"{node}.{port}: target(s) not on the stage yet: {', '.join(missing)}")
             rel.SetTargets([Sdf.Path(p) for p in paths])
     except SpecError as exc:
-        stage.RemovePrim(path)
-        exc.details["rolled_back"] = True
-        exc.details["replaced_graph_lost"] = replaced
+        exc.details.update(rolled_back=True, replaced_graph_lost=_roll_back(stage, path, backup))
         return _refuse(exc)
     except Exception as exc:  # noqa: BLE001 - OmniGraph errors: roll back, report the message
-        stage.RemovePrim(path)
         return _refuse(SpecError("BUILD_FAILED", f"{type(exc).__name__}: {str(exc)[:400]}", rolled_back=True,
-                                 replaced_graph_lost=replaced))
+                                 replaced_graph_lost=_roll_back(stage, path, backup)))
     unsaved = [f"{node}.{port}" for node, port, _ in spec["values"]
                if stage.GetPrimAtPath(f"{path}/{node}").GetAttribute(port).Get() is None]
     if unsaved:
@@ -436,6 +436,18 @@ def build(stage, a, stopped):
                   next="Play the timeline, then sim__graph__inspect again: nodes that failed to compute list "
                        "their errors there.")
     return result
+
+
+def _roll_back(stage, path, backup):
+    """Remove a failed build and put back the graph it was replacing. True if there was one and it could not be restored."""
+    from pxr import Sdf
+
+    stage.RemovePrim(path)
+    if backup is None:
+        return False
+    layer = stage.GetEditTarget().GetLayer()
+    Sdf.CreatePrimInLayer(layer, path)
+    return not Sdf.CopySpec(backup, path, layer, path)
 
 
 def _refuse(exc):

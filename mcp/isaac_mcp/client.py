@@ -197,6 +197,8 @@ def discover_bridges() -> list:
             continue
         path = os.path.join(_runtime_dir(), name)
         try:
+            if not stat.S_ISREG(os.lstat(path).st_mode):  # opening a FIFO here would hang discovery
+                raise OSError("not a regular file")
             with open(path) as f:
                 info = json.load(f)
             if not _valid_portfile(name, info):
@@ -383,16 +385,23 @@ class BridgeClient:
             request["queue_s"] = queue_budget(timeout, execution_reserve_s)
         frame = json.dumps(request).encode("utf-8") + b"\n"
         self._sock.sendall(frame)
-        while b"\n" not in self._buffer:
+        buffer, scanned = bytearray(self._buffer), 0  # a growing array, searched only where new: large replies stay linear
+        while (end := buffer.find(b"\n", scanned)) < 0:
+            scanned = len(buffer)
             chunk = self._sock.recv(65536)
             if not chunk:
                 raise ConnectionError("bridge closed the connection mid-response")
-            self._buffer += chunk
-            if len(self._buffer) > MAX_REPLY_BYTES:
+            buffer += chunk
+            if len(buffer) > MAX_REPLY_BYTES:
                 self.close()
                 raise BridgeError(f"the bridge sent over {MAX_REPLY_BYTES // (1 << 30)} GiB without ending its reply; disconnected")
-        line, self._buffer = self._buffer.split(b"\n", 1)
-        return _decode(json.loads(line.decode("utf-8")))
+        self._buffer = bytes(buffer[end + 1:])
+        try:
+            reply = json.loads(buffer[:end].decode("utf-8"))
+        except (ValueError, RecursionError) as exc:  # the stream can't be trusted to line up with the next request
+            self.close()
+            raise BridgeError(f"the bridge sent an unreadable reply ({type(exc).__name__}); disconnected") from exc
+        return _decode(reply)
 
     def call(self, tool: str, params: Optional[Dict[str, Any]] = None, *,
              timeout: Optional[float] = None,
