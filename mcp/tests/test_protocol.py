@@ -64,3 +64,12 @@ def test_frame_decoder_drops_an_oversized_frame_and_keeps_going():
     assert [o for o, _ in decoder.feed(b'yyy\n{"a": 1}\n')] == [{"a": 1}]
     assert list(decoder.feed(b'{"b"')) == [] and [o for o, _ in decoder.feed(b': 2}\n')] == [{"b": 2}]
     assert b"NaN" not in encode_frame({"x": float("nan")}) or b'"nan"' in encode_frame({"x": float("nan")})
+
+
+def test_a_deeply_nested_frame_is_refused_and_the_decoder_keeps_working():
+    from isaac_mcp_bridge.protocol import FrameDecoder
+
+    decoder = FrameDecoder()
+    (_, error), = decoder.feed(b"[" * 200000 + b"\n")
+    assert "invalid JSON frame" in error
+    assert [o for o, _ in decoder.feed(b'{"a": 1}\n')] == [{"a": 1}]

@@ -965,3 +965,10 @@ def test_hydra_override_with_two_equals_is_refused_before_launch():
 
     assert jobs._HYDRA_ARG_RE.match("a.b=1")
     assert not jobs._HYDRA_ARG_RE.match("eh=1=2")
+
+
+@pytest.mark.parametrize("pid", [0, 1, -1, -5, "1234", None, True])
+def test_a_job_record_cannot_name_a_process_group_or_everything(pid):
+    from isaac_mcp.isaaclab import jobs
+
+    assert jobs._pid_alive(pid) is False

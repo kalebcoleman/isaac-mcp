@@ -72,6 +72,7 @@ TWIN_PORT_ENV = "UR5E_DT_PORT"
 HOST_ENV = "ISAAC_MCP_HOST"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_TIMEOUT = 300.0
+MAX_REPLY_BYTES = 1 << 30
 
 
 #: THE QUEUE BUDGET. The bridge runs one frame-advancing verb at a time and keeps a request that
@@ -387,6 +388,9 @@ class BridgeClient:
             if not chunk:
                 raise ConnectionError("bridge closed the connection mid-response")
             self._buffer += chunk
+            if len(self._buffer) > MAX_REPLY_BYTES:
+                self.close()
+                raise BridgeError(f"the bridge sent over {MAX_REPLY_BYTES // (1 << 30)} GiB without ending its reply; disconnected")
         line, self._buffer = self._buffer.split(b"\n", 1)
         return _decode(json.loads(line.decode("utf-8")))
 

@@ -427,7 +427,8 @@ def _kit_bridge_guard() -> dict[str, Any] | None:
 
 
 def _pid_alive(pid: int | None) -> bool:
-    if not pid:
+    # A record could name 0, 1 or a negative number, which mean a process group or everything to kill().
+    if type(pid) is not int or pid <= 1:
         return False
     try:
         os.kill(int(pid), 0)

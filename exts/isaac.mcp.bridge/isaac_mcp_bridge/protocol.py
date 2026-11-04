@@ -107,7 +107,7 @@ class FrameDecoder:
                 continue
             try:
                 yield json.loads(line.decode("utf-8")), None
-            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as e:
                 yield None, f"invalid JSON frame: {e}"
         if len(self._buffer) > self._max_frame:
             self._buffer.clear()

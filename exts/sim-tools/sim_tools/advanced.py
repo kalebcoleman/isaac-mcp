@@ -1138,6 +1138,10 @@ class Advanced:
                     # Write beside it, then link: a no-replace publish, so a crash or a failed encode can't leave a
                     # partial image at the name a retry would then be refused for.
                     temp = f".{filename}.{os.getpid()}.tmp"
+                    try:
+                        os.unlink(temp, dir_fd=fd)  # left by a crash under a reused PID
+                    except FileNotFoundError:
+                        pass
                     out = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
                     try:
                         with os.fdopen(out, "wb") as stream:

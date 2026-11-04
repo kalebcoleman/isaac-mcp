@@ -791,7 +791,10 @@ def occupancy_map(scene, stage, a):
     scene.output.mkdir(mode=0o700, parents=True, exist_ok=True)
     def publish(path, data):  # never a partial file at the final name, if Kit dies here
         temp = path.with_name(f".{path.name}.tmp")
-        temp.write_bytes(data)
+        temp.unlink(missing_ok=True)  # left by a crash, or a symlink someone planted
+        descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
         os.replace(temp, path)
 
     publish(pgm_path, pgm)
