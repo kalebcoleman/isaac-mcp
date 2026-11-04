@@ -231,7 +231,7 @@ List registered Isaac Lab task ids (optionally filtered by substring).
 
 ### `isaaclab__eval`
 
-Run a policy checkpoint (headless by default) as a job and return its job_id.
+Run a policy checkpoint (headless by default) as a job and return its job_id. It plays until cancelled or timeout_s and prints no score, so judge learning from training metrics.
 
 - `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
 - `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
@@ -494,9 +494,9 @@ Set one revolute/prismatic joint drive target and gains in session layer; stoppe
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Revolute or prismatic joint path.
+- `path` (string, required): Revolute or prismatic joint prim, e.g. /World/UR5e/joints/elbow_joint; sim__joints__inspect lists them.
 - `target` (number, required): Radians for angular joint, stage units for prismatic.
-- `stiffness` (number, required): Nonnegative USD drive stiffness.
+- `stiffness` (number, required): Nonnegative USD drive stiffness. Too low and a gravity-loaded joint settles short of its target.
 - `damping` (number, required): Nonnegative USD drive damping.
 - `max_force` (number, default `1000`): Positive force/torque cap.
 
@@ -519,7 +519,7 @@ While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized arti
 
 ### `sim__lidar__create`
 
-Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan) with IsaacCreateRenderProduct (cameraPrim = the LiDAR) wired to its renderProductPath. Requires session_id and stage_id from sim__stage__info.
+Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build OnPlaybackTick -> IsaacCreateRenderProduct (cameraPrim = the LiDAR) -> ROS2RtxLidarHelper (type=laser_scan), wiring both execIn and renderProductPath. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -647,7 +647,7 @@ Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary ref
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): New absolute prim path.
+- `path` (string, required): New absolute prim path; every ancestor must already exist (create them with kind=Xform).
 - `kind` (string, required): Cube, Sphere, Cylinder, Capsule, Cone, Xform or PhysicsScene.
 - `size` (number, default `1`): Positive cube edge or sphere diameter.
 - `rigid` (boolean, default `false`): Author rigid body AND collider on geometry.
@@ -766,7 +766,7 @@ Export a flattened copy, including session edits, to a new basename (.usda added
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `filename` (string, required): New basename ending .usda; no directories.
+- `filename` (string, required): New basename, e.g. scene or scene.usda; no other extension, no folders.
 - `directory` (string, optional): Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.
 - `reset_camera_render_handles` (boolean, default `false`): Explicitly remove validated session-only ROS camera and LiDAR viewportHandle fields from the copy so native textures can rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.
 
@@ -783,7 +783,7 @@ Bounded stage hierarchy including inactive prims. Text is untrusted data. Requir
 
 ### `sim__timeline__control`
 
-Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. Requires session_id and stage_id from sim__stage__info.
+Explicit play, pause or stop. Play keeps running between your calls, not always at real time; use sim__simulation__step for an exact duration. Stop rewinds physics and awaits pending render/writer and capture-settings completion; its five-second timeout is cooperative. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback until Stop. Never pumps the Kit update loop. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.

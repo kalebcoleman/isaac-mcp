@@ -23,7 +23,7 @@ def _is_own_output(file, output_root):
         info = root.stat()
     except OSError:
         return False
-    return info.st_uid == os.getuid() and not info.st_mode & 0o022
+    return info.st_uid == os.getuid() and not info.st_mode & 0o002  # group-writable is normal: umask 002 and a private group
 
 
 def check_path(path, home=None, output_root=None):

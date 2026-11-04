@@ -108,7 +108,7 @@ def _validate_extra_args(extra_args) -> list[str]:
     out = []
     for a in extra_args:
         if not isinstance(a, str) or not (_EXTRA_ARG_RE.match(a) or (not a.startswith("-") and _HYDRA_ARG_RE.match(a))):
-            raise ValueError(f"invalid extra_arg: {a!r}")
+            raise ValueError(f"invalid extra_arg: {a!r}: use --flag, --flag=value, or a Hydra override such as key=value, +key=value or ~key")
         out.append(a)
     return list(out)
 
@@ -145,7 +145,7 @@ def _validate_checkpoint(checkpoint: Any, root: Any) -> str | None:
         raise ValueError("checkpoint must be a non-empty path string")
     p = Path(checkpoint).expanduser()
     if not p.exists():
-        raise ValueError(f"checkpoint does not exist: {checkpoint}")
+        raise ValueError(f"checkpoint does not exist: {checkpoint}; find one with isaaclab__checkpoints_list")
     rp = p.resolve()
     allowed = [Path(root).resolve(), jobs_dir().resolve()]
     if not any(_under(rp, r) for r in allowed):
@@ -210,7 +210,7 @@ def _update_job(job_dir: Path, **fields: Any) -> dict[str, Any]:
 def _job_path(job_id: Any) -> Path:
     """Directory of an existing job; rejects ids that could escape the jobs dir."""
     if not isinstance(job_id, str) or not _JOB_ID_RE.match(job_id):
-        raise ValueError(f"invalid job id: {job_id!r}")
+        raise ValueError(f"invalid job id: {job_id!r}; it looks like 20261104-092041-Isaac-Cartpole, and isaaclab__runs_list has them")
     return jobs_dir() / job_id
 
 
@@ -340,6 +340,43 @@ def _orphaned(job_id: str, data: dict) -> bool:
     return data.get("status") == "running" and job_id not in _active and not _job_alive(data)
 
 
+EXIT_FILE = "exit_code"
+
+
+def _exit_recording(command: list[str], job_dir: Path) -> list[str]:
+    """Run *command* so its exit code reaches the job folder even if this host is gone by then. The shell stays the group leader."""
+    return ["/bin/sh", "-c", '"$@"; code=$?; printf %s "$code" > "$0"; exit "$code"', str(job_dir / EXIT_FILE), *command]
+
+
+def _settle_orphan(job_dir: Path, data: dict) -> None:
+    """Record how a job with no watcher ended. Its own exit code if it left one; otherwise it was killed, or predates the file."""
+    try:
+        code = int((job_dir / EXIT_FILE).read_text())
+    except (OSError, ValueError):
+        data.update(status="failed", finished_at=data.get("finished_at") or _now(), note=data.get("note") or "host restarted")
+        _write_job(job_dir, data)
+        return
+    crash = _crashed_with_exit_zero(job_dir) if code == 0 else None
+    data.update(status="succeeded" if code == 0 and not crash else "failed", exit_code=code,
+                finished_at=data.get("finished_at") or _now(), **({"note": crash} if crash else {}))
+    _write_job(job_dir, data)
+
+
+def _enforce_orphan_timeout(job_id: str, job_dir: Path, data: dict) -> None:
+    """A watchdog dies with its host, so whoever looks next enforces timeout_s."""
+    limit, started = data.get("timeout_s"), data.get("started_at")
+    if data.get("status") != "running" or job_id in _active or not limit or not started or _now() - float(started) <= float(limit):
+        return
+    if _job_alive(data):
+        try:
+            if os.getpgid(int(data["pid"])) == int(data["pid"]):
+                os.killpg(int(data["pid"]), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    data.update(status="timeout", finished_at=_now())
+    _write_job(job_dir, data)
+
+
 def _running_job() -> dict[str, Any] | None:
     """Another job still running. A job a watcher here owns is running until its process has exited
     (its record is finalized a moment later); any other 'running' record counts only if its pid is
@@ -447,7 +484,8 @@ def _latest_checkpoint(run_dir: Any) -> str | None:
         return None
     candidates = []
     for pat in _CHECKPOINT_EXTS:
-        candidates.extend(rd.rglob(pat))
+        # exported/ holds TorchScript and ONNX for deployment: the newest file, but play and resume can't load it.
+        candidates.extend(p for p in rd.rglob(pat) if "exported" not in p.relative_to(rd).parts)
     if "sb3" in rd.parts:  # stable-baselines3 saves model.zip, not a torch file
         candidates.extend(rd.rglob("*.zip"))
     if not candidates:
@@ -531,17 +569,9 @@ def _rehydrate() -> None:
         if not data:
             continue
         if data.get("status") == "running":
-            pid = data.get("pid")
-            if not _pid_alive(pid):
-                data["status"] = "failed"
-                data["finished_at"] = _now()
-                if data.get("exit_code") is None:
-                    data["exit_code"] = None
-                data["note"] = "host restarted"
-                _write_job(jd, data)
+            if not _pid_alive(data.get("pid")):
+                _settle_orphan(jd, data)
 
-
-_rehydrate()
 
 
 _KIT_LOG_LINE_RE = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+Z \[[\d,.]+m?s\] \[")
@@ -695,7 +725,7 @@ def _start_job_locked(
         env["ISAACLAB_TASK_MODULES"] = ",".join(task_modules)
         env["PYTHONPATH"] = os.pathsep.join(task_paths + [env["PYTHONPATH"]])
     proc = subprocess.Popen(
-        full_cmd,
+        _exit_recording(full_cmd, jd),
         stdout=stdout_f,
         stderr=stderr_f,
         stdin=subprocess.DEVNULL,
@@ -717,6 +747,7 @@ def _start_job_locked(
         "command": full_cmd,
         "pid": proc.pid,
         "pid_start": _process_start(proc.pid),
+        "timeout_s": timeout_s,
         "started_at": started,
         "finished_at": None,
         "status": "running",
@@ -869,11 +900,9 @@ def runs_list(state: str | None = None) -> dict[str, Any]:
         if not data:
             continue
         # reconcile dead pids
+        _enforce_orphan_timeout(jd.name, jd, data)
         if _orphaned(jd.name, data):
-            data["status"] = "failed"
-            data["finished_at"] = data.get("finished_at") or _now()
-            data["note"] = data.get("note") or "host restarted"
-            _write_job(jd, data)
+            _settle_orphan(jd, data)
         st = data.get("status")
         if state and state != "all":
             if state == "running" and st != "running":
@@ -901,11 +930,9 @@ def runs_status(job_id: str) -> dict[str, Any]:
     data = _read_job(jd)
     if not data:
         raise ValueError(f"unknown job: {job_id}; list jobs with isaaclab__runs_list")
+    _enforce_orphan_timeout(job_id, jd, data)
     if _orphaned(job_id, data):
-        data["status"] = "failed"
-        data["finished_at"] = data.get("finished_at") or _now()
-        data["note"] = data.get("note") or "host restarted"
-        _write_job(jd, data)
+        _settle_orphan(jd, data)
     started = data.get("started_at")
     if data.get("status") == "running":
         elapsed = _now() - float(started) if started else 0.0
@@ -1008,6 +1035,8 @@ def runs_cancel(job_id: str, grace_s: int = 10) -> dict[str, Any]:
         return {"cancelled": False, "state": "cancelled", "note": "The process had already gone, so nothing was signalled. The record now says cancelled."}
     return {"cancelled": True, "state": "cancelled"}
 
+
+_rehydrate()  # last: it can need anything above
 
 # expose for tests
 __all__ = [

@@ -768,7 +768,7 @@ def test_envs_list_does_not_present_gymnasium_tasks_as_isaac_tasks(monkeypatch, 
                   import_errors=dict(isaaclab_tasks="ImportError: no"), gymnasium_builtin=["CartPole-v1"])
     install = _install_probe(monkeypatch, tmp_path, tmp_path, output)
     result = install.envs_list("cartpole")
-    assert [e["id"] for e in result["envs"]] == ["My-Cartpole"] and "could not be listed" in result["isaac_tasks_unavailable"]
+    assert [e["id"] for e in result["envs"]] == ["My-Cartpole"] and "can't be imported" in result["isaac_tasks_unavailable"]
     healthy = dict(output, import_errors={})
     install = _install_probe(monkeypatch, tmp_path, tmp_path, healthy)
     result = install.envs_list("cartpole")
@@ -1044,3 +1044,65 @@ def test_a_job_record_with_nothing_tying_it_to_its_pid_is_not_alive():
 
     assert not jobs._job_alive({"pid": os.getpid()})
     assert jobs._job_alive({"pid": os.getpid(), "pid_start": jobs._process_start(os.getpid())})
+
+
+def test_a_job_that_outlives_its_host_keeps_its_exit_code(monkeypatch, tmp_path):
+    import json
+    import subprocess
+
+    from isaac_mcp.isaaclab import jobs
+
+    for code, expected in ((0, "succeeded"), (3, "failed")):
+        folder = tmp_path / f"job{code}"
+        folder.mkdir()
+        (folder / "job.json").write_text(json.dumps({"status": "running", "log_dir": str(folder), "kind": "eval"}))
+        done = subprocess.run(jobs._exit_recording(["sh", "-c", f"exit {code}"], folder))
+        assert done.returncode == code and (folder / jobs.EXIT_FILE).read_text() == str(code)
+        record = json.loads((folder / "job.json").read_text())
+        jobs._settle_orphan(folder, record)
+        assert record["status"] == expected and record["exit_code"] == code and "note" not in record
+
+
+def test_a_job_that_left_no_exit_code_is_still_reported_as_unknown_cause(tmp_path):
+    from isaac_mcp.isaaclab import jobs
+
+    (tmp_path / "job.json").write_text("{}")
+    record = {"status": "running"}
+    jobs._settle_orphan(tmp_path, record)
+    assert record["status"] == "failed" and record["note"] == "host restarted"
+
+
+def test_the_newest_checkpoint_is_never_a_torchscript_export(tmp_path):
+    import os
+
+    from isaac_mcp.isaaclab import jobs
+
+    (tmp_path / "exported").mkdir()
+    (tmp_path / "model_9.pt").write_text("x")
+    (tmp_path / "exported" / "policy.pt").write_text("x")
+    os.utime(tmp_path / "model_9.pt", (1, 1))
+    assert jobs._latest_checkpoint(tmp_path).endswith("model_9.pt")
+
+
+def test_task_ids_are_read_from_source_when_they_cannot_be_imported(tmp_path):
+    from isaac_mcp.isaaclab import install
+
+    tasks = tmp_path / "source" / "isaaclab_tasks" / "a"
+    tasks.mkdir(parents=True)
+    (tasks / "__init__.py").write_text('gym.register(\n    id="Isaac-Cartpole-v0", entry_point="x")\nid = "not-a-task"\n')
+    assert install.scan_task_ids(tmp_path) == ["Isaac-Cartpole-v0"]
+
+
+def test_the_module_loads_with_a_finished_job_left_from_an_earlier_host(tmp_path):
+    import json
+    import os
+    import subprocess
+    import sys
+
+    job = tmp_path / "20261104-000000-Task"
+    job.mkdir()
+    (job / "job.json").write_text(json.dumps({"id": job.name, "status": "running", "pid": 2 ** 22 + 1, "log_dir": str(job)}))
+    (job / "exit_code").write_text("0")
+    subprocess.run([sys.executable, "-c", "import isaac_mcp.isaaclab.jobs"], check=True,
+                   env={**os.environ, "ISAACLAB_JOBS_DIR": str(tmp_path)})
+    assert json.loads((job / "job.json").read_text())["status"] == "succeeded"

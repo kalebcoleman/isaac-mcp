@@ -439,7 +439,7 @@
         },
         "path": {
           "type": "string",
-          "description": "New absolute prim path.",
+          "description": "New absolute prim path; every ancestor must already exist (create them with kind=Xform).",
           "required": true
         },
         "kind": {
@@ -529,7 +529,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "New absolute prim path."
+          "description": "New absolute prim path; every ancestor must already exist (create them with kind=Xform)."
         },
         {
           "name": "kind",
@@ -919,7 +919,7 @@
       "owner_id": "generic-sim"
     },
     "sim.timeline.control": {
-      "description": "Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Explicit play, pause or stop. Play keeps running between your calls, not always at real time; use sim__simulation__step for an exact duration. Stop rewinds physics and awaits pending render/writer and capture-settings completion; its five-second timeout is cooperative. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback until Stop. Never pumps the Kit update loop. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -984,7 +984,7 @@
         },
         "filename": {
           "type": "string",
-          "description": "New basename ending .usda; no directories.",
+          "description": "New basename, e.g. scene or scene.usda; no other extension, no folders.",
           "required": true
         },
         "directory": {
@@ -1025,7 +1025,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "New basename ending .usda; no directories."
+          "description": "New basename, e.g. scene or scene.usda; no other extension, no folders."
         },
         {
           "name": "directory",
@@ -1998,7 +1998,7 @@
         },
         "path": {
           "type": "string",
-          "description": "Revolute or prismatic joint path.",
+          "description": "Revolute or prismatic joint prim, e.g. /World/UR5e/joints/elbow_joint; sim__joints__inspect lists them.",
           "required": true
         },
         "target": {
@@ -2008,7 +2008,7 @@
         },
         "stiffness": {
           "type": "number",
-          "description": "Nonnegative USD drive stiffness.",
+          "description": "Nonnegative USD drive stiffness. Too low and a gravity-loaded joint settles short of its target.",
           "required": true
         },
         "damping": {
@@ -2049,7 +2049,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Revolute or prismatic joint path."
+          "description": "Revolute or prismatic joint prim, e.g. /World/UR5e/joints/elbow_joint; sim__joints__inspect lists them."
         },
         {
           "name": "target",
@@ -2067,7 +2067,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Nonnegative USD drive stiffness."
+          "description": "Nonnegative USD drive stiffness. Too low and a gravity-loaded joint settles short of its target."
         },
         {
           "name": "damping",
@@ -2540,7 +2540,7 @@
       "owner_id": "generic-sim"
     },
     "sim.lidar.create": {
-      "description": "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan) with IsaacCreateRenderProduct (cameraPrim = the LiDAR) wired to its renderProductPath. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build OnPlaybackTick -> IsaacCreateRenderProduct (cameraPrim = the LiDAR) -> ROS2RtxLidarHelper (type=laser_scan), wiring both execIn and renderProductPath. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",

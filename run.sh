@@ -178,12 +178,12 @@ if [ ! -x "$PY" ]; then
   exit 1
 fi
 
-if ! "$PY" -c 'import isaacsim' 2>/dev/null; then
-  echo "FAIL: $PY cannot import isaacsim." >&2
+if ! "$PY" -c 'import isaacsim' 2>/dev/null </dev/null; then
+  echo "FAIL: $PY cannot import isaacsim. If the EULA has not been accepted yet, set OMNI_KIT_ACCEPT_EULA=YES." >&2
   exit 1
 fi
 
-SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))')"
+SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))' </dev/null)"
 # Refuse here rather than after Kit has started: 5.1 has no Newton extension, and never fall back to PhysX.
 # Extensions sit in <site>/exts in a pip install and two levels above the package in a standalone app.
 if [ "$PHYSICS_BACKEND" = newton ] \

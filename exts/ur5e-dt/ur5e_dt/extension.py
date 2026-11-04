@@ -3119,6 +3119,9 @@ class DigitalTwin(omni.ext.IExt):
             self._refresh_viewport_camera_list()
             self._apply_active_viewport_camera()
 
+            if not self._timeline.is_playing():  # a rebuilt scene plays below; a reused one must too
+                self._timeline.play()
+                await app.next_update_async()
             print("=== Quick Start Complete ===")
             return
 
@@ -4818,7 +4821,8 @@ class DigitalTwin(omni.ext.IExt):
                     print(f"Placement succeeded after {retry + 1} retries")
                 return poses
 
-        raise RuntimeError("Could not place all objects without violating min_sep; reduce density.")
+        raise RuntimeError("Could not place all objects without violating min_sep: the other objects take up the free slots. "
+                           "Move them first with randomize_object_poses or set_object_pose.")
 
     def _set_obj_prim_pose(self, prim_path, position, quat_wxyz):
         stage = omni.usd.get_context().get_stage()
@@ -6411,7 +6415,9 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "success",
                 "message": f"Objects added from {assembly} (physics views rebuilt)",
-                "folder_path": self._objects_folder_path
+                "folder_path": self._objects_folder_path,
+                "objects": [child.GetName() for child in omni.usd.get_context().get_stage()
+                            .GetPrimAtPath("/World/Objects").GetChildren()],
             }
         except Exception as e:
             carb.log_error(f"Error in add_objects: {e}")
@@ -6540,7 +6546,13 @@ class DigitalTwin(omni.ext.IExt):
 
     def _quick_start_report(self) -> Dict[str, Any]:
         """What the last Quick Start used: whether the gripper loaded and each asset's source."""
-        return {"gripper": self._quick_start_gripper, "assets": self._quick_start_assets}
+        stage = omni.usd.get_context().get_stage()
+        return {"gripper": self._quick_start_gripper, "assets": self._quick_start_assets,
+                "robot": {"path": "/World/UR5e", "articulation_root": "/World/UR5e/root_joint"},
+                "camera": "/World/workspace_camera_sim",
+                "playing": self._timeline.is_playing(),
+                **({"workstation": asset_source(WORKSTATION_USD)["source"]}
+                   if stage and stage.GetPrimAtPath("/World/Vention").IsValid() else {})}
 
     def _bench_label(self) -> str:
         if asset_source(WORKSTATION_USD)["source"] == "missing":
@@ -6723,7 +6735,7 @@ class DigitalTwin(omni.ext.IExt):
         if backend == "fake":
             if mode == "real":
                 return {"status": "error",
-                        "message": "backend='fake' is sim-only; use backend='ursim' mode='real' for the lab UR5e"}
+                        "message": "backend='fake' is sim-only, and real-robot mode is not enabled in this build (docs/TOOLS-UR5E.md)."}
             script = repo_root / "scripts" / "launch_ur_fake.sh"
             cmd = ["bash", str(script), action]          # fake script takes only the action
             label = f"launch_ur_fake.sh {action}"

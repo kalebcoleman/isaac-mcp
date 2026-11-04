@@ -473,7 +473,7 @@ class Scene:
             or parent.IsInstanceProxy()
         ):
             refuse(
-                "INVALID_PARENT", "Parent must exist, be active and not an instance."
+                "INVALID_PARENT", f"Parent {str(p.GetParentPath())!r} must exist, be active and not an instance: create each ancestor first."
                 + (" A new stage has no /World: create it first with sim__prim__create kind=Xform." if not stage.GetPrimAtPath("/World") else "")
             )
         if not stage.GetSessionLayer().permissionToEdit:

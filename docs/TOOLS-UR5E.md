@@ -136,7 +136,7 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 | `ur5e_dt__restore_scene_state` | Restore object poses from JSON |
 | `ur5e_dt__add_objects` | Load objects from an assembly folder; your lab files |
 | `ur5e_dt__delete_objects` | Delete `/World/Objects` and pose-publisher graph |
-| `ur5e_dt__setup_pose_publisher` | Publish object poses to ROS2 `objects_poses_sim` |
+| `ur5e_dt__setup_pose_publisher` | Publish object poses to ROS2 `objects_poses_sim`: one `tf2_msgs/msg/TFMessage` holding them all, parent frame `World`, each child frame the object's name |
 | `ur5e_dt__start_ros_driver` | Bring ROS2 robot driver up/down/status |
 | `ur5e_dt__sync_real_poses` | Sync sim poses from real-world detections |
 | `ur5e_dt__new_stage` | Clear stage and free memory |

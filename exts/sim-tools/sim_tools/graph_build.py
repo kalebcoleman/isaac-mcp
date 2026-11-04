@@ -301,7 +301,11 @@ def build(stage, a, stopped):
         nt = og.get_node_type(kind)
         if not nt or not (nt.is_valid() if callable(getattr(nt, "is_valid", None)) else True):
             short = kind.rsplit(".", 1)[-1]
-            return _refuse(SpecError("UNKNOWN_NODE_TYPE", f"No node type {kind!r} is registered. Look it up with "
+            import difflib
+
+            near = difflib.get_close_matches(kind, og.get_registered_nodes(), n=3, cutoff=0.7)
+            hint = f" Did you mean {' or '.join(near)}?" if near else ""
+            return _refuse(SpecError("UNKNOWN_NODE_TYPE", f"No node type {kind!r} is registered.{hint} Look it up with "
                                      f"sim__graph__node_types contains={short!r}."))
     existing = stage.GetPrimAtPath(path)
     replaced, backup = False, None

@@ -842,7 +842,8 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                 info = active.get_client().call("sim.stage.info")
                 if not broker.staging or str(broker.staging) != info.get("staging"):
                     raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. "
-                                     "A robot from an approved root needs it; a public name or asset pack does not.")
+                                     "A URDF needs it even from an asset pack, as does anything from an approved root; a public name or a USD pack "
+                                     "does not. The user can create it with the approval helper in docs/TOOLS-SCENE.md, then restart both.")
                 kind = "urdf" if str(params["robot"]).lower().endswith((".urdf", ".xacro")) else "usd"
                 root_id, relative_path = broker.locate(_quick_start_robot_path(params["robot"]), kind=kind)
                 snapshot = broker.snapshot(root_id, relative_path, kind=kind)

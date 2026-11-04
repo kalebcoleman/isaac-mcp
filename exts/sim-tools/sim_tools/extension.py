@@ -374,7 +374,9 @@ class Extension(omni.ext.IExt):
             target_prim = s.stage().GetPrimAtPath(args["path"])
             if entry is None and not target_prim.IsValid():
                 refuse("NOT_FOUND", f"No prim at {args['path']}. Check sim__stage__tree, or create it with sim__{expected}__create.")
-            if entry is not None or target_prim.IsA(UsdGeom.Gprim):
+            wrong_kind = target_prim.IsValid() and target_prim.GetTypeName() and target_prim.GetTypeName() != (
+                "Camera" if expected == "camera" else "OmniLidar")
+            if entry is not None or wrong_kind or target_prim.IsA(UsdGeom.Gprim):  # adopt could never help these
                 what = f"a {entry[0]}" if entry is not None else f"a {target_prim.GetTypeName()}"
                 refuse("NOT_A_SENSOR", f"{args['path']} is {what}, not a {expected}. Find one with sim__prim__find, or "
                        f"create it with sim__{expected}__create.")
@@ -800,7 +802,7 @@ class Extension(omni.ext.IExt):
             if a["action"] not in ("play", "pause", "stop"):
                 refuse(
                     "INVALID_ACTION",
-                    "Use play, pause or stop; exact stepping uses sim.simulation.step.",
+                    "Use play, pause or stop; exact stepping uses sim__simulation__step.",
                 )
             if a["action"] == "play":
                 from .physics import prepare

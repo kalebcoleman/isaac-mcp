@@ -405,7 +405,7 @@ def show_graph_open(stage, path, width=0, height=0):
     from isaac_mcp.project_assets import refuse
 
     if _headless():
-        refuse("HEADLESS", "The Action Graph editor needs a windowed Isaac Sim (sim__launch headless=false).")
+        refuse("HEADLESS", "The Action Graph editor needs a windowed Isaac Sim: start Kit without --headless.")
     import omni.graph.core as og
 
     graph = og.get_graph_by_path(_graph_path(path))

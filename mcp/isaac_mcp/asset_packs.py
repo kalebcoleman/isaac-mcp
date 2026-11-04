@@ -1038,7 +1038,9 @@ def doctor_folder(folder: Path, *, closure=None, entries: list | None = None, ma
     deps = result["dependencies"]
     if deps["checked"]:
         problems += [f"{rel}: entry file is missing" for rel in deps["missing_entries"]]
-        problems += [f"{u['reference']}: unresolved, referenced by {u['referenced_by']}" for u in deps["unresolved"]]
+        problems += [f"{u['reference']}: unresolved, referenced by {u['referenced_by']}"
+                     + (f". The pack needs a folder named {u['reference'].split('/')[2]}, or a package.xml naming it"
+                        if u["reference"].startswith("package://") else "") for u in deps["unresolved"]]
         problems += [f"{u['reference']}: unreadable USD" for u in deps["unreadable"]]
         problems += [f"{u['reference']}: remote, referenced by {u['referenced_by']}" for u in deps["remote"]]
         problems += [f"{u['file']}: outside the pack, referenced by {u['referenced_by']}" for u in deps["outside_pack"]]

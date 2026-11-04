@@ -170,12 +170,12 @@ before anything starts, naming the flag and the alternative; otherwise a per-lib
 
 **Isaac Lab 2.3.2 with Sim 5.1 is experimental, and `tested` stays false.** Tiny Cartpole jobs ran through these tools on one desktop with `rsl_rl`, `skrl`, `sb3` and
 `rl_games`, including checkpoints, metrics, eval and play; the profile's flags matched each script's real `--help`. That shows the launcher works, not long training or other tasks.
-`rl_games` at 16 environments needs `extra_args=["agent.params.config.minibatch_size=64"]`. `sb3` saves `model.zip`, which counts as a checkpoint only under an `sb3` path.
+`rl_games` needs `minibatch_size` to divide `num_envs` times the task's horizon, which varies by task (the job's `seq_length` in the log): a failure is a bare `AssertionError` on `batch_size % minibatch_size`. `extra_args=["agent.params.config.minibatch_size=64"]` fits at 16 or 64 environments on the tasks we ran. `sb3` saves `model.zip`, which counts as a checkpoint only under an `sb3` path.
 
 `isaaclab__envs_list` can't list tasks on this pair: importing `isaaclab_tasks` needs `pxr`, which exists only once Kit has started. It
-reports `isaac_tasks_unavailable`, and `train` and `play` still work, so use a task name from Lab's docs.
+reports `isaac_tasks_unavailable` and lists the ids it can read from the checkout's source, marked `source: "scanned"`. `train` and `play` work with those.
 
-A job that finishes while no host server is running reports `failed` with `note: "host restarted"`, because nothing saw its exit code. Check `isaaclab__runs_tail` and `checkpoints_list` before rerunning a long job.
+A job records its own exit code in its folder, so one that finishes after the host that started it has gone still reports `succeeded` or `failed` correctly. `failed` with `note: "host restarted"` now means it left no code: it was killed, or predates this. `timeout_s` is enforced by the host that started the job and, if that has gone, by the next `runs_status` or `runs_list`.
 
 **A crash can exit 0.** Kit's shutdown can hide an uncaught exception: seen on Lab 2.3.2 with an unknown task. A job that exits 0 with a traceback at the end of stderr reports `failed` with a note.
 One exception: a `train` job whose run folder already has a checkpoint still reports `succeeded`, so check its log and iteration count if it stopped early.
@@ -458,7 +458,7 @@ unless that port is configured or advertised.
 - Job ids: `YYYYMMDD-HHMMSS-<slug>` of the task, with `-2`, `-3`, ... if two launches land
   in the same second.
 - The host keeps an in-memory map of active `Popen` handles; on server restart, records are
-  rehydrated and dead "running" jobs are marked `failed` with note "host restarted".
+  rehydrated and dead "running" jobs take their recorded exit code, or `failed` with note "host restarted" if they left none.
 - `runs_cancel` records `cancelled` before signalling, so the watcher does not overwrite it.
   Cancelling an already-finished job is a no-op.
 - Subprocesses are launched with `shell=False`, an explicit argv list, and
@@ -526,7 +526,7 @@ Historical verification includes:
   use the library named by a checkpoint under `logs/<library>/` when you pass none, and report it as
   `rl_library_from_checkpoint_path`. `--num_episodes` was
   dropped because only the rlinf backend has it. `extra_args` accepts flags and Hydra
-  overrides; rl_games needs `minibatch_size` to divide `num_envs * 24`.
+  overrides; rl_games needs `minibatch_size` to divide `num_envs` times the task's horizon.
 - Runs land under `<isaaclab_root>/logs/...`, not the job dir; `runs_status` finds the newest
   checkpoint from the training log and reports the experiment dir as `run_dir`.
 

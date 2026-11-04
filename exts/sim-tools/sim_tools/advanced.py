@@ -37,7 +37,7 @@ MUTATIONS = {
 
 def scalar(x, lo=0, hi=1e8):
     if type(x) not in (float, int) or not math.isfinite(x) or not lo <= x <= hi:
-        refuse("INVALID_VALUE", f"Finite number in [{lo},{hi}] required.")
+        refuse("INVALID_VALUE", f"{x!r} is not valid here: a finite number in [{lo},{hi}] is required.")
     return x
 
 

@@ -227,7 +227,7 @@ and `runs_status` / `metrics_summary` read its checkpoint and TensorBoard scalar
 - The RL backend is chosen with `--rl_library` (else the task's registered `default_agent`; with none, Lab exits 2 asking for it); `episodes` was dropped because
   only the rlinf backend has `--num_episodes`.
 - `extra_args` accepts `--flags` **and Hydra overrides** (`agent.params.config.minibatch_size=1536`, `+key=v`, `~key`).
-  rl_games needs `minibatch_size` to divide `num_envs * 24`, so small `num_envs` runs need that override.
+  rl_games needs `minibatch_size` to divide `num_envs` times the task's horizon, which varies by task.
 - Runs live under `<isaaclab_root>/logs/...`, not the job dir; `runs_status` finds the newest checkpoint from the
   training log ("saving checkpoint '...'") and reports the experiment dir as `run_dir`.
 - Job ids are validated (`YYYYMMDD-HHMMSS-<slug>`), and cancel only signals a pid whose command line still matches the job.

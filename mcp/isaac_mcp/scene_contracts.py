@@ -150,7 +150,7 @@ add(
     "Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units.",
     dict(
         **TARGET,
-        path=field("string", "New absolute prim path."),
+        path=field("string", "New absolute prim path; every ancestor must already exist (create them with kind=Xform)."),
         kind=field(
             "string", "Cube, Sphere, Cylinder, Capsule, Cone, Xform or PhysicsScene."
         ),
@@ -198,7 +198,7 @@ add(
 )
 add(
     "sim.timeline.control",
-    "Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step.",
+    "Explicit play, pause or stop. Play keeps running between your calls, not always at real time; use sim__simulation__step for an exact duration. Stop rewinds physics and awaits pending render/writer and capture-settings completion; its five-second timeout is cooperative. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback until Stop. Never pumps the Kit update loop.",
     dict(**TARGET, action=field("string", "play, pause, or stop.")),
 )
 add(
@@ -206,7 +206,7 @@ add(
     "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses.",
     dict(
         **TARGET,
-        filename=field("string", "New basename ending .usda; no directories."),
+        filename=field("string", "New basename, e.g. scene or scene.usda; no other extension, no folders."),
         directory=field("string", "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.", False),
         reset_camera_render_handles=field(
             "boolean",
@@ -434,9 +434,9 @@ add(
     "Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention.",
     dict(
         **TARGET,
-        path=field("string", "Revolute or prismatic joint path."),
+        path=field("string", "Revolute or prismatic joint prim, e.g. /World/UR5e/joints/elbow_joint; sim__joints__inspect lists them."),
         target=field("number", "Radians for angular joint, stage units for prismatic."),
-        stiffness=field("number", "Nonnegative USD drive stiffness."),
+        stiffness=field("number", "Nonnegative USD drive stiffness. Too low and a gravity-loaded joint settles short of its target."),
         damping=field("number", "Nonnegative USD drive damping."),
         max_force=field("number", "Positive force/torque cap.", False, default=1000),
     ),
@@ -483,7 +483,7 @@ add(
 )
 add(
     "sim.lidar.create",
-    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan) with IsaacCreateRenderProduct (cameraPrim = the LiDAR) wired to its renderProductPath.",
+    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build OnPlaybackTick -> IsaacCreateRenderProduct (cameraPrim = the LiDAR) -> ROS2RtxLidarHelper (type=laser_scan), wiring both execIn and renderProductPath.",
     dict(
         **TARGET,
         path=field("string", "Path for the new LiDAR, not in use yet; its parent prim (e.g. a robot link) must exist."),

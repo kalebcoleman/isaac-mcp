@@ -144,7 +144,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
     ) -> str:
-        """Run a policy checkpoint (headless by default) as a job and return its job_id.
+        """Run a policy checkpoint (headless by default) as a job and return its job_id. It plays until cancelled
+        or timeout_s and prints no score, so judge learning from training metrics.
 
         Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true. Video needs optional
         MoviePy/imageio-ffmpeg in the Lab interpreter.

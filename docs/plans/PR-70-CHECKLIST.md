@@ -107,9 +107,69 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] Approval helper silently keeps one of several roots: now refuses
 - [x] A client exiting mid-recording leaves a tiny MP4: documented
 - [x] Kit uploads crash minidumps to NVIDIA by default: off for `run.sh` and Lab jobs, `ISAAC_MCP_CRASH_UPLOAD=1` opts in
-- [ ] Decide on git history: four public commits carry a university address and machine hostname as committer. Rewriting needs Kaleb's decision
+- [ ] Git history: Kaleb chose variant B. **Run last**, after the tool work, all builds, Lab setup and the merge. Plan: `~/.cache/isaac-mcp-history-scrub/PLAN.md`
 - [ ] Windowed `sim__graph__show` on 6.0.0.1 logs a Kit `ZeroDivisionError` in its own zoom-to-fit, with the graph still fitted. Kit's code
-- [ ] License: `mcp/` and the bridge derive from `omni-kit-mcp`, whose upstream has no license file. Kaleb to ask its author for a grant
-- [ ] Decide what stays public: `docs/plans`, "student run" wording, course names, "Kaleb's work" wording
+- [ ] License: `mcp/` and the bridge derive from `omni-kit-mcp`, whose upstream has no license file. Kaleb is asking its author himself; update VENDORING, README and LICENSE when he reports the answer
+- [ ] Public cleanup, **last, with the history rewrite**: Kaleb wants anything that shouldn't be public removed. Take out `docs/plans` (keep a local copy and fix its links), course names and "student run" wording, and the private strings in `scripts/check_private_paths.py`. "Kaleb's work with RISE lab" stays unless he says otherwise. List: memory `history-scrub-pending`
 - [ ] Enable private vulnerability reporting on the repository, which SECURITY.md points to
 
+## Tool-use fleet at `9803f4c`, 2026-11-04
+
+14 agents (8 DeepSeek, 6 Gemini) worked from goals on all six builds and both Lab pairs. Every goal was reached, with no crash or hang. `[x]` means fixed in code and tested offline; **live** marks the ones also seen working in a simulator. Each stays open until the final retest.
+
+### Fixed
+
+- [x] `/clock` from the documented graph publishes zero stamps: example fixed, and `sim__graph__build` notes a clock with no time source. **live** (note)
+- [x] `sim__lidar__create` claimed a `targetPrim` on 6.2 that no build has; now one route, including the exec wiring
+- [x] `sim__joints__command` said `achieved: false` and blamed controllers when the arm was on the ground. **live**
+- [x] `sim__quick_start` camera needed `adopt`, and lost a raised arm. **live**
+- [x] Timeline results have no `paused`. **live**
+- [x] `sim__stage__open` refused its own output folder when group-writable: my regression from the audit fix. **live**
+- [x] Wrong-kind sensor told to retry with `adopt`, which could never work: now `NOT_A_SENSOR`. **live**
+- [x] `ur5e_dt__quick_start` on a reused scene said "simulation running" while stopped: now plays, and reports `playing`. **live**
+- [x] Twin quick starts return robot path, articulation root, camera and bench source; `add_objects` returns object names. **live**
+- [x] Lab job that outlives its host reported `failed` even after succeeding: exit code recorded in the job folder. **live** on Lab 2.3.2
+- [x] Lab `timeout_s` died with its host: the next `runs_status` or `runs_list` enforces it. **live** on Lab 2.3.2
+- [x] `latest_checkpoint` picked the unplayable `exported/policy.pt`
+- [x] `envs_list` empty on Lab 2.3: ids read from the checkout's source, marked `scanned`. **live**
+- [x] `install_info` adds `rl_libraries` (what is really installed); its note names the package version plainly
+- [x] rl_games `minibatch_size` docs wrong (`num_envs * 24`): the horizon varies by task
+- [x] Refusals with no next step: `ROOT_NOT_APPROVED`, missing checkpoint, bad `extra_args`, bad job id, `randomize_single_object`, `UNKNOWN_NODE_TYPE` (now suggests the nearest), `INVALID_PARENT` (names the parent), `HEADLESS`, real-robot mode pointing at a disabled route
+- [x] `NO_SHARED_STAGING` wrongly said a pack needs no staging; a URDF does
+- [x] A `.urdf` holding xacro reported `USD_UNREADABLE`: now `XACRO`
+- [x] `run.sh` could hang silently on the EULA prompt during its import check
+- [x] Wording: `sim__simulation__step` observe arguments, `sim__joints__state` needs playing or paused, `sim__prim__create` ancestors, `sim__joints__drive` joint paths and stiffness, `sim__stage__save` extensions, Play not being real time, `assets__packs` host and Kit stores, `source: snapshot`, `/objects_poses_sim` format, `/scan` and `resetSimulationTimeOnStop`, `eval` gives no score, doctor's `package://` hint, `--field ranges`
+
+### Open: to attempt
+
+- [ ] **`sim__lidar__read` stuck on `NOT_READY`**: 6.0.0.0 and 6.0.1 in the confused-agent runs, with a target in range after 10 s of Play. It worked on the same builds in other runs (6.0.1, 6.0.0.1, 6.1), so a preceding step may matter. Needs a reproduction, and the refusal should report what it observed
+- [ ] **Driving a mobile base**: only position targets exist, so a TurtleBot moved 0.04 m. Wheeled robots agent in progress
+- [ ] **Merge and review the wheeled robots and Nav2 branch**
+- [ ] **URDF pack needs one-time approval and staging**, unlike a USD pack. Decide: a default staging folder, or keep it and document
+- [ ] Windowed 5.1: first `sim__quick_start` failed twice with no error earlier. 5 of 5 pass headless; windowed not retried
+- [ ] Refusals check state before type: `joints__state` on a Cube says "play first", then the real fault. Same for `steps=0`
+- [ ] `NO_SHARED_STAGING` comes before validating a root or path, so a typo reads as an unconfigured install
+- [ ] Range refusals show the value but not the argument name
+- [ ] A guessed argument gets `Extra inputs are not permitted` with no list of real ones; NaN shows as `None`
+- [ ] `sim__light__modify` requires both intensity and color
+- [ ] `sim__map__occupancy` requires `min` and `max`; a default from colliders needs care with a ground plane
+- [ ] `assets__pack_doctor` doesn't list a pack's files
+- [ ] `start_ros_driver backend=ursim status` returns success with Docker missing; its status text can contradict itself
+- [ ] `set_object_pose` and `sync_real_poses` report the requested pose, not where physics left it
+- [ ] Lab: a task id isn't checked before a roughly 50 s launch; a bad task with no library first blames `--rl_library`
+- [ ] Lab: tqdm bars fill `last_log_lines` for skrl and sb3
+- [ ] Lab: `runs_status.window` was missing on the lab PC, present on the desktop
+- [ ] Lab: `--video` without MoviePy fails only after launch
+- [ ] Docs say `Example_Rotary_2D` is 10 Hz; 5.1 reports 30
+- [ ] `sim__lidar__read`'s 256 samples are the start of the buffer, not a whole sweep: say so on `limit`
+- [ ] For LEGO and Jenga: mass or density authoring, an arm with a gripper in `sim__quick_start`, a route from a saved scene to a Lab task
+
+### Known limitations, to state in the docs
+
+- [ ] `isaaclab__eval` is Lab's `play.py`: it runs until stopped and gives no score
+- [ ] `--video` needs MoviePy and imageio-ffmpeg in the Lab environment
+- [ ] A screen recording belongs to the server process that started it, so a client that restarts between calls can't stop it
+- [ ] `timeout_s` with no host running waits until the next status call
+- [ ] Real-robot mode is not enabled; `ursim` needs Docker
+- [ ] `randomize_single_object` often can't fit: a 4 cm by 20 cm strip with 0.18 m separation, not configurable
+- [ ] `sim__launch` suggests a free port, which may belong to another agent on a shared machine: it can't know

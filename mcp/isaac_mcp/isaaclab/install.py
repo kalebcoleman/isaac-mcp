@@ -314,7 +314,10 @@ def install_info(env: Any = None) -> dict:
         "        return importlib.metadata.version(name)\n"
         "    except Exception:\n"
         "        return None\n"
-        "print(json.dumps({'isaaclab': _v('isaaclab'), 'isaacsim': _v('isaacsim')}))\n"
+        "import importlib.util as _u\n"
+        "_libs = {'rsl_rl': 'rsl_rl', 'rl_games': 'rl_games', 'skrl': 'skrl', 'sb3': 'stable_baselines3'}\n"
+        "print(json.dumps({'isaaclab': _v('isaaclab'), 'isaacsim': _v('isaacsim'), "
+        "'rl_libraries': sorted(k for k, m in _libs.items() if _u.find_spec(m))}))\n"
     )
     try:
         proc = subprocess.run(
@@ -352,11 +355,13 @@ def install_info(env: Any = None) -> dict:
         result["project_setting_ignored"] = (f"{project['file']} sets an Isaac Lab environment, but this server's "
                                              "ISAACLAB_PYTHON or ISAACLAB_ROOT takes priority. Remove them from "
                                              "its MCP configuration to use the project's.")
+    if "rl_libraries" in data:
+        result["rl_libraries"] = data["rl_libraries"]
     version = data.get("isaaclab")
     if version:
         result["tested"] = _tested_pair(version, data.get("isaacsim"))
         if not result["tested"]:
-            result["note"] = (f"Isaac Lab {version} with Isaac Sim {data.get('isaacsim')} is not in the tested list in "
+            result["note"] = (f"The package isaaclab {version} with Isaac Sim {data.get('isaacsim')} is not in the tested list in "
                               "docs/TOOLS-ISAACLAB.md. Reading its version works; jobs may need changes.")
     if not loc["isaaclab_root"]:
         result["jobs"] = ("train, eval and play need a checkout with scripts/reinforcement_learning: "
@@ -389,6 +394,22 @@ def resolve_task_modules(root: Any, env: Any = None) -> tuple[list[str], list[st
         base = Path(root).parent
         paths.extend([str(base), str(root)])
     return modules, paths
+
+
+_TASK_ID_RE = re.compile(r"""\bid\s*=\s*["'](Isaac-[A-Za-z0-9_.-]+)["']""")
+
+
+def scan_task_ids(root: Any) -> list[str]:
+    """Task ids registered in a checkout's isaaclab_tasks source, read as text: nothing is imported."""
+    if not root:
+        return []
+    found: set[str] = set()
+    for source in sorted(Path(root).joinpath("source", "isaaclab_tasks").rglob("*.py")):
+        try:
+            found.update(_TASK_ID_RE.findall(source.read_text(errors="replace")))
+        except OSError:
+            continue
+    return sorted(found)
 
 
 def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
@@ -461,9 +482,14 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
         envs = [x for x in envs if needle in str(x.get("id", "")).lower()]
     result: dict = {"envs": envs}
     if isaac_tasks_failed:
-        result["isaac_tasks_unavailable"] = ("Isaac Lab's tasks could not be listed: isaaclab_tasks failed to import "
-                                             "(see import_errors). gymnasium's own tasks are left out; anything listed "
-                                             "comes from your configured task modules.")
+        known = {x.get("id") for x in envs}
+        scanned = [dict(id=task, source="scanned") for task in scan_task_ids(root) if task not in known
+                   and (filter is None or str(filter).lower() in task.lower())]
+        result["envs"] = envs + scanned
+        result["isaac_tasks_unavailable"] = ("isaaclab_tasks can't be imported here (see import_errors), which is normal "
+                                             "where it needs Kit. Entries marked source=scanned were read from the "
+                                             "checkout's source without running it; use those exact ids, with their "
+                                             "-v0 where they have one.")
     if data.get("import_errors"):
         result["import_errors"] = data["import_errors"]
     return result
