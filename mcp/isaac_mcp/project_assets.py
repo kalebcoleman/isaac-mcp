@@ -59,11 +59,30 @@ def relative(value):
     ):
         refuse(
             "INVALID_PATH",
-            "Absolute paths, URLs, traversal and empty components are forbidden.",
+            "Absolute paths, URLs, traversal and empty components are forbidden. Pass a path relative to the approved root; assets__scan lists them.",
         )
     if len(value.split("/")) > MAX_DEPTH:
         refuse("LIMIT", "Path depth exceeds eight.")
     return value
+
+
+def urdf_dependency(entry, value):
+    """Return a URDF mesh path relative to its project, naming what is wrong if it cannot be."""
+    try:
+        return str(Path(entry).parent / relative(value))
+    except AssetError as exc:
+        why = "package:// needs ROS package lookup, which this importer does not do" if value.startswith(
+            "package:") else str(exc)
+        refuse(exc.code, f"{entry} references mesh {value!r}: {why}. Rewrite it relative to the URDF, for "
+               "example meshes/part.stl, and keep the file under the approved root.")
+
+
+def units_mismatch_message(asset_up, asset_mpu, stage_up, stage_mpu):
+    """Say what differs and which stage settings to change; nothing is converted."""
+    return (f"Asset and target up-axis/units must match; no automatic conversion. Asset: upAxis={asset_up}, "
+            f"metersPerUnit={asset_mpu}. Stage: upAxis={stage_up}, metersPerUnit={stage_mpu}. For a new scene that "
+            f"matches, call sim__quick_start with up_axis=\"{asset_up}\" and meters_per_unit={asset_mpu} (unsaved "
+            "edits need discard_changes=true). Or sim__stage__open a file authored that way.")
 
 
 def usd_path(value):
@@ -161,6 +180,8 @@ def read_regular(fd, name, before):
 class Broker:
     def __init__(self, config=None):
         self.roots = {}
+        self.missing_roots = {}
+        self._pack_roots = {}
         self.staging = None
         self.config_error = None
         self.requested_profile = "trusted_project"
@@ -197,7 +218,16 @@ class Broker:
                 ):
                     refuse("CONFIG", "Invalid root ID or filesystem root.")
                 root = Path(value)
-                fd = open_dir(root)
+                # Only a folder that is simply absent is skipped: it grants nothing while gone, and
+                # is not trusted if it comes back before a restart. A symlink, a non-folder or a
+                # permission error still refuses everything, because they may mean a swapped root.
+                try:
+                    fd = open_dir(root)
+                except FileNotFoundError:
+                    if any(self._overlaps(root, other) for other in self._all_roots(doc, key)):
+                        refuse("CONFIG", "Approved roots must not overlap.")
+                    self.missing_roots[key] = str(root)
+                    continue
                 try:
                     ident = signature(os.fstat(fd))[:2]
                 finally:
@@ -208,18 +238,24 @@ class Broker:
                     or self.staging in root.parents
                 ):
                     refuse("CONFIG", "Staging and project roots must be disjoint.")
-                if any(
-                    root == other[0]
-                    or root in other[0].parents
-                    or other[0] in root.parents
-                    for other in self.roots.values()
-                ):
+                # Each file must belong to exactly one root: snapshots copy a whole root, and a
+                # nested root would make the same file subject to two different scopes.
+                if any(self._overlaps(root, other) for other in self._all_roots(doc, key)):
                     refuse("CONFIG", "Approved roots must not overlap.")
                 self.roots[key] = (root, ident)
         except (ValueError, KeyError, TypeError, OSError) as e:
             self.config_error = str(e)
             self.roots.clear()
+            self.missing_roots.clear()
             self.staging = None
+
+    @staticmethod
+    def _overlaps(root, other):
+        return root == other or root in other.parents or other in root.parents
+
+    @staticmethod
+    def _all_roots(doc, key):
+        return [Path(value) for name, value in doc["roots"].items() if name != key]
 
     def listing(self):
         return dict(
@@ -230,8 +266,10 @@ class Broker:
             roots=[
                 dict(root_id=k, path=str(v[0])) for k, v in sorted(self.roots.items())
             ],
+            missing_roots=[dict(root_id=k, path=v) for k, v in sorted(self.missing_roots.items())],
             config_error=self.config_error,
             disabled=DISABLED,
+            store_packs="Packs in the user's asset stores can be imported by absolute path once staging is configured; a project file's asset_path is not approval.",
             setup="User: configure ISAAC_MCP_ASSET_CONFIG for host AND Kit at launch. See docs/TOOLS-SCENE.md. No tool can approve folders.",
         )
 
@@ -273,18 +311,58 @@ class Broker:
                 continue
             usd_path(rel)
             return root_id, rel
+        found = self._store_pack(source)
+        if found is not None:
+            return found
         refuse(
             "ROOT_NOT_APPROVED",
-            "The USD path is outside all user-approved project roots. Call assets.roots for setup.",
+            "The USD path is outside all user-approved project roots and user asset stores. Call assets__roots for setup.",
         )
 
+    def _store_pack(self, source):
+        """Map a path in a pack of a user store to a root; the user put it there.
+
+        Only ``user_stores``: a project file's ``asset_path`` is found from the working directory,
+        so a cloned repository could name any folder. A pack whose files fail their pins is refused.
+        """
+        from . import asset_packs, assets
+
+        for store in assets.Resolver(assets.DEFAULT_PACK).user_stores():
+            try:
+                pack, *rest = source.relative_to(store).parts
+            except ValueError:
+                continue
+            if not rest:
+                continue
+            try:
+                assets.validate_pack_name(pack)
+            except assets.InvalidPackName:
+                continue
+            folder = store / pack
+            rel = "/".join(rest)
+            usd_path(rel)
+            changes = asset_packs.pin_changes(folder)
+            bad = [item["file"] for item in changes["changed"]] + changes["removed"]
+            if bad:
+                refuse("PACK_CORRUPT", f"Pack {pack} has files that differ from their pins: {bad[:10]}. "
+                       "Run assets__pack_doctor, then restore them or re-pin with assets__pack_pin.")
+            root_id = f"pack:{folder}"
+            fd = open_dir(folder)
+            try:
+                self._pack_roots.setdefault(root_id, (folder, signature(os.fstat(fd))[:2]))
+            finally:
+                os.close(fd)
+            return root_id, rel
+        return None
+
     def root_fd(self, root_id):
-        if root_id not in self.roots:
+        known = self.roots.get(root_id) or self._pack_roots.get(root_id)
+        if known is None:
             refuse(
                 "ROOT_NOT_APPROVED",
-                "Root is not approved in this server configuration. Call assets.roots for setup.",
+                "Root is not approved in this server configuration. Call assets__roots for setup.",
             )
-        path, identity = self.roots[root_id]
+        path, identity = known
         fd = open_dir(path)
         if signature(os.fstat(fd))[:2] != identity:
             os.close(fd)
@@ -392,7 +470,7 @@ class Broker:
             files, total, packages = {}, 0, {}
             for parent, name, rel, st in walk(fd):
                 if len(files) >= MAX_FILES or total + st.st_size > MAX_BYTES:
-                    refuse("LIMIT", "Snapshot exceeds 1000 files or 256 MiB.")
+                    refuse("LIMIT", "Snapshot exceeds 1000 files or 256 MiB. Copy only what the USD needs with assets__pack_build, then import from that pack.")
                 data = read_regular(parent, name, st)
                 if Path(rel).suffix.lower() == ".usdz":
                     from .usdz import validate
@@ -411,7 +489,7 @@ class Broker:
                 files[rel] = hashlib.sha256(data).hexdigest()
             if path not in files:
                 refuse(
-                    "NOT_FOUND", "Selected file is absent from the project snapshot."
+                    "NOT_FOUND", "Selected file is absent from the project snapshot. Check the name with assets__scan."
                 )
             manifest = dict(
                 version=1,
@@ -504,7 +582,7 @@ class Broker:
         return self.staging / token / "project" / manifest["entry"], manifest
 
 
-def main():
+def main(argv=None):
     """Human launch-configuration helper, intentionally not an MCP tool."""
     import argparse
 
@@ -512,33 +590,48 @@ def main():
         description="Approve a trusted project for the local OS user. NOT a sandbox. Set ISAAC_MCP_ASSET_CONFIG for both MCP host and Kit after this command."
     )
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--root-id", required=True)
-    parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--staging", type=Path, required=True)
+    parser.add_argument("--root-id", help="name for --root; give both, or neither for staging only")
+    parser.add_argument("--root", type=Path)
+    parser.add_argument("--staging", type=Path, help="required when creating the file")
     parser.add_argument(
         "--trust-project",
         action="store_true",
         help="Explicitly trust native USD parsing, dependencies and enabled Kit code with this OS account permissions.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not args.trust_project:
         parser.error("--trust-project required; isolated untrusted mode is unavailable")
-    args.staging.mkdir(mode=0o700, parents=True, exist_ok=True)
-    doc = dict(
-        version=1,
-        profile="trusted_project",
-        roots={args.root_id: str(args.root.absolute())},
-        staging=str(args.staging.absolute()),
-    )
-    # Never overwrite an existing approval; changes are a deliberate user edit.
+    if (args.root is None) != (args.root_id is None):
+        parser.error("--root and --root-id go together")
+    if args.config.exists():
+        # The user runs this helper, not a model, and it only ever adds: an existing root or the
+        # staging folder cannot be changed from here.
+        doc = json.loads(args.config.read_text())
+        if not isinstance(doc, dict) or not isinstance(doc.get("roots"), dict):
+            parser.error(f"{args.config} is not an approval file")
+        if args.staging is not None and str(args.staging.absolute()) != doc.get("staging"):
+            parser.error(f"{args.config} already uses staging {doc.get('staging')}; edit the file to change it")
+        if args.root_id in doc["roots"] and doc["roots"][args.root_id] != str(args.root.absolute()):
+            parser.error(f"root id {args.root_id} already names {doc['roots'][args.root_id]}; choose another id")
+    else:
+        if args.staging is None:
+            parser.error("--staging is required when creating the approval file")
+        args.staging.mkdir(mode=0o700, parents=True, exist_ok=True)
+        doc = dict(version=1, profile="trusted_project", roots={}, staging=str(args.staging.absolute()))
+    if args.root is not None:
+        doc["roots"][args.root_id] = str(args.root.absolute())
     args.config.parent.mkdir(parents=True, exist_ok=True)
-    with args.config.open("x") as stream:
-        json.dump(doc, stream, indent=2)
-    broker = Broker(str(args.config))
+    tmp = args.config.with_name(f".{args.config.name}.{uuid.uuid4().hex}.part")
+    tmp.write_text(json.dumps(doc, indent=2))
+    # Check the result before it replaces anything, so a bad addition leaves the old file working.
+    broker = Broker(str(tmp))
     if broker.config_error:
-        args.config.unlink()
+        tmp.unlink()
         parser.error(broker.config_error)
+    tmp.replace(args.config)
     print("Approved trusted project configuration: " + str(args.config.absolute()))
+    for root_id, path in sorted(broker.missing_roots.items()):
+        print(f"Note: root {root_id} does not exist right now: {path}")
     print(
         "Set ISAAC_MCP_ASSET_CONFIG to this path for host and Kit, then restart them."
     )

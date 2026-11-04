@@ -153,11 +153,13 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
     use_local = root_path.is_dir()
     fetched = skipped = 0
     total_bytes = 0
-    kept = 0
+    kept = []
     changed = []
     for group, entry in _iter_files(manifest):
         if _pinned(cache, entry):
-            kept += 1  # never replace a file the user pinned (e.g. a lab-modified robot)
+            # Name it as SHA256SUMS does, so the unpin command printed below works.
+            kept.append(_rel(entry) if _rel(entry) in asset_cache.pins(cache / asset_cache.PACK) else entry["target"])
+            # never replace a file the user pinned (e.g. a lab-modified robot)
             continue
         destination = cache / asset_cache.PACK / _rel(entry)
         if destination.is_file() and not force:
@@ -189,7 +191,11 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
         f"{cache / asset_cache.PACK} ({total_bytes / 1048576:.1f} MB downloaded)."
     )
     if kept:
-        print(f"Kept {kept} file(s) you pinned yourself (not replaced by NVIDIA's copy).")
+        print(f"Kept {len(kept)} file(s) you pinned yourself (not replaced by NVIDIA's copy; --force does not change this).")
+        if force:
+            print("To get NVIDIA's copy of a pinned file back, remove its pin, then fetch again:\n"
+                  f"  python3 scripts/isaac_assets.py unpin {' '.join(kept)}\n"
+                  "  python3 scripts/fetch_ur5e_assets.py --force")
     for item in manifest.get("manual", []):
         print(f"Manual: {item['target']} — {item['hint']}")
     print("Air-gapped runs: set ISAAC_MCP_ASSET_STRICT=1 after this fetch.")
@@ -198,7 +204,7 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
         for path in changed:
             print(f"  {path}", file=sys.stderr)
         print("If you changed them on purpose, accept them: python3 scripts/isaac_assets.py pin\n"
-              "To replace them with NVIDIA's copy instead, re-run with --force.", file=sys.stderr)
+              "To replace these unpinned files with NVIDIA's copy instead, re-run with --force.", file=sys.stderr)
         return 1
     return 0
 
@@ -220,6 +226,9 @@ def main() -> int:
     root = args.asset_root or asset_cache.asset_root()
     print(f"Cache: {cache}")
     print(f"Source: {root}")
+    selected = asset_cache.selected_pack()
+    if selected != asset_cache.PACK:
+        print(f"Note: NVIDIA's files go to the twin's {asset_cache.PACK} pack, never to the selected pack {selected}.")
     if args.check:
         return check(manifest, cache)
     return fetch(manifest, cache, root, args.force)
