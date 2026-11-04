@@ -202,8 +202,8 @@ Five builds at once plus one started by hand, on the lab PC, with other agents r
 - [x] Parallel instances: no crossover or crash across 6.0.0.0, 6.0.0.1, 6.0.1, 6.1 and 6.2
 - [x] `sim__stop` left Kit running on 6.0.1, because its `python.sh` doesn't `exec`. Stop now signals the launcher's group members first, on kernels without group pidfds; status and list treat the child as that session. Unit tested; needs a live check on 6.0.1
 - [ ] Live check of that fix on 6.0.1
-- [x] A queued call that times out now says what the bridge is running, read from `status`. Unit-level only; `DOORWAY_BUSY` itself still doesn't reach an MCP caller
-- [x] A SIGKILL mid-call now names the bridge and tool, says the effects are unknown, and how to check
+- [ ] A queued call that times out should say what the bridge is running. Tried reading `status` in the client; it added a call and broke 11 tests, so reverted. Needs the host layer, which already formats these errors
+- [ ] A SIGKILL mid-call should name the tool and say the effects are unknown. Tried in the client, which broke host tests that expect its text, so reverted. Do it in the host layer's error formatting
 - [ ] `ISAAC_MCP_SIM_MAX_INSTANCES` counts the whole machine, and its refusal doesn't say `0` disables it
 - [x] Windowed 5.1 (DeepSeek): capture, screenshot, viewport, `sim__graph__show`, a 141-frame recording, LiDAR and `/scan`, reopen, `create3` drove 1.38 m. No `run_python`
 - [x] Regression from the exit-code wrapper: the recorded pid became the shell, so `runs_status` lost `window`, and cancel could report done with Kit still running. Shell now outlasts the signal; windows match the job's process group
