@@ -182,6 +182,29 @@ Otherwise a build refuses with `USD_UNAVAILABLE`, and a doctor says the dependen
 checked. Native USD parsers are not sandboxed, so only use files you trust. Standalone USD and
 Kit can resolve some references differently; the result names the `backend` that ran.
 
+## Build a pack from a URDF
+
+Approve the folder you cloned as a root (see [one-time approval](TOOLS-SCENE.md#one-time-approval)), then:
+
+```text
+assets__pack_build  pack="panda" sources=["/abs/example-robot-data/robots/panda_description/urdf/panda.urdf"]
+sim__quick_start    robot="panda/example-robot-data/robots/panda_description/urdf/panda.urdf"
+```
+
+The build copies the URDF, each mesh it names and the textures a DAE, OBJ or MTL file names. It copies nothing else, so
+a large repository is fine. No USD parser is needed. The source and the copy in the pack are never rewritten.
+
+`package://<pkg>/<path>` is looked for inside the approved root or pack only, in this order:
+
+1. a `package.xml` that names `<pkg>`, in any folder;
+2. a folder called `<pkg>`;
+3. the root itself, when its own folder is called `<pkg>`. The pack then keeps that folder name, so the package can still be found.
+
+An unresolved package, a missing mesh, a symlink, a URL or a path that leaves the root refuses the build, naming each one
+(`allow_unresolved=true` builds anyway, and records them). A texture a mesh names but that is absent does not
+block: it is listed in `missing_textures`, and `self_contained` is false. `.glb`, `.gltf` and `.fbx` meshes are copied, but what
+they name is not followed, which also makes `self_contained` false. A xacro file refuses with the command to expand it; this tool never runs xacro.
+
 ## Packs from MCP tools
 
 | Tool | Writes | Does |
@@ -191,7 +214,7 @@ Kit can resolve some references differently; the result names the `backend` that
 | `assets__dependencies` | No | The raw USD closure of files |
 | `assets__pack_adopt` | Yes | Creates an empty pack, or copies a folder's asset files in and pins them. `files` limits it to named files or folders. `entries` records its root USDs; a sole top-level USD is recorded on its own |
 | `assets__pack_pin` | Yes | Pins a pack's files |
-| `assets__pack_build` | Yes | Builds a pack from USD files, as above |
+| `assets__pack_build` | Yes | Builds a pack from USD or URDF files, as above |
 
 These run on the MCP host and need no Kit, apart from USD parsing when no helper is set.
 
@@ -214,9 +237,9 @@ the rules marked *both*.
   directory, so a cloned repository could name any folder. The resolver still searches it, and
   `assets__pack_doctor` still checks its pins, but the tools do not parse USD there or copy from it
   until you approve that folder as a root.
-- **A USD in a pack in a user store can be imported with `assets__import_path` without approving it as a root.** `assets__import_urdf` takes only an approved root, so a URDF pack still needs its folder approved. You put it there, and
-  the pack tools already read it. `assets__import_path` still needs shared staging, refuses a pack
-  whose files differ from their pins with `PACK_CORRUPT`, and refuses symlinks inside it.
+- **A pack in a user store can be imported without approving it as a root:** a USD with `assets__import_path`, a URDF with `assets__import_urdf source_path`. You put it there, and
+  the pack tools already read it. Both still need shared staging, refuse a pack
+  whose files differ from their pins with `PACK_CORRUPT`, and refuse symlinks inside it.
 - **No overwrite without `force=true`** (*both*). A different file in the pack is a refusal, with
   nothing copied.
 - **Re-pinning is not implicit.** New files are pinned, but a pin that would change accepts whatever
