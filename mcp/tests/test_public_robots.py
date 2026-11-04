@@ -68,6 +68,19 @@ def test_no_root_strict_mode_and_an_unreachable_server_are_each_told_apart():
     assert exc.value.code == "ASSETS_UNAVAILABLE" and "reach" in str(exc.value)
 
 
+def test_only_not_found_means_absent():
+    assert pr.stat_found("ok", "ok", "missing") is True
+    assert pr.stat_found("missing", "ok", "missing") is False
+    with pytest.raises(OSError):
+        pr.stat_found("connection lost", "ok", "missing")
+
+    async def offline(url):
+        return pr.stat_found("connection lost", "ok", "missing")
+    with pytest.raises(AssetError) as exc:
+        asyncio.run(pr.locate("franka", ROOT, offline))
+    assert exc.value.code == "ASSETS_UNAVAILABLE"
+
+
 def test_strict_mode_keeps_a_local_assets_root():
     url = "/data/isaac/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
     assert _locate("franka", root="/data/isaac", existing={url}, offline=True)["uri"] == url

@@ -50,12 +50,21 @@ def assets_root():
         return None
 
 
+def stat_found(result, ok, not_found):
+    """True or False for a stat answer. Anything else, such as a lost connection, raises: unreachable is not absent."""
+    if result == ok:
+        return True
+    if result == not_found:
+        return False
+    raise OSError(str(result))
+
+
 async def client_stat(url):
     """True when the assets server has this file. Times out rather than holding Kit's loop."""
     import omni.client
 
     result, _ = await asyncio.wait_for(omni.client.stat_async(url), STAT_TIMEOUT_S)
-    return result == omni.client.Result.OK
+    return stat_found(result, omni.client.Result.OK, omni.client.Result.ERROR_NOT_FOUND)
 
 
 async def locate(name, root, stat, offline=False):
