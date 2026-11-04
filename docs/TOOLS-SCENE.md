@@ -16,7 +16,7 @@ UR5e twin, `ur5e_dt__quick_start`.
 
 | Argument | Meaning |
 |---|---|
-| `robot` | Optional. A public name (`ur5e`), `<pack>/<file.usd>`, or an absolute path under an approved root. |
+| `robot` | Optional. A public name, `<pack>/<file.usd>`, or an absolute path under an approved root. Names: `ur5e` (your local copy first), and `franka`, `turtlebot3_burger`, `carter_v1`, `nova_carter`, `jetbot` and `create3` from this simulator's own assets root, which are checked first and refused with the names if this build lacks one. A wheeled robot's result adds `robot.wheels` and `robot.cmd_vel_graph`, ready for `sim__graph__build`. See the [worked example](ROS2-RVIZ.md#worked-example-a-public-robot-cmd_vel-and-a-nav2-goal). |
 | `ros` | With a robot: run what `sim__ros2__tf_setup` runs and report the matching shell line. |
 | `play` | Start the timeline. Default: stopped. |
 | `up_axis`, `meters_per_unit` | The stage's up axis (`Z` or `Y`, default `Z`) and units (default `1.0`; `0.01` for centimetres). The ground, gravity, camera and framing follow them. |
@@ -479,7 +479,9 @@ annotator, including the older 6.0.0.0 API. A `config` LiDAR uses NVIDIA's 6.x
 On 6.2.0.0 an `Example_Rotary_2D` LiDAR at `/turtlebot3_burger/base_scan/Lidar2D` returned
 points through `sim__lidar__read`, and a `ROS2RtxLidarHelper` (`type=laser_scan`) published
 3600-beam `/scan` messages, both with Motion BVH off. The helper has no `targetPrim` on any build we inspected, including 5.1 and 6.2. Wire
-`OnPlaybackTick`'s `outputs:tick` to `IsaacCreateRenderProduct` (`cameraPrim` = the LiDAR), then to the helper's `renderProductPath`, which gave the same `/scan` on 6.0.0.0 through 6.2. The full build, running Kit and loaded extensions must match
+`OnPlaybackTick`'s `outputs:tick` to `IsaacCreateRenderProduct` (`cameraPrim` = the LiDAR), then to the helper's `renderProductPath`, which gave the same `/scan` on 6.0.0.0 through 6.2. `sim__lidar__create` returns this graph as `ros2_scan_graph`, ready for `sim__graph__build`, and its `cameraPrim` is the returned `sensor_path`: NVIDIA's config assets
+can nest the OmniLidar below your `path` (`RPLIDAR_S2E`), and a product aimed at the wrapper only logs `not attached to RTX Lidar`. It also returns the tool's own `render_product`. On 6.2.0.0 and 5.1.0.0 a helper wired directly to it published too, but saves drop that product, so such a graph goes silent in a reopened file.
+One run on 6.1 saw 360 values of `-1.0` from that direct wiring until `sim__lidar__read` had run; that did not reproduce on 6.2.0.0, and 6.1 is untested here. The full build, running Kit and loaded extensions must match
 a qualified stack; missing/conflicting identity and unknown builds fail before native creation.
 `sim__stage__info.runtime` reports the actual package, full VERSION, Kit, extension, Warp,
 solver and adapter information. Adding a release requires qualification evidence and a data

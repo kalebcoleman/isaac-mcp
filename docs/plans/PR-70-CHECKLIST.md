@@ -143,8 +143,15 @@ Found by the fleet at `e658289`; not fixed yet:
 ### Open: to attempt
 
 - [ ] **`sim__lidar__read` stuck on `NOT_READY`**: 6.0.0.0 and 6.0.1 in the confused-agent runs, with a target in range after 10 s of Play. It worked on the same builds in other runs (6.0.1, 6.0.0.1, 6.1), so a preceding step may matter. Needs a reproduction, and the refusal should report what it observed
-- [ ] **Driving a mobile base**: only position targets exist, so a TurtleBot moved 0.04 m. Wheeled robots agent in progress
-- [ ] **Merge and review the wheeled robots and Nav2 branch**
+- [x] **Driving a mobile base and Nav2**: merged. NVIDIA robots load by name and drive from `/cmd_vel`, and Nav2 reached a goal with Create 3 and TurtleBot3, on 6.2 and 5.1. Pictures and steps: `docs/evidence/public-robot-nav2-2026-11-04/`
+- [ ] Same on 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1: not run yet, and the first TF loop report came from 6.1
+- [ ] Carter: drives, but Nav2 stopped 1.2 m short (`Failed to make progress`); not tuned. Nova Carter and Jetbot: drive, Nav2 not run
+- [ ] TurtleBot3 stalls on the final heading without `--yaw-tolerance 3.2`, probably its box caster
+- [ ] A very flat floor already saved in a file gets no warning: only `sim__prim__create` warns
+- [ ] Why a floor scaled 20x20x0.1 gives wheels no contact is measured, not explained (133:1 fails, 100:1 drives on TurtleBot3; Carter erratic from 50:1). Limitation unless the cause turns up
+- [ ] 5.1 saves also write a `/WriterOrchestrator` graph; `/scan` still worked after reopening. Not looked into
+- [ ] A collapsed body after reopening, seen once on 6.1, did not reproduce on 6.2 or 5.1. Cause unknown
+- [ ] RViz not used in these runs: all headless
 - [ ] **URDF pack needs one-time approval and staging**, unlike a USD pack. Decide: a default staging folder, or keep it and document
 - [ ] Windowed 5.1: first `sim__quick_start` failed twice with no error earlier. 5 of 5 pass headless; windowed not retried
 - [ ] Refusals check state before type: `joints__state` on a Cube says "play first", then the real fault. Same for `steps=0`

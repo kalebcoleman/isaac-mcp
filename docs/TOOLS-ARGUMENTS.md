@@ -481,7 +481,7 @@ Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit,
 
 ### `sim__joints__command`
 
-Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure. Requires session_id and stage_id from sim__stage__info.
+Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure. Targets are runtime only and are lost on Stop; to keep one, use sim__joints__drive. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -519,7 +519,7 @@ While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized arti
 
 ### `sim__lidar__create`
 
-Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build OnPlaybackTick -> IsaacCreateRenderProduct (cameraPrim = the LiDAR) -> ROS2RtxLidarHelper (type=laser_scan), wiring both execIn and renderProductPath. Requires session_id and stage_id from sim__stage__info.
+Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path, rates and ros2_scan_graph: pass that to sim__graph__build to publish /scan. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -699,9 +699,9 @@ Set a static local/world pose for a prim created by this pack. Refuses playing/p
 
 ### `sim__quick_start`
 
-One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns the new session_id and stage_id, paths, each asset's source and next steps. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.
+One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.
 
-- `robot` (string, optional): Optional robot: a public name (ur5e, from your local copy first, then NVIDIA, honoring strict mode), <pack>/<file.usd> or <pack>/<file.urdf> from a pack in your asset folder, or an absolute path under an approved root (same rules as assets__import_path and assets__import_urdf). A file found only through a project file's asset_path is refused.
+- `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from a pack in your asset folder, or an absolute path under an approved root (as for assets__import_path and assets__import_urdf). Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (from this simulator's own assets root). A file found only through a project file's asset_path is refused.
 - `fixed_base` (boolean, default `true`): With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
 - `ros` (boolean, default `false`): With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.
 - `up_axis` (Z|Y, default `"Z"`): The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.

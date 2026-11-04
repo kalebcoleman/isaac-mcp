@@ -1124,6 +1124,8 @@ class Advanced:
                     rate="A USD camera has no tick rate: it renders every frame. Set a ROS publishing rate on the ROS2 Camera Helper (frameSkipCount).",
                 )
             else:
+                from .ros2 import scan_graph_args, tf_name
+
                 try:
                     import carb.settings
 
@@ -1132,6 +1134,14 @@ class Advanced:
                     motion = None
                 result.update(
                     sensor_path=sensor["sensor_path"],
+                    render_product=sensor.get("product_path"),
+                    ros2_scan_graph=scan_graph_args(sensor["sensor_path"], tf_name(stage.GetPrimAtPath(sensor["sensor_path"]))),
+                    ros2_note=(
+                        "To publish /scan, pass ros2_scan_graph to sim__graph__build: it targets sensor_path, the OmniLidar, "
+                        "and makes its own render product at Play, which survives a save. render_product is this "
+                        "session's own, for sim__lidar__read; saves drop it. Scans are stamped with the sensor's own frame: pass "
+                        "sensor_path in sim__ros2__tf_setup extra_frames so that frame is in the tree."
+                    ),
                     tick_rate_hz=sensor["tick_rate_hz"],
                     scan_rate_hz=sensor["scan_rate_hz"],
                     config=a.get("config") or None,
