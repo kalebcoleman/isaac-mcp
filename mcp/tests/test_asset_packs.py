@@ -1222,17 +1222,6 @@ def test_a_symlink_in_a_store_pack_is_refused_by_the_snapshot(env, tmp_path):
 # ---------------------------------------------------------------- refusals that say what to do
 
 
-def test_a_package_url_names_the_file_and_the_fix():
-    from isaac_mcp import project_assets as pa
-
-    with pytest.raises(pa.AssetError) as caught:
-        pa.urdf_dependency("urdf/07-physics.urdf", "package://urdf_tutorial/meshes/l_finger.dae")
-    message = str(caught.value)
-    assert caught.value.code == "INVALID_PATH" and "07-physics.urdf" in message
-    assert "package://urdf_tutorial/meshes/l_finger.dae" in message and "Rewrite it relative" in message
-    assert pa.urdf_dependency("urdf/a.urdf", "meshes/b.stl") == "urdf/meshes/b.stl"
-
-
 def test_a_units_mismatch_says_what_to_change():
     from isaac_mcp import project_assets as pa
 

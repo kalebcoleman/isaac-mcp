@@ -58,14 +58,20 @@ def _resolved(relpath, pack, label, name):
 
 
 def resolve_robot(robot, snapshot_id=None):
-    """What ``robot`` names, before anything changes. A public name, ``<pack>/<file>``, or an absolute path
-    the host turned into a verified snapshot under an approved root."""
+    """What ``robot`` names, before anything changes. A public name, ``<pack>/<file>``, or a path the host
+    turned into a verified snapshot under an approved root or in a pack. A URDF always comes as a snapshot."""
     if robot in PUBLIC_ROBOTS:
         relpath, name = PUBLIC_ROBOTS[robot]
         return _resolved(relpath, PUBLIC_PACK, f"The {robot} robot ({relpath})", name)
     known = ", ".join(sorted(PUBLIC_ROBOTS))
     if not isinstance(robot, str) or not robot.strip():
         refuse("INVALID_VALUE", f"robot: a public name ({known}), <pack>/<file.usd> or an absolute path under an approved root.")
+    is_urdf = robot.lower().endswith(".urdf")
+    if snapshot_id and is_urdf:
+        return dict(name=_prim_name(robot), snapshot=True, urdf=True, assets=[dict(asset=robot, source="snapshot", location=robot)])
+    if is_urdf:
+        refuse("ROOT_NOT_APPROVED", "A URDF goes through the MCP host, which checks it against your approved roots and "
+               "asset folder. Nothing was changed.")
     if os.path.isabs(os.path.expanduser(robot)):
         if not snapshot_id:
             refuse("ROOT_NOT_APPROVED", "An absolute robot path goes through the MCP host, which checks it against your "
@@ -266,6 +272,9 @@ async def run(ext, args):
         refuse("APP_STARTING", "Kit startup is still running. Wait until sim__stage__info reports app_ready=true; "
                "nothing was changed.")
     robot, ros, play = args.get("robot"), args.get("ros", False), args.get("play", False)
+    fixed_base = args.get("fixed_base", True)
+    if type(fixed_base) is not bool:
+        refuse("INVALID_VALUE", "fixed_base must be a boolean.")
     discard = args.get("discard_changes", False)
     if any(type(value) is not bool for value in (ros, play, discard)):
         refuse("INVALID_VALUE", "ros, play and discard_changes must be booleans.")
@@ -278,7 +287,11 @@ async def run(ext, args):
                before_retry=stop_call(info["session_id"], info["stage_id"]))
     snapshot = args.get("snapshot_id"), args.get("manifest_sha256")
     wanted = resolve_robot(robot, snapshot[0]) if robot else None
-    if wanted and wanted.get("snapshot"):
+    is_urdf = bool(wanted and wanted.get("urdf"))
+    if is_urdf and (up_axis, meters_per_unit) != ("Z", 1.0):
+        # Both importers write Z up in metres, whatever the stage is.
+        refuse_units("a URDF", "Z", 1.0, up_axis, meters_per_unit)
+    if wanted and wanted.get("snapshot") and not is_urdf:
         info = scene.inspect_asset(*snapshot)[2]
         if info["up_axis"] != up_axis or not math.isclose(info["meters_per_unit"], meters_per_unit, rel_tol=1e-9):
             refuse_units("the robot file", info["up_axis"], info["meters_per_unit"], up_axis, meters_per_unit)
@@ -317,7 +330,12 @@ async def run(ext, args):
     owned = [WORLD]
     root = robot_path = None
     if wanted:
-        if wanted.get("snapshot"):
+        if is_urdf:
+            robot_path = f"{WORLD}/{wanted['name']}"
+            converted = ext.advanced.import_urdf(stage, *snapshot, robot_path, fixed_base=fixed_base)
+            urdf_report = {k: converted[k] for k in ("base", "packages", "mapped_files", "placement", "warnings")}
+            urdf_report["drives"] = converted["converted_physics"].get("drives")
+        elif wanted.get("snapshot"):
             robot_path = f"{WORLD}/{wanted['name']}"
             scene.import_path(stage, *snapshot, robot_path)
         else:
@@ -337,6 +355,8 @@ async def run(ext, args):
                                expanded_visuals=expanded, composition_errors=len(errors),
                                **({"composition_error_samples": [str(e)[:200] for e in errors[:3]]} if errors else {}),
                                **({} if root else {"note": "No articulation root found, so the joint tools will not work on it."}))
+        if is_urdf:
+            result["robot"]["urdf"] = urdf_report
         result["assets"] = wanted["assets"]
         if not units_checked:
             result["robot"]["units_note"] = "The remote file's up axis and units could not be read beforehand; check the result."

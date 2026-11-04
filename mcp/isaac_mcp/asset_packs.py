@@ -19,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from . import assets, material_refs
+from . import assets, material_refs, urdf_refs
 
 PINS_FILE = assets.PINS_FILE
 PACK_FILE = assets.PACK_FILE
@@ -528,6 +528,23 @@ def helper_closure(paths: list[str], python: str, timeout: float = CLOSURE_TIMEO
     )
 
 
+def run_closure(closure, paths: list[str], folder_of, projects: dict | None = None) -> list[dict]:
+    """Closures for a mix of files: URDFs are read here, with no USD parser, and USD goes to *closure*.
+
+    *folder_of* gives the folder a URDF's packages are looked for in. Nothing outside it is searched.
+    """
+    projects = {} if projects is None else projects
+    results, usd = [], []
+    for path in paths:
+        if not urdf_refs.is_urdf(path):
+            usd.append(path)
+            continue
+        folder = Path(folder_of(path))
+        project = projects.setdefault(str(folder), urdf_refs.project_from_folder(folder))
+        results.append(urdf_refs.closure_result(path, project, folder))
+    return results + (list(closure(usd)) if usd else [])
+
+
 class ClosureBackend:
     """Compute closures with a host USD helper, else the selected Kit, and say which ran."""
 
@@ -627,8 +644,9 @@ def build_pack(
     dry_run: bool = False,
     force: bool = False,
     notes: list | None = None,
+    urdf_root=None,
 ) -> dict:
-    """Copy USD files and only what they depend on into a pack, keeping relative layout, and pin.
+    """Copy USD or URDF files and only what they depend on into a pack, keeping relative layout, and pin.
 
     A source is an absolute path or, with *from_pack_dirs*, a path inside that pack. A source
     outside both *from_pack_dirs* and *layout_root* (a scene whose references are logical names)
@@ -642,6 +660,8 @@ def build_pack(
     from_dirs = [Path(d) for d in from_pack_dirs]
     base_of: dict[str, Path | None] = {}  # queued real path -> layout folder, None = read only
     queue: list[str] = []
+    search_folder: dict[str, Path] = {}  # URDF -> the folder its ROS packages are looked for in
+    urdf_projects: dict = {}
 
     def layout_for(path: Path) -> Path | None:
         for folder in ([layout_root] if layout_root else []) + from_dirs:
@@ -672,10 +692,21 @@ def build_pack(
             )
         if not path.is_file():
             raise PackError(f"source not found: {path}", "NOT_FOUND")
-        if path.suffix.lower() not in USD_SUFFIXES:
-            raise PackError(f"source is not a USD file: {path}", "UNSUPPORTED_FORMAT")
+        if urdf_refs.is_xacro(path):
+            raise PackError(f"{path.name} is a xacro file, not a URDF. {urdf_refs.XACRO_HELP}", "XACRO")
+        is_urdf = urdf_refs.is_urdf(path)
+        if path.suffix.lower() not in USD_SUFFIXES and not is_urdf:
+            raise PackError(f"source is not a USD or URDF file: {path}", "UNSUPPORTED_FORMAT")
         base = layout_for(path)
-        if base is None and not from_dirs:
+        if is_urdf:
+            base = base or (urdf_root(path) if urdf_root else path.parent)
+            search_folder[str(path)] = base
+            # A package known only by the name of this folder: lay out from one level up, so the copy
+            # holds a folder of that name. Each file still has to pass the trust check below.
+            peek = run_closure(closure, [str(path)], search_folder.__getitem__, urdf_projects)[0]
+            if peek.get("root_folder_package"):
+                base = base.parent
+        elif base is None and not from_dirs:
             base = path.parent
         enqueue(path, base)
 
@@ -684,9 +715,12 @@ def build_pack(
     blocked: dict[str, list] = dict(unresolved=[], remote=[], outside=[], unreadable=[])
     runtime: set[str] = set()
     file_base: dict[Path, Path] = {}
+    missing_textures: list[dict] = []
+    urdf_unfollowable: list[dict] = []
+    urdf_packages: dict = {}
     while queue:
         batch, queue[:] = list(queue), []
-        for result in closure(batch):
+        for result in run_closure(closure, batch, search_folder.__getitem__, urdf_projects):
             origin = Path(result["path"])
             base = base_of[str(origin)]
             if result.get("error"):
@@ -694,6 +728,12 @@ def build_pack(
             runtime.update(result.get("runtime", []))
             if base is not None:
                 entries.add(origin.relative_to(base).as_posix())
+            for item in result.get("problems", []):
+                blocked[item["kind"]].append(
+                    dict(reference=item["reference"], reason=item["reason"], referenced_by=str(origin)))
+            missing_textures += [{**item, "urdf": origin.name} for item in result.get("missing_textures", [])]
+            urdf_unfollowable += result.get("unfollowable", [])
+            urdf_packages.update(result.get("packages", {}))
             for dep in [*result["layers"], *result["assets"]]:
                 if _URL.match(dep) and not dep.startswith("file:"):
                     blocked["remote"].append(dict(reference=dep, referenced_by=str(origin)))
@@ -746,6 +786,9 @@ def build_pack(
             files[rel] = real
     if not files:
         raise PackError("nothing to copy: no source is inside the layout or the source pack", "NOT_FOUND")
+    if missing_textures or urdf_unfollowable:
+        notes.append("Some meshes name files that are absent or could not be read: see missing_textures and "
+                     "unfollowable. Geometry still imports, and self_contained is false.")
     for rel in files:
         if rel in (PINS_FILE, PACK_FILE):
             raise PackError(f"{rel} in the closure would collide with the pack's own files", "CONFLICT")
@@ -754,13 +797,16 @@ def build_pack(
         unresolved=blocked["unresolved"][:MAX_REPORTED], remote=blocked["remote"][:MAX_REPORTED],
         outside=blocked["outside"][:MAX_REPORTED], unreadable=blocked["unreadable"][:MAX_REPORTED],
         runtime_materials=sorted(runtime), material_references=len(followed["references"]),
-        unfollowable=followed["unfollowable"][:MAX_REPORTED],
+        unfollowable=[*followed["unfollowable"], *urdf_unfollowable][:MAX_REPORTED],
+        missing_textures=missing_textures[:MAX_REPORTED],
+        **({"urdf_packages": urdf_packages} if urdf_packages else {}),
     )
     if followed["unfollowable"]:
         notes.append(UNFOLLOWABLE_NOTE)
     if any(blocked.values()) and not allow_unresolved:
         listed = [
             f"  {kind}: {item.get('reference') or item.get('file')} (in {item['referenced_by']})"
+            + (f": {item['reason']}" if item.get("reason") else "")
             for kind, items in blocked.items() for item in items
         ]
         raise PackError(
@@ -814,6 +860,8 @@ def check_closure(folder: Path, entries: list[str], closure) -> dict:
     accepted_found: set[str] = set()
     present = [rel for rel in entries if (folder / rel).is_file()]
     missing = [rel for rel in entries if not (folder / rel).is_file()]
+    urdf_projects: dict = {}
+    missing_textures: list[dict] = []
 
     def add_unresolved(reference: str, holder: str) -> None:
         rel = _under(Path(plain_path(reference)), root) or reference
@@ -822,12 +870,21 @@ def check_closure(folder: Path, entries: list[str], closure) -> dict:
         else:
             out["unresolved"].append(dict(reference=rel, referenced_by=_short(holder, root)))
 
-    for result in closure([str(root / rel) for rel in present]) if present else []:
+    results = run_closure(closure, [str(root / rel) for rel in present], lambda _: root, urdf_projects) if present else []
+    for result in results:
         origin = result["path"]
         if result.get("error"):
             out["unreadable"].append(dict(reference=_short(origin, root), detail=result["error"]))
             continue
         runtime.update(result.get("runtime", []))
+        for item in result.get("problems", []):
+            if item["kind"] == "unresolved":
+                add_unresolved(item["reference"], origin)
+            elif item["kind"] == "remote":
+                out["remote"].append(dict(reference=item["reference"], referenced_by=_short(origin, root)))
+            else:
+                out["outside_pack"].append(dict(file=item["reference"], referenced_by=_short(origin, root)))
+        missing_textures += [{**item, "urdf": _short(origin, root)} for item in result.get("missing_textures", [])]
         for dep in [*result["layers"], *result["assets"]]:
             if _URL.match(dep) and not dep.startswith("file:"):
                 out["remote"].append(dict(reference=dep, referenced_by=_short(origin, root)))
@@ -860,6 +917,8 @@ def check_closure(folder: Path, entries: list[str], closure) -> dict:
         else:
             add_unresolved(str(item["target"]), holder)
     out["unfollowable"] = [dict(file=_short(i["file"], root), reason=i["reason"]) for i in followed["unfollowable"]]
+    out["unfollowable"] += [item for result in results for item in result.get("unfollowable", [])]
+    out["missing_textures"] = missing_textures
     for key in out:
         unique = {json.dumps(item, sort_keys=True): item for item in out[key]}
         out[key] = [unique[k] for k in sorted(unique)]
@@ -924,7 +983,8 @@ def doctor_folder(folder: Path, *, closure=None, entries: list | None = None, ma
     elif manifest and twin_entries(folder, manifest):
         chosen, entry_source = twin_entries(folder, manifest), "twin_manifest"
     else:
-        chosen = sorted(rel for rel in report["current"] if PurePosixPath(rel).suffix.lower() in USD_SUFFIXES)
+        chosen = sorted(rel for rel in report["current"]
+                        if PurePosixPath(rel).suffix.lower() in USD_SUFFIXES or urdf_refs.is_urdf(rel))
         entry_source = "all_usd"
     for rel in chosen:
         clean_relpath(rel, "entry")
@@ -971,6 +1031,9 @@ def doctor_folder(folder: Path, *, closure=None, entries: list | None = None, ma
         problems += [f"{u['file']}: outside the pack, referenced by {u['referenced_by']}" for u in deps["outside_pack"]]
     if deps["checked"] and deps["unfollowable"]:
         result["warnings"] = [UNFOLLOWABLE_NOTE]
+    if deps["checked"] and deps["missing_textures"]:
+        result.setdefault("warnings", []).append(
+            "Meshes name files that are absent: " + ", ".join(i["reference"] for i in deps["missing_textures"][:10]))
     result["problems"] = problems[:MAX_REPORTED]
     # Never "ok" when the dependency check did not run: a folder listing proves nothing about it.
     result["ok"] = not problems and deps["checked"]
@@ -1151,7 +1214,7 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
         folder = _write_pack(params.get("pack"), resolver)
         sources = params.get("sources") or []
         if not sources or len(sources) > 64:
-            raise PackError("sources must list 1..64 USD files", "LIMIT")
+            raise PackError("sources must list 1..64 USD or URDF files", "LIMIT")
         broker.require_profile()
         from_dirs = []
         if params.get("from_pack"):
@@ -1169,13 +1232,23 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
                 raise PackError(f"layout_root is outside approved roots and user stores: {layout}", "ROOT_NOT_APPROVED")
         if any(_under(folder.resolve(), d) is not None or _under(d, folder.resolve()) is not None for d in from_dirs):
             raise PackError("source pack and destination pack overlap", "OVERLAP")
-        if not closure.available():
+        # A URDF is read here, so a URDF-only build needs no USD parser.
+        if not closure.available() and not all(urdf_refs.is_urdf(s) or urdf_refs.is_xacro(s) for s in sources):
             raise PackError(unavailable_message(), "USD_UNAVAILABLE")
+
+        def urdf_root(path: Path) -> Path:
+            """The approved root or pack holding *path*, which is as far as its packages are looked for."""
+            for store in resolver.user_stores():
+                pack_rel = _under(path, store.resolve())
+                if pack_rel and "/" in pack_rel:
+                    return store.resolve() / pack_rel.split("/")[0]
+            return _approved_root(path, broker).resolve()
+
         notes = []
         report = build_pack(
             folder, sources, closure, from_pack_dirs=from_dirs, layout_root=layout, trusted=trusted,
             allow_unresolved=bool(params.get("allow_unresolved", False)), dry_run=bool(params.get("dry_run", False)),
-            force=bool(params.get("force", False)), notes=notes,
+            force=bool(params.get("force", False)), notes=notes, urdf_root=urdf_root,
         )
         return dict(status="ok", **context, backend=closure.name, notes=notes, **report)
 

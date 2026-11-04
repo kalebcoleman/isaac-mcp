@@ -66,17 +66,6 @@ def relative(value):
     return value
 
 
-def urdf_dependency(entry, value):
-    """Return a URDF mesh path relative to its project, naming what is wrong if it cannot be."""
-    try:
-        return str(Path(entry).parent / relative(value))
-    except AssetError as exc:
-        why = "package:// needs ROS package lookup, which this importer does not do" if value.startswith(
-            "package:") else str(exc)
-        refuse(exc.code, f"{entry} references mesh {value!r}: {why}. Rewrite it relative to the URDF, for "
-               "example meshes/part.stl, with the file below the URDF's own folder: . and .. are not allowed.")
-
-
 def units_mismatch_message(asset_up, asset_mpu, stage_up, stage_mpu):
     """Say what differs and which stage settings to change; nothing is converted."""
     return (f"Asset and target up-axis/units must match; no automatic conversion. Asset: upAxis={asset_up}, "
@@ -281,13 +270,13 @@ class Broker:
                 + self.config_error,
             )
 
-    def locate(self, source_path):
+    def locate(self, source_path, kind="usd"):
         """Map an absolute local path to an already-approved root, without widening it."""
         self.require_profile()
         if not isinstance(source_path, str) or not source_path.startswith("/"):
             refuse(
                 "INVALID_PATH",
-                "Provide an absolute local USD path under an approved root.",
+                "Provide an absolute local path under an approved root or in a pack of your asset folder.",
             )
         if (
             "\\" in source_path
@@ -309,17 +298,28 @@ class Broker:
                 rel = source.relative_to(root).as_posix()
             except ValueError:
                 continue
-            usd_path(rel)
+            self._check_kind(rel, kind)
             return root_id, rel
-        found = self._store_pack(source)
+        found = self._store_pack(source, kind)
         if found is not None:
             return found
         refuse(
             "ROOT_NOT_APPROVED",
-            "The USD path is outside all user-approved project roots and user asset stores. Call assets__roots for setup.",
+            "The path is outside all user-approved project roots and user asset stores. Call assets__roots for setup.",
         )
 
-    def _store_pack(self, source):
+    @staticmethod
+    def _check_kind(rel, kind):
+        if kind == "urdf":
+            from . import urdf_refs
+
+            urdf_refs.check_urdf_path(rel)
+        elif Path(rel).suffix.lower() in (".urdf", ".xacro"):
+            refuse("UNSUPPORTED_FORMAT", f"{rel} is a URDF, not a USD: use assets__import_urdf with source_path.")
+        else:
+            usd_path(rel)
+
+    def _store_pack(self, source, kind="usd"):
         """Map a path in a pack of a user store to a root; the user put it there.
 
         Only ``user_stores``: a project file's ``asset_path`` is found from the working directory,
@@ -340,7 +340,7 @@ class Broker:
                 continue
             folder = store / pack
             rel = "/".join(rest)
-            usd_path(rel)
+            self._check_kind(rel, kind)
             changes = asset_packs.pin_changes(folder)
             bad = [item["file"] for item in changes["changed"]] + changes["removed"]
             if bad:
@@ -384,7 +384,7 @@ class Broker:
         found = []
         try:
             for _, _, name, st in walk(fd):
-                if Path(name).suffix.lower() in USD | {".usdz"}:
+                if Path(name).suffix.lower() in USD | {".usdz", ".urdf"}:
                     if len(found) >= MAX_FILES:
                         refuse(
                             "LIMIT",
@@ -395,7 +395,7 @@ class Broker:
                             relative_path=name,
                             bytes=st.st_size,
                             inspected=False,
-                            supported=Path(name).suffix.lower() in USD,
+                            supported=Path(name).suffix.lower() in USD | {".urdf"},
                         )
                     )
         finally:
@@ -443,9 +443,10 @@ class Broker:
 
     def snapshot(self, root_id, path, kind="usd"):
         if kind == "urdf":
+            from . import urdf_refs
+
             relative(path)
-            if Path(path).suffix.lower() != ".urdf":
-                refuse("UNSUPPORTED_FORMAT", "Expected .urdf.")
+            urdf_refs.check_urdf_path(path)
         else:
             usd_path(path)
         fd = self.root_fd(root_id)
@@ -470,7 +471,7 @@ class Broker:
             files, total, packages = {}, 0, {}
             for parent, name, rel, st in walk(fd):
                 if len(files) >= MAX_FILES or total + st.st_size > MAX_BYTES:
-                    refuse("LIMIT", "Snapshot exceeds 1000 files or 256 MiB. Copy only what the USD needs with assets__pack_build, then import from that pack.")
+                    refuse("LIMIT", "Snapshot exceeds 1000 files or 256 MiB. Copy only what the USD or URDF needs with assets__pack_build, then import from that pack.")
                 data = read_regular(parent, name, st)
                 if Path(rel).suffix.lower() == ".usdz":
                     from .usdz import validate
@@ -499,6 +500,10 @@ class Broker:
                 bytes=total,
                 packages=packages,
             )
+            if kind == "urdf":
+                # A package may be found by the name of this folder, which a snapshot does not keep.
+                known = self.roots.get(root_id) or self._pack_roots.get(root_id)
+                manifest["root_name"] = Path(known[0]).name
             raw = json.dumps(manifest, sort_keys=True).encode()
             digest = hashlib.sha256(raw).hexdigest()
             # Repeated inspection/import must not retain another identical project.
