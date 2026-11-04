@@ -26,7 +26,7 @@ Claude codes and reviews. DeepSeek V4.1 Flash on OpenCode Go scouts and tests, a
   - [x] Axis lines in `sim__camera__capture` images: exclude them, or document why not
 - [ ] Stable Isaac Lab pairs only: 5.1 with Lab 2.3.x, and 6.2 with Lab 3.0.0 (done). Tiny real jobs passed through the tools on both pairs, with all four RL libraries on 2.3.2; `tested` stays false for 5.1 + 2.3.2
 - [x] Old stale LiDAR files: the repair failed on 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1, and passed on 6.2. Fix or scope it, then re-test per build
-- [ ] `sim__map__occupancy` all-free map on 6.0.0.1
+- [x] `sim__map__occupancy` all-free map on 6.0.0.1: only when nothing in the slice has a collider (a Cube's default is no collider, or a slice above everything). With colliding walls, 14 maps all correct, no malloc errors
 - [x] Standalone install launcher crash on 6.0.1
 
 ## Isaac Sim 5.1 (on this desktop)
@@ -69,7 +69,7 @@ Built and reviewed, uncommitted until the gate passes; ticked once pushed.
   - [x] `sim__camera__capture` schema has `adopt`
   - [x] `sim__ros2__tf_setup` `extra_frames` accepts prim paths
   - [x] `sim__stage__open` no longer errors after switching on 5.1
-  - [ ] `sim__simulation__step`: a way forward from `EDIT_TARGET_CHANGED` when Play came from elsewhere
+  - [x] `sim__simulation__step`: `EDIT_TARGET_CHANGED` gives a way forward that works: stop, play, pause, step. Stop loses the paused state, and the message says so
   - [x] `sim__joints__drive`: `JOINT_LIMIT` at target 1.0 on `rg2_gripper_joint`
   - [x] `isaaclab__install_info`: per-project interpreter
   - [x] `sim__stage__save`: a size note for large flattened scenes
@@ -81,8 +81,8 @@ Keep as they are: `run_python`, `use_bridge` with `status`, `sim__ros2__tf_setup
 
 ## Open from earlier in PR 70
 
-- [ ] Stale camera handles have no repair on open
-- [ ] A saved copy can list a removed capture product in `RenderSettings.products`
+- [ ] Stale camera handles have no repair on open. Reproduced with a raw `stage.Export`: open's note names only LiDAR, capture still works, `sim__graph__inspect` is the only honest tool, and both documented repairs fail (`reset_camera_render_handles` refuses, rebuild stays silent). Only `RemoveProperty` from `run_python` worked
+- [x] A saved copy can list a removed capture product in `RenderSettings.products`: not reproduced on 6.2; the product is dropped from the copy and the relationship
 - [ ] `assets__*` `STALE_TARGET` is checked on the host, so it lacks the outside-change explanation
 - [x] Stale `checkpoints/*.usda` moved aside in the main checkout, to `~/.cache/isaac-mcp-moved-checkpoints`
 
@@ -146,7 +146,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] The same on 6.0.0.0, 21 fresh Kits: `NOT_READY` means the scan is empty. The stuck run's 1 m cube, 0.5 m from a LiDAR at the default height, hid its wall inside the near range. `sim__stage__clear_owned` removes the ground, so a rigid wall falls out of the scan. No effect from save and reopen, pause and step, or read timing. The refusal now leads with this
 - [x] **Driving a mobile base and Nav2**: merged. NVIDIA robots load by name and drive from `/cmd_vel`, and Nav2 reached a goal with Create 3 and TurtleBot3, on 6.2 and 5.1. Pictures and steps: `docs/evidence/public-robot-nav2-2026-11-04/`
 - [x] Worked example on 6.0.0.0: Create 3 and TurtleBot3 (`--yaw-tolerance 3.2`) reached goals, TF clean, thin floor doesn't drive and thick does, reopened file publishes and drives
-- [ ] Same on 6.0.0.1, 6.0.1 and 6.1: running. The first TF loop report came from 6.1
+- [x] Same on 6.0.0.1, 6.0.1 and 6.1: Create 3 and TurtleBot3 (`--yaw-tolerance 3.2`) reached goals on all three, within 0.17 to 0.30 m. No TF loop with either `base_link`. Thin floor doesn't drive and thick does. Reopen drives, and isn't collapsed
 - [ ] On 6.0.0.0 a LiDAR read after building a scan graph on a tool-created sensor reported `NOT_OWNED`, then `NOT_READY` while playing. A sensor `sim__lidar__create` made should be registered. Check against the stuck LiDAR read
 - [ ] `[spin] error in rcl_take: error not set` lines in the Kit log on 6.0.0.0: appears harmless, not explained
 - [ ] Carter: drives, but Nav2 stopped 1.2 m short (`Failed to make progress`); not tuned. Nova Carter and Jetbot: drive, Nav2 not run
@@ -154,8 +154,8 @@ Found by the fleet at `e658289`; not fixed yet:
 - [ ] A very flat floor already saved in a file gets no warning: only `sim__prim__create` warns
 - [ ] Why a floor scaled 20x20x0.1 gives wheels no contact is measured, not explained (133:1 fails, 100:1 drives on TurtleBot3; Carter erratic from 50:1). Limitation unless the cause turns up
 - [x] 5.1 saves write an empty `/WriterOrchestrator` graph with no nodes. It survives a reopen, `/scan` publishes once, nothing breaks. `graphs` in the save result still lists it, which reads like a saved pipeline
-- [ ] A collapsed body after reopening, seen once on 6.1, did not reproduce on 6.2 or 5.1. Cause unknown
-- [ ] RViz not used in these runs: all headless
+- [x] A collapsed body after reopening: not reproduced on 6.1 either, with UR5e and Franka across 5 reopens. A Franka sags while playing, the same with or without a save, so it's its drives
+- [x] RViz: `/scan` and TF shown from a windowed 6.2 scene, Global Status OK. The default view (`--distance 3`) can leave a 2.4 m scan outside the frustum
 - [ ] **URDF pack needs one-time approval and staging**, unlike a USD pack. Decide: a default staging folder, or keep it and document
 - [x] Windowed 5.1: first `sim__quick_start` failed twice earlier with no error. 5 of 5 pass windowed and 5 of 5 headless, so not reproduced. A returned `ok` can precede the first rendered frame: one screenshot 4 s later was black, and 13 s later showed the arm
 - [ ] Refusals check state before type: `joints__state` on a Cube says "play first", then the real fault. Same for `steps=0`
@@ -191,9 +191,9 @@ Found by the fleet at `e658289`; not fixed yet:
 Fleet runs at `9803f4c` were almost all headless, so a pass there doesn't cover a window. Windowed runs started at `8336c4c` on every build.
 
 - [x] Windowed 6.1 (Gemini): UR5e, falling box, viewport, save and reopen in a new windowed Kit, `sim__graph__show`, a 62-frame recording, `create3` and `turtlebot3_burger`. No `run_python`
-- [ ] Windowed: the same on 5.1, 6.0.0.0, 6.0.0.1, 6.0.1 and 6.2, plus `sim__ui__*`
-- [ ] Windowed Isaac Lab `play` on both Lab pairs
-- [ ] RViz against a running scene
+- [x] Windowed on 5.1, 6.0.0.0, 6.0.0.1, 6.0.1 and 6.2, plus `sim__ui__find` and `sim__ui__act` (pressed Play by ref on 6.2). All goals reached, no `run_python`
+- [x] Windowed Isaac Lab `play` on Lab 2.3.2 and 3.0.0: robots seen moving, recordings have frames. Lab 3 ran before the `window` fix, so it reported none
+- [x] RViz against a running scene
 
 ### Parallel work
 
@@ -208,4 +208,43 @@ Five builds at once plus one started by hand, on the lab PC, with other agents r
 - [x] Regression from the exit-code wrapper: the recorded pid became the shell, so `runs_status` lost `window`, and cancel could report done with Kit still running. Shell now outlasts the signal; windows match the job's process group
 - [x] Windowed `play` and cancel on Lab 2.3.2: `window` reported, and after a full load Kit ignored SIGTERM, so cancel escalated at 10 s and left nothing, twice
 - [ ] The same on Lab 3.0.0
+
+### From the windowed, Nav2, pack and save runs at `8336c4c`
+
+To fix or attempt:
+
+- [ ] `sim__ros2__tf_setup` `extra_frames` with a LiDAR floods the Kit log: `[PoseTree] target getObjectType eInvalid` every tick, 24,135 of 24,547 lines on 6.1. The worked example does this
+- [ ] `sim__lidar__read` says `NOT_OWNED` for a LiDAR the tool just created, on 6.0.0.0 and 6.1. Check whether `sensor_path`, which can differ from `path`, isn't recognised
+- [ ] Each save of a reopened Franka grows the file: 22.7, 45.3, 67.9 MB
+- [ ] `sim__logs__tail` reads the last 32 KiB: about 2 s of Info lines, so it returned nothing just after 3 warnings. Needs level or text filtering
+- [ ] `z_used` note says anything lower isn't mapped, but on omap 2.3.1 lower geometry was mapped. Also raised even with the floor far below
+- [ ] An all-free map with colliders nowhere in the slice: a tester saw no warning. Check it warns
+- [ ] Packs: doctor reports 19 false `package://` unresolved after one mesh is missing, and blames the package folder
+- [ ] Packs: `accepted_unresolved` passes doctor, then `assets__import_path` refuses the same files
+- [ ] Packs: one folder over eight levels stops `assets__search` and `assets__scan` for a whole root, without naming the folder
+- [ ] Packs: `PACK_CORRUPT` says "differ from their pins" for a missing file
+- [ ] Packs: `assets__dependencies` on a URDF returns an empty closure and a raw pxr string
+- [ ] Packs: a directory symlink in a USD source is skipped silently; URDF symlinks refuse
+- [ ] `sim__quick_start` next steps send `sim__joints__inspect` to a link of a URDF robot, which finds no joints
+- [ ] `scripts/isaac_assets.py doctor` has no `--store`, though `add` does
+- [ ] `sim__viewport__frame` says `selected_path`, while the Stage and Property panels keep the old selection
+- [ ] One `sim__camera__capture` had the selection outline in it, after a prim was selected by hand. Not reproduced in 4 tries
+- [ ] Lab: the job guard's refusal shows the screenshot hint, not `allow_concurrent=true`
+- [ ] Lab: `runs_status` doesn't echo `timeout_s`
+- [ ] Lab: two windowed jobs have the same title, so only id and pid tell them apart
+- [ ] Lab: a window still loading is black for up to 4 minutes when two Kits share a GPU, with no signal
+- [ ] `--ur5e-panel` loads the panel behind another tab; `sim__ui__act` action=tab shows it
+- [ ] `clock=auto` reuses any existing clock, even one with no time source
+- [ ] `sim__body__state` refuses while stopped, so "stop then read the pose" fails
+- [ ] `start_ros_driver` status text can say both 1 message and none on `/joint_states`
+
+To state in the docs:
+
+- [ ] `/scan` can publish all invalid ranges at first, and nothing at all with no return in range
+- [ ] `--realtime` is a cap: on a loaded machine the sim ran at 0.08 to 0.4 of wall time, so wall-clock distances and Nav2 timeouts stretch. Check `/clock`
+- [ ] Nav2 stop: SIGINT can be ignored when the launch was backgrounded by a script, and SIGTERM on the launch can leave nodes behind
+- [ ] Map rasterising: a collider marks every cell it touches, so a thin wall can show a cell wider
+- [ ] With a robot on the origin, pass `start` on open floor
+- [ ] `nav2_params.py` needs ROS sourced
+- [ ] An agent's background Kit dies with its shell or tool limit: use the detached start
 
