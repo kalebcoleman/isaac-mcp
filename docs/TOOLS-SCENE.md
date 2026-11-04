@@ -36,6 +36,9 @@ Edits are in the session layer. `sim__stage__save` flattens that layer, so the s
 its own. A File > Save of the root layer would not contain it. The camera has no render resources until
 `sim__camera__capture` with `adopt=true`.
 
+The camera frames the robot's first pose, so a moved arm can leave the picture. Move it with `sim__prim__set_transform`, or make another aimed
+at the robot with `sim__camera__create`: `path="/World/Camera2", frame="world", position=[2,2,1.5], target=[0,0,0.4], focal_length=18`. That wider lens fits a UR5e in most poses.
+
 ## A typical session
 
 Most tools take the `session_id` and `stage_id` from `sim__stage__info`; `sim__graph__node_types`, `sim__logs__tail` and the `sim__ui__*` tools do not. Call it first, and again after

@@ -401,6 +401,8 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
             raise
         threading.Thread(target=proc.wait, daemon=True).start()
         return {**_public(record), "managed": True, "state": "starting",
+                # Inherited, and deliberately not an argument: a pack in a store imports without approval.
+                "asset_stores": os.environ.get("ISAAC_MCP_ASSET_PATH") or "default; set ISAAC_MCP_ASSET_PATH in the MCP server's environment",
                 "note": (f"Use sim__status to confirm bridge readiness, then use_bridge(port={port}) "
                          "to send tool calls to this simulator. If this is the only managed session "
                          "and the configured port does not answer, refresh_tools(wait_s=120) waits "

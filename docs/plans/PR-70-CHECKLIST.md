@@ -100,7 +100,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [ ] Reopened workstation plays with non-finite physics on 6.0.0.1. Cause unknown
 - [ ] `/scan` on 6.0.0.0, and the config LiDAR on 6.1: retest with a target beyond the 1 m near range
 - [ ] `start_ros_driver up` fails on a cold first launch and leaves a healthy driver; `status` always exits 0
-- [ ] `verify.sh` version gate fails on the standalone layout
+- [x] `verify.sh` version gate fails on the standalone layout (needs the ASU retest)
 - [ ] Host needs `python-xlib` when run from the Isaac venv
 - [ ] Selection outline appears in `sim__camera__capture` after `sim__viewport__frame`, windowed
 - [ ] URDF packs: `assets__import_urdf` has no pack route, the `package://` fix text is incomplete, and an unstable robot reads `status: ok`
