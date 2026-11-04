@@ -556,6 +556,9 @@ def test_publisher_scan_walks_subgraphs_skips_own_and_disabled_and_marks_tool_gr
         def get_type_name(self):
             return self.kind
 
+        def get_attribute_exists(self, name):
+            return False
+
     class Graph:
         def __init__(self, path, nodes=(), subs=(), disabled=False):
             self.path, self.nodes, self.subs, self.disabled = path, list(nodes), list(subs), disabled
@@ -1192,3 +1195,47 @@ def test_a_clock_on_another_topic_is_not_treated_as_this_stages_clock():
     assert plan["publish"] is True and plan["foreign"] == []
     source = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/ros2.py").read_text(encoding="utf-8")
     assert 'kind = resolved_topic(topic, value("inputs:nodeNamespace")) if topic else kind' in source
+
+
+def test_publisher_scan_reads_a_clock_nodes_real_topic(monkeypatch):
+    class Attribute:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    class Node:
+        def __init__(self, path, topic):
+            self.path, self.attrs = path, {"inputs:topicName": topic, "inputs:nodeNamespace": ""}
+
+        def get_prim_path(self):
+            return self.path
+
+        def get_type_name(self):
+            return "isaacsim.ros2.bridge.ROS2PublishClock"
+
+        def get_attribute_exists(self, name):
+            return name in self.attrs
+
+        def get_attribute(self, name):
+            return Attribute(self.attrs[name])
+
+    class Graph:
+        def get_path_to_graph(self):
+            return "/World/ClockGraph"
+
+        def get_nodes(self):
+            return [Node("/World/ClockGraph/a", "s61clock"), Node("/World/ClockGraph/b", "clock")]
+
+    import sys
+    import types
+
+    core = types.ModuleType("omni.graph.core")
+    monkeypatch.setitem(sys.modules, "omni", types.ModuleType("omni"))
+    monkeypatch.setitem(sys.modules, "omni.graph", types.ModuleType("omni.graph"))
+    monkeypatch.setitem(sys.modules, "omni.graph.core", core)
+    sys.modules["omni"].graph = sys.modules["omni.graph"]
+    sys.modules["omni.graph"].core = core
+    monkeypatch.setattr(ros2, "_graphs", lambda og: [Graph()])
+    assert [o["publishes"] for o in ros2.other_ros2_publishers("/Graph/own")] == ["/s61clock", "/clock"]
