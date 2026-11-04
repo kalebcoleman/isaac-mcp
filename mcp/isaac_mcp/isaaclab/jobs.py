@@ -47,7 +47,7 @@ _JOB_ID_RE = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]+$")
 _LIB_RE = re.compile(r"^[a-z0-9_]+$")
 _EXTRA_ARG_RE = re.compile(r"^--[A-Za-z0-9_.-]+(=[^\s;|&$`]*)?$")
 # Isaac Lab 3 takes Hydra overrides (key.sub=value, +key=value, ~key) alongside --flags.
-_HYDRA_ARG_RE = re.compile(r"^(~[A-Za-z0-9_.@/-]+|[+]{0,2}[A-Za-z0-9_.@/-]+=[^\s;|&$`'\"]*)$")
+_HYDRA_ARG_RE = re.compile(r"^(~[A-Za-z0-9_.@/-]+|[+]{0,2}[A-Za-z0-9_.@/-]+=[^\s;|&$`'\"=]*)$")
 _CHECKPOINT_EXTS = ("*.pth", "*.pt")
 
 _jobs_lock = threading.Lock()

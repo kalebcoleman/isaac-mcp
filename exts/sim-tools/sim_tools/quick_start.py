@@ -341,9 +341,10 @@ async def run(ext, args):
         result["assets"] = wanted["assets"]
         if not units_checked:
             result["robot"]["units_note"] = "The remote file's up axis and units could not be read beforehand; check the result."
-    # Named as well as /World, because tools that move a prim check its exact path.
-    scene.owned.update(owned + [CAMERA] + ([robot_path] if robot_path else []))
+    # stage_info first: on a new stage it resets the owned set, and this registration must come after that.
+    # Each prim by name, because tools that change a prim check its exact path.
     info = scene.stage_info()
+    scene.owned.update(owned + [GROUND, PHYSICS_SCENE, DOME, SUN, CAMERA] + ([robot_path] if robot_path else []))
     if ros:
         shell = (info.get("ros") or {}).get("shell")
         try:

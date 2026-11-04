@@ -374,6 +374,8 @@ directory should be private to the OS user. Defaults are process-specific under 
 
 A collider overlapping a robot can make PhysX report `Illegal BroadPhaseUpdateData - non-finite bounds` and `Invalid PhysX transform` on Play, on every build we tried. Move the collider clear of the robot; saving and reopening does not cause this.
 
+Generic edits are in the session layer and make no undo entry, so Ctrl+Z in Kit won't undo them and may undo an earlier edit of yours. `sim__prim__find` also lists Kit's runtime prims (`/Render`, `/Orchestrator`), which `sim__stage__tree` hides unless `include_runtime=true`. `sim__status` reports `busy` when a bridge answers that an exclusive call holds Kit's main thread: the simulator is alive, so wait rather than relaunch.
+
 ## Extension hot reload
 
 Kit watches extension folders. When a file in `exts/sim-tools` changes, Kit stops and restarts that extension inside the

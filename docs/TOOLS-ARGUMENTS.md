@@ -221,7 +221,7 @@ Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 12 tools.
 List policy checkpoints (*.pt / *.pth, and stable-baselines3's .zip), newest first, under a run dir or the configured logs.
 
 - `run_dir` (str | None, default `None`): Run folder. Default: search the configured logs.
-- `task` (str | None, default `None`): Keep runs of this task id.
+- `task` (str | None, default `None`): Keep checkpoints whose path contains this text. Paths use the experiment name, such as cartpole, not the task id.
 
 ### `isaaclab__envs_list`
 

@@ -789,11 +789,16 @@ def occupancy_map(scene, stage, a):
                f"{FLOOR_RETRIES} steps did not help. If a floor is one of them, set z above it; check that the others are "
                "enabled and that physics has run since they were added. No files were written.", colliders=colliders, cells=counts)
     scene.output.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pgm_path.write_bytes(pgm)
+    def publish(path, data):  # never a partial file at the final name, if Kit dies here
+        temp = path.with_name(f".{path.name}.tmp")
+        temp.write_bytes(data)
+        os.replace(temp, path)
+
+    publish(pgm_path, pgm)
     yaml_text = (f"image: {base}.pgm\nmode: trinary\nresolution: {cell:g}\n"
                  f"origin: [{origin[0]:.4f}, {origin[1]:.4f}, 0.0]\nnegate: 0\n"
                  "occupied_thresh: 0.65\nfree_thresh: 0.25\n")
-    yaml_path.write_text(yaml_text)
+    publish(yaml_path, yaml_text.encode())  # last: a map with its YAML is a complete map
     total = max(1, sum(counts.values()))
     if counts["unknown"] > 0.5 * total:
         warn = (f"{counts['unknown'] * 100 // total}% of the map is unknown (not reachable from start "

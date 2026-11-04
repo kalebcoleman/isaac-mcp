@@ -356,6 +356,7 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
                           "ISAAC_MCP_BIND": "127.0.0.1", "ROS_DOMAIN_ID": str(ros_domain),
                           "ISAAC_MCP_PHYSICS_BACKEND": physics_backend,
                           "MCP_CLIENT_OUTPUT_DIR": str(output),
+                          "ISAAC_MCP_SCENE_OUTPUT": child_env.get("ISAAC_MCP_SCENE_OUTPUT") or str(output),
                           "ISAAC_MCP_SIM_SESSION_ID": session_id,
                           "ISAAC_MCP_SIM_SESSION_DIR": str(directory)})
         for key in ("UR5E_DT_PYTHON", "ISAAC_MCP_PYTHON", "ISAAC_MCP_WORKSPACE"):
@@ -427,7 +428,9 @@ def _bridge_state(host: str | None, port: int, pid: int) -> tuple[str, dict]:
     """Readiness from the bridge's own ``status``, checked against the PID expected on that port."""
     try:
         response = client.call("status", host=host or "127.0.0.1", port=port, timeout=2)
-    except (OSError, RuntimeError, client.BridgeError):
+    except client.BridgeError:  # it answered, to say it is busy: an exclusive call holds Kit's main thread
+        return "busy", {}
+    except (OSError, RuntimeError):
         return "starting_or_unresponsive", {}
     if response.get("pid") != pid:
         return "port_conflict", response
@@ -461,12 +464,13 @@ def _status(env: Mapping[str, str], session_id: str) -> dict:
     session = _read(_sessions_dir(env), session_id)
     if not _alive(session):
         return {**_public(session), "managed": True, "state": "exited"}
-    state, _ = _bridge_state("127.0.0.1", session["port"], session["pid"])
+    state, answer = _bridge_state("127.0.0.1", session["port"], session["pid"])
     try:
         resources = _resources()
     except RuntimeError as exc:
         resources = {"error": str(exc)}
-    result = {**_public(session), "managed": True, "state": state, "current_resources": resources}
+    result = {**_public(session), "managed": True, "state": state, "current_resources": resources,
+              "app": answer.get("app"), "app_version": answer.get("app_version")}
     if state == "port_conflict" and session.get("launcher"):
         result["note"] = ("Another PID answers this session's port. A custom launcher must exec Kit rather than "
                           "fork it, or the process recorded here is not the simulator.")

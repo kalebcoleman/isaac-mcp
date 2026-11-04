@@ -175,6 +175,8 @@ before anything starts, naming the flag and the alternative; otherwise a per-lib
 `isaaclab__envs_list` can't list tasks on this pair: importing `isaaclab_tasks` needs `pxr`, which exists only once Kit has started. It
 reports `isaac_tasks_unavailable`, and `train` and `play` still work, so use a task name from Lab's docs.
 
+A job that finishes while no host server is running reports `failed` with `note: "host restarted"`, because nothing saw its exit code. Check `isaaclab__runs_tail` and `checkpoints_list` before rerunning a long job.
+
 **A crash can exit 0.** Kit's shutdown can hide an uncaught exception: seen on Lab 2.3.2 with an unknown task. A job that exits 0 with a traceback at the end of stderr reports `failed` with a note.
 One exception: a `train` job whose run folder already has a checkpoint still reports `succeeded`, so check its log and iteration count if it stopped early.
 

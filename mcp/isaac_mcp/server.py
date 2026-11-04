@@ -1293,13 +1293,20 @@ async def _select_launched_session(server: FastMCP, session: Dict[str, Any],
             f"status before scene changes.\n{result}")
 
 
+USE_BRIDGE_TIMEOUT_S = 10.0
+
+
 async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None) -> str:
     state = _state_for(server)
+    if type(port) is not int or not 1 <= port <= 65535:
+        return f"Error: port must be a number from 1 to 65535, not {port!r}. Nothing changed."
     try:
-        new_client = BridgeClient(port=int(port))
-        identity = new_client.call("status")
+        new_client = BridgeClient(port=port)
+        # A short limit: this blocks the server, and a port that accepts TCP may not be a bridge at all.
+        identity = new_client.call("status", timeout=USE_BRIDGE_TIMEOUT_S)
     except Exception as e:  # noqa: BLE001
-        return f"Error: {e}"
+        return (f"Error: no bridge answered on port {port} within {USE_BRIDGE_TIMEOUT_S:g} s: {e}. Nothing changed. "
+                "It may be busy, or not a bridge: " + LIST_BRIDGES_HELP + " lists them.")
     before = _tool_list_surface(server)
     old_client = state.client
     state.client = new_client

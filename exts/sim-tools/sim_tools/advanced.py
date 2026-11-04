@@ -38,6 +38,10 @@ def scalar(x, lo=0, hi=1e8):
     return x
 
 
+CAPTURE_NAME = r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}\.png"
+CAPTURE_NAME_RULE = "Use a new name of letters, digits, _ and -, ending .png (<=64 characters). No spaces or folders."
+
+
 def runtime_dof_limits(path):
     """This articulation's [[low, high], ...], or None if this build or backend can't say."""
     from .physics import view_for
@@ -142,6 +146,8 @@ KIT_ROOTS = ("Render", "OmniverseKit_Persp", "OmniverseKit_Front", "OmniverseKit
 def foreign_prim(s, stage, p, allow_foreign):
     """The explicit route for a prim that is not pack-owned; refuses unless it was asked for."""
     prim = s.prim(stage, p)
+    if not allow_foreign and p == "/World":  # allow_foreign wouldn't help, so don't send the caller there
+        refuse("PROTECTED_PRIM", "World/default prim or its ancestor is protected.")
     if not allow_foreign:
         refuse(
             "NOT_OWNED",
@@ -1122,29 +1128,29 @@ class Advanced:
                     )
                 array = np.array(data[:, :, :3], copy=True, order="C")
                 filename = a["filename"]
-                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}\.png", filename):
-                    refuse("INVALID_OUTPUT", "Simple new .png basename required.")
+                if not re.fullmatch(CAPTURE_NAME, filename):
+                    refuse("INVALID_OUTPUT", CAPTURE_NAME_RULE)
                 s.output.mkdir(mode=0o700, parents=True, exist_ok=True)
                 from isaac_mcp.project_assets import open_dir
 
                 fd = open_dir(s.output)
                 try:
-                    # Exclusive descriptor creation prevents symlink/overwrite races.
+                    # Write beside it, then link: a no-replace publish, so a crash or a failed encode can't leave a
+                    # partial image at the name a retry would then be refused for.
+                    temp = f".{filename}.{os.getpid()}.tmp"
+                    out = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
                     try:
-                        out = os.open(
-                            filename,
-                            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                            0o600,
-                            dir_fd=fd,
-                        )
+                        with os.fdopen(out, "wb") as stream:
+                            Image.fromarray(array).save(stream, format="PNG")
+                        os.link(temp, filename, src_dir_fd=fd, dst_dir_fd=fd, follow_symlinks=False)
                     except FileExistsError:
                         refuse(
                             "CONFLICT",
                             f"{filename} already exists; use another filename. No overwrite. "
                             "The acquisition stays cached, so wait_for_render=false can save it.",
                         )
-                    with os.fdopen(out, "wb") as stream:
-                        Image.fromarray(array).save(stream, format="PNG")
+                    finally:
+                        os.unlink(temp, dir_fd=fd)
                 finally:
                     os.close(fd)
                 file = s.output / filename

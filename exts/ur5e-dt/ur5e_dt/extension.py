@@ -58,13 +58,13 @@ if BASE_OUTPUT_DIR:
     RESOURCES_DIR = os.path.join(BASE_OUTPUT_DIR, "resources")
     VIDEOS_DIR = os.path.join(BASE_OUTPUT_DIR, "videos")
 else:
-    RESOURCES_DIR = "resources"
+    _scene_output = os.getenv("ISAAC_MCP_SCENE_OUTPUT", "").strip()
+    RESOURCES_DIR = os.path.join(os.path.abspath(_scene_output), "resources") if _scene_output else "resources"
     VIDEOS_DIR = ""  # resolved below after _ext_dir
 
 # Local asset paths (no Nucleus dependency)
 _ext_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if not VIDEOS_DIR:
-    _scene_output = os.getenv("ISAAC_MCP_SCENE_OUTPUT", "").strip()
     VIDEOS_DIR = os.path.join(os.path.abspath(_scene_output) if _scene_output else _ext_dir, "videos")
 
 # Environment scene USDs (relative to Isaac assets root). Verified against Isaac 5.0.
@@ -1952,6 +1952,9 @@ class DigitalTwin(omni.ext.IExt):
         viewport = vp_utils.get_active_viewport()
 
         if camera_path:
+            prim = viewport.stage.GetPrimAtPath(str(camera_path)) if viewport.stage else None
+            if not prim or not prim.IsValid() or prim.GetTypeName() != "Camera":
+                raise ValueError(f"{camera_path} is not a Camera on this stage, so nothing was recorded.")
             viewport.camera_path = camera_path
 
         w, h = viewport.get_texture_resolution()
@@ -6099,6 +6102,8 @@ class DigitalTwin(omni.ext.IExt):
             msg = f"Assembled {assembled} objects ({assembly})"
             if skipped:
                 msg += f", {skipped} skipped (prim not found)"
+            if not assembled:
+                return {"status": "error", "message": msg + ". Call ur5e_dt__add_objects with this assembly first."}
             return {"status": "success", "message": msg}
         except Exception as e:
             traceback.print_exc()
@@ -6499,7 +6504,7 @@ class DigitalTwin(omni.ext.IExt):
                     if line.startswith("VmRSS"):
                         rss_after = int(line.split()[1]) // 1024  # MB
 
-            freed_mb = rss_before - rss_after
+            freed_mb = max(0, rss_before - rss_after)
             return {
                 "status": "success",
                 "message": f"Stage cleared. Freed {freed_mb} MB (RSS: {rss_before} MB -> {rss_after} MB).",

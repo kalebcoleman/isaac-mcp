@@ -1101,7 +1101,7 @@ class Scene:
         try:
             # Export to private temporary file; hard-link publication is no-replace,
             # unlike an exists check followed by Export to the destination.
-            handle, tmp = tempfile.mkstemp(suffix=".usda", dir=folder)
+            handle, tmp = tempfile.mkstemp(prefix=".isaac-mcp-tmp-", suffix=".usda", dir=folder)
             os.close(handle)
             layer = stage.Flatten()
             omitted_render_properties = reset_export_handles(layer, handles)

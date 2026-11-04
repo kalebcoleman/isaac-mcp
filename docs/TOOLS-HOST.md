@@ -131,7 +131,7 @@ under `~/Videos/screen-mcp/` on the **host server** machine. Mouse and keyboard 
 | `screen_recording_status` | none | Report active recording, elapsed time and frame count, or the most recent recording. |
 
 Examples: `list_windows` with `{"filter":"Isaac"}`; `screenshot` with `{"window_id":12345}`;
-A recording lives in the MCP server process. If that client exits first, it leaves a very short MP4, and a later `stop_screen_recording` from another process reports none active. Keep one client connected from start to stop.
+X11 reuses window IDs after a window closes. On a shared desktop, list windows again right before `screenshot` or `start_screen_recording` with a `window_id`. A recording lives in the MCP server process. If that client exits first, it leaves a very short MP4, and a later `stop_screen_recording` from another process reports none active. Keep one client connected from start to stop.
 
 `start_screen_recording` with `{"window_id":12345,"fps":15,"max_seconds":20}`; then
 `stop_screen_recording` with `{}`. For a demo with Isaac Sim and RViz 2 together: `tile_windows` with

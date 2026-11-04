@@ -104,6 +104,17 @@ def lidar_config_registry():
 STALE_LIDAR_REPAIR_PROVEN = ("6.2.", "5.1.")
 
 
+def generic_lidar_supported():
+    """False where IsaacSensorCreateRtxLidar with no config can't honor an exact path: on 5.1 it builds its own,
+    such as /World_Lidar for /World/Lidar, and leaves that prim behind. Unknown builds try it and are checked."""
+    try:
+        from isaacsim.core.version import get_version
+
+        return not str(get_version()[0]).startswith("5.")
+    except (ImportError, IndexError, OSError):
+        return True
+
+
 def stale_lidar_repair_proven():
     """True on a build where the session-layer repair of a stale LiDAR product was measured to work."""
     try:

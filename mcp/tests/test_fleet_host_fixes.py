@@ -917,3 +917,51 @@ def test_cancel_signals_nothing_for_a_process_that_is_not_the_recorded_job(monke
     finally:
         proc.kill()
         proc.wait()
+
+
+def _source(relative):
+    return (Path(__file__).resolve().parents[2] / relative).read_text(encoding="utf-8")
+
+
+def test_quick_start_registers_what_it_built_after_stage_info_resets_ownership():
+    source = _source("exts/sim-tools/sim_tools/quick_start.py")
+    assert source.index("info = scene.stage_info()") < source.index("scene.owned.update(")
+    assert all(name in source[source.index("scene.owned.update("):][:120] for name in ("GROUND", "PHYSICS_SCENE", "DOME", "SUN", "CAMERA"))
+
+
+def test_a_capture_is_never_visible_at_its_final_name_until_complete():
+    source = _source("exts/sim-tools/sim_tools/advanced.py")
+    assert source.index('Image.fromarray(array).save(stream, format="PNG")') < source.index("os.link(temp, filename")
+
+
+@pytest.mark.parametrize("port", [0, -1, 65536, True, "18000"])
+def test_use_bridge_refuses_a_bad_port_without_dialling(port):
+    import asyncio
+
+    from isaac_mcp import server as server_module
+
+    result = asyncio.run(server_module._use_bridge(server_module.FastMCP("t"), port))
+    assert result.startswith("Error: port must be a number")
+
+
+def test_sim_status_tells_a_busy_bridge_from_a_dead_one(monkeypatch):
+    from isaac_mcp import client, sim_sessions
+
+    def busy(*args, **kwargs):
+        raise client.BridgeError("DOORWAY_BUSY")
+
+    monkeypatch.setattr(client, "call", busy)
+    assert sim_sessions._bridge_state("127.0.0.1", 1, 1)[0] == "busy"
+
+    def dead(*args, **kwargs):
+        raise OSError("refused")
+
+    monkeypatch.setattr(client, "call", dead)
+    assert sim_sessions._bridge_state("127.0.0.1", 1, 1)[0] == "starting_or_unresponsive"
+
+
+def test_hydra_override_with_two_equals_is_refused_before_launch():
+    from isaac_mcp.isaaclab import jobs
+
+    assert jobs._HYDRA_ARG_RE.match("a.b=1")
+    assert not jobs._HYDRA_ARG_RE.match("eh=1=2")

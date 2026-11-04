@@ -170,13 +170,20 @@ def create(stage, path, kind, width=640, height=480, *, lidar_asset=None, tick_r
                     refuse(
                         "SENSOR_API_UNAVAILABLE", "Enable isaacsim.sensors.rtx: " + str(e)
                     )
+                from .compat import generic_lidar_supported
+
+                if not generic_lidar_supported():
+                    refuse("CONFIG_REQUIRED", "On this build a LiDAR needs a config: its native command can't place a "
+                           "default sensor at an exact path. Pass config, for example config=\"Example_Rotary_2D\". "
+                           "Nothing was created.")
                 ok, prim = omni.kit.commands.execute(
                     "IsaacSensorCreateRtxLidar", path=str(path), parent=None, config=None
                 )
                 if not ok or not prim or str(prim.GetPath()) != str(path):
                     refuse(
                         "SENSOR_CREATE_FAILED",
-                        "Native LiDAR command did not create the exact requested path.",
+                        f"The native LiDAR command made {prim.GetPath() if prim else 'nothing'} instead of {path}. "
+                        "Inspect the stage. Pass config, for example config=\"Example_Rotary_2D\".",
                     )
             sensor["sensor_path"] = product_path = str(prim.GetPath())
             attr = prim.GetAttribute("omni:sensor:Core:outputFrameOfReference")
@@ -218,6 +225,8 @@ def create(stage, path, kind, width=640, height=480, *, lidar_asset=None, tick_r
         return _attach(stage, rep, sensor, product_path, kind, width, height,
                        None if kind == "camera" else annotator_name)
     except Exception as e:
+        if getattr(e, "code", None) == "CONFIG_REQUIRED":  # refused before anything was made: nothing to clean up
+            raise
         cleanup_errors = dispose(sensor)
         refuse(
             "SENSOR_CREATE_FAILED",

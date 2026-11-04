@@ -218,7 +218,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
 
     @mcp.tool(name="isaaclab__checkpoints_list", annotations=READ_ONLY)
     def isaaclab_checkpoints_list(run_dir: Annotated[str | None, Field(description="Run folder. Default: search the configured logs.")] = None,
-                                  task: Annotated[str | None, Field(description="Keep runs of this task id.")] = None) -> str:
+                                  task: Annotated[str | None, Field(description="Keep checkpoints whose path contains this text. Paths use the experiment name, such as cartpole, not the task id.")] = None) -> str:
         """List policy checkpoints (*.pt / *.pth, and stable-baselines3's .zip), newest first, under a run dir or the configured logs."""
         return _guard(lambda: _metrics.checkpoints_list(run_dir=run_dir, task=task))
 

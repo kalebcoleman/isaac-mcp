@@ -627,6 +627,8 @@ async def act(a):
                 if i % 20 == 19:
                     await tick(1)
             await tick(frames)
+            if not focus_first:
+                result["note"] = "No target given, so this went to whatever has keyboard focus. Pass ref to choose a widget."
             return dict(result, typed=len(text), frames_waited=frames)
         mods, key = keys
         flags = 0

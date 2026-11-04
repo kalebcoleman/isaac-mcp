@@ -353,7 +353,14 @@ class Extension(omni.ext.IExt):
         wait = args.pop("wait_for_render", expected == "camera")
         if type(wait) is not bool:
             refuse("INVALID_VALUE", "wait_for_render must be boolean.")
-        # Refuse what can be refused before adoption creates anything.
+        # Refuse what can be refused before adoption creates anything, or a render is spent on it.
+        if expected == "camera" and isinstance(args.get("filename"), str):
+            import re
+
+            from .advanced import CAPTURE_NAME, CAPTURE_NAME_RULE
+
+            if not re.fullmatch(CAPTURE_NAME, args["filename"]):
+                refuse("INVALID_OUTPUT", CAPTURE_NAME_RULE)
         if wait and expected == "lidar" and not s.timeline.is_playing():
             refuse(
                 "SENSOR_PAUSED",

@@ -573,6 +573,12 @@ def setup(scene, stage, a):
     if not links:
         refuse("NO_LINKS", f"No rigid-body links found below {robot_path}.")
     base_path = a.get("base_link") or ""
+    if base_path and not base_path.startswith("/"):  # a link's name, as BASE_LINK_REQUIRED lists them
+        matches = [p for p, n in links if n == base_path]
+        if len(matches) != 1:
+            refuse("BASE_LINK_REQUIRED", f"base_link {base_path!r} matches {len(matches)} links. Pass its absolute prim path, "
+                   "one of: " + ", ".join(p for p, _ in links[:12]))
+        base_path = matches[0]
     if not base_path:
         by_name = {n: p for p, n in reversed(links)}
         named = [by_name[n] for n in ("base_link", "base_footprint", "base") if n in by_name]
