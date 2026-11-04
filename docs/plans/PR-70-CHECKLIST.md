@@ -149,8 +149,9 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] Same on 6.0.0.1, 6.0.1 and 6.1: Create 3 and TurtleBot3 (`--yaw-tolerance 3.2`) reached goals on all three, within 0.17 to 0.30 m. No TF loop with either `base_link`. Thin floor doesn't drive and thick does. Reopen drives, and isn't collapsed
 - [ ] On 6.0.0.0 a LiDAR read after building a scan graph on a tool-created sensor reported `NOT_OWNED`, then `NOT_READY` while playing. A sensor `sim__lidar__create` made should be registered. Check against the stuck LiDAR read
 - [ ] `[spin] error in rcl_take: error not set` lines in the Kit log on 6.0.0.0: appears harmless, not explained
-- [ ] Carter: drives, but Nav2 stopped 1.2 m short (`Failed to make progress`); not tuned. Nova Carter and Jetbot: drive, Nav2 not run
-- [ ] TurtleBot3 stalls on the final heading without `--yaw-tolerance 3.2`, probably its box caster
+- [x] Carter, Nova Carter and Jetbot reached Nav2 goals on 6.2 (0.20 to 0.26 m). Carter's stop was the LiDAR at 0.12 m inside its body: at 0.6 m it succeeds. Settings are in the guide
+- [x] TurtleBot3 final-heading stalls: with the guide's goal (yaw 0) Nav2's default succeeds on 6.2 with a few retries. A goal with a 180 degree turn needs yaw tolerance 0.20 or more. Floor friction matters: 0.15 gave zero stalls, 2.0 aborted. The `3.2` in the guide is more than needed
+- [ ] Trim the guide's `--yaw-tolerance 3.2` advice to the measured 0.2 to 0.5
 - [ ] A very flat floor already saved in a file gets no warning: only `sim__prim__create` warns
 - [ ] Why a floor scaled 20x20x0.1 gives wheels no contact is measured, not explained (133:1 fails, 100:1 drives on TurtleBot3; Carter erratic from 50:1). Limitation unless the cause turns up
 - [x] 5.1 saves write an empty `/WriterOrchestrator` graph with no nodes. It survives a reopen, `/scan` publishes once, nothing breaks. `graphs` in the save result still lists it, which reads like a saved pipeline
@@ -276,4 +277,4 @@ Scores track training: rsl_rl cartpole -5.99 early, +4.92 trained; rl_games -4.8
 - [ ] **Split the PR:** M1 to M5 stay in PR 70. M6 (`assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources) and M7 (viewport screenshot and recording, final demo) go to a second PR from a branch off PR 70's head
 - [ ] Mark Lab 2.3.2 with Sim 5.1 as `tested` after the final retest passes
 - [ ] Keep "Kaleb's work with RISE lab" in the docs (kept, no action)
-
+- [ ] `sim__lidar__read` `NOT_READY` text should mention a sensor inside its own robot's body. The empty-scan rewrite covers a robot at the origin; Carter's was on a chassis link

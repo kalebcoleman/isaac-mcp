@@ -216,7 +216,10 @@ Use the robot's `wheels` values from the Quick Start result. The base link and t
 |---|---|---|---|
 | `create3` | `base_link`, 0.12 m up | `base_link` | none |
 | `turtlebot3_burger` | `base_scan`, at its origin | `base_link` | `--yaw-tolerance 3.2` (see below) |
-| `carter_v1`, `nova_carter` | `chassis_link`, above the chassis | `chassis_link` | `--base-frame chassis_link --radius 0.45`, and a `clear` radius of 0.7 in step 4. Carter did not reach this goal (see below) |
+| `carter_v1`, `nova_carter` | `chassis_link`, **0.6 m up** | `chassis_link` | `--base-frame chassis_link --radius 0.45`, and a `clear` radius of 0.7 in step 4. Both reached the goal on 6.2 (0.2 to 0.26 m away) |
+| `jetbot` | `chassis`, 0.12 m up | `chassis` | `--base-frame chassis --radius 0.12`, `clear` 0.15. Reached the goal on 6.2 (0.23 m) |
+
+Mount the LiDAR clear of the robot's own body: 0.12 m is Create 3's height. Inside Carter's body `/scan` has a publisher and never a message; at 0.3 m it sees the chassis as a ring at 0.45 m; at 0.6 m it's clean. If `/scan` is silent, raise the sensor first. Send the first goal only after `/amcl_pose` is publishing: a goal sent as soon as the action server exists can abort short.
 
 TurtleBot3's parent path is `/World/TurtleBot3/Geometry/base_footprint/base_link/base_scan` on 6.1 and 6.2, and `/World/TurtleBot3/base_scan` on 5.1 and 6.0, because NVIDIA restructured the asset.
 
