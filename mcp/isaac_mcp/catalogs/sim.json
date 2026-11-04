@@ -1257,7 +1257,7 @@
         },
         "new_path": {
           "type": "string",
-          "description": "Unused target path.",
+          "description": "New path, not in use yet.",
           "required": true
         }
       },
@@ -1296,7 +1296,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Unused target path."
+          "description": "New path, not in use yet."
         }
       ],
       "namespace": "sim",
@@ -2092,7 +2092,7 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.state": {
-      "description": "Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.",
+      "description": "While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2143,7 +2143,7 @@
       "owner_id": "generic-sim"
     },
     "sim.simulation.step": {
-      "description": "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2459,7 +2459,7 @@
         },
         "path": {
           "type": "string",
-          "description": "Camera created by this pack, or an existing Camera with adopt=true.",
+          "description": "Camera from sim__camera__create or sim__quick_start, or any other Camera with adopt=true.",
           "required": true
         },
         "filename": {
@@ -2506,7 +2506,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Camera created by this pack, or an existing Camera with adopt=true."
+          "description": "Camera from sim__camera__create or sim__quick_start, or any other Camera with adopt=true."
         },
         {
           "name": "filename",
@@ -2540,7 +2540,7 @@
       "owner_id": "generic-sim"
     },
     "sim.lidar.create": {
-      "description": "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan): on 6.2 set its targetPrim; on 6.0 and 6.1 wire IsaacCreateRenderProduct (cameraPrim = the LiDAR) to its renderProductPath. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan) with IsaacCreateRenderProduct (cameraPrim = the LiDAR) wired to its renderProductPath. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2554,7 +2554,7 @@
         },
         "path": {
           "type": "string",
-          "description": "Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist.",
+          "description": "Path for the new LiDAR, not in use yet; its parent prim (e.g. a robot link) must exist.",
           "required": true
         },
         "position": {
@@ -2633,7 +2633,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist."
+          "description": "Path for the new LiDAR, not in use yet; its parent prim (e.g. a robot link) must exist."
         },
         {
           "name": "position",
@@ -3908,7 +3908,7 @@
         },
         "path": {
           "type": "string",
-          "description": "Unused graph path.",
+          "description": "Path for the new graph, not in use yet.",
           "required": true
         },
         "code": {
@@ -3943,7 +3943,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Unused graph path."
+          "description": "Path for the new graph, not in use yet."
         },
         {
           "name": "code",

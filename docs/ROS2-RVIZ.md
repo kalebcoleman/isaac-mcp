@@ -183,8 +183,8 @@ on the prefix, which breaks concurrent `ros2` calls. The daemon matters: one sta
 stop; `ros2 topic list --no-daemon` avoids the daemon (`ros2 topic hz` has no such flag). Kit's
 bridge nodes do not appear in `ros2 node list` at all; check topics and `/tf` instead.
 
-`ros2 topic echo` truncates long arrays, so a LaserScan can look all invalid: judge `/scan` with
-`--field` or a small `rclpy` subscriber.
+`ros2 topic echo` truncates long arrays, so a LaserScan can look all invalid: judge `/scan` with a small
+`rclpy` subscriber that prints the count and the range. `--field ranges` works too, but prints every value on one line.
 
 Without a TTY there is no keyboard teleop. Drive with timed steps (linear m/s, angular rad/s,
 seconds):

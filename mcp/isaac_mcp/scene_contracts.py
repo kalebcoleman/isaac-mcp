@@ -261,7 +261,7 @@ HOST_ONLY = {
 }
 add(
     "assets.packs",
-    "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing.",
+    "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs.",
 )
 add(
     "assets.pack_doctor",
@@ -346,7 +346,7 @@ add(
     dict(
         **TARGET,
         path=field("string", "Pack-created source leaf."),
-        new_path=field("string", "Unused target path."),
+        new_path=field("string", "New path, not in use yet."),
     ),
 )
 add(
@@ -443,12 +443,12 @@ add(
 )
 add(
     "sim.joints.state",
-    "Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data.",
+    "While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data.",
     dict(**TARGET, path=field("string", "Exact articulation root path, e.g. /World/UR5e/root_joint: robot.articulation_root from sim__quick_start, or sim__physics__inspect.")),
 )
 add(
     "sim.simulation.step",
-    "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.",
+    "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.",
     dict(
         **TARGET,
         steps=field("integer", "Number of physics steps 1..120."),
@@ -476,17 +476,17 @@ add(
     "Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true.",
     dict(
         **TARGET,
-        path=field("string", "Camera created by this pack, or an existing Camera with adopt=true."),
+        path=field("string", "Camera from sim__camera__create or sim__quick_start, or any other Camera with adopt=true."),
         filename=field("string", "New simple basename ending .png."),
         adopt=field("boolean", "If this exact prim is a Camera with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; the prim itself is not edited and stays non-owned.", False, default=False),
     ),
 )
 add(
     "sim.lidar.create",
-    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan): on 6.2 set its targetPrim; on 6.0 and 6.1 wire IsaacCreateRenderProduct (cameraPrim = the LiDAR) to its renderProductPath.",
+    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan) with IsaacCreateRenderProduct (cameraPrim = the LiDAR) wired to its renderProductPath.",
     dict(
         **TARGET,
-        path=field("string", "Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist."),
+        path=field("string", "Path for the new LiDAR, not in use yet; its parent prim (e.g. a robot link) must exist."),
         **POSE,
         rotate_xyz=field("array", "Orientation as USD rotateXYZ Euler angles in degrees, instead of the orientation quaternion.", False),
         config=field("string", "NVIDIA lidar config name, e.g. Example_Rotary_2D, Example_Rotary, OS1, RPLIDAR_S2E. Empty: local generic LiDAR.", False, default=""),
@@ -619,7 +619,7 @@ add(
     "OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox.",
     dict(
         **TARGET,
-        path=field("string", "Unused graph path."),
+        path=field("string", "Path for the new graph, not in use yet."),
         code=field(
             "string", "Trusted setup(db)/compute(db) script, <=16384 characters."
         ),

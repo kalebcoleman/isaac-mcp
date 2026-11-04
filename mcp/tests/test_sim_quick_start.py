@@ -129,7 +129,7 @@ def test_default_needs_nothing_and_builds_a_working_scene(kit):
     assert stage.GetPrimAtPath(out["lights"][0]).IsA(UsdLux.DomeLight)
     assert out["session_id"] == kit.scene.session_id and out["stage_id"] == kit.scene.stage_id
     assert out["stopped"] is True and "robot" not in out and "ros" not in out and kit.played == []
-    assert any("sim__camera__capture" in step and "adopt=true" in step for step in out["next_steps"])
+    assert any("sim__camera__capture" in step for step in out["next_steps"])
 
 
 def test_no_twin_wiring_is_built(kit):
@@ -155,9 +155,11 @@ def test_camera_frames_the_robot_at_its_size(kit):
     box = UsdGeom.BBoxCache(Usd.TimeCode.Default(), ["default", "render"]).ComputeWorldBound(
         stage.GetPrimAtPath("/World/UR5e")).ComputeAlignedRange()
     to_center = (box.GetMidpoint() - world.ExtractTranslation())
-    assert world.TransformDir((0, 0, -1)).GetNormalized() * to_center.GetNormalized() == pytest.approx(1.0)
     half_fov = math.atan(qs.HORIZONTAL_APERTURE / qs.CAPTURE_ASPECT / 2 / qs.FOCAL_LENGTH)
-    assert math.asin(qs.MIN_FRAMED_RADIUS_M / to_center.GetLength()) <= half_fov + 1e-6
+    # Aimed a little above the robot, to leave room for it to rise, with all of it still in view.
+    off_axis = math.acos(world.TransformDir((0, 0, -1)).GetNormalized() * to_center.GetNormalized())
+    assert 0 < off_axis
+    assert off_axis + math.asin(box.GetSize().GetLength() / 2 / to_center.GetLength()) <= half_fov + 1e-6
 
 
 def test_a_prim_with_no_bounds_keeps_the_default_aim(kit):

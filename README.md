@@ -155,7 +155,7 @@ It starts at all joints zero, stretched out low to the ground. That can look col
 ### 5. The RISE lab UR5e digital twin
 
 The `ur5e_dt__*` tools are Kaleb's work with RISE lab's UR5e: a digital twin that mirrors a real robot over ROS 2, with its
-gripper, bench and object tools. `ur5e_dt__quick_start` builds that twin's scene from public files and starts it running. To
+gripper, bench and object tools. For a plain UR5e scene to edit and save, use `sim__quick_start` with `robot="ur5e"` instead. `ur5e_dt__quick_start` builds that twin's scene from public files and starts it running. To
 keep working offline, download those files once:
 
 ```bash

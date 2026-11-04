@@ -688,7 +688,10 @@ def build_pack(
             path = found[0].resolve()
         if trusted is not None and not trusted(path):
             raise PackError(
-                f"source is outside approved roots and user stores: {path}", "ROOT_NOT_APPROVED"
+                f"source is outside approved roots and user stores: {path}. Put it in a folder under your asset store, or "
+                "have the user approve its folder once, outside the tools: docs/TOOLS-SCENE.md, One-time approval. "
+                "assets__roots lists what is approved.",
+                "ROOT_NOT_APPROVED",
             )
         if not path.is_file():
             raise PackError(f"source not found: {path}", "NOT_FOUND")
@@ -724,7 +727,8 @@ def build_pack(
             origin = Path(result["path"])
             base = base_of[str(origin)]
             if result.get("error"):
-                raise PackError(f"cannot read {origin}: {result['error']}", "USD_UNREADABLE", file=str(origin))
+                code = "XACRO" if "xacro" in result["error"].lower() else "USD_UNREADABLE"
+                raise PackError(f"cannot read {origin}: {result['error']}", code, file=str(origin))
             runtime.update(result.get("runtime", []))
             if base is not None:
                 entries.add(origin.relative_to(base).as_posix())

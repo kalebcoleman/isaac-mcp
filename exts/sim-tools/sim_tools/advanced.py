@@ -865,8 +865,9 @@ class Advanced:
                 path=a["path"],
                 targets=positions,
                 names=state["names"],
-                achieved=False,
-                warning="Active controllers may replace these targets; inspect runtime joints after stepping.",
+                effect="Targets set; the joints have not moved yet. Compare sim__joints__state while the simulation runs. "
+                       "A joint that stops short is usually in contact (a low arm against the ground) or has a controller "
+                       "replacing its target.",
             )
         if name == "sim.joints.state":
             state = self.joints(stage, a["path"])

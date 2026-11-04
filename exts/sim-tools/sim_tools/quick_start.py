@@ -30,7 +30,8 @@ GROUND_HALF_SIZE_M = 25.0
 EYE, EYE_TARGET = (2.2, 2.2, 1.5), (0.0, 0.0, 0.35)
 VIEW_DIRECTION = Gf.Vec3d(1.0, 1.0, 0.7).GetNormalized()
 FOCAL_LENGTH, HORIZONTAL_APERTURE, CAPTURE_ASPECT = 24.0, 20.955, 4.0 / 3.0
-MIN_FRAMED_RADIUS_M = 0.5
+MIN_FRAMED_RADIUS_M = 0.3
+ROOM_TO_MOVE = 1.5  # an arm's first pose can be its flattest: leave room for it to rise
 
 
 def _resolved(relpath, pack, label, name):
@@ -207,8 +208,9 @@ def frame_camera_on(stage, path):
         return None
     center = box.GetMidpoint()
     up, units = _stage_layout(stage)
-    radius = max(box.GetSize().GetLength() / 2.0, MIN_FRAMED_RADIUS_M * units)
+    radius = max(box.GetSize().GetLength() / 2.0 * ROOM_TO_MOVE, MIN_FRAMED_RADIUS_M * units)
     distance = fit_distance(radius, FOCAL_LENGTH, HORIZONTAL_APERTURE, CAPTURE_ASPECT)
+    center = center + _stage_point((0, 0, 1), up) * radius / 3  # robots rise from a first pose; the first pose still fits
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         eye = center + _stage_point(VIEW_DIRECTION, up) * distance
         UsdGeom.Xformable(stage.GetPrimAtPath(CAMERA)).GetOrderedXformOps()[0].Set(_aim(eye, center, up))
@@ -243,14 +245,14 @@ def next_steps(ids, robot_path, root, play):
         steps.append(f"Play: sim__timeline__control with {ids_text}, action=\"play\".")
     if root:
         steps += [
-            "A robot starts at its all-zero joint pose. For an arm that can be low and stretched out, which can look collapsed; check the joint state before assuming a fault. A joint driven toward the ground stops when the arm reaches it, so lift the shoulder first.",
+            "A robot starts at its all-zero joint pose. For an arm that can be low and stretched out, which can look collapsed; check the joint state before assuming a fault. A joint driven into the ground just stops, with no error, so raise a low arm first (on a UR5e, shoulder_lift_joint to about -1.57).",
             f"Read joints while playing or paused: sim__joints__state with path=\"{root}\".",
             f"Move: sim__joints__command with path=\"{root}\" and one position per joint, in radians.",
             "Exact steps: pause with sim__timeline__control, then sim__simulation__step.",
             f"ROS 2 TF and joint states: sim__ros2__tf_setup with robot=\"{robot_path}\" on a stopped timeline.",
         ]
     steps += [
-        f"Look: sim__camera__capture with path=\"{CAMERA}\", filename=\"scene.png\", adopt=true, then read the file.",
+        f"Look: sim__camera__capture with path=\"{CAMERA}\", filename=\"scene.png\", then read the file.",
         "Keep it: sim__stage__save. These edits are in the session layer, and the saved file contains them.",
     ]
     return steps

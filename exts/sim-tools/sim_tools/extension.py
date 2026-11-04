@@ -266,6 +266,7 @@ class Extension(omni.ext.IExt):
             result["edit_target_restored"] = self.scene.end_runtime_edit(self.scene.stage())
         result.update(
             playing=self.scene.timeline.is_playing(),
+            paused=not self.scene.timeline.is_playing() and not self.scene.timeline.is_stopped(),
             stopped=self.scene.timeline.is_stopped(),
             time_s=self.scene.timeline.get_current_time(),
         )
@@ -377,7 +378,7 @@ class Extension(omni.ext.IExt):
                 what = f"a {entry[0]}" if entry is not None else f"a {target_prim.GetTypeName()}"
                 refuse("NOT_A_SENSOR", f"{args['path']} is {what}, not a {expected}. Find one with sim__prim__find, or "
                        f"create it with sim__{expected}__create.")
-            if entry is not None or not adopt:
+            if entry is not None or not (adopt or args["path"] in s.owned):  # sim__quick_start's camera is ours already
                 refuse(
                     "NOT_OWNED",
                     f"{args['path']} has no {expected} render resources in this session: sensors from an opened "

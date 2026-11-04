@@ -393,7 +393,7 @@ Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured outp
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Camera created by this pack, or an existing Camera with adopt=true.
+- `path` (string, required): Camera from sim__camera__create or sim__quick_start, or any other Camera with adopt=true.
 - `filename` (string, required): New simple basename ending .png.
 - `adopt` (boolean, default `false`): If this exact prim is a Camera with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; the prim itself is not edited and stays non-owned.
 - `wait_for_render` (boolean, default `true`): True: wait up to five seconds for render completions and a new owned CPU transfer. False: reuse the last validated tool acquisition, possibly from before Stop/reset or scene edits; NOT_READY until a true capture seeds it. Ordinary Play never refreshes this cache. PNG I/O still occurs. No implicit physics advance or atomic sensor/physics guarantee.
@@ -422,7 +422,7 @@ OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inli
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Unused graph path.
+- `path` (string, required): Path for the new graph, not in use yet.
 - `code` (string, required): Trusted setup(db)/compute(db) script, <=16384 characters.
 
 ### `sim__controller__update`
@@ -511,7 +511,7 @@ Inspect bounded authored joint limits/drives below an articulation, reporting US
 
 ### `sim__joints__state`
 
-Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.
+While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -519,11 +519,11 @@ Read initialized articulation DOF positions/velocities on selected PhysX or qual
 
 ### `sim__lidar__create`
 
-Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan): on 6.2 set its targetPrim; on 6.0 and 6.1 wire IsaacCreateRenderProduct (cameraPrim = the LiDAR) to its renderProductPath. Requires session_id and stage_id from sim__stage__info.
+Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. To publish /scan, sim__graph__build a ROS2RtxLidarHelper (type=laser_scan) with IsaacCreateRenderProduct (cameraPrim = the LiDAR) wired to its renderProductPath. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist.
+- `path` (string, required): Path for the new LiDAR, not in use yet; its parent prim (e.g. a robot link) must exist.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
@@ -639,7 +639,7 @@ Clone a pack-created simple leaf primitive into a new path, preserving session-l
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Pack-created source leaf.
-- `new_path` (string, required): Unused target path.
+- `new_path` (string, required): New path, not in use yet.
 
 ### `sim__prim__create`
 
@@ -729,7 +729,7 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 
 ### `sim__simulation__step`
 
-Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.
+Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -928,7 +928,7 @@ Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary a
 
 ### `assets__packs`
 
-List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing.
+List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs.
 
 No arguments.
 

@@ -311,3 +311,11 @@ def test_script_nodes_stay_off_without_the_users_consent(monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS", "1")
     assert not gb.scripts_disabled()
     assert set(gb.SCRIPT_PORTS) == {"inputs:script", "inputs:scriptPath"}
+
+
+def test_a_clock_with_no_time_source_is_noted():
+    nodes = [("tick", "omni.graph.action.OnPlaybackTick"), ("clock", "isaacsim.ros2.bridge.ROS2PublishClock")]
+    wired = [(("time", "outputs:simulationTime"), ("clock", "inputs:timeStamp"))]
+    assert gb.unstamped_clocks(dict(nodes=nodes, connections=[], values=[])) == ["clock"]
+    assert gb.unstamped_clocks(dict(nodes=nodes, connections=wired, values=[])) == []
+    assert gb.unstamped_clocks(dict(nodes=nodes, connections=[], values=[("clock", "inputs:timeStamp", 1.0)])) == []

@@ -182,10 +182,12 @@ accepted when they have an even number of strings. JSON containers are limited t
 levels and must not contain non-JSON constants such as `NaN`. For example, an Antigravity client can send:
 
 ```json
-{"nodes": ["[\"tick\", \"omni.graph.action.OnPlaybackTick\"]", "[\"clock\", \"isaacsim.ros2.bridge.ROS2PublishClock\"]"],
- "connections": ["[\"tick.outputs:tick\", \"clock.inputs:execIn\"]"],
+{"nodes": ["[\"tick\", \"omni.graph.action.OnPlaybackTick\"]", "[\"time\", \"isaacsim.core.nodes.IsaacReadSimulationTime\"]", "[\"clock\", \"isaacsim.ros2.bridge.ROS2PublishClock\"]"],
+ "connections": ["[\"tick.outputs:tick\", \"clock.inputs:execIn\"]", "[\"time.outputs:simulationTime\", \"clock.inputs:timeStamp\"]"],
  "values": "{\"clock.inputs:topicName\": \"/clock\", \"clock.inputs:queueSize\": 10}"}
 ```
+
+Without the `time` node, `/clock` publishes steadily with every stamp at zero, and the result's `notes` says so.
 
 Supply the graph `path` and current session/stage IDs too. Type and port checks still apply.
 For manual `run_python` diagnostics, prefer `sim__graph__node_types` and `sim__graph__inspect`.
@@ -476,9 +478,8 @@ annotator, including the older 6.0.0.0 API. A `config` LiDAR uses NVIDIA's 6.x
 `Lidar.create(usd_path=<assets root>/Isaac/Sensors/..., tick_rate=...)` with the same annotator.
 On 6.2.0.0 an `Example_Rotary_2D` LiDAR at `/turtlebot3_burger/base_scan/Lidar2D` returned
 points through `sim__lidar__read`, and a `ROS2RtxLidarHelper` (`type=laser_scan`) published
-3600-beam `/scan` messages, both with Motion BVH off. On 6.0.0.0 through 6.1.0.0 the helper has no `targetPrim`, and `OnPlaybackTick`'s output is
-`outputs:tick`: there, wire `OnPlaybackTick` to `IsaacCreateRenderProduct` (`cameraPrim` = the LiDAR), then to the helper's
-`renderProductPath`, which gave the same `/scan` on each of them. The full build, running Kit and loaded extensions must match
+3600-beam `/scan` messages, both with Motion BVH off. The helper has no `targetPrim` on any build we inspected, including 5.1 and 6.2. Wire
+`OnPlaybackTick`'s `outputs:tick` to `IsaacCreateRenderProduct` (`cameraPrim` = the LiDAR), then to the helper's `renderProductPath`, which gave the same `/scan` on 6.0.0.0 through 6.2. The full build, running Kit and loaded extensions must match
 a qualified stack; missing/conflicting identity and unknown builds fail before native creation.
 `sim__stage__info.runtime` reports the actual package, full VERSION, Kit, extension, Warp,
 solver and adapter information. Adding a release requires qualification evidence and a data

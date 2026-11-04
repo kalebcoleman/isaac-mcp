@@ -37,7 +37,7 @@ lab scene, so it needs all of these.
 - A local copy **always** wins. The resolver looks in project stores, then your asset folder, and only then at NVIDIA, and only for `robot/ur5e.usd` and
   `sensors/rsd455.usd`.
 - `ISAAC_MCP_ASSET_STRICT=1` (or `"strict": true` in `isaac-mcp.json`) forbids online loading. A missing file is then an error.
-- Each Quick Start result lists every asset in `assets`, with `source` (`project`, `store`, `remote` or `missing`) and `location`, and the
+- Each Quick Start result lists every asset in `assets`, with `source` (`project`, `store`, `remote`, `missing`, or `snapshot` for a file loaded from a pack) and `location`, and the
   console warns when one loads from online. `python3 scripts/isaac_assets.py doctor` shows the same without starting Kit.
 - `fetch_ur5e_assets.py` only ever writes to `ur5e-dt/`, never to a pack a project selected. It keeps a changed file that has no pin, lists it and exits 1.
   Accept your change with `isaac_assets.py pin`, or replace it with NVIDIA's copy with `--force`.

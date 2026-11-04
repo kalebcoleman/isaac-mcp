@@ -271,6 +271,13 @@ def token_value(value, allowed_raw):
 
 # ---------------------------------------------------------------- Kit side
 
+def unstamped_clocks(spec):
+    """Clock publishers nothing gives a time to. They publish happily, and every stamp is 0."""
+    stamped = {node for _, (node, port) in spec["connections"] if port == "inputs:timeStamp"}
+    stamped |= {node for node, port, _ in spec["values"] if port == "inputs:timeStamp"}
+    return [name for name, kind in spec["nodes"] if kind.rsplit(".", 1)[-1] == "ROS2PublishClock" and name not in stamped]
+
+
 def build(stage, a, stopped):
     import json
 
@@ -322,6 +329,8 @@ def build(stage, a, stopped):
         return _refuse(SpecError("NOT_FOUND", f"The parent of {path} does not exist."))
 
     notes, created_ports = list(spec["notes"]), []
+    notes += [f"{name}.inputs:timeStamp is not connected, so every /clock stamp will be 0. Connect "
+              "isaacsim.core.nodes.IsaacReadSimulationTime's outputs:simulationTime to it." for name in unstamped_clocks(spec)]
     keys = og.Controller.Keys
     try:
         og.Controller.edit({"graph_path": path, "evaluator_name": spec["evaluator"]},
