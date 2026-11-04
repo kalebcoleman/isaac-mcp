@@ -194,7 +194,7 @@ Tool `sim__camera__capture`:
 {"path": "/World/TopCamera", "filename": "goal.png"}
 ```
 
-**9. Clean up and save.** `pkill -INT -f '[p]arams_file:=/tmp/isaac_nav2.yaml'` stops this Nav2 and not anyone else's; the brackets stop it matching your own shell. A launch backgrounded by a script can ignore SIGINT, and SIGTERM on the launch alone can leave its nodes running, so confirm with `ros2 node list` and stop any left by PID. Then stop the timeline and save a copy. The flag removes this session's render handles from the copy; without it, the save refuses and says so. In the saved file, the drive and LiDAR graphs make their own render products at Play, so `/scan` comes back when you open it with `sim__stage__open`.
+**9. Clean up and save.** `pkill -INT -f '[p]arams_file:=/tmp/isaac_nav2.yaml'` (use the path you gave `nav2_params.py`) stops this Nav2 and not anyone else's; the brackets stop it matching your own shell. A launch backgrounded by a script can ignore SIGINT, and SIGTERM on the launch alone can leave its nodes running, so confirm with `ros2 node list` and stop any left by PID. Then stop the timeline and save a copy. The flag removes this session's render handles from the copy; without it, the save refuses and says so. In the saved file, the drive and LiDAR graphs make their own render products at Play, so `/scan` comes back when you open it with `sim__stage__open`.
 
 Tool `sim__timeline__control`:
 

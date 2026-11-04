@@ -293,3 +293,9 @@ Home PC, run by script, headless:
 - [x] 5.1 with Lab 2.3.2: rsl_rl and rl_games trained; every eval ended `succeeded`; early -7.32 against trained +2.47; windowed play reported its window; the guard refusal named `allow_concurrent=true`; cancel left nothing
 - [ ] Lab PC, unreachable at the time: 6.0.0.0, 6.0.0.1, 6.0.1, 6.1 (smoke, M4, M5, the plain-request tests) and Lab 3.0.0 (eval fix, refusal hints)
 - [ ] 6.0.1 `sim__stop` fix, live
+
+### Plain-request runs on the home PC (Gemini, 6.2 headless)
+
+- [x] "A little wheeled robot drives around a box to the far side of a room": worked in 22 calls, no `run_python`, goal `SUCCEEDED` at (2.28, -0.03). The agent found the tools from the tool list, docs and skill with no steps given
+- [x] Its only stumbles: my brief said a bad tool name lists the tools (the test client wants `list_tools`; it now says so on an unknown name), and it moved Nav2's parameter file so the documented stop pattern missed (the guide now says to use your own path)
+
