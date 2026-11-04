@@ -298,4 +298,6 @@ Home PC, run by script, headless:
 
 - [x] "A little wheeled robot drives around a box to the far side of a room": worked in 22 calls, no `run_python`, goal `SUCCEEDED` at (2.28, -0.03). The agent found the tools from the tool list, docs and skill with no steps given
 - [x] Its only stumbles: my brief said a bad tool name lists the tools (the test client wants `list_tools`; it now says so on an unknown name), and it moved Nav2's parameter file so the documented stop pattern missed (the guide now says to use your own path)
+- [x] "Teach a robot to balance a pole on a cart" on Lab 2.3.2 with 5.1 (Gemini): trained from 8.5 to 291.6 steps balanced, eval 4.82 (32 episodes), a window screenshot of it balancing, 20 calls, one wrong turn. Fixed what it tripped on: `rl_library` is required on Lab 2.x, and the skill said ids drop `-v0` without saying 2.3 keeps it
+- [ ] A window appears 8 to 12 s before it renders: the play hint says so, but a tester screenshotted at once. Consider a `loading` field on `runs_status`
 

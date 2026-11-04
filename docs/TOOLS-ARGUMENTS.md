@@ -237,7 +237,7 @@ Run a checkpoint as a job and score it. Returns its job_id; when the job ends, i
 - `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
 - `num_envs` (int | None, default `None`): Parallel environments. Default: the task's own.
 - `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
-- `rl_library` (str | None, default `None`): RL library name, e.g. rsl_rl. Default: the Isaac Lab script's own.
+- `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.
 - `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
 - `num_episodes` (int, default `20`): Finished episodes to collect before the run stops itself.
 - `max_steps` (int | None, default `20000`): Environment-step bound that also ends the run; null removes it.
@@ -266,7 +266,7 @@ Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cance
 - `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
 - `num_envs` (int, default `1`): Parallel environments.
 - `headless` (bool, default `False`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
-- `rl_library` (str | None, default `None`): RL library name, e.g. rsl_rl. Default: the Isaac Lab script's own.
+- `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.
 - `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
@@ -318,7 +318,7 @@ Start a training job and return its job_id immediately; follow it with isaaclab_
 - `device` (str | None, default `None`): e.g. cuda:0 or cpu. Default: Isaac Lab's choice.
 - `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `checkpoint` (str | None, default `None`): Checkpoint file to resume from, from isaaclab__checkpoints_list.
-- `rl_library` (str | None, default `None`): RL library name, e.g. rsl_rl. Default: the Isaac Lab script's own.
+- `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.
 - `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.

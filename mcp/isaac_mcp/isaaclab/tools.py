@@ -36,7 +36,7 @@ _Checkpoint = Annotated[str, Field(description="Checkpoint file from isaaclab__c
 _JobId = Annotated[str, Field(description="job_id from isaaclab__train, eval or play, or isaaclab__runs_list.")]
 _RunDir = Annotated[str, Field(description="Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status.")]
 _Headless = Annotated[bool, Field(description="false opens a window. true with extra_args=['--video'] keeps a renderer with no window.")]
-_RlLibrary = Annotated[str | None, Field(description="RL library name, e.g. rsl_rl. Default: the Isaac Lab script's own.")]
+_RlLibrary = Annotated[str | None, Field(description="RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.")]
 _ExtraArgs = Annotated[list[str] | None, Field(description="More command-line arguments for the Isaac Lab script, e.g. ['--video'].")]
 _Timeout = Annotated[float | None, Field(description="Stop the job after this many seconds. Default: no limit.")]
 _AllowConcurrent = Annotated[bool, Field(description="Start even if another job is running; a 16 GB GPU normally fits one.")]

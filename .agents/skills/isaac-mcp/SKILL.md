@@ -134,7 +134,8 @@ bridge tools.
 Details and parameter tables: [references/isaac-lab.md](references/isaac-lab.md).
 
 1. `isaaclab__envs_list` with a `filter` substring to find the task id. Isaac Lab 3 ids have no
-   `-v0` suffix (for example `Isaac-Reach-Franka`).
+   `-v0` suffix (for example `Isaac-Reach-Franka`); Lab 2.3 ids keep it (`Isaac-Cartpole-v0`), and Lab 2.x
+   needs `rl_library` too (`install_info` lists the installed ones).
 2. Training refuses to start next to a running Kit bridge (the GPU guard). Ask the user whether to
    stop the Sim or to pass `allow_concurrent_gpu=true`; do not set it on your own.
 3. Smoke test first: `isaaclab__train` with a small `num_envs` and `max_iterations`, and a
