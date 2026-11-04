@@ -403,8 +403,17 @@ def test_allow_unresolved_builds_and_doctor_accepts_only_what_was_recorded(lab, 
     dest = env / "bricksim"
     report = packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()], allow_unresolved=True)
     assert report["copied"] == 2 and report["verified"]["accepted_unresolved"] == ["robot/SubUSDs/Robotiq.usda"]
-    assert report["verified"]["self_contained"] is True
-    assert packs.doctor_folder(dest, closure=USD)["ok"] is True
+    # The accepted file is still missing, so the pack is not self-contained and cannot import yet.
+    assert report["verified"]["self_contained"] is False
+    assert report["importable"] is False and report["import_blockers"] == ["robot/SubUSDs/Robotiq.usda"]
+    doctor = packs.doctor_folder(dest, closure=USD)
+    assert doctor["ok"] is False
+    assert any("accepted as unresolved" in p and "assets__import_path refuses" in p for p in doctor["problems"])
+    # Adding the file makes both agree again, without a rebuild.
+    put(dest, "robot/SubUSDs/Robotiq.usda", "#usda 1.0\n")
+    packs.pin_pack(dest, force=True)
+    doctor = packs.doctor_folder(dest, closure=USD)
+    assert doctor["ok"] is True and doctor["dependencies"]["accepted_unresolved"] == []
     put(dest, "robot/ur5e.usda", usda("./SubUSDs/base.usda", "./SubUSDs/Robotiq.usda", "./Another.usda"))
     packs.pin_pack(dest, force=True)
     report = packs.doctor_folder(dest, closure=USD)
@@ -1192,11 +1201,15 @@ def test_a_user_store_pack_can_be_located_and_snapshotted(env, tmp_path):
 def test_a_corrupt_store_pack_is_refused(env, tmp_path):
     made = Broker(config_for(tmp_path, {}))
     path = put(env / "chess", "scene.usda", usda())
+    put(env / "chess", "other.usda", usda())
     packs.pin_pack(env / "chess")
     path.write_text("#usda 1.0\n# changed\n")
-    with pytest.raises(Exception, match="differ from their pins") as caught:
+    (env / "chess" / "other.usda").unlink()
+    with pytest.raises(Exception, match="do not match its pins") as caught:
         made.locate(str(path))
     assert caught.value.code == "PACK_CORRUPT"
+    assert "changed: ['scene.usda']" in str(caught.value)
+    assert "missing: ['other.usda']" in str(caught.value)
 
 
 def test_a_project_file_store_or_a_flat_store_file_is_still_not_approval(env, tmp_path, monkeypatch):
@@ -1249,3 +1262,26 @@ def test_doctor_names_a_symlink_that_import_would_refuse(tmp_path):
     (tmp_path / "a.usda").write_text("#usda 1.0\n")
     (tmp_path / "link.usda").symlink_to(tmp_path / "a.usda")
     assert asset_packs._pack_symlinks(tmp_path) == ["link.usda"]
+
+
+def test_adopt_reports_a_symlink_it_did_not_copy(env, broker):
+    root = broker.roots["demo"][0]
+    put(root, "real/a.usda", "#usda 1.0\n")
+    put(root, "solo.usda", "#usda 1.0\n")
+    (root / "link").symlink_to(root / "real", target_is_directory=True)
+    (root / "alias.usda").symlink_to(root / "solo.usda")
+
+    out = packs.run_tool("assets.pack_adopt",
+                         {"pack": "linked", "source_path": str(root)}, broker)
+    assert out["status"] == "ok"
+    assert out["skipped_symlinks"] == ["alias.usda", "link/"]
+    assert any("symbolic link" in note and "alias.usda" in note for note in out["notes"])
+    assert (env / "linked/real/a.usda").is_file()
+    assert (env / "linked/solo.usda").is_file()
+    assert not (env / "linked/link").exists()
+    assert not (env / "linked/alias.usda").exists()
+
+    dry = packs.run_tool("assets.pack_adopt",
+                         {"pack": "linked2", "source_path": str(root), "dry_run": True}, broker)
+    assert dry["skipped_symlinks"] == ["alias.usda", "link/"]
+    assert not (env / "linked2").exists()

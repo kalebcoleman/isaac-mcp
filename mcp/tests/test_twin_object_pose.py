@@ -2,6 +2,7 @@
 
 import importlib.util
 import math
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -124,3 +125,45 @@ def test_referenced_fmb_body_rotation_and_source_preservation(tmp_path):
     for layer in stage.GetUsedLayers():
         if layer != stage.GetSessionLayer():
             assert layer.ExportToString() == source_before[layer.identifier]
+
+
+def _twin_method(name, namespace=None):
+    import ast
+    from types import SimpleNamespace
+    from typing import Any, Dict
+
+    source = ROOT / "exts/ur5e-dt/ur5e_dt/extension.py"
+    tree = ast.parse(source.read_text())
+    method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
+    module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
+    base = {"__file__": str(source), "Dict": Dict, "Any": Any}
+    base.update(namespace or {})
+    exec(compile(module, str(source), "exec"), base)
+    return base[name]
+
+
+def test_set_object_pose_reports_the_request_not_a_measured_pose():
+    handler = _twin_method("_cmd_set_object_pose")
+
+    class Twin:
+        def set_object_pose(self, name, position, **kwargs):
+            return (0.1, 0.2, 0.3)
+
+    result = handler(Twin(), object_name="u_brown", position=[0.1, 0.2, 0.3])
+    assert result["status"] == "success"
+    assert result["message"].startswith("Requested 'u_brown'")
+    assert "physics settles it" in result["message"]
+    assert result["requested_world"] == [0.1, 0.2, 0.3]
+
+
+def test_sync_real_poses_reports_requested_poses():
+    handler = _twin_method("_cmd_sync_real_poses", {"carb": SimpleNamespace(log_error=lambda *a: None)})
+
+    class Twin:
+        def sync_real_poses(self):
+            return {"received": True, "updated": ["a", "b"], "snapped": []}
+
+    result = handler(Twin())
+    assert result["status"] == "success"
+    assert "Requested 2 object pose(s)" in result["message"]
+    assert "physics settles" in result["message"]

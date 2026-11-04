@@ -161,6 +161,11 @@ python3 scripts/isaac_assets.py pack-build <project>/assets/robot/arm.usd --pack
   each reference and the layer holding it, and copies nothing. `--allow-unresolved` builds anyway,
   and records what was missing so `doctor` accepts those and no others. It never copies a file from
   outside. A source USD that cannot be read always refuses.
+- **A pack built with `--allow-unresolved` does not import until the recorded files are added.**
+  `assets__import_path` checks the snapshot's dependencies, so a missing file refuses the import.
+  The build result therefore says `"importable": false` with its `import_blockers`, and `doctor`
+  reports each accepted file and exits 1. Add the files (then re-pin) and both agree again without
+  a rebuild.
 - A bare MDL name such as `OmniPBR.mdl` comes from Kit's material library, so it is listed under
   `runtime_materials` and never blocks.
 - A different file already in the pack is refused unless `--force`. Identical files are skipped, so
@@ -201,7 +206,9 @@ a large repository is fine. No USD parser is needed. The source and the copy in 
 3. the root itself, when its own folder is called `<pkg>`. The pack then keeps that folder name, so the package can still be found.
 
 An unresolved package, a missing mesh, a symlink, a URL or a path that leaves the root refuses the build, naming each one
-(`allow_unresolved=true` builds anyway, and records them). A texture a mesh names but that is absent does not
+(`allow_unresolved=true` builds anyway, and records them). A package folder that is found reports only the paths that are
+actually absent: one missing mesh does not make its siblings unresolved, and the problem says the package is there but the
+file is not. A texture a mesh names but that is absent does not
 block: it is listed in `missing_textures`, and `self_contained` is false. `.glb`, `.gltf` and `.fbx` meshes are copied, but what
 they name is not followed, which also makes `self_contained` false. A xacro file refuses with the command to expand it; this tool never runs xacro.
 
@@ -211,12 +218,18 @@ they name is not followed, which also makes `self_contained` false. A xacro file
 |---|---|---|
 | `assets__packs` | No | Lists packs in every store, the selected pack and where that choice came from |
 | `assets__pack_doctor` | No | The dependency-aware doctor below |
-| `assets__dependencies` | No | The raw USD closure of files |
+| `assets__dependencies` | No | The closure of the files: USD through the parser, and a URDF's own references (meshes, packages, package.xml) read on the host |
 | `assets__pack_adopt` | Yes | Creates an empty pack, or copies a folder's asset files in and pins them. `files` limits it to named files or folders. `entries` records its root USDs; a sole top-level USD is recorded on its own |
 | `assets__pack_pin` | Yes | Pins a pack's files |
 | `assets__pack_build` | Yes | Builds a pack from USD or URDF files, as above |
 
 These run on the MCP host and need no Kit, apart from USD parsing when no helper is set.
+
+`assets__dependencies` also accepts a `.urdf`: its references are read on the host with the same
+rules as a build (packages inside the file's pack or approved root, nothing outside), so it returns
+the meshes, `package.xml` and textures the URDF needs instead of a parser error. A package that is
+not there is reported with `PACKAGE_UNRESOLVED`, and a package whose folder exists but lacks one
+file reports only that file.
 
 ### Trust rules for the pack tools
 
@@ -227,8 +240,10 @@ the rules marked *both*.
 - **Writes go only to the primary asset folder** (the first user store). There is no destination
   argument, and a model cannot choose another path. Older read-only locations are never written.
 - **Nothing is written inside the repository** (*both*), and a symlinked pack folder is refused.
-- **`assets__pack_adopt` copies only from an approved root.** A symlink that leaves the root is
-  refused. A broken approval file refuses with no fallback.
+- **`assets__pack_adopt` copies only from an approved root.** A symlink anywhere in the source is
+  never followed and never copied: a named symlink is refused, and one met while copying a folder is
+  listed in `skipped_symlinks` with a note, so a pack cannot silently lose part of a tree.
+  A broken approval file refuses with no fallback.
 - **`assets__pack_build`, `assets__dependencies` and the USD check in `assets__pack_doctor` read
   from approved roots and user stores** (`ISAAC_MCP_ASSET_PATH` or the default folder). You set both
   outside the tools. A USD in an approved root cannot pull in other files: a dependency outside
@@ -266,7 +281,7 @@ It changes nothing. It checks every store holding the pack, because the first co
 | `dependencies.unreadable` | The file is there and USD cannot open it | Yes |
 | `dependencies.remote`, `outside_pack` | The pack is not self-contained | Yes |
 | `dependencies.missing_entries` | An entry file is gone | Yes |
-| `dependencies.accepted_unresolved` | Recorded by `--allow-unresolved` when the pack was built | No |
+| `dependencies.accepted_unresolved` | Recorded by `--allow-unresolved` when the pack was built; still missing, so `assets__import_path` refuses the pack | Yes, until the file is added |
 | `dependencies.runtime_materials` | Supplied by Kit, such as `OmniPBR.mdl` | No |
 | `dependencies.unfollowable`, `warnings` | A material file that cannot be read statically; `self_contained` is false and import refuses it | No: named as a warning, because the twin's own loading can still work |
 | `unused` | No entry file reaches it through USD | No: information, because code can load files by name |
@@ -427,14 +442,14 @@ python3 scripts/isaac_assets.py doctor --pack bricksim
 | Command | What it does |
 |---|---|
 | `where [--json]` | Prints stores, project file, selected pack and where it came from, strict flag and any deprecated variable names in use. |
-| `doctor [--json] [--require RELPATH] [--local-only]` | Resolves each known asset and reports `layer`, `status`, `path`, `sha256`. Exit 1 on a corrupt asset, a `--require` asset that is not local, or any remote asset with `--local-only`. |
-| `doctor --pack NAME [--entry RELPATH] [--usd-python PY] [--pins-only] [--json]` | Checks a pack's files and USD dependencies. See [Check a pack](#check-a-pack-doctor). Exit 1 on a problem, or if dependencies could not be checked. |
-| `packs [--json]` | Lists the packs in every store. |
+| `doctor [--json] [--require RELPATH] [--local-only] [--store DIR]` | Resolves each known asset and reports `layer`, `status`, `path`, `sha256`. Exit 1 on a corrupt asset, a `--require` asset that is not local, or any remote asset with `--local-only`. `--store` checks that asset folder instead of the resolved stores. |
+| `doctor --pack NAME [--entry RELPATH] [--usd-python PY] [--pins-only] [--store DIR] [--json]` | Checks a pack's files and USD dependencies. See [Check a pack](#check-a-pack-doctor). Exit 1 on a problem, or if dependencies could not be checked. `--store` looks for the pack in that folder only. |
+| `packs [--json] [--store DIR]` | Lists the packs in every store, or only those in `--store`. |
 | `create NAME [--store DIR]` | Creates an empty pack. |
 | `pack-build USD... --pack NAME [--from-pack NAME] [--layout-root DIR] [--store DIR] [--usd-python PY] [--allow-unresolved] [--dry-run] [--force] [--json]` | Copies USD files and only what they depend on. See [Build a pack](#build-a-pack-from-a-usd). |
 | `unpin RELPATH... [--store DIR] [--pack NAME]` | Removes pins and leaves the files. |
 | `add SRC [--store DIR] [--pack NAME] [--as RELPATH] [--force] [--max-members N] [--max-file-bytes N] [--max-total-bytes N]` | Copies a file, folder or archive into `<store>/<pack>/` (default: the selected pack) and pins it. Extracts archives safely and refuses archives that expand past the limits (defaults: 20000 members, 8 GiB per file, 16 GiB in total; each extended tar header at most 1 MiB, 16 MiB in total). Never overwrites without `--force`. Refuses a store inside the repo checkout. |
-| `adopt FOLDER [--pack NAME] [--include EXT] [--file RELPATH] [--entry RELPATH] [--dry-run] [--force]` | `--file` copies only that file or folder. `--entry` records a root USD; a sole top-level USD is recorded on its own. Copies the asset files (USD, URDF/xacro/SDF/MJCF, meshes, MDL/MaterialX, textures) of a project folder into `<store>/<pack>/`, keeping their layout and pinning them. Skips `.git`, virtual environments, `node_modules` and hidden folders. The pack defaults to the folder's name. |
+| `adopt FOLDER [--pack NAME] [--include EXT] [--file RELPATH] [--entry RELPATH] [--dry-run] [--force]` | `--file` copies only that file or folder. `--entry` records a root USD; a sole top-level USD is recorded on its own. Copies the asset files (USD, URDF/xacro/SDF/MJCF, meshes, MDL/MaterialX, textures) of a project folder into `<store>/<pack>/`, keeping their layout and pinning them. Skips `.git`, virtual environments, `node_modules` and hidden folders, and reports every symlink it did not follow. The pack defaults to the folder's name. |
 | `migrate [--from CHECKOUT] [--git-rev REV] [--no-legacy-stores] [--dry-run] [--force]` | Copies an old checkout's `exts/ur5e-dt/assets` (the files git tracked, read from history, plus the untracked copies still in the working tree, which win) and old asset folders into `<store>/ur5e-dt/`. A file at a path NVIDIA's files use is kept unpinned only when it is NVIDIA's exact file; a different one (a lab-modified robot) or one an old folder pinned is pinned as yours, and a file you already pinned in the database is never replaced. Files that fail their old check (a changed pinned file, or an unpinned file at an NVIDIA path that is not NVIDIA's file) are skipped and reported, and the command exits 1, as it does when the checkout's git history cannot be read (shallow clone, ownership error); other packs in an old folder are left alone (copy them with `adopt`). Identical files are skipped; a different file already in the database is a refusal unless `--force`. Safe to run again. |
 | `pin [--store DIR] [--pack NAME]` | Records the current hashes of the pack's files as pins, accepting every change. The pack defaults to the selected one. |
 

@@ -739,6 +739,13 @@ def raised_slice(z_low, z_high, cell, occupied, attempt):
     return raised if raised < z_high else None
 
 
+def slice_bottom_note(cell):
+    """What a raised slice bottom does and does not exclude, worded for every omap version we have seen."""
+    return ("Bottom of the slice raised to z_used, because a floor within one cell of it fills the slice. "
+            "omap releases before 2.3.3 can still include colliders below z_used, within about one cell "
+            f"({cell:g} m); on later releases the slice starts at z_used.")
+
+
 def occupancy_map(scene, stage, a):
     """Generate a 2D occupancy map from the stage's colliders and write a Nav2 PGM + YAML."""
     from isaac_mcp.project_assets import refuse
@@ -814,8 +821,7 @@ def occupancy_map(scene, stage, a):
         warn = "No occupied cells reached from start: nothing with a collider intersects the z slice there."
     else:
         warn = None
-    raised = {"z_used": [round(z_low, 4), z[1]], "z_note": "Bottom of the slice raised, because a floor within one cell of it "
-              "fills the slice. Anything lower than z_used is not mapped."} if z_low != z[0] else {}
+    raised = {"z_used": [round(z_low, 4), z[1]], "z_note": slice_bottom_note(cell)} if z_low != z[0] else {}
     return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=width, height=height, resolution=cell, **raised,
                 origin=[round(origin[0], 4), round(origin[1], 4), 0.0], cells=counts, yaml_text=yaml_text,
                 **({"warning": warn} if warn else {}),

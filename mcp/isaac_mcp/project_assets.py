@@ -102,7 +102,13 @@ def open_dir(path):
         raise
 
 
-def walk(fd, prefix="", depth=0, budget=None):
+def walk(fd, prefix="", depth=0, budget=None, skipped=None):
+    """Every regular file below *fd*, bounded, never following a symlink.
+
+    A folder deeper than :data:`MAX_DEPTH` is not searched. When *skipped* is a list it is recorded
+    there and the rest of the tree is still walked; without one, the walk refuses (a snapshot must
+    never copy a folder silently short of its files).
+    """
     budget = budget if budget is not None else [0, time.monotonic() + 15]
     # scandir iterator, never materialize an unbounded directory before counting.
     with os.scandir(fd) as entries:
@@ -117,7 +123,11 @@ def walk(fd, prefix="", depth=0, budget=None):
             st = entry.stat(follow_symlinks=False)
             if stat.S_ISDIR(st.st_mode):
                 if depth >= MAX_DEPTH - 1:
-                    refuse("LIMIT", "Project directory depth exceeds eight.")
+                    if skipped is None:
+                        refuse("LIMIT", f"Project directory depth exceeds {MAX_DEPTH}: {name}/. "
+                                        "Approve a smaller folder, or use assets__pack_build on the file you need.")
+                    skipped.append(name + "/")
+                    continue
                 sub = os.open(
                     entry.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd
                 )
@@ -126,7 +136,7 @@ def walk(fd, prefix="", depth=0, budget=None):
                         refuse(
                             "SOURCE_CHANGED", "Directory replaced during enumeration."
                         )
-                    yield from walk(sub, name + "/", depth + 1, budget)
+                    yield from walk(sub, name + "/", depth + 1, budget, skipped)
                 finally:
                     os.close(sub)
             elif stat.S_ISREG(st.st_mode):
@@ -342,10 +352,17 @@ class Broker:
             rel = "/".join(rest)
             self._check_kind(rel, kind)
             changes = asset_packs.pin_changes(folder)
-            bad = [item["file"] for item in changes["changed"]] + changes["removed"]
-            if bad:
-                refuse("PACK_CORRUPT", f"Pack {pack} has files that differ from their pins: {bad[:10]}. "
-                       "Run assets__pack_doctor, then restore them or re-pin with assets__pack_pin.")
+            missing = changes["removed"]
+            changed = [item["file"] for item in changes["changed"]]
+            if missing or changed:
+                parts = []
+                if changed:
+                    parts.append(f"changed: {changed[:10]}")
+                if missing:
+                    parts.append(f"missing: {missing[:10]}")
+                refuse("PACK_CORRUPT", f"Pack {pack} has files that do not match its pins ({'; '.join(parts)}). "
+                       "Run assets__pack_doctor, then restore the missing files or re-pin the changed ones "
+                       "with assets__pack_pin.")
             root_id = f"pack:{folder}"
             fd = open_dir(folder)
             try:
@@ -382,8 +399,9 @@ class Broker:
             refuse("LIMIT", "offset 0..1000 and limit 1..100 required.")
         fd = self.root_fd(root_id)
         found = []
+        skipped: list[str] = []
         try:
-            for _, _, name, st in walk(fd):
+            for _, _, name, st in walk(fd, skipped=skipped):
                 if Path(name).suffix.lower() in USD | {".usdz", ".urdf"}:
                     if len(found) >= MAX_FILES:
                         refuse(
@@ -408,6 +426,10 @@ class Broker:
             total=len(found),
             next_offset=offset + limit if offset + limit < len(found) else None,
             truncated=False,
+            depth_limit=MAX_DEPTH,
+            skipped_deep=sorted(skipped),
+            **({"note": f"Folders deeper than {MAX_DEPTH} levels are not searched; "
+                        "they are listed in skipped_deep."} if skipped else {}),
         )
 
     def search(self, query="", limit=50):
@@ -419,15 +441,21 @@ class Broker:
         ):
             refuse("LIMIT", "query <=128 characters; limit 1..100.")
         found = []
+        skipped: list[dict] = []
         for root_id in sorted(self.roots):
             offset = 0
             while True:
                 page = self.scan(root_id, offset, 100)
+                for name in page.get("skipped_deep", []):
+                    item = dict(root_id=root_id, path=name)
+                    if item not in skipped:
+                        skipped.append(item)
                 for item in page["files"]:
                     if query.casefold() in item["relative_path"].casefold():
                         if len(found) == limit:
                             return dict(
-                                status="ok", files=found, truncated=True, network=False
+                                status="ok", files=found, truncated=True, network=False,
+                                depth_limit=MAX_DEPTH, skipped_deep=skipped,
                             )
                         found.append(dict(root_id=root_id, **item))
                 if page["next_offset"] is None:
@@ -438,6 +466,8 @@ class Broker:
             files=found,
             truncated=False,
             network=False,
+            depth_limit=MAX_DEPTH,
+            skipped_deep=skipped,
             refresh="Fresh scan on every call; no fixed robot count or kind claim.",
         )
 

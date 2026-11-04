@@ -18,12 +18,22 @@ SOURCE = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.p
 def driver_handler():
     """Load the real bridge handler without importing Kit."""
     tree = ast.parse(SOURCE.read_text())
-    method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
-                  and n.name == "_cmd_start_ros_driver")
-    module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
     namespace = {"__file__": str(SOURCE), "Dict": Dict, "Any": Any}
-    exec(compile(module, str(SOURCE), "exec"), namespace)
+    for name in ("_cmd_start_ros_driver", "_last_error_line"):
+        method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                      and n.name == name)
+        module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
+        exec(compile(module, str(SOURCE), "exec"), namespace)
     return namespace["_cmd_start_ros_driver"]
+
+
+def test_a_failed_driver_command_names_its_last_output_line(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: SimpleNamespace(
+        returncode=4, stdout="", stderr="\x1b[0;31m  ERR\x1b[0m Docker is not installed or not on PATH\n"))
+    result = driver_handler()(None, action="status", backend="ursim")
+    assert result["status"] == "error"
+    assert "Docker is not installed" in result["message"]
 
 
 def test_managed_bridge_passes_only_its_driver_paths_and_session_marker(tmp_path, monkeypatch):

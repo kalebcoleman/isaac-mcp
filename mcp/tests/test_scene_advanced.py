@@ -552,3 +552,70 @@ def test_joints_past_limits_names_only_joints_clearly_outside():
     assert joints_past_limits(names, [0.0, 1.01, 5.0], limits) == []  # a drive can press slightly past one
     assert joints_past_limits(names, [-1.5, 3.0, -0.5], limits) == ["a", "b", "c"]
     assert joints_past_limits(names, [9.0, 9.0, 9.0], None) == []  # can't say on this build
+
+
+LINK_ARTICULATION_USDA = ARM_USDA.replace(
+    'def Xform "base" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}',
+    'def Xform "base" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsArticulationRootAPI"]) {}',
+).replace(
+    'def PhysicsFixedJoint "root_joint" (prepend apiSchemas = ["PhysicsArticulationRootAPI"])',
+    'def PhysicsFixedJoint "root_joint"',
+)
+
+
+def test_inspect_on_a_link_carrying_the_articulation_api_finds_its_joints(advanced, tmp_path):
+    file = tmp_path / "link_root.usda"
+    file.write_text(LINK_ARTICULATION_USDA)
+    stage = advanced.s.stage()
+    stage.GetRootLayer().subLayerPaths.append(str(file))
+    out = advanced.execute("sim.joints.inspect", stage, dict(path="/World/arm/base"))
+    assert [j["path"].rsplit("/", 1)[-1] for j in out["joints"]] == ["root_joint", "j1", "j2"]
+    assert out["scope"] == "articulation" and out["articulation_root"] == "/World/arm/base"
+
+
+URDF_SHAPED_USDA = """#usda 1.0
+(
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+def Xform "World" {
+    def Xform "robot" {
+        def Xform "Asset" {
+            def Xform "Geometry" {
+                def Xform "base_link" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsArticulationRootAPI"]) {}
+                def Xform "link1" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+                def Xform "link2" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+            }
+            def Scope "Physics" {
+                def PhysicsFixedJoint "root_joint" {
+                    rel physics:body1 = </World/robot/Asset/Geometry/base_link>
+                }
+                def PhysicsRevoluteJoint "shoulder_pan_joint" {
+                    rel physics:body0 = </World/robot/Asset/Geometry/base_link>
+                    rel physics:body1 = </World/robot/Asset/Geometry/link1>
+                    float physics:lowerLimit = -180
+                    float physics:upperLimit = 180
+                }
+                def PhysicsRevoluteJoint "elbow_joint" {
+                    rel physics:body0 = </World/robot/Asset/Geometry/link1>
+                    rel physics:body1 = </World/robot/Asset/Geometry/link2>
+                }
+            }
+        }
+    }
+}
+"""
+
+
+def test_inspect_finds_joints_in_a_sibling_physics_folder_of_the_link(advanced, tmp_path):
+    # A URDF import puts the articulation API on a link under Asset/Geometry and the joints under
+    # Asset/Physics: the link's own parent has none of them.
+    file = tmp_path / "urdf_shaped.usda"
+    file.write_text(URDF_SHAPED_USDA)
+    stage = advanced.s.stage()
+    stage.GetRootLayer().subLayerPaths.append(str(file))
+    out = advanced.execute("sim.joints.inspect", stage,
+                           dict(path="/World/robot/Asset/Geometry/base_link"))
+    assert [j["path"].rsplit("/", 1)[-1] for j in out["joints"]] == [
+        "root_joint", "shoulder_pan_joint", "elbow_joint"]
+    assert out["scope"] == "articulation"

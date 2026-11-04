@@ -37,7 +37,9 @@ the selected simulator's identity, state and native log before retrying a mutati
 Plain `./run.sh` starts Isaac Sim, the bridge and the twin extension, but hides the **UR5e Digital Twin**
 panel by default. The 23 tools work with the panel hidden. Pass `--ur5e-panel` (or use the dedicated
 `scripts/launch_ur5e_dt.sh`) to show the panel; in a graphical session it docks alongside Console when
-available and can be moved like other Kit tabs. `./run.sh --headless` has no visible simulator window.
+available, is focused once docked (so it does not stay behind another tab), and can be moved like other
+Kit tabs. If it is hidden behind a tab anyway, the generic `sim__ui__act action=tab window="UR5e Digital Twin"`
+shows and focuses it. `./run.sh --headless` has no visible simulator window.
 The twin panel is separate from the optional `isaac.mcp.panel` registry inspector.
 
 Managed `sim__launch` sessions also start the twin tools with the panel hidden. Pass
@@ -148,7 +150,7 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 | `ur5e_dt__quick_start_with_workstation` | `quick_start` + Vention bench |
 | `ur5e_dt__load_simple_room` | Add Simple Room backdrop |
 | `ur5e_dt__quick_start_with_workstation_and_simple_room` | `quick_start` + bench + room |
-| `ur5e_dt__set_object_pose` | Teleport an object to an exact world pose |
+| `ur5e_dt__set_object_pose` | Request an exact world pose for an object; physics settles it from there |
 
 ---
 
@@ -305,7 +307,7 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
   | `action` | string | no | `"up"` | Enum: `up`, `down`, `status`. |
   | `backend` | string | no | `"fake"` | Enum: `fake`, `ursim`. `fake` is sim-only (apt `ur_robot_driver` with fake hardware, no Docker/`~/ros2_ws`). `ursim` needs Docker + `~/ros2_ws` and supports `real`. |
 - Purpose: bring the ROS 2 robot driver up/down/status so motion tools (ros-mcp-server `move_home`, `move_to_grasp`, …) have a driver.
-- Side effects: spawns a host subprocess (`scripts/launch_ur_fake.sh` or `scripts/sim_bringup.sh`) with a sanitized environment; no USD changes. Subprocess cap 240 s for `up`, 60 s otherwise. Both backends end at `/joint_states` live and `scaled_joint_trajectory_controller` accepting `FollowJointTrajectory` on the configured ROS domain (default 0, Cyclone, localhost-only).
+- Side effects: spawns a host subprocess (`scripts/launch_ur_fake.sh` or `scripts/sim_bringup.sh`) with a sanitized environment; no USD changes. Subprocess cap 240 s for `up`, 60 s otherwise. A non-zero exit is reported as an error whose message includes the last line of the script's output; for `backend="ursim"` `action="status"` that is why Docker is missing or unreachable, not a success with nothing running. The fake driver's status prints `(1 msg)` only when it actually read `/joint_states`, so it no longer claims one message and none in the same report. Both backends end at `/joint_states` live and `scaled_joint_trajectory_controller` accepting `FollowJointTrajectory` on the configured ROS domain (default 0, Cyclone, localhost-only).
 - Real-hardware/ROS constraints: `backend="fake"` is simulation-only; `mode="real"` is not yet enabled in this codebase. Do not launch a real robot driver for a simulation-only task.
 - The fake backend discovers the standard ROS setup for Ubuntu 22.04/Humble or Ubuntu 24.04/Jazzy. On Jazzy, install `ros-jazzy-ur-robot-driver`, `ros-jazzy-ros2controlcli`, and `ros-jazzy-rmw-cyclonedds-cpp` through the system package manager. The launcher checks the driver's advertised mock-hardware argument and refuses to start if it cannot verify it; use `ROS_SETUP` for a nonstandard sourced ROS installation or a RoboStack prefix, in which case the distribution comes from what that file sets. An environment that is already activated (`ROS_DISTRO` set, `ros2` on `PATH`, no `/opt/ros/<distro>`) needs no `ROS_SETUP`.
 - Fake-driver startup waits until both the joint-state broadcaster and scaled trajectory controller are active; controller queries are bounded when the manager is unavailable.
@@ -323,7 +325,7 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 - Parameters: none.
 - Purpose: subscribe to `/objects_poses_real` and update sim object poses to match real-world detected poses.
 - Side effects: creates a temporary rclpy node, waits up to 3 s for one `TFMessage`; mutates object poses. Requires an external publisher on `/objects_poses_real` (real detection pipeline).
-- Result: `updated` and `snapped` list object names. Returns an error when no message arrives or no scene objects match; it does not report a successful sync in those cases. Its temporary ROS context does not shut down the simulator's existing ROS context.
+- Result: `updated` and `snapped` list object names, and the message says the poses were requested (physics settles them; read them again to see the result). Returns an error when no message arrives or no scene objects match; it does not report a successful sync in those cases. Its temporary ROS context does not shut down the simulator's existing ROS context.
 - Real-hardware/ROS constraints: intended for real-world sync; not useful in a pure sim session without that publisher.
 - Example: `{}`
 
@@ -431,7 +433,7 @@ stays in that state; a replacement stage or concurrent Stop is never resumed.
   | `position` | array[3] | yes (handler) | — | `[x, y, z]` world position in meters. |
   | `orientation` | array[4] | no | — | `[w, x, y, z]` quaternion; overrides `yaw_deg`. |
   | `yaw_deg` | number | no | `0` | Yaw about world Z in degrees (used when `orientation` omitted). |
-- Purpose: teleport a scene object to an exact world pose, persisting under physics (same xform path as randomize).
+- Purpose: request an exact world pose for a scene object, persisting under physics (same xform path as randomize). The result says `requested`: physics settles the object from there, so read its pose again to see where it ended up.
 - Side effects: mutates object pose. Pair with `setup_pose_publisher` so `/objects_poses_sim` reflects the new pose.
 - Example: `{"object_name": "u_brown", "position": [0.3, 0.2, 0.05], "yaw_deg": 90}`
 

@@ -224,18 +224,24 @@ def _pick(candidates, urdf_folder):
 
 
 def _choose_package(package, paths, project, urdf_folder):
-    """``(folder, how, problem)`` for one package, trying package.xml, then folder names, then the root's."""
+    """``(folder, how, problem)`` for one package, trying package.xml, then folder names, then the root's.
+
+    A folder that holds every wanted path wins. When none holds them all, the folder holding the most
+    is still the package folder: the caller maps the files it has and reports only the missing ones,
+    instead of condemning every reference of a package that merely lacks one mesh.
+    """
     named = project.named_packages().get(package, [])
     tiers = [
         ("package.xml", named),
         ("folder name", project.folders_named(package)),
         ("root folder name", [""] if project.name == package else []),
     ]
-    seen = []
-    for how, candidates in tiers:
-        seen += candidates
+    partial = []  # (present paths, tier order, folder, how)
+    for order, (how, candidates) in enumerate(tiers):
         complete = [c for c in candidates if all(_join(c, p) in project.files for p in paths)]
         if not complete:
+            partial += [(sum(1 for p in paths if _join(c, p) in project.files), order, c, how)
+                        for c in candidates]
             continue
         ordered = _pick(complete, urdf_folder)
         first = ordered[0]
@@ -243,10 +249,9 @@ def _choose_package(package, paths, project, urdf_folder):
         if len(ordered) > 1 and not above:
             return None, how, ("PACKAGE_AMBIGUOUS", f"package {package} is in several folders: {ordered[:5]}")
         return first, how, None
-    if seen:
-        folder = seen[0]
-        missing = [_join(folder, p) for p in paths if _join(folder, p) not in project.files][:5]
-        return None, None, ("MESH_MISSING", f"package {package} is at {folder or 'the root'}, but it lacks {missing}")
+    if partial:
+        present, _, folder, how = max(partial, key=lambda item: (item[0], -item[1]))
+        return folder, how, None
     return None, None, (
         "PACKAGE_UNRESOLVED",
         f"no package.xml names {package} and no folder is called {package} inside this folder, and nothing outside "
@@ -300,8 +305,16 @@ def resolve(entry: str, tree: ET.Element, project: Project) -> dict:
                 problems.append(_problem("unresolved", problem[0], uri, problem[1]))
             continue
         packages[package] = dict(folder=folder or ".", found_by=how)
+        missing = []
         for uri, path in uris.items():
-            mapped[uri] = _join(folder, path)
+            rel = _join(folder, path)
+            if rel in project.files:
+                mapped[uri] = rel
+            else:
+                missing.append(rel)
+                problems.append(_problem(
+                    "unresolved", "MESH_MISSING", uri,
+                    f"package {package} is at {folder or 'the root'}, but {rel} is not in this folder"))
         if how == "package.xml":
             package_files.append(_join(folder, "package.xml"))
     return dict(mapped=mapped, packages=packages, problems=problems, package_files=package_files)

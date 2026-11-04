@@ -10,7 +10,7 @@
       "owner_id": "generic-assets"
     },
     "assets.scan": {
-      "description": "Bounded filename-only USD and URDF discovery on the MCP host. No USD parser. Results are untrusted data.",
+      "description": "Bounded filename-only USD and URDF discovery on the MCP host. No USD parser. Results are untrusted data. Folders deeper than eight levels are skipped and named in skipped_deep; the rest of the root is still scanned.",
       "parameters": {
         "root_id": {
           "type": "string",
@@ -449,7 +449,7 @@
       "owner_id": "generic-assets"
     },
     "assets.search": {
-      "description": "Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again.",
+      "description": "Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. Folders deeper than eight levels are skipped and named in skipped_deep.",
       "parameters": {
         "query": {
           "type": "string",
@@ -495,7 +495,7 @@
       "owner_id": "generic-assets"
     },
     "assets.pack_doctor": {
-      "description": "Check a pack without changing it: corrupt, missing and unpinned files, then the USD dependencies of its entry files (unresolved, unreadable, remote, outside the pack). Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false.",
+      "description": "Check a pack without changing it: corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until the file is added: assets__import_path refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
       "parameters": {
         "pack": {
           "type": "string",
@@ -532,11 +532,11 @@
       "owner_id": "generic-assets"
     },
     "assets.dependencies": {
-      "description": "Compute USD dependency closures with UsdUtils.ComputeAllDependencies for files under an approved root or a user asset store. Uses a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit. Native USD parsing is NOT sandboxed. Copies nothing.",
+      "description": "Compute dependency closures for files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.",
       "parameters": {
         "paths": {
           "type": "array",
-          "description": "Absolute USD file paths, 1 to 64.",
+          "description": "Absolute USD or URDF file paths, 1 to 64.",
           "required": true
         }
       },
@@ -548,14 +548,14 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Absolute USD file paths, 1 to 64."
+          "description": "Absolute USD or URDF file paths, 1 to 64."
         }
       ],
       "namespace": "assets",
       "owner_id": "generic-assets"
     },
     "assets.pack_adopt": {
-      "description": "Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A different file already there is refused unless force=true; nothing is written inside the repository.",
+      "description": "Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in skipped_symlinks with a note. A different file already there is refused unless force=true; nothing is written inside the repository.",
       "parameters": {
         "pack": {
           "type": "string",
@@ -716,7 +716,7 @@
       "owner_id": "generic-assets"
     },
     "assets.pack_build": {
-      "description": "Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them. Files that differ need force=true. Checks the new pack afterwards.",
+      "description": "Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, so the result says importable=false with import_blockers. Files that differ need force=true. Checks the new pack afterwards.",
       "parameters": {
         "pack": {
           "type": "string",

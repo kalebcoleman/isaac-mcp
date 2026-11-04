@@ -177,8 +177,9 @@ def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled)
             "VIEWPORT_FRAME_FAILED",
             f"Native framing failed: {str(exc)[:500]}",
             camera=camera_path,
-            selected_path=selected_path,
-            effects="Selection and session camera edits may have occurred. Inspect before retrying; the prior edit target was restored.",
+            framed_path=selected_path,
+            effects="Selection and session camera edits may have occurred, and the Stage selection may be left on "
+                    "the framed prim. Inspect before retrying; the prior edit target was restored.",
         )
     if previous is not None:  # framing needs the selection only here; left on, its outline shows in later camera captures
         selection.set_selected_prim_paths(previous, False)
@@ -187,7 +188,7 @@ def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled)
             "VIEWPORT_FRAME_FAILED",
             "The native viewport utility did not confirm framing.",
             camera=camera_path,
-            selected_path=selected_path,
+            framed_path=selected_path,
             effects="Selection and session camera edits may have occurred; inspect before retrying.",
         )
     validate()
@@ -203,12 +204,13 @@ def frame(scene, stage, path, context, viewport, frame_selection, undo_disabled)
         )
     return dict(
         requested_path=path,
-        selected_path=selected_path,
+        framed_path=selected_path,
+        selection="framed for this call; Stage selection unchanged",
         camera=camera_path,
         camera_world_matrix=camera_matrix,
         authored_layer="session",
         render_complete=False,
-        effects="Selected prim and framed the active camera in the session layer. Source layers are unchanged; rendering and visibility are not verified.",
+        effects="Framed the requested prim in the active camera in the session layer, then put the Stage selection back. Source layers are unchanged; rendering and visibility are not verified.",
         capture="Allow ordinary render updates, then use screenshot with this application PID/window ID. A large subtree can frame occluding geometry; select a smaller subtree if needed.",
     )
 
@@ -312,7 +314,8 @@ def place(scene, stage, context, viewport, a, undo_disabled):
         capture="Allow ordinary render updates, then use screenshot with this application PID/window ID.",
     )
     if prim is not None:
-        result.update(path=path, requested_path=requested_path, selected_path=path,
+        result.update(path=path, requested_path=requested_path, framed_path=path,
+                      selection="framed for this call; Stage selection unchanged",
                       prim_center=list(center), bounding_radius=radius,
                       margin_m=margin or 0.0)
     follow = None

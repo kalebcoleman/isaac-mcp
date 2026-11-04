@@ -166,13 +166,13 @@ Found by the fleet at `e658289`; not fixed yet:
 - [ ] `sim__light__modify` requires both intensity and color
 - [ ] `sim__map__occupancy` requires `min` and `max`; a default from colliders needs care with a ground plane
 - [ ] `assets__pack_doctor` doesn't list a pack's files
-- [ ] `start_ros_driver backend=ursim status` returns success with Docker missing; its status text can contradict itself
-- [ ] `set_object_pose` and `sync_real_poses` report the requested pose, not where physics left it
-- [ ] Lab: `rl_library` isn't checked against `rl_libraries` before launch: `skrl` on Lab 3 fails after about 80 s
-- [ ] Lab: a task id isn't checked before a roughly 50 s launch; a bad task with no library first blames `--rl_library`
-- [ ] Lab: tqdm bars fill `last_log_lines` for skrl and sb3
+- [x] `start_ros_driver backend=ursim status` returns success with Docker missing; its status text can contradict itself
+- [x] `set_object_pose` and `sync_real_poses` report the requested pose, not where physics left it
+- [x] Lab: `rl_library` isn't checked against `rl_libraries` before launch: `skrl` on Lab 3 fails after about 80 s
+- [x] Lab: a task id isn't checked before a roughly 50 s launch; a bad task with no library first blames `--rl_library`
+- [x] Lab: tqdm bars fill `last_log_lines` for skrl and sb3
 - [ ] Lab: `runs_status.window` was missing on the lab PC, present on the desktop
-- [ ] Lab: `--video` without MoviePy fails only after launch
+- [x] Lab: `--video` without MoviePy fails only after launch
 - [ ] Docs say `Example_Rotary_2D` is 10 Hz; 5.1 reports 30
 - [ ] `sim__lidar__read`'s 256 samples are the start of the buffer, not a whole sweep: say so on `limit`
 - [ ] For LEGO and Jenga: mass or density authoring, an arm with a gripper in `sim__quick_start`, a route from a saved scene to a Lab task
@@ -219,26 +219,26 @@ To fix or attempt:
 - [x] `sim__lidar__read` said `NOT_OWNED` for a LiDAR the tool just created when given its `sensor_path`, which a config can nest below `path`. Both now read, on 6.2
 - [x] Each save of a reopened scene with instanced parts grew it (a Franka: 22.7, 45.3, 67.9 MB; 414, 756, 1098 prims), because USD's flatten keeps old `Flattened_Prototype_N` prims. Unused ones are now pruned: 22.67 MB and 414 prims every round, on 6.2
 - [ ] `sim__logs__tail` reads the last 32 KiB: about 2 s of Info lines, so it returned nothing just after 3 warnings. Needs level or text filtering
-- [ ] `z_used` note says anything lower isn't mapped, but on omap 2.3.1 lower geometry was mapped. Also raised even with the floor far below
-- [ ] An all-free map with colliders nowhere in the slice: a tester saw no warning. Check it warns
-- [ ] Packs: doctor reports 19 false `package://` unresolved after one mesh is missing, and blames the package folder
-- [ ] Packs: `accepted_unresolved` passes doctor, then `assets__import_path` refuses the same files
-- [ ] Packs: one folder over eight levels stops `assets__search` and `assets__scan` for a whole root, without naming the folder
-- [ ] Packs: `PACK_CORRUPT` says "differ from their pins" for a missing file
-- [ ] Packs: `assets__dependencies` on a URDF returns an empty closure and a raw pxr string
-- [ ] Packs: a directory symlink in a USD source is skipped silently; URDF symlinks refuse
-- [ ] `sim__quick_start` next steps send `sim__joints__inspect` to a link of a URDF robot, which finds no joints
-- [ ] `scripts/isaac_assets.py doctor` has no `--store`, though `add` does
-- [ ] `sim__viewport__frame` says `selected_path`, while the Stage and Property panels keep the old selection
+- [x] `z_used` note says anything lower isn't mapped, but on omap 2.3.1 lower geometry was mapped. Also raised even with the floor far below
+- [x] An all-free map with colliders nowhere in the slice: a tester saw no warning. Check it warns
+- [x] Packs: doctor reports 19 false `package://` unresolved after one mesh is missing, and blames the package folder
+- [x] Packs: `accepted_unresolved` passes doctor, then `assets__import_path` refuses the same files
+- [x] Packs: one folder over eight levels stops `assets__search` and `assets__scan` for a whole root, without naming the folder
+- [x] Packs: `PACK_CORRUPT` says "differ from their pins" for a missing file
+- [x] Packs: `assets__dependencies` on a URDF returns an empty closure and a raw pxr string
+- [x] Packs: a directory symlink in a USD source is skipped silently; URDF symlinks refuse
+- [x] `sim__quick_start` next steps send `sim__joints__inspect` to a link of a URDF robot, which finds no joints
+- [x] `scripts/isaac_assets.py doctor` has no `--store`, though `add` does
+- [x] `sim__viewport__frame` says `selected_path`, while the Stage and Property panels keep the old selection
 - [ ] One `sim__camera__capture` had the selection outline in it, after a prim was selected by hand. Not reproduced in 4 tries
-- [ ] Lab: the job guard's refusal shows the screenshot hint, not `allow_concurrent=true`
-- [ ] Lab: `runs_status` doesn't echo `timeout_s`
+- [x] Lab: the job guard's refusal shows the screenshot hint, not `allow_concurrent=true`
+- [x] Lab: `runs_status` doesn't echo `timeout_s`
 - [ ] Lab: two windowed jobs have the same title, so only id and pid tell them apart
 - [ ] Lab: a window still loading is black for up to 4 minutes when two Kits share a GPU, with no signal
-- [ ] `--ur5e-panel` loads the panel behind another tab; `sim__ui__act` action=tab shows it
+- [x] `--ur5e-panel` loads the panel behind another tab; `sim__ui__act` action=tab shows it
 - [ ] `clock=auto` reuses any existing clock, even one with no time source
 - [ ] `sim__body__state` refuses while stopped, so "stop then read the pose" fails
-- [ ] `start_ros_driver` status text can say both 1 message and none on `/joint_states`
+- [x] `start_ros_driver` status text can say both 1 message and none on `/joint_states`
 
 To state in the docs:
 

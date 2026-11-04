@@ -101,11 +101,19 @@ MAX_ARTICULATION_SCAN_PRIMS = 20000
 
 
 def articulation_joints(stage, root, limit):
-    """(joints, truncated) of the articulation whose root is the joint ``root``: the joints reached from it
-    through their body0/body1 links, in stage order. A joint excluded from the articulation is left out, and
-    so is another articulation under the same parent."""
-    parent = root.GetParent()
-    scan = stage.GetPseudoRoot() if parent.IsPseudoRoot() else parent
+    """(joints, truncated) of the articulation under ``root``: the joints reached through its rigid
+    bodies, in stage order. ``root`` may be the articulation's root joint, a link that carries the
+    articulation API, or the prim holding all of them. A joint excluded from the articulation is left
+    out, and so is another articulation under the same parent."""
+    if root.IsA(UsdPhysics.Joint):
+        # A root joint is a leaf under the joints' own folder: its siblings are the articulation's.
+        parent = root.GetParent()
+        scan = stage.GetPseudoRoot() if parent.IsPseudoRoot() else parent
+    else:
+        # A link's joints can sit in a sibling folder (a URDF import puts them under
+        # <robot>/Asset/Physics while the bodies are under <robot>/Asset/Geometry), so look at the
+        # whole stage. The body walk below still keeps other articulations out.
+        scan = stage.GetPseudoRoot()
     found, truncated = [], False
     for count, prim in enumerate(Usd.PrimRange(scan)):
         if count >= MAX_ARTICULATION_SCAN_PRIMS:
@@ -118,8 +126,15 @@ def articulation_joints(stage, root, limit):
         joint = UsdPhysics.Joint(prim)
         return {str(t) for rel in (joint.GetBody0Rel(), joint.GetBody1Rel()) for t in rel.GetTargets()}
 
-    reached = bodies(root)
-    joints = [root]
+    if root.IsA(UsdPhysics.Joint):
+        reached = bodies(root)
+        joints = [root]
+    else:
+        # A link or the robot's own prim: start from the rigid bodies at or below it. Its joints are
+        # siblings, so a scan below the link alone would find none.
+        reached = {str(prim.GetPath()) for prim in Usd.PrimRange(root)
+                   if prim.HasAPI(UsdPhysics.RigidBodyAPI)}
+        joints = []
     pending = [p for p in found if p != root and not UsdPhysics.Joint(p).GetExcludeFromArticulationAttr().Get()]
     grew = True
     while grew:
@@ -131,7 +146,7 @@ def articulation_joints(stage, root, limit):
                 pending.remove(prim)
                 grew = True
     order = {prim: index for index, prim in enumerate(found)}
-    joints.sort(key=lambda prim: order[prim])
+    joints.sort(key=lambda prim: order.get(prim, -1))
     if len(joints) > limit:
         return joints[:limit], True
     return joints, truncated
@@ -754,9 +769,12 @@ class Advanced:
             # matter are its siblings, connected through the links, not below it.
             root_prim = s.prim(stage, a["path"])
             scope = {}
-            if root_prim.HasAPI(UsdPhysics.ArticulationRootAPI) and root_prim.IsA(UsdPhysics.Joint):
+            if root_prim.HasAPI(UsdPhysics.ArticulationRootAPI):
                 nodes, truncated = articulation_joints(stage, root_prim, a.get("limit", 200))
-                scope = dict(scope="articulation", articulation_root=a["path"])
+                if nodes:
+                    scope = dict(scope="articulation", articulation_root=a["path"])
+                else:  # nothing linked through bodies: keep the subtree view rather than an empty list
+                    nodes, truncated = bounded(stage, a["path"], a.get("limit", 200))
             joints = []
             for prim in nodes:
                 if prim.IsA(UsdPhysics.Joint):
