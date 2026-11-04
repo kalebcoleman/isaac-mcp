@@ -321,19 +321,19 @@ def _claims():
     def handover(new_owner: Mapping) -> None:
         """The simulator now holds what the launch claimed, until it exits: a host that returns while Kit is
         still starting must not free the port and domain before the bridge advertises them."""
-        for path in held:
+        for path in list(held):
             tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
             try:
                 fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
                 with os.fdopen(fd, "wb") as stream:
                     stream.write(json.dumps(dict(new_owner)).encode())
                 os.replace(tmp, path)
+                held.remove(path)  # a claim that could not be rewritten stays held, so the host releases it
             except OSError:
                 try:
                     os.unlink(tmp)
                 except OSError:
                     pass
-        held.clear()
 
     take.handover = handover
     try:

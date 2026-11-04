@@ -178,6 +178,7 @@ def _receive_contact_report(headers, data):
         _LAST_REPORT["error"] = None
     except Exception as exc:  # noqa: BLE001 - a physics callback must never raise into Kit
         _LAST_REPORT["error"] = str(exc)[:300]
+        _LAST_REPORT["capped"] = False
 
 
 def stop_contact_reports():
@@ -265,6 +266,12 @@ def contacts(paths, stage, timeline=None):
             if candidate
         )
     ]
+    if not pairs and not reporting and _LAST_REPORT.get("capped"):
+        refuse(
+            "CONTACT_REPORT_TRUNCATED",
+            f"The last report held more than {MAX_CAPTURE} contact pairs and none kept touches the requested "
+            "paths, so their contacts may have been dropped. Step again or reduce the number of touching bodies.",
+        )
     if not pairs and not reporting:
         refuse(
             "CONTACT_REPORT_DISABLED",

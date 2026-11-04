@@ -566,3 +566,16 @@ def test_orphan_timeout_leaves_a_finished_job_to_settle(tmp_path, monkeypatch):
     assert data["status"] == "running" and not killed
     jobs._settle_orphan(d, data)
     assert data["status"] == "succeeded" and data["exit_code"] == 0
+
+
+def test_orphan_timeout_not_recorded_when_the_kill_did_not_happen(tmp_path, monkeypatch):
+    d = tmp_path / "job"
+    d.mkdir()
+    data = {"status": "running", "pid": 1, "started_at": time.time() - 100, "timeout_s": 5, "command": ["x", "y"]}
+    monkeypatch.setattr(jobs, "_job_alive", lambda _d: True)
+    monkeypatch.setattr(jobs, "_kill_orphan_group", lambda _d: False)
+    jobs._enforce_orphan_timeout("j2", d, data)
+    assert data["status"] == "running"
+    monkeypatch.setattr(jobs, "_kill_orphan_group", lambda _d: True)
+    jobs._enforce_orphan_timeout("j2", d, data)
+    assert data["status"] == "timeout"
