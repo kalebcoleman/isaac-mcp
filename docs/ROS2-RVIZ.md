@@ -92,7 +92,7 @@ Tool `sim__lidar__create`:
 
 Keep the result: `sensor_path` is the OmniLidar inside that asset, and `ros2_scan_graph` is used in step 3.
 
-**3. Connect ROS 2.** TF, odometry, `/clock` and `/joint_states`. `world_frame` is empty because AMCL publishes `map -> odom`. `extra_frames` puts the LiDAR's frame in the tree.
+**3. Connect ROS 2.** TF, odometry, `/clock` and `/joint_states`. `world_frame` is empty because AMCL publishes `map -> odom`. `extra_frames` puts the LiDAR's frame in the tree: use `sensor_path` from step 2.
 
 Tool `sim__ros2__tf_setup`:
 
@@ -102,7 +102,7 @@ Tool `sim__ros2__tf_setup`:
 
 Then call `sim__graph__build` twice: once with every field of `robot.cmd_vel_graph` from step 1, and once with every field of `ros2_scan_graph` from step 2.
 
-**4. Make the map.** This plays a few frames, then stops, so the robot returns to its start. `clear` removes the robot's own footprint.
+**4. Make the map.** This plays a few frames, then stops, so the robot returns to its start. `clear` removes the robot's own footprint, so use at least the robot's radius.
 
 Tool `sim__map__occupancy`:
 
@@ -216,7 +216,7 @@ Use the robot's `wheels` values from the Quick Start result. The base link and t
 |---|---|---|---|
 | `create3` | `base_link`, 0.12 m up | `base_link` | none |
 | `turtlebot3_burger` | `base_scan`, at its origin | `base_link` | `--yaw-tolerance 3.2` (see below) |
-| `carter_v1`, `nova_carter` | `chassis_link`, above the chassis | `chassis_link` | `--base-frame chassis_link --radius 0.45`. Carter could not plan in this room (see below) |
+| `carter_v1`, `nova_carter` | `chassis_link`, above the chassis | `chassis_link` | `--base-frame chassis_link --radius 0.45`, and a `clear` radius of 0.7 in step 4. Carter did not reach this goal (see below) |
 
 TurtleBot3's parent path is `/World/TurtleBot3/Geometry/base_footprint/base_link/base_scan` on 6.1 and 6.2, and `/World/TurtleBot3/base_scan` on 5.1 and 6.0, because NVIDIA restructured the asset.
 
@@ -232,7 +232,7 @@ Each run used `--realtime`, the room above and a goal at (2.2, 0), with ROS 2 Ja
 | 5.1.0 | `create3` (doc text) | 0.2 m/s, 0.205 m/s | `SUCCEEDED` (0.07 m) |
 | 6.2.0 | `turtlebot3_burger`, `--yaw-tolerance 3.2` | 0.2 m/s, 0.196 m/s | `SUCCEEDED` (0.235 m) |
 | 5.1.0 | `turtlebot3_burger`, `--yaw-tolerance 3.2` | 0.2 m/s, 0.19 m/s | `SUCCEEDED` (0.224 m) |
-| 6.2.0 | `carter_v1`, radius 0.45 | 0.5 m/s, 0.5 m/s | `ABORTED`: Nav2 could not plan in this room. Cause not pursued |
+| 6.2.0 | `carter_v1`, radius 0.45 | 0.5 m/s, 0.5 m/s | not reached. With `clear` 0.3 the map held its own body and planning failed. With 0.7 it planned around the box, then stopped 1.2 m short with `Failed to make progress`, on Nav2's default controller settings. Not tuned further |
 | 6.2.0, 5.1.0 | `carter_v1`, `nova_carter`, `jetbot` | 0.5, 0.5, 0.2 m/s; measured 0.5, 0.5, 0.21 m/s | not run, except Carter above |
 
 Without `--realtime`, TurtleBot3 reached `SUCCEEDED` on 6.2 and `ABORTED` on 5.1 at the goal position. `franka` loads on both builds; it was not driven. Isaac Sim 6.0 and 6.1 weren't available on the machine used: NVIDIA's files for these names exist on both, and TurtleBot3's 6.1 files are identical to 6.2's, but the runs are still to do. RViz was not opened in these runs.
@@ -256,7 +256,7 @@ Measured with a cube floor on 6.2, with its top at z=0. The same 20 x 20 x 0.1 a
 | 5, 5, 0.1 | 50:1 | drove | erratic, thinner than its wheels |
 | 20, 20, 0.5 and 20, 20, 1 | 40:1, 20:1 | drove | drove |
 | Quick Start's ground (a plane), or a mesh | none | drove | drove |
-| 20, 20, 0.1 with `--/physics/collisionApproximateCylinders=true` | 200:1 | drove | drove |
+| 20, 20, 0.1, launched with `--/physics/collisionApproximateCylinders=true` | 200:1 | drove, 0.178 m/s | drove unevenly: started 0.9 m off, wheels 1.99 and 2.34 rad/s |
 
 - Use `sim__quick_start`'s ground. A thicker box, thicker than the wheels, also works; no safe ratio is claimed.
 - `sim__prim__create` warns about a box collider at 50:1 or more.
