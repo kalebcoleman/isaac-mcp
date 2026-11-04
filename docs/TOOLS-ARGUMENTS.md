@@ -894,13 +894,13 @@ Reference: [TOOLS-UR5E.md](TOOLS-UR5E.md). 23 tools.
 
 ### `ur5e_dt__add_objects`
 
-Add objects to the scene from a predefined assembly folder.
+Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Add objects to the scene from a predefined assembly folder.
 
 - `assembly` (fmb1|fmb2|fmb3|fmb4|jenga|fmb_jenga, optional): Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga
 
 ### `ur5e_dt__assemble_objects`
 
-Assemble objects into a specified configuration.
+Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Assemble objects into a specified configuration.
 
 - `assembly` (fmb1|fmb2|fmb3|fmb4|jenga|fmb_jenga, optional): Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga
 
@@ -924,7 +924,7 @@ No arguments.
 
 ### `ur5e_dt__load_workstation`
 
-Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.
+Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.
 
 No arguments.
 
@@ -942,19 +942,19 @@ No arguments.
 
 ### `ur5e_dt__quick_start`
 
-One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.
+One-click scene setup from public assets: loads the scene, imports NVIDIA's UR5e with action graphs, creates a workspace camera and starts simulation. Adds the RG2 gripper only when its files are in the asset folder; the result's gripper field says which happened. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.
 
 No arguments.
 
 ### `ur5e_dt__quick_start_with_workstation`
 
-Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.
+Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.
 
 No arguments.
 
 ### `ur5e_dt__quick_start_with_workstation_and_simple_room`
 
-Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.
+Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.
 
 No arguments.
 

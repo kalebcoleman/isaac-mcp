@@ -96,7 +96,7 @@ Rules of thumb:
 
 The `sim`/`assets` pack is on by default (`run.sh` enables `sim-tools`). `ISAAC_MCP_SCENE_TOOLS=0`
 on the host hides all of them per server; it is a visibility preference, not access control.
-Arguments are in `docs/TOOLS-ARGUMENTS.md`. `ur5e_dt__quick_start*` leaves the timeline playing, so call
+Arguments are in `docs/TOOLS-ARGUMENTS.md`. `ur5e_dt__quick_start` works from public files (check `gripper` and `assets` in its result; local files always win); the workstation and object tools need the user's lab files. `ur5e_dt__quick_start*` leaves the timeline playing, so call
 `sim__timeline__control` stop before generic edits. Joint tools take the articulation root
 (`/World/UR5e/root_joint` on the twin), not the parent Xform, and a new stage needs `/World` created first.
 

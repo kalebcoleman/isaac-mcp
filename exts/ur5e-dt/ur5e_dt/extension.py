@@ -23,7 +23,7 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
 from .graph_compat import ensure_fixed_graph
-from .asset_cache import AssetCorrupt, AssetMissing, cache_dir, resolve_dir, resolve_path, resolve_uri
+from .asset_cache import AssetCorrupt, AssetMissing, asset_source, cache_dir, missing_assets, resolve_dir, resolve_path, resolve_uri
 from .object_pose import read_local_pose, set_local_pose
 from .robot_visuals import prepare_robot_visuals
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
@@ -422,6 +422,10 @@ def _isaac_sim_data_file(ext_prefix: str, relative: str) -> str:
     return ""
 
 
+# Your own files, with no public download. Quick Start adds the gripper only when all of them exist.
+GRIPPER_ASSETS = ("gripper/husarion_rg2/rg2_gripper_fixed.usd", "gripper/QuickChanger.usd")
+
+
 def _local_asset(relpath):
     """Resolve an asset to a file:// or https:// URI.
 
@@ -501,7 +505,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "assemble_objects": {
-        "description": "Assemble objects into a specified configuration.",
+        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Assemble objects into a specified configuration.",
         "parameters": {
             "assembly": {
                 "type": "string",
@@ -542,7 +546,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "add_objects": {
-        "description": "Add objects to the scene from a predefined assembly folder.",
+        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Add objects to the scene from a predefined assembly folder.",
         "parameters": {
             "assembly": {
                 "type": "string",
@@ -588,7 +592,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "quick_start": {
-        "description": "One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
+        "description": "One-click scene setup from public assets: loads the scene, imports NVIDIA's UR5e with action graphs, creates a workspace camera and starts simulation. Adds the RG2 gripper only when its files are in the asset folder; the result's gripper field says which happened. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
         "parameters": {}
     },
     "start_recording": {
@@ -617,11 +621,11 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "load_workstation": {
-        "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
+        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
         "parameters": {}
     },
     "quick_start_with_workstation": {
-        "description": "Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.",
+        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.",
         "parameters": {}
     },
     "load_simple_room": {
@@ -629,7 +633,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "quick_start_with_workstation_and_simple_room": {
-        "description": "Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.",
+        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.",
         "parameters": {}
     },
     "set_object_pose": {
@@ -913,7 +917,7 @@ class DigitalTwin(omni.ext.IExt):
                     with ui.HStack(spacing=5):
                         ui.Button("Quick Start with Workstation", width=210, height=35,
                                   clicked_fn=lambda: asyncio.ensure_future(self.quick_start_with_workstation()),
-                                  tooltip="Run Quick Start, then load the Vention workstation bench.")
+                                  tooltip="Run Quick Start, then load the Vention workstation bench (your own lab file; a placeholder is used without it).")
                         ui.Button("Quick Start with Workstation + Simple Room", width=320, height=35,
                                   clicked_fn=lambda: asyncio.ensure_future(self.quick_start_with_workstation_and_simple_room()),
                                   tooltip="Run Quick Start, then load the Vention bench AND the Simple Room backdrop.")
@@ -2995,13 +2999,25 @@ class DigitalTwin(omni.ext.IExt):
             print(f"[ur5e-dt] could not select person view camera: {e}")
 
     async def quick_start(self):
-        """Quick start: load scene, UR5e + action graph, RG2 + action graph, workspace camera with action graph."""
+        """Quick start: scene, public UR5e + action graph, workspace camera; the RG2 when its files exist."""
         import numpy as np
         from pxr import Gf, Sdf, UsdGeom
 
         require_newton_mount_support(selected_engine())
 
         print("=== Quick Start ===")
+
+        # Decide before building anything. Corrupt gripper files raise here rather than being skipped.
+        missing_gripper = missing_assets(GRIPPER_ASSETS)
+        # A local copy always wins; say which file each part really comes from.
+        self._quick_start_assets = [asset_source(relpath) for relpath in ("robot/ur5e.usd", *GRIPPER_ASSETS)]
+        for used in self._quick_start_assets:
+            if used["source"] == "remote":
+                print(f"Warning: no local copy of {used['asset']}; loading it from {used['location']}")
+        self._quick_start_gripper = (
+            {"loaded": False, "missing": missing_gripper,
+             "note": "The RG2 is optional and has no public download. See docs/ASSETS.md."}
+            if missing_gripper else {"loaded": True})
 
         # 1. Load scene
         print("--- Loading scene ---")
@@ -3022,20 +3038,23 @@ class DigitalTwin(omni.ext.IExt):
         app = omni.kit.app.get_app()
         await app.next_update_async()
 
-        # 5. Import RG2 gripper
-        print("--- Importing RG2 Gripper ---")
-        self.import_rg2_gripper()
-        await app.next_update_async()
+        if missing_gripper:
+            print(f"--- Skipping the RG2 gripper; not in the asset folder: {missing_gripper} ---")
+        else:
+            # 5. Import RG2 gripper
+            print("--- Importing RG2 Gripper ---")
+            self.import_rg2_gripper()
+            await app.next_update_async()
 
-        # 6. Attach gripper to UR5e
-        print("--- Attaching Gripper to UR5e ---")
-        self.attach_rg2_to_ur5e()
-        await app.next_update_async()
+            # 6. Attach gripper to UR5e
+            print("--- Attaching Gripper to UR5e ---")
+            self.attach_rg2_to_ur5e()
+            await app.next_update_async()
 
-        # 7. Setup gripper action graph
-        print("--- Setting up Gripper Action Graph ---")
-        self.setup_gripper_action_graph()
-        await app.next_update_async()
+            # 7. Setup gripper action graph
+            print("--- Setting up Gripper Action Graph ---")
+            self.setup_gripper_action_graph()
+            await app.next_update_async()
 
         # 8. Workspace camera + viewport switch — ALWAYS run (no headless early-return).
         # Creating the camera and pointing the active viewport at it is what makes the webrtc stream show
@@ -6489,13 +6508,25 @@ class DigitalTwin(omni.ext.IExt):
                 "traceback": traceback.format_exc()
             }
 
+    def _quick_start_report(self) -> Dict[str, Any]:
+        """What the last Quick Start used: whether the gripper loaded and each asset's source."""
+        return {"gripper": self._quick_start_gripper, "assets": self._quick_start_assets}
+
+    def _bench_label(self) -> str:
+        if asset_source(WORKSTATION_USD)["source"] == "missing":
+            return "a placeholder bench (no Vention workstation asset)"
+        return "the Vention workstation"
+
     async def _cmd_quick_start(self) -> Dict[str, Any]:
         """MCP handler: full scene setup (table, UR5e, gripper, camera, play)."""
         try:
             await self.quick_start()
             return {
                 "status": "success",
-                "message": "Quick start complete: scene loaded with UR5e, RG2 gripper, workspace camera, and simulation running.",
+                "message": "Quick start complete: scene loaded with UR5e"
+                           + (", RG2 gripper" if self._quick_start_gripper["loaded"] else " (no gripper)")
+                           + ", workspace camera, and simulation running.",
+                **self._quick_start_report(),
                 "force_publisher": getattr(self, "_force_publish_status", {"status": "not_configured"}),
             }
         except Exception as e:
@@ -6550,7 +6581,8 @@ class DigitalTwin(omni.ext.IExt):
             await self.quick_start_with_workstation()
             return {
                 "status": "success",
-                "message": "Quick start complete with the Vention workstation loaded.",
+                "message": f"Quick start complete with {self._bench_label()} loaded.",
+                **self._quick_start_report(),
                 "force_publisher": getattr(self, "_force_publish_status", {"status": "not_configured"}),
             }
         except Exception as e:
@@ -6585,7 +6617,8 @@ class DigitalTwin(omni.ext.IExt):
             await self.quick_start_with_workstation_and_simple_room()
             return {
                 "status": "success",
-                "message": "Quick start complete with the Vention workstation and Simple Room loaded.",
+                "message": f"Quick start complete with {self._bench_label()} and Simple Room loaded.",
+                **self._quick_start_report(),
                 "force_publisher": getattr(self, "_force_publish_status", {"status": "not_configured"}),
             }
         except Exception as e:

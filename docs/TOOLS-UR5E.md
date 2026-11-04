@@ -14,7 +14,8 @@ on the shared Kit bridge. It is the implementation reference. Generic tools are 
   (`use_bridge`, `refresh_tools`) and desktop-capture tools
   (`screenshot`, `start_screen_recording`, …) carry **no** `ur5e_dt__` prefix.
 
-Quick Start needs [assets you must supply](ASSETS.md#what-the-ur5e-twin-needs) and fails on a clean clone without them. It leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` before generic scene edits.
+Most of these tools serve one lab's digital twin. `ur5e_dt__quick_start` works for anyone from public files, while the gripper, workstation and
+object tools need [your own lab files](ASSETS.md#public-files-and-lab-files), which cannot be hosted. Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` before generic scene edits.
 
 The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 `ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
@@ -129,17 +130,17 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 | `ur5e_dt__randomize_single_object` | Randomize one object in a clear strip |
 | `ur5e_dt__save_scene_state` | Save object poses to JSON |
 | `ur5e_dt__restore_scene_state` | Restore object poses from JSON |
-| `ur5e_dt__add_objects` | Load objects from an assembly folder |
+| `ur5e_dt__add_objects` | Load objects from an assembly folder; your lab files |
 | `ur5e_dt__delete_objects` | Delete `/World/Objects` and pose-publisher graph |
 | `ur5e_dt__setup_pose_publisher` | Publish object poses to ROS2 `objects_poses_sim` |
 | `ur5e_dt__start_ros_driver` | Bring ROS2 robot driver up/down/status |
 | `ur5e_dt__sync_real_poses` | Sync sim poses from real-world detections |
 | `ur5e_dt__new_stage` | Clear stage and free memory |
-| `ur5e_dt__quick_start` | Full scene setup (table, UR5e, RG2, camera, play) |
+| `ur5e_dt__quick_start` | Scene from public files (UR5e, camera, play); adds the RG2 when your files are present |
 | `ur5e_dt__start_recording` | Start viewport MP4 recording |
 | `ur5e_dt__stop_recording` | Finalize MP4 recording |
 | `ur5e_dt__get_recording_status` | Recording status |
-| `ur5e_dt__load_workstation` | Add Vention bench (visual) |
+| `ur5e_dt__load_workstation` | Add Vention bench (visual); your lab file, else a placeholder |
 | `ur5e_dt__quick_start_with_workstation` | `quick_start` + Vention bench |
 | `ur5e_dt__load_simple_room` | Add Simple Room backdrop |
 | `ur5e_dt__quick_start_with_workstation_and_simple_room` | `quick_start` + bench + room |
@@ -336,7 +337,8 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 - Bridge: `ur5e_dt.quick_start`
 - Parameters: none.
 - Async: yes.
-- Purpose: one-click setup: load table scene, import UR5e with action graphs, attach RG2 gripper with action graphs, create workspace camera, start simulation.
+- Result: `gripper` says whether the RG2 loaded and what is missing; `assets` lists each asset's `source` (`project`, `store`, `remote`, `missing`) and `location`.
+- Purpose: one-click setup: load scene, import UR5e with action graphs, attach RG2 gripper with action graphs when its files exist, create workspace camera, start simulation.
 - Side effects: full scene creation and timeline play.
 - Example: `{}`
 

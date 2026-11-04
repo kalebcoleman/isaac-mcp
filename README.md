@@ -25,7 +25,7 @@ jobs, from Claude Code, Codex, OpenCode or any other MCP client.
 | **Work with your own scenes** | Inspect USD hierarchies, author prims, lights and materials, import trusted USD and URDF projects, build OmniGraph graphs, step physics and save composed scenes. |
 | **See the result** | Capture fresh camera frames and LiDAR points, screenshot or record the real application window, and drive Isaac Sim's own UI, even on a locked or remote desktop. |
 | **Connect ROS 2** | Set up `/clock`, `/joint_states` and TF in one call, write an RViz 2 config, diagnose the live TF tree and export a Nav2 occupancy map. |
-| **Operate a UR5e digital twin** | Build the workstation, use simulated ROS streams, and exercise motion with measured feedback ([supply its assets first](docs/ASSETS.md#what-the-ur5e-twin-needs)). |
+| **Try a UR5e, or run your lab twin** | Build a UR5e scene from public files in one call. With [your own lab files](docs/ASSETS.md#public-files-and-lab-files), add the gripper, workstation and objects. |
 | **Run Isaac Lab jobs** | Discover an existing Lab install, launch training, evaluation or play, and read metrics and checkpoints. |
 
 ## How it fits together
@@ -50,7 +50,7 @@ scene needs a live bridge, and a call without one returns an error that says wha
 | Tools | Count | Examples | Needs |
 |---|--:|---|---|
 | Generic scene and assets | 48 | `sim__stage__info`, `sim__graph__build`, `assets__import_path` | Kit with `sim-tools` (three asset tools run on the host) |
-| UR5e digital twin | 23 | `ur5e_dt__quick_start_with_workstation` | Kit with `ur5e-dt` and [its assets](docs/ASSETS.md#what-the-ur5e-twin-needs) |
+| UR5e digital twin | 23 | `ur5e_dt__quick_start`, `ur5e_dt__add_objects` | Kit with `ur5e-dt`; [some need lab files](docs/ASSETS.md#public-files-and-lab-files) |
 | Isaac Lab | 12 | `isaaclab__train`, `isaaclab__metrics_summary` | An Isaac Lab install for job tools |
 | Host gateway and desktop | 12 | `refresh_tools`, `screenshot`, `tile_windows` | A display for the desktop tools |
 | Bridge built-ins | 7 | `status`, `run_python`, `put_file` | Any Kit with the bridge |
@@ -128,21 +128,24 @@ python3 mcp/isaac_mcp/client.py --list-bridges
 python3 mcp/isaac_mcp/client.py status --port 8766
 ```
 
-### 4. Optional: the UR5e demo
+### 4. Try a scene
 
-The generic tools need no assets; you can use your own robots and scenes right away.
-
-> [!IMPORTANT]
-> **`ur5e_dt__quick_start` does not work from a clean clone yet.** The repository ships no assets, and the download
-> below covers only NVIDIA's robot and sensor files. Quick Start also needs the RG2 gripper, Quick-Changer and object files,
-> which have no download yet, so it stops with `Asset not available: gripper/husarion_rg2/rg2_gripper_fixed.usd` until you
-> add them. See [what you need to supply](docs/ASSETS.md#what-the-ur5e-twin-needs).
+Ask your agent to call `ur5e_dt__quick_start`. It builds a working scene from public files: NVIDIA's UR5e, a ground plane, a
+camera and a running simulation, with nothing to supply. To keep working offline, download those files once:
 
 ```bash
 python3 scripts/fetch_ur5e_assets.py          # about 26 MB; applicable asset terms apply
 python3 scripts/fetch_ur5e_assets.py --check
-python3 scripts/isaac_assets.py doctor        # shows what is still missing
 ```
+
+**Your own assets always win.** Each user has one asset folder, `isaac-mcp-assets` next to the checkout, with a subfolder per project.
+A file there is used instead of the online copy and is not replaced by a download, so a lab-modified robot stays yours.
+Quick Start's result says which file each part came from. See [Assets](docs/ASSETS.md).
+
+> [!NOTE]
+> The RG2 gripper, Vention bench and FMB objects belong to the lab twin this project grew from. Those tools remain, but they need
+> [your own lab files](docs/ASSETS.md#public-files-and-lab-files), which cannot be hosted. Without them Quick Start skips the gripper
+> and the bench becomes a placeholder.
 
 ## Where to go next
 

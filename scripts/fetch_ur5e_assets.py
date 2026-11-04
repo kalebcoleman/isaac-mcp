@@ -154,6 +154,7 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
     fetched = skipped = 0
     total_bytes = 0
     kept = 0
+    changed = []
     for group, entry in _iter_files(manifest):
         if _pinned(cache, entry):
             kept += 1  # never replace a file the user pinned (e.g. a lab-modified robot)
@@ -163,6 +164,9 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
             if _verify(destination, entry) is None:
                 skipped += 1
                 continue
+            # It may be a lab-modified file: never replace someone's work unasked.
+            changed.append(destination)
+            continue
         source = entry["source"].lstrip("/")
         if use_local:
             origin = root_path / source
@@ -189,6 +193,13 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
     for item in manifest.get("manual", []):
         print(f"Manual: {item['target']} — {item['hint']}")
     print("Air-gapped runs: set ISAAC_MCP_ASSET_STRICT=1 after this fetch.")
+    if changed:
+        print(f"Kept {len(changed)} file(s) that differ from NVIDIA's copy:", file=sys.stderr)
+        for path in changed:
+            print(f"  {path}", file=sys.stderr)
+        print("If you changed them on purpose, accept them: python3 scripts/isaac_assets.py pin\n"
+              "To replace them with NVIDIA's copy instead, re-run with --force.", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -201,7 +212,7 @@ def main() -> int:
         help="NVIDIA asset root URL or a local directory to copy from",
     )
     parser.add_argument("--check", action="store_true", help="verify the cache and exit")
-    parser.add_argument("--force", action="store_true", help="re-download files even when the cached copy matches")
+    parser.add_argument("--force", action="store_true", help="re-download even over a changed, unpinned file, or when the cached copy matches")
     args = parser.parse_args()
 
     manifest = asset_cache.manifest()

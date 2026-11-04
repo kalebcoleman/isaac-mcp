@@ -620,6 +620,32 @@ def resolve_uri(relpath: str) -> str:
     raise AssetMissing(relpath, offline=remote is not None and offline())
 
 
+def missing_assets(relpaths) -> list[str]:
+    """Return which assets are unavailable, for optional scene parts.
+
+    A corrupt file still raises :class:`AssetCorrupt`: being absent can be fine, but a
+    file that fails its recorded hash must never be quietly skipped.
+    """
+    missing = []
+    for relpath in relpaths:
+        try:
+            resolve_uri(relpath)
+        except AssetMissing:
+            missing.append(relpath)
+    return missing
+
+
+def asset_source(relpath: str) -> dict:
+    """Say where *relpath* would come from: ``project``, ``store``, ``remote`` or ``missing``."""
+    found = _locate(relpath)
+    if found is not None:
+        return {"asset": relpath, "source": found[1], "location": str(found[0])}
+    remote = remote_uri(relpath)
+    if remote is not None and not offline():
+        return {"asset": relpath, "source": "remote", "location": remote}
+    return {"asset": relpath, "source": "missing", "location": None}
+
+
 def resolve_path(relpath: str) -> Path:
     """Resolve an asset to a local path, raising :class:`AssetMissing` otherwise."""
     found = _locate(relpath)

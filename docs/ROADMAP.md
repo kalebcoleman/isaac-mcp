@@ -40,9 +40,7 @@ in the [compatibility matrix](COMPATIBILITY.md).
 
 ### 1. Reliability
 
-- [ ] **Make the UR5e demo work from a clean clone.** The Apache-2.0 and CC BY 4.0 gripper and object files have no download, so
-  Quick Start fails for a new user. Decide how to publish them, for example a release asset pack checked by the fetcher.
-  See [what the twin needs](ASSETS.md#what-the-ur5e-twin-needs).
+- [x] Make Quick Start work from a clean clone using public files, with lab files [optional and clearly labelled](ASSETS.md#public-files-and-lab-files).
 - [x] Make `./verify.sh` detect a checkpoint with dead asset references up front. See [the message](VERIFICATION.md#live-ur5e-baseline).
 - [ ] Improve the `randomize_single_object` placement configuration without breaking existing defaults; test feasible
   and infeasible scenes.

@@ -15,19 +15,49 @@ workstation, gripper, objects, layouts) and how to build up and move your own as
 Where each asset originally comes from, and under which licence, is in
 [asset notices](provenance/ASSETS.md).
 
-## What the UR5e twin needs
+## Public files and lab files
 
-Generic scene tools need none of this. Quick Start needs all of the first two rows. On a clean clone only the first can be
-downloaded, so **Quick Start stops with `Asset not available` until you add the others**.
+`ur5e_dt__quick_start` works for anyone, using only the first row. The other rows belong to a specific lab's digital twin: the tools
+stay available, but they need your own files.
 
-| Files | Source | How to get them |
+| Files | Source | Without them |
 |---|---|---|
-| `robot/`, `sensors/` and their materials (15 files, about 26 MB) | NVIDIA | `python3 scripts/fetch_ur5e_assets.py` |
-| `gripper/husarion_rg2/`, `gripper/QuickChanger.usd`, `gripper/configuration/`, `objects/` and the `fmb_assembly*.json` layouts | Apache-2.0 and CC BY 4.0 upstreams, plus project files; see [notices](provenance/ASSETS.md#what-a-public-copy-can-ship) | No download yet. Copy them from a machine that has them, then run `isaac_assets.py add`, or `migrate` from an old checkout. The gripper USD is converted from [husarion/ur_onrobot_rg2_ros](https://github.com/husarion/ur_onrobot_rg2_ros) by `tools/convert_husarion_rg2_urdf.py` and `tools/rewire_husarion_rg2_usd.py` |
-| `workstation/vention.usd` | Your own Vention export; not redistributable | `isaac_assets.py add`. Optional: a placeholder bench is used when it is absent |
+| `robot/`, `sensors/` and their materials (15 files, about 26 MB) | NVIDIA, online. `python3 scripts/fetch_ur5e_assets.py` keeps a local copy | Loaded from NVIDIA's server, unless strict mode refuses |
+| `gripper/husarion_rg2/`, `gripper/QuickChanger.usd`, `gripper/configuration/` | Your lab's files; see [notices](provenance/ASSETS.md#what-a-public-copy-can-ship). Converted from [husarion/ur_onrobot_rg2_ros](https://github.com/husarion/ur_onrobot_rg2_ros) by `tools/convert_husarion_rg2_urdf.py` and `tools/rewire_husarion_rg2_usd.py` | Quick Start skips the gripper and says so in its `gripper` result |
+| `workstation/vention.usd` | Your own Vention export; not redistributable | A placeholder bench |
+| `objects/`, `fmb_assembly*.json` | Your lab's files | `ur5e_dt__add_objects` and `ur5e_dt__assemble_objects` report what is missing |
 
-`python3 scripts/isaac_assets.py doctor` shows what is found. Publishing the redistributable second row as a download is
-[on the roadmap](ROADMAP.md#1-reliability).
+`ur5e_dt__sync_real_poses` and a real-robot `ur5e_dt__start_ros_driver` also expect your lab's hardware. `./verify.sh` checks the complete
+lab scene, so it needs all of these.
+
+### When something comes from online
+
+- A local copy **always** wins. The resolver looks in project stores, then your asset folder, and only then at NVIDIA, and only for `robot/ur5e.usd` and
+  `sensors/rsd455.usd`.
+- `ISAAC_MCP_ASSET_STRICT=1` (or `"strict": true` in `isaac-mcp.json`) forbids online loading. A missing file is then an error.
+- Each Quick Start result lists every asset in `assets`, with `source` (`project`, `store`, `remote` or `missing`) and `location`, and the
+  console warns when one loads from online. `python3 scripts/isaac_assets.py doctor` shows the same without starting Kit.
+- `fetch_ur5e_assets.py` never replaces a pinned file, or a file that differs from NVIDIA's unless you pass `--force`. It keeps a changed file,
+  lists it and exits 1. Accept your change with `isaac_assets.py pin`.
+- A changed file with no pin **refuses to load** with `AssetCorrupt`, rather than falling back to online. This is how a damaged file is told apart from a
+  deliberate edit: run `pin` once to say it is deliberate.
+- With several stores, new downloads go to the first. Put a store holding modified files first, so a fetched copy cannot shadow it.
+- `ur5e_dt__load_simple_room` and LiDAR `config` presets use Isaac's own assets root, not this resolver; strict mode does not cover them.
+
+### Use your own assets
+
+Put them in your asset folder, in a subfolder for the project. Files in `ur5e-dt/` replace the twin's by name:
+
+```bash
+python3 scripts/isaac_assets.py add <file-or-archive>     # into ur5e-dt/, and pins it
+python3 scripts/isaac_assets.py pin                       # accept files you edited in place
+python3 scripts/isaac_assets.py adopt <project-folder>    # a whole project, in its own subfolder
+python3 scripts/isaac_assets.py doctor                    # what is found, and where
+```
+
+To use a folder elsewhere, set `ISAAC_MCP_ASSET_PATH` when starting Kit, or list it in a project's `isaac-mcp.json`. Kit reads these at startup,
+so restart it after changing them. To import a project's own USD into any scene with `assets__import_path`, approve its folder as a
+[trusted root](TOOLS-SCENE.md#one-time-approval).
 
 ## Layout
 
@@ -106,7 +136,7 @@ not a silent skip.
 
 ## User pins: `SHA256SUMS`
 
-A robot modified by your lab is not NVIDIA's file, so the manifest hash would reject it.
+A robot modified by your lab is not NVIDIA's file, so the manifest hash would refuse it.
 To accept it, list it in a `SHA256SUMS` file **in the folder that holds the asset**
 (normally `<store>/ur5e-dt/SHA256SUMS`):
 
@@ -240,7 +270,7 @@ machines would load different bytes.
 
 ## Troubleshooting
 
-**`AssetMissing: Asset not available: gripper/QuickChanger.usd`**
+**`AssetMissing: Asset not available: objects/...`**
 The database does not have it. The message shows where it is expected and the command that
 adds it. An old checkout still holding the files: `isaac_assets.py migrate`.
 
@@ -251,7 +281,7 @@ files, `isaac_assets.py add` for your own, or set `ISAAC_MCP_ASSET_STRICT=0`.
 **`AssetCorrupt: sha256 mismatch`**
 The file differs from its pin or the manifest. If you changed it on purpose, run
 `isaac_assets.py pin`. Otherwise restore it (`fetch_ur5e_assets.py --force` for public
-files).
+files; without `--force` the fetcher keeps it).
 
 **The robot loaded, but I expected my copy (silent remote fallback)**
 Without strict mode, a missing local file loads from NVIDIA. `doctor --local-only` exits 1

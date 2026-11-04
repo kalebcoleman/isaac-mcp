@@ -61,3 +61,29 @@ def test_check_accepts_an_older_flat_layout(fetcher, tmp_path):
     (store / "sensors").mkdir(parents=True)
     (store / "sensors" / "x.usd").write_bytes(b"x")
     assert fetcher.check(manifest, store) == 0
+
+
+def _changed_store(tmp_path):
+    root = tmp_path / "nvidia-root"
+    (root / "Isaac" / "robot").mkdir(parents=True)
+    (root / "Isaac" / "robot" / "ur5e.usd").write_bytes(b"nvidia robot")
+    manifest = {"fetch": [{"id": "g", "files": [entry("robot/ur5e.usd", b"nvidia robot")]}], "manual": []}
+    store = tmp_path / "isaac-mcp-assets"
+    robot = store / "ur5e-dt" / "robot" / "ur5e.usd"
+    robot.parent.mkdir(parents=True)
+    robot.write_bytes(b"lab edit, not pinned yet")
+    return root, manifest, store, robot
+
+
+def test_fetch_keeps_a_changed_unpinned_file_and_says_how_to_accept_it(fetcher, tmp_path, capsys):
+    root, manifest, store, robot = _changed_store(tmp_path)
+    assert fetcher.fetch(manifest, store, str(root), force=False) == 1
+    assert robot.read_bytes() == b"lab edit, not pinned yet"
+    err = capsys.readouterr().err
+    assert str(robot) in err and "isaac_assets.py pin" in err and "--force" in err
+
+
+def test_force_is_the_explicit_way_to_replace_a_changed_unpinned_file(fetcher, tmp_path):
+    root, manifest, store, robot = _changed_store(tmp_path)
+    assert fetcher.fetch(manifest, store, str(root), force=True) == 0
+    assert robot.read_bytes() == b"nvidia robot"

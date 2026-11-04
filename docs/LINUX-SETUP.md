@@ -185,9 +185,9 @@ viewport and URDF follow-ups have superseded some early pending checks, while th
 
 ## Prepare the UR5e and sensor assets
 
-The host connection and `sim__stage__info` do not require a robot or workstation. A UR5e
-Quick Start does need the robot, gripper and object assets, and **the gripper and object files have no download yet**, so
-Quick Start fails on a clean machine until you [supply them](ASSETS.md#what-the-ur5e-twin-needs). The repository ships **no
+The host connection and `sim__stage__info` do not require a robot or workstation. `ur5e_dt__quick_start`
+needs only NVIDIA's public UR5e. The gripper, workstation and objects are [your own lab files](ASSETS.md#public-files-and-lab-files), and
+Quick Start skips the gripper when they are absent. The repository ships **no
 assets**: every asset lives in your local asset folder, `isaac-mcp-assets` next to the
 checkout (see [ASSETS.md](ASSETS.md)). `install.sh` installs packages, not assets. Add your
 own files with `python3 scripts/isaac_assets.py add`, move assets from an older checkout with
@@ -199,7 +199,7 @@ python3 scripts/fetch_ur5e_assets.py
 python3 scripts/fetch_ur5e_assets.py --check
 ```
 
-The first command downloads missing/mismatched manifest files from the configured NVIDIA
+The first command downloads missing manifest files from the configured NVIDIA
 asset root and skips already valid files. The second reads the cache only: exit 0 means all
 manifest fetch entries match size/SHA-256; exit 1 reports missing or mismatched entries.
 It checks neither the manual Vention bench nor native rendering/physics readiness.
@@ -241,7 +241,7 @@ All options can be inspected without fetching: `python3 scripts/fetch_ur5e_asset
 | `--cache-dir PATH` | Overrides the destination for this invocation only; select the same directory through `ISAAC_MCP_ASSET_PATH` when launching Kit |
 | `--asset-root URL_OR_DIRECTORY` | Overrides the source for this invocation; an existing local mirror must have the manifest's source-relative layout. `ISAAC_MCP_ASSET_REMOTE_ROOT` is the environment equivalent (`UR5E_DT_ASSET_ROOT` is a deprecated alias) |
 | `--check` | Verifies existing cache bytes only; no download or repair |
-| `--force` | Re-fetches/copies even matching files; intentional replacement, not a normal startup requirement |
+| `--force` | Re-fetches/copies even matching files, and replaces changed files that are not pinned; intentional replacement, not a normal startup requirement |
 
 The [manifest](../exts/ur5e-dt/assets-manifest.json) pins the **Isaac asset-library 5.1**
 paths and byte hashes. That asset generation is separate from the selected **Sim 6.2**
@@ -287,7 +287,9 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
-| `Asset not available: gripper/...` from Quick Start | The fetcher does not supply the gripper or objects. See [what the twin needs](ASSETS.md#what-the-ur5e-twin-needs) |
+| Quick Start result says `"gripper": {"loaded": false}` | Expected without your lab files; the scene still works. See [public and lab files](ASSETS.md#public-files-and-lab-files) |
+| `Asset not available: objects/...` | Object tools need your lab files. See [public and lab files](ASSETS.md#public-files-and-lab-files) |
+| `fetch_ur5e_assets.py` exits 1 and lists files it kept | They differ from NVIDIA's. Run `isaac_assets.py pin` if the change is yours, or `--force` to replace them |
 | `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
 | `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK: `uv run --isolated --project mcp --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
