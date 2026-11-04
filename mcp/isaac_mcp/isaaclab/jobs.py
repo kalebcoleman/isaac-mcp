@@ -630,6 +630,10 @@ def _crashed_with_exit_zero(job_dir: Path) -> str | None:
     exception = _uncaught_exception(log_dir / "stderr.log")
     if not exception:
         return None
+    if data.get("kind") == "eval":
+        score = _eval_result(log_dir)
+        if score and not score.get("error") and score.get("stopped_by") in ("episodes", "max_steps"):
+            return None  # the runner ended the play loop on purpose and wrote its result: a trace in stderr isn't a crash
     if data.get("kind") == "train":
         run_dir = _run_dir_from_log(log_dir / "stdout.log")
         if run_dir and _latest_checkpoint(run_dir):

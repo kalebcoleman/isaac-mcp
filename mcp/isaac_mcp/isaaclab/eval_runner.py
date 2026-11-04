@@ -34,8 +34,12 @@ from pathlib import Path
 _SUCCESS_KEYS = ("success", "is_success", "episode_success")
 
 
-class EvalStop(Exception):
-    """Raised inside a second post-target step if the play loop ignored ``is_running()``."""
+class EvalStop(BaseException):
+    """Raised inside a second post-target step if the play loop ignored ``is_running()``.
+
+    A BaseException so a play script's own ``except Exception`` handler (Lab 3's prints a traceback and exits 0) can't
+    swallow it: that made every finished eval read as a crash.
+    """
 
 
 def _to_list(value):

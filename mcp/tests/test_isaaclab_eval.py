@@ -283,3 +283,30 @@ def test_runs_status_reports_the_result_after_the_starting_host_is_gone():
     assert status["eval_result"]["episodes"] == 20
     assert status["eval_result"]["mean_return"] == 123.5
     assert status["eval_result"]["stopped_by"] == "episodes"
+
+
+def test_a_finished_eval_with_a_stop_trace_in_stderr_is_not_a_crash(tmp_path):
+    import json
+
+    from isaac_mcp.isaaclab import jobs
+
+    (tmp_path / "job.json").write_text(json.dumps({"kind": "eval", "log_dir": str(tmp_path)}))
+    (tmp_path / "stderr.log").write_text("Traceback (most recent call last):\n  File \"play.py\", line 1\nEvalStop\n")
+    assert jobs._crashed_with_exit_zero(tmp_path) and "EvalStop" in jobs._crashed_with_exit_zero(tmp_path)  # no score: still a crash
+    (tmp_path / "eval_result.json").write_text(json.dumps({"episodes": 3, "stopped_by": "episodes"}))
+    assert jobs._crashed_with_exit_zero(tmp_path) is None
+    (tmp_path / "eval_result.json").write_text(json.dumps({"episodes": 3, "stopped_by": "error", "error": "boom"}))
+    assert jobs._crashed_with_exit_zero(tmp_path)
+
+
+def test_eval_stop_passes_through_a_play_scripts_except_exception():
+    from isaac_mcp.isaaclab import eval_runner
+
+    assert not issubclass(eval_runner.EvalStop, Exception)
+    try:
+        try:
+            raise eval_runner.EvalStop()
+        except Exception:  # what a play script's handler would do
+            raise AssertionError("EvalStop was swallowed")
+    except eval_runner.EvalStop:
+        pass

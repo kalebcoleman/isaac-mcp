@@ -57,7 +57,7 @@ Built and reviewed, uncommitted until the gate passes; ticked once pushed.
   - [x] `assets__*` tools: list packs, doctor a pack, create or adopt a pack, re-pin. No overwrite without force, nothing inside the repo, no tool approving folders
   - [x] Build a pack from a USD's dependency closure
   - [x] Doctor checks dependencies, not a folder listing, including unresolved ones
-  - [ ] Update BrickSim's four `run_path` call sites to `from isaac_mcp import assets` (BrickSim's own change)
+  - Left to Kaleb, in BrickSim's own repo: update its four `run_path` call sites to `from isaac_mcp import assets`
 - [x] **2. Supported resolver import:** a stable stdlib-only module usable without Kit
 - [x] **3. External apps in session tools:** registered launcher or attach, so `sim__list` and `sim__status` include external bridges
 - [x] **4. Version and reload visibility:**
@@ -111,7 +111,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] Windowed `sim__graph__show` on 6.0.0.1: the earlier `ZeroDivisionError` did not come back in small and large graphs, layout on and off, docked and undocked
 - [ ] License: `mcp/` and the bridge derive from `omni-kit-mcp`, whose upstream has no license file. Kaleb is asking its author himself; update VENDORING, README and LICENSE when he reports the answer
 - [ ] Public cleanup, **last, with the history rewrite**: Kaleb wants anything that shouldn't be public removed. Take out `docs/plans` (keep a local copy and fix its links), course names and "student run" wording, and the private strings in `scripts/check_private_paths.py`. "Kaleb's work with RISE lab" stays unless he says otherwise. List: memory `history-scrub-pending`
-- [ ] Enable private vulnerability reporting on the repository, which SECURITY.md points to
+- [x] Private vulnerability reporting enabled on the repository, which SECURITY.md points to (2026-11-04)
 
 ## Tool-use fleet at `9803f4c`, 2026-11-04
 
@@ -260,4 +260,20 @@ To state in the docs:
 - [ ] M7: `sim__viewport__screenshot`, `sim__viewport__record_start`, `sim__viewport__record_stop`, and the final demo
 - [ ] Twin: `SCENE-TOOLS-AGENT-UX.md` proposals still unbuilt: to be listed by a scout
 - [ ] Keep, combine or remove review of the tool surface: **needs Kaleb's review before any removal**
+
+### Lab 3 eval, tested by Gemini at `d437a86`
+
+Scores track training: rsl_rl cartpole -5.99 early, +4.92 trained; rl_games -4.88 to +0.63; Reach-UR10 improved on both libraries. `max_steps` too small gave no score, as designed. With `num_episodes=5`, 50 episodes are reported, because every parallel environment finishes one first.
+
+- [x] Every Lab 3 eval reported `failed` though its score was valid: `EvalStop` ended up in stderr and the crash detector read it. `EvalStop` is now a BaseException so a play script's handler can't swallow it, and a recorded score is not a crash. Unit tested; needs a live check on Lab 3
+- [x] The job guard's refusal showed the window paragraph, hiding `allow_concurrent=True`: a refusal now keeps its own hint
+- [ ] Live check of both on Lab 3
+- [ ] State in the docs that `num_episodes` is a floor: all parallel environments finish once first
+
+### Decisions (Kaleb, 2026-11-04)
+
+- [ ] **Default staging folder** so a URDF in the user's own asset folder loads without the one-time approval. Not built yet
+- [ ] **Split the PR:** M1 to M5 stay in PR 70. M6 (`assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources) and M7 (viewport screenshot and recording, final demo) go to a second PR from a branch off PR 70's head
+- [ ] Mark Lab 2.3.2 with Sim 5.1 as `tested` after the final retest passes
+- [ ] Keep "Kaleb's work with RISE lab" in the docs (kept, no action)
 
