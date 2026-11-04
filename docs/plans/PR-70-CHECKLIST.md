@@ -96,9 +96,9 @@ Keep as they are: `run_python`, `use_bridge` with `status`, `sim__ros2__tf_setup
 
 Found by the fleet at `e658289`; not fixed yet:
 
-- [ ] `sim__map__occupancy` wedges or crashes the app on 6.0.0.0 and 6.0.0.1 (`malloc` corruption). Find the cause, or refuse on those builds
-- [ ] Reopened workstation plays with non-finite physics on 6.0.0.1. Cause unknown
-- [ ] `/scan` on 6.0.0.0, and the config LiDAR on 6.1: retest with a target beyond the 1 m near range
+- [ ] `sim__map__occupancy` wedged or crashed on 6.0.0.0 and 6.0.0.1 at `e658289`; 3 of 3 clean headless on each at `c90e0ab`. Windowed retest with the root-cause run
+- [ ] Reopened workstation had non-finite physics on 6.0.0.1 windowed at `e658289`; 0 errors headless at `c90e0ab`. Windowed retest with the root-cause run
+- [x] `/scan` on 6.0.0.0, and the config LiDAR on 6.1: both work with a target beyond the 1 m near range
 - [ ] `start_ros_driver up` fails on a cold first launch and leaves a healthy driver; `status` always exits 0
 - [x] `verify.sh` version gate fails on the standalone layout (needs the ASU retest)
 - [ ] Host needs `python-xlib` when run from the Isaac venv

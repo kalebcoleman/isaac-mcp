@@ -231,10 +231,28 @@ def namespace_for(robot_path, taken=()):
     return candidate
 
 
+def rebuild_plan(own, graphs, active, owned):
+    """Where to build this namespace's graph, and what to clear first. ``graphs`` is every prim beside it and ``active``
+    the active ones. A graph this session made is removed. One from an opened file (a saved setup) can only be
+    deactivated, which leaves its path taken, so the new one gets a free path. own_rN are earlier rebuilds, and two
+    active graphs would publish every message twice."""
+    pattern = re.compile(re.escape(own) + r"(_r\d+)?$")
+    mine = [path for path in active if pattern.fullmatch(path)]
+    remove = [path for path in mine if path in owned]
+    deactivate = [path for path in mine if path not in owned]
+    taken = set(graphs) - set(remove)
+    graph, number = own, 0
+    while graph in taken:
+        number += 1
+        graph = f"{own}_r{number}"
+    return dict(graph=graph, remove=remove, deactivate=deactivate)
+
+
 def check_graph_robot(stage, graph, articulation, robot_path, namespace=""):
     """Return (code, message, retry_with) when this namespace's graph belongs to another robot, else None.
     Rebuilding it would silently drop that robot's frames and joint states. Unreadable counts as another robot."""
-    if not stage.GetPrimAtPath(graph):
+    prim = stage.GetPrimAtPath(graph)
+    if not prim or not prim.IsActive():  # a saved graph an earlier rebuild deactivated publishes nothing
         return None
     current = graph_robot(stage, graph)
     if current == articulation:
@@ -630,12 +648,16 @@ def setup(scene, stage, a):
     conflict = check_graph_robot(stage, graph, articulation, robot_path, a.get("namespace", ""))
     if conflict:
         refuse(conflict[0], conflict[1], current_robot=graph_robot(stage, graph), graph=graph, retry_with=conflict[2])
-    if existing:
-        if graph not in scene.owned:
-            refuse("CONFLICT", f"{graph} exists and was not created by this tool in this session; "
-                   "remove it or start a new stage.")
-        with Usd.EditContext(stage, stage.GetSessionLayer()):
-            stage.RemovePrim(graph)
+    # This namespace's graphs, including a rebuild of a saved one. check_graph_robot has shown the main one is this robot's.
+    parent = stage.GetPrimAtPath(own.rsplit("/", 1)[0])
+    children = list(parent.GetAllChildren()) if parent else []
+    plan = rebuild_plan(own, [str(p.GetPath()) for p in children], [str(p.GetPath()) for p in children if p.IsActive()], scene.owned)
+    graph = plan["graph"]
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        for path in plan["remove"]:
+            stage.RemovePrim(path)
+        for path in plan["deactivate"]:  # from an opened file: a session edit can't delete it, and the file stays as it is
+            stage.GetPrimAtPath(path).SetActive(False)
     from pxr import Sdf
 
     keys = og.Controller.Keys
@@ -757,6 +779,7 @@ def setup(scene, stage, a):
             f"and set that node's odom_frame_id to {frames['odom']}.",
         ] if a.get("base", "fixed") == "mobile" else []),
         rebuilt=existing,
+        **({"deactivated_saved_graphs": plan["deactivate"]} if plan["deactivate"] else {}),
         **({"attached_to": dict(prim=attach_path, frame=attach_name)} if attach_path else {}),
         clock=dict(source=clock["source"] or "none", shared_tool_clock=clock["publish"],
                    tool_clock_present=bool(stage.GetPrimAtPath(CLOCK_GRAPH)),

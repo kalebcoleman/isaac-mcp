@@ -24,7 +24,7 @@ MAX_REPORTED_HANDLES = 16
 PUBLISHER_NOTE = ("Publisher count is not read from inside Kit: run `ros2 topic info <topic>` in the shell line from "
                   "sim__stage__info. writer_computes 0 while playing means the writer never ran and the topic is not advertised.")
 STALE_HANDLE_FIX = (
-    "On 6.2, Replicator's attach_hydra_texture skips a product that already has viewportHandle, so a saved handle leaves it "
+    "Measured on 6.2: Replicator's attach_hydra_texture skips a product that already has viewportHandle, so a saved handle leaves it "
     "with no texture: the sensor renders nothing, its ROS writer never runs and the topic is not advertised. "
     "Rebuilding the graph reuses the same product. Save a clean copy with reset_camera_render_handles=true and open it "
     "with sim__stage__open, or rebuild the graph with another width/height.")

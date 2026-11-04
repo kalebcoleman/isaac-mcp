@@ -1146,3 +1146,21 @@ def test_setup_checks_before_it_removes_anything_and_the_advice_names_the_namesp
     body = ast.unparse(next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "setup"))
     assert body.index("check_graph_robot") < body.index("stage.RemovePrim(graph)")
     assert "a different namespace from this call" in body
+
+
+def test_rebuilding_a_saved_graph_deactivates_it_and_never_leaves_two():
+    own, r1, r2 = ros2.GRAPH_PATH, ros2.GRAPH_PATH + "_r1", ros2.GRAPH_PATH + "_r2"
+    assert ros2.rebuild_plan(own, [], [], set()) == dict(graph=own, remove=[], deactivate=[])
+    assert ros2.rebuild_plan(own, [own], [own], {own}) == dict(graph=own, remove=[own], deactivate=[])
+    assert ros2.rebuild_plan(own, [own], [own], set()) == dict(graph=r1, remove=[], deactivate=[own])
+    # Again in this session: our rebuild goes, and the deactivated original still holds its path.
+    assert ros2.rebuild_plan(own, [own, r1], [r1], {r1}) == dict(graph=r1, remove=[r1], deactivate=[])
+    # A file saved after a rebuild, then reopened: that rebuild is the saved one now. Flatten dropped the inactive original.
+    assert ros2.rebuild_plan(own, [r1], [r1], set()) == dict(graph=own, remove=[], deactivate=[r1])
+
+
+def test_another_namespace_and_the_clock_graph_are_left_alone():
+    own = ros2.GRAPH_PATH
+    other, clock = ros2.graph_path("rg2"), ros2.CLOCK_GRAPH
+    plan = ros2.rebuild_plan(own, [own, other, clock], [own, other, clock], {own, other})
+    assert plan == dict(graph=own, remove=[own], deactivate=[])
