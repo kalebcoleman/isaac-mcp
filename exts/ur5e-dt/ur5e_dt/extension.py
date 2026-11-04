@@ -536,7 +536,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "save_scene_state": {
-        "description": "Save the UR5e twin's object poses to a JSON file in its scene_states folder, for ur5e_dt__restore_scene_state. A file of that name is replaced; with no name it gets a timestamp. Returns result, file_path and, on failure, error.",
+        "description": "Save the UR5e twin's object poses to a JSON file in its scene_states folder, for ur5e_dt__restore_scene_state. A file of that name is replaced; with no name it gets a timestamp. Returns result, json_file_path and, on failure, error.",
         "parameters": {
             "json_file_path": {
                 "type": "string",
@@ -608,7 +608,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {
             "file_name": {
                 "type": "string",
-                "description": "Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'realtime_recording.mp4'."
+                "description": "Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'isaacsim_<timestamp>.mp4'."
             },
             "camera": {
                 "type": "string",

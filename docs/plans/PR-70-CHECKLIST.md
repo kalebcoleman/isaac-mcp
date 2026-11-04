@@ -15,7 +15,7 @@ Claude codes and reviews. DeepSeek V4.1 Flash on OpenCode Go scouts and tests, a
 - [x] Run `validate_scene_equivalents.py` and `validate_scene_clear.py`, which need the Agilebot pack
 - [ ] End-to-end asset pack test with public GitHub assets. First run: the build tool failed for the chess set. A pass means no workaround:
   - [x] `assets__pack_build` alone makes a pack that imports and renders with textures, with the source hidden
-  - [ ] The same for a real robot with physics: build, import, Play, and move a joint with universal tools
+  - [x] The same for a real robot with physics: build, import, Play, and move a joint with universal tools
   - [ ] Anything needing a workaround counts as a fail
 - [ ] Pack test findings:
   - [x] Closure follows MaterialX and MDL textures, and `self_contained` is never falsely true
@@ -99,11 +99,11 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] `sim__map__occupancy` crashes: NVIDIA `getBuffer()` heap overrun on all 6.x builds; the tool no longer calls it. 26 clean runs on the older builds
 - [x] Non-finite physics after reopening: a collider overlapping the robot, not save or reopen. Documented
 - [x] `/scan` on 6.0.0.0, and the config LiDAR on 6.1: both work with a target beyond the 1 m near range
-- [ ] `start_ros_driver up` fails on a cold first launch and leaves a healthy driver; `status` always exits 0
+- [x] `start_ros_driver up` on a cold first launch: passes on all five builds. `status` still always exits 0
 - [x] `verify.sh` version gate fails on the standalone layout (needs the ASU retest)
-- [ ] Host needs `python-xlib` when run from the Isaac venv
+- [x] Host needs `python-xlib` when run from the Isaac venv: documented
 - [x] Selection outline appears in `sim__camera__capture` after `sim__viewport__frame`, windowed: selection restored after framing
-- [ ] URDF packs: no pack route in `assets__import_urdf` (documented, approve the folder). `package://` text fixed; `sim__joints__state` warns past limits. A real robot through the pack path is still untested
+- [x] URDF packs: pack route, `package://` and holding drives, on 6.2 and 5.1 with Panda, UR5, xArm7, TIAGo and Go2. Go2 flips (zero pose outside limits); TIAGo's base does not drive. 6.0 and 6.1 not run
 - [x] Approval helper silently keeps one of several roots: now refuses
 - [x] A client exiting mid-recording leaves a tiny MP4: documented
 - [x] Kit uploads crash minidumps to NVIDIA by default: off for `run.sh` and Lab jobs, `ISAAC_MCP_CRASH_UPLOAD=1` opts in

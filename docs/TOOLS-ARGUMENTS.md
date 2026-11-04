@@ -1051,7 +1051,7 @@ Restore the UR5e twin's object poses from a JSON file made by ur5e_dt__save_scen
 
 ### `ur5e_dt__save_scene_state`
 
-Save the UR5e twin's object poses to a JSON file in its scene_states folder, for ur5e_dt__restore_scene_state. A file of that name is replaced; with no name it gets a timestamp. Returns result, file_path and, on failure, error.
+Save the UR5e twin's object poses to a JSON file in its scene_states folder, for ur5e_dt__restore_scene_state. A file of that name is replaced; with no name it gets a timestamp. Returns result, json_file_path and, on failure, error.
 
 - `json_file_path` (string, optional): Path to save file. If omitted, a timestamped filename is used.
 
@@ -1080,7 +1080,7 @@ No arguments.
 
 Start real-time viewport video recording using ffmpeg. Records frames from the viewport render buffer without blocking physics. Returns immediately — call stop_recording to finalize the video.
 
-- `file_name` (string, optional): Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'realtime_recording.mp4'.
+- `file_name` (string, optional): Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'isaacsim_<timestamp>.mp4'.
 - `camera` (string, optional): Camera prim path to record from (e.g. '/World/workspace_camera_sim'). If omitted, uses the active viewport camera.
 - `fps` (integer, optional): Frames per second for the output video. Defaults to 30.
 
