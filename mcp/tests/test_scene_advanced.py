@@ -69,13 +69,14 @@ def test_camera_requires_owned_cpu_data_and_preserves_existing_output(
         assert image.mode == "RGB" and image.getpixel((0, 0)) == (42, 42, 42)
     original = (advanced.s.output / "capture.png").read_bytes()
     pixels.fill(99)
-    with pytest.raises(FileExistsError):
+    with pytest.raises(AssetError, match="use another filename") as conflict:  # not an errno 17 application error
         advanced.execute(
             "sim.camera.capture",
             advanced.s.stage(),
             args,
             camera_frame=CameraFrame(pixels, True),
         )
+    assert conflict.value.code == "CONFLICT"
     assert (advanced.s.output / "capture.png").read_bytes() == original
 
     class BorrowedGPU:
@@ -103,7 +104,6 @@ def test_camera_requires_owned_cpu_data_and_preserves_existing_output(
         assert image.getpixel((0, 0)) == (99, 99, 99)
     with pytest.raises(AssetError, match="validated renderer"):
         advanced.execute("sim.camera.capture", advanced.s.stage(), args)
-
 
 def test_light_material_clone_delete(advanced):
     s = advanced.s
@@ -399,3 +399,223 @@ def test_sensor_registry_protection_uses_prim_ancestry_not_string_prefix(advance
     assert stage.GetPrimAtPath("/World/AB")
     assert advanced.sensors == {"/World/AB": sensor}
     assert advanced.s.owned == {"/World/AB"}
+
+
+def test_target_at_a_float32_limit_is_accepted_and_put_on_the_limit(advanced):
+    """rg2_gripper_joint: 1.0 rad to -0.45 rad, authored as float32 degrees; both ends were refused."""
+    stage = advanced.s.stage()
+    j = UsdPhysics.RevoluteJoint.Define(stage, "/World/Rg2")
+    j.CreateLowerLimitAttr(-25.783098220825195)  # how the asset stores -0.45 rad
+    j.CreateUpperLimitAttr(57.2957763671875)  # how the asset stores 1.0 rad
+    high = advanced.execute("sim.joints.drive", stage, dict(path="/World/Rg2", target=1.0, stiffness=10, damping=1))
+    assert high["authored_target"] == pytest.approx(57.2957763671875, abs=1e-9) and "note" in high
+    low = advanced.execute("sim.joints.drive", stage, dict(path="/World/Rg2", target=-0.45, stiffness=10, damping=1))
+    assert low["authored_target"] == pytest.approx(-25.783098220825195, abs=1e-9) and "note" in low
+    inside = advanced.execute("sim.joints.drive", stage, dict(path="/World/Rg2", target=0.5, stiffness=10, damping=1))
+    assert "note" not in inside
+    with pytest.raises(AssetError) as error:  # a real excess still refuses, with the numbers and units
+        advanced.execute("sim.joints.drive", stage, dict(path="/World/Rg2", target=1.01, stiffness=10, damping=1))
+    assert error.value.code == "JOINT_LIMIT" and "degrees" in str(error.value)
+
+
+def test_limit_rounding_is_float32_sized_in_both_units():
+    from sim_tools.advanced import to_limit
+
+    assert to_limit(0.5, -1.0, 1.0) == 0.5
+    assert to_limit(1.0000001, -1.0, 1.0) == 1.0
+    assert to_limit(-1.0000001, -1.0, 1.0) == -1.0
+    assert to_limit(1.001, -1.0, 1.0) is None
+    assert to_limit(5.0, None, None) == 5.0
+    # A prismatic joint in metres: 0.01 past a 0.05 limit is a real excess.
+    assert to_limit(0.06, 0.0, 0.05) is None
+
+
+def test_a_registered_sensor_with_a_large_subtree_can_be_deleted(advanced):
+    stage = advanced.s.stage()
+    advanced.invalidate()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        UsdGeom.Camera.Define(stage, "/World/BigSensor")
+        for index in range(250):
+            stage.DefinePrim(f"/World/BigSensor/Part{index}")
+    advanced.s.owned.add("/World/BigSensor")
+    advanced.sensors["/World/BigSensor"] = (
+        "camera",
+        dict(annotator=SimpleNamespace(detach=lambda: None), product=SimpleNamespace(destroy=lambda: None)),
+    )
+    result = advanced.execute("sim.prim.delete", stage, dict(path="/World/BigSensor", confirm=True))
+    assert result["deleted"] == "/World/BigSensor" and not advanced.sensors
+
+
+def test_an_ordinary_large_subtree_keeps_the_limit(advanced):
+    stage = advanced.s.stage()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        stage.DefinePrim("/World/Big", "Xform")
+        for index in range(250):
+            stage.DefinePrim(f"/World/Big/Part{index}")
+    advanced.s.owned.add("/World/Big")
+    with pytest.raises(AssetError, match="exceeds 200"):
+        advanced.execute("sim.prim.delete", stage, dict(path="/World/Big", confirm=True))
+
+
+def test_second_physics_scene_refusal_names_the_existing_one(advanced):
+    stage = advanced.s.stage()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        UsdPhysics.Scene.Define(stage, "/PhysicsScene")
+    with pytest.raises(AssetError, match="/PhysicsScene.*sim__physics__configure") as err:
+        advanced.s.create(stage, "/World/Second", "PhysicsScene")
+    assert err.value.code == "CONFLICT" and err.value.details["existing"] == "/PhysicsScene"
+
+
+ARM_USDA = """#usda 1.0
+(
+    defaultPrim = "arm"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+def Xform "World" {
+    def Xform "arm" {
+        def Xform "base" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+        def Xform "link1" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+        def Xform "link2" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+        def PhysicsFixedJoint "root_joint" (prepend apiSchemas = ["PhysicsArticulationRootAPI"]) {
+            rel physics:body1 = </World/arm/base>
+        }
+        def Scope "joints" {
+            def PhysicsRevoluteJoint "j1" (prepend apiSchemas = ["PhysicsDriveAPI:angular"]) {
+                rel physics:body0 = </World/arm/base>
+                rel physics:body1 = </World/arm/link1>
+                float physics:lowerLimit = -180
+                float physics:upperLimit = 180
+                float drive:angular:physics:stiffness = 1000
+                float drive:angular:physics:damping = 50
+            }
+            def PhysicsRevoluteJoint "j2" {
+                rel physics:body0 = </World/arm/link1>
+                rel physics:body1 = </World/arm/link2>
+            }
+            def PhysicsFixedJoint "to_gripper" {
+                rel physics:body0 = </World/arm/link2>
+                rel physics:body1 = </World/gripper/base>
+                bool physics:excludeFromArticulation = true
+            }
+        }
+        def Xform "other_robot" {
+            def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+            def Xform "c" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+            def PhysicsRevoluteJoint "elsewhere" {
+                rel physics:body0 = </World/arm/other_robot/b>
+                rel physics:body1 = </World/arm/other_robot/c>
+            }
+        }
+    }
+}
+"""
+
+
+@pytest.fixture
+def arm(advanced, tmp_path):
+    file = tmp_path / "arm.usda"
+    file.write_text(ARM_USDA)
+    stage = advanced.s.stage()
+    stage.GetRootLayer().subLayerPaths.append(str(file))
+    return advanced, stage
+
+
+def test_inspect_on_a_leaf_root_joint_returns_the_articulations_joints_and_drives(arm):
+    advanced, stage = arm
+    out = advanced.execute("sim.joints.inspect", stage, dict(path="/World/arm/root_joint"))
+    assert [j["path"].rsplit("/", 1)[-1] for j in out["joints"]] == ["root_joint", "j1", "j2"]
+    j1 = out["joints"][1]
+    assert j1["authored"]["drive:angular:physics:stiffness"] == 1000
+    assert j1["authored"]["physics:lowerLimit"] == -180
+    assert out["scope"] == "articulation" and out["articulation_root"] == "/World/arm/root_joint"
+    assert out["units"] and out["source"] and out["truncated"] is False
+
+
+def test_inspect_on_a_root_is_bounded_by_the_limit(arm):
+    advanced, stage = arm
+    out = advanced.execute("sim.joints.inspect", stage, dict(path="/World/arm/root_joint", limit=2))
+    assert len(out["joints"]) == 2 and out["truncated"] is True
+
+
+def test_inspect_on_a_subtree_is_unchanged(arm):
+    advanced, stage = arm
+    out = advanced.execute("sim.joints.inspect", stage, dict(path="/World/arm/joints"))
+    assert {j["path"].rsplit("/", 1)[-1] for j in out["joints"]} == {"j1", "j2", "to_gripper"}
+    assert "scope" not in out
+
+
+def test_joints_past_limits_names_only_joints_clearly_outside():
+    from sim_tools.advanced import joints_past_limits
+
+    names, limits = ["a", "b", "c"], [[-1, 1], [-1, 1], [0, float("inf")]]
+    assert joints_past_limits(names, [0.0, 1.01, 5.0], limits) == []  # a drive can press slightly past one
+    assert joints_past_limits(names, [-1.5, 3.0, -0.5], limits) == ["a", "b", "c"]
+    assert joints_past_limits(names, [9.0, 9.0, 9.0], None) == []  # can't say on this build
+
+
+LINK_ARTICULATION_USDA = ARM_USDA.replace(
+    'def Xform "base" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}',
+    'def Xform "base" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsArticulationRootAPI"]) {}',
+).replace(
+    'def PhysicsFixedJoint "root_joint" (prepend apiSchemas = ["PhysicsArticulationRootAPI"])',
+    'def PhysicsFixedJoint "root_joint"',
+)
+
+
+def test_inspect_on_a_link_carrying_the_articulation_api_finds_its_joints(advanced, tmp_path):
+    file = tmp_path / "link_root.usda"
+    file.write_text(LINK_ARTICULATION_USDA)
+    stage = advanced.s.stage()
+    stage.GetRootLayer().subLayerPaths.append(str(file))
+    out = advanced.execute("sim.joints.inspect", stage, dict(path="/World/arm/base"))
+    assert [j["path"].rsplit("/", 1)[-1] for j in out["joints"]] == ["root_joint", "j1", "j2"]
+    assert out["scope"] == "articulation" and out["articulation_root"] == "/World/arm/base"
+
+
+URDF_SHAPED_USDA = """#usda 1.0
+(
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+def Xform "World" {
+    def Xform "robot" {
+        def Xform "Asset" {
+            def Xform "Geometry" {
+                def Xform "base_link" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsArticulationRootAPI"]) {}
+                def Xform "link1" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+                def Xform "link2" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+            }
+            def Scope "Physics" {
+                def PhysicsFixedJoint "root_joint" {
+                    rel physics:body1 = </World/robot/Asset/Geometry/base_link>
+                }
+                def PhysicsRevoluteJoint "shoulder_pan_joint" {
+                    rel physics:body0 = </World/robot/Asset/Geometry/base_link>
+                    rel physics:body1 = </World/robot/Asset/Geometry/link1>
+                    float physics:lowerLimit = -180
+                    float physics:upperLimit = 180
+                }
+                def PhysicsRevoluteJoint "elbow_joint" {
+                    rel physics:body0 = </World/robot/Asset/Geometry/link1>
+                    rel physics:body1 = </World/robot/Asset/Geometry/link2>
+                }
+            }
+        }
+    }
+}
+"""
+
+
+def test_inspect_finds_joints_in_a_sibling_physics_folder_of_the_link(advanced, tmp_path):
+    # A URDF import puts the articulation API on a link under Asset/Geometry and the joints under
+    # Asset/Physics: the link's own parent has none of them.
+    file = tmp_path / "urdf_shaped.usda"
+    file.write_text(URDF_SHAPED_USDA)
+    stage = advanced.s.stage()
+    stage.GetRootLayer().subLayerPaths.append(str(file))
+    out = advanced.execute("sim.joints.inspect", stage,
+                           dict(path="/World/robot/Asset/Geometry/base_link"))
+    assert [j["path"].rsplit("/", 1)[-1] for j in out["joints"]] == [
+        "root_joint", "shoulder_pan_joint", "elbow_joint"]
+    assert out["scope"] == "articulation"

@@ -26,24 +26,36 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Match the system ROS distribution to the simulator. Never guess the mock-hardware
 # argument for an unsupported distro: an unrecognized launch argument can otherwise
 # leave the driver in real-hardware mode.
-if [ -z "${ROS_DISTRO:-}" ]; then
+# A named ROS_SETUP (a nonstandard install or a RoboStack prefix) says its own distribution.
+if [ -z "${ROS_DISTRO:-}" ] && [ -z "${ROS_SETUP:-}" ]; then
   case "$(. /etc/os-release 2>/dev/null; echo "${VERSION_CODENAME:-}")" in
     jammy) ROS_DISTRO=humble ;;
     noble) ROS_DISTRO=jazzy ;;
     *) echo "ERROR: set ROS_DISTRO to humble or jazzy for the fake driver" >&2; exit 1 ;;
   esac
 fi
-case "$ROS_DISTRO" in
+if [ -z "${ROS_SETUP:-}" ]; then
+  case "$ROS_DISTRO" in
+    humble|jazzy) ;;
+    *) echo "ERROR: fake driver does not support ROS_DISTRO=$ROS_DISTRO" >&2; exit 1 ;;
+  esac
+fi
+# An activated environment (RoboStack, conda) has no /opt/ros, and needs nothing sourced.
+if [ -z "${ROS_SETUP:-}" ] && [ ! -f "/opt/ros/$ROS_DISTRO/setup.bash" ] && command -v ros2 >/dev/null 2>&1; then
+  ROS_SETUP=""
+else
+  ROS_SETUP="${ROS_SETUP:-/opt/ros/$ROS_DISTRO/setup.bash}"
+  if [ ! -f "$ROS_SETUP" ]; then
+    echo "ERROR: ROS setup not found: $ROS_SETUP" >&2
+    exit 1
+  fi
+  source "$ROS_SETUP"
+fi
+case "${ROS_DISTRO:-}" in
   humble) MOCK_ARG=use_fake_hardware ;;
   jazzy) MOCK_ARG=use_mock_hardware ;;
-  *) echo "ERROR: fake driver does not support ROS_DISTRO=$ROS_DISTRO" >&2; exit 1 ;;
+  *) echo "ERROR: fake driver does not support ROS_DISTRO=${ROS_DISTRO:-unset} (after sourcing $ROS_SETUP); set ROS_DISTRO to humble or jazzy" >&2; exit 1 ;;
 esac
-ROS_SETUP="${ROS_SETUP:-/opt/ros/$ROS_DISTRO/setup.bash}"
-if [ ! -f "$ROS_SETUP" ]; then
-  echo "ERROR: ROS setup not found: $ROS_SETUP" >&2
-  exit 1
-fi
-source "$ROS_SETUP"
 source "$REPO/config/ros_dds.env"
 # Optional overlay workspace (apt ur_robot_driver works without it; source if present).
 WS_SETUP="${WS_SETUP:-$HOME/ros2_ws/install/setup.bash}"
@@ -111,6 +123,9 @@ case "$ACTION" in
       fi
       exit 2
     fi
+    # A daemon left over from other DDS settings makes every `ros2` call below fail with `!rclpy.ok()`
+    # while the driver itself is healthy (see ros_env.sh). Starting clean makes the wait below reliable.
+    timeout -k 2s 10s ros2 daemon stop >/dev/null 2>&1 || true
     echo "[ur-fake] launching $UR_TYPE fake hardware -> domain $ROS_DOMAIN_ID (Cyclone, localhost_only=$ROS_LOCALHOST_ONLY)"
     # A dedicated process group lets down clean up this driver's children without
     # touching another UR driver that happens to be running on the machine.
@@ -145,6 +160,7 @@ case "$ACTION" in
       fi
     done
     echo "ERROR: joint state broadcaster and trajectory controller not both active within timeout; see $LOG" >&2
+    echo "The driver may still be running: check with 'status', and clean up with 'down' before trying 'up' again." >&2
     tail -20 "$LOG" 2>/dev/null | sed 's/^/  log: /'
     exit 4
     ;;
@@ -159,9 +175,13 @@ case "$ACTION" in
       echo "[ur-fake] driver NOT running"
     fi
     echo "--- controllers ---"; _controllers || echo "  (controller_manager not reachable)"
-    echo "--- /joint_states (1 msg) ---"
-    timeout 5 ros2 topic echo --once /joint_states 2>/dev/null | grep -E "name:|position:" | head -3 \
-      || echo "  (no /joint_states)"
+    if _joint_states="$(timeout 5 ros2 topic echo --once /joint_states 2>/dev/null)"; then
+      echo "--- /joint_states (1 msg) ---"
+      printf '%s\n' "$_joint_states" | grep -E "name:|position:" | head -3 || true
+    else
+      echo "--- /joint_states ---"
+      echo "  (no /joint_states)"
+    fi
     ;;
 
   down)

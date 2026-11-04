@@ -15,6 +15,8 @@ def test_launcher_sets_shared_port_and_waits_for_twin_registration(tmp_path, por
     repo = Path(__file__).resolve().parents[2]
     launcher = root / "run.sh"
     launcher.write_bytes((repo / "run.sh").read_bytes())
+    (root / "scripts").mkdir(exist_ok=True)
+    (root / "scripts" / "isaac_ros_libs.sh").write_bytes((repo / "scripts" / "isaac_ros_libs.sh").read_bytes())
     fake_python = tmp_path / "python"
     fake_python.write_text(
         '#!/bin/bash\n'
@@ -55,6 +57,8 @@ def test_launcher_always_enables_twin_tools_but_panel_is_optional(tmp_path, pane
     repo = Path(__file__).resolve().parents[2]
     launcher = root / "run.sh"
     launcher.write_bytes((repo / "run.sh").read_bytes())
+    (root / "scripts").mkdir(exist_ok=True)
+    (root / "scripts" / "isaac_ros_libs.sh").write_bytes((repo / "scripts" / "isaac_ros_libs.sh").read_bytes())
     fake_python = tmp_path / "python"
     fake_python.write_text(
         '#!/bin/bash\n'

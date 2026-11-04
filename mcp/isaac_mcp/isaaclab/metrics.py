@@ -9,6 +9,7 @@ import math
 import os
 import re
 import tempfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
@@ -157,7 +158,8 @@ def checkpoints_list(run_dir=None, task=None, search_roots=None) -> Dict[str, An
             # prune symlinked dirs that escape by checking realpath
             # (os.walk followlinks=False already avoids descending into them)
             for fn in filenames:
-                if not (fn.lower().endswith(".pth") or fn.lower().endswith(".pt")):
+                sb3_model = fn.lower().endswith(".zip") and "sb3" in Path(dp).parts  # stable-baselines3's format
+                if not (fn.lower().endswith(".pth") or fn.lower().endswith(".pt") or sb3_model):
                     continue
                 full = os.path.join(dp, fn)
                 realfile = os.path.realpath(full)
@@ -245,6 +247,9 @@ def metrics_summary(run_dir, tags=None) -> Dict[str, Any]:
             "count": len(values),
         }
 
+    if not scalars:
+        return {"scalars": scalars, "note": "No TensorBoard scalars under this folder. A very short run may have logged none; "
+                "a job's own folder holds logs, and its results are in run_dir from isaaclab__runs_status."}
     return {"scalars": scalars}
 
 

@@ -1,14 +1,14 @@
 # Agent guide
 
 Start here if you are an AI agent working in or with this repository. It is a map; the
-per-tool reference lives in `docs/`.
+per-tool reference lives in `docs/` ([index](docs/README.md), [every tool's arguments](docs/TOOLS-ARGUMENTS.md)).
 
 ## Setup guide for agents
 
 - **Use the Isaac Sim that is already installed. Never download or install Isaac Sim unless the
   user explicitly asks for it.** Lab and shared PCs have their own install: find it with
   `python3 scripts/isaac_env.py find` and install only the MCP server with `./install.sh`
-  (it uses an installed Isaac Sim 6.x and skips the download; `--no-sim` forces that). Do not run
+  (it uses an installed Isaac Sim 6.x and skips the download; `--no-sim` guarantees that, and still records the install it finds). Do not run
   `./install.sh --download-sim`, `uv sync`, `pip install isaacsim`, or `uv run`/`uv lock`/`uv add` in
   the repository root (the root project depends on Isaac Sim, so they create a ~20 GB `.venv`) without
   the user asking; run tools with `python3 scripts/...` or `cd mcp && uv run --isolated ...`, and
@@ -41,13 +41,17 @@ per-tool reference lives in `docs/`.
   `scripts/check_machine.sh` is a **6.2-specific** preflight and can run a real CUDA kernel; use the
   version-specific checks for earlier builds. `./verify.sh` changes the UR5e scene and is 6.2-specific.
 
-When saving a scene with native ROS camera render handles, `sim__stage__save` defaults to
+When saving a scene with native ROS camera or LiDAR render handles, `sim__stage__save` defaults to
 `reset_camera_render_handles=false`. An affected save refuses with `SAVE_UNSUPPORTED`, exact
 `properties` and `retry_with`. After inspecting that response, explicitly retry with the flag set
 to `true` only if normalization of those runtime fields in the exported copy is intended. The
 result reports `omitted_runtime_render_properties`; cameras and source/live layers remain intact.
-The flag does not bypass ambiguous, authored, dependent or unavailable-binding refusals, prove
-property authorship, or repair an already-stale opened file. Pause before saving and verify the
+The flag does not bypass ambiguous, dependent or unavailable-binding refusals, or an authored camera handle,
+and does not prove property authorship. A LiDAR handle saved in the file is dropped from the copy, and saves omit
+Replicator's runtime pipeline, so saving with the flag and opening the copy is the rescue for a stale LiDAR file
+([saved LiDAR scenes](docs/TOOLS-SCENE.md#saved-lidar-scenes-and-scan)). This tool's own `IsaacMCP_*` capture products need no flag.
+On builds where it was measured (6.2.0.0 and 5.1.0.0), `sim__stage__open` deactivates stale saved LiDAR products in the session layer, so `/scan` returns. On other builds it reports them and its `rescue` field gives the fix; see
+[why a saved LiDAR lost its topic](docs/TOOLS-SCENE.md#saved-lidar-scenes-and-scan). Pause before saving and verify the
 new file in a fresh process. See [save limitations](docs/TOOLS-SCENE.md).
 
 When a physics read or step returns `PHYSICS_STATE_INVALID`, inspect its backend, path and
@@ -72,10 +76,10 @@ configured filters.
 | Simulator sessions (optional) | 4 (`sim__*`) | only when `sim_launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
 | Isaac Lab (`isaaclab__*`) | 12 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
-| Generic scene and assets | 48 (`assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots/scan/search run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
-| UR5e twin (`ur5e_dt__*`) | 23 | listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
+| Generic scene and assets | 68 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
+| UR5e twin (`ur5e_dt__*`) | 23 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, a client lists exactly 102 tools from startup:
+With default groups and no namespace filter, a client lists exactly 122 tools from startup:
 the host, Isaac Lab, bridge built-in, generic and UR5e catalog tiers, whether or not Kit is running.
 A listed tool does not prove that a bridge exists: catalogued tools dial the selected bridge when
 called and return an actionable error if none answers. Use `status` (or the CLI check below) to
@@ -90,7 +94,7 @@ find out. Fewer tools mean a filter:
 
 The other 7 tools (bridge built-ins) are listed from the same kind of snapshot as the twin and
 scene tools, so clients that ignore `tools/list_changed` (OpenCode) can call them at once. With
-the standard groups and bridge built-ins visible there are 102 tools in total. The optional desktop input and
+the standard groups and bridge built-ins visible there are 122 tools in total. The optional desktop input and
 simulator session groups add 9 more. The initial generic tools are documented in `docs/TOOLS-SCENE.md`; the broader
 `docs/GENERIC-SIM-TOOLS.md` design includes capabilities not yet implemented. Untrusted
 loading and remote upload remain disabled; bounded trusted USDZ packages are supported.
@@ -100,6 +104,13 @@ scene/asset pack, both offline and after bridge refresh. It is read once per ser
 With otherwise standard settings this leaves 54 tools, offline or with a bridge.
 The 23 UR5e tools, Isaac Lab, desktop tools and optional managed `sim__launch/list/status/stop`
 tools retain their existing rules. This discovery preference is not a security boundary.
+
+`ur5e_dt__quick_start*` leaves the timeline playing, and generic edits refuse with `TIMELINE_ACTIVE` until an
+explicit `sim__timeline__control` stop. Joint tools take the articulation root (for the twin, `/World/UR5e/root_joint`,
+reported by `sim__ros2__tf_setup`), not the robot's parent Xform. See the [scene workflow](docs/TOOLS-SCENE.md#a-typical-session).
+
+After reopening a scene, its sensors and prims are not pack-owned: pass `adopt=true` to `sim__lidar__read` or `sim__camera__capture`, and
+`allow_foreign=true` to `sim__prim__delete`, which deactivates rather than removes. See the [scene reference](docs/TOOLS-SCENE.md#reopened-scenes).
 
 Camera capture defaults to a fresh bounded renderer CPU readback. With
 `wait_for_render=false`, it writes the last validated tool-acquired image and reports its
@@ -112,13 +123,14 @@ Simulator and twin work (the bridge built-ins and `ur5e_dt__*`) needs a running 
 make sure one is up before relying on those tools. Host and Isaac Lab tools need no bridge.
 
 1. Call `refresh_tools` first. Do not start Kit yet: a reachable bridge may already exist.
-2. Discover bridges, then verify the one you mean. Do not assume a port: advertised bridges can
-   use other ports or hosts. `python -m isaac_mcp.client --list-bridges` prints every live
+2. Discover bridges, then verify the one you mean. The CLI below is standard-library only and runs from
+   the checkout root with any Python. From another directory, use `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client`. Do not assume a port: advertised bridges can
+   use other ports or hosts. `python3 mcp/isaac_mcp/client.py --list-bridges` prints every live
    advertised bridge as JSON (`pid`, `host`, `port`, `app`). It works even when `status` and
    `list_bridges` are hidden (they are bridge built-ins, so `ISAAC_MCP_BUILTINS=0` or
    `ISAAC_MCP_NAMESPACE` can remove them), and it exits 2 with `[]` when none is advertised.
    Probe the bridge you chose with the values from that listing:
-   `python -m isaac_mcp.client status --host <host> --port <port>` (PID, port, app version).
+   `python3 mcp/isaac_mcp/client.py status --host <host> --port <port>` (PID, port, app version).
    Without `--port` the CLI discovers a lone bridge but refuses when several are running, and an
    exported `UR5E_DT_PORT` or `ISAAC_MCP_PORT` overrides discovery. The host's `refresh_tools`
    resolves the endpoint the same way, so with several bridges or a pinned port, select the
@@ -132,7 +144,7 @@ make sure one is up before relying on those tools. Host and Isaac Lab tools need
 4. `refresh_tools` and `use_bridge` send `notifications/tools/list_changed` when they change the
    tool list (the host advertises `tools.listChanged`), so a client that honours it shows the new
    tools without a restart. If yours does not, restart the MCP connection or list the tools
-   directly: `python -m isaac_mcp.client list_tools --host <host> --port <port>` (the bridge you
+   directly: `python3 mcp/isaac_mcp/client.py list_tools --host <host> --port <port>` (the bridge you
    verified in step 2).
 
 Parallel instances are supported when explicitly requested and resource checks pass. Use distinct
@@ -185,20 +197,21 @@ See [docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md).
 - Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). The job
   inspection and Python probe tools can have side effects and are not in `readonly`;
   `screenshot` writes files and returns desktop pixels. Annotations are hints, not enforcement.
-  Generic scene/asset tools carry conservative host annotations; legacy bridge tools are unchanged.
+  Generic scene/asset tools, bridge built-ins and the UR5e twin carry host annotations. Tools a project's own extension registers carry none.
 
 ## Changing tools
 
 Every registered tool must be documented in its `docs/TOOLS-*.md` page, and the counts above
-(each tier's Tools cell, the 100 listed offline, the 7 built-ins and the 100 total) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
+(each tier's Tools cell, the totals and the built-ins count) must match the code. Both are enforced by `python3 scripts/check_docs.py`, which also runs in
 CI along with the host test suite (`pytest -q` from `mcp/`, see `.github/workflows/ci.yml`).
-After changing the twin tool registry, run `python3 scripts/gen_host_catalog.py --write` and commit the
-updated snapshot; `--check` and the host tests detect drift.
+After changing a tool registry or contract, run `python3 scripts/gen_host_catalog.py --write`, then
+`python3 scripts/gen_tool_reference.py --write`, and commit both results; `check_docs.py` and the host tests detect drift.
 
 Evidence must use neutral `<repo>`, `<worktree>`, `<home>` and `<sim-install>` placeholders.
 `check_docs.py` also scans tracked bytes and nested gzip/tar/zip members for private home and
-worktree paths; it fails closed on unreadable/oversized archives. All tracked files, including
+worktree paths and a former workstation's login, hostname and domain; it fails closed on unreadable/oversized archives. All tracked files, including
 assets and evidence, are scanned without legacy hash exemptions.
+`python3 scripts/check_private_paths.py --commits <range>` also rejects commits whose author or committer email is not a real address.
 Review screenshot pixels separately; the byte scanner cannot recognize text inside images.
 Keep large redacted transcripts and reproduction bundles in the draft evidence release, with
 URL and SHA-256 in the evidence index. Keep only compact summaries and a few images <=400 KB in Git.

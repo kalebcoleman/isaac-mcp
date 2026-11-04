@@ -217,16 +217,23 @@ def inside(point, rect):
     return rx <= x < rx + rw and ry <= y < ry + rh
 
 
+def _ancestors(path):
+    """Paths of a widget's ancestors, outermost first, that Kit can query. A window's bare "Title/" or
+    "Title//Frame" matches nothing and logs a warning that lands in the status bar and in recordings."""
+    title, sep, rest = path.partition("//")
+    segments = rest.split("/")
+    if not sep:
+        return []
+    return [f"{title}//{'/'.join(segments[:i])}" for i in range(2, len(segments))]
+
+
 def _context(path, ui_test):
     """Text of the nearest Label beside the widget (up to three levels up), e.g. a Property row name."""
     import omni.ui as ui
 
-    parts = path.split("/")
-    for up in range(1, 4):
-        if len(parts) - up < 2:
-            break
+    for ancestor in _ancestors(path)[:-4:-1]:
         try:
-            parent = ui_test.find("/".join(parts[:-up])).widget
+            parent = ui_test.find(ancestor).widget
         except Exception:  # noqa: BLE001
             continue
         for child in ui.Inspector.get_children(parent):
@@ -298,10 +305,14 @@ def _shown(path, center, ui_test):
 def _candidates(window_filter, include_labels, query):
     """Cheap pass: (title, ref, widget, type) that match, before computing paths (each realpath
     walks the window tree again, so it is computed only for what is returned)."""
+    import omni.ui as ui
+
     ui_test = _ui_test()
+    # Kit queries only ui.Window; asking for another (the status bar) just logs "Failed to find window".
+    queryable = {w.title for w in ui.Workspace.get_windows() if isinstance(w, ui.Window)}
     for win in windows():
         title = win["title"]
-        if window_filter and window_filter.lower() not in title.lower():
+        if title not in queryable or (window_filter and window_filter.lower() not in title.lower()):
             continue
         try:
             refs = ui_test.find_all(f"{title}//Frame/**/*")
@@ -356,6 +367,10 @@ def find(a):
 
     import omni.ui as ui
 
+    from .graph import _headless
+
+    if _headless():  # no layout to report, and walking every widget took about 38 s per call on 6.1
+        raise UIRefusal("NO_UI", "This Kit has no application window (headless); finding widgets needs a windowed Isaac Sim.")
     query = a.get("query", "") or ""
     window = a.get("window", "") or ""
     limit = a.get("limit", 40)
@@ -430,7 +445,10 @@ def _resolve(a):
             raise UIRefusal("STALE_WIDGET", f"That ref now points at a different widget ({actual}, expected "
                                             f"{expected}): the UI was rebuilt. Call sim__ui__find again.")
         if not getattr(found.widget, "visible", True):
-            raise UIRefusal("NOT_VISIBLE", "That widget is hidden; open its window or panel first.")
+            # sim__ui__find lists only visible widgets, so a hidden one means the UI changed since then.
+            raise UIRefusal("STALE_WIDGET", "That widget is hidden now: its panel changed or an inline editor (such "
+                                            "as a Stage rename) replaced it. Finish or cancel that, then call "
+                                            "sim__ui__find again.")
         c, s = found.center, found.size
         if s.x <= 0 or s.y <= 0:
             raise UIRefusal("NOT_VISIBLE", "That widget has no size yet (not laid out or collapsed).")
@@ -438,12 +456,11 @@ def _resolve(a):
         if why:
             raise UIRefusal("NOT_VISIBLE", f"That widget cannot be clicked: {why}.")
         enabled = bool(getattr(found.widget, "enabled", True))
-        parts = path.split("/")
-        for i in range(2, len(parts)):  # a disabled container disables its children
+        for ancestor in _ancestors(path):  # a disabled container disables its children
             if not enabled:
                 break
             try:
-                enabled = bool(getattr(ui_test.find("/".join(parts[:i])).widget, "enabled", True))
+                enabled = bool(getattr(ui_test.find(ancestor).widget, "enabled", True))
             except Exception:  # noqa: BLE001
                 pass
         return round(c.x * dpi), round(c.y * dpi), dict(ref=ref, type=type(found.widget).__name__,
@@ -602,12 +619,16 @@ async def act(a):
                 mouse_event(kind, x, y, w, h)
                 await tick(2)
             result.update(focused_at=dict(x=x, y=y), widget=hit)
+            if hit is None:
+                result["note"] = "No known widget at that point, so the input may have gone nowhere. Check with a screenshot, or use a ref from sim__ui__find."
         if action == "type":
             for i, ch in enumerate(text):
                 provider.buffer_keyboard_char_event(keyboard, ch, 0)
                 if i % 20 == 19:
                     await tick(1)
             await tick(frames)
+            if not focus_first:
+                result["note"] = "No target given, so this went to whatever has keyboard focus. Pass ref to choose a widget."
             return dict(result, typed=len(text), frames_waited=frames)
         mods, key = keys
         flags = 0

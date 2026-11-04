@@ -89,8 +89,14 @@ def test_world_rotated_parent_and_quaternion(scene):
     )
     with pytest.raises(AssetError):
         scene.transform(st, "/World/Parent/Box", orientation=[0, 0, 0, 0])
-    with pytest.raises(AssetError):
-        scene.transform(st, "/World", position=[1, 2, 3])
+    # Any Xformable prim may move now, including a stage root; a prim with no Xformable schema may not.
+    moved = scene.transform(st, "/World", position=[1, 2, 3])
+    assert moved["world_position"] == pytest.approx([1, 2, 3])
+    assert moved["layer"] == "session" and moved["source_files_changed"] is False
+    st.DefinePrim("/World/Scope", "Scope")
+    with pytest.raises(AssetError) as error:
+        scene.transform(st, "/World/Scope", position=[0, 0, 0])
+    assert error.value.code == "WRONG_TYPE"
 
 
 def test_active_physics_refused(scene):

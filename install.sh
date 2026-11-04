@@ -8,13 +8,14 @@
 #   ./install.sh [options]
 #
 # Options:
-#   --no-sim          Skip the 20 GB Isaac Sim environment sync (installs host MCP server only)
+#   --no-sim          Never download or sync Isaac Sim: install the host MCP server only, and record
+#                     an installed Isaac Sim 6.x in client configurations when one is found
 #   --download-sim    Create the locked 6.2 environment even when an Isaac Sim is already installed
 #   --claude          Configure both Claude Code and Claude Desktop
 #   --claude-code     Configure Claude Code only
 #   --claude-desktop  Configure Claude Desktop only
 #   --print-opencode  Print configuration snippet for OpenCode
-#   --port N          Twin bridge port for MCP client configuration (default: 8766)
+#   --port N          Bridge port for MCP client configuration (default: 8766)
 #   --isaaclab-python PATH  Isaac Lab venv python -> ISAACLAB_PYTHON in client configs ($ISAACLAB_PYTHON by default)
 #   --isaaclab-root PATH    Isaac Lab checkout -> ISAACLAB_ROOT in client configs ($ISAACLAB_ROOT by default)
 #   --accept-eula     Acknowledge the NVIDIA Omniverse EULA (sets OMNI_KIT_ACCEPT_EULA=YES)
@@ -37,17 +38,20 @@ usage() {
   cat <<'EOF'
 Usage: ./install.sh [options]
 
-Idempotent setup for the UR5e digital twin repository.
+Idempotent setup for isaac-mcp: the host MCP server and, only when needed, Isaac Sim.
+An installed Isaac Sim 6.x is used and recorded in the client configurations this writes.
 
 Options:
-  --no-sim          Skip Isaac Sim environment sync (host MCP server only)
+  --no-sim          Never download or sync Isaac Sim (host MCP server only); an installed
+                    Isaac Sim 6.x is still found and recorded in client configurations
   --download-sim    Download the locked Isaac Sim 6.2 environment into .venv even when an
                     Isaac Sim 6.x is already installed (by default an existing install is used)
+  (5.1 is used only when named: ISAAC_MCP_PYTHON=/path/to/5.1/python ./install.sh --no-sim)
   --claude          Configure both Claude Code and Claude Desktop
   --claude-code     Configure Claude Code only
   --claude-desktop  Configure Claude Desktop only
   --print-opencode  Print configuration snippet for OpenCode
-  --port N          Twin bridge port for MCP client configuration (default: 8766)
+  --port N          Bridge port for MCP client configuration (default: 8766)
   --isaaclab-python PATH  Isaac Lab venv python, written to client configs as ISAACLAB_PYTHON
                           (default: $ISAACLAB_PYTHON if set)
   --isaaclab-root PATH    Isaac Lab checkout, written as ISAACLAB_ROOT (default: $ISAACLAB_ROOT if set)
@@ -114,6 +118,11 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+case "$PORT" in
+  ''|*[!0-9]*) echo "port must be a number from 1 to 65535, not '$PORT'" >&2; exit 2 ;;
+esac
+if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then echo "port must be a number from 1 to 65535, not '$PORT'" >&2; exit 2; fi
+
 if [ "$NO_SIM" = 1 ] && [ "$DOWNLOAD_SIM" = 1 ]; then
   echo "--no-sim and --download-sim cannot be combined" >&2
   exit 2
@@ -124,8 +133,11 @@ fi
 # this installer's environment. The interpreter found here is written into the client
 # configuration (ISAAC_MCP_PYTHON), so sim__launch/run.sh use it even from a shell where the
 # variables that found it (VIRTUAL_ENV, CONDA_PREFIX, ISAACSIM_PATH, ...) are not set.
+# --no-sim never downloads, so a failed look there is only a warning; it still records what it finds.
 SIM_PYTHON=""
-if [ "$NO_SIM" = 0 ] && [ "$DOWNLOAD_SIM" = 0 ] && [ ! -x "$ROOT/.venv/bin/python" ]; then
+HOST_ONLY="$NO_SIM"
+if [ "$DOWNLOAD_SIM" = 0 ] && { [ "$NO_SIM" = 1 ] || [ ! -x "$ROOT/.venv/bin/python" ]; } \
+    && { [ "$NO_SIM" = 0 ] || command -v python3 >/dev/null 2>&1; }; then
   if ! command -v python3 >/dev/null 2>&1; then
     echo "python3 is required to look for an installed Isaac Sim (or pass --download-sim)" >&2
     exit 1
@@ -140,8 +152,8 @@ listed = subprocess.run([sys.executable, tool, "find", "--json"], capture_output
 if listed.returncode:
     print(listed.stderr.strip() or "isaac_env.py find failed", file=sys.stderr)
     sys.exit(3)
-cands = [c for c in json.loads(listed.stdout or "[]")
-         if str(c.get("isaacsim") or "").split(".")[0] == "6"]
+found = json.loads(listed.stdout or "[]")
+cands = [c for c in found if str(c.get("isaacsim") or "").split(".")[0] == "6"]
 # Same precedence as isaac_env.py: an interpreter variable wins over an install-root variable.
 # Only the variables the user named count (not an activated VIRTUAL_ENV/CONDA_PREFIX), so a typo
 # is reported instead of being replaced by whatever environment happens to be active.
@@ -151,10 +163,12 @@ if not named:
     named = [v for v in ROOT_VARS if os.environ.get(v, "").strip()]
     wanted = {f"standalone:{v}" for v in named}
 if named:
-    # The user chose an install: it must be Isaac Sim 6.x; never fall back to a download.
-    chosen = [c for c in cands if c.get("source") in wanted]
+    # The user chose an install: it must be Isaac Sim 6.x, or 5.1 when named this way (auto-detection
+    # never picks 5.1); never fall back to a download.
+    chosen = [c for c in found if c.get("source") in wanted and (
+        c in cands or str(c.get("isaacsim") or "").split(".")[:2] == ["5", "1"])]
     if not chosen:
-        print(f"{', '.join(named)} is set but does not point at an Isaac Sim 6.x install "
+        print(f"{', '.join(named)} is set but does not point at an Isaac Sim 6.x or 5.1 install "
               "(check it with: python3 scripts/isaac_env.py find). Fix or unset it; "
               "pass --download-sim only if you want the locked 6.2 download.", file=sys.stderr)
         sys.exit(3)
@@ -168,7 +182,8 @@ PY
   rc=$?
   set -e
   if [ "$rc" = 3 ]; then
-    exit 1
+    [ "$HOST_ONLY" = 1 ] || exit 1
+    echo "WARNING: no interpreter recorded (see above); continuing with the host server only" >&2
   elif [ "$rc" = 0 ] && [ -n "$FOUND" ]; then
     IFS=$'\t' read -r SIM_PYTHON SIM_VERSION SIM_SOURCE <<<"$FOUND"
     echo "== using the Isaac Sim already installed: $SIM_PYTHON (Isaac Sim $SIM_VERSION, found via $SIM_SOURCE)"
@@ -177,6 +192,9 @@ PY
     echo "   Pass --download-sim to install the locked 6.2 environment instead."
     case "$SIM_VERSION" in
       6.2*) ;;
+      5.1*)
+        echo "WARNING: Isaac Sim $SIM_VERSION is an explicitly pinned older build. It is used only because you named it;" >&2
+        echo "         auto-detection never picks it. PhysX only, no Newton, and fewer checks than 6.2: see docs/COMPATIBILITY.md." >&2 ;;
       *) echo "WARNING: Isaac Sim $SIM_VERSION is not the tested 6.2 release; see docs/COMPATIBILITY.md" >&2 ;;
     esac
     case "$SIM_SOURCE" in
@@ -186,12 +204,12 @@ PY
     NO_SIM=1
   elif [ "$rc" != 4 ]; then
     echo "could not check for an installed Isaac Sim (exit $rc); not downloading. Pass --no-sim or --download-sim." >&2
-    exit 1
+    [ "$HOST_ONLY" = 1 ] || exit 1
   fi
 fi
 
 if [ "$NO_SIM" = 1 ] && [ -z "$SIM_PYTHON" ]; then
-  echo "== --no-sim: sim__launch/run.sh look for Isaac Sim when they start. If yours is only reachable"
+  echo "== --no-sim: no Isaac Sim 6.x found to record. sim__launch/run.sh look again when they start. If yours is only reachable"
   echo "   through shell variables (an activated venv/conda env, ISAACSIM_PATH), put ISAAC_MCP_PYTHON in the client's isaac entry."
 fi
 
@@ -318,7 +336,7 @@ if [ "$DO_CLAUDE_CODE" = 1 ]; then
     [ -n "$LAB_ROOT" ] && lab_env+=(-e "ISAACLAB_ROOT=$LAB_ROOT")
     [ -n "$SIM_PYTHON" ] && lab_env+=(-e "ISAAC_MCP_PYTHON=$SIM_PYTHON")
     claude mcp add --scope user isaac \
-      -e "DISPLAY=$DISPLAY_NAME" -e "UR5E_DT_PORT=$PORT" "${lab_env[@]}" \
+      -e "DISPLAY=$DISPLAY_NAME" -e "ISAAC_MCP_PORT=$PORT" "${lab_env[@]}" \
       -- "$CLI_BIN"
   else
     echo "== claude CLI not found; skipped Claude Code configuration" >&2
@@ -342,27 +360,31 @@ if not os.path.exists(path):
     print(f"Claude Desktop config not found at {path}; skipped")
     sys.exit(0)
 
-with open(path, encoding="utf-8") as f:
-    config = json.load(f)
-env = {"UR5E_DT_PORT": port, "DISPLAY": display}
+env = {"ISAAC_MCP_PORT": port, "DISPLAY": display}
 if os.environ.get("LAB_PYTHON"):
     env["ISAACLAB_PYTHON"] = os.environ["LAB_PYTHON"]
 if os.environ.get("LAB_ROOT"):
     env["ISAACLAB_ROOT"] = os.environ["LAB_ROOT"]
 if os.environ.get("SIM_PYTHON"):
     env["ISAAC_MCP_PYTHON"] = os.environ["SIM_PYTHON"]
-config.setdefault("mcpServers", {})["isaac"] = {
-    "command": cli_path,
-    "args": [],
-    "env": env,
-}
-backup = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
-shutil.copy2(path, backup)
-tmp = f"{path}.tmp"
-with open(tmp, "w", encoding="utf-8") as f:
-    json.dump(config, f, indent=2)
-    f.write("\n")
-os.replace(tmp, path)
+entry = {"command": cli_path, "args": [], "env": env}
+try:
+    with open(path, encoding="utf-8") as f:
+        config = json.load(f)
+    config.setdefault("mcpServers", {})["isaac"] = entry
+    backup = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+    shutil.copy2(path, backup)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+except (OSError, ValueError, AttributeError) as exc:
+    # The rest of the install succeeded, and this file is the user's: leave it alone and say what to add.
+    print(f"Claude Desktop config not changed: {path}: {exc}", file=sys.stderr)
+    print('Add this under "mcpServers" yourself, then restart Claude Desktop:', file=sys.stderr)
+    print(json.dumps({"isaac": entry}, indent=2), file=sys.stderr)
+    sys.exit(0)
 print(f"updated {path}")
 print(f"backup  {backup}")
 print("restart Claude Desktop to load the new server")
@@ -381,8 +403,8 @@ OpenCode entry (~/.config/opencode/opencode.jsonc):
 
   "isaac": {
     "type": "local",
-    "command": ["isaac-mcp"],
-    "environment": { "UR5E_DT_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME"$lab_json }
+    "command": ["$CLI_BIN"],
+    "environment": { "ISAAC_MCP_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME"$lab_json }
   }
 EOF
 fi

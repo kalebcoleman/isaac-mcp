@@ -148,3 +148,51 @@ async def test_stop_without_lease_is_noop(scene):
     scene.stage()
     watcher.stopped()
     assert watcher.task is None and not errors
+
+
+def test_step_after_outside_play_gives_the_exact_next_calls(scene):
+    from isaac_mcp.project_assets import AssetError
+
+    stage = scene.stage()
+    scene.record_event("timeline", "timeline playing", dict(origin="outside_tools", source="outside the MCP tools"))
+    with pytest.raises(AssetError) as error:
+        scene.check_runtime_edit(stage)
+    assert error.value.code == "EDIT_TARGET_CHANGED"
+    details = error.value.details
+    assert details["started_outside_tools"] is True
+    assert details["before_retry"]["arguments"]["action"] == "stop"
+    assert [c["arguments"]["action"] for c in details["then"]] == ["play", "pause"]
+    assert details["then"][0]["arguments"]["session_id"] == scene.session_id
+    assert "outside the MCP tools" in str(error.value)
+    assert "monotonic" not in details["timeline_change"]
+    scene.record_event("timeline", "timeline paused", dict(origin="tool", source="sim__timeline__control"))
+    with pytest.raises(AssetError) as later:  # a later pause by the tools does not hide who pressed Play
+        scene.check_runtime_edit(stage)
+    assert "outside the MCP tools" in str(later.value)
+    assert stage.GetEditTarget().GetLayer() != stage.GetSessionLayer()  # nothing was moved
+
+
+def test_step_after_an_editor_changed_the_layer_keeps_the_stop_advice(scene):
+    from isaac_mcp.project_assets import AssetError
+
+    stage = scene.stage()
+    scene.begin_runtime_edit(stage)
+    stage.SetEditTarget(stage.GetRootLayer())
+    with pytest.raises(AssetError) as error:
+        scene.check_runtime_edit(stage)
+    assert error.value.code == "EDIT_TARGET_CHANGED" and "another editor" in str(error.value)
+    assert "started_outside_tools" not in error.value.details
+
+
+def test_stale_target_after_a_hot_reload_says_what_happened(scene):
+    from isaac_mcp.project_assets import AssetError
+
+    info = scene.stage_info()
+    scene.previous_sessions = ["old-session"]
+    with pytest.raises(AssetError) as error:
+        scene.target("old-session", info["stage_id"])
+    assert error.value.code == "STALE_TARGET" and "hot-reloaded" in str(error.value)
+    assert "ISAAC_MCP_NO_HOT_RELOAD" in str(error.value)
+    with pytest.raises(AssetError) as other:
+        scene.target("some-other-process", info["stage_id"])
+    assert "hot-reloaded" not in str(other.value) and "Kit restarted" in str(other.value)

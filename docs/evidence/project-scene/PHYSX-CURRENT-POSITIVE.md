@@ -36,7 +36,7 @@ UI counters and final native-line counts are different observations. Startup/USD
 
 1. The original `20f` 6.0.1 windowed 108-step PhysX stall is still unresolved. This smaller fixture is not its reproduction or explanation. The next task is a finite, source-matched reproduction/recovery exercise; passing repeats must not be labeled a fix.
 2. Latest `1f` camera clipping outputs were reopened with standalone OpenUSD; fresh-Kit reuse of those particular new files remains unqualified. Earlier native fresh-reopen results retain their own source and scope.
-3. Fresh-user installation on the user's ASU workstation, final combined-head checks and the user's code review remain separate. Prepared-environment, full-installer and Lab metadata/locked-replay limits stay explicit.
+3. Fresh-user installation on the user's lab workstation, final combined-head checks and the user's code review remain separate. Prepared-environment, full-installer and Lab metadata/locked-replay limits stay explicit.
 4. Existing Newton failures and bounded 6.2 candidate successes are experimental limitations, not further release-completion work. Isolated untrusted loading, authenticated remote upload and presets remain the agreed deferred work.
 
 The [99-tool census](CURRENT-TOOL-RECONCILIATION.md) and its JSON snapshot keep their historical counts. This supplemental record closes only its then-open normal PhysX body/joint/step path gap. PR #16 remains draft and unmerged; there is no merge or publication authorization.

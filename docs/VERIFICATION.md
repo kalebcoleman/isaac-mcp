@@ -57,8 +57,9 @@ current head or declare the candidate merge-ready.
 The [bounded PhysX assessment](evidence/project-scene/PHYSX-STALL-DISPOSITION.md) is complete,
 with **non-reproduction, not a fix**, as its outcome. The
 [compact](evidence/project-scene/RECENT-PHYSX-STALL-BOUNDED-0163-20261102.json) has SHA-256
-`03abcf27844de64873a5cf52236caf3ab502e874ce1e0bfee8afd69db3533f9b`;
+`8d458ac8137daade2738462af4d72b10a74e583d2aaed42401453cfa8486b4ab`;
 all 35 key original record hashes and sizes were verified for this documentation update.
+This copy differs from the draft release's `COMPACT.json` by one location label in its limitations list.
 It separates the original `20f2953` failure from two exact `0163b3f` 6.0.1.0 windowed replays,
 including retained setup/history errors, 132 total calls and 30 scoped assertions. The
 original cause remains unresolved; passing later calls do not erase it or certify readiness.
@@ -363,17 +364,19 @@ qualification. Earlier CPU and native evidence retains its own source identity.
 
 ## Live UR5e baseline
 
+These checks cover the complete lab scene, so they need [your own lab files](ASSETS.md#public-files-and-lab-files); without them `verify.sh`
+reports the missing gripper and bench. Kit uses the asset folder next to its checkout unless `ISAAC_MCP_ASSET_PATH` says otherwise.
 These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
 confirm which bridge is selected before running them. This example reuses an already installed Sim 6.2 interpreter;
-set the path for your machine or omit `UR5E_DT_PYTHON` to use this repo's `.venv`.
+set the path for your machine or omit `ISAAC_MCP_PYTHON` to use this repo's `.venv`.
 
 ```bash
-export UR5E_DT_PYTHON=/path/to/isaacsim-env/bin/python
+export ISAAC_MCP_PYTHON=/path/to/isaacsim-env/bin/python
 export UR5E_DT_PORT=18766
 ./run.sh --headless --port "$UR5E_DT_PORT"
 # In another terminal after the app is ready, with the same environment:
 ./verify.sh
-"$UR5E_DT_PYTHON" scripts/smoke_tools.py
+"$ISAAC_MCP_PYTHON" scripts/smoke_tools.py
 ```
 
 `verify.sh` checks the workstation baseline: UR5e, RG2, QuickChanger and Vention scene prims; observed
@@ -410,7 +413,46 @@ The validator is [`scripts/validate_ur5e_check.py`](../scripts/validate_ur5e_che
 malformed, non-finite or out-of-range observations, and `verify.sh` exits nonzero if a check or its response fails.
 If a check fails, inspect the named result and the simulator log before changing limits.
 
+**If `verify.sh` stops with `FAILED: checkpoint`**, the git-ignored `checkpoints/ur5e-dt-workstation-person-view-portable-*.usda`
+it would reuse references files that no longer exist, usually because it predates the code-only asset migration. Reopened,
+`/World/UR5e` would be empty and the motion check would fail with `'NoneType' object has no attribute 'is_homogeneous'`.
+The verifier checks this before touching the scene (`scripts/check_checkpoint_refs.py`) and never changes the file. Inspect
+it, move it aside and re-run: `./verify.sh` exports a new one from your current assets. A clean clone is not affected.
+
 ## Last live check
+
+### Lab 3 run 8 fixes (2026-11-03)
+
+Live on 6.2.0.0 headless PhysX. Run 8's own observations, and what it did not exercise, are in the [run 8 record](evidence/lab3-run8-2026-11-03.md).
+
+- `/scan`: save and reopen experiments in new Kits established the cause and verified the fix, with real messages received. See the [explanation](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
+- `UNSAVED_CHANGES`: opening a clean file no longer refuses; a tool edit, an unsaved graph and a root-layer edit all still do.
+- `ISAAC_MCP_ASSET_STRICT=1` with a complete asset folder: Quick Start with the RG2 loaded, and every asset reported `source: store`.
+- An existing stale file opened with `sim__stage__open`: product deactivated, `/scan` publishing with messages, and the file's hash unchanged.
+- Independent test of commit `0c109d0` by a separate agent on the OpenCode Go DeepSeek V4.1 Flash model, in a clean worktree: public Quick Start, modified assets with fetch and pin, the `/scan` cycle in new Kits, reopened-scene routes and host checks all behaved as documented. It found a private-path test literal and two wording issues, since fixed. A LiDAR's first adopted read returned `NOT_READY`, then about 68,000 valid returns from 3 s on.
+- Adoption, `allow_foreign` and outside-change reporting were checked with a delayed Kit script standing in for a person. A real GUI click and a real OpenCode client were not.
+
+### Documentation check (2026-11-03)
+
+Source `d721f91`, Ubuntu 24.04, RTX 5080, Isaac Sim 6.2.0.0, headless PhysX, disposable sessions on port 18766.
+
+- Host suite: **1968 passed, 7 skipped**. `check_docs.py`, a fresh-clone `./install.sh --claude-code --print-opencode` using an
+  existing Sim and a throwaway `HOME`, and the `client.py` terminal checks all worked.
+- `smoke_tools.py`: **20/20**, with the known `randomize_single_object` warning for its narrow default strip.
+- `./verify.sh` from a clean clone, with Kit using an existing complete asset folder: **all checks passed**; elbow commanded -0.1 rad, achieved -0.0999992, returned to within 3e-9.
+  The same run from an older checkout failed in the motion check, which `verify.sh` now reports up front as described above.
+- With an empty asset folder and nothing fetched, `ur5e_dt__quick_start` built the public scene from NVIDIA's server with zero Kit
+  errors (before this change it failed on the missing gripper). See the [source of each asset](ASSETS.md#when-something-comes-from-online).
+- `validate_scene_tools.py` over real MCP: passed, 32 calls.
+- Further calls over real MCP returned the expected results: stage tree, save and open, prim create, clone, transform, find and delete,
+  graph node types, build and inspect, occupancy map, viewport frame, `sim__ui__find` and a `wait` action, lights, materials, camera create and capture,
+  LiDAR create, logs, ROS 2 TF setup, joint inspect, drive, state and command, exact stepping, body state, and URDF and path import.
+- Refusals seen as documented: `sim__graph__show` headless (`HEADLESS`), `sim__stage__open` outside home (`OUTSIDE_HOME`) and with
+  unsaved edits (`UNSAVED_CHANGES`), `sim__controller__create` without opt-in (`SCRIPT_DISABLED`).
+
+**Not exercised in this check:** windowed sessions, window input and screen recording on the desktop, `sim__lidar__read`,
+`sim__physics__configure`, `sim__stage__clear_owned`, `sim__controller__update`, `assets__prepare_workstation`, Isaac Lab jobs, external ROS 2 clients and RViz, Newton, and other Sim builds.
+The installer's `--download-sim` path was read, not run. Earlier records below remain the evidence for those areas.
 
 ### Windowed viewport reset comparison
 
@@ -433,7 +475,7 @@ was valid, rendered viewport captures succeeded, a separate ROS subscriber recei
 test cube dropped under gravity. After the third rebuild on each revision, selecting the workspace and person cameras
 produced distinct rendered images. This supports recovery for this sequence and machine; it is not proof that all
 stages, GPUs, recording states or Isaac versions recover. The exception is not suppressed, and its underlying cause
-remains [tracked in the roadmap](ROADMAP.md#1-reliable-baseline-and-documentation).
+remains [tracked in the roadmap](ROADMAP.md#1-reliability).
 
 The comparison also found that the existing real-time recorder sent every viewport redraw to ffmpeg: a roughly
 one-second recording at 10 fps produced an 11.8-second file on the base and an 8.8-second file on the original PR

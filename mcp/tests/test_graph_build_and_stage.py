@@ -198,3 +198,124 @@ def test_allowed_tokens_in_list_and_string_form():
     with pytest.raises(gb.SpecError):
         gb.token_value("x", ["foo", "B"])
     assert gb.token_map({"k": "v"}) == {"k": "v"} and gb.token_map(None) == {}
+
+
+# ---- what sim.stage.save writes by default can be opened again ----
+
+
+def _own_output(tmp_path):
+    root = tmp_path / "scenes-1"
+    root.mkdir()
+    root.chmod(0o700)
+    (root / "saved.usda").write_text("#usda 1.0\n")
+    return root
+
+
+def test_the_processs_own_output_root_can_be_opened(tmp_path):
+    root = _own_output(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    file, problem = so.check_path(str(root / "saved.usda"), home=home, output_root=root)
+    assert problem is None and file == (root / "saved.usda").resolve()
+
+
+def test_without_it_the_same_file_is_outside_home(tmp_path):
+    root = _own_output(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    assert so.check_path(str(root / "saved.usda"), home=home)[1][0] == "OUTSIDE_HOME"
+
+
+def test_a_sibling_folder_with_a_matching_prefix_still_refuses(tmp_path):
+    root = _own_output(tmp_path)
+    sibling = tmp_path / "scenes-12"
+    sibling.mkdir()
+    (sibling / "other.usda").write_text("#usda 1.0\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    problem = so.check_path(str(sibling / "other.usda"), home=home, output_root=root)[1]
+    assert problem[0] == "OUTSIDE_HOME" and str(root) in problem[1]
+
+
+def test_a_symlink_out_of_the_output_root_still_refuses(tmp_path):
+    root = _own_output(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.usda").write_text("#usda 1.0\n")
+    (root / "link.usda").symlink_to(outside / "secret.usda")
+    home = tmp_path / "home"
+    home.mkdir()
+    assert so.check_path(str(root / "link.usda"), home=home, output_root=root)[1][0] == "OUTSIDE_HOME"
+
+
+def test_a_world_writable_output_root_is_not_trusted(tmp_path):
+    root = _own_output(tmp_path)
+    root.chmod(0o777)
+    home = tmp_path / "home"
+    home.mkdir()
+    assert so.check_path(str(root / "saved.usda"), home=home, output_root=root)[1][0] == "OUTSIDE_HOME"
+
+
+def test_a_missing_output_root_refuses_rather_than_raises(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    assert so.check_path("/etc/passwd.usda", home=home, output_root=tmp_path / "never")[1][0] == "OUTSIDE_HOME"
+
+
+@pytest.mark.parametrize("source,target,why", [
+    (("uint64", 1, 0, "none"), ("float", 1, 1, "none"), "array"),  # dataPtr into linearDepthData, the reported wire
+    (("uint", 1, 0, "execution"), ("uint", 1, 0, "none"), "execution"),
+    (("float", 3, 0, "none"), ("float", 1, 0, "none"), "tuple"),
+    (("token", 1, 0, "none"), ("double", 1, 0, "none"), "text"),
+    (("uchar", 1, 1, "none"), ("token", 1, 0, "none"), "array"),  # raw bytes, not text
+])
+def test_type_mismatch_names_a_wire_kit_would_only_warn_about(source, target, why):
+    assert why in gb.type_mismatch(source, target)
+
+
+@pytest.mark.parametrize("source,target", [
+    (("uint64", 1, 0, "none"), ("uint64", 1, 0, "none")),
+    (("float", 3, 0, "none"), ("double", 3, 0, "vector")),  # widths convert, and roles other than execution don't matter
+    (("unknown", 1, 0, "none"), ("float", 1, 1, "none")),  # an extended port resolves when connected
+    (("token", 1, 0, "none"), ("string", 1, 0, "none")),
+    (("token", 1, 0, "none"), ("uchar", 1, 1, "text")),  # how OmniGraph models string; measured on 6.0.0.0
+    (("uchar", 1, 1, "text"), ("token", 1, 0, "none")),
+])
+def test_type_mismatch_leaves_compatible_wires_alone(source, target):
+    assert gb.type_mismatch(source, target) is None
+
+
+class _Attr:
+    def __init__(self, path, upstream=()):
+        self.path, self.upstream = path, upstream
+
+    def get_path(self):
+        return self.path
+
+    def get_upstream_connections(self):
+        return self.upstream
+
+
+def test_wire_dropped_tells_a_refused_connection_from_a_made_one():
+    source = _Attr("/g/a.outputs:x")
+    assert not gb.wire_dropped(source, _Attr("/g/b.inputs:y", [source]))
+    assert gb.wire_dropped(source, _Attr("/g/b.inputs:y", []))
+    assert gb.wire_dropped(source, _Attr("/g/b.inputs:y", [_Attr("/g/other.outputs:z")]))
+    assert not gb.wire_dropped(source, object())  # nothing to read on this build: Kit's choice stands
+
+
+def test_script_nodes_stay_off_without_the_users_consent(monkeypatch):
+    # sim__graph__build must not be a way around SCRIPT_DISABLED: a ScriptNode runs Python on Play.
+    monkeypatch.delenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS", raising=False)
+    assert gb.scripts_disabled()
+    monkeypatch.setenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS", "1")
+    assert not gb.scripts_disabled()
+    assert set(gb.SCRIPT_PORTS) == {"inputs:script", "inputs:scriptPath"}
+
+
+def test_a_clock_with_no_time_source_is_noted():
+    nodes = [("tick", "omni.graph.action.OnPlaybackTick"), ("clock", "isaacsim.ros2.bridge.ROS2PublishClock")]
+    wired = [(("time", "outputs:simulationTime"), ("clock", "inputs:timeStamp"))]
+    assert gb.unstamped_clocks(dict(nodes=nodes, connections=[], values=[])) == ["clock"]
+    assert gb.unstamped_clocks(dict(nodes=nodes, connections=wired, values=[])) == []
+    assert gb.unstamped_clocks(dict(nodes=nodes, connections=[], values=[("clock", "inputs:timeStamp", 1.0)])) == []

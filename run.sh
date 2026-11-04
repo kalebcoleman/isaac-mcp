@@ -33,6 +33,11 @@ while [ "$#" -gt 0 ]; do
       HEADLESS=1
       shift
       ;;
+    --realtime)
+      # Headless Kit otherwise runs as fast as it can, so sim time outruns the wall clock and Nav2 misses its control rate.
+      EXTRA_ARGS+=("--/app/runLoops/main/rateLimitEnabled=true" "--/app/runLoops/main/rateLimitFrequency=60")
+      shift
+      ;;
     --motion-bvh)
       EXTRA_ARGS+=("--/renderer/raytracingMotion/enabled=true"
                    "--/renderer/raytracingMotion/enableHydraEngineMasking=true"
@@ -43,6 +48,10 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || { echo "--physics-backend needs physx or newton" >&2; exit 2; }
       PHYSICS_BACKEND="$2"
       shift 2
+      ;;
+    --no-hot-reload)
+      ISAAC_MCP_NO_HOT_RELOAD=1
+      shift
       ;;
     --ur5e-panel|--ur5e-dt)
       SHOW_UR5E_PANEL=1
@@ -69,10 +78,21 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+case "$PORT" in
+  ''|*[!0-9]*) echo "port must be a number from 0 (any free port) to 65535, not '$PORT'" >&2; exit 2 ;;
+esac
+if [ "$PORT" -gt 65535 ]; then echo "port must be a number from 0 to 65535, not '$PORT'" >&2; exit 2; fi
+
 if [ "$PY_AUTODETECT" = 1 ]; then
   if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/scripts/isaac_env.py" ]; then
     # Any Isaac Sim 6.x; the first match in the documented search order wins.
-    if DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6)" && [ -n "$DETECTED" ]; then
+    # Inherit stderr rather than opening /dev/stderr, which fails when fd 2 is a socket (journald, some CI).
+    if [ "$SHOW_HELP" = 1 ]; then
+      DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6 2>/dev/null)" || DETECTED=""
+    else
+      DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6)" || DETECTED=""
+    fi
+    if [ -n "$DETECTED" ]; then
       PY="$DETECTED"
       if [ "$SHOW_HELP" != 1 ]; then
         echo "run.sh: auto-detected interpreter $PY (pin one with ISAAC_MCP_PYTHON=/path/to/python; list all with scripts/isaac_env.py find)" >&2
@@ -88,21 +108,24 @@ if [ "${ISAAC_MCP_PRINT_PYTHON:-0}" = 1 ]; then
 fi
 
 if [ "$SHOW_HELP" = 1 ]; then
+  if [ -x "$PY" ]; then HELP_PY="$PY"; else HELP_PY="$PY (not found; list candidates with: python3 scripts/isaac_env.py find)"; fi
   cat <<EOF
 Usage: ./run.sh [options] [-- <extra kit args>]
 
-Launch Isaac Sim 6.2 with the Kit MCP bridge and UR5e tools.
+Launch Isaac Sim with the Kit MCP bridge and UR5e tools (6.2 by default; other builds by ISAAC_MCP_PYTHON).
 
 Configuration:
   Port:        $PORT (override with UR5E_DT_PORT or --port)
-  Interpreter: $PY
+  Interpreter: $HELP_PY
                (override with ISAAC_MCP_PYTHON; UR5E_DT_PYTHON is an alias; without either, the
                checkout .venv is used, else scripts/isaac_env.py auto-detects an existing install)
 
 Options:
   --headless     Run without visible window (sets UR5E_DT_HEADLESS=1)
   --motion-bvh   Enable RTX sensor motion compensation (increases GPU memory use)
+  --realtime     Cap the app at 60 frames per second, so sim time keeps to wall-clock time (for Nav2 with a headless app)
   --physics-backend physx|newton  Select this new session's engine (default: physx)
+  --no-hot-reload  Do not reload extensions when their files change (or set ISAAC_MCP_NO_HOT_RELOAD=1)
   --ur5e-panel   Show the UR5e panel (the tools are always enabled)
   --ur5e-dt      Compatibility alias for --ur5e-panel
   --port N       Bridge port (default: 8766)
@@ -161,15 +184,42 @@ if [ ! -x "$PY" ]; then
   exit 1
 fi
 
-if ! "$PY" -c 'import isaacsim' 2>/dev/null; then
-  echo "FAIL: $PY cannot import isaacsim." >&2
+if ! "$PY" -c 'import isaacsim' 2>/dev/null </dev/null; then
+  echo "FAIL: $PY cannot import isaacsim. If the EULA has not been accepted yet, set OMNI_KIT_ACCEPT_EULA=YES." >&2
   exit 1
 fi
 
-SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))')"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
+SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))' </dev/null)"
+# Refuse here rather than after Kit has started: 5.1 has no Newton extension, and never fall back to PhysX.
+# Extensions sit in <site>/exts in a pip install and two levels above the package in a standalone app.
+if [ "$PHYSICS_BACKEND" = newton ] \
+    && [ ! -d "$SITE/exts/isaacsim.physics.newton" ] && [ ! -d "$(dirname "$(dirname "$SITE")")/exts/isaacsim.physics.newton" ]; then
+  echo "FAIL: this Isaac Sim ($SITE) has no isaacsim.physics.newton extension. Nothing was started and there is no PhysX fallback." >&2
+  echo "      Use --physics-backend physx, or an interpreter with Newton (see docs/COMPATIBILITY.md)." >&2
+  exit 2
+fi
+. "$ROOT/scripts/isaac_ros_libs.sh"
+if ROS_LIB="$(isaac_ros_lib_dir "$SITE" "$ROS_DISTRO")"; then
+  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROS_LIB"
+else
+  echo "run.sh: WARNING: no ROS 2 $ROS_DISTRO libraries bundled under $SITE or its install root;" >&2
+  echo "        the ROS 2 bridge will not start. Set ROS_DISTRO or LD_LIBRARY_PATH if yours are elsewhere." >&2
+fi
 
 EXT_ARGS=(--ext-folder "$ROOT/exts")
+
+# Kit watches extension folders and reloads an extension when a file in it changes, inside the running
+# process. Turn that off for a recorded run, or when another process edits this checkout.
+case "${ISAAC_MCP_NO_HOT_RELOAD:-0}" in
+  1|true|yes) EXT_ARGS+=("--/app/extensions/fsWatcherEnabled=0") ;;
+esac
+
+# Kit uploads a crash's minidump to NVIDIA by default, and a minidump can contain process memory. Keep it on this
+# machine for debugging instead, unless the user opts in.
+case "${ISAAC_MCP_CRASH_UPLOAD:-0}" in
+  1|true|yes) ;;
+  *) EXT_ARGS+=("--/crashreporter/url=" "--/crashreporter/skipOldDumpUpload=true" "--/crashreporter/preserveDump=true") ;;
+esac
 
 exec "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
   "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt --enable sim-tools \

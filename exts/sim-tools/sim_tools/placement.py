@@ -243,3 +243,24 @@ def bbox_settled(previous, current):
         return False
     return previous is not None and len(previous) == len(current) and all(
         abs(a - b) <= 1e-3 * max(1.0, abs(a)) for a, b in zip(previous, current))
+
+
+FLAT_BOX_RATIO = 50.0
+
+
+def flat_box_warning(kind, scale, collision):
+    """A warning for a very flat box collider, else None.
+
+    Measured with TurtleBot3 and Carter on 6.2: UsdGeom.Cylinder wheels got no contact from a Cube floor scaled 20x20x0.1
+    (nor at 133:1, 200:1), so the wheels spun at exactly v/r while the robot rested on its box colliders or fell through.
+    Kit's convex cylinders, a plane and a mesh floor did not. Carter was also erratic on floors thinner than its wheels at
+    50:1 and 100:1, which is why this warns from 50:1.
+    """
+    if kind != "Cube" or not collision:
+        return None
+    sides = [abs(float(value)) for value in scale]
+    if not sides or min(sides) <= 0 or max(sides) / min(sides) < FLAT_BOX_RATIO:
+        return None
+    return (f"This box collider is {max(sides) / min(sides):.0f}:1. Cylinder colliders, such as most robots' wheels, can get no "
+            "contact from a box this flat: the wheels spin but the robot stays put or falls through. For a floor, use "
+            "sim__quick_start's ground. A thicker box, thicker than the wheels, also works. See docs/ROS2-RVIZ.md.")

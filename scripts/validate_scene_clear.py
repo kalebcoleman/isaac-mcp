@@ -25,6 +25,10 @@ async def validate(port, output):
             info = await invoke("sim__stage__info")
             assert info["stopped"], info
             t = {k: info[k] for k in ("session_id", "stage_id")}
+            found = [x["path"] for x in (await invoke("sim__stage__tree", **t, limit=200))["nodes"]]
+            if "/World/TestCamera" not in found or "/World/Agilebot" not in found:
+                raise SystemExit("Run validate_scene_equivalents.py first: this checks the stage it leaves, including "
+                                 "/World/Agilebot from the approved root 'agilebot' (see docs/TOOLS-SCENE.md). Nothing was changed.")
             await invoke(
                 "sim__prim__delete",
                 error=True,

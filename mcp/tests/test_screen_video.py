@@ -2,7 +2,9 @@
 raise_window on a locked screen, and join_videos (pure parts; no X display or ffmpeg run needed)."""
 import io
 import threading
+import time
 import types
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -504,3 +506,149 @@ def test_close_refusals_report_that_no_input_was_sent():
     source = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/extension.py").read_text()
     block = source[source.index('effects="No input was sent."'):][:400]
     assert '"INVALID_VALUE"' in block and '"NO_WINDOW"' in block
+
+
+# ---- wait_for_window and stop_on_log_marker ----
+
+
+@pytest.fixture()
+def screen_state(monkeypatch):
+    monkeypatch.setattr(screen, "_current", None)
+    monkeypatch.setattr(screen, "_window_wait", None)
+    monkeypatch.setattr(screen, "_window_wait_error", None)
+    monkeypatch.setattr(screen, "WINDOW_WAIT_POLL_S", 0.01)
+
+
+def _no_window(query, wid=None, *_):
+    raise ValueError("no window")
+
+
+def _wait_until(predicate, timeout=3.0):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def test_defaults_do_not_wait_or_watch(monkeypatch, tmp_path, screen_state):
+    text, rec, _ = _start(monkeypatch, tmp_path, WINDOWS, window_id=1)
+    assert "waiting" not in text and "stops when" not in text and rec.stopped_by is None
+
+
+def test_wait_returns_at_once_and_starts_when_the_window_appears(monkeypatch, tmp_path, screen_state):
+    tools = _register(monkeypatch, tmp_path)
+    seen = {"up": False}
+    monkeypatch.setattr(screen, "_match_window", lambda q, wid=None, *_: WINDOWS[1] if seen["up"] else _no_window(q))
+    monkeypatch.setattr(screen, "_ffmpeg", lambda: "ffmpeg")
+    monkeypatch.setattr(screen, "_primary_monitor_size", lambda: (3440, 1440))
+    monkeypatch.setattr(screen, "_screen_locked", lambda: False)
+    monkeypatch.setattr(screen.subprocess, "Popen", lambda cmd, **kw: _Popen(cmd))
+    monkeypatch.setattr(screen, "_record_loop", lambda rec: None)
+    text = tools["start_screen_recording"](window="Isaac", wait_for_window=5)
+    assert text.startswith("waiting up to 5 s") and screen._current is None
+    assert "waiting for a window" in tools["screen_recording_status"]()
+    with pytest.raises(RuntimeError, match="waiting for a window"):
+        tools["start_screen_recording"](window_id=1)
+    seen["up"] = True
+    assert _wait_until(lambda: screen._current is not None)
+    assert screen._window_wait is None and screen._current.window == WINDOWS[1]
+
+
+def test_wait_times_out_and_status_says_so(monkeypatch, tmp_path, screen_state):
+    tools = _register(monkeypatch, tmp_path)
+    monkeypatch.setattr(screen, "_match_window", _no_window)
+    tools["start_screen_recording"](window="Isaac", wait_for_window=0.05)
+    assert _wait_until(lambda: screen._window_wait is None)
+    assert "nothing was recorded" in tools["screen_recording_status"]()
+    assert screen._current is None
+
+
+def test_stop_cancels_a_wait(monkeypatch, tmp_path, screen_state):
+    tools = _register(monkeypatch, tmp_path)
+    monkeypatch.setattr(screen, "_match_window", _no_window)
+    tools["start_screen_recording"](window="Isaac", wait_for_window=60)
+    assert "cancelled" in tools["stop_screen_recording"]()
+    assert screen._window_wait is None and screen._current is None
+
+
+@pytest.mark.parametrize("kwargs,message", [
+    (dict(wait_for_window=5), "needs window"),
+    (dict(window="a", window_id=1, wait_for_window=5), "needs window"),
+    (dict(window="a", monitor=1, wait_for_window=5), "needs window"),
+    (dict(window="a", wait_for_window=601), "wait_for_window"),
+    (dict(window="a", wait_for_window=-1), "wait_for_window"),
+    (dict(window="a", stop_on_log_marker=""), "stop_on_log_marker"),
+    (dict(window="a", stop_on_log_marker="x" * 257), "stop_on_log_marker"),
+    (dict(window="a", stop_log_file="/tmp/a.log"), "needs stop_on_log_marker"),
+    (dict(window="a", stop_on_log_marker="x", stop_log_file="/etc/passwd"), "stop_log_file"),
+    (dict(window="a", stop_on_log_marker="x", stop_log_file="relative/logs/Kit/a.log"), "stop_log_file"),
+])
+def test_bad_recording_arguments(monkeypatch, tmp_path, screen_state, kwargs, message):
+    tools = _register(monkeypatch, tmp_path)
+    with pytest.raises(ValueError, match=message):
+        tools["start_screen_recording"](**kwargs)
+
+
+def _rec():
+    return SimpleNamespace(stop=threading.Event(), stopped_by=None, warnings=[], warned=set())
+
+
+def test_marker_added_after_start_stops_the_recording(tmp_path):
+    log = tmp_path / "kit.log"
+    log.write_bytes(b"DONE was here before\n")
+    rec = _rec()
+    thread = threading.Thread(target=screen._watch_log_marker, args=(rec, "DONE", lambda: log, 0.01), daemon=True)
+    thread.start()
+    time.sleep(0.05)
+    assert not rec.stop.is_set()  # text from before the watcher started does not count
+    with log.open("ab") as f:
+        f.write(b"nothing yet\nDO")
+    time.sleep(0.05)
+    assert not rec.stop.is_set()
+    with log.open("ab") as f:
+        f.write(b"NE\n")  # split across two reads
+    assert rec.stop.wait(2) and "DONE" in rec.stopped_by
+    thread.join(2)
+
+
+def test_marker_watcher_ends_with_the_recording_and_waits_for_a_log(tmp_path):
+    rec = _rec()
+    asked = []
+    thread = threading.Thread(target=screen._watch_log_marker,
+                              args=(rec, "DONE", lambda: asked.append(1), 0.01), daemon=True)
+    thread.start()
+    assert _wait_until(lambda: asked)
+    rec.stop.set()
+    thread.join(3)
+    assert not thread.is_alive() and rec.stopped_by is None
+
+
+def test_only_project_logs_can_be_watched(tmp_path, monkeypatch):
+    monkeypatch.setattr(screen.Path, "home", lambda: tmp_path)
+    assert screen._log_marker_file_allowed(tmp_path / ".local/share/isaac-mcp/sim-sessions/abc/sim.log")
+    assert screen._log_marker_file_allowed(Path("/opt/x/kit/logs/Kit/Isaac-Sim Python/6.2/kit_1.log"))
+    assert not screen._log_marker_file_allowed(tmp_path / ".ssh/id_rsa.log")
+    assert not screen._log_marker_file_allowed(Path("/opt/x/kit/logs/Kit/secret.txt"))
+    assert not screen._log_marker_file_allowed(tmp_path / ".local/share/isaac-mcp/../../../notes.log")
+
+
+def test_finish_reports_why_it_stopped(tmp_path):
+    path = tmp_path / "video.mp4"
+    path.write_bytes(b"x")
+    rec = screen.Recording(path=path, bbox={"width": 2, "height": 2, "left": 0, "top": 0}, fps=10, max_width=960,
+                           proc=SimpleNamespace(stderr=None, wait=lambda timeout=None: 0), stop=threading.Event(),
+                           stopped_by="log marker 'DONE' in /x.log")
+    assert "DONE" in screen._finish(rec)["stopped_by"]
+
+
+def test_marker_with_no_log_to_watch_warns(monkeypatch):
+    monkeypatch.setattr(screen, "LOG_MARKER_WARN_S", 0.0)
+    rec = _rec()
+    thread = threading.Thread(target=screen._watch_log_marker, args=(rec, "DONE", lambda: None, 0.01), daemon=True)
+    thread.start()
+    assert _wait_until(lambda: rec.warnings)
+    rec.stop.set()
+    thread.join(3)
+    assert "could not stop this recording" in rec.warnings[0] and len(rec.warnings) == 1

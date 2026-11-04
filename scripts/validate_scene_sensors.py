@@ -17,6 +17,18 @@ from mcp.client.stdio import stdio_client
 from scene_mcp_client import call, parameters
 
 
+async def wait_simulated(invoke, t, seconds, wall_limit=180.0, poll=0.5):
+    """Play until the timeline has advanced *seconds*: a loaded host can run far slower than real time."""
+    deadline = time.monotonic() + wall_limit
+    while True:
+        # Play is idempotent, and its result is the only MCP read of the timeline clock.
+        state = await invoke("sim__timeline__control", **t, action="play")
+        if state["time_s"] >= seconds:
+            return state
+        assert time.monotonic() < deadline, f"only {state['time_s']} s simulated after {wall_limit} s"
+        await asyncio.sleep(poll)
+
+
 async def validate(port, output, cycles=3):
     records, metrics = [], []
     out = Path(output)
@@ -139,8 +151,7 @@ async def validate(port, output, cycles=3):
                         position=[30, 4.55, 1],
                         scale=[8, 0.1, 8],
                     )
-                await invoke("sim__timeline__control", **t, action="play")
-                await asyncio.sleep(3)
+                await wait_simulated(invoke, t, seconds=3)
                 lidar = await invoke(
                     "sim__lidar__read", **t, path=prefix + "/Lidar", limit=256
                 )

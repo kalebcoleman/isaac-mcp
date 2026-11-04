@@ -308,3 +308,25 @@ def test_diagnostic_log_not_listed_or_deleted_as_a_bridge(monkeypatch, tmp_path)
         bridge._sweep_stale_portfiles()
         assert failure.read_text() == payload + '\n'
         assert malformed.exists()
+
+
+# ==================== the form the host's messages recommend ====================
+
+def test_client_file_runs_on_a_python_without_the_package(tmp_path):
+    """`python3 mcp/isaac_mcp/client.py --list-bridges` is what server.LIST_BRIDGES_HELP recommends;
+    -S leaves out site-packages, as on a stock python3 with no isaac_mcp or mcp installed."""
+    script = os.path.join(os.path.dirname(REPO_ROOT), "mcp", "isaac_mcp", "client.py")
+    env = {**os.environ, "XDG_RUNTIME_DIR": str(tmp_path)}
+    env.pop("PYTHONPATH", None)
+    listed = subprocess.run([sys.executable, "-S", script, "--list-bridges"], cwd=tmp_path, env=env,
+                            capture_output=True, text=True, timeout=30)
+    assert listed.returncode == 2 and listed.stdout.strip() == "[]", listed.stderr
+    usage = subprocess.run([sys.executable, "-S", script, "--help"], cwd=tmp_path, env=env,
+                           capture_output=True, text=True, timeout=30)
+    assert usage.returncode == 0 and "-m isaac_mcp.client" not in usage.stdout
+
+
+def test_module_form_keeps_its_usage():
+    usage = subprocess.run([sys.executable, "-m", "isaac_mcp.client", "--help"],
+                           capture_output=True, text=True, timeout=30)
+    assert usage.returncode == 0 and "python3 -m isaac_mcp.client" in usage.stdout

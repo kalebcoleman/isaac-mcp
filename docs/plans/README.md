@@ -2,6 +2,8 @@
 
 These plans distinguish implemented slices from future work. Use the tool references and evidence for current behavior.
 
+- [PR 70 working checklist](PR-70-CHECKLIST.md) — what is done and still needed for the open PR.
+
 - [Asset presets and project-folder discovery](ASSET-PRESETS.md) — catalog, user USD discovery, isolation and safe loading.
 - [Asset naming, packs and stores](ASSET-NAMING-PLAN.md) — proposal for generic `ISAAC_MCP_*` names and optional packs.
 - [Scene tools for agents](SCENE-TOOLS-AGENT-UX.md) — current tool review and prioritized improvements.

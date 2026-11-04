@@ -198,3 +198,82 @@ def test_the_opencode_snippet_is_valid_json_for_unusual_paths(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     body = re.search(r'"environment": (\{.*\})', result.stdout).group(1)
     assert json.loads(body)["ISAAC_MCP_PYTHON"] == env["ISAAC_MCP_PYTHON"]
+
+
+def test_no_sim_records_an_installed_isaac_sim_and_never_syncs(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / "lab-isaac", "6.2.0.0"))
+    env["OMNI_KIT_ACCEPT_EULA"] = "YES"
+    result = _install(root, env, "--no-sim", "--claude-code")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "uv sync" not in _calls(log)
+    assert f"ISAAC_MCP_PYTHON={env['ISAAC_MCP_PYTHON']}" in _calls(log)
+
+
+def test_no_sim_without_any_isaac_sim_never_syncs_even_with_the_eula_accepted(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    env["OMNI_KIT_ACCEPT_EULA"] = "YES"
+    result = _install(root, env, "--no-sim", "--claude-code")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "uv sync" not in _calls(log) and "ISAAC_MCP_PYTHON=" not in _calls(log)
+    assert "no Isaac Sim 6.x found to record" in result.stdout
+
+
+def test_no_sim_with_a_bad_named_interpreter_warns_and_still_installs_the_host(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = "/no/such/python"
+    result = _install(root, env, "--no-sim", "--claude-code")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ISAAC_MCP_PYTHON is set but does not point" in result.stderr
+    assert "no interpreter recorded" in result.stderr
+    assert "uv sync" not in _calls(log) and "ISAAC_MCP_PYTHON=" not in _calls(log)
+
+
+def test_opencode_entry_uses_the_installed_path_so_it_starts_without_path_setup(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    result = _install(root, env, "--no-sim", "--print-opencode")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f'"command": ["{Path(env["HOME"]) / ".local" / "bin" / "isaac-mcp"}"]' in result.stdout
+
+
+def test_an_explicitly_named_51_is_used_with_a_clear_warning(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / "bricksim", "5.1.0.0"))
+    result = _install(root, env, "--claude-code")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "uv sync" not in _calls(log)
+    assert "explicitly pinned older build" in result.stderr and "auto-detection never picks it" in result.stderr
+    assert f"ISAAC_MCP_PYTHON={env['ISAAC_MCP_PYTHON']}" in _calls(log)
+
+
+def test_auto_detection_never_picks_51(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    old = _fake_isaac(root.parent / "older-project" / ".venv", "5.1.0.0")
+    new = _fake_isaac(root.parent / "other-project" / ".venv", "6.2.0.0")
+    result = _install(root, env, "--claude-code", "--no-sim")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"ISAAC_MCP_PYTHON={new}" in _calls(log) and str(old) not in _calls(log)
+
+
+def test_a_named_older_build_other_than_51_is_still_refused(tmp_path):
+    root, env, _ = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / "old", "4.5.0"))
+    result = _install(root, env)
+    assert result.returncode == 1 and "6.x or 5.1 install" in result.stderr
+
+
+@pytest.mark.parametrize("port", ["abc", "0", "70000", "80 80", ""])
+def test_a_bad_port_stops_before_anything_is_installed(tmp_path, port):
+    root, env, log = _sandbox(tmp_path)[:3]
+    result = _install(root, env, "--no-sim", "--port", port)
+    assert result.returncode == 2 and "port must be a number" in result.stderr
+
+
+def test_a_claude_desktop_config_it_cannot_parse_is_left_alone_with_the_entry_to_add(tmp_path):
+    root, env = _sandbox(tmp_path)[:2]
+    config = Path(env["HOME"]) / ".config/Claude/claude_desktop_config.json"
+    config.parent.mkdir(parents=True)
+    config.write_text('{ // my comment\n"mcpServers": {} }\n')
+    result = _install(root, env, "--no-sim", "--claude-desktop")
+    assert result.returncode == 0 and "not changed" in result.stderr and '"isaac"' in result.stderr
+    assert "Traceback" not in result.stderr and "my comment" in config.read_text()

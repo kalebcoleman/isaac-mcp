@@ -203,6 +203,59 @@ def token_map(raw):
     return {}
 
 
+SCRIPT_PORTS = ("inputs:script", "inputs:scriptPath")
+
+
+def scripts_disabled():
+    """A node that runs Python from its inputs is code execution, like sim__controller__create: same consent."""
+    import os
+
+    return os.getenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS") != "1"
+
+
+def type_shape(og_type):
+    """An OmniGraph type as (base, tuple count, array depth, role), lower-case names."""
+    name = lambda value: str(value).rsplit(".", 1)[-1].lower()
+    return name(og_type.base_type), og_type.tuple_count, og_type.array_depth, name(og_type.role)
+
+
+TEXT_TYPES = {"token", "string", "path"}
+TEXT_ROLES = {"text", "path"}
+
+
+def _as_text(shape):
+    """OmniGraph models string as uchar[] with a text role, and connects it to token, so count it as one text value."""
+    base, tuples, depth, role = shape
+    return ("token", tuples, 0, role) if base == "uchar" and depth == 1 and role in TEXT_ROLES else shape
+
+
+def type_mismatch(source, target):
+    """Why these two types can't connect, or None. Only what OmniGraph cannot convert: numeric widths convert, so they
+    pass, and an extended ("any") port has no base type until it is connected, so it passes too."""
+    if "unknown" in (source[0], target[0]):
+        return None
+    source, target = _as_text(source), _as_text(target)
+    if (source[3] == "execution") != (target[3] == "execution"):
+        return "one is an execution port and the other carries data"
+    if source[2] != target[2]:
+        return "one is an array and the other is not"
+    if source[1] != target[1]:
+        return f"tuple sizes differ ({source[1]} and {target[1]})"
+    if (source[0] in TEXT_TYPES) != (target[0] in TEXT_TYPES):
+        return "one is text and the other is a number"
+    return None
+
+
+def wire_dropped(source, target):
+    """Whether Kit left this connection out. Its connect call can't tell: on 6.0.0.0 it returns false even when the wire
+    is made, and only logs a warning when it refuses. No way to read the wire on this build counts as made."""
+    try:
+        upstream = target.get_upstream_connections()
+    except AttributeError:
+        return False
+    return not any(attr.get_path() == source.get_path() for attr in upstream)
+
+
 def token_value(value, allowed_raw):
     """(value to store, note) for a token input with allowed tokens; raises on a bad value."""
     allowed_raw = token_map(allowed_raw)
@@ -217,6 +270,13 @@ def token_value(value, allowed_raw):
 
 
 # ---------------------------------------------------------------- Kit side
+
+def unstamped_clocks(spec):
+    """Clock publishers nothing gives a time to. They publish happily, and every stamp is 0."""
+    stamped = {node for _, (node, port) in spec["connections"] if port == "inputs:timeStamp"}
+    stamped |= {node for node, port, _ in spec["values"] if port == "inputs:timeStamp"}
+    return [name for name, kind in spec["nodes"] if kind.rsplit(".", 1)[-1] == "ROS2PublishClock" and name not in stamped]
+
 
 def build(stage, a, stopped):
     import json
@@ -241,14 +301,18 @@ def build(stage, a, stopped):
         nt = og.get_node_type(kind)
         if not nt or not (nt.is_valid() if callable(getattr(nt, "is_valid", None)) else True):
             short = kind.rsplit(".", 1)[-1]
-            return _refuse(SpecError("UNKNOWN_NODE_TYPE", f"No node type {kind!r} is registered. Look it up with "
+            import difflib
+
+            near = difflib.get_close_matches(kind, og.get_registered_nodes(), n=3, cutoff=0.7)
+            hint = f" Did you mean {' or '.join(near)}?" if near else ""
+            return _refuse(SpecError("UNKNOWN_NODE_TYPE", f"No node type {kind!r} is registered.{hint} Look it up with "
                                      f"sim__graph__node_types contains={short!r}."))
     existing = stage.GetPrimAtPath(path)
-    replaced = False
+    replaced, backup = False, None
     if existing:
         if not a.get("replace"):
             return _refuse(SpecError("ALREADY_EXISTS", f"{path} exists. Pass replace=true to rebuild it (the old "
-                                     "graph is deleted first), or choose another path."))
+                                     "graph is put back if the rebuild is refused), or choose another path."))
         if existing.GetTypeName() != "OmniGraph":
             return _refuse(SpecError("NOT_A_GRAPH", f"{path} is a {existing.GetTypeName() or 'typeless'} prim, "
                                      "not a graph; refusing to replace it."))
@@ -257,6 +321,9 @@ def build(stage, a, stopped):
             return _refuse(SpecError("NOT_REPLACEABLE", f"{path} comes (partly) from another layer, a reference or a "
                                      "payload, so it cannot be deleted from here. Deactivate it, or build at "
                                      "another path."))
+        backup = Sdf.Layer.CreateAnonymous()  # so a refused rebuild puts the old graph back instead of losing it
+        Sdf.CreatePrimInLayer(backup, path)
+        Sdf.CopySpec(target_layer, path, backup, path)
         stage.RemovePrim(path)
         if stage.GetPrimAtPath(path):
             return _refuse(SpecError("NOT_REPLACEABLE", f"{path} is still defined after removing it from the edit "
@@ -266,10 +333,18 @@ def build(stage, a, stopped):
         return _refuse(SpecError("NOT_FOUND", f"The parent of {path} does not exist."))
 
     notes, created_ports = list(spec["notes"]), []
+    notes += [f"{name}.inputs:timeStamp is not connected, so every /clock stamp will be 0. Connect "
+              "isaacsim.core.nodes.IsaacReadSimulationTime's outputs:simulationTime to it." for name in unstamped_clocks(spec)]
     keys = og.Controller.Keys
     try:
         og.Controller.edit({"graph_path": path, "evaluator_name": spec["evaluator"]},
                            {keys.CREATE_NODES: spec["nodes"]})
+
+        for name, kind in spec["nodes"]:
+            created = og.Controller.node(f"{path}/{name}")
+            if scripts_disabled() and any(created.get_attribute_exists(p) for p in SCRIPT_PORTS):
+                raise SpecError("SCRIPT_DISABLED", f"{name} ({kind}) runs Python, which is off unless the user starts Kit "
+                                "with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1. Nothing was built.")
 
         def attr(node, port, create_dynamic):
             n = og.Controller.node(f"{path}/{node}")
@@ -294,7 +369,9 @@ def build(stage, a, stopped):
             a_ = attr(node, port, True)
             raw = None
             try:
-                raw = a_.get_metadata(og.MetadataKeys.ALLOWED_TOKENS_RAW)
+                from .compat import metadata_keys
+
+                raw = a_.get_metadata(metadata_keys().ALLOWED_TOKENS_RAW)
             except Exception:  # noqa: BLE001
                 pass
             try:
@@ -322,13 +399,27 @@ def build(stage, a, stopped):
             return "outputs:" + port[1:]  # attr() then refuses with the node's real ports
 
         for (s_node, s_port), (d_node, d_port) in spec["connections"]:
-            og.Controller.connect(attr(s_node, source_port(s_node, s_port), False), attr(d_node, d_port, True))
+            source, target = attr(s_node, source_port(s_node, s_port), False), attr(d_node, d_port, True)
+            try:
+                mismatch = type_mismatch(type_shape(source.get_resolved_type()), type_shape(target.get_resolved_type()))
+            except AttributeError:  # no type information on this build: let Kit decide, as before
+                mismatch = None
+            if mismatch:
+                raise SpecError("TYPE_MISMATCH", f"{s_node}.{s_port} cannot drive {d_node}.{d_port}: {mismatch} "
+                                f"({source.get_resolved_type()} to {target.get_resolved_type()}). Nothing was built. "
+                                "sim__graph__node_types lists each node's ports and types.")
+            og.Controller.connect(source, target)
+            if wire_dropped(source, target):
+                raise SpecError("CONNECTION_REFUSED", f"Kit did not connect {s_node}.{s_port} to {d_node}.{d_port} "
+                                f"({source.get_resolved_type()} to {target.get_resolved_type()}); it only logs a warning. "
+                                "Nothing was built. For text, set the input's value in values instead of wiring it.")
         for node, port, value in deferred:
             try:
                 attr(node, port, False)
                 set_value(node, port, value)
             except Exception as exc:  # noqa: BLE001
-                raise SpecError("INVALID_VALUE", f"Cannot set {node}.{port} = {value!r}: {str(exc)[:200]}") from exc
+                raise SpecError("INVALID_VALUE", f"Cannot set {node}.{port} (type {attr(node, port, False).get_resolved_type()}) "
+                                f"= {value!r}: {str(exc)[:200]}") from exc
         for node, port, paths in spec["targets"]:
             prim = stage.GetPrimAtPath(f"{path}/{node}")
             rel = prim.GetRelationship(port)
@@ -340,14 +431,11 @@ def build(stage, a, stopped):
                 notes.append(f"{node}.{port}: target(s) not on the stage yet: {', '.join(missing)}")
             rel.SetTargets([Sdf.Path(p) for p in paths])
     except SpecError as exc:
-        stage.RemovePrim(path)
-        exc.details["rolled_back"] = True
-        exc.details["replaced_graph_lost"] = replaced
+        exc.details.update(rolled_back=True, replaced_graph_lost=_roll_back(stage, path, backup))
         return _refuse(exc)
     except Exception as exc:  # noqa: BLE001 - OmniGraph errors: roll back, report the message
-        stage.RemovePrim(path)
         return _refuse(SpecError("BUILD_FAILED", f"{type(exc).__name__}: {str(exc)[:400]}", rolled_back=True,
-                                 replaced_graph_lost=replaced))
+                                 replaced_graph_lost=_roll_back(stage, path, backup)))
     unsaved = [f"{node}.{port}" for node, port, _ in spec["values"]
                if stage.GetPrimAtPath(f"{path}/{node}").GetAttribute(port).Get() is None]
     if unsaved:
@@ -361,6 +449,18 @@ def build(stage, a, stopped):
                   next="Play the timeline, then sim__graph__inspect again: nodes that failed to compute list "
                        "their errors there.")
     return result
+
+
+def _roll_back(stage, path, backup):
+    """Remove a failed build and put back the graph it was replacing. True if there was one and it could not be restored."""
+    from pxr import Sdf
+
+    stage.RemovePrim(path)
+    if backup is None:
+        return False
+    layer = stage.GetEditTarget().GetLayer()
+    Sdf.CreatePrimInLayer(layer, path)
+    return not Sdf.CopySpec(backup, path, layer, path)
 
 
 def _refuse(exc):

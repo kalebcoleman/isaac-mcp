@@ -119,7 +119,10 @@ def wait_for_status(job_id, target, timeout=10):
 def test_guard_blocks_train_eval_play_while_a_job_runs(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    rl = root / "scripts" / "reinforcement_learning"
+    rl.mkdir(parents=True)
+    (rl / "train.py").write_text("")
+    (rl / "play.py").write_text("")
     ckpt = root / "model.pth"
     ckpt.write_text("x")
     monkeypatch.setenv("FAKE_MODE", "ok")
@@ -146,7 +149,10 @@ def test_guard_blocks_train_eval_play_while_a_job_runs(tmp_path, monkeypatch):
 def test_dead_pid_record_does_not_block(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    rl = root / "scripts" / "reinforcement_learning"
+    rl.mkdir(parents=True)
+    (rl / "train.py").write_text("")
+    (rl / "play.py").write_text("")
     monkeypatch.setenv("FAKE_MODE", "ok")
 
     pid = dead_pid()
@@ -165,7 +171,10 @@ def test_dead_pid_record_does_not_block(tmp_path, monkeypatch):
 def test_allow_concurrent_bypasses_the_guard(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    rl = root / "scripts" / "reinforcement_learning"
+    rl.mkdir(parents=True)
+    (rl / "train.py").write_text("")
+    (rl / "play.py").write_text("")
     ckpt = root / "model.pth"
     ckpt.write_text("x")
     monkeypatch.setenv("FAKE_MODE", "ok")

@@ -6,11 +6,14 @@ Only public Kit APIs are used. No CUDA pointer access or orchestrator stepping.
 """
 
 import asyncio
+from contextlib import asynccontextmanager
 import copy
 from dataclasses import dataclass
 import time
 
 from isaac_mcp.project_assets import refuse
+
+from .compat import has_drawable_events, observe_drawable_changed
 
 
 @dataclass(frozen=True)
@@ -19,6 +22,41 @@ class CameraFrame:
 
     data: object
     fresh: bool
+
+
+VIEWPORT_GRID_SETTING = "/app/viewport/grid/enabled"
+
+
+# A frame drawn before the setting changed can still be the one read back.
+GRID_SETTLE_FRAMES = 12
+
+
+@asynccontextmanager
+async def without_viewport_grid(playing, next_update=None):
+    """Leave Kit's grid and axis lines out of a stopped-timeline capture, then restore the setting.
+
+    The legacy viewport gizmos draw them into every render product, including ours, unless the timeline is playing.
+    The setting is process-wide with no per-product form, so a window's grid is hidden during the capture too. It is
+    not persistent. Nothing changes when it is already off, absent (a build without it) or the timeline is playing.
+    """
+    settings = None
+    if not playing:
+        try:
+            import carb.settings
+
+            settings = carb.settings.get_settings()
+        except ImportError:
+            pass
+    if settings is None or settings.get(VIEWPORT_GRID_SETTING) is not True:
+        yield
+        return
+    settings.set(VIEWPORT_GRID_SETTING, False)
+    try:
+        for _ in range(GRID_SETTLE_FRAMES):
+            await next_update()
+        yield
+    finally:
+        settings.set(VIEWPORT_GRID_SETTING, True)
 
 
 def invalidate(sensor):
@@ -112,7 +150,6 @@ async def wait_for_frames(texture, validate, timeout=5):
     try:
         import omni.hydratexture as ht
         import omni.kit.app
-        from carb.eventdispatcher import get_eventdispatcher
 
         state = RenderFrames(texture)
         error = None
@@ -126,12 +163,7 @@ async def wait_for_frames(texture, validate, timeout=5):
                 except Exception as exc:
                     error = exc
 
-        subscription = get_eventdispatcher().observe_event(
-            observer_name="IsaacMCP.SensorRenderWait",
-            event_name=ht.GLOBAL_EVENT_DRAWABLE_CHANGED,
-            on_event=drawable,
-            filter=texture.get_event_key(),
-        )
+        subscription = observe_drawable_changed(ht, texture, drawable, "IsaacMCP.SensorRenderWait")
     except (ImportError, AttributeError) as exc:
         refuse(
             "SENSOR_API_UNAVAILABLE",
@@ -269,12 +301,13 @@ async def capture(sensor, validate, timeout=5, context=None):
         import omni.hydratexture as ht
         import omni.kit.app
         import omni.kit.renderer_capture as rc
-        from carb.eventdispatcher import get_eventdispatcher
 
         texture = sensor["product"].hydra_texture
         renderer = rc.acquire_renderer_capture_interface()
+        if not has_drawable_events(ht, texture):
+            refuse("SENSOR_API_UNAVAILABLE", "This Hydra texture has no drawable-change event API.")
         for obj, methods in (
-            (texture, ("get_frame_info", "get_aov_info", "get_event_key")),
+            (texture, ("get_frame_info", "get_aov_info")),
             (renderer, ("capture_next_frame_rp_resource_callback",)),
             (rc, ("convert_raw_bytes_to_list",)),
         ):
@@ -291,12 +324,7 @@ async def capture(sensor, validate, timeout=5, context=None):
             asyncio.get_running_loop(),
         )
         sensor["readback_pending"] = state
-        subscription = get_eventdispatcher().observe_event(
-            observer_name="IsaacMCP.CameraCapture",
-            event_name=ht.GLOBAL_EVENT_DRAWABLE_CHANGED,
-            on_event=state.drawable,
-            filter=texture.get_event_key(),
-        )
+        subscription = observe_drawable_changed(ht, texture, state.drawable, "IsaacMCP.CameraCapture")
     except Exception as e:
         if state is not None:
             state.close()

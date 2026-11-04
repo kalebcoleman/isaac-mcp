@@ -17,6 +17,7 @@ def checkout(tmp_path):
     for name in ("run.sh", "verify.sh"):
         shutil.copy(repo / name, root / name)
     shutil.copy(repo / "scripts" / "probe_62.sh", scripts / "probe_62.sh")
+    shutil.copy(repo / "scripts" / "isaac_ros_libs.sh", scripts / "isaac_ros_libs.sh")
     # An old workspace interpreter must not be selected implicitly.
     legacy = root / "learning6" / ".venv" / "bin" / "python"
     legacy.parent.mkdir(parents=True)

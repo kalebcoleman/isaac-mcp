@@ -5,10 +5,10 @@
 #   1. The script owns the Kit app (AppLauncher + Lab's isaaclab.python.*.kit
 #      experience), so scripts/install.py's persistent registration does NOT
 #      apply — enable the bridge per-script via --kit_args, as below.
-#   2. The script owns the main loop: bridge commands execute only while the
-#      app is pumped (env.step()/sim.step()/app.update()). A request sent while
-#      the script blocks between steps stalls until the next pump. Keep
-#      stepping (training loops naturally do).
+#   2. The script owns the main loop: bridge commands execute only while Kit
+#      updates. On Lab 3.0.0 sim.step() and env.step() update Kit only through a
+#      windowed Kit visualizer, so call simulation_app.update() in your loop. A
+#      request sent while the script blocks stalls until the next update.
 #   3. Configuration is env-var only (no carb persistence): ISAAC_MCP_PORT,
 #      ISAAC_MCP_TOOL_PATHS, ISAAC_MCP_TOOL_MODULES.
 #
@@ -56,12 +56,20 @@ simulation_app = app_launcher.app
 # Bridge is now listening on ISAAC_MCP_PORT (run_python + your tools).
 
 # ---- your normal Isaac Lab code below; imports must come after app launch ----
+import carb.settings
 import isaaclab.sim as sim_utils
 
 sim = sim_utils.SimulationContext(sim_utils.SimulationCfg(dt=1 / 120))
 sim.reset()
+_settings = carb.settings.get_settings()
 
 while simulation_app.is_running():
-    sim.step()   # each step pumps the app — bridge requests dispatch here
+    sim.step()
+    # Bridge requests dispatch here. Lab 3.0.0's sim.step() runs Kit's update only through a windowed Kit
+    # visualizer; headless (--viz kit with HEADLESS=1, or --viz none) it does not, and the bridge hangs.
+    # Lab guards its own updates this way so that Kit does not also advance physics.
+    _settings.set("/app/player/playSimulations", False)
+    simulation_app.update()
+    _settings.set("/app/player/playSimulations", True)
 
 simulation_app.close()

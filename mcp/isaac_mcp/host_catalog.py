@@ -32,7 +32,7 @@ CATALOG_DIR = "catalogs"
 CATALOG_VERSION = 1
 
 # The field-spec vocabulary (isaac_mcp_bridge.schema) the gateway knows how to render.
-_KINDS = frozenset({"enum", "boolean", "integer", "number", "array", "object", "string"})
+_KINDS = frozenset({"enum", "boolean", "integer", "number", "array", "object", "string", "any"})
 _FIELD_KEYS = frozenset({"name", "kind", "enum", "required", "default", "has_default",
                          "description"})
 _TOOL_KEYS = frozenset({"description", "parameters", "fields", "namespace", "owner_id"})

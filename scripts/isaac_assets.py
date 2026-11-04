@@ -14,6 +14,9 @@ Examples::
     python3 scripts/isaac_assets.py add <path>/my-robot.tar.gz
     python3 scripts/isaac_assets.py add ./bench.usd --as bench/bench.usd
     python3 scripts/isaac_assets.py pin
+    python3 scripts/isaac_assets.py packs
+    python3 scripts/isaac_assets.py doctor --pack bricksim
+    python3 scripts/isaac_assets.py pack-build robot/ur5e.usd --pack bricksim --from-pack ur5e-dt
 
 Exit status: 0 success, 1 ``doctor`` found a problem, 2 usage error or refusal.
 Nothing is ever written inside this repository checkout.
@@ -22,7 +25,6 @@ Nothing is ever written inside this repository checkout.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib.util
 import bz2
 import gzip
@@ -30,7 +32,6 @@ import io
 import json
 import lzma
 import os
-import secrets
 import shutil
 import struct
 import subprocess
@@ -59,25 +60,20 @@ def _load_asset_cache():
 
 asset_cache = _load_asset_cache()
 
-
-class CliError(Exception):
-    """An expected failure: printed without a traceback, exit status 2."""
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _inside_repo(path: Path) -> bool:
-    try:
-        path.resolve().relative_to(REPO.resolve())
-    except ValueError:
-        return False
-    return True
+# Loading asset_cache put <repo>/mcp on sys.path. The install code is shared with the MCP tools.
+from isaac_mcp import asset_packs as packs  # noqa: E402
+from isaac_mcp.asset_packs import (  # noqa: E402
+    ADOPT_SUFFIXES,
+    PackError as CliError,
+    adopt_sources as _adopt_sources,
+    clean_relpath as _clean_relpath,
+    install_file as _install_file,
+    install_many as _install_many,
+    inside_repo as _inside_repo,
+    private_dirs as _private_dirs,
+    sha256,
+    write_pins as _write_pins,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -109,11 +105,14 @@ def cmd_where(args) -> int:
     entries = _store_entries()
     strict = asset_cache.offline()
     deprecated = _deprecated_env()
+    pack, pack_source = asset_cache.selected_pack_info()
     if args.json:
         print(
             json.dumps(
                 {
                     "project_file": str(project) if project else None,
+                    "pack": pack,
+                    "pack_source": pack_source,
                     "stores": entries,
                     "strict": strict,
                     "deprecated_env": deprecated,
@@ -123,6 +122,7 @@ def cmd_where(args) -> int:
         )
         return 0
     print(f"project file: {project if project else 'none'}")
+    print(f"pack:         {pack} ({pack_source})")
     print("stores (searched in this order):")
     for number, entry in enumerate(entries, 1):
         print(f"  {number}. [{entry['origin']}] {entry['path']}")
@@ -143,7 +143,149 @@ def cmd_where(args) -> int:
 LOCAL_STATUSES = {"ok", "pinned", "unpinned"}
 
 
+def _print_pack_report(report: dict) -> None:
+    for folder in report["folders"]:
+        files, deps = folder["files"], folder["dependencies"]
+        print(f"{folder['pack_dir']}")
+        print(f"  files: {files['total']} ({files['pinned_ok']} pinned, {files['manifest_ok']} match the "
+              f"manifest, {files['unpinned_count']} unpinned)")
+        for rel in files["unpinned"]:
+            print(f"    unpinned: {rel}")
+        for item in files["corrupt"]:
+            print(f"    CORRUPT: {item['file']} (does not match its {item['kind']} hash)")
+        for rel in files["missing"]:
+            print(f"    MISSING: {rel} (pinned, not on disk)")
+        if not deps["checked"]:
+            print(f"  dependencies: NOT CHECKED. {deps['reason']}")
+            continue
+        print(f"  dependencies of {len(deps['entries'])} entry file(s), from {folder['entry_source']}, "
+              f"by {deps.get('backend')}:")
+        for key in ("unresolved", "unreadable", "remote"):
+            for item in deps[key]:
+                print(f"    {key.upper()}: {item['reference']} (in {item.get('referenced_by', '?')})")
+        for item in deps["unfollowable"]:
+            print(f"    could not follow: {item['file']}: {item['reason']}")
+        for item in deps["outside_pack"]:
+            print(f"    OUTSIDE PACK: {item['file']} (in {item['referenced_by']})")
+        for rel in deps["accepted_unresolved"]:
+            print(f"    accepted unresolved: {rel}")
+        if deps["runtime_materials"]:
+            print(f"    runtime materials (Kit supplies these): {', '.join(deps['runtime_materials'])}")
+        if folder.get("unused"):
+            print(f"  unused, information only ({folder['unused_count']}): {folder['unused_note']}")
+            for rel in folder["unused"]:
+                print(f"    {rel}")
+
+
+def _doctor_pack(args, stores: list[Path] | None = None) -> int:
+    pack = args.pack
+    manifest = asset_cache.manifest() if pack == asset_cache.PACK else None
+    closure = None if args.pins_only else packs.ClosureBackend(args.usd_python)
+    report = packs.doctor_pack(pack, stores or asset_cache.stores(), closure=closure, entries=args.entry,
+                               manifest=manifest)
+    problems = [p for folder in report["folders"] for p in folder["problems"]]
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        _print_pack_report(report)
+        print()
+        if problems:
+            print(f"PROBLEMS ({len(problems)}):")
+            for problem in problems:
+                print(f"  {problem}")
+        elif report["dependencies_checked"]:
+            print("OK")
+        elif args.pins_only:
+            print("OK for pins; dependencies were not checked (--pins-only)")
+    if problems or not (report["dependencies_checked"] or args.pins_only):
+        return 1
+    return 0
+
+
+def _store_arg(args, what: str = "asset folder") -> Path | None:
+    """The ``--store`` folder a command names, or None for the resolved stores."""
+    raw = getattr(args, "store", None)
+    if not raw:
+        return None
+    store = Path(raw).expanduser().resolve()
+    if not store.is_dir():
+        raise CliError(f"{what} is not a folder: {store}")
+    return store
+
+
+def cmd_packs(args) -> int:
+    pack, source = asset_cache.selected_pack_info()
+    store = _store_arg(args)
+    listing = packs.list_packs([store] if store else asset_cache.stores())
+    if args.json:
+        print(json.dumps(dict(selected_pack=pack, pack_source=source, listing=listing), indent=2))
+        return 0
+    print(f"selected pack: {pack} ({source})")
+    for entry in listing:
+        print(f"{entry['store']}" + ("" if entry["exists"] else "  (does not exist yet)"))
+        for item in entry["packs"]:
+            print(f"  {item['name']}: {item['pinned']} pinned, {item.get('entries', 0)} entry file(s)")
+        if entry["folders"]:
+            print(f"  other folders, not packs: {', '.join(entry['folders'])}")
+    return 0
+
+
+def cmd_create(args) -> int:
+    store, pack_dir = _pack_dir(args.store, args.pack)
+    _private_dirs(pack_dir)
+    if not (pack_dir / asset_cache.PACK_FILE).exists():
+        packs.write_pack_file(pack_dir, [])
+    print(f"pack folder ready: {pack_dir}")
+    return 0
+
+
+def cmd_pack_build(args) -> int:
+    store, pack_dir = _pack_dir(args.store, args.pack)
+    from_dirs = []
+    if args.from_pack:
+        from_dirs = [(s / args.from_pack).resolve() for s in asset_cache.stores() if (s / args.from_pack).is_dir()]
+        if not from_dirs:
+            raise CliError(f"source pack {args.from_pack!r} is in no store (see `isaac_assets.py packs`)")
+    closure = packs.ClosureBackend(args.usd_python)
+    if not closure.available():
+        raise CliError(packs.unavailable_message())
+    sources = [str(Path(s).expanduser().resolve()) if s.startswith(("/", "~", "./", "../")) or Path(s).exists() else s
+               for s in args.sources]
+    notes: list = []
+    report = packs.build_pack(
+        pack_dir, sources, closure, from_pack_dirs=from_dirs,
+        layout_root=Path(args.layout_root).expanduser().resolve() if args.layout_root else None,
+        allow_unresolved=args.allow_unresolved, dry_run=args.dry_run, force=args.force, notes=notes,
+    )
+    if args.json:
+        print(json.dumps({**report, "notes": notes}, indent=2))
+        return 0
+    verb = "would copy" if args.dry_run else "copied"
+    print(f"{report['files']} file(s) in the closure, {report['bytes'] / 1048576:.1f} MB; {verb} into {pack_dir}")
+    print(f"entry files: {', '.join(report['entries'])}")
+    for key in ("unresolved", "remote", "outside", "unreadable"):
+        for item in report[key]:
+            print(f"  {key}: {item.get('reference') or item.get('file')} (in {item['referenced_by']})")
+    for item in report["unfollowable"]:
+        print(f"  could not follow: {item['file']}: {item['reason']}")
+    if report["runtime_materials"]:
+        print(f"  runtime materials (Kit supplies these): {', '.join(report['runtime_materials'])}")
+    for note in notes:
+        print(f"note: {note}")
+    verified = report.get("verified")
+    if verified:
+        state = "self-contained" if verified.get("self_contained") else "NOT self-contained"
+        print(f"checked the new pack: {state}")
+    return 0
+
+
 def cmd_doctor(args) -> int:
+    store = _store_arg(args)
+    if args.pack:
+        return _doctor_pack(args, [store] if store else None)
+    if store is not None:
+        # The plain check follows the same store order as every other command: one asset folder.
+        os.environ[asset_cache.PATH_ENV] = str(store)
     names = list(asset_cache.known_assets())
     for required in args.require or []:
         if required not in names:
@@ -214,45 +356,15 @@ def cmd_doctor(args) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _clean_relpath(raw: str, what: str) -> str:
-    """Validate a relative asset path; return it in POSIX form."""
-    if not raw or "\\" in raw or "\n" in raw or "\r" in raw or "\x00" in raw:
-        raise CliError(f"unsafe {what}: {raw!r}")
-    posix = PurePosixPath(raw)
-    if posix.is_absolute() or raw.startswith("/") or (len(raw) > 1 and raw[1] == ":"):
-        raise CliError(f"unsafe {what} (absolute path): {raw!r}")
-    parts = [p for p in posix.parts if p != "."]
-    if not parts or ".." in parts:
-        raise CliError(f"unsafe {what} (empty or contains '..'): {raw!r}")
-    for part in parts:
-        if part != part.strip() or any(ord(c) < 32 or ord(c) == 127 for c in part):
-            raise CliError(
-                f"unsupported {what}: names must not start or end with whitespace "
-                f"or contain control characters: {raw!r}"
-            )
-    return "/".join(parts)
-
-
 def _is_root_entry(name: str) -> bool:
     """True for the archive's own root directory entry (``.``, ``./`` or empty)."""
     return all(part in ("", ".") for part in PurePosixPath(name).parts)
 
 
-def _pack_dir(store_arg: str | None, pack: str) -> tuple[Path, Path]:
-    if not pack or "/" in pack or "\\" in pack or pack in (".", ".."):
-        raise CliError(f"invalid pack name: {pack!r}")
+def _pack_dir(store_arg: str | None, pack: str | None) -> tuple[Path, Path]:
+    """The store and pack folder to write. No --pack means the selected pack (default ur5e-dt)."""
     store = Path(store_arg).expanduser() if store_arg else asset_cache.cache_dir()
-    store = store.resolve()
-    if _inside_repo(store):
-        raise CliError(
-            f"refusing store inside the repository checkout: {store}\n"
-            "Private assets must never land in git; choose a directory outside it "
-            "(see `isaac_assets.py where`)."
-        )
-    pack_dir = store / pack
-    if _inside_repo(pack_dir):
-        raise CliError(f"refusing pack folder that resolves inside the repository: {pack_dir}")
-    return store, pack_dir
+    return packs.pack_dir(store, pack or asset_cache.selected_pack())
 
 
 def _is_archive(path: Path) -> bool:
@@ -547,123 +659,6 @@ def _walk_directory(root: Path) -> dict[str, Path]:
     return found
 
 
-_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
-_DIR_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | _NOFOLLOW
-
-
-def _open_dir_chain(pack_dir: Path, parts: tuple[str, ...]) -> int:
-    """Open *pack_dir*, then each folder in *parts* below it, creating missing ones.
-
-    Every step uses ``O_NOFOLLOW`` relative to the previous directory handle, so a
-    symlink planted anywhere below the pack folder is refused before anything is
-    created through it. Returns a directory file descriptor the caller must close.
-    """
-    fd = os.open(pack_dir, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-    try:
-        for part in parts:
-            try:
-                nxt = os.open(part, _DIR_FLAGS, dir_fd=fd)
-            except FileNotFoundError:
-                os.mkdir(part, 0o755, dir_fd=fd)
-                nxt = os.open(part, _DIR_FLAGS, dir_fd=fd)
-            except OSError as exc:
-                raise CliError(
-                    f"refusing destination: {part!r} under {pack_dir} is a symlink or not a folder"
-                ) from exc
-            os.close(fd)
-            fd = nxt
-    except BaseException:
-        os.close(fd)
-        raise
-    return fd
-
-
-def _temp_name(name: str) -> str:
-    return f".{name}.{secrets.token_hex(8)}.part"
-
-
-def _publish(dfd: int, tmp: str, name: str, force: bool) -> None:
-    """Move *tmp* to *name* inside directory *dfd*; without ``force`` never replace anything."""
-    if force:
-        os.rename(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
-        return
-    try:
-        os.link(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd, follow_symlinks=False)
-    except FileExistsError:
-        os.unlink(tmp, dir_fd=dfd)
-        raise CliError(f"refusing to overwrite (use --force): {name}") from None
-    except OSError:
-        # No hard links on this filesystem: create the destination exclusively and copy.
-        # O_EXCL means a file that appears in the meantime is never replaced.
-        try:
-            out_fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, 0o666, dir_fd=dfd)
-        except FileExistsError:
-            os.unlink(tmp, dir_fd=dfd)
-            raise CliError(f"refusing to overwrite (use --force): {name}") from None
-        try:
-            with os.fdopen(out_fd, "wb") as out, open(
-                tmp, "rb", opener=lambda path, flags: os.open(path, flags, dir_fd=dfd)
-            ) as src:
-                shutil.copyfileobj(src, out, 1 << 20)
-        except BaseException:
-            os.unlink(name, dir_fd=dfd)
-            raise
-    os.unlink(tmp, dir_fd=dfd)
-
-
-def _unlink_quietly(dfd: int, name: str) -> None:
-    try:
-        os.unlink(name, dir_fd=dfd)
-    except OSError:
-        pass  # best effort: the error that caused the cleanup is the one worth reporting
-
-
-def _write_new_file(dfd: int, name: str, write) -> str:
-    """Create a uniquely named temp file in *dfd* (exclusive, no symlink following)."""
-    tmp = _temp_name(name)
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, 0o666, dir_fd=dfd)
-    try:
-        with os.fdopen(fd, "wb") as out:
-            write(out)
-    except BaseException:
-        os.unlink(tmp, dir_fd=dfd)
-        raise
-    return tmp
-
-
-def _install_file(src: Path, rel: str, pack_dir: Path, force: bool) -> None:
-    """Copy *src* to ``<pack_dir>/<rel>`` without following symlinks below the pack folder."""
-    *parents, name = PurePosixPath(rel).parts
-    dfd = _open_dir_chain(pack_dir, tuple(parents))
-    try:
-        def write(out):
-            with src.open("rb") as handle:
-                shutil.copyfileobj(handle, out, 1 << 20)
-
-        tmp = _write_new_file(dfd, name, write)
-        try:
-            _publish(dfd, tmp, name, force)
-        except BaseException:
-            _unlink_quietly(dfd, tmp)
-            raise
-    finally:
-        os.close(dfd)
-
-
-def _write_pins(pack_dir: Path, entries: dict[str, str]) -> None:
-    text = "".join(f"{digest}  {name}\n" for name, digest in sorted(entries.items()))
-    dfd = _open_dir_chain(pack_dir, ())
-    try:
-        tmp = _write_new_file(dfd, asset_cache.PINS_FILE, lambda out: out.write(text.encode("utf-8")))
-        try:
-            os.rename(tmp, asset_cache.PINS_FILE, src_dir_fd=dfd, dst_dir_fd=dfd)
-        except BaseException:
-            _unlink_quietly(dfd, tmp)
-            raise
-    finally:
-        os.close(dfd)
-
-
 def cmd_add(args) -> int:
     src = Path(args.src).expanduser()
     if not src.exists() and not src.is_symlink():
@@ -752,6 +747,14 @@ def cmd_add(args) -> int:
     return 0
 
 
+def cmd_unpin(args) -> int:
+    store, pack_dir = _pack_dir(args.store, args.pack)
+    removed = packs.unpin_files(pack_dir, args.names)
+    print(f"removed {len(removed)} pin(s) from {pack_dir / asset_cache.PINS_FILE}; the files are still there")
+    print("To get NVIDIA's copy of a public file back: python3 scripts/fetch_ur5e_assets.py --force")
+    return 0
+
+
 def cmd_pin(args) -> int:
     store, pack_dir = _pack_dir(args.store, args.pack)
     if not pack_dir.is_dir():
@@ -762,7 +765,7 @@ def cmd_pin(args) -> int:
         for name in files:
             path = Path(current) / name
             rel = path.relative_to(pack_dir).as_posix()
-            if rel == asset_cache.PINS_FILE:
+            if rel in (asset_cache.PINS_FILE, asset_cache.PACK_FILE):
                 continue
             if path.is_symlink():
                 skipped += 1
@@ -783,79 +786,6 @@ def cmd_pin(args) -> int:
 
 
 # --------------------------------------------------------------- migrate / adopt
-
-# File types copied by ``adopt``: scene and robot descriptions, meshes, materials and
-# textures, plus layout JSON. Extend with --include.
-ADOPT_SUFFIXES = {
-    ".usd", ".usda", ".usdc", ".usdz", ".urdf", ".xacro", ".sdf", ".mjcf",
-    ".obj", ".stl", ".dae", ".fbx", ".glb", ".gltf", ".ply", ".mtl",
-    ".mdl", ".mtlx", ".png", ".jpg", ".jpeg", ".exr", ".hdr", ".tga", ".tif", ".tiff",
-}
-ADOPT_SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "build", "dist", ".tox"}
-
-
-def _private_dirs(path: Path) -> None:
-    """Create *path* (and missing parents) as 0755 and make sure *path* itself, the pack
-    folder, is not group- or world-writable when it is the user's own
-    (``assets__prepare_workstation`` refuses such folders, and others must not be able to
-    swap your assets). Folders above it are left as they are."""
-    missing = []
-    probe = path
-    while not probe.exists():
-        missing.append(probe)
-        probe = probe.parent
-    for folder in reversed(missing):
-        os.mkdir(folder, 0o755)
-    try:
-        st = path.stat()
-    except OSError:
-        return
-    if st.st_uid == os.getuid() and st.st_mode & 0o022:
-        os.chmod(path, st.st_mode & ~0o022 & 0o7777)
-        print(f"note: removed group/world write permission from {path}")
-
-
-def _install_many(sources: dict[str, Path], pack_dir: Path, force: bool, pin: bool) -> tuple[int, int]:
-    """Copy ``rel -> source`` into ``pack_dir`` safely. Returns (added, identical).
-
-    A destination that already holds the same bytes is skipped. One that differs is a
-    conflict: everything is checked first, and nothing is copied unless ``force``.
-    """
-    conflicts, todo, identical = [], {}, 0
-    for rel in sorted(sources):
-        try:
-            rel.encode("utf-8")
-        except UnicodeEncodeError:
-            raise CliError(f"file name is not valid UTF-8: {rel!r}") from None
-        target = pack_dir / rel
-        if target.is_symlink() or _inside_repo(target.parent):
-            raise CliError(f"refusing unsafe destination: {target}")
-        if target.exists():
-            if not target.is_file():
-                raise CliError(f"refusing destination: {target} exists and is not a file")
-            if sha256(target) == sha256(sources[rel]):
-                identical += 1
-                continue
-            conflicts.append(rel)
-        todo[rel] = sources[rel]
-    if conflicts and not force:
-        shown = "\n".join(f"  {pack_dir / rel}" for rel in conflicts[:10])
-        more = f"\n  ... and {len(conflicts) - 10} more" if len(conflicts) > 10 else ""
-        raise CliError(f"different files already in the asset folder (use --force to replace):\n{shown}{more}")
-    _private_dirs(pack_dir)
-    pins = dict(asset_cache.pins(pack_dir))
-    added = 0
-    try:
-        for rel in sorted(todo):
-            _install_file(todo[rel], rel, pack_dir, force)
-            if pin:
-                pins[rel] = sha256(pack_dir / rel)
-            added += 1
-    finally:
-        if added and pin:
-            _write_pins(pack_dir, pins)
-    return added, identical
-
 
 LEGACY_REPO_ASSETS = "exts/ur5e-dt/assets"
 
@@ -1059,30 +989,13 @@ def cmd_migrate(args) -> int:
     return 1 if damaged or incomplete else 0
 
 
-def _adopt_sources(root: Path, suffixes: set[str]) -> dict[str, Path]:
-    found: dict[str, Path] = {}
-    for current, dirs, files in os.walk(root, followlinks=False):
-        dirs[:] = sorted(d for d in dirs if d not in ADOPT_SKIP_DIRS and not d.startswith(".")
-                         and not (Path(current) / d).is_symlink())
-        for name in files:
-            path = Path(current) / name
-            if path.suffix.lower() not in suffixes or path.is_symlink() or not path.is_file():
-                continue
-            found[_clean_relpath(path.relative_to(root).as_posix(), "file name")] = path
-    return found
-
-
 def cmd_adopt(args) -> int:
     src = Path(args.src).expanduser().resolve()
     if not src.is_dir():
         raise CliError(f"not a folder: {src}")
-    pack = args.pack or src.name
-    _clean_relpath(pack, "pack name")
-    if pack != asset_cache.PACK and "/" in pack:
-        raise CliError("--pack must be a single folder name")
-    store, pack_dir = _pack_dir(args.store, pack)
+    store, pack_dir = _pack_dir(args.store, args.pack or src.name)
     suffixes = ADOPT_SUFFIXES | {("." + e.lstrip(".")).lower() for e in (args.include or [])}
-    sources = _adopt_sources(src, suffixes)
+    sources = packs.named_sources(src, args.file, suffixes) if args.file else _adopt_sources(src, suffixes)
     if not sources:
         print(f"no asset files found in {src}")
         return 0
@@ -1092,7 +1005,11 @@ def cmd_adopt(args) -> int:
         for rel in sorted(sources):
             print(f"  {rel}")
         return 0
+    entries, how = packs.adopted_entries(sources, args.entry)
     added, identical = _install_many(sources, pack_dir, args.force, pin=True)
+    if entries:
+        packs.write_pack_file(pack_dir, entries)
+        print(f"entry files ({how}): {', '.join(entries)}")
     print(f"added {added}, already present {identical}; pins in {pack_dir / asset_cache.PINS_FILE}")
     return 0
 
@@ -1115,12 +1032,43 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument(
         "--local-only", action="store_true", help="fail if any asset resolves remotely"
     )
+    doctor.add_argument("--pack", help="check this pack's files and USD dependencies")
+    doctor.add_argument("--store", metavar="DIR",
+                        help="check this asset folder (default: the project and user stores; with --pack, every store)")
+    doctor.add_argument("--entry", action="append", metavar="RELPATH",
+                        help="with --pack: an entry file (default: from the pack, else the twin's names)")
+    doctor.add_argument("--usd-python", metavar="PYTHON",
+                        help="with --pack: a Python with usd-core (default: $ISAAC_MCP_USD_PYTHON)")
+    doctor.add_argument("--pins-only", action="store_true", help="with --pack: skip the dependency check")
     doctor.set_defaults(func=cmd_doctor)
+
+    listing = sub.add_parser("packs", help="list the packs in every store")
+    listing.add_argument("--json", action="store_true")
+    listing.add_argument("--store", metavar="DIR", help="list only this asset folder")
+    listing.set_defaults(func=cmd_packs)
+
+    create = sub.add_parser("create", help="create an empty pack folder")
+    create.add_argument("pack", metavar="NAME")
+    create.add_argument("--store", metavar="DIR", help="asset folder (default: the primary one)")
+    create.set_defaults(func=cmd_create)
+
+    build = sub.add_parser("pack-build", help="copy USD files and only what they depend on into a pack")
+    build.add_argument("sources", metavar="USD", nargs="+", help="a USD path, or a path inside --from-pack")
+    build.add_argument("--pack", required=True)
+    build.add_argument("--from-pack", metavar="NAME", help="pack that source names and logical references come from")
+    build.add_argument("--layout-root", metavar="DIR", help="folder the pack layout is relative to (default: the source's folder)")
+    build.add_argument("--store", metavar="DIR", help="asset folder to write (default: the primary one)")
+    build.add_argument("--usd-python", metavar="PYTHON", help="a Python with usd-core (default: $ISAAC_MCP_USD_PYTHON)")
+    build.add_argument("--allow-unresolved", action="store_true", help="build even if references are missing; they are recorded")
+    build.add_argument("--dry-run", action="store_true")
+    build.add_argument("--force", action="store_true", help="replace different files")
+    build.add_argument("--json", action="store_true")
+    build.set_defaults(func=cmd_pack_build)
 
     add = sub.add_parser("add", help="copy a file, directory or archive into a store")
     add.add_argument("src", metavar="SRC")
     add.add_argument("--store", metavar="DIR", help="store directory (default: first user store)")
-    add.add_argument("--pack", default=asset_cache.PACK, help="pack folder (default: %(default)s)")
+    add.add_argument("--pack", help="pack folder (default: the selected pack, else ur5e-dt)")
     add.add_argument("--as", dest="as_", metavar="RELPATH", help="relative path for a single file")
     add.add_argument("--force", action="store_true", help="overwrite existing files")
     add.add_argument(
@@ -1162,14 +1110,22 @@ def build_parser() -> argparse.ArgumentParser:
     adopt.add_argument("--pack", help="folder name inside the asset folder (default: the project folder's name)")
     adopt.add_argument("--store", metavar="DIR", help="asset folder (default: the primary one)")
     adopt.add_argument("--include", action="append", metavar="EXT", help="also copy files with this extension")
+    adopt.add_argument("--file", action="append", metavar="RELPATH", help="copy only this file or folder inside FOLDER")
+    adopt.add_argument("--entry", action="append", metavar="RELPATH", help="root USD file (default: a sole top-level USD)")
     adopt.add_argument("--dry-run", action="store_true")
     adopt.add_argument("--force", action="store_true", help="replace different files")
     adopt.set_defaults(func=cmd_adopt)
 
     pin = sub.add_parser("pin", help="regenerate SHA256SUMS for a pack folder")
     pin.add_argument("--store", metavar="DIR")
-    pin.add_argument("--pack", default=asset_cache.PACK)
+    pin.add_argument("--pack", help="pack folder (default: the selected pack, else ur5e-dt)")
     pin.set_defaults(func=cmd_pin)
+
+    unpin = sub.add_parser("unpin", help="remove pins, so NVIDIA's check and fetch --force apply again")
+    unpin.add_argument("names", metavar="RELPATH", nargs="+", help="file names as listed in SHA256SUMS")
+    unpin.add_argument("--store", metavar="DIR")
+    unpin.add_argument("--pack", help="pack folder (default: the selected pack, else ur5e-dt)")
+    unpin.set_defaults(func=cmd_unpin)
     return parser
 
 

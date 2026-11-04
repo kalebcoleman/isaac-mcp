@@ -97,7 +97,21 @@ def analyze(edges, fixed_frame, *, clock_seen, tf_publishers=(), clock_publisher
         errors.append("no transforms received on /tf or /tf_static: is the timeline playing, and are both "
                       "sides on the same ROS_DOMAIN_ID?")
     elif fixed_frame not in frames:
-        errors.append(f"the Fixed Frame '{fixed_frame}' is not in the tree; roots are: {', '.join(roots)}.")
+        errors.append(f"the Fixed Frame '{fixed_frame}' is not in the tree; roots are: {', '.join(roots) or 'none, every frame has a parent, so there is a TF loop'}.")
+        # Kit drops odom -> base as a duplicate child when links loop, so a loop can hide the Fixed Frame too.
+        for child in sorted(parents):
+            seen, frame = [], child
+            while frame in parents and frame not in seen:
+                seen.append(frame)
+                frame = sorted(parents[frame])[0]
+            if frame in seen:
+                loop = seen[seen.index(frame):]
+                start = loop.index(min(loop))
+                loop = loop[start:] + loop[:start]
+                message = (f"TF loop {' -> '.join(loop + [loop[0]])}: a frame is its own ancestor, so nothing in it can be placed. "
+                           "Two publishers disagree about which frame is the parent; keep one.")
+                if message not in errors:
+                    errors.append(message)
     else:
         cycles = set()
 
@@ -332,7 +346,10 @@ def isaac_ros_env(env=None):
         roots = [Path(purelib) / "isaacsim"]
     distro = env.get("ROS_DISTRO") or ("humble" if "jammy" in Path("/etc/os-release").read_text(errors="replace")
                                         else "jazzy")
+    # The bundled ROS 2 is in isaacsim.ros2.core on 6.x and isaacsim.ros2.bridge on 5.1.
     base = roots[0] / "exts" / "isaacsim.ros2.core" / distro
+    if not (base / "rclpy").is_dir() and (roots[0] / "exts" / "isaacsim.ros2.bridge" / distro / "rclpy").is_dir():
+        base = roots[0] / "exts" / "isaacsim.ros2.bridge" / distro
     if not (base / "rclpy").is_dir():
         raise RuntimeError(f"Isaac Sim has no bundled ROS 2 {distro} at {base}")
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(base / "rclpy"), env.get("PYTHONPATH")]))

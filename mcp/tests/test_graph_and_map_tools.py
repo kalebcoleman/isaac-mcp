@@ -170,6 +170,35 @@ def test_graph_paths_accept_unicode_and_refuse_property_paths(monkeypatch):
             graph._graph_path(bad)
 
 
+def test_buffer_from_occupied_keeps_last_row_and_floods_from_start():
+    # 119 cells: native getDimensions truncates this span to 118, and the last-row leaf overruns its buffer.
+    cell = 0.05
+    lo, hi = (-3.0, -3.0), (2.95, 2.95)
+    wall = [(-3.0 + (i + 0.5) * cell, 2.925) for i in range(119)]  # the whole last row
+    buf, w, h, on_wall = graph.buffer_from_occupied(wall, lo, hi, cell, (-2.0, -2.0))
+    assert not on_wall
+    assert (w, h, len(buf)) == (119, 119, 119 * 119)
+    assert buf.count(1.0) == 119 and buf[118 * 119:] == [1.0] * 119
+    assert buf.count(0.0) == 118 * 119 and buf.count(0.5) == 0
+
+
+def test_buffer_from_occupied_leaves_unreachable_cells_unknown():
+    wall = [(0.25, 0.05 + i * 0.1) for i in range(4)]  # a column that splits the 4x4 map
+    buf, w, h, _ = graph.buffer_from_occupied(wall, (0.0, 0.0), (0.4, 0.4), 0.1, (0.05, 0.05))
+    assert (w, h) == (4, 4) and buf.count(1.0) == 4 and buf.count(0.0) == 8 and buf.count(0.5) == 4
+
+
+def test_a_start_on_a_wall_is_reported_instead_of_erasing_the_wall():
+    wall = [(0.05 + i * 0.1, 0.05) for i in range(3)]  # touches the start
+    other = [(0.35, 0.35)]
+    buf, _, _, on_wall = graph.buffer_from_occupied(wall + other, (0.0, 0.0), (0.4, 0.4), 0.1, (0.05, 0.05))
+    assert on_wall and buf.count(1.0) == 1  # the wall was erased, the far cell was not
+    counts = {"occupied": 1, "free": 15, "unknown": 0}
+    assert "occupied cell" in graph.start_blocked(counts, [254], False, on_wall)
+    # A floor filling the slice erases everything: that stays the raise-the-slice case, not a blocked start.
+    assert graph.start_blocked({"occupied": 0, "free": 16, "unknown": 0}, [254], False, True) is None
+
+
 def test_start_blocked_decisions():
     walls_mostly_unknown = {"occupied": 50, "free": 100, "unknown": 850}  # big bounds, walls exist
     assert graph.start_blocked(walls_mostly_unknown, [254]) is None
@@ -188,3 +217,18 @@ def test_start_on_a_cell_edge_checks_the_touching_cells(np):
     pgm, origin, _ = graph.pgm_and_origin(buf.tolist(), dims, dims, (0.0, 0.0, 0.0), 0.1, 1.0)
     assert len(graph.cells_at(pgm, dims, dims, origin, 0.1, 0.3, 0.3)) == 4   # a corner: four cells
     assert len(graph.cells_at(pgm, dims, dims, origin, 0.1, 0.35, 0.35)) == 1  # a cell centre: one
+
+
+def test_map_slice_rises_past_a_floor_only_while_nothing_is_occupied():
+    raised = graph.raised_slice(0.05, 0.3, 0.05, 0, 0)
+    assert raised == pytest.approx(0.11)
+    assert graph.raised_slice(0.05, 0.3, 0.05, 12, 0) is None  # a real map: leave it alone
+    assert graph.raised_slice(0.05, 0.3, 0.05, 0, graph.FLOOR_RETRIES) is None
+    assert graph.raised_slice(0.28, 0.3, 0.05, 0, 0) is None  # no room left in the slice
+
+
+def test_raised_slice_note_does_not_claim_lower_geometry_is_never_mapped():
+    note = graph.slice_bottom_note(0.05)
+    assert "before 2.3.3" in note and "0.05" in note
+    assert "anything lower" not in note.lower()
+    assert "still include colliders below" in note

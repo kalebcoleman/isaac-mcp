@@ -13,7 +13,7 @@ The reference environment used Isaac Lab 3.0.0, Isaac Sim 6.2.0.0 and Python 3.1
 Isaac Lab standalone scripts own the Kit app via `AppLauncher` and their own main
 loop (the Isaac Lab `scripts/reinforcement_learning/train.py` calls
 `run_train_cli`). The bridge doc notes they are a separate Kit process that must
-be pumped by `env.step()`/`sim.step()` (`mcp/docs/isaac-lab.md`).
+update Kit itself when headless, as the template does (`mcp/docs/isaac-lab.md`).
 
 Two candidate drivers:
 
@@ -224,10 +224,10 @@ and `runs_status` / `metrics_summary` read its checkpoint and TensorBoard scalar
   The current host keeps a Kit renderer for headless `--video`, using child-only `HEADLESS=1`;
   windowed jobs select Kit with `HEADLESS=0`. Explicit visualizer overrides and optional
   video dependencies are described in [the tool reference](TOOLS-ISAACLAB.md).
-- The RL backend is chosen with `--rl_library` (else the task's registered default); `episodes` was dropped because
+- The RL backend is chosen with `--rl_library` (else the task's registered `default_agent`; with none, Lab exits 2 asking for it); `episodes` was dropped because
   only the rlinf backend has `--num_episodes`.
 - `extra_args` accepts `--flags` **and Hydra overrides** (`agent.params.config.minibatch_size=1536`, `+key=v`, `~key`).
-  rl_games needs `minibatch_size` to divide `num_envs * 24`, so small `num_envs` runs need that override.
+  rl_games needs `minibatch_size` to divide `num_envs` times the task's horizon, which varies by task.
 - Runs live under `<isaaclab_root>/logs/...`, not the job dir; `runs_status` finds the newest checkpoint from the
   training log ("saving checkpoint '...'") and reports the experiment dir as `run_dir`.
 - Job ids are validated (`YYYYMMDD-HHMMSS-<slug>`), and cancel only signals a pid whose command line still matches the job.

@@ -11,8 +11,13 @@ is none or it lacks the extension, answers with an actionable error. A live brid
 import asyncio
 import importlib.util
 import json
+import os
+import socket
 import subprocess
+import time
+import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,7 +29,7 @@ import mcp.types as types
 
 import isaac_mcp.screen as screen
 import isaac_mcp.server as gw
-from isaac_mcp import host_catalog, local_tools as lt
+from isaac_mcp import host_catalog, local_tools as lt, sim_sessions
 from isaac_mcp_bridge.bridge import ToolDefinition
 from isaac_mcp_bridge.schema import field_specs
 from test_bridge import LiveBridge
@@ -768,10 +773,16 @@ def test_the_host_tool_collision_check_still_protects_local_tools(monkeypatch):
         gw.discover_and_register_tools(server)
 
 
-def test_the_offline_proxies_carry_no_local_tool_groups_or_annotations():
+def test_the_offline_proxies_carry_hints_from_their_own_table():
     server = build({lt.ENV_VAR: "none"})
     tool = server._tool_manager._tools[PLAY]
-    assert tool.annotations is None                       # bridge tools are not annotated
+    assert tool.annotations.readOnlyHint is False and tool.annotations.destructiveHint is False
+
+
+def test_a_tool_from_a_projects_own_extension_gets_no_hints():
+    server = build({lt.ENV_VAR: "none"})
+    gw.register_dynamic_tool(server, "demo__ping", "demo.ping", {"description": "d", "parameters": {}, "fields": []})
+    assert server._tool_manager._tools["demo__ping"].annotations is None
 
 
 def test_instructions_say_the_tools_are_always_listed():
@@ -816,3 +827,360 @@ def test_jenga_is_accepted_by_real_mcp_schema_and_forwarded(monkeypatch, name, a
             assert refused.isError
 
         run(server, exercise)
+
+
+# ---- Lab 3 run 8: refresh_tools(wait_s) waited on the pinned port, not sim__launch's ----------
+
+def dead_port():
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+@pytest.fixture()
+def managed(monkeypatch, tmp_path):
+    """A server with sim__launch whose launches are faked as session records of a live process."""
+    env = {"ISAAC_MCP_LOCAL_TOOLS": "gateway,sim_launch",
+           "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "sessions")}
+
+    def write_session(port, pid=None):
+        pid = os.getpid() if pid is None else pid
+        record = {"id": uuid.uuid4().hex, "pid": pid, "port": port, "ros_domain": 9,
+                  "start_ticks": sim_sessions._process_identity(pid)[1],
+                  "boot_id": sim_sessions._boot_id(), "started_at": time.time()}
+        directory = tmp_path / "sessions" / record["id"]
+        directory.mkdir(parents=True)
+        (directory / "session.json").write_text(json.dumps(record))
+        return record
+
+    pid_box = {}
+    monkeypatch.setattr(sim_sessions, "_launch", lambda settings, port, *args: write_session(port, pid_box.get("pid")))
+    server = gw.build_server(env)
+
+    async def selected(client):
+        return gw._state_for(server).get_client().port
+
+    return SimpleNamespace(server=server, write_session=write_session, selected=selected, pid_box=pid_box,
+                           launch=lambda port: call("sim__launch", {"port": port, "ros_domain": 9}),
+                           state=gw._state_for(server))
+
+
+def test_refresh_selects_the_launched_session_when_nothing_listens_on_the_pinned_port(managed, monkeypatch):
+    pinned = dead_port()
+    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    notes = []
+    with LiveBridge() as live:
+        launched, message, port, status = run(
+            managed.server, managed.launch(live.port), call("refresh_tools", {"wait_s": 5}),
+            managed.selected, call("status"), notes=notes)
+    session_id = json.loads(launched)["id"]
+    assert port == live.port and json.loads(status)["port"] == live.port
+    assert f"Selected the bridge on port {live.port} (PID {os.getpid()})" in message
+    assert f"port {pinned}, which this server was using, did not answer" in message
+    assert session_id in message and "launched by this server" in message
+    assert f"switched to bridge on port {live.port}" in message   # the use_bridge path
+    assert "Confirm the PID with status" in message
+    assert notes, "the client must hear that the tool list changed"
+
+
+def test_refresh_without_wait_also_selects_a_ready_launched_session(managed, monkeypatch):
+    monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+    with LiveBridge() as live:
+        _, message, port = run(managed.server, managed.launch(live.port), call("refresh_tools"), managed.selected)
+    assert port == live.port and "Selected the bridge" in message
+
+
+def test_refresh_wait_polls_the_session_until_it_is_ready(managed, monkeypatch):
+    pinned = dead_port()
+    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    monkeypatch.setattr(gw, "REFRESH_POLL_S", 0.01)
+    real, checks = gw._session_not_ready, []
+
+    def slow_boot(session):
+        checks.append(session["port"])
+        return "still booting" if len(checks) < 3 else real(session)
+
+    monkeypatch.setattr(gw, "_session_not_ready", slow_boot)
+    with LiveBridge() as live:
+        _, message, port = run(managed.server, managed.launch(live.port),
+                               call("refresh_tools", {"wait_s": 5}), managed.selected)
+    assert port == live.port and checks == [live.port] * 3 and "Selected the bridge" in message
+
+
+def test_refresh_wait_timeout_names_the_session_port_it_polled(managed, monkeypatch):
+    pinned, session_port = dead_port(), dead_port()
+    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    monkeypatch.setattr(gw, "REFRESH_POLL_S", 0.01)
+    monkeypatch.setattr(gw, "REFRESH_WAIT_MAX_S", 0.05)
+    _, message, port = run(managed.server, managed.launch(session_port),
+                           call("refresh_tools", {"wait_s": 5}), managed.selected)
+    assert port == pinned and "waited 0 s" in message
+    assert f"polls port {pinned} and port {session_port}" in message
+    assert "polls for you" not in message
+    assert f"port {session_port} (PID {os.getpid()}) is not answering yet" in message
+
+
+def test_refresh_never_leaves_a_pinned_bridge_that_answers(managed, monkeypatch):
+    monkeypatch.setattr(gw, "_session_not_ready", lambda session: pytest.fail("polled away from a live pin"))
+    with LiveBridge() as pinned, LiveBridge() as launched:
+        monkeypatch.setenv("UR5E_DT_PORT", str(pinned.port))
+        _, message, port = run(managed.server, managed.launch(launched.port),
+                               call("refresh_tools", {"wait_s": 5}), managed.selected)
+    assert port == pinned.port and "Selected the bridge" not in message
+    assert f"stayed on port {pinned.port}, whose bridge answered" in message
+    assert f"port {launched.port} (PID {os.getpid()})" in message and "use_bridge(port)" in message
+
+
+def test_refresh_does_not_leave_a_pinned_port_that_accepts_but_is_still_booting(managed, monkeypatch):
+    monkeypatch.setattr(gw, "DISCOVERY_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(gw, "_session_not_ready", lambda session: pytest.fail("left a booting pin"))
+    with socket.socket() as booting, LiveBridge() as launched:
+        booting.bind(("127.0.0.1", 0))
+        booting.listen(8)
+        pinned = booting.getsockname()[1]
+        monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+        _, message, port = run(managed.server, managed.launch(launched.port),
+                               call("refresh_tools"), managed.selected)
+    assert port == pinned and "accepted the connection" in message and "Selected" not in message
+    assert "polls for you" not in message and f"use_bridge(port={launched.port})" in message
+
+
+def test_refresh_does_not_guess_between_several_managed_sessions(managed, monkeypatch):
+    pinned = dead_port()
+    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    monkeypatch.setattr(gw, "_session_not_ready", lambda session: pytest.fail("guessed"))
+    with LiveBridge() as first, LiveBridge() as second:
+        _, _, message, port = run(managed.server, managed.launch(first.port), managed.launch(second.port),
+                                  call("refresh_tools", {"wait_s": 0}), managed.selected)
+    assert port == pinned and "Selected the bridge" not in message
+    assert f"port {first.port}" in message and f"port {second.port}" in message
+    assert "will not guess" in message and "polls for you" not in message
+
+
+def test_refresh_names_but_does_not_select_a_session_this_server_did_not_launch(managed, monkeypatch):
+    # The session directory is shared with other hosts and agents.
+    pinned = dead_port()
+    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    with LiveBridge() as foreign:
+        managed.write_session(foreign.port)
+        message, port = run(managed.server, call("refresh_tools", {"wait_s": 0}), managed.selected)
+    assert port == pinned and "Selected the bridge" not in message
+    assert f"port {foreign.port}" in message and f"use_bridge(port={foreign.port})" in message
+    assert "polls for you" not in message and f"keeps dialling port {pinned}" in message
+
+
+def test_refresh_refuses_a_session_port_answered_by_another_process(managed, monkeypatch):
+    pinned = dead_port()
+    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    managed.pid_box["pid"] = os.getppid()
+    with LiveBridge() as impostor:
+        _, message, port = run(managed.server, managed.launch(impostor.port),
+                               call("refresh_tools"), managed.selected)
+    assert port == pinned and "Selected the bridge" not in message
+    assert f"answered as PID {os.getpid()}, not the managed session's PID {os.getppid()}" in message
+
+
+def test_refresh_waits_for_the_session_app_to_finish_loading(managed, monkeypatch):
+    from isaac_mcp_bridge import builtins as bridge_builtins
+
+    monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+    monkeypatch.setattr(bridge_builtins, "_app_ready", lambda: False)
+
+    async def app_ready(client):
+        monkeypatch.setattr(bridge_builtins, "_app_ready", lambda: True)
+
+    with LiveBridge() as live:
+        _, loading, _, ready, port = run(managed.server, managed.launch(live.port), call("refresh_tools"),
+                                         app_ready, call("refresh_tools"), managed.selected)
+    assert "still loading" in loading and "Selected the bridge" not in loading
+    assert port == live.port and "Selected the bridge" in ready
+
+
+def test_a_session_on_the_selected_port_is_waited_for_not_replaced(managed, monkeypatch):
+    # The pin itself is the launched session, still starting: there is nothing to switch to.
+    session_port = dead_port()
+    monkeypatch.setenv("UR5E_DT_PORT", str(session_port))
+    _, message, port = run(managed.server, managed.launch(session_port), call("refresh_tools"), managed.selected)
+    assert port == session_port and f"polls port {session_port} for you" in message
+
+
+def test_a_remote_dial_host_is_not_redirected_to_a_local_session(managed, monkeypatch):
+    with LiveBridge() as live:
+        record = managed.write_session(live.port)
+        managed.state.launched_sessions.add(record["id"])
+        monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+        assert gw._followable_session(managed.state)["port"] == live.port
+        monkeypatch.setenv("ISAAC_MCP_HOST", "192.0.2.1")
+        assert gw._followable_session(managed.state) is None
+
+
+def test_refresh_with_no_pin_and_no_bridge_reports_it(monkeypatch, tmp_path):
+    # client.port raises when discovery finds nothing; the hint must not turn that into a crash.
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    server = build({"ISAAC_MCP_LOCAL_TOOLS": "gateway", "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")})
+    (message,) = run(server, call("refresh_tools"))
+    assert message.startswith("Error: no Isaac Sim bridge is reachable") and "polls for you" in message
+
+
+def test_refresh_hint_with_no_pin_names_only_the_session_port(managed, monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    session_port = dead_port()
+    _, message = run(managed.server, managed.launch(session_port), call("refresh_tools"))
+    assert f"refresh_tools(wait_s=120) polls port {session_port}, and selects" in message
+    assert "port None" not in message
+
+
+def test_use_bridge_still_switches_to_any_port_and_keeps_its_result(managed, monkeypatch):
+    monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+    with LiveBridge() as live:
+        message, port = run(managed.server, call("use_bridge", {"port": live.port}), managed.selected)
+    assert message.startswith(f"switched to bridge on port {live.port}\n") and port == live.port
+    assert "Selected the bridge" not in message
+
+
+def test_launch_notes_no_longer_claim_refresh_cannot_switch(monkeypatch, tmp_path):
+    record = {"id": "b" * 32, "pid": os.getpid(), "port": 18766, "ros_domain": 9,
+              "start_ticks": sim_sessions._process_identity(os.getpid())[1], "boot_id": sim_sessions._boot_id()}
+    directory = tmp_path / record["id"]
+    directory.mkdir()
+    (directory / "session.json").write_text(json.dumps(record))
+    monkeypatch.setattr(sim_sessions.client, "call", lambda *a, **k: {"pid": os.getpid(), "app_ready": True})
+    monkeypatch.setattr(sim_sessions, "_resources", lambda: {})
+    status = sim_sessions._status({"ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path)}, record["id"])
+    assert "use_bridge(port=18766)" in status["next"] and "while that port answers" in status["next"]
+
+
+# ---- Lab 3 run 8: status reports what the MCP host process is running -------------------------
+
+COMMIT_A, COMMIT_B = "a" * 40, "b" * 40
+
+
+def fake_checkout(root, head=f"ref: refs/heads/main", loose=COMMIT_A):
+    git = root / ".git"
+    (git / "refs" / "heads").mkdir(parents=True)
+    (git / "HEAD").write_text(head + "\n")
+    if loose:
+        (git / "refs" / "heads" / "main").write_text(loose + "\n")
+    return root
+
+
+def test_read_git_head_handles_loose_packed_detached_and_worktree_layouts(tmp_path):
+    loose = fake_checkout(tmp_path / "loose")
+    assert gw._read_git_head(loose) == COMMIT_A
+    detached = fake_checkout(tmp_path / "detached", head=COMMIT_B)
+    assert gw._read_git_head(detached) == COMMIT_B
+    packed = fake_checkout(tmp_path / "packed", loose=None)
+    (packed / ".git" / "packed-refs").write_text(
+        f"# pack-refs with: peeled\n{COMMIT_B} refs/heads/other\n{COMMIT_A} refs/heads/main\n")
+    assert gw._read_git_head(packed) == COMMIT_A
+    # A worktree or submodule: .git is a file, and refs live in the common directory.
+    common = fake_checkout(tmp_path / "main")
+    private = common / ".git" / "worktrees" / "w"
+    private.mkdir(parents=True)
+    (private / "HEAD").write_text("ref: refs/heads/main\n")
+    (private / "commondir").write_text("../..\n")
+    worktree = tmp_path / "w"
+    worktree.mkdir()
+    (worktree / ".git").write_text(f"gitdir: {private}\n")
+    assert gw._read_git_head(worktree) == COMMIT_A
+
+
+@pytest.mark.parametrize("head", ["garbage", "ref: refs/heads/missing"])
+def test_read_git_head_reports_nothing_rather_than_guessing(tmp_path, head):
+    assert gw._read_git_head(fake_checkout(tmp_path / "bad", head=head)) is None
+    assert gw._read_git_head(tmp_path / "absent") is None
+    assert gw._read_git_head(None) is None
+
+
+def test_find_checkout_recognizes_a_source_tree_but_not_an_installed_copy(tmp_path):
+    tree = fake_checkout(tmp_path / "tree")
+    (tree / "mcp" / "isaac_mcp").mkdir(parents=True)
+    (tree / "mcp" / "pyproject.toml").write_text("")
+    assert gw._find_checkout(str(tree / "mcp" / "isaac_mcp" / "server.py")) == tree.resolve()
+    installed = fake_checkout(tmp_path / "repo") / ".venv" / "lib" / "site-packages" / "isaac_mcp"
+    installed.mkdir(parents=True)
+    assert gw._find_checkout(str(installed / "server.py")) is None
+
+
+def test_host_identity_warns_only_after_the_checkout_moves(tmp_path, monkeypatch):
+    checkout = fake_checkout(tmp_path / "tree")
+    monkeypatch.setattr(gw, "_HOST_CHECKOUT", checkout)
+    monkeypatch.setattr(gw, "_HOST_COMMIT", COMMIT_A)
+    identity = gw._host_identity()
+    assert identity["commit"] == identity["checkout_commit"] == COMMIT_A
+    assert identity["stale"] is False and "warning" not in identity and identity["pid"] == os.getpid()
+    (checkout / ".git" / "refs" / "heads" / "main").write_text(COMMIT_B + "\n")   # a git pull
+    identity = gw._host_identity()
+    assert identity["commit"] == COMMIT_A and identity["checkout_commit"] == COMMIT_B and identity["stale"] is True
+    assert COMMIT_A[:12] in identity["warning"] and COMMIT_B[:12] in identity["warning"]
+    assert "Restart the MCP connection" in identity["warning"]
+    (checkout / ".git" / "HEAD").write_text("garbage")                              # unreadable now
+    identity = gw._host_identity()
+    assert identity["checkout_commit"] == "unknown" and identity["stale"] is None and "warning" not in identity
+
+
+def test_host_identity_of_an_installed_wheel_is_just_the_version(monkeypatch):
+    monkeypatch.setattr(gw, "_HOST_CHECKOUT", None)
+    monkeypatch.setattr(gw, "_HOST_COMMIT", None)
+    monkeypatch.setattr(gw, "_HOST_VERSION", "9.9.9")
+    assert gw._host_identity() == {"version": "9.9.9", "pid": os.getpid()}
+
+
+def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypatch, tmp_path):
+    from isaac_mcp.client import call as direct_call
+
+    checkout = fake_checkout(tmp_path / "tree")
+    monkeypatch.setattr(gw, "_HOST_CHECKOUT", checkout)
+    monkeypatch.setattr(gw, "_HOST_COMMIT", COMMIT_B)   # the server started before the pull
+    with LiveBridge() as live:
+        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        direct = direct_call("status", port=live.port, timeout=5)
+        assert "host" not in direct, "the bridge must not grow a field this would overwrite"
+        (answer,) = run(build(), call("status"))
+    payload = json.loads(answer)
+    host = payload.pop("host")
+    assert set(payload) == set(direct) and payload["pid"] == direct["pid"] and payload["port"] == live.port
+    assert host["stale"] is True and host["commit"] == COMMIT_B and "warning" in host
+    assert str(tmp_path) not in answer, "status must not publish the checkout path"
+
+
+def test_status_with_no_bridge_still_reports_the_host(monkeypatch, tmp_path):
+    monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+    checkout = fake_checkout(tmp_path / "tree")
+    monkeypatch.setattr(gw, "_HOST_CHECKOUT", checkout)
+    monkeypatch.setattr(gw, "_HOST_COMMIT", COMMIT_B)
+    state = gw._state_for(build({"ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")}))
+    answer = gw._dispatch("status", {}, state)
+    assert answer.startswith("Error:") and "MCP host: version" in answer and "Restart the MCP connection" in answer
+    other = gw._dispatch("ur5e_dt.play_scene", {}, state)
+    assert "MCP host:" not in other
+
+
+# ---- Lab 3 run 8: help text must work on a stock python3 --------------------------------------
+
+def test_bridge_listing_help_is_one_working_form(monkeypatch, tmp_path):
+    bare = "python -m isaac_mcp.client"    # fails on a python3 without the package
+    assert bare not in gw.LIST_BRIDGES_HELP
+    assert "python3 mcp/isaac_mcp/client.py --list-bridges" in gw.LIST_BRIDGES_HELP
+    assert (ROOT / "mcp" / "isaac_mcp" / "client.py").is_file()
+    server = build({"ISAAC_MCP_LOCAL_TOOLS": "gateway", "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")})
+    state = gw._state_for(server)
+    listed = {tool.name: tool for tool in asyncio.run(server.list_tools())}
+    refused = ConnectionRefusedError("[Errno 111] Connection refused")
+    messages = [gw._BRIDGE_HELP, gw.SERVER_INSTRUCTIONS, listed["use_bridge"].description,
+                gw._catalog_error("status", refused, state), gw._catalog_error("ur5e_dt.play_scene", refused, state),
+                gw._starting_hint(server, refused)]
+    for message in messages:
+        assert gw.LIST_BRIDGES_HELP in message and bare not in message
+    # gen_tool_reference reads docstrings from the source, so use_bridge must keep one.
+    reference_spec = importlib.util.spec_from_file_location("gen_tool_reference", ROOT / "scripts" / "gen_tool_reference.py")
+    reference = importlib.util.module_from_spec(reference_spec)
+    reference_spec.loader.exec_module(reference)
+    summary = reference.local_tools(ROOT / "mcp" / "isaac_mcp" / "server.py")["use_bridge"][0]
+    assert summary and listed["use_bridge"].description.startswith(summary)
+    source = (ROOT / "mcp" / "isaac_mcp" / "server.py").read_text()
+    assert source.count("--list-bridges`") == 2, "the two forms live only in LIST_BRIDGES_HELP"
+    monkeypatch.setattr(gw, "discover_and_register_tools",
+                        lambda s: (_ for _ in ()).throw(RuntimeError("multiple bridges running (a, b)")))
+    several = asyncio.run(gw._refresh_tools(server))
+    assert gw.LIST_BRIDGES_HELP in several and "use_bridge(port)" in several

@@ -251,8 +251,11 @@ def cmd_put_file(bridge, path: str, content_b64: str, mkdirs: bool = True) -> Di
     parent = os.path.dirname(p)
     if mkdirs and parent:
         os.makedirs(parent, exist_ok=True)
-    with open(p, "wb") as f:
-        f.write(data)
+    try:
+        with open(p, "wb") as f:
+            f.write(data)
+    except OSError as e:
+        raise ToolError(f"cannot write {p}: {e}" + ("; pass mkdirs=true to create the folder" if not mkdirs else ""))
     if p.endswith(".py"):
         purge_pycache(parent)   # a pushed edit must never serve stale bytecode
     return {"path": p, "bytes": len(data)}
@@ -283,7 +286,7 @@ def cmd_stat_file(bridge, path: str) -> Dict[str, Any]:
 
     p = os.path.abspath(os.path.expanduser(path))
     if not os.path.isfile(p):
-        return {"path": p, "exists": False}
+        return {"path": p, "exists": False, **({"note": "This path is a directory; stat_file reads files."} if os.path.isdir(p) else {})}
     h = hashlib.sha256()
     size = 0
     with open(p, "rb") as f:
@@ -349,6 +352,12 @@ def cmd_status(bridge) -> Dict[str, Any]:
         "hold": bridge.hold_report(),
         "doorway_hold": HOLD_CAPABILITY,
     })
+    # Which code this Kit runs: commit, uncommitted edits and in-place reloads. Never a process.
+    try:
+        from .source_state import report as source_report
+        ident["extension"] = source_report()
+    except Exception as e:  # noqa: BLE001 - optional detail; status must remain available
+        ident["extension"] = {"commit": "unknown", "dirty": None, "error": str(e)[:200]}
     return ident
 
 
@@ -390,7 +399,11 @@ def cmd_list_tools(bridge) -> Dict[str, Any]:
 def cmd_reload_tools(bridge, module: str) -> Dict[str, Any]:
     """Hot-reload one autoloaded tool package in place (see autoload.py)."""
     from .autoload import reload_tool_module
-    return reload_tool_module(bridge, module)
+    try:
+        return reload_tool_module(bridge, module)
+    except (ImportError, ValueError) as e:
+        raise ToolError(f"cannot reload {module}: {e}. reload_tools takes a project's autoloaded tool package. The bundled "
+                        "sim_tools and ur5e_dt reload through Kit's file watcher when their files change; see `status`.")
 
 
 def builtin_tools(bridge) -> List:

@@ -1,6 +1,7 @@
 """Real stdio MCP client for manual/agent use. No bridge or private Kit APIs.
 
 Usage: python scripts/scene_mcp_client.py --port 18861 sim__stage__info '{}'
+       python scripts/scene_mcp_client.py --port 18861 list_tools   # every tool, with its arguments'
 Uses this checkout's host server. ISAAC_MCP_ASSET_CONFIG is user launch configuration.
 """
 
@@ -21,12 +22,13 @@ def parameters(port):
         command=sys.executable,
         args=["-m", "isaac_mcp.server"],
         env={
+            # Defaults for a scene-only client; an exported value opts in (e.g. all,screen_input).
+            "ISAAC_MCP_LOCAL_TOOLS": "gateway,screen_read,screen_capture,screen_control",
+            "ISAAC_MCP_BUILTINS": "0",
             **os.environ,
             "PYTHONPATH": str(ROOT / "mcp"),
             "ISAAC_MCP_PORT": str(port),
             "UR5E_DT_PORT": str(port),
-            "ISAAC_MCP_LOCAL_TOOLS": "gateway,screen_read,screen_capture",
-            "ISAAC_MCP_BUILTINS": "0",
         },
     )
 
@@ -47,7 +49,10 @@ async def main(port, name, args):
             await c.initialize()
             if name == "list_tools":
                 return (await c.list_tools()).model_dump(mode="json")
-            return await call(c, name, args)
+            reply = await call(c, name, args)
+            if reply["isError"] and str(reply["result"]).startswith("Unknown tool"):
+                reply["hint"] = "Run this script with the tool name list_tools to see every tool and its arguments."
+            return reply
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import contextlib
 import omni.ext
 import omni.ui as ui
 import asyncio
@@ -23,11 +24,12 @@ from isaacsim.gui.components.element_wrappers import ScrollingWindow
 # namespace and tool registrations. The dependency is declared in extension.toml.
 from isaac_mcp_bridge import ToolDefinition, get_mcp_bridge, knobs as bridge_knobs
 from .graph_compat import ensure_fixed_graph
-from .asset_cache import AssetCorrupt, AssetMissing, cache_dir, resolve_dir, resolve_path, resolve_uri
+from .asset_cache import AssetCorrupt, AssetMissing, asset_source, cache_dir, missing_assets, resolve_dir, resolve_path, resolve_uri
 from .object_pose import read_local_pose, set_local_pose
 from .robot_visuals import prepare_robot_visuals
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
+from .joint_state_guard import check_stage as check_joint_state_loop
 from .tf_compat import use_legacy_transform_publisher
 from .world_compat import initialized_twin_world, paused_scene_edit, twin_play_edit
 from .physics_compat import (
@@ -57,13 +59,14 @@ if BASE_OUTPUT_DIR:
     RESOURCES_DIR = os.path.join(BASE_OUTPUT_DIR, "resources")
     VIDEOS_DIR = os.path.join(BASE_OUTPUT_DIR, "videos")
 else:
-    RESOURCES_DIR = "resources"
+    _scene_output = os.getenv("ISAAC_MCP_SCENE_OUTPUT", "").strip()
+    RESOURCES_DIR = os.path.join(os.path.abspath(_scene_output), "resources") if _scene_output else "resources"
     VIDEOS_DIR = ""  # resolved below after _ext_dir
 
 # Local asset paths (no Nucleus dependency)
 _ext_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if not VIDEOS_DIR:
-    VIDEOS_DIR = os.path.join(_ext_dir, "videos")
+    VIDEOS_DIR = os.path.join(os.path.abspath(_scene_output) if _scene_output else _ext_dir, "videos")
 
 # Environment scene USDs (relative to Isaac assets root). Verified against Isaac 5.0.
 ENVIRONMENTS = {
@@ -422,6 +425,10 @@ def _isaac_sim_data_file(ext_prefix: str, relative: str) -> str:
     return ""
 
 
+# Your own files, with no public download. Quick Start adds the gripper only when all of them exist.
+GRIPPER_ASSETS = ("gripper/husarion_rg2/rg2_gripper_fixed.usd", "gripper/QuickChanger.usd")
+
+
 def _local_asset(relpath):
     """Resolve an asset to a file:// or https:// URI.
 
@@ -430,6 +437,22 @@ def _local_asset(relpath):
     ``docs/provenance/ASSETS.md``.
     """
     return resolve_uri(relpath)
+
+
+def _last_error_line(output: str) -> str:
+    """The last non-empty line of a subprocess's output, for a refusal's message. ANSI colors removed."""
+    import re
+
+    for line in reversed((output or "").splitlines()):
+        cleaned = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
+        if cleaned:
+            return cleaned[:300]
+    return ""
+
+
+def _failure_detail(exc):
+    """A missing asset is an expected refusal whose message already names the fix."""
+    return {} if isinstance(exc, AssetMissing) else {"traceback": traceback.format_exc()}
 
 
 def _assembly_layout(relpath):
@@ -493,7 +516,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "stop_scene": {
-        "description": "Stop the simulation timeline in Isaac Sim.",
+        "description": "Stop the UR5e twin's simulation timeline, e.g. before generic sim__* edits. Stop rewinds physics to the authored start pose. For other scenes use sim__timeline__control.",
         "parameters": {}
     },
     "setup_camera_tf_graph": {
@@ -501,7 +524,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "assemble_objects": {
-        "description": "Assemble objects into a specified configuration.",
+        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Assemble objects into a specified configuration.",
         "parameters": {
             "assembly": {
                 "type": "string",
@@ -511,7 +534,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "randomize_object_poses": {
-        "description": "Randomize the positions of non-base objects in /World/Objects.",
+        "description": "Randomize the positions of non-base objects in /World/Objects of the UR5e twin, after ur5e_dt__add_objects.",
         "parameters": {}
     },
     "randomize_single_object": {
@@ -524,7 +547,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "save_scene_state": {
-        "description": "Save current scene object poses to a JSON file.\n\nReturns:\n    result: \"success\" or \"failure\"\n    file_path: path to the saved JSON file\n    error: failure reason (only on failure)",
+        "description": "Save the UR5e twin's object poses to a JSON file in its scene_states folder, for ur5e_dt__restore_scene_state. A file of that name is replaced; with no name it gets a timestamp. Returns result, json_file_path and, on failure, error.",
         "parameters": {
             "json_file_path": {
                 "type": "string",
@@ -533,7 +556,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "restore_scene_state": {
-        "description": "Restore scene object poses from a previously saved JSON file.\n\nReturns:\n    result: \"success\" or \"failure\"\n    error: failure reason (only on failure)",
+        "description": "Restore the UR5e twin's object poses from a JSON file made by ur5e_dt__save_scene_state. Returns result and, on failure, error.",
         "parameters": {
             "json_file_path": {
                 "type": "string",
@@ -542,7 +565,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "add_objects": {
-        "description": "Add objects to the scene from a predefined assembly folder.",
+        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Add objects to the scene from a predefined assembly folder.",
         "parameters": {
             "assembly": {
                 "type": "string",
@@ -552,15 +575,15 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "delete_objects": {
-        "description": "Delete all objects from /World/Objects and the associated pose publisher graph.",
+        "description": "Delete all objects from /World/Objects of the UR5e twin and the associated pose publisher graph.",
         "parameters": {}
     },
     "setup_pose_publisher": {
-        "description": "Create an action graph to publish object poses to ROS2 topic 'objects_poses_sim'.",
+        "description": "Create an action graph publishing the UR5e twin's object poses to ROS 2 topic objects_poses_sim, after ur5e_dt__add_objects.",
         "parameters": {}
     },
     "start_ros_driver": {
-        "description": "Bring the ROS2 robot driver up/down/status so robot-motion tools (ros-mcp-server move_home/move_to_grasp/...) have a driver to talk to. Two backends: backend='fake' (default) uses scripts/launch_ur_fake.sh — the apt ur_robot_driver with fake/mock hardware, no Docker and no ~/ros2_ws needed, ready in a few seconds (sim only); backend='ursim' uses scripts/sim_bringup.sh — URSim docker + ur_bringup, hands-free no PolyScope clicks, ~110s, and is the path that supports mode='real' (lab UR5e, not yet enabled). Both end at /joint_states live + scaled_joint_trajectory_controller accepting FollowJointTrajectory, on the same DDS island (the ROS domain from config/ros_dds.env (default 0), Cyclone, localhost-only). Managed sim__launch sessions support only the fake backend; URSim uses shared host resources. The fake launcher refuses startup when another UR driver is detected. Stop the fake driver before stopping its simulator. Use once at startup.",
+        "description": "Bring the ROS 2 driver of the lab's UR5e twin up, down or report status, so robot-motion tools have a driver. backend='fake' (default) is sim only, with mock hardware and no Docker, ready in seconds; 'ursim' needs Docker and is the path to mode='real' (not yet enabled). Refuses if another UR driver is detected. Stop the fake driver before stopping its simulator. Managed sim__launch sessions support only fake. Use once at startup.",
         "parameters": {
             "mode": {
                 "type": "string",
@@ -588,7 +611,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "quick_start": {
-        "description": "One-click scene setup: loads the table scene, imports UR5e robot with action graphs, attaches RG2 gripper with action graphs, creates workspace camera, and starts simulation. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
+        "description": "RISE lab UR5e digital twin; for a generic start, see sim__quick_start. One-click scene setup from public assets: loads the scene, imports NVIDIA's UR5e with action graphs, creates a workspace camera and starts simulation. Adds the RG2 gripper only when its files are in the asset folder; the result's gripper field says which happened. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
         "parameters": {}
     },
     "start_recording": {
@@ -596,7 +619,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {
             "file_name": {
                 "type": "string",
-                "description": "Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'realtime_recording.mp4'."
+                "description": "Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'isaacsim_<timestamp>.mp4'."
             },
             "camera": {
                 "type": "string",
@@ -617,11 +640,11 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "load_workstation": {
-        "description": "Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
+        "description": "Load the Vention bench as visual context under the lab's UR5e twin, at /World/Vention with its top at z=0. Uses your own lab file from the asset folder, which cannot be downloaded (see docs/ASSETS.md); a placeholder bench is used without it. Additive (cleared by new_stage), visual-only and safe while playing. Does not move the robot.",
         "parameters": {}
     },
     "quick_start_with_workstation": {
-        "description": "Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.",
+        "description": "RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.",
         "parameters": {}
     },
     "load_simple_room": {
@@ -629,7 +652,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "quick_start_with_workstation_and_simple_room": {
-        "description": "Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.",
+        "description": "RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.",
         "parameters": {}
     },
     "set_object_pose": {
@@ -867,6 +890,36 @@ class DigitalTwin(omni.ext.IExt):
                 self._window.deferred_dock_in("Console", ui.DockPolicy.CURRENT_WINDOW_IS_ACTIVE)
             except Exception as exc:
                 carb.log_warn(f"[DigitalTwin] could not dock the twin panel: {exc}")
+            self._focus_panel_soon()
+
+    def _focus_panel_soon(self):
+        """Show and focus the panel once its deferred docking has run.
+
+        A newly created window can open behind another tab of its dock. Focusing it is the same
+        call sim__ui__act action=tab makes, and it is skipped if anything goes wrong: the panel is
+        still usable from the Window menu or by that tool.
+        """
+        async def focus():
+            try:
+                import omni.kit.app
+
+                app = omni.kit.app.get_app()
+                for _ in range(4):
+                    await app.next_update_async()
+                    window = self._window
+                    if window is None or not window.visible:
+                        return
+                    ui.Workspace.show_window("UR5e Digital Twin", True)
+                    window.focus()
+                    if not window.docked or window.is_selected_in_dock():
+                        return
+            except Exception as exc:  # noqa: BLE001 - a hidden tab is cosmetic, never a startup failure
+                carb.log_warn(f"[DigitalTwin] could not focus the twin panel: {exc}")
+
+        try:
+            asyncio.ensure_future(focus())
+        except Exception as exc:  # noqa: BLE001
+            carb.log_warn(f"[DigitalTwin] could not schedule the twin panel focus: {exc}")
 
     def _attach_bridge(self):
         try:
@@ -913,7 +966,7 @@ class DigitalTwin(omni.ext.IExt):
                     with ui.HStack(spacing=5):
                         ui.Button("Quick Start with Workstation", width=210, height=35,
                                   clicked_fn=lambda: asyncio.ensure_future(self.quick_start_with_workstation()),
-                                  tooltip="Run Quick Start, then load the Vention workstation bench.")
+                                  tooltip="Run Quick Start, then load the Vention workstation bench (your own lab file; a placeholder is used without it).")
                         ui.Button("Quick Start with Workstation + Simple Room", width=320, height=35,
                                   clicked_fn=lambda: asyncio.ensure_future(self.quick_start_with_workstation_and_simple_room()),
                                   tooltip="Run Quick Start, then load the Vention bench AND the Simple Room backdrop.")
@@ -1279,6 +1332,22 @@ class DigitalTwin(omni.ext.IExt):
         sys.stderr = self._stderr_redirector
         logging = carb.logging.acquire_logging()
         self._carb_log_sub = logging.add_logger(self._on_carb_log)
+
+    @contextlib.contextmanager
+    def without_carb_log_capture(self):
+        """Suspend this panel's Python log listener during a blocking native call. The listener needs the
+        GIL on whichever thread logs. A native call that holds the GIL while it waits for worker threads
+        (the 5.x URDF importer) then never finishes, because a worker that logs waits for the GIL."""
+        logging = carb.logging.acquire_logging()
+        installed = getattr(self, "_carb_log_sub", None)
+        if installed is not None:
+            logging.remove_logger(installed)
+            self._carb_log_sub = None
+        try:
+            yield
+        finally:
+            if installed is not None and not getattr(self, "_closing", False):
+                self._carb_log_sub = logging.add_logger(self._on_carb_log)
 
     def _on_carb_log(self, source, level, filename, linenum, msg):
         # carb levels: VERBOSE=-2, INFO=-1, WARN=0, ERROR=1, FATAL=2
@@ -1941,6 +2010,9 @@ class DigitalTwin(omni.ext.IExt):
         viewport = vp_utils.get_active_viewport()
 
         if camera_path:
+            prim = viewport.stage.GetPrimAtPath(str(camera_path)) if viewport.stage else None
+            if not prim or not prim.IsValid() or prim.GetTypeName() != "Camera":
+                raise ValueError(f"{camera_path} is not a Camera on this stage, so nothing was recorded.")
             viewport.camera_path = camera_path
 
         w, h = viewport.get_texture_resolution()
@@ -2995,13 +3067,26 @@ class DigitalTwin(omni.ext.IExt):
             print(f"[ur5e-dt] could not select person view camera: {e}")
 
     async def quick_start(self):
-        """Quick start: load scene, UR5e + action graph, RG2 + action graph, workspace camera with action graph."""
+        """Quick start: scene, public UR5e + action graph, workspace camera; the RG2 when its files exist."""
         import numpy as np
         from pxr import Gf, Sdf, UsdGeom
 
         require_newton_mount_support(selected_engine())
+        check_joint_state_loop()
 
         print("=== Quick Start ===")
+
+        # Decide before building anything. Corrupt gripper files raise here rather than being skipped.
+        missing_gripper = missing_assets(GRIPPER_ASSETS)
+        # A local copy always wins; say which file each part really comes from.
+        self._quick_start_assets = [asset_source(relpath) for relpath in ("robot/ur5e.usd", *GRIPPER_ASSETS)]
+        for used in self._quick_start_assets:
+            if used["source"] == "remote":
+                print(f"Warning: no local copy of {used['asset']}; loading it from {used['location']}")
+        self._quick_start_gripper = (
+            {"loaded": False, "missing": missing_gripper,
+             "note": "The RG2 is optional and has no public download. See docs/ASSETS.md."}
+            if missing_gripper else {"loaded": True})
 
         # 1. Load scene
         print("--- Loading scene ---")
@@ -3022,20 +3107,23 @@ class DigitalTwin(omni.ext.IExt):
         app = omni.kit.app.get_app()
         await app.next_update_async()
 
-        # 5. Import RG2 gripper
-        print("--- Importing RG2 Gripper ---")
-        self.import_rg2_gripper()
-        await app.next_update_async()
+        if missing_gripper:
+            print(f"--- Skipping the RG2 gripper; not in the asset folder: {missing_gripper} ---")
+        else:
+            # 5. Import RG2 gripper
+            print("--- Importing RG2 Gripper ---")
+            self.import_rg2_gripper()
+            await app.next_update_async()
 
-        # 6. Attach gripper to UR5e
-        print("--- Attaching Gripper to UR5e ---")
-        self.attach_rg2_to_ur5e()
-        await app.next_update_async()
+            # 6. Attach gripper to UR5e
+            print("--- Attaching Gripper to UR5e ---")
+            self.attach_rg2_to_ur5e()
+            await app.next_update_async()
 
-        # 7. Setup gripper action graph
-        print("--- Setting up Gripper Action Graph ---")
-        self.setup_gripper_action_graph()
-        await app.next_update_async()
+            # 7. Setup gripper action graph
+            print("--- Setting up Gripper Action Graph ---")
+            self.setup_gripper_action_graph()
+            await app.next_update_async()
 
         # 8. Workspace camera + viewport switch — ALWAYS run (no headless early-return).
         # Creating the camera and pointing the active viewport at it is what makes the webrtc stream show
@@ -3072,6 +3160,9 @@ class DigitalTwin(omni.ext.IExt):
             self._refresh_viewport_camera_list()
             self._apply_active_viewport_camera()
 
+            if not self._timeline.is_playing():  # a rebuilt scene plays below; a reused one must too
+                self._timeline.play()
+                await app.next_update_async()
             print("=== Quick Start Complete ===")
             return
 
@@ -4771,7 +4862,8 @@ class DigitalTwin(omni.ext.IExt):
                     print(f"Placement succeeded after {retry + 1} retries")
                 return poses
 
-        raise RuntimeError("Could not place all objects without violating min_sep; reduce density.")
+        raise RuntimeError("Could not place all objects without violating min_sep: the other objects take up the free slots. "
+                           "Move them first with randomize_object_poses or set_object_pose.")
 
     def _set_obj_prim_pose(self, prim_path, position, quat_wxyz):
         stage = omni.usd.get_context().get_stage()
@@ -5047,10 +5139,11 @@ class DigitalTwin(omni.ext.IExt):
         print(f"[randomize_single] Placed '{object_name}' at world ({pose['position'][0]:.3f}, {pose['position'][1]:.3f}, {pose['position'][2]:.4f}), yaw={pose['yaw_deg']:.1f}°")
 
     def set_object_pose(self, object_name, position, orientation=None, yaw_deg=None, folder_path="/World/Objects"):
-        """Teleport an object to an EXACT world pose. Mirrors randomize_single_object's apply path
+        """Request an EXACT world pose for an object. Mirrors randomize_single_object's apply path
         (resolve parent-local pose, set xformOp:translate/orient via _set_obj_prim_pose) so the pose
         persists under physics. Orientation precedence: orientation=[w,x,y,z] quat > yaw_deg about z >
-        identity. position is [x,y,z] in METERS (world). Returns the applied world position."""
+        identity. position is [x,y,z] in METERS (world). Returns the requested world position; physics
+        settles the object from there, so read its pose again to see where it ended up."""
         import numpy as np
         stage = omni.usd.get_context().get_stage()
         target_child_path = self._get_prim_path(object_name, folder_path)
@@ -5072,7 +5165,7 @@ class DigitalTwin(omni.ext.IExt):
             quat_wxyz = np.roll(quat_xyzw, 1)
 
         self._set_obj_prim_pose(target_child_path, local_pos, quat_wxyz)
-        print(f"[set_object_pose] '{object_name}' -> world ({target_world[0]:.3f}, {target_world[1]:.3f}, {target_world[2]:.4f})")
+        print(f"[set_object_pose] requested '{object_name}' at world ({target_world[0]:.3f}, {target_world[1]:.3f}, {target_world[2]:.4f})")
         return target_world
 
     def sync_real_poses(self):
@@ -6072,6 +6165,8 @@ class DigitalTwin(omni.ext.IExt):
             msg = f"Assembled {assembled} objects ({assembly})"
             if skipped:
                 msg += f", {skipped} skipped (prim not found)"
+            if not assembled:
+                return {"status": "error", "message": msg + ". Call ur5e_dt__add_objects with this assembly first."}
             return {"status": "success", "message": msg}
         except Exception as e:
             traceback.print_exc()
@@ -6114,7 +6209,10 @@ class DigitalTwin(omni.ext.IExt):
             world = self.set_object_pose(object_name, position, orientation=orientation, yaw_deg=yaw_deg)
             return {
                 "status": "success",
-                "message": f"Set '{object_name}' to world ({float(world[0]):.3f}, {float(world[1]):.3f}, {float(world[2]):.4f})"
+                "message": f"Requested '{object_name}' at world ({float(world[0]):.3f}, {float(world[1]):.3f}, "
+                           f"{float(world[2]):.4f}); physics settles it from there, so read the pose again to see "
+                           "where it ended up",
+                "requested_world": [float(world[0]), float(world[1]), float(world[2])],
             }
         except Exception as e:
             traceback.print_exc()
@@ -6362,7 +6460,9 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "success",
                 "message": f"Objects added from {assembly} (physics views rebuilt)",
-                "folder_path": self._objects_folder_path
+                "folder_path": self._objects_folder_path,
+                "objects": [child.GetName() for child in omni.usd.get_context().get_stage()
+                            .GetPrimAtPath("/World/Objects").GetChildren()],
             }
         except Exception as e:
             carb.log_error(f"Error in add_objects: {e}")
@@ -6370,7 +6470,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Failed to add objects: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     def _cmd_delete_objects(self) -> Dict[str, Any]:
@@ -6472,7 +6572,7 @@ class DigitalTwin(omni.ext.IExt):
                     if line.startswith("VmRSS"):
                         rss_after = int(line.split()[1]) // 1024  # MB
 
-            freed_mb = rss_before - rss_after
+            freed_mb = max(0, rss_before - rss_after)
             return {
                 "status": "success",
                 "message": f"Stage cleared. Freed {freed_mb} MB (RSS: {rss_before} MB -> {rss_after} MB).",
@@ -6489,13 +6589,31 @@ class DigitalTwin(omni.ext.IExt):
                 "traceback": traceback.format_exc()
             }
 
+    def _quick_start_report(self) -> Dict[str, Any]:
+        """What the last Quick Start used: whether the gripper loaded and each asset's source."""
+        stage = omni.usd.get_context().get_stage()
+        return {"gripper": self._quick_start_gripper, "assets": self._quick_start_assets,
+                "robot": {"path": "/World/UR5e", "articulation_root": "/World/UR5e/root_joint"},
+                "camera": "/World/workspace_camera_sim",
+                "playing": self._timeline.is_playing(),
+                **({"workstation": asset_source(WORKSTATION_USD)["source"]}
+                   if stage and stage.GetPrimAtPath("/World/Vention").IsValid() else {})}
+
+    def _bench_label(self) -> str:
+        if asset_source(WORKSTATION_USD)["source"] == "missing":
+            return "a placeholder bench (no Vention workstation asset)"
+        return "the Vention workstation"
+
     async def _cmd_quick_start(self) -> Dict[str, Any]:
-        """MCP handler: full scene setup (table, UR5e, gripper, camera, play)."""
+        """MCP handler: full scene setup (ground, UR5e, gripper if present, camera, play). No table: see load_workstation."""
         try:
             await self.quick_start()
             return {
                 "status": "success",
-                "message": "Quick start complete: scene loaded with UR5e, RG2 gripper, workspace camera, and simulation running.",
+                "message": "Quick start complete: scene loaded with UR5e"
+                           + (", RG2 gripper" if self._quick_start_gripper["loaded"] else " (no gripper)")
+                           + ", workspace camera, and simulation running.",
+                **self._quick_start_report(),
                 "force_publisher": getattr(self, "_force_publish_status", {"status": "not_configured"}),
             }
         except Exception as e:
@@ -6504,7 +6622,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Quick start failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     async def _cmd_setup_camera_tf_graph(self) -> Dict[str, Any]:
@@ -6533,7 +6651,7 @@ class DigitalTwin(omni.ext.IExt):
             await self.load_workstation()
             return {
                 "status": "success",
-                "message": "Workstation loaded at /World/Vention (tabletop top at z=0; robot and object physics unchanged; ground plane visual hidden)."
+                "message": f"Loaded {self._bench_label()} at /World/Vention (tabletop top at z=0; robot and object physics unchanged; ground plane visual hidden)."
             }
         except Exception as e:
             carb.log_error(f"Error in load_workstation: {e}")
@@ -6541,7 +6659,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Load workstation failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     async def _cmd_quick_start_with_workstation(self) -> Dict[str, Any]:
@@ -6550,7 +6668,8 @@ class DigitalTwin(omni.ext.IExt):
             await self.quick_start_with_workstation()
             return {
                 "status": "success",
-                "message": "Quick start complete with the Vention workstation loaded.",
+                "message": f"Quick start complete with {self._bench_label()} loaded.",
+                **self._quick_start_report(),
                 "force_publisher": getattr(self, "_force_publish_status", {"status": "not_configured"}),
             }
         except Exception as e:
@@ -6559,7 +6678,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Quick start with workstation failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     async def _cmd_load_simple_room(self) -> Dict[str, Any]:
@@ -6576,7 +6695,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Load simple room failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     async def _cmd_quick_start_with_workstation_and_simple_room(self) -> Dict[str, Any]:
@@ -6585,7 +6704,8 @@ class DigitalTwin(omni.ext.IExt):
             await self.quick_start_with_workstation_and_simple_room()
             return {
                 "status": "success",
-                "message": "Quick start complete with the Vention workstation and Simple Room loaded.",
+                "message": f"Quick start complete with {self._bench_label()} and Simple Room loaded.",
+                **self._quick_start_report(),
                 "force_publisher": getattr(self, "_force_publish_status", {"status": "not_configured"}),
             }
         except Exception as e:
@@ -6594,7 +6714,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Quick start with workstation and simple room failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     def _cmd_setup_pose_publisher(self) -> Dict[str, Any]:
@@ -6660,7 +6780,7 @@ class DigitalTwin(omni.ext.IExt):
         if backend == "fake":
             if mode == "real":
                 return {"status": "error",
-                        "message": "backend='fake' is sim-only; use backend='ursim' mode='real' for the lab UR5e"}
+                        "message": "backend='fake' is sim-only, and real-robot mode is not enabled in this build (docs/TOOLS-UR5E.md)."}
             script = repo_root / "scripts" / "launch_ur_fake.sh"
             cmd = ["bash", str(script), action]          # fake script takes only the action
             label = f"launch_ur_fake.sh {action}"
@@ -6719,7 +6839,7 @@ class DigitalTwin(omni.ext.IExt):
             }
         return {
             "status": "error",
-            "message": f"{label} exited {proc.returncode}",
+            "message": f"{label} exited {proc.returncode}" + (f": {_last_error_line(output)}" if _last_error_line(output) else ""),
             "output": output,
         }
 
@@ -6731,7 +6851,12 @@ class DigitalTwin(omni.ext.IExt):
                 return {"status": "error", "message": "No pose message received on /objects_poses_real within 3 seconds.", **result}
             if not result["updated"]:
                 return {"status": "error", "message": "Received a pose message, but no matching scene objects were updated.", **result}
-            return {"status": "success", "message": f"Synced {len(result['updated'])} object poses to sim", **result}
+            return {
+                "status": "success",
+                "message": f"Requested {len(result['updated'])} object pose(s) in sim from /objects_poses_real; "
+                           "physics settles them from there, so read the poses again to see where they ended up",
+                **result,
+            }
         except Exception as e:
             carb.log_error(f"Error in sync_real_poses: {e}")
             traceback.print_exc()

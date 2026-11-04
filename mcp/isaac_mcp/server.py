@@ -52,15 +52,20 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional
+from pathlib import Path
+from typing import Annotated, Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional
+
+from pydantic import Field
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.lowlevel.server import NotificationOptions
 
 from . import host_catalog
+from .scene_contracts import HOST_ONLY
+from .tool_hints import CATALOG_HINTS
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
-from .local_tools import DEFAULT_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups
+from .local_tools import DEFAULT_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups, strip_schema_titles
 from .desktop_input import register_desktop_input_tools
 from .sim_sessions import live_sessions, register_sim_session_tools
 from .screen import register_screen_tools
@@ -69,35 +74,148 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("KitMCPServer")
 
+# How to find running bridges. A stock python3 has no isaac_mcp package, so `python -m isaac_mcp.client`
+# alone fails there; the file itself is stdlib-only. list_bridges needs a bridge that already answers.
+LIST_BRIDGES_HELP = (
+    "`python3 mcp/isaac_mcp/client.py --list-bridges` from an isaac-mcp checkout, "
+    "`\"$(uv tool dir)/isaac-mcp/bin/python\" -m isaac_mcp.client --list-bridges` for the isaac-mcp "
+    "tool's own Python, or the list_bridges tool (a bridge built-in) when a bridge already answers")
+
 SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "isaac")
 SERVER_INSTRUCTIONS = os.getenv(
     "ISAAC_MCP_INSTRUCTIONS",
-    "Isaac Sim / Isaac Lab MCP server. Isaac Sim tools are discovered from the "
-    "running Kit bridge. The ur5e_dt__* twin tools are listed by default from a packaged "
-    "catalog, but work only when the selected bridge's Kit loaded the twin extension; "
-    "otherwise they return an error that says what to do. The bridge built-ins "
-    "(run_python, status, list_bridges, the file tools) are also listed from startup and "
-    "dial the selected bridge when called; ISAAC_MCP_BUILTINS=0 hides them. If Kit is still "
-    "starting, refresh_tools(wait_s=120) waits for its bridge. "
-    "ISAAC_MCP_NAMESPACE may hide catalog and other namespaced tools. "
-    "Find advertised bridges with the isaac_mcp.client CLI (--list-bridges) and "
-    "confirm the chosen bridge's PID and port (status) before scene-changing calls, "
-    "and start an additional Kit only when explicitly requested and resource checks permit. "
-    "screenshot, list_windows, raise_window, move_window and the screen "
-    "recording tools capture this Linux desktop. screenshot() and "
-    "start_screen_recording() with no target pick the Isaac Sim or Isaac Lab "
-    "window when one is open, so they capture the sim alone even if it is covered. "
-    "Use the ur5e_dt__* tools for twin state and the Kit start_recording tool for "
-    "clean viewport video. isaaclab__* tools run Isaac Lab training/eval/play jobs. "
-    "When a job or scene is running with a window (isaaclab__play, headless=false), "
-    "look at it yourself: take screenshots or a short screen recording to check the "
-    "result and decide the next step, without waiting to be asked. "
-    "isaaclab__runs_status reports the job's window_id for screenshot(window_id=...).")
+    "Isaac Sim / Isaac Lab MCP server. Which tool first: to build a new scene, sim__quick_start, the "
+    "universal starting point, which needs no IDs. On a scene that already exists, sim__stage__info "
+    "first: other sim__* and assets__* tools need its session_id and stage_id. sim__* and assets__* "
+    "work on any scene. ur5e_dt__* is one lab's UR5e digital twin (RISE lab): use it only when asked "
+    "for that twin. isaaclab__* runs Isaac Lab training, eval and play jobs and needs no bridge. "
+    "A listed tool does not prove a bridge exists: the sim__*, assets__*, ur5e_dt__* and built-in tools "
+    "(run_python, status, list_bridges, the file tools) are listed by default from a packaged catalog, "
+    "dial the selected bridge when called, and return an error that says what to do. If Kit is still "
+    "starting, refresh_tools(wait_s=120) waits for its bridge. ISAAC_MCP_NAMESPACE and "
+    "ISAAC_MCP_BUILTINS=0 can hide tools. Find advertised bridges with " + LIST_BRIDGES_HELP + ", and "
+    "confirm the chosen bridge's PID and port (status) before scene-changing calls. Start an additional "
+    "Kit only when explicitly requested and resource checks permit. screenshot() and "
+    "start_screen_recording() with no target pick the Isaac Sim or Isaac Lab window when one is open, "
+    "even if it is covered. When a job or scene is running with a window (isaaclab__play, "
+    "headless=false), look at it yourself: take screenshots or a short recording to check the result "
+    "and decide the next step, without waiting to be asked. isaaclab__runs_status reports the job's "
+    "window for screenshot(window_id=...).")
 
 RESPONSE_TIMEOUT_S = 300.0
 # Discovery must not make host recovery tools wait behind a stalled native Kit
 # call. Mutations keep their existing timeout and are never retried on timeout.
 DISCOVERY_TIMEOUT_S = 5.0
+
+
+# ---- What this host process is running (Lab 3 run 8: `opencode serve` keeps an MCP child per
+# instance, so after a git pull an old server silently keeps running the old code) ----
+
+def _package_version() -> str:
+    from importlib import metadata
+    try:
+        return metadata.version("isaac-mcp")
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
+def _find_checkout(module_file: str = __file__) -> Optional[Path]:
+    """The git checkout this module was imported from; None for an installed wheel."""
+    package_parent = Path(module_file).resolve().parents[1]   # <checkout>/mcp in a source tree
+    root = package_parent.parent
+    return root if (package_parent / "pyproject.toml").is_file() and (root / ".git").exists() else None
+
+
+def _read_git_head(root: Optional[Path]) -> Optional[str]:
+    """The commit ``root`` has checked out, from its .git files, without running git. Handles
+    worktrees and submodules (.git is a file), detached HEAD and packed refs; None if unreadable."""
+    if root is None:
+        return None
+    commit = re.compile(r"^[0-9a-f]{40,64}$")
+    try:
+        git_dir = root / ".git"
+        if git_dir.is_file():
+            pointer = git_dir.read_text().strip()
+            if not pointer.startswith("gitdir:"):
+                return None
+            git_dir = (root / pointer.split(":", 1)[1].strip()).resolve()
+        head = (git_dir / "HEAD").read_text().strip()
+        if not head.startswith("ref:"):
+            return head if commit.match(head) else None
+        ref = head.split(":", 1)[1].strip()
+        common = git_dir
+        if (git_dir / "commondir").is_file():
+            common = (git_dir / (git_dir / "commondir").read_text().strip()).resolve()
+        for base in (git_dir, common):
+            if (base / ref).is_file():
+                value = (base / ref).read_text().strip()
+                return value if commit.match(value) else None
+        if (common / "packed-refs").is_file():
+            for line in (common / "packed-refs").read_text().splitlines():
+                value, _, name = line.partition(" ")
+                if name == ref and commit.match(value):
+                    return value
+    except (OSError, ValueError):   # UnicodeDecodeError is a ValueError
+        return None
+    return None
+
+
+# Recorded once, when the server process starts.
+_HOST_VERSION = _package_version()
+_HOST_CHECKOUT = _find_checkout()
+_HOST_COMMIT = _read_git_head(_HOST_CHECKOUT)
+
+
+def _compare_with_bridge(identity: Dict[str, Any], extension: Any) -> None:
+    """Add to the ``host`` object whether this gateway and the bridge run the same commit.
+
+    ``bridge_match`` is true, false, or null when either side does not know (an installed wheel, an
+    exported tree with no .git, or a bridge too old to report). Uncommitted edits are a warning either
+    way, because then a commit does not say what is running."""
+    extension = extension if isinstance(extension, dict) else {}
+    host_commit, bridge_commit = identity.get("commit"), extension.get("commit")
+    known = host_commit and bridge_commit and "unknown" not in (host_commit, bridge_commit)
+    identity["bridge_match"] = (host_commit == bridge_commit) if known else None
+    notes = [identity["warning"]] if identity.get("warning") else []
+    if known and host_commit != bridge_commit:
+        notes.append(f"This gateway runs commit {host_commit[:12]} but the bridge runs {bridge_commit[:12]}, so tool "
+                     "schemas and behavior can differ. Restart whichever is older, or update its checkout.")
+    if extension.get("dirty"):
+        notes.append(f"The bridge's tree has {extension.get('dirty_count', 'some')} uncommitted changed file(s), so "
+                     "its commit does not fully say what is running.")
+    if notes:
+        identity["warning"] = " ".join(notes)
+
+
+def _host_identity(extension: Any = None) -> Dict[str, Any]:
+    """The ``host`` object of ``status``: this MCP server process, not the Kit bridge.
+
+    An installed wheel has no checkout and reports only its version. It compares commits, so
+    uncommitted edits to the host code are not detected. ``extension`` is the bridge's own report."""
+    identity: Dict[str, Any] = {"version": _HOST_VERSION, "pid": os.getpid()}
+    if _HOST_CHECKOUT is None:
+        if extension is not None:
+            _compare_with_bridge(identity, extension)
+        return identity
+    current = _read_git_head(_HOST_CHECKOUT)
+    identity.update(commit=_HOST_COMMIT or "unknown", checkout_commit=current or "unknown",
+                    stale=(_HOST_COMMIT != current) if _HOST_COMMIT and current else None)
+    if identity["stale"]:
+        identity["warning"] = (
+            f"This MCP server started from commit {_HOST_COMMIT[:12]} but its checkout is now at "
+            f"{current[:12]}, so it is still running the old host code. Restart the MCP connection "
+            "(for OpenCode, restart `opencode serve`) to load the new code.")
+    if extension is not None:
+        _compare_with_bridge(identity, extension)
+    return identity
+
+
+def _host_identity_text() -> str:
+    """The same facts, for the error of a ``status`` call no bridge answered."""
+    identity = _host_identity()
+    commit = f", commit {identity['commit'][:12]}" if "commit" in identity else ""
+    warning = f" Warning: {identity['warning']}" if "warning" in identity else ""
+    return f" MCP host: version {identity['version']}{commit}, PID {identity['pid']}.{warning}"
 
 
 def _namespace_filter() -> Optional[set]:
@@ -422,7 +540,7 @@ def _sync_offline(server: Any, state: _BridgeState) -> Dict[str, str]:
 
 # Catalogued tools this host server runs itself (filename-only project discovery); a bridge never
 # serves them, so their absence from a bridge is expected and not worth a note.
-HOST_RUN_TOOLS = frozenset({"assets.roots", "assets.scan", "assets.search"})
+HOST_RUN_TOOLS = HOST_ONLY
 
 
 def _offline_note(server: Any) -> str:
@@ -447,7 +565,7 @@ def _offline_note(server: Any) -> str:
 
 _BRIDGE_HELP = (
     "To use it: find a bridge that loaded the requested tool extension (ur5e-dt or sim-tools) with "
-    "`python -m isaac_mcp.client --list-bridges` and select it with use_bridge(port), or start "
+    + LIST_BRIDGES_HELP + ", and select it with use_bridge(port), or start "
     "Kit yourself (`./run.sh --headless`, or sim__launch when simulator launch is enabled) "
     "and call refresh_tools. This server never starts a simulator "
     "on its own.")
@@ -480,8 +598,8 @@ def _catalog_error(canonical: str, error: BaseException, state: Optional[_Bridge
         return (f"Error: {canonical} is not available: no Isaac Sim bridge could be reached ({error}). "
                 "If the connection failed after dispatch, the tool may have run; check the "
                 "simulator state before retrying. If Kit was just started it may still be loading "
-                "(2-3 minutes on a first start): call refresh_tools(wait_s=120). Otherwise find a "
-                "running bridge with `python -m isaac_mcp.client --list-bridges` and select it with "
+                f"(2-3 minutes on a first start). {_wait_advice(state or _DEFAULT_STATE, error)} Otherwise find a "
+                f"running bridge with {LIST_BRIDGES_HELP}, and select it with "
                 "use_bridge(port), or start Kit (`./run.sh --headless`, or sim__launch when "
                 "simulator launch is enabled). This server never starts a simulator on its own.")
     return (f"Error: {canonical} is not available: no Isaac Sim bridge could be reached ({error}). "
@@ -503,7 +621,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
     optional fields default to their declared default, else None — and None
     values are dropped before dispatch so bridge-side handler defaults apply.
     """
-    from typing import Literal, Optional
+    from typing import Literal
 
     # def-order: required-without-default parameters must precede defaulted ones.
     ordered = sorted(fields, key=lambda f: not (f["required"] and not f["has_default"]))
@@ -519,12 +637,9 @@ def _build_tool_function(name: str, canonical: str, description: str,
             # A newer bridge can serve a parameter this host's registry does not know yet (the two
             # checkouts sync separately): keep the bridge's plain type and description instead of
             # failing discovery or guessing a typed vector.
-            from typing import Annotated
-            from pydantic import Field
-            annotation = Annotated[annotation, Field(description=f.get("description") or "")]
+            pass
         elif canonical in REGISTRY:
-            from typing import Annotated
-            from pydantic import Field, PlainValidator, WithJsonSchema
+            from pydantic import PlainValidator, WithJsonSchema
             spec = REGISTRY[canonical]["parameters"][f["name"]]
             bounds = {}
             graph_container = canonical == "sim.graph.build" and f["name"] in (
@@ -552,8 +667,18 @@ def _build_tool_function(name: str, canonical: str, description: str,
                     variants.append({"type": "null"})
                 schema = {"anyOf": variants, "description": spec["description"]}
                 annotation = Annotated[str, PlainValidator(lambda value: value), WithJsonSchema(schema)]
+            elif spec.get("type") == "any":
+                # `any` is not a JSON-Schema type. Pass the decoded JSON through unchanged, as the
+                # graph containers do, and advertise the kinds a caller may send.
+                annotation = Annotated[Any, PlainValidator(lambda value: value), WithJsonSchema({
+                    "description": spec["description"],
+                    "anyOf": [{"type": "boolean"}, {"type": "integer"}, {"type": "number"},
+                              {"type": "string"}, {"type": "array"}, {"type": "object"}],
+                })]
             elif f["kind"] == "array":
-                strings = f["name"] in {"observe_prims", "observe_joints"} or (canonical == "sim.ui.act" and f["name"] == "keys")
+                strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames", "paths", "dofs"}
+                           or (canonical == "sim.ui.act" and f["name"] == "keys")
+                           or canonical in _PACK_TOOLS)  # every array in these tools holds paths or names
                 annotation = list[str] if strings else list[float]
                 if canonical == "sim.map.occupancy" and f["name"] == "clear":
                     # A list of [x, y, radius] circles; list[float] rejected every valid value.
@@ -564,17 +689,22 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 if f["name"] in lengths:
                     bounds = {"min_length": lengths[f["name"]], "max_length": lengths[f["name"]]}
                 else:
-                    bounds = {"max_length": {"observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256}.get(f["name"], 128)}
-            if not graph_container:
-                annotation = Annotated[annotation, Field(description=spec["description"], **bounds)]
+                    bounds = {"max_length": {"extra_frames": 16, "observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256}.get(f["name"], 128)}
+            if bounds and not graph_container:
+                annotation = Annotated[annotation, Field(**bounds)]
+        graph_field = canonical == "sim.graph.build" and f["name"] in (
+            "nodes", "connections", "values", "targets")
         if f["required"] and not f["has_default"]:
             param_list.append(f["name"])
         else:
             default = f["default"] if f["has_default"] else None
-            if default is None and not (canonical == "sim.graph.build" and f["name"] in (
-                    "nodes", "connections", "values", "targets")):
+            if default is None and not graph_field:
                 annotation = Optional[annotation]
             param_list.append(f"{f['name']}={default!r}")
+        # On the whole parameter, not inside Optional: clients read the top-level description, and
+        # nested under anyOf many never show it.
+        if f.get("description") and not graph_field:
+            annotation = Annotated[annotation, Field(description=f["description"])]
         annotations[f["name"]] = annotation
 
     params_str = ", ".join(param_list)
@@ -643,6 +773,10 @@ def _failed_tool_result(result: str) -> bool:
     return isinstance(data, dict) and data.get("status") == "error"
 
 
+_PACK_TOOLS = {"assets.packs", "assets.pack_doctor", "assets.dependencies", "assets.pack_adopt",
+               "assets.pack_pin", "assets.pack_build"}
+
+
 def _dispatch(canonical: str, params: Dict[str, Any],
               state: Optional[_BridgeState] = None) -> str:
     """Run the pre-dispatch hooks and, if none refused, the bridge call."""
@@ -674,6 +808,15 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                     return json.dumps(broker.search(**params))
                 if canonical == "assets.scan":
                     return json.dumps(broker.scan(**params))
+                if canonical in _PACK_TOOLS:
+                    from .asset_packs import PackError, run_tool
+                    try:
+                        return json.dumps(run_tool(canonical, params, broker,
+                                                   kit_call=lambda name, args: active.get_client().call(name, args)))
+                    except PackError as e:
+                        return json.dumps(dict(status="error", code=e.code, message=str(e), **e.details))
+                    except ValueError as e:  # an invalid pack name or project file
+                        return json.dumps(dict(status="error", code=getattr(e, "code", "INVALID_CONFIG"), message=str(e)))
                 if canonical in ("assets.info", "assets.import_usd", "assets.import_urdf", "assets.prepare_workstation", "assets.import_path"):
                     # Verify destination identity BEFORE reading/copying project files.
                     info = active.get_client().call("sim.stage.info")
@@ -681,8 +824,14 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                         raise AssetError("STALE_TARGET", "Review current_target and resend its IDs explicitly; no project was read and this call was not retargeted.",
                                          current_target={k: info.get(k) for k in ("session_id", "stage_id", "pid", "source", "default_prim", "meters_per_unit", "up_axis")})
                     if not broker.staging or str(broker.staging) != info.get("staging"):
-                        raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. Remote upload is disabled.")
-                    if canonical in ("assets.prepare_workstation", "assets.import_path"):
+                        raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. Remote upload is disabled. The user can create it with the approval helper in docs/TOOLS-SCENE.md, then restart both.")
+                    if canonical == "assets.import_urdf":
+                        params = dict(params)
+                        source = params.pop("source_path", None)
+                        if (source is None) == (params.get("root_id") is None or params.get("relative_path") is None):
+                            raise AssetError("INVALID_VALUE", "Give source_path, or root_id with relative_path; not both and not neither.")
+                        root_id, relative_path = (params["root_id"], params["relative_path"]) if source is None else broker.locate(source, kind="urdf")
+                    elif canonical in ("assets.prepare_workstation", "assets.import_path"):
                         params = dict(params)
                         root_id, relative_path = broker.locate(params.pop("source_path"))
                     else:
@@ -691,7 +840,28 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                     params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e,"code","FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
+        if canonical == "sim.quick_start" and _quick_start_needs_host(params.get("robot")):
+            # The same approval and snapshot as assets__import_path: no tool can trust a path by itself.
+            from .project_assets import Broker, AssetError
+            if not hasattr(active, "asset_broker"):
+                active.asset_broker = Broker()
+            broker = active.asset_broker
+            try:
+                info = active.get_client().call("sim.stage.info")
+                if not broker.staging or str(broker.staging) != info.get("staging"):
+                    raise AssetError("NO_SHARED_STAGING", "Host and Kit must use the same staging folder, and these don't: by default both use "
+                                     "~/.cache/isaac-mcp/staging, so one of them has ISAAC_MCP_ASSET_CONFIG or ISAAC_MCP_STAGING set that the other "
+                                     "lacks, or the folder can't be made private. Give both the same setting and restart both; "
+                                     "docs/TOOLS-SCENE.md has the approval helper.")
+                kind = "urdf" if str(params["robot"]).lower().endswith((".urdf", ".xacro")) else "usd"
+                root_id, relative_path = broker.locate(_quick_start_robot_path(params["robot"]), kind=kind)
+                snapshot = broker.snapshot(root_id, relative_path, kind=kind)
+                params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
+            except (AssetError, OSError) as e:
+                return json.dumps(dict(status="error", code=getattr(e, "code", "FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
         result = active.get_client().call(canonical, params)
+        if canonical == "status" and isinstance(result, dict):
+            result = {**result, "host": _host_identity(result.get("extension", {}))}
         return json.dumps(result, indent=2, default=repr)
     except BridgeError as e:
         if (str(e).startswith("unknown tool") and "known_tools" in e.details
@@ -705,9 +875,36 @@ def _dispatch(canonical: str, params: Dict[str, Any],
         logger.error(f"Error in {canonical}: {e}")
         # A retry can fail to connect after an earlier attempt reached Kit, so
         # connection guidance must not claim the tool was never executed.
+        host = _host_identity_text() if canonical == "status" else ""
         if _needs_bridge_guidance(e) and host_catalog.is_catalog_tool(canonical):
-            return _catalog_error(canonical, e, state)
-        return f"Error: {e}"
+            return _catalog_error(canonical, e, state) + host
+        return f"Error: {e}{host}"
+
+
+def _quick_start_needs_host(robot) -> bool:
+    """An absolute path or a URDF needs the host's approval and snapshot; a USD in a pack does not."""
+    text = str(robot or "")
+    return os.path.isabs(os.path.expanduser(text)) or ("/" in text and text.lower().endswith((".urdf", ".xacro")))
+
+
+def _quick_start_robot_path(robot: str) -> str:
+    """An absolute path as given, or the first copy of ``<pack>/<file>`` in the user's asset stores."""
+    if os.path.isabs(os.path.expanduser(robot)):
+        return robot
+    from . import assets
+    from .project_assets import AssetError
+
+    pack, _, rel = robot.partition("/")
+    try:
+        assets.validate_pack_name(pack)
+    except assets.InvalidPackName as exc:
+        raise AssetError("INVALID_VALUE", str(exc)[:300]) from exc
+    stores = assets.Resolver(assets.DEFAULT_PACK).user_stores()
+    for store in stores:
+        if (store / pack / rel).is_file():
+            return str(store / pack / rel)
+    raise AssetError("ASSET_MISSING", f"{rel} is not in pack {pack} in your asset folder ({[str(s) for s in stores]}). "
+                     "A pack named only by a project file's asset_path is not an approval. List packs with assets__packs.")
 
 
 def _post_dispatch(canonical: str, params: Dict[str, Any], result: str) -> str:
@@ -763,14 +960,34 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
 
     options = {"meta": {"category": category}} if category is not None else {}
     from .scene_contracts import REGISTRY
+    from mcp.types import ToolAnnotations
+    if canonical in CATALOG_HINTS:
+        options["annotations"] = ToolAnnotations(**CATALOG_HINTS[canonical])
     if canonical in REGISTRY:
-        from mcp.types import ToolAnnotations
-        read_only = canonical in {"assets.roots", "assets.scan", "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.physics.inspect", "sim.body.state", "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "assets.search", "sim.lidar.read", "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find"}
-        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.ui.act", "sim.stage.open", "sim.graph.build"},
+        read_only = canonical in {"assets.roots", "assets.scan", "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.prim.bounds", "sim.prim.measure", "sim.camera.list", "sim.physics.inspect", "sim.physics.raycast", "sim.physics.contacts", "sim.body.state", "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "sim.logs.mark", "sim.logs.summary", "assets.search", "assets.packs", "assets.pack_doctor", "assets.dependencies", "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find"}
+        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.ui.act", "sim.stage.open", "sim.quick_start", "sim.graph.build", "assets.pack_adopt", "assets.pack_pin", "assets.pack_build"},
                                                  idempotentHint=read_only, openWorldHint=canonical.startswith(("assets.", "sim.controller.")))
     server.tool(**options)(handler)
     if canonical in REGISTRY:
         _forbid_unknown_arguments(server, name)
+    strip_schema_titles(server, name)
+
+
+def _explain_missing_target(model) -> None:
+    """Replace pydantic's "Field required" for the stage IDs with what to do about it. Clients that
+    enforce the published required list answer with their own text before reaching this server."""
+    if not all(key in model.model_fields and model.model_fields[key].is_required()
+               for key in ("session_id", "stage_id")):
+        return
+    validate = model.model_validate
+
+    def model_validate(obj, **kw):
+        if isinstance(obj, dict) and not (obj.get("session_id") and obj.get("stage_id")):
+            raise ValueError("session_id and stage_id are required: call sim__stage__info first and "
+                             "pass its exact IDs. This call did nothing.")
+        return validate(obj, **kw)
+
+    model.model_validate = model_validate
 
 
 def _forbid_unknown_arguments(server: FastMCP, name: str) -> None:
@@ -784,6 +1001,7 @@ def _forbid_unknown_arguments(server: FastMCP, name: str) -> None:
         return
     model.model_config["extra"] = "forbid"
     model.model_rebuild(force=True)
+    _explain_missing_target(model)
     if isinstance(getattr(tool, "parameters", None), dict):
         tool.parameters["additionalProperties"] = False   # so clients can see the rule up front
 
@@ -861,7 +1079,10 @@ def _screen_port(state: Optional[_BridgeState] = None) -> int | None:
     """Bridge port for auto-targeting, before or after the client connects."""
     client = (state or _DEFAULT_STATE).client
     if client is not None:
-        return client.port
+        try:
+            return client.port
+        except Exception:  # noqa: BLE001 - e.g. nothing pinned and discovery found none or several
+            return None
     raw = os.getenv("UR5E_DT_PORT") or os.getenv("ISAAC_MCP_PORT")
     try:
         return int(raw) if raw else None
@@ -880,12 +1101,114 @@ def _booting_error(error: BaseException) -> bool:
     return _needs_bridge_guidance(error) or isinstance(error, (TimeoutError, ConnectionError))
 
 
-def _starting_hint(server: FastMCP, error: BaseException) -> str:
+def _nothing_listening(error: BaseException) -> bool:
+    """No bridge is on the selected port at all. A timeout is different: something accepted the
+    connection, probably a bridge still booting, and that must not be switched away from."""
+    return isinstance(error, ConnectionRefusedError) or (
+        isinstance(error, RuntimeError) and str(error).startswith("no bridge found"))
+
+
+def _followable_session(state: _BridgeState) -> Optional[Dict[str, Any]]:
+    """The managed session refresh_tools may select when nothing listens on the selected port.
+
+    Only when there is exactly one live session, this server process launched it (the directory is
+    shared with other hosts and agents), it is on another port, and it would be dialled on loopback.
+    Anything less is a guess, so the caller names the sessions instead."""
+    from .client import _resolve_endpoint
+
+    sessions = live_sessions(getattr(state, "env", None))
+    if len(sessions) != 1 or sessions[0].get("id") not in getattr(state, "launched_sessions", ()):
+        return None
+    if sessions[0]["port"] == _screen_port(state):
+        return None
+    if _resolve_endpoint(None, sessions[0]["port"])[0] not in ("127.0.0.1", "localhost", "::1"):
+        return None
+    return sessions[0]
+
+
+def _several_launched_sessions(state: _BridgeState, error: BaseException) -> bool:
+    """A wait cannot select anything: nothing listens on the port, and this server launched more than one
+    live simulator elsewhere. Sessions other clients launched do not count: someone may be starting Kit
+    on the configured port beside them, which is what the wait is for."""
+    if not _nothing_listening(error) or _screen_port(state) is None:
+        return False
+    launched = getattr(state, "launched_sessions", ())
+    return sum(s.get("id") in launched for s in live_sessions(getattr(state, "env", None))) > 1
+
+
+def _session_not_ready(session: Dict[str, Any]) -> Optional[str]:
+    """Why ``session``'s bridge cannot be selected yet, or None if it can. Runs on a worker thread:
+    while Kit boots these calls can block for the whole discovery timeout."""
+    port, pid = session["port"], session["pid"]
+    try:
+        with BridgeClient(host="127.0.0.1", port=port, timeout=DISCOVERY_TIMEOUT_S) as client:
+            identity = client.call("status", timeout=DISCOVERY_TIMEOUT_S)
+            answered = identity.get("pid") if isinstance(identity, dict) else None
+            if answered != pid:
+                return (f"port {port} answered as PID {answered}, not the managed session's "
+                        f"PID {pid}, so it was not selected")
+            if identity.get("app_ready") is False:
+                return f"port {port} (PID {pid}) answered but its Kit app is still loading"
+            client.call("list_tools", timeout=DISCOVERY_TIMEOUT_S)
+    except (OSError, BridgeError, ValueError, RuntimeError) as error:   # also a non-bridge on the port
+        return f"port {port} (PID {pid}) is not answering yet ({error})"
+    return None
+
+
+def _advertised_elsewhere(state: _BridgeState) -> List[Dict[str, Any]]:
+    """Live bridges advertised on another port than the one this server dials (best effort)."""
+    from .client import discover_bridges
+
+    current = _screen_port(state)
+    try:
+        return sorted((b for b in discover_bridges() if int(b["port"]) != current), key=lambda b: int(b["port"]))
+    except Exception:  # noqa: BLE001 - only enriches an error message
+        return []
+
+
+def _dead_endpoint_hint(state: _BridgeState, error: BaseException, others: List[Dict[str, Any]]) -> str:
+    """The configured bridge is dead and another is up: that is a wrong port, not a slow start."""
+    client = getattr(state, "client", None)
+    host = getattr(client, "_host", None) or "127.0.0.1"
+    current = _screen_port(state)
+    listing = ", ".join(f"port {b['port']} (PID {b.get('pid')}, {b.get('app') or 'unknown app'})" for b in others)
+    sessions = live_sessions(getattr(state, "env", None))
+    return (f"Error: nothing answers on {host}:{current}, the endpoint this server is set to use ({error}). Other bridges "
+            f"are advertised and up: {listing}. This is not Kit still starting. Confirm which simulator you mean, then call "
+            f"use_bridge(port={others[0]['port']}). Port {current} comes from use_bridge, UR5E_DT_PORT or ISAAC_MCP_PORT; "
+            f"wait only if you are starting a simulator on port {current} yourself."
+            + (" " + _wait_advice(state, error) if sessions and all(x["port"] != current for x in sessions) else ""))
+
+
+def _wait_advice(state: _BridgeState, error: BaseException) -> str:
+    """What waiting will actually do, for the port refresh_tools dials and the live sessions."""
+    current = _screen_port(state)
+    sessions = live_sessions(getattr(state, "env", None))
+    follow = _followable_session(state) if _nothing_listening(error) else None
+    if follow is not None:
+        first = f"port {current} and " if current is not None else ""
+        return (f"refresh_tools(wait_s=120) polls {first}port {follow['port']}, and selects port "
+                f"{follow['port']} (the simulator this server launched) when it is ready"
+                + (f" and port {current} still does not answer." if current is not None else "."))
+    if current is not None and sessions and all(s["port"] != current for s in sessions):
+        ports = ", ".join(str(s["port"]) for s in sessions)
+        guess = " several managed sessions are live, so it will not guess;" if len(sessions) > 1 else ""
+        return (f"refresh_tools keeps dialling port {current} and does not select port(s) {ports}:{guess} "
+                f"check readiness with sim__status, then call use_bridge(port={sessions[0]['port']}).")
+    target = f" port {current}" if current is not None else ""
+    return f"Wait until it is ready (refresh_tools(wait_s=120) polls{target} for you)."
+
+
+def _starting_hint(server: FastMCP, error: BaseException, session_detail: Optional[str] = None) -> str:
     """Explain a discovery failure that usually means Kit is still starting, with any managed
     simulator session's age (sim__launch records ``started_at``)."""
     import time
     state = _state_for(server)
     current = _screen_port(state)
+    if current is not None and _nothing_listening(error) and _followable_session(state) is None:
+        others = _advertised_elsewhere(state)
+        if others:
+            return _dead_endpoint_hint(state, error, others)
     sessions = live_sessions(getattr(state, "env", None))
     lines = []
     for session in sessions:
@@ -895,6 +1218,7 @@ def _starting_hint(server: FastMCP, error: BaseException) -> str:
         lines.append(f"port {session['port']} (PID {session['pid']}{age}; {where})")
     managed = ("" if not lines else " Managed simulators started with sim__launch are running on "
                + ", ".join(lines) + ".")
+    detail = f" Last check: {session_detail}." if session_detail else ""
     if isinstance(error, TimeoutError):
         cause = (f"Error: the Isaac Sim bridge accepted the connection but did not answer list_tools "
                  f"in time ({error}). Kit is probably still starting: the bridge opens its port "
@@ -903,10 +1227,22 @@ def _starting_hint(server: FastMCP, error: BaseException) -> str:
         cause = (f"Error: no Isaac Sim bridge is reachable ({error}). Isaac Sim is probably not running "
                  "yet, or is still starting (a first start can take 2-3 minutes before the bridge "
                  "answers).")
-    return (cause + managed + " Wait until it is ready (refresh_tools(wait_s=120) polls for you), "
-            "or start it if nothing is running (sim__launch when simulator launch is enabled, or "
-            "./run.sh), then call refresh_tools again. `python -m isaac_mcp.client --list-bridges` "
-            "lists running bridges.")
+    return (cause + managed + detail + " " + _wait_advice(state, error) + " If nothing is running, start "
+            "it (sim__launch when simulator launch is enabled, or ./run.sh), then call refresh_tools "
+            f"again. List running bridges with {LIST_BRIDGES_HELP}.")
+
+
+def _other_sessions_note(server: FastMCP) -> str:
+    """After a successful refresh: say so if a managed session is live on another port, so a client
+    that just called sim__launch does not assume the answering bridge is its new simulator."""
+    state = _state_for(server)
+    current = _screen_port(state)
+    others = [s for s in live_sessions(getattr(state, "env", None)) if s["port"] != current]
+    if current is None or not others:
+        return ""
+    listing = ", ".join(f"port {s['port']} (PID {s['pid']})" for s in others)
+    return (f"\nNote: this server stayed on port {current}, whose bridge answered. A managed simulator "
+            f"is also running on {listing}; call use_bridge(port) to select it.")
 
 
 def _probe_bridge(server: FastMCP) -> None:
@@ -946,6 +1282,7 @@ async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None, wait_s:
     start = time.monotonic()
     deadline = start + wait
     attempts = 0
+    session_detail = None
 
     while True:
         attempts += 1
@@ -956,28 +1293,63 @@ async def _refresh_tools(server: FastMCP, ctx: Optional[Context] = None, wait_s:
             break
         except Exception as e:
             if isinstance(e, RuntimeError) and str(e).startswith("multiple bridges running"):
-                return (f"Error: {e} Pick one with use_bridge(port) (`python -m isaac_mcp.client "
-                        "--list-bridges` shows each one's port and PID); do not start another simulator.")
+                return (f"Error: {str(e).rstrip('.')}. Pick one with use_bridge(port) (each one's port and PID: "
+                        f"{LIST_BRIDGES_HELP}); do not start another simulator.")
             if not _booting_error(e):
                 return f"Error: {e}"
-            if time.monotonic() + REFRESH_POLL_S > deadline:
+            state = _state_for(server)
+            session = _followable_session(state) if _nothing_listening(e) else None
+            if session is not None:
+                session_detail = await asyncio.to_thread(_session_not_ready, session)
+                if session_detail is None:
+                    return await _select_launched_session(server, session, ctx)
+            if wait and _several_launched_sessions(state, e):
+                return _starting_hint(server, e, session_detail) + (
+                    " Returned without waiting: this server launched several simulators that are still live, so it "
+                    "will not choose one, and waiting would not change that. Pick one with use_bridge(port). Only if "
+                    "one exits, or something starts on the configured port, would refresh_tools then succeed.")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 waited = (f" (waited {time.monotonic() - start:.0f} s, {attempts} attempt(s))" if wait else "")
-                return _starting_hint(server, e) + waited
-            await asyncio.sleep(REFRESH_POLL_S)
+                return _starting_hint(server, e, session_detail) + waited
+            await asyncio.sleep(min(REFRESH_POLL_S, remaining))
     if added:
         await _notify_tools_changed(ctx)
     waited = f" after {attempts} attempt(s)" if attempts > 1 else ""
     return ((f"Registered/updated/removed {len(added)} tool(s){waited}: {added}" if added
-             else f"No new or changed tools (registry unchanged){waited}.") + _offline_note(server))
+             else f"No new or changed tools (registry unchanged){waited}.")
+            + _offline_note(server) + _other_sessions_note(server))
+
+
+async def _select_launched_session(server: FastMCP, session: Dict[str, Any],
+                                   ctx: Optional[Context] = None) -> str:
+    """Move to the session _followable_session chose, through the use_bridge path, and say so."""
+    previous = _screen_port(_state_for(server))
+    result = await _use_bridge(server, session["port"], ctx)
+    if result.startswith("Error:"):
+        return result
+    why = (f"port {previous}, which this server was using, did not answer" if previous is not None
+           else "no port is configured and no bridge is advertised")
+    return (f"Selected the bridge on port {session['port']} (PID {session['pid']}): {why}, "
+            f"and it is the only managed simulator running, launched by this server (session "
+            f"{session['id']}). This lasts until use_bridge or a server restart. Confirm the PID with "
+            f"status before scene changes.\n{result}")
+
+
+USE_BRIDGE_TIMEOUT_S = 10.0
 
 
 async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None) -> str:
     state = _state_for(server)
+    if type(port) is not int or not 1 <= port <= 65535:
+        return f"Error: port must be a number from 1 to 65535, not {port!r}. Nothing changed."
     try:
-        new_client = BridgeClient(port=int(port))
-        identity = new_client.call("status")
+        new_client = BridgeClient(port=port)
+        # A short limit: this blocks the server, and a port that accepts TCP may not be a bridge at all.
+        identity = new_client.call("status", timeout=USE_BRIDGE_TIMEOUT_S)
     except Exception as e:  # noqa: BLE001
-        return f"Error: {e}"
+        return (f"Error: no bridge answered on port {port} within {USE_BRIDGE_TIMEOUT_S:g} s: {e}. Nothing changed. "
+                "It may be busy, or not a bridge: " + LIST_BRIDGES_HELP + " lists them.")
     before = _tool_list_surface(server)
     old_client = state.client
     state.client = new_client
@@ -1014,6 +1386,16 @@ async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None)
     )
 
 
+def _reported(text: str) -> Any:
+    """A gateway tool's text as an MCP result: the same words, with isError set when it failed, so a
+    client does not read "Error: ..." as success. A use_bridge that connected but could not list the
+    new bridge's tools also failed, although the switch took effect."""
+    if text.startswith("Error:") or "but tool discovery failed:" in text.split("\n", 1)[0]:
+        from mcp.types import CallToolResult, TextContent
+        return CallToolResult(content=[TextContent(type="text", text=text)], isError=True)
+    return text
+
+
 def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
     """Register ``refresh_tools`` and ``use_bridge`` (the ``gateway`` group) on ``server``.
 
@@ -1022,26 +1404,23 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
     mcp = ScopedTools(server, groups)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
-    async def refresh_tools(wait_s: float = 0, ctx: Context = None) -> str:  # type: ignore[assignment]
-        """Re-discover the bridge registry and register any new tools (use after
-        the bridge's reload_tools, after enabling a project, or after Kit restarts).
+    async def refresh_tools(wait_s: Annotated[float, Field(description="Seconds to keep polling while no bridge answers, 0-180. A first Kit start can take 120-180.")] = 0, ctx: Context = None) -> Any:  # type: ignore[assignment]
+        """Re-discover the bridge's tools and register new ones. Use after Kit starts or restarts,
+        after reload_tools, or when tools seem missing.
 
-        wait_s (0-180, default 0): keep polling up to this many seconds while no bridge answers
-        yet, e.g. while Kit is still starting (a first start can take 2-3 minutes)."""
-        return await _refresh_tools(server, ctx, wait_s)
+        A port whose bridge answers is never switched away from. If nothing listens and this server
+        launched the only live simulator, it selects that one and says so; otherwise it names
+        candidates for use_bridge."""
+        return _reported(await _refresh_tools(server, ctx, wait_s))
 
-    @mcp.tool(annotations=IDEMPOTENT_WRITE)
-    async def use_bridge(port: int, ctx: Context = None) -> str:  # type: ignore[assignment]
-        """Switch this MCP server to another running Kit bridge on this machine.
-
-        To find the candidates, run `python -m isaac_mcp.client --list-bridges`. (`list_bridges`
-        exists only as a bridge built-in: it is an MCP tool only when built-ins are enabled and a
-        bridge is already reachable.) This replaces the bridge tools with the ones registered in
-        that Kit process (the ur5e_dt__* tools stay listed even if it lacks the twin, but then
-        return an error when called); screen tools are unaffected. The choice lasts until this MCP server
-        restarts, then UR5E_DT_PORT (or ISAAC_MCP_PORT, or auto-discovery) decides again.
-        """
-        return await _use_bridge(server, port, ctx)
+    @mcp.tool(annotations=IDEMPOTENT_WRITE, description=(
+        "Switch this MCP server to another running Kit bridge on this machine. Use it when several run "
+        f"or the wrong one answers.\n\nFind candidates with {LIST_BRIDGES_HELP}. Replaces the bridge tools "
+        "with that Kit's; ur5e_dt__* stay listed but error without the twin. Screen tools are unaffected. "
+        "Lasts until this server restarts."))
+    async def use_bridge(port: Annotated[int, Field(description="Bridge TCP port from --list-bridges or list_bridges.")], ctx: Context = None) -> Any:  # type: ignore[assignment]
+        """Switch this MCP server to another running Kit bridge on this machine."""
+        return _reported(await _use_bridge(server, port, ctx))
 
 
 _RESTRICTED_NOTE = (
@@ -1092,7 +1471,9 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups)
     register_desktop_input_tools(server, groups=groups)
     state.env = env
-    register_sim_session_tools(server, groups=groups, env=env)
+    state.launched_sessions = set()   # IDs sim__launch created in this server process
+    register_sim_session_tools(server, groups=groups, env=env,
+                               on_launch=lambda record: state.launched_sessions.add(record["id"]))
     register_isaaclab_tools(server, groups=groups)
     _register_gateway_tools(server, groups)
     setattr(server, _OFFLINE_ATTR, _OfflineTools(host_catalog.load_catalog()))
@@ -1111,7 +1492,6 @@ use_bridge = functools.partial(_use_bridge, mcp)
 def main(argv: list[str] | None = None) -> None:
     """Run the MCP server (stdio). `--help` and `--version` exit without starting it."""
     import argparse
-    from importlib import metadata
 
     parser = argparse.ArgumentParser(
         prog="isaac-mcp",
@@ -1119,11 +1499,7 @@ def main(argv: list[str] | None = None) -> None:
         "screen capture. Speaks MCP over stdio; configure it in your MCP client, do not run it by hand. "
         "Environment: UR5E_DT_PORT (bridge port, default 8766), DISPLAY (screen tools).",
     )
-    try:
-        version = metadata.version("isaac-mcp")
-    except metadata.PackageNotFoundError:
-        version = "unknown"
-    parser.add_argument("--version", action="version", version=f"%(prog)s {version}")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {_package_version()}")
     parser.parse_args(argv)
     mcp.run()
 

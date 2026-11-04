@@ -8,7 +8,7 @@
 
 The [end-to-end asset and scene plan](plans/ASSET-SCENE-END-TO-END.md) combines this draft with project-folder
 discovery, current catalog/session behavior and the required live verification. Its proposed shared host/catalog
-integration supersedes this draft's original no-host-changes assumption; generic tools remain unimplemented.
+integration supersedes this draft's original no-host-changes assumption. The shipped tools are in [TOOLS-SCENE.md](TOOLS-SCENE.md); names here that differ, such as `sim__raycast`, are proposals.
 
 
 Design for a second Kit-side tool pack exposing **robot-agnostic** Isaac Sim

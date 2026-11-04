@@ -63,6 +63,11 @@ Stop and inspect any dependency-check failure before treating the environment as
 
 The convenience installer:
 
+- When it finds an installed Isaac Sim 6.x and the checkout has no `.venv`, it installs only the MCP server and writes that
+  interpreter into the Claude entries it creates. If nothing is found, it continues to the checks below and **stops at the
+  EULA check unless `--accept-eula` was given or `OMNI_KIT_ACCEPT_EULA=YES` is already exported; in those two cases it
+  downloads the environment**. An existing checkout `.venv` is re-synced unless you pass `--no-sim`, the one form that never
+  downloads or syncs a simulator. `--no-sim` still looks for an installed Isaac Sim 6.x and records it in client entries.
 - Runs **`uv sync --python 3.12` in the current directory**. It may update the lock/environment;
   it does not enforce `--locked` and does not use `ISAAC_MCP_PYTHON` (or its alias `UR5E_DT_PYTHON`) as its install target.
 - Runs `uv tool install --force --editable` for the host with the `isaaclab` metrics extra.
@@ -96,7 +101,7 @@ The launcher enables the bridge, generic scene tools, UR5e tools and NVIDIA's bu
 it keeps the UR panel hidden unless `--ur5e-panel` is supplied. Its default backend is **PhysX**.
 The optional Newton flag is not a compatibility promise; see the [matrix](COMPATIBILITY.md).
 
-For a windowless GPU session, use `./run.sh --headless --port 8766` instead. Headless Sim still
+For a windowless GPU session, use `./run.sh --headless --port 8766` instead. To leave either running after your shell or a tool's time limit ends, use `setsid nohup ./run.sh --port 8766 > kit.log 2>&1 < /dev/null &`. Headless Sim still
 requires the NVIDIA runtime and can render sensors, but has no application window for desktop
 capture/input. Windowed tools were exercised on X11/XWayland; native Wayland is not qualified.
 Keep the launch terminal available for startup errors. First startup can take minutes for shader
@@ -128,7 +133,7 @@ For the equivalent read-only terminal check, use the repository's standard-libra
 # From checkout root; no Sim imports and no host-package installation needed for this CLI.
 python3 mcp/isaac_mcp/client.py --list-bridges
 # Set these to the intended endpoint from that listing, not an arbitrary visible window.
-BRIDGE_HOST=127.0.0.1
+BRIDGE_HOST=localhost
 BRIDGE_PORT=8766
 python3 mcp/isaac_mcp/client.py status --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
 python3 mcp/isaac_mcp/client.py sim.stage.info '{}' --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
@@ -152,6 +157,7 @@ compatible installation. Do not rename, relocate or reinstall an environment jus
 
 ```bash
 # From checkout root; this replaces only the user-level host tool and may create its ffmpeg shim.
+# Export ISAAC_MCP_PYTHON first if the install is outside the searched locations, so it is recorded.
 ./install.sh --no-sim
 ISAAC_SIM_PYTHON=<env>/bin/python
 "$ISAAC_SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
@@ -173,14 +179,18 @@ A plain Python `import omni` failure outside Kit does not prove the installation
 Consult NVIDIA's version-specific [6.0 install guide](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/installation/install_python.html)
 or [6.0.1 guide](https://docs.isaacsim.omniverse.nvidia.com/6.0.1/installation/install_python.html)
 when obtaining older builds. **Do not run the root 6.2 sync in those environments.**
+Run their `uv pip install` from outside this checkout or with `--no-config`: inside it, `uv` applies the
+root `pyproject.toml`'s 6.2 overrides (`torch`, `numpy`, `packaging`), which caused false conflicts and a
+failing `uv pip check` on 6.0.0.1 and 6.1.0.0 until the environments were rebuilt.
 The [compatibility record](COMPATIBILITY.md) is authoritative for measured scope: later save,
 viewport and URDF follow-ups have superseded some early pending checks, while the original
 6.0.1 windowed native-step stall and remaining matrix gates remain open.
 
 ## Prepare the UR5e and sensor assets
 
-The host connection and `sim__stage__info` do not require a robot or workstation. A UR5e
-Quick Start does need the robot, gripper and object assets. The repository ships **no
+The host connection and `sim__stage__info` do not require a robot or workstation. `ur5e_dt__quick_start`
+needs only NVIDIA's public UR5e. The gripper, workstation and objects are [your own lab files](ASSETS.md#public-files-and-lab-files), and
+Quick Start skips the gripper when they are absent. The repository ships **no
 assets**: every asset lives in your local asset folder, `isaac-mcp-assets` next to the
 checkout (see [ASSETS.md](ASSETS.md)). `install.sh` installs packages, not assets. Add your
 own files with `python3 scripts/isaac_assets.py add`, move assets from an older checkout with
@@ -192,7 +202,7 @@ python3 scripts/fetch_ur5e_assets.py
 python3 scripts/fetch_ur5e_assets.py --check
 ```
 
-The first command downloads missing/mismatched manifest files from the configured NVIDIA
+The first command downloads missing manifest files from the configured NVIDIA
 asset root and skips already valid files. The second reads the cache only: exit 0 means all
 manifest fetch entries match size/SHA-256; exit 1 reports missing or mismatched entries.
 It checks neither the manual Vention bench nor native rendering/physics readiness.
@@ -234,7 +244,7 @@ All options can be inspected without fetching: `python3 scripts/fetch_ur5e_asset
 | `--cache-dir PATH` | Overrides the destination for this invocation only; select the same directory through `ISAAC_MCP_ASSET_PATH` when launching Kit |
 | `--asset-root URL_OR_DIRECTORY` | Overrides the source for this invocation; an existing local mirror must have the manifest's source-relative layout. `ISAAC_MCP_ASSET_REMOTE_ROOT` is the environment equivalent (`UR5E_DT_ASSET_ROOT` is a deprecated alias) |
 | `--check` | Verifies existing cache bytes only; no download or repair |
-| `--force` | Re-fetches/copies even matching files; intentional replacement, not a normal startup requirement |
+| `--force` | Re-fetches/copies even matching files, and replaces changed files that are not pinned; intentional replacement, not a normal startup requirement |
 
 The [manifest](../exts/ur5e-dt/assets-manifest.json) pins the **Isaac asset-library 5.1**
 paths and byte hashes. That asset generation is separate from the selected **Sim 6.2**
@@ -276,11 +286,22 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | `isaac-mcp` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
 | Interpreter missing | Run `python3 scripts/isaac_env.py find`, select a compatible `ISAAC_MCP_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
 | `uv pip check` fails | Record exact versions and conflicts. Use a new isolated locked environment for comparison; do not infer a native failure's cause from metadata alone |
-| 89 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
+| 109 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
+| Quick Start result says `"gripper": {"loaded": false}` | Expected without your lab files; the scene still works. See [public and lab files](ASSETS.md#public-files-and-lab-files) |
+| `Asset not available: objects/...` | Object tools need your lab files. See [public and lab files](ASSETS.md#public-files-and-lab-files) |
+| `fetch_ur5e_assets.py` exits 1 and lists files it kept | They differ from NVIDIA's. Run `isaac_assets.py pin` if the change is yours, or `--force` to replace them |
 | `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
+| `No module named 'Xlib'` when starting the MCP host | You ran the host with Isaac Sim's Python. It has its own dependencies: use the installed `isaac-mcp`, or `cd mcp && uv run --isolated --with-editable . ...` |
+| `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
+| Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
+| `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; for the twin that is `/World/UR5e/root_joint`. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
+| `./verify.sh` stops with `FAILED: checkpoint` | A pre-migration `checkpoints/*.usda` has dead references. Inspect it and move it aside. See [Verification](VERIFICATION.md#live-ur5e-baseline) |
+| `/scan` missing after reopening a saved scene | Open it with `sim__stage__open`, which repairs stale LiDAR products. See [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan) |
+| `refresh_tools` selected another port | It found no bridge on the pinned port and one session this server launched. The result names it; verify with `status` |
+| `status` shows `host.stale: true` | This MCP server predates your `git pull`. Restart the MCP connection |
 | `SAVE_UNSUPPORTED` | Inspect returned properties/retry guidance; pause and follow the explicit normalization contract in [scene tools](TOOLS-SCENE.md) |
 | `TIMELINE_BUSY` or a call stops responding | Preserve logs and identity; do not repeatedly replay Play or assume a client timeout cancels native work. See the known stall in [compatibility](COMPATIBILITY.md) |
 | No display / screenshot fails | Use the actual X11/XWayland display for window tools, or headless sensor capture; neither creates a desktop session |

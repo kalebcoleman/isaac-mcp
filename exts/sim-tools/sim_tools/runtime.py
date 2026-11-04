@@ -78,7 +78,9 @@ def runtime_identity():
     try:
         from isaacsim.core.simulation_manager import SimulationManager
 
-        result["physics_engine"] = SimulationManager.get_active_physics_engine()
+        from .compat import adapt_simulation_manager
+
+        result["physics_engine"] = adapt_simulation_manager(SimulationManager).get_active_physics_engine()
     except (ImportError, AttributeError):
         result["physics_engine"] = None
     result["physics_adapter"] = (

@@ -11,6 +11,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from isaac_mcp.isaaclab import jobs
 
 
+def make_lab_root(root: Path) -> None:
+    """A checkout with Isaac Lab 3's entry scripts: a job needs them to exist even when a fake interpreter runs it."""
+    scripts = root / "scripts" / "reinforcement_learning"
+    scripts.mkdir(parents=True, exist_ok=True)
+    (scripts / "train.py").write_text("")
+    (scripts / "play.py").write_text("")
+
+
 def make_fake_python(tmp_path: Path) -> Path:
     p = tmp_path / "fake_python.py"
     p.write_text(
@@ -41,7 +49,7 @@ def test_job_display_choice_is_child_local_and_video_keeps_renderer(
     import json
 
     root = tmp_path / 'lab'
-    root.mkdir()
+    make_lab_root(root)
     checkpoint = root / 'model.pt'
     checkpoint.write_bytes(b'fixture')
     fake_py = make_fake_python(tmp_path)
@@ -112,7 +120,7 @@ def test_import_does_not_create_jobs_directory_but_launch_does(tmp_path, monkeyp
 
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    make_lab_root(root)
     result = jobs.train(python=str(fake_py), root=str(root), task="Test", allow_concurrent=True,
                         allow_concurrent_gpu=True)
     assert directory.is_dir()
@@ -123,7 +131,7 @@ def test_import_does_not_create_jobs_directory_but_launch_does(tmp_path, monkeyp
 def test_launch_status_tail(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    make_lab_root(root)
     monkeypatch.setenv("FAKE_MODE", "ok")
     res = jobs.train(python=str(fake_py), root=str(root), task="Foo.Bar:1", num_envs=4)
     assert set(res) == {"job_id", "log_dir", "command"}
@@ -146,7 +154,7 @@ def test_launch_status_tail(tmp_path, monkeypatch):
 def test_fail_exit_code(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    make_lab_root(root)
     monkeypatch.setenv("FAKE_MODE", "fail")
     res = jobs.train(python=str(fake_py), root=str(root), task="T", num_envs=2)
     jid = res["job_id"]
@@ -158,7 +166,7 @@ def test_fail_exit_code(tmp_path, monkeypatch):
 def test_cancel_kills_process_group(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    make_lab_root(root)
     monkeypatch.setenv("FAKE_MODE", "sleep")
     res = jobs.train(python=str(fake_py), root=str(root), task="SleepTask", num_envs=1)
     jid = res["job_id"]
@@ -176,7 +184,7 @@ def test_cancel_kills_process_group(tmp_path, monkeypatch):
 def test_timeout(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    make_lab_root(root)
     monkeypatch.setenv("FAKE_MODE", "sleep")
     res = jobs.train(python=str(fake_py), root=str(root), task="TimeoutTask", num_envs=1, timeout_s=0.5)
     jid = res["job_id"]
@@ -222,7 +230,7 @@ def test_rehydration_host_restarted(tmp_path, monkeypatch):
 def test_validation(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    make_lab_root(root)
     # bad task
     with pytest.raises(ValueError):
         jobs.train(python=str(fake_py), root=str(root), task="bad task!")
@@ -244,7 +252,7 @@ def test_validation(tmp_path, monkeypatch):
 def test_eval_play(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    make_lab_root(root)
     # create a checkpoint under root
     ckpt = root / "model.pth"
     ckpt.write_text("x")
@@ -261,7 +269,7 @@ def test_eval_play(tmp_path, monkeypatch):
 def test_runs_tail_lines_cap(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    make_lab_root(root)
     monkeypatch.setenv("FAKE_MODE", "ok")
     res = jobs.train(python=str(fake_py), root=str(root), task="T")
     jid = res["job_id"]
@@ -352,7 +360,7 @@ def test_status_reconciles_an_orphaned_job_after_host_restart():
 def _launch_sleeping(tmp_path, monkeypatch, **kw):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir(exist_ok=True)
+    make_lab_root(root)
     monkeypatch.setenv("FAKE_MODE", "sleep")
     monkeypatch.setattr(jobs, "_kit_bridge_guard", lambda: None)
     return jobs.train(python=str(fake_py), root=str(root), task="T", **kw)
@@ -378,7 +386,7 @@ def test_cancel_is_not_overwritten_by_the_watcher(tmp_path, monkeypatch, round_)
 def test_cancel_leaves_a_finished_job_alone(tmp_path, monkeypatch):
     fake_py = make_fake_python(tmp_path)
     root = tmp_path / "root"
-    root.mkdir()
+    make_lab_root(root)
     monkeypatch.setenv("FAKE_MODE", "ok")
     monkeypatch.setattr(jobs, "_kit_bridge_guard", lambda: None)
     r = jobs.train(python=str(fake_py), root=str(root), task="T")
@@ -543,3 +551,31 @@ def test_atomic_job_write_does_not_follow_existing_destination_symlink(tmp_path)
     assert other.read_text() == "preserve this file"
     assert not (jd / "job.json").is_symlink()
     assert jobs._read_job(jd) == record
+
+
+def test_orphan_timeout_leaves_a_finished_job_to_settle(tmp_path, monkeypatch):
+    """Review fix: a job that ended cleanly before anyone looked is not recorded as timed out."""
+    d = tmp_path / "job"
+    d.mkdir()
+    (d / jobs.EXIT_FILE).write_text("0")
+    data = {"status": "running", "pid": 2 ** 22 + 12345, "started_at": time.time() - 100, "timeout_s": 5, "command": ["x", "y"]}
+    monkeypatch.setattr(jobs, "_job_alive", lambda _d: False)
+    killed = []
+    monkeypatch.setattr(jobs, "_kill_orphan_group", lambda _d: killed.append(1))
+    jobs._enforce_orphan_timeout("j1", d, data)
+    assert data["status"] == "running" and not killed
+    jobs._settle_orphan(d, data)
+    assert data["status"] == "succeeded" and data["exit_code"] == 0
+
+
+def test_orphan_timeout_not_recorded_when_the_kill_did_not_happen(tmp_path, monkeypatch):
+    d = tmp_path / "job"
+    d.mkdir()
+    data = {"status": "running", "pid": 1, "started_at": time.time() - 100, "timeout_s": 5, "command": ["x", "y"]}
+    monkeypatch.setattr(jobs, "_job_alive", lambda _d: True)
+    monkeypatch.setattr(jobs, "_kill_orphan_group", lambda _d: False)
+    jobs._enforce_orphan_timeout("j2", d, data)
+    assert data["status"] == "running"
+    monkeypatch.setattr(jobs, "_kill_orphan_group", lambda _d: True)
+    jobs._enforce_orphan_timeout("j2", d, data)
+    assert data["status"] == "timeout"

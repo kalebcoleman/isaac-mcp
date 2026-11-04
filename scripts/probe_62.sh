@@ -46,7 +46,8 @@ if ! "$PY" -c 'import isaacsim' 2>/dev/null; then
   exit 1
 fi
 
-ISAAC_VER="$("$PY" -c 'import importlib.metadata as m;print(m.version("isaacsim"))')"
+. "$ROOT/scripts/isaac_ros_libs.sh"
+ISAAC_VER="$(isaac_sim_version "$PY")"
 case "$ISAAC_VER" in
   6.*) ;;
   *) echo "FAIL: $PY has isaacsim $ISAAC_VER; this probe needs 6.x." >&2; exit 1 ;;
@@ -66,7 +67,8 @@ if [ -z "${ROS_DISTRO:-}" ]; then
 fi
 export ROS_DISTRO
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
+. "$ROOT/scripts/isaac_ros_libs.sh"
+ROS_LIB="$(isaac_ros_lib_dir "$SITE" "$ROS_DISTRO")" && export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROS_LIB"
 export ISAAC_MCP_PORT="$PORT"  # shared endpoint, opened after the twin registers
 export ISAAC_MCP_DEFER_START=1
 export UR5E_DT_PORT="$PORT"
@@ -86,15 +88,16 @@ fi
 
 # ---- boot --------------------------------------------------------------------------
 echo "== boot"
-"$PY" "$ROOT/scripts/run_ur5e_dt.py" \
+setsid "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
   "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt \
   --enable isaacsim.ros2.bridge > "$LOG" 2>&1 &
 APP_PID=$!
 cleanup() {
-  kill "$APP_PID" 2>/dev/null; pkill -P "$APP_PID" 2>/dev/null
+  # The whole group: a standalone app's python.sh does not exec, so its Kit outlives the wrapper.
+  kill -- "-$APP_PID" 2>/dev/null
   # Kit ignores SIGTERM while it is busy shutting down; escalate so the probe cannot hang on exit.
   for _ in 1 2 3 4 5; do kill -0 "$APP_PID" 2>/dev/null || break; sleep 1; done
-  kill -9 "$APP_PID" 2>/dev/null; pkill -9 -P "$APP_PID" 2>/dev/null
+  kill -9 -- "-$APP_PID" 2>/dev/null
   wait "$APP_PID" 2>/dev/null
 }
 trap cleanup EXIT

@@ -18,12 +18,22 @@ SOURCE = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.p
 def driver_handler():
     """Load the real bridge handler without importing Kit."""
     tree = ast.parse(SOURCE.read_text())
-    method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
-                  and n.name == "_cmd_start_ros_driver")
-    module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
     namespace = {"__file__": str(SOURCE), "Dict": Dict, "Any": Any}
-    exec(compile(module, str(SOURCE), "exec"), namespace)
+    for name in ("_cmd_start_ros_driver", "_last_error_line"):
+        method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                      and n.name == name)
+        module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
+        exec(compile(module, str(SOURCE), "exec"), namespace)
     return namespace["_cmd_start_ros_driver"]
+
+
+def test_a_failed_driver_command_names_its_last_output_line(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: SimpleNamespace(
+        returncode=4, stdout="", stderr="\x1b[0;31m  ERR\x1b[0m Docker is not installed or not on PATH\n"))
+    result = driver_handler()(None, action="status", backend="ursim")
+    assert result["status"] == "error"
+    assert "Docker is not installed" in result["message"]
 
 
 def test_managed_bridge_passes_only_its_driver_paths_and_session_marker(tmp_path, monkeypatch):
@@ -282,3 +292,39 @@ def test_other_managed_and_unmanaged_sessions_cannot_stop_a_managed_driver(fake_
                     os.killpg(managed_pid, signal.SIGKILL)
             except (FileNotFoundError, ProcessLookupError):
                 pass
+
+
+def test_named_ros_setup_decides_the_distribution(fake_ros, tmp_path):
+    """A RoboStack prefix or other install: ROS_SETUP says its distribution, whatever the OS is."""
+    root, env = fake_ros
+    prefix = tmp_path / "ros2-humble"
+    prefix.mkdir()
+    (prefix / "setup.bash").write_text(f'. "{env["ROS_SETUP"]}"\nexport ROS_DISTRO=humble\n')
+    env.pop("ROS_DISTRO", None)
+    env.update(ROS_SETUP=str(prefix / "setup.bash"), ADVERTISED_ARG="use_fake_hardware")
+    result = subprocess.run(["bash", str(SCRIPT), "up"], env=env, text=True, capture_output=True, timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "use_fake_hardware:=true" in (root / "args").read_text().splitlines()
+
+
+def test_named_ros_setup_that_sets_no_distribution_refuses(fake_ros, tmp_path):
+    root, env = fake_ros
+    setup = tmp_path / "plain.bash"
+    setup.write_text(f'. "{env["ROS_SETUP"]}"\nunset ROS_DISTRO\n')
+    env.pop("ROS_DISTRO", None)
+    env.update(ROS_SETUP=str(setup), ADVERTISED_ARG="use_mock_hardware")
+    result = subprocess.run(["bash", str(SCRIPT), "up"], env=env, text=True, capture_output=True)
+    assert result.returncode != 0 and "does not support ROS_DISTRO" in result.stderr
+    assert not (root / "args").exists()
+
+
+def test_activated_environment_needs_no_setup_file(fake_ros):
+    """RoboStack activated: ROS_DISTRO set, ros2 on PATH, no /opt/ros, no ROS_SETUP."""
+    if Path("/opt/ros/humble/setup.bash").exists():
+        pytest.skip("this machine has a real /opt/ros/humble")
+    root, env = fake_ros
+    env.pop("ROS_SETUP")
+    env.update(ROS_DISTRO="humble", ADVERTISED_ARG="use_fake_hardware")
+    result = subprocess.run(["bash", str(SCRIPT), "up"], env=env, text=True, capture_output=True, timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "use_fake_hardware:=true" in (root / "args").read_text().splitlines()

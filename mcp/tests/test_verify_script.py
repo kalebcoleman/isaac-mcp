@@ -28,6 +28,7 @@ def test_verifier_uses_selected_python_and_reports_failed_checks(tmp_path, faili
     source = Path(__file__).resolve().parents[2] / "scripts" / "verify_ur5e_dt.sh"
     script = scripts / source.name
     shutil.copy(source, script)
+    shutil.copy(source.with_name("check_checkpoint_refs.py"), scripts)
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -134,3 +135,68 @@ def test_documented_generic_scene_command_fails_if_log_cannot_be_created(tmp_pat
     assert result.returncode != 0
     assert "Full log:" not in result.stdout
     assert "Could not create validation log" in result.stderr
+
+
+def _checkpoint(tmp_path, body):
+    checkpoints = tmp_path / "checkpoints"
+    checkpoints.mkdir()
+    manifest = checkpoints / "manifest.json"
+    manifest.write_text('{"checkpoint": "scene.usda"}')
+    (checkpoints / "scene.usda").write_text(body)
+    return manifest
+
+
+def _check_refs(manifest):
+    script = Path(__file__).resolve().parents[2] / "scripts" / "check_checkpoint_refs.py"
+    return subprocess.run([sys.executable, str(script), str(manifest)], capture_output=True, text=True)
+
+
+def test_checkpoint_with_a_dead_reference_is_reported(tmp_path):
+    (tmp_path / "ok.usd").touch()
+    manifest = _checkpoint(tmp_path, """
+        prepend references = @../ok.usd@
+        prepend references = @../gone/robot.usd@</Robot>
+        references = [@../gone/list.usd@, @omniverse://server/remote.usd@]
+    """)
+    result = _check_refs(manifest)
+    assert result.returncode == 1
+    assert "2 reference(s)" in result.stdout and "../gone/list.usd" in result.stdout
+    assert "omniverse" not in result.stdout
+
+
+def test_checkpoint_with_live_references_passes_and_ignores_other_asset_paths(tmp_path):
+    (tmp_path / "ok.usd").touch()
+    manifest = _checkpoint(tmp_path, """
+        prepend references = @../ok.usd@
+        asset inputs:file = @./texture-not-composed.png@
+    """)
+    assert _check_refs(manifest).returncode == 0
+
+
+def test_missing_checkpoint_passes_so_the_verifier_can_export_one(tmp_path):
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text('{"checkpoint": "not-yet.usda"}')
+    assert _check_refs(manifest).returncode == 0
+
+
+def test_verifier_stops_before_the_scene_on_a_stale_checkpoint(tmp_path):
+    root = tmp_path / "checkout"
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True)
+    (root / "mcp").mkdir()
+    checkpoints = root / "checkpoints"
+    checkpoints.mkdir()
+    (checkpoints / "ur5e-dt-workstation-person-view-portable.json").write_text('{"checkpoint": "old.usda"}')
+    (checkpoints / "old.usda").write_text("prepend references = @../gone.usd@\n")
+    source = Path(__file__).resolve().parents[2] / "scripts"
+    for name in ("verify_ur5e_dt.sh", "check_checkpoint_refs.py"):
+        shutil.copy(source / name, scripts / name)
+    interpreter = tmp_path / "python"
+    interpreter.write_text('#!/bin/sh\necho reached the bridge\n')
+    interpreter.chmod(0o755)
+    env = os.environ | {"ISAAC_MCP_PYTHON": str(interpreter)}
+    result = subprocess.run(["bash", str(scripts / "verify_ur5e_dt.sh")], env=env, text=True, capture_output=True)
+    assert result.returncode == 1
+    assert "FAILED: checkpoint" in result.stdout and "move it aside" in result.stdout
+    assert "reached the bridge" not in result.stdout
+    assert (checkpoints / "old.usda").exists()

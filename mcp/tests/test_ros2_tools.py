@@ -291,6 +291,19 @@ def test_doctor_names_publishers_for_tf_and_tf_static_duplicates():
     assert any("several nodes publish TF" in w for w in warnings)
 
 
+def test_isaac_ros_env_finds_the_5_1_bridge_folder(tmp_path, monkeypatch):
+    import subprocess as sp
+
+    root = tmp_path / "isaac-sim"
+    python = root / "python.sh"
+    (root / "exts" / "isaacsim.ros2.bridge" / "humble" / "rclpy").mkdir(parents=True)
+    real = sp.run
+    monkeypatch.setattr(doctor.subprocess, "run", lambda cmd, *a, **k: (
+        sp.CompletedProcess(cmd, 0, stdout=f"{python}\n", stderr="") if "resolve-python" in cmd else real(cmd, *a, **k)))
+    _, env = doctor.isaac_ros_env({"ROS_DISTRO": "humble", "PATH": "/usr/bin:/bin"})
+    assert env["PYTHONPATH"].split(":")[0] == str(root / "exts" / "isaacsim.ros2.bridge" / "humble" / "rclpy")
+
+
 @pytest.mark.parametrize("layout", ["venv", "python.sh", "kit"])
 def test_isaac_ros_env_finds_the_bundled_ros_for_each_install_layout(tmp_path, monkeypatch, layout):
     import subprocess as sp
@@ -542,6 +555,9 @@ def test_publisher_scan_walks_subgraphs_skips_own_and_disabled_and_marks_tool_gr
 
         def get_type_name(self):
             return self.kind
+
+        def get_attribute_exists(self, name):
+            return False
 
     class Graph:
         def __init__(self, path, nodes=(), subs=(), disabled=False):
@@ -898,3 +914,338 @@ def test_cmd_vel_sequence_refuses_non_finite_limits():
     with _pytest.raises(SystemExit):
         module["main"](["0.1,0,1", "--max-linear", "nan", "--dry-run"])
     assert module["main"](["0.1,0,1", "--dry-run"]) == 0
+
+
+def test_attach_to_publishes_a_dynamic_parent_edge_and_no_world_link():
+    nodes, values, connects, frames = plan(robot="/World/RG2", base_prim="/World/RG2/rg2_base_link",
+                                           base_frame="rg2_base_link", attach_parent="/World/UR5e/wrist_3_link",
+                                           attach_parent_frame="wrist_3_link")
+    names = [n for n, _ in nodes]
+    assert "TFAttach" in names and "TFWorldToBase" not in names
+    values = dict((k, v) for k, v in values)
+    assert values["TFAttach.inputs:parentPrim"] == "/World/UR5e/wrist_3_link"
+    assert values["TFAttach.inputs:targetPrims"] == ["/World/RG2/rg2_base_link"]
+    assert values["TFAttach.inputs:topicName"] == "tf"
+    edge = next(e for e in frames["edges"] if e["source"] == "TFAttach")
+    assert edge == dict(parent="wrist_3_link", child="rg2_base_link", static=False, source="TFAttach")
+    assert ("OnPlaybackTick.outputs:tick", "TFAttach.inputs:execIn") in connects
+    assert ("Context.outputs:context", "TFAttach.inputs:context") in connects
+    assert ("ReadSimTime.outputs:simulationTime", "TFAttach.inputs:timeStamp") in connects
+
+
+def test_attach_to_refuses_a_mobile_base():
+    with pytest.raises(ValueError, match="attach_to"):
+        plan(mode="mobile", attach_parent="/World/UR5e/wrist_3_link")
+
+
+def test_without_attach_to_the_layout_is_unchanged():
+    names = [n for n, _ in plan()[0]]
+    assert "TFWorldToBase" in names and "TFAttach" not in names
+
+
+RG2_LINKS = [("/World/RG2/rg2_base_link", "rg2_base_link"), ("/World/RG2/rg2_hand_link", "rg2_hand_link")]
+
+
+@pytest.mark.parametrize("parent,name,is_body,code", [
+    ("/World/RG2/rg2_hand_link", "rg2_hand_link", True, "ATTACH_LOOP"),
+    ("/World/RG2", "RG2", True, "ATTACH_LOOP"),
+    ("/World/UR5e/wrist_3_link", "wrist_3_link", False, "ATTACH_NOT_A_LINK"),
+    ("/World/Other/rg2_hand_link", "rg2_hand_link", True, "DUPLICATE_FRAME_NAMES"),
+])
+def test_attachment_refusals(parent, name, is_body, code):
+    assert ros2.check_attachment(RG2_LINKS, "/World/RG2", parent, name, is_body)[0] == code
+
+
+def test_valid_attachment_passes():
+    assert ros2.check_attachment(RG2_LINKS, "/World/RG2", "/World/UR5e/wrist_3_link", "wrist_3_link", True) is None
+
+
+def test_attach_to_with_a_renamed_base_is_refused():
+    problem = ros2.check_frames(RG2_LINKS, "/World/RG2/rg2_base_link", "gripper", "rg2_base_link", [], "world", "fixed",
+                                "robot_state_publisher", attached=True)
+    assert problem[0] == "BASE_FRAME_MISMATCH" and "attach_to" in problem[1]
+
+
+def test_contract_exposes_attach_to_as_a_string():
+    from isaac_mcp.scene_contracts import REGISTRY
+
+    assert REGISTRY["sim.ros2.tf_setup"]["parameters"]["attach_to"]["type"] == "string"
+
+
+# ---- publishing into a joint state subscriber drives the robot from its own state ----
+
+
+@pytest.mark.parametrize("topic,namespace,sub_topic,sub_namespace,loops", [
+    ("joint_states", "", "/joint_states", "", True),
+    ("/joint_states", "", "joint_states", "", True),
+    ("joint_states", "rg2", "/rg2/joint_states", "", True),
+    ("joint_states", "rg2", "joint_states", "rg2", True),
+    ("joint_states", "rg2", "/joint_states", "", False),
+    ("isaac/joint_states", "", "/joint_states", "", False),
+])
+def test_joint_state_loop_compares_resolved_topics(topic, namespace, sub_topic, sub_namespace, loops):
+    found = ros2.joint_state_loop(topic, namespace, [("/Graph/n", sub_topic, sub_namespace)])
+    assert found == (["/Graph/n"] if loops else [])
+
+
+def test_setup_refuses_the_loop_before_touching_the_graph():
+    import ast
+
+    tree = ast.parse((REPO / "exts/sim-tools/sim_tools/ros2.py").read_text())
+    source = ast.unparse(next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "setup"))
+    assert source.index("JOINT_STATE_LOOP") < source.index("stage.RemovePrim(graph)")
+    assert "retry_with" in source
+
+
+# ---- a saved file that already holds the loop ----
+
+PUB, SUB = "isaacsim.ros2.bridge.ROS2PublishJointState", "isaacsim.ros2.bridge.ROS2SubscribeJointState"
+
+
+@pytest.mark.parametrize("nodes,count", [
+    ([("/G/p", PUB, "joint_states", ""), ("/H/s", SUB, "/joint_states", "")], 1),
+    ([("/G/p", PUB, None, ""), ("/H/s", SUB, "joint_states", "")], 1),  # the publisher's default topic
+    ([("/G/p", PUB, "joint_states", "rg2"), ("/H/s", SUB, "/rg2/joint_states", "")], 1),
+    ([("/G/p", PUB, "joint_states", "")], 0),  # a graph that only publishes
+    ([("/H/s", SUB, "joint_states", "")], 0),
+    ([("/G/p", PUB, "isaac/joint_states", ""), ("/H/s", SUB, "/joint_states", "")], 0),
+    ([("/G/p", PUB, "joint_states", ""), ("/H/s", SUB, None, "")], 0),  # the subscriber's default is joint_command
+    ([("/G/p", "isaacsim.ros2.bridge.ROS2PublishClock", "joint_states", ""), ("/H/s", SUB, "joint_states", "")], 0),
+    ([], 0),
+])
+def test_find_joint_state_loops(nodes, count):
+    assert len(ros2.find_joint_state_loops(nodes)) == count
+
+
+LOOP_USDA = """#usda 1.0
+def "G" {
+    def OmniGraphNode "p" {
+        token node:type = "isaacsim.ros2.bridge.ROS2PublishJointState"
+        string inputs:topicName = "joint_states"
+    }
+}
+def "H" {
+    def OmniGraphNode "s" {
+        token node:type = "isaacsim.ros2.bridge.ROS2SubscribeJointState"
+        string inputs:topicName = "/joint_states"
+    }
+}
+"""
+
+
+def test_a_saved_loop_is_reported_with_paths_and_the_fix_and_nothing_changes(tmp_path):
+    pytest.importorskip("pxr.Usd")
+    from pxr import Usd
+
+    file = tmp_path / "loop.usda"
+    file.write_text(LOOP_USDA)
+    stage = Usd.Stage.Open(str(file))
+    before = stage.GetRootLayer().ExportToString()
+    report = ros2.joint_state_loop_report(stage)["joint_state_loop"]
+    assert report["loops"] == [dict(topic="/joint_states", publishers=["/G/p"], subscribers=["/H/s"])]
+    assert "path=/G," in report["fix"] and "with a namespace" in report["fix"] and "allow_foreign=true" in report["fix"] and "confirm=true" in report["fix"] and "not changed" in report["fix"]
+    assert stage.GetRootLayer().ExportToString() == before and not list(stage.GetSessionLayer().rootPrims)
+
+
+def test_a_graph_that_only_publishes_is_not_reported(tmp_path):
+    pytest.importorskip("pxr.Usd")
+    from pxr import Usd
+
+    file = tmp_path / "pub.usda"
+    file.write_text(LOOP_USDA.split('def "H"')[0])
+    assert ros2.joint_state_loop_report(Usd.Stage.Open(str(file))) == {}
+
+
+def test_stage_open_adds_the_report_without_being_able_to_fail_the_open():
+    import ast
+
+    tree = ast.parse((REPO / "exts/sim-tools/sim_tools/stage_open.py").read_text())
+    helper = ast.unparse(next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_joint_state_loop"))
+    assert "except Exception" in helper
+    opener = ast.unparse(next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "open_stage"))
+    assert "**loop" in opener
+
+
+# ---- one namespace, one robot ----
+
+
+def _graph_stage(robot="/World/UR5e/root_joint", graph=ros2.GRAPH_PATH, tmp_path=None):
+    pytest.importorskip("pxr.Usd")
+    from pxr import Sdf, Usd
+
+    stage = Usd.Stage.CreateInMemory()
+    node = stage.DefinePrim(f"{graph}/PublishJointState", "OmniGraphNode")
+    if robot is not None:
+        node.CreateRelationship("inputs:targetPrim").SetTargets([Sdf.Path(robot)])
+    return stage
+
+
+def test_same_robot_rebuilds_and_another_robot_refuses():
+    stage = _graph_stage()
+    assert ros2.check_graph_robot(stage, ros2.GRAPH_PATH, "/World/UR5e/root_joint", "/World/UR5e") is None
+    code, message, retry = ros2.check_graph_robot(stage, ros2.GRAPH_PATH, "/World/RG2_Gripper/rg2_base_link", "/World/RG2_Gripper")
+    assert code == "ROBOT_GRAPH_CONFLICT" and retry == dict(namespace="rg2_gripper")
+    assert "/World/UR5e/root_joint" in message and "namespace=rg2_gripper" in message
+
+
+def test_both_orders_refuse_the_second_robot():
+    gripper_first = _graph_stage("/World/RG2_Gripper/rg2_base_link")
+    assert ros2.check_graph_robot(gripper_first, ros2.GRAPH_PATH, "/World/UR5e/root_joint", "/World/UR5e")[2] == dict(namespace="ur5e")
+
+
+def test_no_graph_there_is_no_conflict():
+    pytest.importorskip("pxr.Usd")
+    from pxr import Usd
+
+    assert ros2.check_graph_robot(Usd.Stage.CreateInMemory(), ros2.GRAPH_PATH, "/a", "/a") is None
+
+
+def test_an_unreadable_graph_fails_safe():
+    stage = _graph_stage(robot=None)
+    assert ros2.graph_robot(stage, ros2.GRAPH_PATH) is None
+    assert ros2.check_graph_robot(stage, ros2.GRAPH_PATH, "/World/UR5e/root_joint", "/World/UR5e")[0] == "ROBOT_GRAPH_CONFLICT"
+
+
+def test_a_saved_and_reopened_graph_reads_the_same(tmp_path):
+    from pxr import Usd
+
+    file = tmp_path / "saved.usda"
+    stage = _graph_stage()
+    stage.GetRootLayer().Export(str(file))
+    reopened = Usd.Stage.Open(str(file))
+    assert ros2.graph_robot(reopened, ros2.GRAPH_PATH) == "/World/UR5e/root_joint"
+    assert ros2.check_graph_robot(reopened, ros2.GRAPH_PATH, "/World/RG2/base", "/World/RG2")[0] == "ROBOT_GRAPH_CONFLICT"
+
+
+def test_a_namespaced_graph_is_checked_too():
+    graph = ros2.graph_path("rg2")
+    stage = _graph_stage("/World/RG2/base", graph=graph)
+    code, message, retry = ros2.check_graph_robot(stage, graph, "/World/UR5e/root_joint", "/World/UR5e", "rg2")
+    assert code == "ROBOT_GRAPH_CONFLICT" and "namespace 'rg2'" in message and retry == dict(namespace="ur5e")
+
+
+def test_the_suggested_namespace_is_valid_and_free():
+    stage = _graph_stage()
+    from pxr import Sdf
+
+    stage.DefinePrim(f"{ros2.graph_path('ur5e')}/PublishJointState", "OmniGraphNode")
+    retry = ros2.check_graph_robot(stage, ros2.GRAPH_PATH, "/World/Other/ur5e", "/World/Other/UR5e")[2]
+    assert retry == dict(namespace="ur5e_2")
+    assert ros2.graph_path(retry["namespace"])  # accepted by the namespace rules
+
+
+@pytest.mark.parametrize("path,expected", [("/World/RG2_Gripper", "rg2_gripper"), ("/World/2arm", "robot_2arm"),
+                                           ("/World/__x__", "x"), ("/World/UR5e", "ur5e"), ("/World/a--b", "a_b")])
+def test_namespace_for_gives_valid_names(path, expected):
+    name = ros2.namespace_for(path)
+    assert name == expected and ros2._namespace(name) == name
+
+
+def test_setup_checks_before_it_removes_anything_and_the_advice_names_the_namespace():
+    import ast
+
+    source = (REPO / "exts/sim-tools/sim_tools/ros2.py").read_text()
+    tree = ast.parse(source)
+    body = ast.unparse(next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "setup"))
+    assert body.index("check_graph_robot") < body.index("stage.RemovePrim(graph)")
+    assert "a different namespace from this call" in body
+
+
+def test_rebuilding_a_saved_graph_deactivates_it_and_never_leaves_two():
+    own, r1, r2 = ros2.GRAPH_PATH, ros2.GRAPH_PATH + "_r1", ros2.GRAPH_PATH + "_r2"
+    assert ros2.rebuild_plan(own, [], [], set()) == dict(graph=own, remove=[], deactivate=[])
+    assert ros2.rebuild_plan(own, [own], [own], {own}) == dict(graph=own, remove=[own], deactivate=[])
+    assert ros2.rebuild_plan(own, [own], [own], set()) == dict(graph=r1, remove=[], deactivate=[own])
+    # Again in this session: our rebuild goes, and the deactivated original still holds its path.
+    assert ros2.rebuild_plan(own, [own, r1], [r1], {r1}) == dict(graph=r1, remove=[r1], deactivate=[])
+    # A file saved after a rebuild, then reopened: that rebuild is the saved one now. Flatten dropped the inactive original.
+    assert ros2.rebuild_plan(own, [r1], [r1], set()) == dict(graph=own, remove=[], deactivate=[r1])
+
+
+def test_another_namespace_and_the_clock_graph_are_left_alone():
+    own = ros2.GRAPH_PATH
+    other, clock = ros2.graph_path("rg2"), ros2.CLOCK_GRAPH
+    plan = ros2.rebuild_plan(own, [own, other, clock], [own, other, clock], {own, other})
+    assert plan == dict(graph=own, remove=[own], deactivate=[])
+
+
+def test_disabling_a_saved_graph_also_stops_it_at_runtime():
+    calls = []
+
+    class Graph:
+        def is_valid(self):
+            return True
+
+        def set_disabled(self, value):
+            calls.append(value)
+
+    class Og:
+        get_graph_by_path = staticmethod(lambda path: Graph())
+
+    ros2.disable_runtime_graph(Og, "/Graph/x")
+    assert calls == [True]
+    ros2.disable_runtime_graph(object(), "/Graph/x")  # no such API on this build: not an error
+    assert calls == [True]
+
+
+def test_a_clock_on_another_topic_is_not_treated_as_this_stages_clock():
+    # plan_clock only counts a publisher on /clock, so a user's clock on /s61clock leaves ours in place.
+    other = dict(node="/World/C/clock", publishes="/s61clock", tool=False)
+    plan = ros2.plan_clock("auto", [other])
+    assert plan["publish"] is True and plan["foreign"] == []
+    source = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/ros2.py").read_text(encoding="utf-8")
+    assert 'kind = resolved_topic(topic, value("inputs:nodeNamespace")) if topic else kind' in source
+
+
+def test_publisher_scan_reads_a_clock_nodes_real_topic(monkeypatch):
+    class Attribute:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    class Node:
+        def __init__(self, path, topic):
+            self.path, self.attrs = path, {"inputs:topicName": topic, "inputs:nodeNamespace": ""}
+
+        def get_prim_path(self):
+            return self.path
+
+        def get_type_name(self):
+            return "isaacsim.ros2.bridge.ROS2PublishClock"
+
+        def get_attribute_exists(self, name):
+            return name in self.attrs
+
+        def get_attribute(self, name):
+            return Attribute(self.attrs[name])
+
+    class Graph:
+        def get_path_to_graph(self):
+            return "/World/ClockGraph"
+
+        def get_nodes(self):
+            return [Node("/World/ClockGraph/a", "s61clock"), Node("/World/ClockGraph/b", "clock")]
+
+    import sys
+    import types
+
+    core = types.ModuleType("omni.graph.core")
+    monkeypatch.setitem(sys.modules, "omni", types.ModuleType("omni"))
+    monkeypatch.setitem(sys.modules, "omni.graph", types.ModuleType("omni.graph"))
+    monkeypatch.setitem(sys.modules, "omni.graph.core", core)
+    sys.modules["omni"].graph = sys.modules["omni.graph"]
+    sys.modules["omni.graph"].core = core
+    monkeypatch.setattr(ros2, "_graphs", lambda og: [Graph()])
+    assert [o["publishes"] for o in ros2.other_ros2_publishers("/Graph/own")] == ["/s61clock", "/clock"]
+
+
+def test_a_sensor_on_a_link_is_a_static_frame_and_only_a_free_one_stays_on_the_tree():
+    links = ["/R/base_link", "/R/arm"]
+    extras = [("/R/arm/cam", "cam"), ("/R/base_link/L/lidar", "lidar"), ("/World/lidar", "w"), ("/R/arm", "arm")]
+    tree, static = ros2.extra_frame_parents(extras, links, "/R/base_link", "base_footprint", "mobile")
+    assert tree == ["/World/lidar", "/R/arm"]
+    assert static == [("/R/arm/cam", "cam", "/R/arm", "arm"), ("/R/base_link/L/lidar", "lidar", "/R/base_link", "base_footprint")]
+    tree, static = ros2.extra_frame_parents([("/World/lidar", "w")], links, "/R/base_link", "base_link", "fixed")
+    assert tree == [] and static == [("/World/lidar", "w", "/R/base_link", "base_link")]

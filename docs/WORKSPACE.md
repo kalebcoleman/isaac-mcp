@@ -14,9 +14,9 @@ untested.
 - **Reproducible.** One root holds everything the setup needs. You can write down what is
   in it and rebuild it.
 - **Projects never edit the MCP checkout.** The checkout is code only. Your scenes, notes and
-  asset changes live in `projects/` and `assets/`, so updating or re-cloning the checkout
+  asset changes live in `projects/` and `isaac-mcp-assets/`, so updating or re-cloning the checkout
   cannot lose them.
-- **Easy to copy.** Moving to a second machine means copying `assets/` and checking hashes
+- **Easy to copy.** Moving to a second machine means copying `isaac-mcp-assets/` and checking hashes
   (see [Move to a second machine](#move-to-a-second-machine)).
 
 ## Layout
@@ -51,7 +51,7 @@ untested.
    python3 scripts/isaac_env.py init
    ```
 
-   It creates `assets`, `envs`, `projects`, `runs` and a short README under
+   It creates `isaac-mcp-assets`, `envs`, `projects`, `runs` and a short README under
    `$ISAAC_MCP_WORKSPACE`. Use `--workspace DIR` to name the folder explicitly.
 
 3. **Make the choice permanent.** Add the export to your shell profile (for example
@@ -73,10 +73,10 @@ untested.
    `migrate` and `scripts/fetch_ur5e_assets.py` (see [ASSETS.md](ASSETS.md)).
 
    ```bash
-   python3 scripts/isaac_assets.py add /path/to/lab-assets.tar.gz --store "$ISAAC_MCP_WORKSPACE/assets"
+   python3 scripts/isaac_assets.py add /path/to/lab-assets.tar.gz --store "$ISAAC_MCP_WORKSPACE/isaac-mcp-assets"
    python3 scripts/isaac_assets.py doctor
    python3 scripts/isaac_env.py where
-   ./run.sh --port 8766
+   ./run.sh --port 8766   # not if a Kit already holds this port; choose another with --port
    ```
 
 ## I already have Isaac Sim installed
@@ -97,15 +97,15 @@ Pick one:
 ```bash
 python3 scripts/isaac_env.py resolve-python                       # print the chosen interpreter
 python3 scripts/isaac_env.py resolve-python --require-version 6.2 # only a matching version
-python3 scripts/isaac_env.py resolve-python --lab                 # Isaac Lab environment
+python3 scripts/isaac_env.py resolve-python --lab                 # prefer an environment that also has Isaac Lab
 ```
 
 Then confirm it before you rely on it:
 
 ```bash
-PY="$(python3 scripts/isaac_env.py resolve-python)"
-"$PY" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
-uv pip check --python "$PY"
+PY="$(python3 scripts/isaac_env.py resolve-python)" &&
+  "$PY" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))' &&
+  uv pip check --python "$PY"
 ```
 
 **Pin it.** Auto-detect is a convenience. To make the choice explicit, set

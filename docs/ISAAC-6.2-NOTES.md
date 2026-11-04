@@ -55,8 +55,8 @@ lidar = Lidar.create("/turtlebot3_burger/base_scan/lidar", config="Example_Rotar
 
 It authors an `OmniLidar` prim (applied schemas include `OmniSensorGenericLidarCoreAPI`). When the
 config asset nests the sensor under a reference root, the transform goes on that root so the
-sensor keeps the vendor mounting offset. Lidar acquisition needs Play, and `sim__lidar__*` needs
-Kit started with `--motion-bvh`.
+sensor keeps the vendor mounting offset. Lidar acquisition needs Play. Motion BVH (`--motion-bvh`) is optional: without it scans are
+correct, but distortion from motion within one scan is not modeled.
 
 ## (e) ROS 2 Publish Transform Tree: `IsaacComputeTransformTree` is preferred, not required
 
@@ -90,6 +90,15 @@ as the parent; leaving `parentPrim` empty (World) avoided the warning.
 
 `sim__ros2__tf_setup` builds its own TF graphs and reports the frames; prefer it over hand-built
 graphs unless the lab asks for its own graph.
+
+## Other things labs run into
+
+- The `PoseTree` warning naming a camera can repeat every frame. It is harmless, but it floods the log.
+- A flattened checkpoint is large (about 97 MB for the RAS545 scene), because saves flatten everything.
+- A LiDAR topic missing after reopening a saved scene has a known cause and fix; see [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
+- In the RAS545 starter, the ground plane is at z=-0.75, and it reports `composition_errors: 2` on opening. Neither was a fault in run 8.
+- Lab instructions that assume ROS domain 0 need adapting if another simulator holds it. A saved graph can author its own domain: a `ROS2Context` node with `useDomainIDEnvVar` off publishes on its authored `domain_id`, whatever `ROS_DOMAIN_ID` and `sim__stage__info` say, so a shell on another domain sees no topics. Lab files were seen authoring different domains, so check the graph; `sim__graph__inspect` adds `ros_domain_note` when they differ.
+- OpenCode Code Mode has no timers, so agents use shell sleeps, and tool results arrive as JSON inside a `result` string.
 
 ## ROS 2 distro
 

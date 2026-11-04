@@ -652,7 +652,7 @@ def test_pins_parser_accepts_coreutils_forms(tmp_path):
     module = load_module()
     digest = hashlib.sha256(b"x").hexdigest()
     (tmp_path / "SHA256SUMS").write_text(
-        f"{digest}  a/one.usd\n{digest} *b/two.usd\n{digest}  ./c/three.usd\nnot a line\n",
+        f"# a comment\n\n{digest}  a/one.usd\n{digest} *b/two.usd\n{digest}  ./c/three.usd\n",
         encoding="utf-8",
     )
     assert module.pins(tmp_path) == {
@@ -660,6 +660,14 @@ def test_pins_parser_accepts_coreutils_forms(tmp_path):
         "b/two.usd": digest,
         "c/three.usd": digest,
     }
+
+
+def test_a_malformed_pins_file_is_refused_rather_than_losing_coverage(tmp_path):
+    module = load_module()
+    digest = hashlib.sha256(b"x").hexdigest()
+    (tmp_path / "SHA256SUMS").write_text(f"{digest}  a/one.usd\nnot a line\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="malformed"):
+        module.pins(tmp_path)
 
 
 def test_directory_assets_resolve_from_every_layer(monkeypatch, tmp_path):
@@ -971,3 +979,45 @@ def test_a_pin_file_that_is_not_utf8_names_the_file(tmp_path):
     (tmp_path / "SHA256SUMS").write_bytes(b"\xff\xfe not text")
     with pytest.raises(ValueError, match="SHA256SUMS"):
         module.pins(tmp_path)
+
+
+def test_missing_assets_reports_absent_optional_files(monkeypatch, tmp_path):
+    module = load_module()
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path))
+    present = tmp_path / "ur5e-dt" / "gripper" / "here.usd"
+    present.parent.mkdir(parents=True)
+    present.write_bytes(b"usd")
+    assert module.missing_assets(["gripper/here.usd", "gripper/gone.usd"]) == ["gripper/gone.usd"]
+
+
+def test_missing_assets_does_not_skip_a_corrupt_file(monkeypatch):
+    module = load_module()
+
+    def corrupt(relpath):
+        raise module.AssetCorrupt(relpath, Path("x"), "a", "b", "sha256 mismatch")
+
+    monkeypatch.setattr(module._TWIN, "resolve_uri", corrupt)
+    with pytest.raises(module.AssetCorrupt):
+        module.missing_assets(["gripper/QuickChanger.usd"])
+
+
+def test_a_local_copy_wins_over_the_online_one_and_the_source_says_so(monkeypatch, tmp_path):
+    module = load_module()
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path))
+    monkeypatch.delenv("ISAAC_MCP_ASSET_STRICT", raising=False)
+    monkeypatch.setattr(module._TWIN, "remote_uri", lambda relpath: "https://example.invalid/" + relpath)
+    assert module.asset_source("x/robot.usd") == {
+        "asset": "x/robot.usd", "source": "remote", "location": "https://example.invalid/x/robot.usd"}
+    local = tmp_path / "ur5e-dt" / "x" / "robot.usd"
+    local.parent.mkdir(parents=True)
+    local.write_bytes(b"lab robot")
+    assert module.asset_source("x/robot.usd") == {"asset": "x/robot.usd", "source": "store", "location": str(local)}
+    assert module.resolve_uri("x/robot.usd") == local.as_uri()
+
+
+def test_strict_mode_reports_a_missing_asset_rather_than_an_online_source(monkeypatch, tmp_path):
+    module = load_module()
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_STRICT", "1")
+    monkeypatch.setattr(module._TWIN, "remote_uri", lambda relpath: "https://example.invalid/" + relpath)
+    assert module.asset_source("x/robot.usd")["source"] == "missing"

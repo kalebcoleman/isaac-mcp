@@ -31,6 +31,11 @@ CLI (replaces printf|nc recipes):
     python3 -m isaac_mcp.client <tool> ['{"json":"params"}'] [--port N] [--host H] [--timeout S]
     python3 -m isaac_mcp.client --list-bridges     # bridges advertised on this box
 
+`-m` needs a Python with the isaac_mcp package installed, which a stock python3 does not
+have. This file is stdlib-only, so from a checkout run it directly instead:
+
+    python3 mcp/isaac_mcp/client.py --list-bridges
+
 Endpoint resolution — host and port resolve together, from the same portfile
 when discovery is the source (a bridge bound to a tailnet IP advertises that
 IP; dialing loopback for its port would be wrong):
@@ -48,6 +53,7 @@ Exit codes: 0 = success · 1 = bridge answered with an error ·
 
 import json
 import os
+import stat
 import re
 import secrets
 import socket
@@ -66,6 +72,7 @@ TWIN_PORT_ENV = "UR5E_DT_PORT"
 HOST_ENV = "ISAAC_MCP_HOST"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_TIMEOUT = 300.0
+MAX_REPLY_BYTES = 1 << 30
 
 
 #: THE QUEUE BUDGET. The bridge runs one frame-advancing verb at a time and keeps a request that
@@ -155,10 +162,32 @@ def _valid_portfile(name: str, info) -> bool:
             and "\0" not in info.get("host", "127.0.0.1"))
 
 
+def _runtime_dir_trusted(folder: str) -> bool:
+    """Only a folder this user owns and others can't write to: a local user could otherwise pre-create
+    the predictable /tmp/isaac-mcp-<uid> and point this client at a bridge of theirs."""
+    if not hasattr(os, "getuid"):
+        return True
+    try:
+        info = os.lstat(folder)
+    except OSError:
+        return False
+    return stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
+
+
+def _pid_is_ours(pid: int) -> bool:
+    """False for a live process of another user. No /proc: not knowable, so the liveness check stands."""
+    try:
+        return os.stat(f"/proc/{pid}").st_uid == os.getuid()
+    except (AttributeError, OSError):
+        return True
+
+
 def discover_bridges() -> list:
     """Live advertised bridges: [{pid, port, host, app, started}]. Stale
     portfiles (dead pid or dead socket) are pruned best-effort."""
     found = []
+    if not _runtime_dir_trusted(_runtime_dir()):
+        return found
     try:
         names = os.listdir(_runtime_dir())
     except OSError:
@@ -168,11 +197,13 @@ def discover_bridges() -> list:
             continue
         path = os.path.join(_runtime_dir(), name)
         try:
+            if not stat.S_ISREG(os.lstat(path).st_mode):  # opening a FIFO here would hang discovery
+                raise OSError("not a regular file")
             with open(path) as f:
                 info = json.load(f)
             if not _valid_portfile(name, info):
                 continue
-            if not _pid_alive(info["pid"]):
+            if not _pid_alive(info["pid"]) or not _pid_is_ours(info["pid"]):
                 raise OSError("stale portfile: process gone")
             probe = socket.create_connection(
                 (info.get("host", DEFAULT_HOST), int(info["port"])), timeout=0.5)
@@ -354,13 +385,23 @@ class BridgeClient:
             request["queue_s"] = queue_budget(timeout, execution_reserve_s)
         frame = json.dumps(request).encode("utf-8") + b"\n"
         self._sock.sendall(frame)
-        while b"\n" not in self._buffer:
+        buffer, scanned = bytearray(self._buffer), 0  # a growing array, searched only where new: large replies stay linear
+        while (end := buffer.find(b"\n", scanned)) < 0:
+            scanned = len(buffer)
             chunk = self._sock.recv(65536)
             if not chunk:
                 raise ConnectionError("bridge closed the connection mid-response")
-            self._buffer += chunk
-        line, self._buffer = self._buffer.split(b"\n", 1)
-        return _decode(json.loads(line.decode("utf-8")))
+            buffer += chunk
+            if len(buffer) > MAX_REPLY_BYTES:
+                self.close()
+                raise BridgeError(f"the bridge sent over {MAX_REPLY_BYTES // (1 << 30)} GiB without ending its reply; disconnected")
+        self._buffer = bytes(buffer[end + 1:])
+        try:
+            reply = json.loads(buffer[:end].decode("utf-8"))
+        except (ValueError, RecursionError) as exc:  # the stream can't be trusted to line up with the next request
+            self.close()
+            raise BridgeError(f"the bridge sent an unreadable reply ({type(exc).__name__}); disconnected") from exc
+        return _decode(reply)
 
     def call(self, tool: str, params: Optional[Dict[str, Any]] = None, *,
              timeout: Optional[float] = None,
@@ -466,13 +507,15 @@ def call(tool: str, params: Optional[Dict[str, Any]] = None, *,
 
 def main(argv=None) -> int:
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(
-        prog="python3 -m isaac_mcp.client",
+        # `__package__` is empty when this file is run directly, which needs no installed package.
+        prog="python3 -m isaac_mcp.client" if __package__ else f"python3 {sys.argv[0]}",
         description="Call one tool on the isaac.mcp.bridge bridge. "
                     "Exit codes: 0 success, 1 bridge error, 2 unreachable/usage.")
     parser.add_argument("tool", nargs="?",
-                        help="canonical tool name, e.g. list_tools or arm.play_scene")
+                        help="canonical tool name, e.g. list_tools or sim.stage.info")
     parser.add_argument("--list-bridges", action="store_true",
                         help="list running bridges advertised in the runtime dir")
     parser.add_argument("params", nargs="?", default="{}",
@@ -485,7 +528,6 @@ def main(argv=None) -> int:
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     args = parser.parse_args(argv)
 
-    import sys
     if args.list_bridges:
         bridges = discover_bridges()
         print(json.dumps(bridges, indent=2))

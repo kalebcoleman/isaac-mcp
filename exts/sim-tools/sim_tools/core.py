@@ -1,5 +1,6 @@
 """USD operations. Session-layer-only edits, no Kit update/step calls."""
 
+import collections
 import math
 import hashlib
 import os
@@ -7,9 +8,13 @@ from pathlib import Path
 import re
 import shutil
 import tempfile
+import time
 import uuid
 from pxr import Ar, Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdUtils
+from .compat import composition_errors
+from isaac_mcp import material_refs
 from isaac_mcp.project_assets import (
+    units_mismatch_message,
     Broker,
     AssetError,
     refuse,
@@ -30,7 +35,8 @@ def vector(value, n):
             for x in value
         )
     ):
-        refuse("INVALID_POSE", f"Expected {n} finite numbers with magnitude <=1e8.")
+        refuse("INVALID_POSE", f"Expected {n} finite number{'' if n == 1 else 's'} with magnitude <=1e8"
+               + (f", got {len(value)} values." if isinstance(value, (list, tuple)) else "."))
     return value
 
 
@@ -58,6 +64,8 @@ def path(value, root=False):
 
 
 RUNTIME_ROOTS = ("/Render",)  # Replicator/render-product prims Kit adds at runtime; they crowded out the scene
+# Kit's own viewport and render prims: never a scene edit target.
+KIT_ROOTS = ("Render", "OmniverseKit_Persp", "OmniverseKit_Front", "OmniverseKit_Top", "OmniverseKit_Right")
 
 
 def _ros_environment():
@@ -78,7 +86,7 @@ def bounded(stage, root, limit, depth=None, include_runtime=True):
         refuse("LIMIT", "depth must be 1..64.")
     p = stage.GetPrimAtPath(path(root, True))
     if not p:
-        refuse("NOT_FOUND", "No prim at requested root.")
+        refuse("NOT_FOUND", "No prim at requested root. List paths with sim__stage__tree root=\"/\".")
     base = p.GetPath().pathElementCount
     skip = () if include_runtime or any(str(p.GetPath()).startswith(r) for r in RUNTIME_ROOTS) else RUNTIME_ROOTS
     it = iter(Usd.PrimRange(p, Usd.PrimAllPrimsPredicate))
@@ -102,18 +110,73 @@ def matrix(m):
 
 
 def facts(prim):
+    mass = prim.GetAttribute("physics:mass") if prim.HasAttribute("physics:mass") else None
+    density = prim.GetAttribute("physics:density") if prim.HasAttribute("physics:density") else None
     return dict(
         rigid_body=prim.HasAPI(UsdPhysics.RigidBodyAPI),
         collision=prim.HasAPI(UsdPhysics.CollisionAPI),
         articulation_root=prim.HasAPI(UsdPhysics.ArticulationRootAPI),
         joint=prim.IsA(UsdPhysics.Joint),
-        mass_authored=prim.HasAttribute("physics:mass")
-        and prim.GetAttribute("physics:mass").HasAuthoredValueOpinion(),
-        mass=prim.GetAttribute("physics:mass").Get()
-        if prim.HasAttribute("physics:mass")
-        else None,
+        mass_authored=mass is not None and mass.HasAuthoredValueOpinion(),
+        mass=mass.Get() if mass is not None else None,
+        density_authored=density is not None and density.HasAuthoredValueOpinion(),
+        density=density.Get() if density is not None else None,
+        kinematic=(
+            prim.GetAttribute("physics:kinematicEnabled").Get()
+            if prim.HasAttribute("physics:kinematicEnabled")
+            else None
+        ),
         runtime_readiness="unknown",
     )
+
+
+# Tools which change the stage or timeline themselves, by event family. Anything else that may
+# run code (run_python, twin tools, Kit UI input) can only be reported as "was running".
+STAGE_TOOLS = {"sim.stage.open": "sim__stage__open", "sim.quick_start": "sim__quick_start"}
+TIMELINE_TOOLS = {"sim.timeline.control": "sim__timeline__control", "sim.map.occupancy": "sim__map__occupancy",
+                  "sim.quick_start": "sim__quick_start"}
+INERT_TOOLS = {"status", "list_bridges", "list_tools", "reload_tools", "stat_file", "get_file", "put_file"}
+
+
+def attribute_change(activity, certain):
+    """Who changed the stage or timeline, as far as this process can tell.
+
+    *activity* maps bridge tools running (True) or finished moments ago (False) to that state; None
+    if unknown. Kit reports no originator, so a named tool is credited only while it is running and
+    nothing else that could do it is. "outside_tools" means no such tool was running or just
+    finished: a person in the GUI or a Kit script, never a guess when a tool was involved.
+    """
+    if activity is None:
+        return dict(origin="unknown", source="unknown; tool activity is unavailable")
+    could_do_it = sorted(
+        n for n in activity
+        if n in certain or n == "sim.ui.act" or not (n.startswith(("sim.", "assets.")) or n in INERT_TOOLS)
+    )
+    running = [n for n in could_do_it if activity[n]]
+    if len(running) == 1 and running[0] in certain:
+        return dict(origin="tool", source=certain[running[0]])
+    if could_do_it:
+        return dict(origin="unattributed", tools_running=could_do_it,
+                    source=", ".join(could_do_it) + " was running or just finished; that, the GUI or a Kit "
+                    "script may have done it")
+    return dict(origin="outside_tools",
+                source="outside the MCP tools: no tool call was running, so a person in the GUI or a Kit script")
+
+
+LARGE_SAVE_BYTES = 100 * 1024 * 1024
+
+
+def flattened_size_note(size):
+    """Why a saved copy can be far bigger than the scene file it came from."""
+    return (f"This file is {size / (1024 * 1024):.0f} MB because it is flattened: the meshes and other data of every "
+            "referenced USD file are copied into this one file, in text. It keeps no references to them. "
+            "Texture files stay external. Check free disk space before saving often.")
+
+
+def stop_call(session_id, stage_id):
+    """The call that clears TIMELINE_ACTIVE; a different tool, so not a retry_with."""
+    return dict(tool="sim__timeline__control",
+                arguments=dict(session_id=session_id, stage_id=stage_id, action="stop"))
 
 
 class Scene:
@@ -132,10 +195,58 @@ class Scene:
         self._stage = None
         self.stage_id = None
         self.owned = set()
+        # Session-layer opinions these tools authored, per prim: what sim.prim.revert undoes.
+        self.edits = {}
         self.runtime_assets = {}
         self._runtime_edit_target = None
         self.device_error = None
         self.render_binding = render_binding
+        self.events = collections.deque(maxlen=32)  # stage/timeline changes, for sim.logs.tail
+        self._retired_stages = {}  # old stage_id -> what replaced it, for STALE_TARGET
+        self.previous_sessions = []  # session_ids of earlier instances in this Kit (hot reload)
+
+    def record_event(self, kind, what, attribution, stage=None):
+        """Remember a stage or timeline change (never frame-rate events); returns its record."""
+        record = dict(kind=kind, what=what, at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                      monotonic=time.monotonic(), **attribution, **({"stage": stage} if stage else {}))
+        self.events.append(record)
+        return record
+
+    def public_events(self):
+        return [{k: v for k, v in e.items() if k != "monotonic"} for e in self.events]
+
+    def last_event(self, kind):
+        return next((e for e in reversed(self.events) if e["kind"] == kind), None)
+
+    def retire_stage(self, record=None):
+        """The current stage_id ended; keep why, so a later call with it gets a true explanation."""
+        if self.stage_id is not None:
+            self._retired_stages[self.stage_id] = record
+            while len(self._retired_stages) > 16:
+                self._retired_stages.pop(next(iter(self._retired_stages)))
+
+    def _stale_reason(self, session_id, stage_id, source):
+        if session_id in self.previous_sessions:
+            return ("Session changed: sim-tools hot-reloaded inside this same Kit process (a file in its folder "
+                    "changed), so that session_id ended. The stage is unchanged, but the tools forgot which prims "
+                    "they created. See sim__logs__tail; launch with ISAAC_MCP_NO_HOT_RELOAD=1 to prevent this."), None
+        if session_id != self.session_id:
+            return ("Session changed: this session_id is not this Kit process (Kit restarted, or the IDs "
+                    "came from another bridge)."), None
+        change = self._retired_stages.get(stage_id)
+        if change is None:
+            return ("Session or stage changed (Kit restarted, the stage was opened or reloaded)."
+                    + (" Current stage: " + source + "." if source else "")), None
+        changed = "Stage changed at " + change["at"] + " "
+        origin = change["origin"]
+        if origin == "tool":
+            changed += "by " + change["source"] + " (this or another client)."
+        elif origin == "outside_tools":
+            changed += ("outside this session's tools: no MCP tool call was running, so a person in the GUI "
+                        "(e.g. File > Open) or a Kit script replaced it. Edits not saved on the old stage may be lost.")
+        else:
+            changed += "while the tools could not tell who did it (" + change["source"] + ")."
+        return changed + " Current stage: " + source + ".", {k: v for k, v in change.items() if k != "monotonic"}
 
     def require_runtime(self):
         if self.device_error:
@@ -151,21 +262,47 @@ class Scene:
             self.check_runtime_edit(stage)
             return
         if not self.timeline.is_stopped():
+            last = self.last_event("timeline")
             refuse(
                 "TIMELINE_ALREADY_ACTIVE",
-                "Stop before the first generic play so physics writeback can acquire the session edit target explicitly.",
+                "The timeline is already running or paused and was not started by sim__timeline__control"
+                + (" (last change: " + last["what"] + ", " + last["source"] + ")" if last else "")
+                + ". To continue: call sim__timeline__control action=stop, then action=play, so physics writeback "
+                "uses the session layer. Stop rewinds physics and returns robots to their start pose.",
+                before_retry=stop_call(self.session_id, self.stage_id),
             )
         self._runtime_edit_target = stage.GetEditTarget()
         stage.SetEditTarget(stage.GetSessionLayer())
 
     def check_runtime_edit(self, stage):
-        if (
-            self._runtime_edit_target is None
-            or stage.GetEditTarget().GetLayer() != stage.GetSessionLayer()
-        ):
+        if self._runtime_edit_target is None:
+            # Play came from outside these tools (the UI, a script, ur5e_dt__quick_start), so this
+            # session never moved physics writeback to the session layer. It cannot be moved now:
+            # frames already played wrote to the selected layer, and Stop would restore poses to a
+            # different layer than those writes, leaving them behind.
+            # The event that started it, not a later pause by these same tools.
+            last = next((e for e in reversed(self.events) if e["what"] == "timeline playing"), None)
+            ids = dict(session_id=self.session_id, stage_id=self.stage_id)
             refuse(
                 "EDIT_TARGET_CHANGED",
-                "Physics writeback requires the managed session edit target. Stop, inspect the selected layer, then play with sim.timeline.control before stepping.",
+                "This timeline was not started by sim__timeline__control"
+                + (" (last change: " + last["what"] + ", " + last["source"] + ")" if last else "")
+                + ", so physics writeback is not on the session layer and a tool step could write into your "
+                "scene's own layers. To step: call sim__timeline__control with action=stop, then action=play, "
+                "then action=pause, then resend this call. Stop rewinds physics and returns robots to their start "
+                "pose; save first (sim__stage__save needs the timeline paused or stopped) if the current state matters.",
+                before_retry=stop_call(**ids),
+                then=[dict(tool="sim__timeline__control", arguments=dict(**ids, action=action))
+                      for action in ("play", "pause")],
+                started_outside_tools=True,
+                **({"timeline_change": {k: v for k, v in last.items() if k != "monotonic"}} if last else {}),
+            )
+        if stage.GetEditTarget().GetLayer() != stage.GetSessionLayer():
+            refuse(
+                "EDIT_TARGET_CHANGED",
+                "Physics writeback requires the managed session edit target, but another editor selected a different "
+                "layer during this run. Stop, inspect the selected layer, then play with sim__timeline__control before stepping.",
+                before_retry=stop_call(self.session_id, self.stage_id),
             )
 
     def end_runtime_edit(self, stage):
@@ -185,40 +322,58 @@ class Scene:
         if st is None:
             refuse(
                 "NO_STAGE",
-                "No stage is open; open a disposable stage in the selected application.",
+                "No stage is open. Call sim__quick_start, or sim__stage__open with any session_id and stage_id.",
             )
         if self._stage != st:
             if self._stage is not None:
                 self.end_runtime_edit(self._stage)
+                self.retire_stage()
             self._stage = st
             self.stage_id = uuid.uuid4().hex
             self.owned.clear()
+            self.edits.clear()
         return st
+
+    def _current_target(self, stage):
+        return dict(
+            session_id=self.session_id,
+            stage_id=self.stage_id,
+            pid=os.getpid(),
+            source=stage.GetRootLayer().identifier,
+            default_prim=str(stage.GetDefaultPrim().GetPath())
+            if stage.GetDefaultPrim()
+            else None,
+            meters_per_unit=UsdGeom.GetStageMetersPerUnit(stage),
+            up_axis=str(UsdGeom.GetStageUpAxis(stage)),
+        )
 
     def target(self, session_id, stage_id, mutation=False):
         stage = self.stage()
+        if not session_id or not stage_id:
+            refuse(
+                "MISSING_TARGET",
+                "session_id and stage_id are required. Call sim__stage__info first and pass its exact IDs "
+                f"(currently session_id=\"{self.session_id}\", stage_id=\"{self.stage_id}\"; check "
+                "current_target if this is not the stage you meant). This call did nothing.",
+                current_target=self._current_target(stage),
+            )
         if session_id != self.session_id or stage_id != self.stage_id:
+            reason, change = self._stale_reason(session_id, stage_id, stage.GetRootLayer().identifier)
             refuse(
                 "STALE_TARGET",
-                "Session or stage changed (Kit restarted, the stage was opened or reloaded). This call was not "
+                reason + " This call was not "
                 f"retargeted. Resend it with session_id=\"{self.session_id}\" and stage_id=\"{self.stage_id}\" "
                 "(check current_target first if the stage is not the one you meant).",
-                current_target=dict(
-                    session_id=self.session_id,
-                    stage_id=self.stage_id,
-                    pid=os.getpid(),
-                    source=stage.GetRootLayer().identifier,
-                    default_prim=str(stage.GetDefaultPrim().GetPath())
-                    if stage.GetDefaultPrim()
-                    else None,
-                    meters_per_unit=UsdGeom.GetStageMetersPerUnit(stage),
-                    up_axis=str(UsdGeom.GetStageUpAxis(stage)),
-                ),
+                current_target=self._current_target(stage),
+                **({"stage_change": change} if change else {}),
             )
         if mutation and not self.timeline.is_stopped():
             refuse(
                 "TIMELINE_ACTIVE",
-                "Stop the timeline before authored edits; paused physics also retains runtime state.",
+                "Stop the timeline before authored edits: call sim__timeline__control action=stop with these IDs, "
+                "then resend this call unchanged. Stop rewinds physics and returns robots to their start pose; "
+                "pausing is not enough, because paused physics also retains runtime state.",
+                before_retry=stop_call(session_id, stage_id),
             )
         return stage
 
@@ -226,9 +381,11 @@ class Scene:
         """Release the old USD object and lease at CLOSING, not on the next call."""
         if self._stage is not None:
             self.end_runtime_edit(self._stage)
+        self.retire_stage(self.last_event("stage"))
         self._stage = None
         self.stage_id = None
         self.owned.clear()
+        self.edits.clear()
 
     def stage_info(self):
         stage = self.stage()
@@ -264,7 +421,7 @@ class Scene:
     def prim(self, stage, value):
         p = stage.GetPrimAtPath(path(value))
         if not p:
-            refuse("NOT_FOUND", "No prim at " + value)
+            refuse("NOT_FOUND", "No prim at " + value + ". Find it with sim__prim__find or sim__stage__tree.")
         return p
 
     def get(self, stage, path):
@@ -311,8 +468,15 @@ class Scene:
 
     def new_path(self, stage, value):
         p = path(value)
-        if stage.GetPrimAtPath(p):
-            refuse("CONFLICT", "Destination already exists; no overwrite.")
+        existing = stage.GetPrimAtPath(p)
+        if existing and not existing.IsActive():
+            refuse(
+                "CONFLICT",
+                "Destination already exists as a deactivated prim, which keeps its path; no overwrite. Use a new "
+                "path, or save a copy with sim__stage__save (it omits the prim) and open that.",
+            )
+        if existing:
+            refuse("CONFLICT", "Destination already exists; no overwrite. Choose a free path, or delete it with sim__prim__delete.")
         parent = stage.GetPrimAtPath(p.GetParentPath())
         if (
             not parent
@@ -321,7 +485,8 @@ class Scene:
             or parent.IsInstanceProxy()
         ):
             refuse(
-                "INVALID_PARENT", "Parent must exist, be active and not an instance."
+                "INVALID_PARENT", f"Parent {str(p.GetParentPath())!r} must exist, be active and not an instance: create each ancestor first."
+                + (" A new stage has no /World: create it first with sim__prim__create kind=Xform." if not stage.GetPrimAtPath("/World") else "")
             )
         if not stage.GetSessionLayer().permissionToEdit:
             refuse("READ_ONLY", "Session layer is not editable.")
@@ -339,20 +504,15 @@ class Scene:
         frame="local",
         collision=False,
         scale=(1, 1, 1),
+        mass=None,
+        density=None,
     ):
         p, parent = self.new_path(stage, path)
-        if kind not in (
-            "Cube",
-            "Sphere",
-            "Cylinder",
-            "Capsule",
-            "Cone",
-            "Xform",
-            "PhysicsScene",
-        ):
+        volume = ("Cube", "Sphere", "Cylinder", "Capsule", "Cone")
+        if kind not in (*volume, "Plane", "Xform", "PhysicsScene"):
             refuse(
                 "UNSUPPORTED_TYPE",
-                "Supported types: Cube, Sphere, Xform, PhysicsScene.",
+                "Supported types: Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform, PhysicsScene.",
             )
         if (
             type(size) not in (int, float)
@@ -360,16 +520,34 @@ class Scene:
             or not 0 < size <= 10000
         ):
             refuse("INVALID_SIZE", "size must be finite and 0<size<=10000.")
-        if (
-            type(rigid) is not bool
-            or rigid
-            and kind not in ("Cube", "Sphere", "Cylinder", "Capsule", "Cone")
-        ):
-            refuse("INVALID_PHYSICS", "rigid requires Cube or Sphere.")
+        if type(rigid) is not bool:
+            refuse("INVALID_PHYSICS", "rigid must be true or false.")
+        if rigid and kind not in volume:
+            refuse(
+                "INVALID_PHYSICS",
+                "rigid needs volume geometry: Cube, Sphere, Cylinder, Capsule or Cone. A Plane can be a "
+                "static collider with collision=true.",
+            )
+        if mass is not None and density is not None:
+            refuse("CONFLICT", "Give mass or density, not both: a mass overrides the density-derived one. "
+                   "Nothing was created.", retry_with={"path": path, "kind": kind, "mass": mass})
+        for label, value in (("mass", mass), ("density", density)):
+            if value is None:
+                continue
+            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+                refuse("INVALID_PHYSICS", f"{label} must be a finite number greater than 0.")
+            if kind not in volume:
+                refuse(
+                    "INVALID_PHYSICS",
+                    f"{label} needs volume geometry (Cube, Sphere, Cylinder, Capsule or Cone): a "
+                    f"{kind} has none to derive it from. Nothing was created.",
+                )
         if kind == "PhysicsScene" and any(
             p.IsA(UsdPhysics.Scene) for p in stage.Traverse()
         ):
-            refuse("CONFLICT", "A PhysicsScene already exists.")
+            existing = next(str(p.GetPath()) for p in stage.Traverse() if p.IsA(UsdPhysics.Scene))
+            refuse("CONFLICT", f"A PhysicsScene already exists at {existing} (creating a sensor adds one). "
+                   "Change it with sim__physics__configure instead of creating another.", existing=existing)
         ancestor = parent
         while ancestor and not ancestor.IsPseudoRoot():
             if rigid and ancestor.HasAPI(UsdPhysics.RigidBodyAPI):
@@ -388,6 +566,16 @@ class Scene:
                         UsdGeom.Cube(prim).CreateSizeAttr(size)
                     if kind == "Sphere":
                         UsdGeom.Sphere(prim).CreateRadiusAttr(size / 2)
+                    if kind == "Plane":
+                        plane = UsdGeom.Plane(prim)
+                        plane.CreateWidthAttr(size)
+                        plane.CreateLengthAttr(size)
+                        plane.CreateAxisAttr(
+                            UsdGeom.Tokens.z
+                            if UsdGeom.GetStageUpAxis(stage) == "Z"
+                            else UsdGeom.Tokens.y
+                        )
+                        plane.CreateDoubleSidedAttr(True)
                     UsdGeom.Xformable(prim).AddTransformOp().Set(m)
                     if kind in ("Cylinder", "Capsule", "Cone"):
                         geometry = getattr(UsdGeom, kind)(prim)
@@ -397,12 +585,136 @@ class Scene:
                         UsdPhysics.CollisionAPI.Apply(prim)
                     if rigid:
                         UsdPhysics.RigidBodyAPI.Apply(prim)
+                        # Let sim.physics.contacts read this body's contacts without a later edit.
+                        try:
+                            from pxr import PhysxSchema
+
+                            PhysxSchema.PhysxContactReportAPI.Apply(prim).CreateThresholdAttr().Set(0)
+                        except ImportError:  # no PhysX schema on this build; contacts will refuse
+                            pass
+                    if mass is not None or density is not None:
+                        self.remember_api(stage, str(p), ["PhysicsMassAPI"])
+                        mass_api = UsdPhysics.MassAPI.Apply(prim)
+                        if mass is not None:
+                            self.remember_properties(stage, str(p), ["physics:mass"])
+                            mass_api.CreateMassAttr(float(mass))
+                        else:
+                            self.remember_properties(stage, str(p), ["physics:density"])
+                            mass_api.CreateDensityAttr(float(density))
             self.owned.add(str(p))
             return self.get(stage, str(p))
         except Exception:
             with Usd.EditContext(stage, stage.GetSessionLayer()):
                 stage.RemovePrim(p)
             raise
+
+    def _edit(self, prim_path):
+        return self.edits.setdefault(prim_path, {"properties": {}, "api": {}})
+
+    def remember_properties(self, stage, prim_path, names):
+        """Record the session layer's state before this pack authors these attributes.
+
+        sim.prim.revert restores a prior session opinion or removes the one this pack added;
+        without the record it could not tell either from a source-layer value.
+        """
+        layer = stage.GetSessionLayer()
+        entry = self._edit(prim_path)
+        for name in names:
+            prop = str(Sdf.Path(prim_path).AppendProperty(name))
+            if prop in entry["properties"]:
+                continue
+            spec = layer.GetPropertyAtPath(prop)
+            has_default = spec is not None and spec.HasDefaultValue()
+            entry["properties"][prop] = dict(
+                existed=spec is not None,
+                had_default=has_default,
+                default=spec.default if has_default else None,
+            )
+
+    def remember_api(self, stage, prim_path, tokens):
+        """Record whether the session layer already applied these API schemas."""
+        entry = self._edit(prim_path)
+        spec = stage.GetSessionLayer().GetPrimAtPath(prim_path)
+        value = spec.GetInfo("apiSchemas") if spec is not None else None
+        prepended = list(value.prependedItems) if value is not None else []
+        for token in tokens:
+            if token not in entry["api"]:
+                entry["api"][token] = token in prepended
+
+    def revert(self, stage, path, subtree=True):
+        """Undo only this pack's session-layer opinions on one prim (and optionally its subtree)."""
+        target = Sdf.Path(path)
+        layer = stage.GetSessionLayer()
+        if not layer.permissionToEdit:
+            refuse("READ_ONLY", "Session layer is not editable.")
+        paths = sorted(
+            (p for p in self.edits if p == path or (subtree and Sdf.Path(p).HasPrefix(target))),
+            key=lambda p: p.count("/"),
+            reverse=True,
+        )
+        composed_before = {p: self.get(stage, p) for p in paths if stage.GetPrimAtPath(p)}
+        removed, restored, not_reverted = [], [], []
+        with Usd.EditContext(stage, layer):
+            for prim_path in paths:
+                entry = self.edits.pop(prim_path)
+                spec = layer.GetPrimAtPath(prim_path)
+                if spec is None:
+                    continue
+                for prop, prior in entry["properties"].items():
+                    prop_spec = layer.GetPropertyAtPath(prop)
+                    if prop_spec is None:
+                        continue
+                    if prior["existed"]:
+                        if prior["had_default"]:
+                            prop_spec.default = prior["default"]
+                            restored.append(prop)
+                        else:
+                            not_reverted.append(
+                                dict(property=prop, reason="the session layer already had this opinion "
+                                     "with no static default, so it was left alone")
+                            )
+                        continue
+                    spec.RemoveProperty(prop_spec)
+                    removed.append(prop)
+                if entry["api"]:
+                    value = spec.GetInfo("apiSchemas")
+                    prepended = list(value.prependedItems) if value is not None else []
+                    drop = [token for token, existed in entry["api"].items() if not existed]
+                    keep = [token for token in prepended if token not in drop]
+                    if drop:
+                        if keep:
+                            spec.SetInfo("apiSchemas", Sdf.TokenListOp.Create(prependedItems=tuple(str(item) for item in keep)))
+                        else:
+                            spec.ClearInfo("apiSchemas")
+                        removed.extend("apiSchemas:" + token for token in drop)
+                    restored.extend(
+                        "apiSchemas:" + token
+                        for token, existed in entry["api"].items()
+                        if existed
+                    )
+        after = {}
+        for prim_path in paths:
+            if stage.GetPrimAtPath(prim_path):
+                after[prim_path] = self.get(stage, prim_path)
+        report = [dict(path=p, before=composed_before.get(p), after=after.get(p)) for p in paths[:16]]
+        return dict(
+            path=path,
+            subtree=subtree,
+            reverted_paths=paths,
+            reverted_path_count=len(paths),
+            removed=removed[:200],
+            removed_count=len(removed),
+            restored=restored[:200],
+            restored_count=len(restored),
+            not_reverted=not_reverted[:20],
+            prims=report,
+            prims_truncated=len(paths) > 16,
+            created_by_pack=[prim_path for prim_path in paths[:16] if prim_path in self.owned],
+            layer="session",
+            source_files_changed=False,
+            note="Only session-layer opinions these tools recorded were touched; source layers and the "
+                 "current stage are unchanged.",
+        )
 
     def transform(
         self,
@@ -411,30 +723,137 @@ class Scene:
         position=(0, 0, 0),
         orientation=(1, 0, 0, 0),
         frame="local",
-        scale=(1, 1, 1),
+        scale=None,
     ):
         prim = self.prim(stage, path)
-        if path not in self.owned or not prim.IsActive() or prim.IsInstanceProxy():
+        if prim.IsPseudoRoot() or prim.GetPath() == Sdf.Path("/"):
+            refuse("INVALID_PRIM_PATH", "The stage root has no pose to set.")
+        if prim.IsInstanceProxy():
             refuse(
-                "NOT_OWNED",
-                "Only active wrapper/primitives created by this pack may be transformed.",
+                "INSTANCE_PROXY",
+                f"{path} is an instance proxy inside an instance and cannot be edited directly. Edit the "
+                "instance root instead: find it with sim__stage__tree root=\"/\" (it composes the proxy), and "
+                "pass that path.",
             )
+        if prim.GetPath().GetPrefixes()[0].name in KIT_ROOTS:
+            refuse("PROTECTED_PRIM", "Kit's runtime render and viewport prims are protected.")
         xf = UsdGeom.Xformable(prim)
-        ops = xf.GetOrderedXformOps() if xf else []
-        if (
-            len(ops) != 1
-            or ops[0].GetOpType() != UsdGeom.XformOp.TypeTransform
-            or ops[0].GetNumTimeSamples()
-            or xf.GetResetXformStack()
-        ):
+        if not xf:
             refuse(
-                "UNSUPPORTED_TRANSFORM",
-                "Expected one static transform op and no reset stack.",
+                "WRONG_TYPE",
+                f"{path} is a {prim.GetTypeName() or 'prim'} with no Xformable schema, so it has no pose. "
+                "Move or wrap it under an Xform parent instead.",
             )
+        root = self.articulation_root_for(stage, prim)
+        if root is not None:
+            movable = root.get("move_instead")
+            refuse(
+                "ARTICULATION_LINK",
+                f"{path} is attached by a joint, so it is a link of the articulation at {root['root']}; moving it "
+                "would break its joints."
+                + (f" Move the robot instead: call sim__prim__set_transform with path=\"{movable}\"." if movable
+                   else " Move the Xform above the joints instead."),
+                articulation_root=root["root"],
+                **({"retry_with": dict(session_id=self.session_id, stage_id=self.stage_id, path=movable,
+                                       position=list(position), orientation=list(orientation),
+                                       frame=frame, **({"scale": list(scale)} if scale is not None else {}))}
+                   if movable else {}),
+            )
+        ops = xf.GetOrderedXformOps()
+        animated = [op.GetName() for op in ops if op.GetAttr().GetNumTimeSamples()]
+        if animated:
+            refuse(
+                "ANIMATED_TRANSFORM",
+                f"{path} has a time-sampled transform ({', '.join(animated)}); a static override would remove "
+                "the animation. Animate or offset a parent Xform instead, or edit the source clip.",
+            )
+        before = self.get(stage, path)
+        if scale is None:
+            # Keep the prim's own scale: moving a scaled table must not resize it.
+            try:
+                scale = list(Gf.Transform(xf.GetLocalTransformation(Usd.TimeCode.Default())).GetScale())
+            except (RuntimeError, ValueError):
+                scale = [1, 1, 1]
         m = self.pose(stage, prim.GetParent(), position, orientation, frame, scale)
+        if xf.GetResetXformStack() and frame == "local":
+            m = m * UsdGeom.XformCache().GetLocalToWorldTransform(prim.GetParent())
+        single = len(ops) == 1 and ops[0].GetOpType() == UsdGeom.XformOp.TypeTransform
         with Usd.EditContext(stage, stage.GetSessionLayer()):
-            ops[0].Set(m)
-        return self.get(stage, path)
+            if single:
+                op = ops[0]
+                self.remember_properties(stage, path, [op.GetAttr().GetName()])
+                op.Set(m)
+                authored = [op.GetAttr().GetName()]
+            else:
+                existing = next(
+                    (op for op in ops if op.GetOpType() == UsdGeom.XformOp.TypeTransform), None
+                )
+                name = existing.GetName() if existing is not None else "xformOp:transform"
+                self.remember_properties(stage, path, [name, "xformOpOrder"])
+                op = existing if existing is not None else xf.AddTransformOp()
+                op.Set(m)
+                xf.SetXformOpOrder([op])
+                authored = [op.GetName(), "xformOpOrder"]
+        result = self.get(stage, path)
+        result.update(
+            before=before,
+            authored=authored,
+            transform_override=(
+                "one transform op replaces the composed op order"
+                if not single
+                else "the existing transform op now has a session-layer value"
+            ),
+            layer="session",
+            source_files_changed=False,
+            revert="sim__prim__revert",
+        )
+        return result
+
+    def articulation_root_for(self, stage, prim):
+        """What to move instead of a joint-attached link: {'root': articulation root, 'move_instead': Xform}.
+
+        None when this prim is not a joint body, or is itself the articulation root. An articulation's
+        root is often a joint sibling (``<robot>/root_joint``) that has no pose of its own, so the
+        useful target is the Xform above it.
+        """
+        target = prim.GetPath()
+        attached = False
+        for index, candidate in enumerate(Usd.PrimRange.Stage(stage, Usd.PrimAllPrimsPredicate)):
+            if index >= 20000:
+                break
+            if not candidate.IsA(UsdPhysics.Joint):
+                continue
+            joint = UsdPhysics.Joint(candidate)
+            bodies = {
+                path
+                for relationship in (joint.GetBody0Rel(), joint.GetBody1Rel())
+                for path in relationship.GetTargets()
+            }
+            if target in bodies:
+                attached = True
+                break
+        if not attached or prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+            return None
+        parent = prim.GetParent()
+        scope = stage.GetPseudoRoot() if parent.IsPseudoRoot() else parent
+        root_prim = None
+        for index, candidate in enumerate(Usd.PrimRange(scope)):
+            if index >= 20000:
+                break
+            if candidate.HasAPI(UsdPhysics.ArticulationRootAPI):
+                root_prim = candidate
+                break
+        root_path = str((root_prim or parent).GetPath())
+        if root_prim is not None and UsdGeom.Xformable(root_prim):
+            movable = root_prim  # the robot Xform itself is the articulation root
+        else:
+            movable = root_prim.GetParent() if root_prim is not None else parent
+        while movable and not movable.IsPseudoRoot() and not UsdGeom.Xformable(movable):
+            movable = movable.GetParent()
+        return dict(
+            root=root_path,
+            move_instead=str(movable.GetPath()) if movable and not movable.IsPseudoRoot() else None,
+        )
 
     def inspect_asset(self, snapshot_id, manifest_sha256):
         filename, manifest = self.broker.verify(snapshot_id, manifest_sha256)
@@ -481,7 +900,7 @@ class Scene:
             )
         asset = Usd.Stage.Open(str(filename))
         if not asset or not asset.GetDefaultPrim():
-            refuse("DEFAULT_PRIM", "Asset needs a valid defaultPrim.")
+            refuse("DEFAULT_PRIM", "Asset needs a valid defaultPrim. Set defaultPrim in the file, or import a USD that has one.")
         count = 0
         for prim in asset.TraverseAll():
             count += 1
@@ -540,7 +959,10 @@ class Scene:
         ):
             refuse(
                 "UNITS_MISMATCH",
-                "Asset and target up-axis/units must match; no automatic conversion.",
+                units_mismatch_message(
+                    info["up_axis"], info["meters_per_unit"],
+                    str(UsdGeom.GetStageUpAxis(stage)), UsdGeom.GetStageMetersPerUnit(stage),
+                ),
             )
         try:
             with Usd.EditContext(stage, stage.GetSessionLayer()):
@@ -552,7 +974,7 @@ class Scene:
                     or not child.IsValid()
                 ):
                     refuse("IMPORT_FAILED", "Reference could not be authored/composed.")
-                errors = stage.GetCompositionErrors()
+                errors = composition_errors(stage)
                 if errors:
                     refuse("COMPOSITION_ERROR", str(errors)[:1500])
             self.owned.add(str(p))
@@ -569,8 +991,12 @@ class Scene:
 
     def validate_project_materials(self, snapshot_id, manifest_sha256):
         """Validate bounded literal MDL and MaterialX project dependencies."""
-        import xml.etree.ElementTree as ET
+        try:
+            return self._validate_project_materials(snapshot_id, manifest_sha256)
+        except material_refs.MaterialRefError as exc:
+            refuse(exc.code, str(exc))
 
+    def _validate_project_materials(self, snapshot_id, manifest_sha256):
         filename, manifest = self.broker.verify(snapshot_id, manifest_sha256)
         root = filename.parents[len(Path(manifest["entry"]).parts) - 1]
         layers, assets, missing = UsdUtils.ComputeAllDependencies(
@@ -614,19 +1040,7 @@ class Scene:
         materialx = []
 
         def reference(parent, value, kind):
-            if (
-                not value
-                or value.startswith("/")
-                or ":" in value
-                or "\\" in value
-                or any(c in value for c in "<>$#?{}")
-            ):
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    kind
-                    + " contains an absolute, network or dynamic reference: "
-                    + value,
-                )
+            material_refs.check_value(value, kind)
             target = Path(os.path.normpath(str(parent / value)))
             try:
                 rel = target.relative_to(root).as_posix()
@@ -676,50 +1090,7 @@ class Scene:
                 refuse(
                     "DEPENDENCIES", "MDL material missing from the snapshot: " + mdl_rel
                 )
-            text = dep.read_text(encoding="utf-8")
-            # Comments do not describe texture resources. For safety reject
-            # escaped/expressive arguments rather than guessing at MDL syntax.
-            text = re.sub(
-                r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*',
-                lambda match: match.group() if match.group().startswith('"') else "",
-                text,
-                flags=re.S,
-            )
-            # We support only absolute MDL module names. A relative or otherwise
-            # nonstandard import could hide another file with its own resources.
-            without_using = re.sub(
-                r"\busing\s+::[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*\s+import\s+[^;]+;",
-                "",
-                text,
-            )
-            if re.search(
-                r"\busing\s+|\bimport(?!\s*::)\s+|#\s*include\b", without_using
-            ):
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    "A relative or unsupported MDL import cannot be validated: "
-                    + mdl_rel,
-                )
-            allowed = {
-                "OmniPBR",
-                "tex",
-                "state",
-                "base",
-                "df",
-                "math",
-                "anno",
-                "limits",
-                "debug",
-                "scene",
-            }
-            modules = re.findall(
-                r"\b(?:using|import)\s+::([A-Za-z_][A-Za-z_0-9]*)", text
-            )
-            if any(module not in allowed for module in modules):
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    "A custom MDL module cannot be validated: " + mdl_rel,
-                )
+            resources, modules = material_refs.scan_mdl(dep.read_text(encoding="utf-8"), mdl_rel)
             if "OmniPBR" in modules:
                 runtime = self.runtime_assets.get("OmniPBR.mdl")
                 if (
@@ -732,31 +1103,7 @@ class Scene:
                         "DEPENDENCIES",
                         "The required installed OmniPBR MDL module is missing or changed.",
                     )
-            resource = r"(texture_(?:2d|3d|cube|ptex)|light_profile|bsdf_measurement)"
-            starts = list(re.finditer(r"\b" + resource + r"\s*\(", text))
-            calls = list(re.finditer(r"\b" + resource + r"\s*\(([^()]*)\)", text))
-            if len(starts) != len(calls):
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    "A complex MDL resource expression cannot be validated: " + mdl_rel,
-                )
-            for call in calls:
-                kind = (
-                    "MDL texture"
-                    if call.group(1).startswith("texture_")
-                    else "MDL resource"
-                )
-                arg = call.group(2).strip()
-                if not arg:
-                    continue
-                match = re.match(r'^"([^"\\]+)"(?:\s*,.*)?$', arg, flags=re.S)
-                if not match or "<" in arg:
-                    refuse(
-                        "DEPENDENCIES_UNSUPPORTED",
-                        "A non-literal, escaped or tiled MDL resource cannot be validated: "
-                        + mdl_rel,
-                    )
-                value = match.group(1)
+            for kind, value in resources:
                 _, rel = reference(dep.parent, value, kind)
                 (textures if kind == "MDL texture" else other_mdl_resources).append(rel)
         visited = set()
@@ -777,47 +1124,13 @@ class Scene:
                     "DEPENDENCIES", "Missing or excessive MaterialX dependency: " + rel
                 )
             visited.add(rel)
-            data = dep.read_bytes()
-            if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    "MaterialX XML declarations/entities are unsupported: " + rel,
-                )
-            try:
-                xml = ET.fromstring(data)
-            except ET.ParseError:
-                refuse("DEPENDENCIES_UNSUPPORTED", "Invalid MaterialX document: " + rel)
-            for element in xml.iter():
-                if element.get("fileprefix"):
-                    refuse(
-                        "DEPENDENCIES_UNSUPPORTED",
-                        "MaterialX fileprefix requires resolver support: " + rel,
-                    )
-                values = []
-                if element.get("type") == "filename" and element.get("value"):
-                    values.append(element.get("value"))
-                for key in ("file", "filename", "href"):
-                    if element.get(key):
-                        values.append(element.get(key))
-                for value in values:
-                    target, name = reference(dep.parent, value, "MaterialX dependency")
-                    materialx.append(name)
-                    if target.suffix.lower() == ".mtlx":
-                        pending_mtlx.append(target)
-                    elif target.suffix.lower() in {
-                        ".mdl",
-                        ".usd",
-                        ".usda",
-                        ".usdc",
-                        ".usdz",
-                        ".abc",
-                        ".xml",
-                    }:
-                        refuse(
-                            "DEPENDENCIES_UNSUPPORTED",
-                            "Nested material or scene dependency requires additional validation: "
-                            + name,
-                        )
+            for value in material_refs.scan_materialx(dep.read_bytes(), rel):
+                target, name = reference(dep.parent, value, "MaterialX dependency")
+                materialx.append(name)
+                if target.suffix.lower() == ".mtlx":
+                    pending_mtlx.append(target)
+                else:
+                    material_refs.check_materialx_target(target, name)
         return dict(
             mdl_literal_textures=textures[:32],
             mdl_texture_count=len(textures),
@@ -967,7 +1280,7 @@ class Scene:
             reference = "./" + bundle.name + "/" + manifest["entry"]
             if (
                 not root.GetReferences().AddReference(reference)
-                or staged.GetCompositionErrors()
+                or composition_errors(staged)
             ):
                 refuse(
                     "COMPOSITION_ERROR", "Prepared workstation wrapper did not compose."
@@ -1031,14 +1344,19 @@ class Scene:
                 "TIMELINE_ACTIVE",
                 "Pause or stop before saving a stable composed snapshot.",
             )
+        # A bare basename only lacks the extension; anything with another dot still refuses.
+        if isinstance(filename, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}", filename):
+            filename += ".usda"
         if not isinstance(filename, str) or not re.fullmatch(
             r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}\.usda", filename
         ):
+            hint = (" This tool writes text .usda files: pass the name alone, or with .usda, not .usd or .usdc."
+                    if isinstance(filename, str) and filename.lower().endswith((".usd", ".usdc", ".usdz")) else "")
             refuse(
                 "INVALID_OUTPUT",
-                "Use a simple basename ending .usda (<=65 characters).",
+                "Use a simple name of letters, digits, _ and -, ending .usda (<=65 characters). No spaces or folders; use directory for a folder." + hint,
             )
-        from .render_export import camera_handles, reset_export_handles, restore_export_camera_targets
+        from .render_export import camera_handles, reset_export_handles, restore_export_camera_targets, save_report
 
         handles, camera_repairs = camera_handles(stage, reset_camera_render_handles, self.render_binding)
         folder = self.save_directory(directory)
@@ -1049,24 +1367,30 @@ class Scene:
         try:
             # Export to private temporary file; hard-link publication is no-replace,
             # unlike an exists check followed by Export to the destination.
-            handle, tmp = tempfile.mkstemp(suffix=".usda", dir=folder)
+            handle, tmp = tempfile.mkstemp(prefix=".isaac-mcp-tmp-", suffix=".usda", dir=folder)
             os.close(handle)
             layer = stage.Flatten()
+            from .flatten import drop_unused_prototypes
+
+            drop_unused_prototypes(layer)
             omitted_render_properties = reset_export_handles(layer, handles)
             restored_camera_targets = restore_export_camera_targets(layer, camera_repairs)
             omitted_render_paths = strip_runtime_render_state(layer)
             if runtime_poses:
                 apply_snapshot_poses(layer, runtime_poses)
+            report = save_report(layer)
             if not layer.Export(tmp):
                 refuse("SAVE_FAILED", "USD export returned false.")
             try:
                 os.link(tmp, filename, dst_dir_fd=fd, follow_symlinks=False)
             except FileExistsError:
                 refuse("CONFLICT", "Output already exists; no overwrite.")
+            size = os.stat(filename, dir_fd=fd).st_size
             return dict(
                 file=str(folder / filename),
-                bytes=os.stat(filename, dir_fd=fd).st_size,
+                bytes=size,
                 flattened=True,
+                **({"size_note": flattened_size_note(size)} if size > LARGE_SAVE_BYTES else {}),
                 stage_switched=False,
                 runtime_pose_count=len(runtime_poses or []),
                 omitted_runtime_render_paths=omitted_render_paths,
@@ -1077,6 +1401,7 @@ class Scene:
                 else "composed USD",
                 checkpoint=False,
                 dependencies="Texture files may still reference retained snapshots; do not clean those while using saved scenes.",
+                **report,
             )
         finally:
             os.close(fd)
@@ -1137,6 +1462,8 @@ def strip_runtime_render_state(layer):
         "omni.syntheticdata.SdRenderVarPtr",
         "omni.graph.nodes.GpuInteropRenderProductEntry",
         "isaacsim.sensors.rtx.IsaacCreateRTXLidarScanBuffer",
+        # The point-cloud writer's annotator; the helper regenerates it at Play.
+        "isaacsim.sensors.rtx.nodes.OgnIsaacExtractRTXSensorPointCloud",
         "omni.graph.action.RationalTimeSyncGate",
         # Replicator 1.13.38 creates this writer/annotator synchronization gate
         # instead of the older action gate. It is regenerated on attachment.
@@ -1146,8 +1473,11 @@ def strip_runtime_render_state(layer):
         "isaacsim.core.nodes.IsaacSimulationGate",
         "isaacsim.core.nodes.IsaacReadSimulationTimeAnnotator",
         "isaacsim.core.nodes.IsaacConvertRGBAToRGB",
+        # Isaac Sim 5.1's laser-scan path and Replicator time node; regenerated the same way.
+        "isaacsim.sensors.rtx.IsaacComputeRTXLidarFlatScan",
+        "omni.replicator.core.ReadRpFabricTime",
     }
-    # Camera helpers regenerate these session-only writers on playback. A
+    # Camera and LiDAR helpers regenerate these session-only writers on playback. A
     # flattened export includes their process handles, unlike a normal USD
     # root-layer save. Only omit recognized writers backed by a preserved
     # helper with the same topic and frame; an arbitrary ROS node is not safe
@@ -1158,6 +1488,10 @@ def strip_runtime_render_state(layer):
             "isaacsim.ros2.bridge.ROS2CameraHelper",
         "isaacsim.ros2.bridge.ROS2PublishCameraInfo":
             "isaacsim.ros2.bridge.ROS2CameraInfoHelper",
+        "isaacsim.ros2.bridge.ROS2PublishLaserScan":
+            "isaacsim.ros2.bridge.ROS2RtxLidarHelper",
+        "isaacsim.ros2.bridge.ROS2PublishPointCloud":
+            "isaacsim.ros2.bridge.ROS2RtxLidarHelper",
     }
     helpers = {}
     for prim in output.Traverse():

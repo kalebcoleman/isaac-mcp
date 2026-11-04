@@ -225,3 +225,56 @@ def test_search_refresh_and_bounds(broker):
     assert broker.search("", 1)["truncated"]
     with pytest.raises(a.AssetError):
         broker.search("", 0)
+
+
+def test_scan_and_search_skip_a_too_deep_folder_and_name_it(broker):
+    root = broker.roots["demo"][0]
+    deep = root.joinpath(*[f"d{i}" for i in range(1, 10)])
+    deep.mkdir(parents=True)
+    (deep / "deep.usda").write_text("#usda 1.0")
+    skipped = "d1/d2/d3/d4/d5/d6/d7/d8/"
+
+    scan = broker.scan("demo")
+    assert "robot.usda" in [item["relative_path"] for item in scan["files"]]
+    assert scan["depth_limit"] == a.MAX_DEPTH == 8
+    assert scan["skipped_deep"] == [skipped]
+    assert "deeper than 8" in scan["note"]
+
+    found = broker.search("deep")
+    assert found["files"] == []
+    assert found["skipped_deep"] == [dict(root_id="demo", path=skipped)]
+    assert found["depth_limit"] == 8
+
+    # A snapshot copies the whole project, so it still refuses rather than copy it short.
+    with pytest.raises(a.AssetError, match="depth exceeds 8") as caught:
+        broker.snapshot("demo", "robot.usda")
+    assert caught.value.code == "LIMIT" and skipped in str(caught.value)
+
+
+def test_with_no_approval_file_both_sides_share_one_private_staging_folder(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_STAGING", raising=False)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    host, kit = a.Broker(), a.Broker()
+    expected = tmp_path / ".cache" / "isaac-mcp" / "staging"
+    assert host.staging == kit.staging == expected and host.default_staging
+    assert (expected.stat().st_mode & 0o777) == 0o700 and not host.roots  # it approves nothing
+
+
+def test_default_staging_can_be_moved_tightened_and_refused(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    where = tmp_path / "elsewhere"
+    monkeypatch.setenv("ISAAC_MCP_STAGING", str(where))
+    assert a.Broker().staging == where
+    where.chmod(0o755)
+    assert a.Broker().staging == where and (where.stat().st_mode & 0o077) == 0  # loose mode is tightened, not trusted
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    monkeypatch.setenv("ISAAC_MCP_STAGING", str(blocker / "inside"))
+    assert a.Broker().staging is None  # can't be made: off, as before
+
+
+def test_an_explicit_approval_file_still_decides_staging(tmp_path, monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_STAGING", str(tmp_path / "default"))
+    broker = a.Broker(str(tmp_path / "missing.json"))
+    assert broker.staging is None and broker.config_error and not broker.default_staging

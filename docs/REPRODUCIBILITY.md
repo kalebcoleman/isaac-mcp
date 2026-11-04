@@ -64,7 +64,7 @@ host's SDK and is not a reason to install the host inside Sim.
 
 Follow [client registration and read-only identity checks](LINUX-SETUP.md#connect-and-check-without-changing-the-scene),
 then launch an authorized session with `./run.sh --port 8766` (or `--headless`). The launcher
-uses this checkout's `.venv`; `UR5E_DT_PYTHON` explicitly selects another interpreter.
+uses this checkout's `.venv`; `ISAAC_MCP_PYTHON` explicitly selects another interpreter.
 Do not run a second full installer afterward merely to register a client: that would repeat
 its non-locked simulator sync. Use `--no-sim` with the chosen registration flag or manual config.
 
@@ -279,7 +279,7 @@ uname -srmo
 cat /etc/os-release
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
 printf 'DISPLAY=%s XDG_SESSION_TYPE=%s\n' "${DISPLAY:-unset}" "${XDG_SESSION_TYPE:-unset}"
-SIM_PYTHON="${UR5E_DT_PYTHON:-$PWD/.venv/bin/python}"
+SIM_PYTHON="${ISAAC_MCP_PYTHON:-$PWD/.venv/bin/python}"
 "$SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.executable); print(sys.version); print({n:m.version(n) for n in ("isaacsim", "isaacsim-kernel", "numpy", "torch", "mcp")})'
 uv pip check --python "$SIM_PYTHON"
 uv tool list

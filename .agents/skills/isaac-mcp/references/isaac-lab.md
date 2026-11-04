@@ -26,7 +26,9 @@ These were checked against an Isaac Lab 3.0.0 checkout and NVIDIA's own skills:
   `isaaclab__envs_list` with a `filter` substring, never guess.
 - The RL backend is chosen with `rl_library` (Isaac Lab 3.0.0 accepts `rsl_rl`, `rl_games`, `skrl`,
   `sb3`, `rlinf` and `torchrl`). When omitted,
-  the task's registered `default_agent` is used. Do not mix one library's agent config with another.
+  the task's registered `default_agent` is used; a task without one (or a misspelled task id) exits 2
+  asking for `--rl_library`. Name the library when loading a checkpoint: another library's default
+  fails inside the backend (`KeyError: 'actor_state_dict'`). Do not mix one library's agent config with another.
 - There is no `--headless` flag in Isaac Lab 3. Ordinary headless jobs use `--viz none`;
   `extra_args=["--video", "--video_length=60"]` selects Kit with child-only `HEADLESS=1`.
   Windowed jobs use Kit with `HEADLESS=0`. One explicit `--viz=VALUE` or

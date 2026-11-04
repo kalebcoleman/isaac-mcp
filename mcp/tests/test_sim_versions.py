@@ -96,7 +96,15 @@ def test_sensor_adapter_requires_expected_kit_and_enabled_extension_versions(
     assert sensor_stack_issues(identity)
 
 
-@pytest.mark.parametrize("release", RELEASE_BUILDS)
+def test_isaac_51_is_identified_but_has_no_newton_adapter():
+    from isaac_mcp.sim_versions import newton_stack_issues
+
+    assert "5.1.0.0" in RELEASE_BUILDS
+    identity = dict(qualified_build=True, release="5.1.0.0", extensions={})
+    assert newton_stack_issues(identity) == ["Release has no qualified Newton adapter"]
+
+
+@pytest.mark.parametrize("release", [release for release in RELEASE_BUILDS if release != "5.1.0.0"])
 def test_newton_qualification_rejects_extension_and_loaded_warp_drift(release):
     from isaac_mcp.sim_versions import (
         NEWTON_STACKS,

@@ -1,9 +1,12 @@
 # UR5e Digital Twin MCP Tools (`ur5e_dt__*`)
 
+**These tools are RISE lab's UR5e digital twin: Kaleb's work with that lab and that robot.** Every other tool in this project is
+robot-agnostic. For a generic start with any robot, including a UR5e without the twin, use
+[`sim__quick_start`](TOOLS-SCENE.md#start-a-scene).
+
 This document covers the 23 tools registered by `exts/ur5e-dt/ur5e_dt/extension.py`
-on the shared Kit bridge. It is the implementation reference; it documents the
-present implementation, not the proposed generic sim tool pack
-([GENERIC-SIM-TOOLS.md](GENERIC-SIM-TOOLS.md)).
+on the shared Kit bridge. It is the implementation reference. Generic tools are in
+[TOOLS-SCENE.md](TOOLS-SCENE.md), and every argument is listed in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#ur5e-twin-ur5e_dt__).
 
 ## Naming: bridge vs. MCP
 
@@ -14,6 +17,9 @@ present implementation, not the proposed generic sim tool pack
 - Bridge built-ins (`status`, `run_python`, `list_bridges`) and host gateway tools
   (`use_bridge`, `refresh_tools`) and desktop-capture tools
   (`screenshot`, `start_screen_recording`, …) carry **no** `ur5e_dt__` prefix.
+
+Most of these tools serve one lab's digital twin. `ur5e_dt__quick_start` works for anyone from public files, while the gripper, workstation and
+object tools need [your own lab files](ASSETS.md#public-files-and-lab-files), which cannot be hosted. `ur5e_dt__quick_start` builds no table; the bench comes from `ur5e_dt__load_workstation`. At its zero pose the arm reaches out low, with the wrist about 6 cm above the ground, which can look collapsed but is not a fault: check `sim__joints__state` and command a pose. `ur5e_dt__quick_start` refuses if this stage already publishes joint states on `/joint_states` (`sim__ros2__tf_setup`'s default topic), because the twin's graph drives the arm from that topic and the arm would oscillate; the error gives the fix. Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` before generic scene edits.
 
 The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 `ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
@@ -31,7 +37,9 @@ the selected simulator's identity, state and native log before retrying a mutati
 Plain `./run.sh` starts Isaac Sim, the bridge and the twin extension, but hides the **UR5e Digital Twin**
 panel by default. The 23 tools work with the panel hidden. Pass `--ur5e-panel` (or use the dedicated
 `scripts/launch_ur5e_dt.sh`) to show the panel; in a graphical session it docks alongside Console when
-available and can be moved like other Kit tabs. `./run.sh --headless` has no visible simulator window.
+available, is focused once docked (so it does not stay behind another tab), and can be moved like other
+Kit tabs. If it is hidden behind a tab anyway, the generic `sim__ui__act action=tab window="UR5e Digital Twin"`
+shows and focuses it. `./run.sh --headless` has no visible simulator window.
 The twin panel is separate from the optional `isaac.mcp.panel` registry inspector.
 
 Managed `sim__launch` sessions also start the twin tools with the panel hidden. Pass
@@ -128,21 +136,21 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 | `ur5e_dt__randomize_single_object` | Randomize one object in a clear strip |
 | `ur5e_dt__save_scene_state` | Save object poses to JSON |
 | `ur5e_dt__restore_scene_state` | Restore object poses from JSON |
-| `ur5e_dt__add_objects` | Load objects from an assembly folder |
+| `ur5e_dt__add_objects` | Load objects from an assembly folder; your lab files |
 | `ur5e_dt__delete_objects` | Delete `/World/Objects` and pose-publisher graph |
-| `ur5e_dt__setup_pose_publisher` | Publish object poses to ROS2 `objects_poses_sim` |
+| `ur5e_dt__setup_pose_publisher` | Publish object poses to ROS2 `objects_poses_sim`: one `tf2_msgs/msg/TFMessage` holding them all, parent frame `World`, each child frame the object's name |
 | `ur5e_dt__start_ros_driver` | Bring ROS2 robot driver up/down/status |
 | `ur5e_dt__sync_real_poses` | Sync sim poses from real-world detections |
 | `ur5e_dt__new_stage` | Clear stage and free memory |
-| `ur5e_dt__quick_start` | Full scene setup (table, UR5e, RG2, camera, play) |
+| `ur5e_dt__quick_start` | Scene from public files (UR5e, camera, play); adds the RG2 when your files are present |
 | `ur5e_dt__start_recording` | Start viewport MP4 recording |
 | `ur5e_dt__stop_recording` | Finalize MP4 recording |
 | `ur5e_dt__get_recording_status` | Recording status |
-| `ur5e_dt__load_workstation` | Add Vention bench (visual) |
+| `ur5e_dt__load_workstation` | Add Vention bench (visual); your lab file, else a placeholder |
 | `ur5e_dt__quick_start_with_workstation` | `quick_start` + Vention bench |
 | `ur5e_dt__load_simple_room` | Add Simple Room backdrop |
 | `ur5e_dt__quick_start_with_workstation_and_simple_room` | `quick_start` + bench + room |
-| `ur5e_dt__set_object_pose` | Teleport an object to an exact world pose |
+| `ur5e_dt__set_object_pose` | Request an exact world pose for an object; physics settles it from there |
 
 ---
 
@@ -299,9 +307,9 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
   | `action` | string | no | `"up"` | Enum: `up`, `down`, `status`. |
   | `backend` | string | no | `"fake"` | Enum: `fake`, `ursim`. `fake` is sim-only (apt `ur_robot_driver` with fake hardware, no Docker/`~/ros2_ws`). `ursim` needs Docker + `~/ros2_ws` and supports `real`. |
 - Purpose: bring the ROS 2 robot driver up/down/status so motion tools (ros-mcp-server `move_home`, `move_to_grasp`, …) have a driver.
-- Side effects: spawns a host subprocess (`scripts/launch_ur_fake.sh` or `scripts/sim_bringup.sh`) with a sanitized environment; no USD changes. Subprocess cap 240 s for `up`, 60 s otherwise. Both backends end at `/joint_states` live and `scaled_joint_trajectory_controller` accepting `FollowJointTrajectory` on the configured ROS domain (default 0, Cyclone, localhost-only).
+- Side effects: spawns a host subprocess (`scripts/launch_ur_fake.sh` or `scripts/sim_bringup.sh`) with a sanitized environment; no USD changes. Subprocess cap 240 s for `up`, 60 s otherwise. A non-zero exit is reported as an error whose message includes the last line of the script's output; for `backend="ursim"` `action="status"` that is why Docker is missing or unreachable, not a success with nothing running. The fake driver's status prints `(1 msg)` only when it actually read `/joint_states`, so it no longer claims one message and none in the same report. Both backends end at `/joint_states` live and `scaled_joint_trajectory_controller` accepting `FollowJointTrajectory` on the configured ROS domain (default 0, Cyclone, localhost-only).
 - Real-hardware/ROS constraints: `backend="fake"` is simulation-only; `mode="real"` is not yet enabled in this codebase. Do not launch a real robot driver for a simulation-only task.
-- The fake backend discovers the standard ROS setup for Ubuntu 22.04/Humble or Ubuntu 24.04/Jazzy. On Jazzy, install `ros-jazzy-ur-robot-driver`, `ros-jazzy-ros2controlcli`, and `ros-jazzy-rmw-cyclonedds-cpp` through the system package manager. The launcher checks the driver's advertised mock-hardware argument and refuses to start if it cannot verify it; use `ROS_SETUP` for a nonstandard sourced ROS installation.
+- The fake backend discovers the standard ROS setup for Ubuntu 22.04/Humble or Ubuntu 24.04/Jazzy. On Jazzy, install `ros-jazzy-ur-robot-driver`, `ros-jazzy-ros2controlcli`, and `ros-jazzy-rmw-cyclonedds-cpp` through the system package manager. The launcher checks the driver's advertised mock-hardware argument and refuses to start if it cannot verify it; use `ROS_SETUP` for a nonstandard sourced ROS installation or a RoboStack prefix, in which case the distribution comes from what that file sets. An environment that is already activated (`ROS_DISTRO` set, `ros2` on `PATH`, no `/opt/ros/<distro>`) needs no `ROS_SETUP`.
 - Fake-driver startup waits until both the joint-state broadcaster and scaled trajectory controller are active; controller queries are bounded when the manager is unavailable.
 - Fake-driver shutdown targets the verified mock process recorded by this launcher and its dedicated process group; it does not globally stop other UR drivers. If its PID file is missing or stale, inspect the host's processes instead of assuming an unrelated driver was stopped.
 - Managed `sim__launch` sessions use separate fake-driver records and logs, with an ownership marker checked before
@@ -317,7 +325,7 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 - Parameters: none.
 - Purpose: subscribe to `/objects_poses_real` and update sim object poses to match real-world detected poses.
 - Side effects: creates a temporary rclpy node, waits up to 3 s for one `TFMessage`; mutates object poses. Requires an external publisher on `/objects_poses_real` (real detection pipeline).
-- Result: `updated` and `snapped` list object names. Returns an error when no message arrives or no scene objects match; it does not report a successful sync in those cases. Its temporary ROS context does not shut down the simulator's existing ROS context.
+- Result: `updated` and `snapped` list object names, and the message says the poses were requested (physics settles them; read them again to see the result). Returns an error when no message arrives or no scene objects match; it does not report a successful sync in those cases. Its temporary ROS context does not shut down the simulator's existing ROS context.
 - Real-hardware/ROS constraints: intended for real-world sync; not useful in a pure sim session without that publisher.
 - Example: `{}`
 
@@ -335,7 +343,8 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 - Bridge: `ur5e_dt.quick_start`
 - Parameters: none.
 - Async: yes.
-- Purpose: one-click setup: load table scene, import UR5e with action graphs, attach RG2 gripper with action graphs, create workspace camera, start simulation.
+- Result: `gripper` says whether the RG2 loaded and what is missing; `assets` lists each asset's `source` (`project`, `store`, `remote`, `missing`) and `location`.
+- Purpose: one-click setup: load scene, import UR5e with action graphs, attach RG2 gripper with action graphs when its files exist, create workspace camera, start simulation.
 - Side effects: full scene creation and timeline play.
 - Example: `{}`
 
@@ -424,7 +433,7 @@ stays in that state; a replacement stage or concurrent Stop is never resumed.
   | `position` | array[3] | yes (handler) | — | `[x, y, z]` world position in meters. |
   | `orientation` | array[4] | no | — | `[w, x, y, z]` quaternion; overrides `yaw_deg`. |
   | `yaw_deg` | number | no | `0` | Yaw about world Z in degrees (used when `orientation` omitted). |
-- Purpose: teleport a scene object to an exact world pose, persisting under physics (same xform path as randomize).
+- Purpose: request an exact world pose for a scene object, persisting under physics (same xform path as randomize). The result says `requested`: physics settles the object from there, so read its pose again to see where it ended up.
 - Side effects: mutates object pose. Pair with `setup_pose_publisher` so `/objects_poses_sim` reflects the new pose.
 - Example: `{"object_name": "u_brown", "position": [0.3, 0.2, 0.05], "yaw_deg": 90}`
 
@@ -435,7 +444,7 @@ stays in that state; a replacement stage or concurrent Stop is never resumed.
 1. **Connect**: call `refresh_tools`, discover bridges and select the intended endpoint
    with `use_bridge`; verify its PID and port with `status` before changing a scene.
    `8766` is only the default. If discovery tools are filtered, use
-   `python -m isaac_mcp.client --list-bridges`, then probe the explicit host and port
+   `python3 mcp/isaac_mcp/client.py --list-bridges`, then probe the explicit host and port
    as described in [the agent guide](../AGENTS.md#getting-the-full-surface).
 2. **Fresh stage (optional)**: `ur5e_dt__new_stage` to free memory, then rebuild.
 3. **Build scene**: `ur5e_dt__quick_start_with_workstation` (or `quick_start` / `quick_start_with_workstation_and_simple_room`).

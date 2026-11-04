@@ -242,10 +242,10 @@ def _headless():
 
 
 def _allowed_tokens(attr):
-    import omni.graph.core as og
+    from .compat import metadata_keys
 
     try:
-        raw = attr.get_metadata(og.MetadataKeys.ALLOWED_TOKENS)
+        raw = attr.get_metadata(metadata_keys().ALLOWED_TOKENS)
     except Exception:  # noqa: BLE001
         return []
     return [t for t in (raw or "").split(",") if t]
@@ -306,9 +306,79 @@ def inspect_graph(stage, path, limit=64):
     failing = [n["path"] for n in out if n.get("errors")]
     return dict(graph=path, evaluator=graph.get_evaluator_name(), node_count=len(nodes),
                 truncated=len(nodes) > limit, nodes=out,
+                **_ros_render_status(stage, nodes[:limit]),
+                **_ros_domain_note(out),
                 **({"nodes_with_errors": failing,
                     "note": "Compute errors come from the last time the graph ran (play the timeline first)."}
                    if failing else {}))
+
+
+def _ros_domain_note(records, env=None):
+    """A saved ROS2Context can override ROS_DOMAIN_ID, which is all sim__stage__info reports."""
+    env_domain = str((os.environ if env is None else env).get("ROS_DOMAIN_ID", "0"))
+    fixed = {}
+    for record in records:
+        if record["type"].rsplit(".", 1)[-1] != "ROS2Context":
+            continue
+        inputs = record["inputs"]
+        domain = inputs.get("inputs:domain_id", {}).get("value")
+        if inputs.get("inputs:useDomainIDEnvVar", {}).get("value") is False and str(domain) != env_domain:
+            fixed[record["path"]] = domain
+    if not fixed:
+        return {}
+    return dict(ros_domain_note=dict(
+        authored_domains=fixed, ros_domain_id=env_domain,
+        note="These ROS2Context nodes publish on their authored domain_id, not ROS_DOMAIN_ID (useDomainIDEnvVar is off). "
+             "Use that domain in your ROS shell, or turn the option on."))
+
+
+def _writer_computes(stage, product_path):
+    """Compute count of the Replicator writer nodes attached to a product, or None when there are none."""
+    import omni.graph.core as og
+
+    pipeline = stage.GetPrimAtPath("/Render/PostProcess/SDGPipeline")
+    if not pipeline or not product_path:
+        return None
+    prefix = product_path.rsplit("/", 1)[-1] + "_NodeWriterWriter"
+    names = [c.GetName() for c in pipeline.GetChildren()
+             if c.GetName() == prefix or c.GetName().startswith(prefix + "_")]
+    if not names:
+        return None
+    return sum(og.Controller.node(f"{pipeline.GetPath()}/{name}").get_compute_count() for name in names)
+
+
+def _ros_render_status(stage, nodes):
+    """Result fields for ROS sensor helpers whose compute reports nothing when no frame ever arrives.
+
+    A helper can look clean while its product has no texture and its writer never runs, so show the
+    render facts Replicator's reuse path reads. Publisher count stays out of scope: see PUBLISHER_NOTE.
+    """
+    import omni.graph.core as og
+    import omni.timeline
+
+    from .render_export import HELPERS, PUBLISHER_NOTE, helper_render_status, retained_product_paths, writer_problem
+
+    helpers = [node for node in nodes if node.get_type_name() in HELPERS]
+    if not helpers:
+        return {}
+    retained = retained_product_paths()
+    playing = omni.timeline.get_timeline_interface().is_playing()
+    status = []
+    for node in helpers:
+        helper = stage.GetPrimAtPath(node.get_prim_path())
+        try:
+            runtime = og.Controller.get(node.get_attribute("inputs:renderProductPath"))
+            entry = helper_render_status(stage, helper, runtime, retained, playing)
+            entry["writer_computes"] = _writer_computes(stage, entry["render_product"])
+            problem = writer_problem(entry, playing)
+            if problem:
+                entry["problem"] = problem
+        except Exception as exc:  # noqa: BLE001 - diagnostics must never break inspection
+            entry = dict(node=node.get_prim_path(), status="unknown", error=f"{type(exc).__name__}: {str(exc)[:200]}")
+        status.append(entry)
+    problems = [entry["node"] for entry in status if entry.get("problem")]
+    return dict(ros_render_status=status, ros_publisher_note=PUBLISHER_NOTE,
+                **({"ros_helpers_with_problems": problems} if problems else {}))
 
 
 def _editor():
@@ -335,7 +405,7 @@ def show_graph_open(stage, path, width=0, height=0):
     from isaac_mcp.project_assets import refuse
 
     if _headless():
-        refuse("HEADLESS", "The Action Graph editor needs a windowed Isaac Sim (sim__launch headless=false).")
+        refuse("HEADLESS", "The Action Graph editor needs a windowed Isaac Sim: start Kit without --headless.")
     import omni.graph.core as og
 
     graph = og.get_graph_by_path(_graph_path(path))
@@ -557,11 +627,14 @@ def cells_at(pgm, width, height, origin, res, x, y):
     return [body[r * width + c] for r in rows for c in cols if 0 <= c < width and 0 <= r < height]
 
 
-def start_blocked(counts, start_cells, start_in_collider=False):
+def start_blocked(counts, start_cells, start_in_collider=False, start_occupied=False):
     """Why the flood-fill start makes the map unusable, or None. Pure, so it is unit-tested."""
     total = max(1, sum(counts.values()))
     if start_in_collider:
         return "is inside a collider (PhysX overlap at the start point)"
+    if start_occupied and counts["occupied"]:
+        # The fill erased whatever touches the start and left the rest: a wall with a hole looks like a good map.
+        return "is on an occupied cell in this z slice, so the obstacle under it would be mapped as free"
     if counts["occupied"] == 0 and counts["unknown"] > 0.5 * total:
         # Seen live: with start inside a solid collider the generator marks that collider's
         # interior free, finds no walls, and leaves everything else unknown.
@@ -585,6 +658,94 @@ def _start_in_collider(stage, start, z_mid, cell, to_su):
         return False
 
 
+def _colliders_in_bounds(lo, hi, z, to_su, limit=5):
+    """Colliders PhysX finds in the mapped volume. Unlike a bounding box, this tests a mesh room's walls, not the
+    space they enclose, so the inside of a large room counts as empty. Physics is playing during generation."""
+    try:
+        from omni.physx import get_physx_scene_query_interface
+
+        half = tuple((high - low) * 0.5 * to_su for low, high in zip((*lo, z[0]), (*hi, z[1])))
+        center = tuple((high + low) * 0.5 * to_su for low, high in zip((*lo, z[0]), (*hi, z[1])))
+        found = set()
+
+        def report(hit):
+            found.add(str(hit.collision or hit.rigid_body))
+            return len(found) < limit
+
+        get_physx_scene_query_interface().overlap_box(half, center, (0.0, 0.0, 0.0, 1.0), report, False)
+        return sorted(found)
+    except Exception:  # noqa: BLE001 - no scene query available: nothing proves the map is wrong
+        return []
+
+
+def _omap_before_2_3_3():
+    """True for omap 2.2.1, 2.3.1 and 2.3.2 (Isaac Sim 6.0.0.0, 6.0.0.1, 6.0.1); False if the version is unreadable."""
+    try:
+        import omni.kit.app
+
+        em = omni.kit.app.get_app().get_extension_manager()
+        version = em.get_extension_dict(em.get_enabled_extension_id("isaacsim.asset.gen.omap")).get("package", {}).get("version")
+        return tuple(int(x) for x in str(version).split(".")[:3]) < (2, 3, 3)
+    except (ImportError, AttributeError, TypeError, ValueError):
+        return False
+
+
+def buffer_from_occupied(points, min_xy, max_xy, cell, start_xy):
+    """The buffer MapGenerator::getBuffer() means to return, built without calling it, because calling it can crash Kit.
+    Native getBuffer sizes the grid by truncating (max - min) / cell in float32, so it can be a cell short (118 for 119
+    rows), then writes every occupied leaf with no bounds check: a leaf on the last row overruns the heap block and Kit
+    aborts in malloc. Measured on 6.0.0.0 through 6.2, and the code is the same in omap 2.2.1 to 2.3.5. Layout matches
+    native: x descending, y ascending, 1.0 occupied, 0.0 free, 0.5 unknown. Like native, the flood fill replaces whatever
+    value the start cell holds, so the fourth value says whether that erased the occupied cells joined to it."""
+    width = int(round((max_xy[0] - min_xy[0]) / cell))
+    height = int(round((max_xy[1] - min_xy[1]) / cell))
+    grid = [0.5] * (width * height)
+
+    def index(x, y):
+        col = min(width - 1, max(0, int((max_xy[0] - x) / cell)))
+        return min(height - 1, max(0, int((y - min_xy[1]) / cell))) * width + col
+
+    for x, y in points:
+        grid[index(x, y)] = 1.0
+    first = index(*start_xy)
+    target, stack = grid[first], [first]
+    start_occupied = target == 1.0
+    if target != 0.0:
+        while stack:
+            i = stack.pop()
+            if grid[i] != target:
+                continue
+            grid[i] = 0.0
+            if i % width:
+                stack.append(i - 1)
+            if i % width != width - 1:
+                stack.append(i + 1)
+            if i >= width:
+                stack.append(i - width)
+            if i + width < len(grid):
+                stack.append(i + width)
+    return grid, width, height, start_occupied
+
+
+FLOOR_RETRIES = 3
+
+
+def raised_slice(z_low, z_high, cell, occupied, attempt):
+    """The next bottom of the z slice to try, or None to stop. A floor in the slice marks every cell occupied, and the flood fill
+    from start then turns them all free (measured on 6.0.1: floor top 0, cell 0.05, z_min 0.05 fails and 0.06 works)."""
+    if occupied or attempt >= FLOOR_RETRIES:
+        return None
+    raised = z_low + cell * 1.2
+    return raised if raised < z_high else None
+
+
+def slice_bottom_note(cell):
+    """What a raised slice bottom does and does not exclude, worded for every omap version we have seen."""
+    return ("Bottom of the slice raised to z_used, because a floor within one cell of it fills the slice. "
+            "omap releases before 2.3.3 can still include colliders below z_used, within about one cell "
+            f"({cell:g} m); on later releases the slice starts at z_used.")
+
+
 def occupancy_map(scene, stage, a):
     """Generate a 2D occupancy map from the stage's colliders and write a Nav2 PGM + YAML."""
     from isaac_mcp.project_assets import refuse
@@ -601,35 +762,57 @@ def occupancy_map(scene, stage, a):
 
     in_collider = _start_in_collider(stage, start, (z[0] + z[1]) / 2, cell, to_su)
     om = _omap.acquire_omap_interface()
+    # Before omap 2.3.3 a collider within one cell below a positive z_min still hits: a floor at z=0 fills the default slice.
+    z_low = min(z[0] + 1.01 * cell, (z[0] + z[1]) / 2) if _omap_before_2_3_3() and z[0] > 0 else z[0]
     try:
-        # The generator flood-fills free space from this origin ("must be in unoccupied space").
-        cz = (z[0] + z[1]) / 2 * to_su
-        cx, cy = start[0] * to_su, start[1] * to_su
-        om.set_cell_size(cell * to_su)
-        om.set_transform((cx, cy, cz), (lo[0] * to_su - cx, lo[1] * to_su - cy, z[0] * to_su - cz),
-                         (hi[0] * to_su - cx, hi[1] * to_su - cy, z[1] * to_su - cz))
-        om.update()
-        om.generate()
-        dims = om.get_dimensions()
-        buffer = om.get_buffer()
-        min_bound = om.get_min_bound()
+        for attempt in range(FLOOR_RETRIES + 1):
+            # The generator flood-fills free space from this origin ("must be in unoccupied space").
+            cz = (z_low + z[1]) / 2 * to_su
+            cx, cy = start[0] * to_su, start[1] * to_su
+            om.set_cell_size(cell * to_su)
+            om.set_transform((cx, cy, cz), (lo[0] * to_su - cx, lo[1] * to_su - cy, z_low * to_su - cz),
+                             (hi[0] * to_su - cx, hi[1] * to_su - cy, z[1] * to_su - cz))
+            om.update()
+            om.generate()
+            min_bound, top = om.get_min_bound(), om.get_max_bound()
+            buffer, width, height, start_occupied = buffer_from_occupied(
+                [(p.x, p.y) for p in om.get_occupied_positions()], (min_bound[0], min_bound[1]), (top[0], top[1]),
+                cell * to_su, (cx, cy))
+            if not len(buffer) or width * height != len(buffer):
+                refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) "
+                       "inside the bounds and a UsdPhysics.Scene on the stage.")
+            pgm, origin, counts = pgm_and_origin(buffer, width, height, min_bound, cell * to_su, mpu, clear)
+            next_low = raised_slice(z_low, z[1], cell, counts["occupied"] and not start_occupied, attempt)
+            if next_low is None or not _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su):
+                break
+            z_low = next_low
     finally:
         _omap.release_omap_interface(om)
-    if not len(buffer) or dims.x * dims.y != len(buffer):
-        refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) "
-               "inside the bounds and a UsdPhysics.Scene on the stage.")
-    pgm, origin, counts = pgm_and_origin(buffer, dims.x, dims.y, min_bound, cell * to_su, mpu, clear)
-    reason = start_blocked(counts, cells_at(pgm, dims.x, dims.y, origin, cell, start[0], start[1]), in_collider)
+    reason = start_blocked(counts, cells_at(pgm, width, height, origin, cell, start[0], start[1]), in_collider, start_occupied)
     if reason:
         refuse("START_BLOCKED", f"start {start} {reason}. The generator flood-fills free space from it, so the "
                "map would be empty or wrong. Move start to open floor next to (not on) the robot; `clear` only "
                "edits the saved image. No files were written.", cells=counts)
+    colliders = _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su) if counts["occupied"] == 0 else []
+    if colliders:
+        refuse("MAP_NO_OBSTACLES", f"The generator marked no cell occupied, but colliders are inside the bounds and z "
+               f"slice ({', '.join(colliders)}), so this map would be wrong. Raising the slice's bottom by up to "
+               f"{FLOOR_RETRIES} steps did not help. If a floor is one of them, set z above it; check that the others are "
+               "enabled and that physics has run since they were added. No files were written.", colliders=colliders, cells=counts)
     scene.output.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pgm_path.write_bytes(pgm)
+    def publish(path, data):  # never a partial file at the final name, if Kit dies here
+        temp = path.with_name(f".{path.name}.tmp")
+        temp.unlink(missing_ok=True)  # left by a crash, or a symlink someone planted
+        descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+        os.replace(temp, path)
+
+    publish(pgm_path, pgm)
     yaml_text = (f"image: {base}.pgm\nmode: trinary\nresolution: {cell:g}\n"
                  f"origin: [{origin[0]:.4f}, {origin[1]:.4f}, 0.0]\nnegate: 0\n"
                  "occupied_thresh: 0.65\nfree_thresh: 0.25\n")
-    yaml_path.write_text(yaml_text)
+    publish(yaml_path, yaml_text.encode())  # last: a map with its YAML is a complete map
     total = max(1, sum(counts.values()))
     if counts["unknown"] > 0.5 * total:
         warn = (f"{counts['unknown'] * 100 // total}% of the map is unknown (not reachable from start "
@@ -638,7 +821,8 @@ def occupancy_map(scene, stage, a):
         warn = "No occupied cells reached from start: nothing with a collider intersects the z slice there."
     else:
         warn = None
-    return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=dims.x, height=dims.y, resolution=cell,
+    raised = {"z_used": [round(z_low, 4), z[1]], "z_note": slice_bottom_note(cell)} if z_low != z[0] else {}
+    return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=width, height=height, resolution=cell, **raised,
                 origin=[round(origin[0], 4), round(origin[1], 4), 0.0], cells=counts, yaml_text=yaml_text,
                 **({"warning": warn} if warn else {}),
                 usage="ros2 launch nav2_bringup localization_launch.py map:=<yaml> use_sim_time:=true")

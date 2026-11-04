@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -453,3 +454,18 @@ def test_project_venv_rule_ranks_below_the_conventional_rules(world):
     repo_env = make_env(world.repo / ".venv", sim="6.2.0.0")
     first = find(world)[0]
     assert first["path"] == str(repo_env) and first["source"] == "repo-venv"
+
+
+def test_run_sh_autodetects_when_stderr_is_a_socket(world):
+    # Opening /dev/stderr fails on a socket (journald, some CI), which used to lose the detected interpreter.
+    shim = world.tmp / "shim"
+    shim.mkdir(exist_ok=True)
+    (shim / "python3").write_text(f'#!/bin/sh\necho {world.tmp}/found/bin/python\n')
+    (shim / "python3").chmod(0o755)
+    env = {"HOME": str(world.home), "PATH": f"{shim}:/usr/bin:/bin", "ISAAC_MCP_PRINT_PYTHON": "1"}
+    ours, theirs = socket.socketpair()
+    with ours, theirs:
+        r = subprocess.run(["bash", str(world.repo / "run.sh")], stdout=subprocess.PIPE, stderr=theirs,
+                           text=True, env=env, cwd=str(world.tmp))
+    assert r.returncode == 0
+    assert r.stdout == f"{world.tmp}/found/bin/python\n"

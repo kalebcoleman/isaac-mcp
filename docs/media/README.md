@@ -43,7 +43,7 @@ release (3129287 bytes, SHA-256
 `fb864cfa1d5aceaa61aed501494bf626bc58c758f5e2cd66fa9417e3296a360e`).
 A [standalone MP4 attachment](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-62w-2fdf-full-ur-video.mp4)
 now exists in the same **unpublished draft**; its remote size and SHA-256 matched the original.
-It is not publicly accessible. The README thumbnail therefore opens this page, where access
+It is not publicly accessible, so the README does not link to it. The README thumbnail therefore opens this page, where access
 requirements are explicit, rather than promising a public player. Authorized repository reviewers can obtain the bundle:
 
 ```bash

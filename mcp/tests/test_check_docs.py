@@ -195,3 +195,51 @@ def test_skill_scene_names_are_checked_when_catalogs_exist(tmp_path):
     finally:
         check_docs.ROOT = original
     assert errors == ["SKILL.md: names not in registry: sim__bogus"]
+
+
+def _with_stale_readme_total():
+    text = (ROOT / "README.md").read_text()
+    match = re.search(r"lists \*\*(\d+) tools\*\*", text)
+    return text.replace(match.group(0), f"lists **{int(match.group(1)) + 1} tools**")
+
+
+def test_readme_counts_match_the_code():
+    errors = []
+    check_docs.check_readme_counts(errors)
+    assert errors == []
+
+
+def test_stale_readme_total_is_reported():
+    errors = []
+    check_docs.check_readme_counts(errors, text=_with_stale_readme_total())
+    assert any("README.md: says" in error for error in errors)
+
+
+def test_stale_tool_reference_is_reported(tmp_path, monkeypatch):
+    import sys
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    sys.modules.pop("gen_tool_reference", None)
+    import gen_tool_reference
+    monkeypatch.setattr(gen_tool_reference, "OUTPUT", tmp_path / "TOOLS-ARGUMENTS.md")
+    errors = []
+    check_docs.check_tool_reference(errors)
+    assert any("TOOLS-ARGUMENTS.md is stale" in error for error in errors)
+    (tmp_path / "TOOLS-ARGUMENTS.md").write_text(gen_tool_reference.render())
+    errors = []
+    check_docs.check_tool_reference(errors)
+    assert errors == []
+
+
+def test_stale_readme_row_is_reported():
+    text = (ROOT / "README.md").read_text().replace("| UR5e digital twin | 23 |", "| UR5e digital twin | 99 |")
+    errors = []
+    check_docs.check_readme_counts(errors, text=text)
+    assert any("'UR5e digital twin' row" in error for error in errors)
+
+
+def test_generic_count_catches_a_stale_page_and_passes_the_real_ones():
+    errors = []
+    check_docs.check_generic_counts(errors)
+    assert errors == []
+    check_docs.check_generic_counts(errors, pages={"x.md": "the 54-tool pack and 40 generic tools"}, generic=55)
+    assert len(errors) == 2

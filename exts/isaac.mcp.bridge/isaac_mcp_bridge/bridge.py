@@ -27,6 +27,7 @@ import hmac
 import inspect
 import json
 import os
+import stat
 import re
 import socket
 import struct
@@ -369,6 +370,8 @@ class McpBridge:
         self._owner_tools: Dict[str, Set[str]] = {}    # owner_id -> canonical names
         self._owner_windows: Dict[str, Set[str]] = {}  # owner_id -> omni.ui window titles
         self._in_flight: Dict[str, int] = {}           # owner_id -> live dispatch count
+        self._tools_running: Dict[str, int] = {}       # canonical name -> live dispatch count
+        self._tools_finished: Dict[str, float] = {}    # canonical name -> monotonic finish time
         self._owner_drain_callbacks: Dict[str, List[Callable[[], None]]] = {}
         self._owner_cleanup_active: Set[str] = set()
         # REQUEST ADMISSION (see `_submit`). A socket request is either started at once or kept
@@ -686,6 +689,14 @@ class McpBridge:
                 return reason
         return None
 
+    def tool_activity(self, recent_s: float = 2.0) -> Dict[str, bool]:
+        """Tools running now (True) or finished within *recent_s* (False): Kit can deliver stage and
+        timeline events on a later update than the call that caused them."""
+        cutoff = time.monotonic() - recent_s
+        with self._lock:
+            recent = {name: False for name, finished in self._tools_finished.items() if finished >= cutoff}
+            return {**recent, **{name: True for name, count in self._tools_running.items() if count > 0}}
+
     async def dispatch(self, name: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """One call from a caller that is ALREADY a coroutine on the main loop.
 
@@ -765,6 +776,7 @@ class McpBridge:
             owner_id = tool.owner_id
             handler = tool.definition.handler
             self._in_flight[owner_id] = self._in_flight.get(owner_id, 0) + 1
+            self._tools_running[name] = self._tools_running.get(name, 0) + 1
 
         try:
             if inspect.iscoroutinefunction(handler):
@@ -807,6 +819,8 @@ class McpBridge:
             finalize_after_callbacks = False
             with self._lock:
                 self._in_flight[owner_id] = max(0, self._in_flight.get(owner_id, 1) - 1)
+                self._tools_running[name] -= 1
+                self._tools_finished[name] = time.monotonic()
                 if owner_id in self._draining and self._in_flight[owner_id] == 0:
                     callbacks, finalize_after_callbacks = self._prepare_owner_drain_locked(owner_id)
             self._run_owner_drain_callbacks(owner_id, callbacks, finalize_after_callbacks)
@@ -1887,12 +1901,19 @@ def _app_identity() -> Dict[str, Any]:
 def _write_portfile(host: str, port: int) -> None:
     """Best-effort advertisement; never fatal."""
     try:
-        os.makedirs(_runtime_dir(), exist_ok=True)
+        folder = _runtime_dir()
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        if hasattr(os, "getuid"):  # /tmp/isaac-mcp-<uid> is a predictable name another local user could create first
+            info = os.lstat(folder)
+            if info.st_uid != os.getuid() or not stat.S_ISDIR(info.st_mode):
+                raise OSError(f"{folder} is not a directory owned by this user")
+            os.chmod(folder, 0o700)
         _sweep_stale_portfiles()
         dial_host = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
         payload = {"pid": os.getpid(), "port": port, "host": dial_host,
                    "started": time.time(), **_app_identity()}
-        with open(_portfile_path(port), "w") as f:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_NONBLOCK
+        with os.fdopen(os.open(_portfile_path(port), flags, 0o600), "w") as f:
             json.dump(payload, f)
         # Cleanup is layered — no single hook covers every exit path:
         #   stop()   -> removes on graceful extension shutdown;
@@ -1931,6 +1952,8 @@ def _sweep_stale_portfiles() -> None:
             continue
         path = os.path.join(_runtime_dir(), name)
         try:
+            if not stat.S_ISREG(os.lstat(path).st_mode):  # opening a FIFO here would hang Kit's startup
+                raise OSError("not a regular file")
             with open(path) as f:
                 info = json.load(f)
             if not _valid_portfile(name, info):

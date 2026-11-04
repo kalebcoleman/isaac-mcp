@@ -11,6 +11,14 @@ from urllib.parse import unquote, urlparse
 from pxr import Sdf, Usd, UsdPhysics, UsdUtils
 
 
+def _composition_errors(stage):
+    """USD 24.05 (Isaac Sim 5.1) has no Stage.GetCompositionErrors."""
+    native = getattr(stage, "GetCompositionErrors", None)
+    if native is not None:
+        return native()
+    return [error for prim in stage.TraverseAll() for error in prim.GetPrimIndex().localErrors]
+
+
 def scene_description(stage):
     scenes = []
     for index, prim in enumerate(stage.TraverseAll()):
@@ -35,7 +43,7 @@ def export_checkpoint(stage, target):
     target = Path(target)
     if target.exists() or target.is_symlink():
         raise FileExistsError(f"Checkpoint already exists; choose a new destination: {target.name}")
-    if stage.GetCompositionErrors():
+    if _composition_errors(stage):
         raise ValueError("Checkpoint source has composition errors")
     description = scene_description(stage)
     path = Sdf.Path(description["path"])
@@ -131,7 +139,7 @@ def export_checkpoint(stage, target):
         if not output.Export(temporary):
             raise RuntimeError("Checkpoint export failed")
         reopened = Usd.Stage.Open(temporary)
-        if not reopened or reopened.GetCompositionErrors() or scene_description(reopened) != description:
+        if not reopened or _composition_errors(reopened) or scene_description(reopened) != description:
             raise ValueError("Checkpoint does not preserve the single typed PhysicsScene")
         # Sdf traversal also sees inactive descendants and variant opinions;
         # composed traversal alone would miss retained reference contributions.
