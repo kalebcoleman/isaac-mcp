@@ -267,6 +267,7 @@ def test_a_missing_output_root_refuses_rather_than_raises(tmp_path):
     (("uint", 1, 0, "execution"), ("uint", 1, 0, "none"), "execution"),
     (("float", 3, 0, "none"), ("float", 1, 0, "none"), "tuple"),
     (("token", 1, 0, "none"), ("double", 1, 0, "none"), "text"),
+    (("uchar", 1, 1, "none"), ("token", 1, 0, "none"), "array"),  # raw bytes, not text
 ])
 def test_type_mismatch_names_a_wire_kit_would_only_warn_about(source, target, why):
     assert why in gb.type_mismatch(source, target)
@@ -277,6 +278,8 @@ def test_type_mismatch_names_a_wire_kit_would_only_warn_about(source, target, wh
     (("float", 3, 0, "none"), ("double", 3, 0, "vector")),  # widths convert, and roles other than execution don't matter
     (("unknown", 1, 0, "none"), ("float", 1, 1, "none")),  # an extended port resolves when connected
     (("token", 1, 0, "none"), ("string", 1, 0, "none")),
+    (("token", 1, 0, "none"), ("uchar", 1, 1, "text")),  # how OmniGraph models string; measured on 6.0.0.0
+    (("uchar", 1, 1, "text"), ("token", 1, 0, "none")),
 ])
 def test_type_mismatch_leaves_compatible_wires_alone(source, target):
     assert gb.type_mismatch(source, target) is None

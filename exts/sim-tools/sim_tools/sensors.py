@@ -446,6 +446,22 @@ def read(sensor):
     return data, info
 
 
+LIDAR_SCAN_WAIT_FRAMES, LIDAR_SCAN_WAIT_S = 60, 1.5
+
+
+def lidar_has_data(sensor):
+    """Whether the annotator holds any points now. Never refuses: the read that follows does that."""
+    annotator = sensor.get("annotator")
+    if annotator is None:
+        return True
+    try:
+        data = annotator.get_data(device="cpu", do_array_copy=False)
+    except Exception:  # noqa: BLE001 - the read that follows reports this properly
+        return True
+    data = data.get("data") if isinstance(data, dict) else data
+    return data is not None and getattr(data, "size", 0) > 0
+
+
 def lidar_points(sensor, limit):
     import numpy as np
 

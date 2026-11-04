@@ -29,8 +29,10 @@ STALE_HANDLE_FIX = (
     "Rebuilding the graph reuses the same product. Save a clean copy with reset_camera_render_handles=true and open it "
     "with sim__stage__open, or rebuild the graph with another width/height.")
 STALE_RESCUE = (
-    "With the timeline stopped, call sim__stage__save with a new filename and reset_camera_render_handles=true, then "
-    "sim__stage__open the new file. It has no saved LiDAR handle or runtime pipeline, and Play builds both again.")
+    "Before any Play, with the timeline stopped, call sim__stage__save with a new filename and "
+    "reset_camera_render_handles=true, then sim__stage__open the new file. It has no saved LiDAR handle or runtime "
+    "pipeline, and Play builds both again. If you already played, open the original again first: on some builds Play adds "
+    "a second product, and the save then refuses.")
 
 
 # A reference or payload to a prim path that does not exist contributes no specs, so it cannot hide a
@@ -199,7 +201,8 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
             if not any(p.HasAttribute("viewportHandle") for p in matches):
                 continue
             if len(matches) != 1:
-                unsupported("Multiple render products match this camera; export cannot guess which one to reset.",
+                unsupported("Multiple render products match this camera; export cannot guess which one to reset. If Play added one "
+                            "to a stale file, open that file again and save before playing.",
                             producer.GetPath(), products=[str(p.GetPath()) for p in matches])
             product = matches[0]
             if any(p.IsInstance() or p.IsInstanceProxy() or p.IsInPrototype()

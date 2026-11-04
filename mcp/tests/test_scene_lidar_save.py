@@ -666,3 +666,8 @@ def test_the_flag_refuses_an_animated_saved_lidar_handle(lidar):
     product.GetAttribute(HANDLE).Set(3, 1.0)
     with pytest.raises(AssetError, match="connected, animated"):
         scene.save(stage, "animated.usda", reset_camera_render_handles=True)
+
+
+def test_rescue_text_says_to_save_before_play():
+    source = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/render_export.py").read_text(encoding="utf-8")
+    assert '"Before any Play, with the timeline stopped' in source

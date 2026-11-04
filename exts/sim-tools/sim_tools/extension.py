@@ -437,6 +437,7 @@ class Extension(omni.ext.IExt):
             )
             return observation, CameraFrame(data, fresh=wait)
         from .camera_capture import wait_for_frames
+        from .sensors import LIDAR_SCAN_WAIT_FRAMES, LIDAR_SCAN_WAIT_S, lidar_has_data
 
         def validate_lidar():
             s.target(args["session_id"], args["stage_id"])
@@ -444,6 +445,13 @@ class Extension(omni.ext.IExt):
                 refuse("SENSOR_INVALIDATED", "Sensor changed while waiting for render.")
 
         observation = await wait_for_frames(texture, validate_lidar)
+        validate_lidar()
+        # A finished render is not always a finished scan: on 6.0.0.0 only about 1 read in 3 found points right after
+        # one. Wait a little for the next scan, then let the read report honestly if there is still none.
+        for _ in range(LIDAR_SCAN_WAIT_FRAMES):
+            if time.monotonic() - begin > LIDAR_SCAN_WAIT_S or lidar_has_data(entry[1]):
+                break
+            await omni.kit.app.get_app().next_update_async()
         validate_lidar()
         return {
             "waited": True,

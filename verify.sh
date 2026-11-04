@@ -42,7 +42,7 @@ fi
 # Version agreement rule (§3):
 # Asserts importlib.metadata.version("isaacsim") matches in whichever interpreter the twin is launched with.
 EXPECTED_VER="${VERIFY_SIM_VERSION:-6.2.0.0}"
-. "$(dirname "$0")/scripts/isaac_ros_libs.sh"
+. "$ROOT/scripts/isaac_ros_libs.sh"
 ISAAC_VER="$(isaac_sim_version "$PY")"
 if [ "$ISAAC_VER" != "$EXPECTED_VER" ]; then
   echo "FAIL: $PY has isaacsim version '${ISAAC_VER:-unknown}', expected '$EXPECTED_VER' (set VERIFY_SIM_VERSION for another build)" >&2

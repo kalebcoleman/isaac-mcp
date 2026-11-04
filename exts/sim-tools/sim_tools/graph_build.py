@@ -209,7 +209,14 @@ def type_shape(og_type):
     return name(og_type.base_type), og_type.tuple_count, og_type.array_depth, name(og_type.role)
 
 
-TEXT_TYPES = {"token", "string", "path", "uchar"}
+TEXT_TYPES = {"token", "string", "path"}
+TEXT_ROLES = {"text", "path"}
+
+
+def _as_text(shape):
+    """OmniGraph models string as uchar[] with a text role, and connects it to token, so count it as one text value."""
+    base, tuples, depth, role = shape
+    return ("token", tuples, 0, role) if base == "uchar" and depth == 1 and role in TEXT_ROLES else shape
 
 
 def type_mismatch(source, target):
@@ -217,6 +224,7 @@ def type_mismatch(source, target):
     pass, and an extended ("any") port has no base type until it is connected, so it passes too."""
     if "unknown" in (source[0], target[0]):
         return None
+    source, target = _as_text(source), _as_text(target)
     if (source[3] == "execution") != (target[3] == "execution"):
         return "one is an execution port and the other carries data"
     if source[2] != target[2]:
