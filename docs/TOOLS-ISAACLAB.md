@@ -289,9 +289,13 @@ arguments. Isaac Lab itself is not modified, and `isaaclab__play` still runs the
   step across all parallel environments), not summed per-environment steps.
 - If no episode finishes, `episodes` is `0` and the return fields are `null`, with a `note`; no score is
   estimated. A play script that never builds its environment through `gymnasium.make`, or never steps it,
-  likewise produces no score: the runner reports that rather than inventing one. An uncaught error is
+  likewise produces no score: the runner reports that rather than inventing one. A multi-agent environment
+  whose base `step` returns a per-agent reward dict is also reported as unscoreable. An uncaught error is
   written into the result and still fails the job. A job killed by `timeout_s` or `runs_cancel` may leave
   no result at all.
+- A training log's mean reward is a different measurement: it usually covers a recent window of rollouts,
+  often with stochastic actions, while eval runs the saved policy deterministically. Expect a gap in either
+  direction; use `eval_result` when the question is how good the saved policy is.
 
 Measured on Isaac Lab 2.3.2 with Isaac Sim 5.1 and `Isaac-Cartpole-v0` for `rsl_rl`, `rl_games`, `skrl` and `sb3`:
 eval returned scores for early and trained checkpoints, and the trained checkpoint scored clearly higher.

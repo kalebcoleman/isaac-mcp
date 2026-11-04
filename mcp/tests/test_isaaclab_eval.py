@@ -188,6 +188,19 @@ def test_runner_stops_a_play_loop_through_is_running_and_closes_cleanly():
     assert env.closed is True and app.closed is True
 
 
+def test_result_is_published_at_stop_before_a_close_that_may_end_the_process(tmp_path):
+    target = tmp_path / "eval_result.json"
+    scorer = eval_runner.Scorer(num_episodes=1, max_steps=None)
+    hooks = eval_runner._Hooks(scorer, str(target))
+    env = FakeEnv([(3.0, True, False, {})])
+    hooks.wrap_env(env)
+    env.step(0)
+    # The target was met during the step, so a reader already has the file even if app.close() exits first.
+    data = json.loads(target.read_text())
+    assert data["episodes"] == 1 and data["mean_return"] == 3.0
+    assert data["stopped_by"] == "episodes"
+
+
 def test_atomic_write_leaves_one_complete_file_and_no_temporary(tmp_path):
     target = tmp_path / "eval_result.json"
     eval_runner._write_atomic(target, {"episodes": 3, "mean_return": 1.5})
@@ -208,6 +221,7 @@ def test_command_building_keeps_play_arguments_after_the_runner_options():
     assert command[command.index("--episodes") + 1] == "7"
     assert command[command.index("--max-steps") + 1] == "900"
     assert command[command.index("--play") + 1].endswith("play.py")
+    assert command[command.index("--play") + 2] == "--"
     assert command[-4:] == ["--task", "Isaac-Cartpole-v0", "--checkpoint", "/lab/model.pt"]
 
 

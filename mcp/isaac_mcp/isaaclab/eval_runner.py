@@ -49,13 +49,21 @@ def _to_list(value):
                 value = method_fn()
             except Exception:  # noqa: BLE001 - a duck-typed tensor may refuse one
                 pass
-    for method in ("numpy", "tolist"):
+    for method in ("tolist", "numpy"):
         method_fn = getattr(value, method, None)
         if callable(method_fn):
             try:
-                return method_fn()
+                result = method_fn()
             except Exception:  # noqa: BLE001
                 continue
+            if method == "numpy":
+                inner = getattr(result, "tolist", None)
+                if callable(inner):
+                    try:
+                        return inner()
+                    except Exception:  # noqa: BLE001
+                        pass
+            return result
     return value
 
 
@@ -298,6 +306,7 @@ def build_command(python: str, play_script: str, play_args: list[str], output: s
         "--max-steps", str(int(max_steps) if max_steps else 0),
         "--output", str(output),
         "--play", str(play_script),
+        "--",
         *[str(arg) for arg in play_args],
     ]
 
@@ -305,12 +314,31 @@ def build_command(python: str, play_script: str, play_args: list[str], output: s
 class _Hooks:
     """State for the patched environment, launcher and simulation app."""
 
-    def __init__(self, scorer: Scorer):
+    def __init__(self, scorer: Scorer, output: str | None = None):
         self.scorer = scorer
+        self.output = Path(output) if output else None
         self.env = None
         self.app = None
         self.env_closed = False
         self.app_closed = False
+        self.failure: str | None = None
+
+    def publish(self) -> None:
+        """Write the result now. Isaac Sim's close can end the process without running our ``finally``."""
+        if self.output is None:
+            return
+        try:
+            _write_atomic(self.output, self.scorer.result(note=self._note(), error=self.failure))
+        except Exception as exc:  # noqa: BLE001 - never mask the real run
+            print(f"[isaac-mcp-eval] could not write {self.output}: {exc}", file=sys.stderr)
+
+    def _note(self) -> str | None:
+        if self.failure and self.scorer.steps and self.scorer.completed:
+            return ("The run ended with an error after the episodes above; those returns are real, but the run did "
+                    "not finish normally.")
+        if self.failure:
+            return "The run ended with an error before scoring anything, so there is no score."
+        return self.scorer._default_note()
 
     def wrap_env(self, env) -> None:
         if getattr(env, "_isaac_mcp_eval_wrapped", False):
@@ -332,6 +360,7 @@ class _Hooks:
             reason = self.scorer.decide()
             if reason:
                 self.scorer.stop(reason)
+                self.publish()
             return result
 
         def reset(*args, **kwargs):
@@ -340,6 +369,7 @@ class _Hooks:
 
         def close(*args, **kwargs):
             self.env_closed = True
+            self.publish()
             if original_close is not None:
                 return original_close(*args, **kwargs)
             return None
@@ -369,6 +399,7 @@ class _Hooks:
         if callable(original_close):
             def close(*args, **kwargs):
                 self.app_closed = True
+                self.publish()
                 return original_close(*args, **kwargs)
 
             app.close = close
@@ -454,7 +485,7 @@ def main(argv: list[str] | None = None) -> int:
     if play_args and play_args[0] == "--":
         play_args = play_args[1:]
     scorer = Scorer(num_episodes=args.episodes, max_steps=args.max_steps or None)
-    hooks = _Hooks(scorer)
+    hooks = _Hooks(scorer, args.output)
     failure = None
     try:
         _prepare()
@@ -475,22 +506,13 @@ def main(argv: list[str] | None = None) -> int:
         failure = f"{type(exc).__name__}: {exc}"
         raise
     finally:
-        hooks.close()
+        hooks.failure = failure
         if failure and not scorer.finished:
             scorer.stop("error")
         elif not scorer.finished:
             scorer.stop("play_exited")
-        if failure and scorer.steps and scorer.completed:
-            note = ("The run ended with an error after the episodes above; those returns are real, but the run did "
-                    "not finish normally.")
-        elif failure:
-            note = "The run ended with an error before scoring anything, so there is no score."
-        else:
-            note = None
-        try:
-            _write_atomic(Path(args.output), scorer.result(note=note, error=failure))
-        except Exception as exc:  # noqa: BLE001 - a missing result is better than masking the real error
-            print(f"[isaac-mcp-eval] could not write {args.output}: {exc}", file=sys.stderr)
+        hooks.close()
+        hooks.publish()
     return 0
 
 
