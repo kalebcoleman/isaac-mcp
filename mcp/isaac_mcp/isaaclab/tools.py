@@ -195,10 +195,10 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
 
     @mcp.tool(name="isaaclab__runs_status", annotations=DESTRUCTIVE)
     def isaaclab_runs_status(job_id: _JobId) -> str:
-        """State, exit code, elapsed time, last log lines and newest checkpoint of a job. For a windowed
-        job also `window` (id, title, size): pass its id to screenshot(window_id=...) or
-        start_screen_recording(window_id=...) to see the result. Reconciles orphaned jobs by
-        updating their stored metadata."""
+        """State, exit code, elapsed time, last log lines, newest checkpoint and, for an eval job, its
+        `eval_result` score once written. For a windowed job also `window` (id, title, size): pass its id to
+        screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result. Reconciles
+        orphaned jobs by updating their stored metadata."""
         def status() -> dict:
             st = _jobs.runs_status(job_id)
             if st.get("pid_alive"):
