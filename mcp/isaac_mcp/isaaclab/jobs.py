@@ -680,10 +680,13 @@ def _checkpoint_from_log(log_path: Path) -> str | None:
     return None
 
 
+_BAR_GLYPHS = ("|", "\u2501", "\u2588", "\u258f", "\u258c", "\u2590")
+
+
 def _progress_bar_only(text: str) -> bool:
-    """A line that is only a progress bar (tqdm, skrl and stable-baselines3 render these)."""
+    """A line that is only a progress bar (tqdm, skrl, stable-baselines3 and rich render these)."""
     line = text.strip()
-    if "|" not in line or not line.endswith("]"):
+    if not line.endswith("]") or not any(glyph in line for glyph in _BAR_GLYPHS):
         return False
     return bool(re.search(r"(\d+%|\d+(?:\.\d+)?/\d+(?:\.\d+)?)\s*\[[^\]]*\]\s*$", line))
 

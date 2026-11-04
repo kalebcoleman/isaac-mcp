@@ -106,6 +106,7 @@ def test_tail_keeps_the_last_carriage_return_text_and_drops_bars(tmp_path):
         "start\n"
         "10%|#         | 10/100 [00:01<00:09, 10.0it/s]\r100%|##########| 100/100 [00:10<00:00, 10.0it/s]\n"
         "|    | 0/500 [00:00<?, ?it/s]\n"
+        " 100% \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 64/64  [ 0:00:00 < 0:00:00 , 321 it/s ]\n"
         "loading\rtooled\n"
         "done\n"
     )

@@ -225,3 +225,10 @@ def test_map_slice_rises_past_a_floor_only_while_nothing_is_occupied():
     assert graph.raised_slice(0.05, 0.3, 0.05, 12, 0) is None  # a real map: leave it alone
     assert graph.raised_slice(0.05, 0.3, 0.05, 0, graph.FLOOR_RETRIES) is None
     assert graph.raised_slice(0.28, 0.3, 0.05, 0, 0) is None  # no room left in the slice
+
+
+def test_raised_slice_note_does_not_claim_lower_geometry_is_never_mapped():
+    note = graph.slice_bottom_note(0.05)
+    assert "before 2.3.3" in note and "0.05" in note
+    assert "anything lower" not in note.lower()
+    assert "still include colliders below" in note

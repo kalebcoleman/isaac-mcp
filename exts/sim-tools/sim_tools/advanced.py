@@ -105,8 +105,15 @@ def articulation_joints(stage, root, limit):
     bodies, in stage order. ``root`` may be the articulation's root joint, a link that carries the
     articulation API, or the prim holding all of them. A joint excluded from the articulation is left
     out, and so is another articulation under the same parent."""
-    parent = root.GetParent()
-    scan = stage.GetPseudoRoot() if parent.IsPseudoRoot() else parent
+    if root.IsA(UsdPhysics.Joint):
+        # A root joint is a leaf under the joints' own folder: its siblings are the articulation's.
+        parent = root.GetParent()
+        scan = stage.GetPseudoRoot() if parent.IsPseudoRoot() else parent
+    else:
+        # A link's joints can sit in a sibling folder (a URDF import puts them under
+        # <robot>/Asset/Physics while the bodies are under <robot>/Asset/Geometry), so look at the
+        # whole stage. The body walk below still keeps other articulations out.
+        scan = stage.GetPseudoRoot()
     found, truncated = [], False
     for count, prim in enumerate(Usd.PrimRange(scan)):
         if count >= MAX_ARTICULATION_SCAN_PRIMS:
