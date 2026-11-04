@@ -1183,3 +1183,12 @@ def test_disabling_a_saved_graph_also_stops_it_at_runtime():
     assert calls == [True]
     ros2.disable_runtime_graph(object(), "/Graph/x")  # no such API on this build: not an error
     assert calls == [True]
+
+
+def test_a_clock_on_another_topic_is_not_treated_as_this_stages_clock():
+    # plan_clock only counts a publisher on /clock, so a user's clock on /s61clock leaves ours in place.
+    other = dict(node="/World/C/clock", publishes="/s61clock", tool=False)
+    plan = ros2.plan_clock("auto", [other])
+    assert plan["publish"] is True and plan["foreign"] == []
+    source = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/ros2.py").read_text(encoding="utf-8")
+    assert 'kind = resolved_topic(topic, value("inputs:nodeNamespace")) if topic else kind' in source

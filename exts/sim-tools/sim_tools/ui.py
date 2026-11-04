@@ -367,6 +367,10 @@ def find(a):
 
     import omni.ui as ui
 
+    from .graph import _headless
+
+    if _headless():  # no layout to report, and walking every widget took about 38 s per call on 6.1
+        raise UIRefusal("NO_UI", "This Kit has no application window (headless); finding widgets needs a windowed Isaac Sim.")
     query = a.get("query", "") or ""
     window = a.get("window", "") or ""
     limit = a.get("limit", 40)

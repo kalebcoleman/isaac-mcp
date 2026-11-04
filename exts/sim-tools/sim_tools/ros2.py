@@ -380,6 +380,10 @@ def other_ros2_publishers(own_graph):
         for node in graph.get_nodes():
             kind = PUBLISHER_KINDS.get(node.get_type_name().rsplit(".", 1)[-1])
             if kind:
+                if kind == "/clock":  # a clock on another topic is not this stage's /clock
+                    value = lambda name: (node.get_attribute(name).get() if node.get_attribute_exists(name) else "")
+                    topic = value("inputs:topicName")
+                    kind = resolved_topic(topic, value("inputs:nodeNamespace")) if topic else kind
                 found.append(dict(node=node.get_prim_path(), publishes=kind,
                                   tool=path == GRAPH_PATH or path.startswith(GRAPH_PATH + "_")))
     return found

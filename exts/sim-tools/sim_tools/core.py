@@ -1088,7 +1088,7 @@ class Scene:
         ):
             refuse(
                 "INVALID_OUTPUT",
-                "Use a simple basename ending .usda (<=65 characters).",
+                "Use a simple name of letters, digits, _ and -, ending .usda (<=65 characters). No spaces or folders; use directory for a folder.",
             )
         from .render_export import camera_handles, reset_export_handles, restore_export_camera_targets, save_report
 
