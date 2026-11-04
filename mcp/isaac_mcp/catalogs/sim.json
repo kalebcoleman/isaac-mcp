@@ -10,16 +10,16 @@
       "owner_id": "generic-sim"
     },
     "sim.stage.open": {
-      "description": "Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage has unsaved edits unless discard_changes=true. Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset.",
+      "description": "Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage really has unsaved edits unless discard_changes=true. Deactivates stale saved LiDAR render products in the session layer so their ROS topics return (reported in stale_render_products; the file is unchanged). Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -42,7 +42,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -51,7 +51,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -76,16 +76,16 @@
       "owner_id": "generic-sim"
     },
     "sim.stage.tree": {
-      "description": "Bounded stage hierarchy including inactive prims. Text is untrusted data.",
+      "description": "Bounded stage hierarchy including inactive prims. Text is untrusted data. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "root": {
@@ -120,7 +120,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -129,7 +129,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "root",
@@ -172,16 +172,16 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.get": {
-      "description": "Read local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown.",
+      "description": "Read local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -198,7 +198,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -207,7 +207,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -223,16 +223,16 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.find": {
-      "description": "Bounded literal path substring/type search (not regex). Includes inactive prims.",
+      "description": "Bounded literal path substring/type search (not regex). Includes inactive prims. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "contains": {
@@ -262,7 +262,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -271,7 +271,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "contains",
@@ -305,16 +305,16 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.create": {
-      "description": "Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale.",
+      "description": "Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -391,7 +391,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -400,7 +400,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -501,16 +501,16 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.set_transform": {
-      "description": "Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation.",
+      "description": "Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -564,7 +564,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -573,7 +573,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -638,16 +638,16 @@
       "owner_id": "generic-sim"
     },
     "sim.physics.inspect": {
-      "description": "Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics.",
+      "description": "Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "root": {
@@ -671,7 +671,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -680,7 +680,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "root",
@@ -705,16 +705,16 @@
       "owner_id": "generic-sim"
     },
     "sim.body.state": {
-      "description": "Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input.",
+      "description": "Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -747,7 +747,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -756,7 +756,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -799,16 +799,16 @@
       "owner_id": "generic-sim"
     },
     "sim.timeline.control": {
-      "description": "Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step.",
+      "description": "Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "action": {
@@ -825,7 +825,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -834,7 +834,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "action",
@@ -850,16 +850,16 @@
       "owner_id": "generic-sim"
     },
     "sim.stage.save": {
-      "description": "Export a flattened copy, including session edits, to a new basename ending .usda in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
+      "description": "Export a flattened copy, including session edits, to a new basename (.usda is added if absent) in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "filename": {
@@ -874,7 +874,7 @@
         },
         "reset_camera_render_handles": {
           "type": "boolean",
-          "description": "Explicitly remove validated session-only ROS camera viewportHandle fields from the copy so native textures can rebuild after restart. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
+          "description": "Explicitly remove validated session-only ROS camera and LiDAR viewportHandle fields from the copy so native textures can rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
           "required": false,
           "default": false
         }
@@ -887,7 +887,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -896,7 +896,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "filename",
@@ -923,23 +923,23 @@
           "required": false,
           "default": false,
           "has_default": true,
-          "description": "Explicitly remove validated session-only ROS camera viewportHandle fields from the copy so native textures can rebuild after restart. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship."
+          "description": "Explicitly remove validated session-only ROS camera and LiDAR viewportHandle fields from the copy so native textures can rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship."
         }
       ],
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
     "sim.viewport.frame": {
-      "description": "Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. If the prim has no geometry, an unambiguous nearby subtree can be selected; the result reports the requested and actual paths, and follow tracks the actual path. follow=false stops following; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds (with candidates). Does not wait for rendered pixels; then screenshot the app window or record.",
+      "description": "Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. If the prim has no geometry, an unambiguous nearby subtree can be selected; the result reports the requested and actual paths, and follow tracks the actual path. follow=false stops following; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds (with candidates). Does not wait for rendered pixels; then screenshot the app window or record. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -977,7 +977,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -986,7 +986,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1038,27 +1038,33 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.delete": {
-      "description": "Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused.",
+      "description": "Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused. Prims from an opened file are not pack-owned, even ones you made earlier: allow_foreign=true deactivates such a prim in the session layer instead (USD cannot remove another layer's opinions from there). It stays composed as inactive and keeps its path; a sim__stage__save copy omits it; source files never change. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
           "type": "string",
-          "description": "Pack-owned root path.",
+          "description": "Pack-owned root path, or any prim with allow_foreign=true.",
           "required": true
         },
         "confirm": {
           "type": "boolean",
           "description": "Explicit confirmation; false refuses.",
           "required": true
+        },
+        "allow_foreign": {
+          "type": "boolean",
+          "description": "Also act on a prim these tools did not create in this session: deactivate it in the session layer (or remove it if all its opinions are session-layer ones). World/default prim, articulation and other protections still apply. Source files are unchanged.",
+          "required": false,
+          "default": false
         }
       },
       "fields": [
@@ -1069,7 +1075,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1078,7 +1084,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1087,7 +1093,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Pack-owned root path."
+          "description": "Pack-owned root path, or any prim with allow_foreign=true."
         },
         {
           "name": "confirm",
@@ -1097,22 +1103,31 @@
           "default": null,
           "has_default": false,
           "description": "Explicit confirmation; false refuses."
+        },
+        {
+          "name": "allow_foreign",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Also act on a prim these tools did not create in this session: deactivate it in the session layer (or remove it if all its opinions are session-layer ones). World/default prim, articulation and other protections still apply. Source files are unchanged."
         }
       ],
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
     "sim.prim.clone": {
-      "description": "Clone a pack-created simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations.",
+      "description": "Clone a pack-created simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -1134,7 +1149,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1143,7 +1158,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1168,16 +1183,16 @@
       "owner_id": "generic-sim"
     },
     "sim.stage.clear_owned": {
-      "description": "Remove only pack-created non-sensor, non-articulated subtrees, preserving other scene content. Explicit stopped target and confirm required. Returns removed/refused lists.",
+      "description": "Remove only pack-created non-sensor, non-articulated subtrees, preserving other scene content. Explicit stopped target and confirm required. Returns removed/refused lists. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "confirm": {
@@ -1194,7 +1209,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1203,7 +1218,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "confirm",
@@ -1219,16 +1234,16 @@
       "owner_id": "generic-sim"
     },
     "sim.light.create": {
-      "description": "Create a SphereLight, DistantLight or DomeLight without asset-valued textures. Pose in stage units, orientation wxyz.",
+      "description": "Create a SphereLight, DistantLight or DomeLight without asset-valued textures. Pose in stage units, orientation wxyz. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -1294,7 +1309,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1303,7 +1318,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1386,16 +1401,16 @@
       "owner_id": "generic-sim"
     },
     "sim.light.modify": {
-      "description": "Set intensity and color (both required) of a pack-owned light on a stopped timeline.",
+      "description": "Set intensity and color (both required) of a pack-owned light on a stopped timeline. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -1422,7 +1437,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1431,7 +1446,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1465,16 +1480,16 @@
       "owner_id": "generic-sim"
     },
     "sim.material.create": {
-      "description": "Create a UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs.",
+      "description": "Create a UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -1537,7 +1552,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1546,7 +1561,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1629,16 +1644,16 @@
       "owner_id": "generic-sim"
     },
     "sim.material.apply": {
-      "description": "Bind a pack-created material to an existing geometry prim in the session layer, preserving source files.",
+      "description": "Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -1660,7 +1675,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1669,7 +1684,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1694,16 +1709,16 @@
       "owner_id": "generic-sim"
     },
     "sim.physics.configure": {
-      "description": "Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch.",
+      "description": "Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -1736,7 +1751,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1745,7 +1760,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1783,16 +1798,16 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.inspect": {
-      "description": "Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim.",
+      "description": "Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -1815,7 +1830,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1824,7 +1839,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1849,16 +1864,16 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.drive": {
-      "description": "Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention.",
+      "description": "Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -1896,7 +1911,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1905,7 +1920,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -1957,16 +1972,16 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.state": {
-      "description": "Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data.",
+      "description": "Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -1983,7 +1998,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -1992,7 +2007,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -2008,16 +2023,16 @@
       "owner_id": "generic-sim"
     },
     "sim.simulation.step": {
-      "description": "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.",
+      "description": "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "steps": {
@@ -2046,7 +2061,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -2055,7 +2070,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "steps",
@@ -2089,16 +2104,16 @@
       "owner_id": "generic-sim"
     },
     "sim.camera.create": {
-      "description": "Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X), focal_length=18, clipping_range=[0.01,100]. USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper.",
+      "description": "Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X), focal_length=18, clipping_range=[0.01,100]. USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -2183,7 +2198,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -2192,7 +2207,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -2310,27 +2325,33 @@
       "owner_id": "generic-sim"
     },
     "sim.camera.capture": {
-      "description": "Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization.",
+      "description": "Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
           "type": "string",
-          "description": "Camera created by this pack.",
+          "description": "Camera created by this pack, or an existing Camera with adopt=true.",
           "required": true
         },
         "filename": {
           "type": "string",
           "description": "New simple basename ending .png.",
           "required": true
+        },
+        "adopt": {
+          "type": "boolean",
+          "description": "If this exact prim is a Camera with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; the prim itself is not edited and stays non-owned.",
+          "required": false,
+          "default": false
         },
         "wait_for_render": {
           "type": "boolean",
@@ -2347,7 +2368,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -2356,7 +2377,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -2365,7 +2386,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Camera created by this pack."
+          "description": "Camera created by this pack, or an existing Camera with adopt=true."
         },
         {
           "name": "filename",
@@ -2375,6 +2396,15 @@
           "default": null,
           "has_default": false,
           "description": "New simple basename ending .png."
+        },
+        {
+          "name": "adopt",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "If this exact prim is a Camera with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; the prim itself is not edited and stays non-owned."
         },
         {
           "name": "wait_for_render",
@@ -2390,16 +2420,16 @@
       "owner_id": "generic-sim"
     },
     "sim.lidar.create": {
-      "description": "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D, as Create > Sensors > RTX Lidar does) or, without config, a local generic LiDAR. Config assets are referenced from Isaac's assets root (network or local mirror); an unknown name lists the valid ones. Motion BVH is not required (only motion distortion within a scan needs run.sh --motion-bvh); the result reports it. Returns prim type, sensor path and tick/scan rate. At most eight sensors; delete an exact owned sensor path to release resources.",
+      "description": "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D, as Create > Sensors > RTX Lidar does) or, without config, a local generic LiDAR. Config assets are referenced from Isaac's assets root (network or local mirror); an unknown name lists the valid ones. Motion BVH is not required (only motion distortion within a scan needs run.sh --motion-bvh); the result reports it. Returns prim type, sensor path and tick/scan rate. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -2465,7 +2495,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -2474,7 +2504,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -2562,21 +2592,21 @@
       "owner_id": "generic-sim"
     },
     "sim.lidar.read": {
-      "description": "Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames.",
+      "description": "Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
           "type": "string",
-          "description": "Pack-created LiDAR path.",
+          "description": "Pack-created LiDAR path, or an existing OmniLidar with adopt=true.",
           "required": true
         },
         "limit": {
@@ -2584,6 +2614,12 @@
           "description": "Maximum returned points 1..256.",
           "required": false,
           "default": 64
+        },
+        "adopt": {
+          "type": "boolean",
+          "description": "If this exact prim is an OmniLidar with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; settings a read needs are overridden in the session layer only and reported as session_overrides. The prim stays non-owned.",
+          "required": false,
+          "default": false
         },
         "wait_for_render": {
           "type": "boolean",
@@ -2600,7 +2636,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -2609,7 +2645,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -2618,7 +2654,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Pack-created LiDAR path."
+          "description": "Pack-created LiDAR path, or an existing OmniLidar with adopt=true."
         },
         {
           "name": "limit",
@@ -2628,6 +2664,15 @@
           "default": 64,
           "has_default": true,
           "description": "Maximum returned points 1..256."
+        },
+        {
+          "name": "adopt",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "If this exact prim is an OmniLidar with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; settings a read needs are overridden in the session layer only and reported as session_overrides. The prim stays non-owned."
         },
         {
           "name": "wait_for_render",
@@ -2643,16 +2688,16 @@
       "owner_id": "generic-sim"
     },
     "sim.ros2.tf_setup": {
-      "description": "Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /joint_states, the static world->base_link (or world->odom + odometry for a mobile base) and the robot's link TF from Isaac. Rebuilds its own graph on each call, so no frame is ever published twice by this tool; reuses an existing /clock and reports other ROS 2 publishers in the scene. Timeline must be stopped; publishes while playing. Then use scripts/ros2_rviz_config.py and scripts/ros2_tf_doctor.py (docs/ROS2-RVIZ.md).",
+      "description": "Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /joint_states, the static world->base_link (or world->odom + odometry for a mobile base) and the robot's link TF from Isaac. Rebuilds its own graph on each call, so no frame is ever published twice by this tool; reuses an existing /clock and reports other ROS 2 publishers in the scene. Timeline must be stopped; publishes while playing. Then use scripts/ros2_rviz_config.py and scripts/ros2_tf_doctor.py (docs/ROS2-RVIZ.md). Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "robot": {
@@ -2728,7 +2773,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -2737,7 +2782,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "robot",
@@ -2838,17 +2883,17 @@
       "owner_id": "generic-sim"
     },
     "sim.graph.node_types": {
-      "description": "Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions.",
+      "description": "Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions. Only contains is required; a catalog read needs no session_id or stage_id.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
-          "required": true
+          "description": "Not needed; accepted and ignored.",
+          "required": false
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
-          "required": true
+          "description": "Not needed; accepted and ignored.",
+          "required": false
         },
         "contains": {
           "type": "string",
@@ -2872,19 +2917,19 @@
           "name": "session_id",
           "kind": "string",
           "enum": null,
-          "required": true,
+          "required": false,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Not needed; accepted and ignored."
         },
         {
           "name": "stage_id",
           "kind": "string",
           "enum": null,
-          "required": true,
+          "required": false,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Not needed; accepted and ignored."
         },
         {
           "name": "contains",
@@ -2918,16 +2963,16 @@
       "owner_id": "generic-sim"
     },
     "sim.graph.build": {
-      "description": "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Containers or individual node/connection entries may be JSON-encoded strings; flat alternating node and connection lists also work. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types.",
+      "description": "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Containers or individual node/connection entries may be JSON-encoded strings; flat alternating node and connection lists also work. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -2981,7 +3026,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -2990,7 +3035,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -3064,16 +3109,16 @@
       "owner_id": "generic-sim"
     },
     "sim.graph.inspect": {
-      "description": "Read an OmniGraph: every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). Read-only.",
+      "description": "Read an OmniGraph: every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). ROS helpers report ros_render_status and writer_computes, which show a sensor that is not rendering; publisher count is not read here, so check with ros2 topic info. Read-only. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -3096,7 +3141,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -3105,7 +3150,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -3130,16 +3175,16 @@
       "owner_id": "generic-sim"
     },
     "sim.graph.show": {
-      "description": "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands and arranges nodes, writing positions into the stage; stop first, or use layout=false while playing. TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window; it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed.",
+      "description": "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands and arranges nodes, writing positions into the stage; stop first, or use layout=false while playing. TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window; it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -3181,7 +3226,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -3190,7 +3235,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -3517,16 +3562,16 @@
       "owner_id": "generic-sim"
     },
     "sim.map.occupancy": {
-      "description": "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as /clock run meanwhile), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.",
+      "description": "Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as /clock run meanwhile), then stops, so robots return to their start poses. Use when a lab or project does not provide map files. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "min": {
@@ -3580,7 +3625,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -3589,7 +3634,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "min",
@@ -3662,17 +3707,17 @@
       "owner_id": "generic-sim"
     },
     "sim.logs.tail": {
-      "description": "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs.",
+      "description": "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs, plus scene_events: recent stage opens and timeline changes with their source (a tool, or outside the tools such as a person in the GUI). Use it to explain a STALE_TARGET. Needs no session_id or stage_id.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
-          "required": true
+          "description": "Not needed; accepted and ignored.",
+          "required": false
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
-          "required": true
+          "description": "Not needed; accepted and ignored.",
+          "required": false
         },
         "limit": {
           "type": "integer",
@@ -3686,19 +3731,19 @@
           "name": "session_id",
           "kind": "string",
           "enum": null,
-          "required": true,
+          "required": false,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Not needed; accepted and ignored."
         },
         {
           "name": "stage_id",
           "kind": "string",
           "enum": null,
-          "required": true,
+          "required": false,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Not needed; accepted and ignored."
         },
         {
           "name": "limit",
@@ -3714,16 +3759,16 @@
       "owner_id": "generic-sim"
     },
     "sim.controller.create": {
-      "description": "OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox.",
+      "description": "OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -3745,7 +3790,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -3754,7 +3799,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -3779,16 +3824,16 @@
       "owner_id": "generic-sim"
     },
     "sim.controller.update": {
-      "description": "OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required.",
+      "description": "OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -3810,7 +3855,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -3819,7 +3864,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",
@@ -3844,16 +3889,16 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.command": {
-      "description": "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose.",
+      "description": "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "path": {
@@ -3875,7 +3920,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -3884,7 +3929,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "path",

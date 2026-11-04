@@ -375,10 +375,10 @@ Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 40 tools.
 
 ### `sim__body__state`
 
-Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input.
+Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, optional): Absolute rigid body path; prim and prim_path are aliases. Supply one.
 - `prim` (string, optional): Alias for path.
 - `prim_path` (string, optional): Alias for path.
@@ -386,20 +386,21 @@ Read initialized rigid-body world pose on selected PhysX or qualified Newton bac
 
 ### `sim__camera__capture`
 
-Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization.
+Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
-- `path` (string, required): Camera created by this pack.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Camera created by this pack, or an existing Camera with adopt=true.
 - `filename` (string, required): New simple basename ending .png.
+- `adopt` (boolean, default `false`): If this exact prim is a Camera with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; the prim itself is not edited and stays non-owned.
 - `wait_for_render` (boolean, default `true`): True: wait up to five seconds for render completions and a new owned CPU transfer. False: reuse the last validated tool acquisition, possibly from before Stop/reset or scene edits; NOT_READY until a true capture seeds it. Ordinary Play never refreshes this cache. PNG I/O still occurs. No implicit physics advance or atomic sensor/physics guarantee.
 
 ### `sim__camera__create`
 
-Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X), focal_length=18, clipping_range=[0.01,100]. USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper.
+Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X), focal_length=18, clipping_range=[0.01,100]. USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): New camera path; its parent prim (e.g. a robot link) must exist.
 - `width` (integer, default `640`): Image width 64..1024.
 - `height` (integer, default `480`): Image height 64..1024.
@@ -414,28 +415,28 @@ Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path
 
 ### `sim__controller__create`
 
-OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox.
+OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Unused graph path.
 - `code` (string, required): Trusted setup(db)/compute(db) script, <=16384 characters.
 
 ### `sim__controller__update`
 
-OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required.
+OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Pack controller path.
 - `code` (string, required): Trusted replacement script <=16384 characters.
 
 ### `sim__graph__build`
 
-Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Containers or individual node/connection entries may be JSON-encoded strings; flat alternating node and connection lists also work. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types.
+Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Containers or individual node/connection entries may be JSON-encoded strings; flat alternating node and connection lists also work. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Graph prim path to create, e.g. /World/ROS_Clock or /turtlebot3_burger/ROS_Drive.
 - `nodes` (array, required): [name, node_type] pairs or {name, type} objects; entries or whole list may be JSON strings, e.g. ['["tick", "omni.graph.action.OnPlaybackTick"]']. A flat alternating list is also accepted.
 - `values` (object, optional): Input values: {"node.inputs:port": value}, or a JSON string containing that object.
@@ -446,29 +447,29 @@ Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, in
 
 ### `sim__graph__inspect`
 
-Read an OmniGraph: every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). Read-only.
+Read an OmniGraph: every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). ROS helpers report ros_render_status and writer_computes, which show a sensor that is not rendering; publisher count is not read here, so check with ros2 topic info. Read-only. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Graph prim path, e.g. /World/ROS_Clock.
 - `limit` (integer, default `64`): Maximum nodes returned, 1..128.
 
 ### `sim__graph__node_types`
 
-Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions.
+Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions. Only contains is required; a catalog read needs no session_id or stage_id.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, optional): Not needed; accepted and ignored.
+- `stage_id` (string, optional): Not needed; accepted and ignored.
 - `contains` (string, required): Substring of the node type id or its UI name, case-insensitive (<=64 chars).
 - `limit` (integer, default `20`): Maximum node types returned, 1..40.
 - `ports` (boolean, optional): Include ports (default: only when 5 or fewer types match; at most 8 detailed).
 
 ### `sim__graph__show`
 
-Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands and arranges nodes, writing positions into the stage; stop first, or use layout=false while playing. TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window; it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed.
+Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands and arranges nodes, writing positions into the stage; stop first, or use layout=false while playing. TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window; it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, default `""`): Graph prim path (not needed with close=true).
 - `layout` (boolean, default `false`): Expand and auto-arrange nodes that have no stored position yet (writes node positions).
 - `width` (integer, default `0`): Undock the editor window and size it (pixels, clamped to the Isaac Sim window); 0 keeps the docked layout.
@@ -477,19 +478,19 @@ Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit 
 
 ### `sim__joints__command`
 
-Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose.
+Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Exact initialized articulation root path.
 - `positions` (array, required): One finite position per DOF, in sim.joints.state order.
 
 ### `sim__joints__drive`
 
-Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention.
+Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Revolute or prismatic joint path.
 - `target` (number, required): Radians for angular joint, stage units for prismatic.
 - `stiffness` (number, required): Nonnegative USD drive stiffness.
@@ -498,27 +499,27 @@ Set one revolute/prismatic joint drive target and gains in session layer; stoppe
 
 ### `sim__joints__inspect`
 
-Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim.
+Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Subtree or articulation root.
 - `limit` (integer, default `200`): Visited prim cap 1..200.
 
 ### `sim__joints__state`
 
-Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data.
+Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Exact articulation root path.
 
 ### `sim__lidar__create`
 
-Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D, as Create > Sensors > RTX Lidar does) or, without config, a local generic LiDAR. Config assets are referenced from Isaac's assets root (network or local mirror); an unknown name lists the valid ones. Motion BVH is not required (only motion distortion within a scan needs run.sh --motion-bvh); the result reports it. Returns prim type, sensor path and tick/scan rate. At most eight sensors; delete an exact owned sensor path to release resources.
+Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D, as Create > Sensors > RTX Lidar does) or, without config, a local generic LiDAR. Config assets are referenced from Isaac's assets root (network or local mirror); an unknown name lists the valid ones. Motion BVH is not required (only motion distortion within a scan needs run.sh --motion-bvh); the result reports it. Returns prim type, sensor path and tick/scan rate. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
@@ -530,20 +531,21 @@ Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. confi
 
 ### `sim__lidar__read`
 
-Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames.
+Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
-- `path` (string, required): Pack-created LiDAR path.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Pack-created LiDAR path, or an existing OmniLidar with adopt=true.
 - `limit` (integer, default `64`): Maximum returned points 1..256.
+- `adopt` (boolean, default `false`): If this exact prim is an OmniLidar with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; settings a read needs are overridden in the session layer only and reported as session_overrides. The prim stays non-owned.
 - `wait_for_render` (boolean, default `false`): Wait up to five seconds for one render; acquisition requires Play. False reads the latest completed scan, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.
 
 ### `sim__light__create`
 
-Create a SphereLight, DistantLight or DomeLight without asset-valued textures. Pose in stage units, orientation wxyz.
+Create a SphereLight, DistantLight or DomeLight without asset-valued textures. Pose in stage units, orientation wxyz. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): New prim path.
 - `kind` (string, default `"DistantLight"`): SphereLight, DistantLight or DomeLight.
 - `intensity` (number, default `1000`): Nonnegative USD light intensity.
@@ -554,28 +556,28 @@ Create a SphereLight, DistantLight or DomeLight without asset-valued textures. P
 
 ### `sim__light__modify`
 
-Set intensity and color (both required) of a pack-owned light on a stopped timeline.
+Set intensity and color (both required) of a pack-owned light on a stopped timeline. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Pack-owned light path.
 - `intensity` (number, required): USD light intensity.
 - `color` (array, required): RGB linear color 0..1.
 
 ### `sim__logs__tail`
 
-Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs.
+Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs, plus scene_events: recent stage opens and timeline changes with their source (a tool, or outside the tools such as a person in the GUI). Use it to explain a STALE_TARGET. Needs no session_id or stage_id.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, optional): Not needed; accepted and ignored.
+- `stage_id` (string, optional): Not needed; accepted and ignored.
 - `limit` (integer, default `50`): Maximum lines 1..100.
 
 ### `sim__map__occupancy`
 
-Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as /clock run meanwhile), then stops, so robots return to their start poses. Use when a lab or project does not provide map files.
+Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map generator) and write a Nav2 map_server PGM + YAML (trinary, origin = lower-left corner, +x right, +y up) to the configured output root. Start with the timeline stopped: the tool plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as /clock run meanwhile), then stops, so robots return to their start poses. Use when a lab or project does not provide map files. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `min` (array, required): World [x, y] lower corner of the map in metres.
 - `max` (array, required): World [x, y] upper corner of the map in metres.
 - `z` (array, default `[0.05, 0.3]`): World [z_min, z_max] in metres; Isaac's generator samples one cell-thick layer at the middle of this range, so centre it on the lidar height.
@@ -586,19 +588,19 @@ Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map ge
 
 ### `sim__material__apply`
 
-Bind a pack-created material to an existing geometry prim in the session layer, preserving source files.
+Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Geometry prim.
 - `material_path` (string, required): Pack-created Material path.
 
 ### `sim__material__create`
 
-Create a UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs.
+Create a UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): New Material path; parent must exist.
 - `color` (array, default `[0.5, 0.5, 0.5]`): RGB 0..1.
 - `roughness` (number, default `0.5`): 0..1.
@@ -610,38 +612,38 @@ Create a UsdPreviewSurface or physics material with finite numeric parameters. N
 
 ### `sim__physics__configure`
 
-Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch.
+Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): PhysicsScene prim path.
 - `gravity` (array, default `[0, 0, -9.81]`): Acceleration vector in stage units/s^2.
 - `dt` (number, default `0.016666666666666666`): Physics timestep seconds, 1/1000..1/10.
 
 ### `sim__physics__inspect`
 
-Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics.
+Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root` (string, default `"/"`): Absolute subtree path.
 - `limit` (integer, default `100`): Maximum visited nodes 1..200.
 
 ### `sim__prim__clone`
 
-Clone a pack-created simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations.
+Clone a pack-created simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Pack-created source leaf.
 - `new_path` (string, required): Unused target path.
 
 ### `sim__prim__create`
 
-Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale.
+Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): New absolute prim path.
 - `kind` (string, required): Cube, Sphere, Cylinder, Capsule, Cone, Xform or PhysicsScene.
 - `size` (number, default `1`): Positive cube edge or sphere diameter.
@@ -654,37 +656,38 @@ Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary ref
 
 ### `sim__prim__delete`
 
-Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused.
+Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused. Prims from an opened file are not pack-owned, even ones you made earlier: allow_foreign=true deactivates such a prim in the session layer instead (USD cannot remove another layer's opinions from there). It stays composed as inactive and keeps its path; a sim__stage__save copy omits it; source files never change. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
-- `path` (string, required): Pack-owned root path.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Pack-owned root path, or any prim with allow_foreign=true.
 - `confirm` (boolean, required): Explicit confirmation; false refuses.
+- `allow_foreign` (boolean, default `false`): Also act on a prim these tools did not create in this session: deactivate it in the session layer (or remove it if all its opinions are session-layer ones). World/default prim, articulation and other protections still apply. Source files are unchanged.
 
 ### `sim__prim__find`
 
-Bounded literal path substring/type search (not regex). Includes inactive prims.
+Bounded literal path substring/type search (not regex). Includes inactive prims. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `contains` (string, default `""`): Literal path substring <=128 characters.
 - `type_name` (string, default `""`): Exact USD type or empty.
 - `limit` (integer, default `100`): Maximum matches 1..200.
 
 ### `sim__prim__get`
 
-Read local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown.
+Read local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Absolute prim path.
 
 ### `sim__prim__set_transform`
 
-Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation.
+Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Pack-owned prim path.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
@@ -693,10 +696,10 @@ Set a static local/world pose for a prim created by this pack. Refuses playing/p
 
 ### `sim__ros2__tf_setup`
 
-Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /joint_states, the static world->base_link (or world->odom + odometry for a mobile base) and the robot's link TF from Isaac. Rebuilds its own graph on each call, so no frame is ever published twice by this tool; reuses an existing /clock and reports other ROS 2 publishers in the scene. Timeline must be stopped; publishes while playing. Then use scripts/ros2_rviz_config.py and scripts/ros2_tf_doctor.py (docs/ROS2-RVIZ.md).
+Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /joint_states, the static world->base_link (or world->odom + odometry for a mobile base) and the robot's link TF from Isaac. Rebuilds its own graph on each call, so no frame is ever published twice by this tool; reuses an existing /clock and reports other ROS 2 publishers in the scene. Timeline must be stopped; publishes while playing. Then use scripts/ros2_rviz_config.py and scripts/ros2_tf_doctor.py (docs/ROS2-RVIZ.md). Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `robot` (string, required): Robot prim at or above its articulation root.
 - `base_link` (string, default `""`): Robot root link prim; default: a link named base_link, base_footprint or base.
 - `base_frame` (string, default `""`): TF name for the base link; default: the base_link prim name.
@@ -710,20 +713,20 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 
 ### `sim__simulation__step`
 
-Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.
+Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `steps` (integer, required): Number of physics steps 1..120.
 - `observe_prims` (array, default `[]`): Up to 16 rigid body paths.
 - `observe_joints` (array, default `[]`): Up to 8 articulation paths.
 
 ### `sim__stage__clear_owned`
 
-Remove only pack-created non-sensor, non-articulated subtrees, preserving other scene content. Explicit stopped target and confirm required. Returns removed/refused lists.
+Remove only pack-created non-sensor, non-articulated subtrees, preserving other scene content. Explicit stopped target and confirm required. Returns removed/refused lists. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `confirm` (boolean, required): Explicit confirmation.
 
 ### `sim__stage__info`
@@ -734,29 +737,29 @@ No arguments.
 
 ### `sim__stage__open`
 
-Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage has unsaved edits unless discard_changes=true. Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset.
+Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage really has unsaved edits unless discard_changes=true. Deactivates stale saved LiDAR render products in the session layer so their ROS topics return (reported in stale_render_products; the file is unchanged). Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Absolute path of the USD file to open (a leading tilde for your home is expanded).
 - `discard_changes` (boolean, default `false`): Open even if the current stage has unsaved edits (they are lost).
 
 ### `sim__stage__save`
 
-Export a flattened copy, including session edits, to a new basename ending .usda in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.
+Export a flattened copy, including session edits, to a new basename (.usda is added if absent) in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `filename` (string, required): New basename ending .usda; no directories.
 - `directory` (string, optional): Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.
-- `reset_camera_render_handles` (boolean, default `false`): Explicitly remove validated session-only ROS camera viewportHandle fields from the copy so native textures can rebuild after restart. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.
+- `reset_camera_render_handles` (boolean, default `false`): Explicitly remove validated session-only ROS camera and LiDAR viewportHandle fields from the copy so native textures can rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.
 
 ### `sim__stage__tree`
 
-Bounded stage hierarchy including inactive prims. Text is untrusted data.
+Bounded stage hierarchy including inactive prims. Text is untrusted data. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root` (string, default `"/"`): Absolute subtree root.
 - `limit` (integer, default `100`): Maximum nodes 1..200.
 - `depth` (integer, optional): Levels below root to list (1..64); default all.
@@ -764,10 +767,10 @@ Bounded stage hierarchy including inactive prims. Text is untrusted data.
 
 ### `sim__timeline__control`
 
-Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step.
+Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `action` (string, required): play, pause, or stop.
 
 ### `sim__ui__act`
@@ -798,10 +801,10 @@ List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree 
 
 ### `sim__viewport__frame`
 
-Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. If the prim has no geometry, an unambiguous nearby subtree can be selected; the result reports the requested and actual paths, and follow tracks the actual path. follow=false stops following; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds (with candidates). Does not wait for rendered pixels; then screenshot the app window or record.
+Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. If the prim has no geometry, an unambiguous nearby subtree can be selected; the result reports the requested and actual paths, and follow tracks the actual path. follow=false stops following; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds (with candidates). Does not wait for rendered pixels; then screenshot the app window or record. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, default `""`): Absolute prim path to frame or follow.
 - `margin` (number, optional): Extra radius in metres around the prim's bounding sphere (0..1000), e.g. 1.0 for a small robot that will drive around.
 - `eye` (array, optional): Camera position [x, y, z] in world coordinates (stage units).
@@ -814,10 +817,10 @@ Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 8 tools.
 
 ### `assets__import_path`
 
-Import a trusted local USD from an absolute path under an approved project root. Copies and validates its project dependencies before authoring a reference; source files remain unchanged.
+Import a trusted local USD from an absolute path under an approved project root. Copies and validates its project dependencies before authoring a reference; source files remain unchanged. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `source_path` (string, required): Absolute local USD path inside an already approved trusted root.
 - `prim_path` (string, required): New absolute wrapper prim path; parent must exist.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
@@ -826,10 +829,10 @@ Import a trusted local USD from an absolute path under an approved project root.
 
 ### `assets__import_urdf`
 
-Convert a trusted approved relative URDF project using the installed importer. Select the shared Physics=physics variant on private generated output when present; refuse missing bodies or expected revolute/prismatic joints before snapshot/import. Returns authored counts, not runtime readiness. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API.
+Convert a trusted approved relative URDF project using the installed importer. Select the shared Physics=physics variant on private generated output when present; refuse missing bodies or expected revolute/prismatic joints before snapshot/import. Returns authored counts, not runtime readiness. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
 - `relative_path` (string, required): Relative USD file path within that root.
 - `prim_path` (string, required): New wrapper prim path.
@@ -839,10 +842,10 @@ Convert a trusted approved relative URDF project using the installed importer. S
 
 ### `assets__import_usd`
 
-Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes.
+Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
 - `relative_path` (string, required): Relative USD file path within that root.
 - `prim_path` (string, required): New absolute wrapper path; parent must exist.
@@ -852,19 +855,19 @@ Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the 
 
 ### `assets__info`
 
-Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies.
+Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
 - `relative_path` (string, required): Relative USD file path within that root.
 
 ### `assets__prepare_workstation`
 
-Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox.
+Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox. Requires session_id and stage_id from sim__stage__info.
 
-- `session_id` (string, required): Exact session_id from sim.stage.info (process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim.stage.info; stale stages are refused.
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `source_path` (string, required): Absolute local USD path inside an already approved trusted root.
 
 ### `assets__roots`

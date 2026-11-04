@@ -306,9 +306,56 @@ def inspect_graph(stage, path, limit=64):
     failing = [n["path"] for n in out if n.get("errors")]
     return dict(graph=path, evaluator=graph.get_evaluator_name(), node_count=len(nodes),
                 truncated=len(nodes) > limit, nodes=out,
+                **_ros_render_status(stage, nodes[:limit]),
                 **({"nodes_with_errors": failing,
                     "note": "Compute errors come from the last time the graph ran (play the timeline first)."}
                    if failing else {}))
+
+
+def _writer_computes(stage, product_path):
+    """Compute count of the Replicator writer nodes attached to a product, or None when there are none."""
+    import omni.graph.core as og
+
+    pipeline = stage.GetPrimAtPath("/Render/PostProcess/SDGPipeline")
+    if not pipeline or not product_path:
+        return None
+    prefix = product_path.rsplit("/", 1)[-1] + "_NodeWriterWriter"
+    names = [c.GetName() for c in pipeline.GetChildren()
+             if c.GetName() == prefix or c.GetName().startswith(prefix + "_")]
+    if not names:
+        return None
+    return sum(og.Controller.node(f"{pipeline.GetPath()}/{name}").get_compute_count() for name in names)
+
+
+def _ros_render_status(stage, nodes):
+    """Result fields for ROS sensor helpers whose compute reports nothing when no frame ever arrives.
+
+    A helper can look clean while its product has no texture and its writer never runs, so show the
+    render facts Replicator's reuse path reads. Publisher count stays out of scope: see PUBLISHER_NOTE.
+    """
+    import omni.graph.core as og
+    import omni.timeline
+
+    from .render_export import HELPERS, PUBLISHER_NOTE, helper_render_status, retained_product_paths
+
+    helpers = [node for node in nodes if node.get_type_name() in HELPERS]
+    if not helpers:
+        return {}
+    retained = retained_product_paths()
+    playing = omni.timeline.get_timeline_interface().is_playing()
+    status = []
+    for node in helpers:
+        helper = stage.GetPrimAtPath(node.get_prim_path())
+        try:
+            runtime = og.Controller.get(node.get_attribute("inputs:renderProductPath"))
+            entry = helper_render_status(stage, helper, runtime, retained, playing)
+            entry["writer_computes"] = _writer_computes(stage, entry["render_product"])
+        except Exception as exc:  # noqa: BLE001 - diagnostics must never break inspection
+            entry = dict(node=node.get_prim_path(), status="unknown", error=f"{type(exc).__name__}: {str(exc)[:200]}")
+        status.append(entry)
+    problems = [entry["node"] for entry in status if entry.get("problem")]
+    return dict(ros_render_status=status, ros_publisher_note=PUBLISHER_NOTE,
+                **({"ros_helpers_with_problems": problems} if problems else {}))
 
 
 def _editor():

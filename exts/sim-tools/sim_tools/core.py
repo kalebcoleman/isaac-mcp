@@ -1,5 +1,6 @@
 """USD operations. Session-layer-only edits, no Kit update/step calls."""
 
+import collections
 import math
 import hashlib
 import os
@@ -7,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import tempfile
+import time
 import uuid
 from pxr import Ar, Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdUtils
 from isaac_mcp.project_assets import (
@@ -116,6 +118,44 @@ def facts(prim):
     )
 
 
+# Tools which change the stage or timeline themselves, by event family. Anything else that may
+# run code (run_python, twin tools, Kit UI input) can only be reported as "was running".
+STAGE_TOOLS = {"sim.stage.open": "sim__stage__open"}
+TIMELINE_TOOLS = {"sim.timeline.control": "sim__timeline__control", "sim.map.occupancy": "sim__map__occupancy"}
+INERT_TOOLS = {"status", "list_bridges", "list_tools", "reload_tools", "stat_file", "get_file", "put_file"}
+
+
+def attribute_change(activity, certain):
+    """Who changed the stage or timeline, as far as this process can tell.
+
+    *activity* maps bridge tools running (True) or finished moments ago (False) to that state; None
+    if unknown. Kit reports no originator, so a named tool is credited only while it is running and
+    nothing else that could do it is. "outside_tools" means no such tool was running or just
+    finished: a person in the GUI or a Kit script, never a guess when a tool was involved.
+    """
+    if activity is None:
+        return dict(origin="unknown", source="unknown; tool activity is unavailable")
+    could_do_it = sorted(
+        n for n in activity
+        if n in certain or n == "sim.ui.act" or not (n.startswith(("sim.", "assets.")) or n in INERT_TOOLS)
+    )
+    running = [n for n in could_do_it if activity[n]]
+    if len(running) == 1 and running[0] in certain:
+        return dict(origin="tool", source=certain[running[0]])
+    if could_do_it:
+        return dict(origin="unattributed", tools_running=could_do_it,
+                    source=", ".join(could_do_it) + " was running or just finished; that, the GUI or a Kit "
+                    "script may have done it")
+    return dict(origin="outside_tools",
+                source="outside the MCP tools: no tool call was running, so a person in the GUI or a Kit script")
+
+
+def stop_call(session_id, stage_id):
+    """The call that clears TIMELINE_ACTIVE; a different tool, so not a retry_with."""
+    return dict(tool="sim__timeline__control",
+                arguments=dict(session_id=session_id, stage_id=stage_id, action="stop"))
+
+
 class Scene:
     def __init__(self, get_stage, timeline, broker=None, output=None, render_binding=None):
         self.get_stage = get_stage
@@ -136,6 +176,47 @@ class Scene:
         self._runtime_edit_target = None
         self.device_error = None
         self.render_binding = render_binding
+        self.events = collections.deque(maxlen=32)  # stage/timeline changes, for sim.logs.tail
+        self._retired_stages = {}  # old stage_id -> what replaced it, for STALE_TARGET
+
+    def record_event(self, kind, what, attribution, stage=None):
+        """Remember a stage or timeline change (never frame-rate events); returns its record."""
+        record = dict(kind=kind, what=what, at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                      monotonic=time.monotonic(), **attribution, **({"stage": stage} if stage else {}))
+        self.events.append(record)
+        return record
+
+    def public_events(self):
+        return [{k: v for k, v in e.items() if k != "monotonic"} for e in self.events]
+
+    def last_event(self, kind):
+        return next((e for e in reversed(self.events) if e["kind"] == kind), None)
+
+    def retire_stage(self, record=None):
+        """The current stage_id ended; keep why, so a later call with it gets a true explanation."""
+        if self.stage_id is not None:
+            self._retired_stages[self.stage_id] = record
+            while len(self._retired_stages) > 16:
+                self._retired_stages.pop(next(iter(self._retired_stages)))
+
+    def _stale_reason(self, session_id, stage_id, source):
+        if session_id != self.session_id:
+            return ("Session changed: this session_id is not this Kit process (Kit restarted, or the IDs "
+                    "came from another bridge)."), None
+        change = self._retired_stages.get(stage_id)
+        if change is None:
+            return ("Session or stage changed (Kit restarted, the stage was opened or reloaded)."
+                    + (" Current stage: " + source + "." if source else "")), None
+        changed = "Stage changed at " + change["at"] + " "
+        origin = change["origin"]
+        if origin == "tool":
+            changed += "by " + change["source"] + " (this or another client)."
+        elif origin == "outside_tools":
+            changed += ("outside this session's tools: no MCP tool call was running, so a person in the GUI "
+                        "(e.g. File > Open) or a Kit script replaced it. Edits not saved on the old stage may be lost.")
+        else:
+            changed += "while the tools could not tell who did it (" + change["source"] + ")."
+        return changed + " Current stage: " + source + ".", {k: v for k, v in change.items() if k != "monotonic"}
 
     def require_runtime(self):
         if self.device_error:
@@ -151,9 +232,14 @@ class Scene:
             self.check_runtime_edit(stage)
             return
         if not self.timeline.is_stopped():
+            last = self.last_event("timeline")
             refuse(
                 "TIMELINE_ALREADY_ACTIVE",
-                "Stop before the first generic play so physics writeback can acquire the session edit target explicitly.",
+                "The timeline is already running or paused and was not started by sim__timeline__control"
+                + (" (last change: " + last["what"] + ", " + last["source"] + ")" if last else "")
+                + ". To continue: call sim__timeline__control action=stop, then action=play, so physics writeback "
+                "uses the session layer. Stop rewinds physics and returns robots to their start pose.",
+                before_retry=stop_call(self.session_id, self.stage_id),
             )
         self._runtime_edit_target = stage.GetEditTarget()
         stage.SetEditTarget(stage.GetSessionLayer())
@@ -190,35 +276,52 @@ class Scene:
         if self._stage != st:
             if self._stage is not None:
                 self.end_runtime_edit(self._stage)
+                self.retire_stage()
             self._stage = st
             self.stage_id = uuid.uuid4().hex
             self.owned.clear()
         return st
 
+    def _current_target(self, stage):
+        return dict(
+            session_id=self.session_id,
+            stage_id=self.stage_id,
+            pid=os.getpid(),
+            source=stage.GetRootLayer().identifier,
+            default_prim=str(stage.GetDefaultPrim().GetPath())
+            if stage.GetDefaultPrim()
+            else None,
+            meters_per_unit=UsdGeom.GetStageMetersPerUnit(stage),
+            up_axis=str(UsdGeom.GetStageUpAxis(stage)),
+        )
+
     def target(self, session_id, stage_id, mutation=False):
         stage = self.stage()
+        if not session_id or not stage_id:
+            refuse(
+                "MISSING_TARGET",
+                "session_id and stage_id are required. Call sim__stage__info first and pass its exact IDs "
+                f"(currently session_id=\"{self.session_id}\", stage_id=\"{self.stage_id}\"; check "
+                "current_target if this is not the stage you meant). This call did nothing.",
+                current_target=self._current_target(stage),
+            )
         if session_id != self.session_id or stage_id != self.stage_id:
+            reason, change = self._stale_reason(session_id, stage_id, stage.GetRootLayer().identifier)
             refuse(
                 "STALE_TARGET",
-                "Session or stage changed (Kit restarted, the stage was opened or reloaded). This call was not "
+                reason + " This call was not "
                 f"retargeted. Resend it with session_id=\"{self.session_id}\" and stage_id=\"{self.stage_id}\" "
                 "(check current_target first if the stage is not the one you meant).",
-                current_target=dict(
-                    session_id=self.session_id,
-                    stage_id=self.stage_id,
-                    pid=os.getpid(),
-                    source=stage.GetRootLayer().identifier,
-                    default_prim=str(stage.GetDefaultPrim().GetPath())
-                    if stage.GetDefaultPrim()
-                    else None,
-                    meters_per_unit=UsdGeom.GetStageMetersPerUnit(stage),
-                    up_axis=str(UsdGeom.GetStageUpAxis(stage)),
-                ),
+                current_target=self._current_target(stage),
+                **({"stage_change": change} if change else {}),
             )
         if mutation and not self.timeline.is_stopped():
             refuse(
                 "TIMELINE_ACTIVE",
-                "Stop the timeline before authored edits; paused physics also retains runtime state.",
+                "Stop the timeline before authored edits: call sim__timeline__control action=stop with these IDs, "
+                "then resend this call unchanged. Stop rewinds physics and returns robots to their start pose; "
+                "pausing is not enough, because paused physics also retains runtime state.",
+                before_retry=stop_call(session_id, stage_id),
             )
         return stage
 
@@ -226,6 +329,7 @@ class Scene:
         """Release the old USD object and lease at CLOSING, not on the next call."""
         if self._stage is not None:
             self.end_runtime_edit(self._stage)
+        self.retire_stage(self.last_event("stage"))
         self._stage = None
         self.stage_id = None
         self.owned.clear()
@@ -311,7 +415,14 @@ class Scene:
 
     def new_path(self, stage, value):
         p = path(value)
-        if stage.GetPrimAtPath(p):
+        existing = stage.GetPrimAtPath(p)
+        if existing and not existing.IsActive():
+            refuse(
+                "CONFLICT",
+                "Destination already exists as a deactivated prim, which keeps its path; no overwrite. Use a new "
+                "path, or save a copy with sim__stage__save (it omits the prim) and open that.",
+            )
+        if existing:
             refuse("CONFLICT", "Destination already exists; no overwrite.")
         parent = stage.GetPrimAtPath(p.GetParentPath())
         if (
@@ -1031,6 +1142,9 @@ class Scene:
                 "TIMELINE_ACTIVE",
                 "Pause or stop before saving a stable composed snapshot.",
             )
+        # A bare basename only lacks the extension; anything with another dot still refuses.
+        if isinstance(filename, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}", filename):
+            filename += ".usda"
         if not isinstance(filename, str) or not re.fullmatch(
             r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}\.usda", filename
         ):
@@ -1038,7 +1152,7 @@ class Scene:
                 "INVALID_OUTPUT",
                 "Use a simple basename ending .usda (<=65 characters).",
             )
-        from .render_export import camera_handles, reset_export_handles, restore_export_camera_targets
+        from .render_export import camera_handles, reset_export_handles, restore_export_camera_targets, save_report
 
         handles, camera_repairs = camera_handles(stage, reset_camera_render_handles, self.render_binding)
         folder = self.save_directory(directory)
@@ -1057,6 +1171,7 @@ class Scene:
             omitted_render_paths = strip_runtime_render_state(layer)
             if runtime_poses:
                 apply_snapshot_poses(layer, runtime_poses)
+            report = save_report(layer)
             if not layer.Export(tmp):
                 refuse("SAVE_FAILED", "USD export returned false.")
             try:
@@ -1077,6 +1192,7 @@ class Scene:
                 else "composed USD",
                 checkpoint=False,
                 dependencies="Texture files may still reference retained snapshots; do not clean those while using saved scenes.",
+                **report,
             )
         finally:
             os.close(fd)
@@ -1137,6 +1253,8 @@ def strip_runtime_render_state(layer):
         "omni.syntheticdata.SdRenderVarPtr",
         "omni.graph.nodes.GpuInteropRenderProductEntry",
         "isaacsim.sensors.rtx.IsaacCreateRTXLidarScanBuffer",
+        # The point-cloud writer's annotator; the helper regenerates it at Play.
+        "isaacsim.sensors.rtx.nodes.OgnIsaacExtractRTXSensorPointCloud",
         "omni.graph.action.RationalTimeSyncGate",
         # Replicator 1.13.38 creates this writer/annotator synchronization gate
         # instead of the older action gate. It is regenerated on attachment.
@@ -1147,7 +1265,7 @@ def strip_runtime_render_state(layer):
         "isaacsim.core.nodes.IsaacReadSimulationTimeAnnotator",
         "isaacsim.core.nodes.IsaacConvertRGBAToRGB",
     }
-    # Camera helpers regenerate these session-only writers on playback. A
+    # Camera and LiDAR helpers regenerate these session-only writers on playback. A
     # flattened export includes their process handles, unlike a normal USD
     # root-layer save. Only omit recognized writers backed by a preserved
     # helper with the same topic and frame; an arbitrary ROS node is not safe
@@ -1158,6 +1276,10 @@ def strip_runtime_render_state(layer):
             "isaacsim.ros2.bridge.ROS2CameraHelper",
         "isaacsim.ros2.bridge.ROS2PublishCameraInfo":
             "isaacsim.ros2.bridge.ROS2CameraInfoHelper",
+        "isaacsim.ros2.bridge.ROS2PublishLaserScan":
+            "isaacsim.ros2.bridge.ROS2RtxLidarHelper",
+        "isaacsim.ros2.bridge.ROS2PublishPointCloud":
+            "isaacsim.ros2.bridge.ROS2RtxLidarHelper",
     }
     helpers = {}
     for prim in output.Traverse():

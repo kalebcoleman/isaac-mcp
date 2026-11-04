@@ -63,16 +63,16 @@
       "owner_id": "generic-assets"
     },
     "assets.info": {
-      "description": "Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies.",
+      "description": "Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "root_id": {
@@ -94,7 +94,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -103,7 +103,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "root_id",
@@ -128,16 +128,16 @@
       "owner_id": "generic-assets"
     },
     "assets.import_usd": {
-      "description": "Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes.",
+      "description": "Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "root_id": {
@@ -191,7 +191,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -200,7 +200,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "root_id",
@@ -270,16 +270,16 @@
       "owner_id": "generic-assets"
     },
     "assets.prepare_workstation": {
-      "description": "Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox.",
+      "description": "Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "source_path": {
@@ -296,7 +296,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -305,7 +305,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "source_path",
@@ -321,16 +321,16 @@
       "owner_id": "generic-assets"
     },
     "assets.import_path": {
-      "description": "Import a trusted local USD from an absolute path under an approved project root. Copies and validates its project dependencies before authoring a reference; source files remain unchanged.",
+      "description": "Import a trusted local USD from an absolute path under an approved project root. Copies and validates its project dependencies before authoring a reference; source files remain unchanged. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "source_path": {
@@ -379,7 +379,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -388,7 +388,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "source_path",
@@ -488,16 +488,16 @@
       "owner_id": "generic-assets"
     },
     "assets.import_urdf": {
-      "description": "Convert a trusted approved relative URDF project using the installed importer. Select the shared Physics=physics variant on private generated output when present; refuse missing bodies or expected revolute/prismatic joints before snapshot/import. Returns authored counts, not runtime readiness. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API.",
+      "description": "Convert a trusted approved relative URDF project using the installed importer. Select the shared Physics=physics variant on private generated output when present; refuse missing bodies or expected revolute/prismatic joints before snapshot/import. Returns authored counts, not runtime readiness. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
-          "description": "Exact session_id from sim.stage.info (process incarnation).",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
           "required": true
         },
         "stage_id": {
           "type": "string",
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused.",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
           "required": true
         },
         "root_id": {
@@ -551,7 +551,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact session_id from sim.stage.info (process incarnation)."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
         },
         {
           "name": "stage_id",
@@ -560,7 +560,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Exact stage_id from sim.stage.info; stale stages are refused."
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
         },
         {
           "name": "root_id",

@@ -52,12 +52,42 @@ def color(value):
 def owned(s, stage, p):
     prim = s.prim(stage, p)
     if p not in s.owned:
-        refuse("NOT_OWNED", "Operation is limited to pack-created prims.")
+        refuse(
+            "NOT_OWNED",
+            "Operation is limited to pack-created prims: ones these tools made on this stage since it opened. "
+            "Prims from an opened file do not count, even ones you made before saving.",
+        )
     return prim
 
 
-def deletable(s, stage, p, direct_sensor=False, sensor_paths=()):
-    prim = owned(s, stage, p)
+KIT_ROOTS = ("Render", "OmniverseKit_Persp", "OmniverseKit_Front", "OmniverseKit_Top", "OmniverseKit_Right")
+
+
+def foreign_prim(s, stage, p, allow_foreign):
+    """The explicit route for a prim that is not pack-owned; refuses unless it was asked for."""
+    prim = s.prim(stage, p)
+    if not allow_foreign:
+        refuse(
+            "NOT_OWNED",
+            f"{p} was not created by these tools on this stage: prims from an opened file do not count, even "
+            "ones you made before saving. Retry with allow_foreign=true to deactivate it in the session layer "
+            "(it stays composed as inactive and keeps its path; source files are unchanged), or reach it through "
+            "the file that defines it.",
+            retry_with={"allow_foreign": True},
+        )
+    if prim.IsInstanceProxy() or prim.GetTypeName() == "OmniGraphNode":
+        refuse(
+            "PROTECTED_PRIM",
+            "Cannot deactivate an instance proxy or a single graph node; "
+            "act on the instance or graph, or rebuild a graph with sim__graph__build replace=true.",
+        )
+    if prim.GetPath().GetPrefixes()[0].name in KIT_ROOTS:
+        refuse("PROTECTED_PRIM", "Kit's runtime render and viewport prims are protected.")
+    return prim
+
+
+def deletable(s, stage, p, direct_sensor=False, sensor_paths=(), foreign=False):
+    prim = s.prim(stage, p) if foreign else owned(s, stage, p)
     # USD traversal cannot see children below inactive prims, or registered
     # sensors removed/retyped externally. Their native resources still exist.
     if any(
@@ -116,6 +146,87 @@ class Advanced:
             )
         self.cleanup_errors = self.cleanup_errors[-16:]
         self.sensors.clear()
+
+    def adopt(self, stage, path, kind):
+        """Register render resources for an existing sensor, on an explicit adopt=true. The prim is
+        not added to the pack-owned set: deleting it still needs allow_foreign."""
+        from .sensors import adopt
+
+        self.s.prim(stage, path)
+        if len(self.sensors) >= 8:
+            refuse("LIMIT", "At most eight live sensors per session; delete an owned sensor to release its resources.")
+        with Usd.EditContext(stage, stage.GetSessionLayer()):
+            sensor = adopt(stage, path, kind)
+        if stage.GetRootLayer().GetPrimAtPath(sensor["product_path"]):
+            # Hydra authors a new render product in the root layer too, whatever the edit target.
+            sensor["root_layer_note"] = (
+                "Kit's render product is also in the in-memory root layer; nothing is on disk. Do not File > Save "
+                "over the source. sim__stage__save copies omit it."
+            )
+        self.sensors[path] = (kind, sensor)
+        return self.sensors[path]
+
+    def delete_foreign(self, stage, prim):
+        """What the session layer can honestly do to a prim defined elsewhere. USD has no delete
+        opinion and RemovePrim only edits the edit target's specs, so a prim with opinions in the
+        root layer stays composed. Never edit that layer: a File > Save would write it to the source."""
+        p = str(prim.GetPath())
+        session = stage.GetSessionLayer()
+        if not session.permissionToEdit:
+            refuse("READ_ONLY", "Session layer is not editable.")
+        if all(spec.layer == session for spec in prim.GetPrimStack()):
+            with Usd.EditContext(stage, session):
+                if not stage.RemovePrim(p):
+                    refuse("DELETE_FAILED", "Session-layer removal failed.")
+            return dict(
+                deleted=p, method="removed_from_session_layer", still_composed=bool(stage.GetPrimAtPath(p)),
+                foreign=True, source_files_changed=False,
+            )
+        was_active = prim.IsActive()
+        with Usd.EditContext(stage, session):
+            if not prim.SetActive(False):
+                refuse("DELETE_FAILED", "Session-layer deactivation failed.")
+        return dict(
+            deleted=p, method="deactivated_in_session_layer", already_inactive=not was_active,
+            still_composed=True, active=False, foreign=True, source_files_changed=False,
+            note="The prim is inactive, so rendering, physics and traversal skip it, but it still holds this "
+                 "path: create a replacement at a new path. Reopening the file restores it; a sim__stage__save copy "
+                 "omits it, so opening that copy frees the path.",
+        )
+
+    def targetless(self, name, a):
+        """Reads with no stage dependency. Deliberately no invalidate(): its sensor cleanup must
+        follow a real stage check, and these run without one."""
+        if name == "sim.logs.tail":
+            import carb.settings
+
+            log = carb.settings.get_settings().get("/log/file")
+            limit = a.get("limit", 50)
+            if type(limit) is not int or not 1 <= limit <= 100:
+                refuse("LIMIT", "limit 1..100 required.")
+            if not log or not Path(log).is_file():
+                refuse("LOG_UNAVAILABLE", "Kit did not expose an existing /log/file.")
+            with open(log, "rb") as stream:
+                stream.seek(0, 2)
+                stream.seek(max(0, stream.tell() - 32768))
+                lines = stream.read(32768).decode(errors="replace").splitlines()
+            return dict(
+                file=str(log),
+                lines=[x[:512] for x in lines if "Warning" in x or "Error" in x or "[sim-tools]" in x][
+                    -limit:
+                ],
+                scope="last 32 KiB; WARN/ERROR and [sim-tools] scene changes only",
+                scene_events=self.s.public_events(),
+            )
+        from . import graph
+
+        contains = a.get("contains")
+        limit = a.get("limit", 20)
+        if not isinstance(contains, str) or not 1 <= len(contains.strip()) <= 64:
+            refuse("INVALID_VALUE", "contains: 1..64 characters.")
+        if type(limit) is not int or not 1 <= limit <= 40:
+            refuse("LIMIT", "limit must be 1..40.")
+        return graph.node_types(contains, limit, a.get("ports"))
 
     def invalidate(self):
         if self.stage_id != self.s.stage_id:
@@ -241,11 +352,23 @@ class Advanced:
             if a["confirm"] is not True:
                 refuse("CONFIRM_REQUIRED", "confirm=true required.")
             p = a["path"]
+            allow_foreign = a.get("allow_foreign", False)
+            if type(allow_foreign) is not bool:
+                refuse("INVALID_VALUE", "allow_foreign must be boolean.")
+            foreign = p not in s.owned
             direct_sensor = (self.sensors[p][1].get("sensor_path") or p) if p in self.sensors else False
+            if foreign:
+                from .sensors import find_sensor_prim
+
+                prim = foreign_prim(s, stage, p, allow_foreign)
+                if not direct_sensor:
+                    # An unregistered sensor holds no resources, so this exact prim may go.
+                    found = find_sensor_prim(stage, p, "lidar") or find_sensor_prim(stage, p, "camera")
+                    direct_sensor = str(found.GetPath()) if found else False
             deletable(
-                s, stage, p, direct_sensor=direct_sensor, sensor_paths=self.sensors
+                s, stage, p, direct_sensor=direct_sensor, sensor_paths=self.sensors, foreign=foreign
             )
-            if direct_sensor:
+            if p in self.sensors:
                 from .sensors import dispose
 
                 errors = dispose(self.sensors[p][1])
@@ -256,6 +379,8 @@ class Advanced:
                         + str(errors),
                     )
                 del self.sensors[p]
+            if foreign:
+                return self.delete_foreign(stage, prim)
             with Usd.EditContext(stage, stage.GetSessionLayer()):
                 if not stage.RemovePrim(p):
                     refuse("DELETE_FAILED", "Session-layer removal failed.")
@@ -830,6 +955,11 @@ class Advanced:
             if entry is None or entry[0] != expected:
                 refuse("NOT_OWNED", "Sensor is not registered in this session.")
             sensor = entry[1]
+            adoption = (
+                dict(adopted=True, session_overrides=sensor.get("session_overrides", []),
+                     **({"root_layer_note": sensor["root_layer_note"]} if "root_layer_note" in sensor else {}))
+                if sensor.get("adopted") else {}
+            )
             prim = s.prim(stage, a["path"])
             if not prim.IsActive():
                 refuse("SENSOR_INVALIDATED", "Sensor prim is inactive.")
@@ -837,7 +967,8 @@ class Advanced:
                 limit = a.get("limit", 64)
                 if type(limit) is not int or not 1 <= limit <= 256:
                     refuse("LIMIT", "limit must be 1..256.")
-                attr = prim.GetAttribute("omni:sensor:Core:outputFrameOfReference")
+                sensor_prim = stage.GetPrimAtPath(sensor.get("sensor_path") or a["path"])
+                attr = sensor_prim.GetAttribute("omni:sensor:Core:outputFrameOfReference")
                 if not attr or attr.Get() != "SENSOR":
                     refuse(
                         "SENSOR_MODIFIED",
@@ -845,7 +976,7 @@ class Advanced:
                     )
                 from .sensors import lidar_points
 
-                return dict(path=a["path"], **lidar_points(sensor, limit))
+                return dict(path=a["path"], **adoption, **lidar_points(sensor, limit))
             h, w = sensor["resolution"]
             if not 64 <= h <= 1024 or not 64 <= w <= 1024:
                 refuse(
@@ -895,6 +1026,7 @@ class Advanced:
                     os.close(fd)
                 file = s.output / filename
                 return dict(
+                    **adoption,
                     file=str(file),
                     width=array.shape[1],
                     height=array.shape[0],
@@ -911,41 +1043,13 @@ class Advanced:
                         else "cached acquisition; may predate Stop/reset, pose edits or physics steps"
                     ),
                 )
-        if name == "sim.logs.tail":
-            import carb.settings
-
-            log = carb.settings.get_settings().get("/log/file")
-            limit = a.get("limit", 50)
-            if type(limit) is not int or not 1 <= limit <= 100:
-                refuse("LIMIT", "limit 1..100 required.")
-            if not log or not Path(log).is_file():
-                refuse("LOG_UNAVAILABLE", "Kit did not expose an existing /log/file.")
-            with open(log, "rb") as stream:
-                stream.seek(0, 2)
-                stream.seek(max(0, stream.tell() - 32768))
-                lines = stream.read(32768).decode(errors="replace").splitlines()
-            return dict(
-                file=str(log),
-                lines=[x[:512] for x in lines if "Warning" in x or "Error" in x][
-                    -limit:
-                ],
-                scope="last 32 KiB; WARN/ERROR only",
-            )
         if name == "sim.graph.build":
             from .graph_build import build
 
             return build(stage, a, s.timeline.is_stopped())
-        if name in ("sim.graph.node_types", "sim.graph.inspect", "sim.graph.show", "sim.map.occupancy"):
+        if name in ("sim.graph.inspect", "sim.graph.show", "sim.map.occupancy"):
             from . import graph
 
-            if name == "sim.graph.node_types":
-                contains = a.get("contains")
-                limit = a.get("limit", 20)
-                if not isinstance(contains, str) or not 1 <= len(contains.strip()) <= 64:
-                    refuse("INVALID_VALUE", "contains: 1..64 characters.")
-                if type(limit) is not int or not 1 <= limit <= 40:
-                    refuse("LIMIT", "limit must be 1..40.")
-                return graph.node_types(contains, limit, a.get("ports"))
             if name == "sim.graph.inspect":
                 limit = a.get("limit", 64)
                 if type(limit) is not int or not 1 <= limit <= 128:

@@ -369,6 +369,8 @@ class McpBridge:
         self._owner_tools: Dict[str, Set[str]] = {}    # owner_id -> canonical names
         self._owner_windows: Dict[str, Set[str]] = {}  # owner_id -> omni.ui window titles
         self._in_flight: Dict[str, int] = {}           # owner_id -> live dispatch count
+        self._tools_running: Dict[str, int] = {}       # canonical name -> live dispatch count
+        self._tools_finished: Dict[str, float] = {}    # canonical name -> monotonic finish time
         self._owner_drain_callbacks: Dict[str, List[Callable[[], None]]] = {}
         self._owner_cleanup_active: Set[str] = set()
         # REQUEST ADMISSION (see `_submit`). A socket request is either started at once or kept
@@ -686,6 +688,14 @@ class McpBridge:
                 return reason
         return None
 
+    def tool_activity(self, recent_s: float = 2.0) -> Dict[str, bool]:
+        """Tools running now (True) or finished within *recent_s* (False): Kit can deliver stage and
+        timeline events on a later update than the call that caused them."""
+        cutoff = time.monotonic() - recent_s
+        with self._lock:
+            recent = {name: False for name, finished in self._tools_finished.items() if finished >= cutoff}
+            return {**recent, **{name: True for name, count in self._tools_running.items() if count > 0}}
+
     async def dispatch(self, name: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """One call from a caller that is ALREADY a coroutine on the main loop.
 
@@ -765,6 +775,7 @@ class McpBridge:
             owner_id = tool.owner_id
             handler = tool.definition.handler
             self._in_flight[owner_id] = self._in_flight.get(owner_id, 0) + 1
+            self._tools_running[name] = self._tools_running.get(name, 0) + 1
 
         try:
             if inspect.iscoroutinefunction(handler):
@@ -807,6 +818,8 @@ class McpBridge:
             finalize_after_callbacks = False
             with self._lock:
                 self._in_flight[owner_id] = max(0, self._in_flight.get(owner_id, 1) - 1)
+                self._tools_running[name] -= 1
+                self._tools_finished[name] = time.monotonic()
                 if owner_id in self._draining and self._in_flight[owner_id] == 0:
                     callbacks, finalize_after_callbacks = self._prepare_owner_drain_locked(owner_id)
             self._run_owner_drain_callbacks(owner_id, callbacks, finalize_after_callbacks)

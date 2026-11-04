@@ -4,17 +4,30 @@ An active native binding is not proof of USD authorship. The caller's explicit
 export policy authorizes the omission; the checks only constrain its scope.
 """
 
+import re
+
 from pxr import Sdf, Usd, UsdGeom
 from isaac_mcp.project_assets import refuse
 
 PRODUCER = "isaacsim.core.nodes.IsaacCreateRenderProduct"
-HELPERS = {
-    namespace + name
-    for namespace in ("isaacsim.ros2.bridge.", "isaacsim.ros2.nodes.")
-    for name in ("ROS2CameraHelper", "ROS2CameraInfoHelper")
-}
+_ROS_NAMESPACES = ("isaacsim.ros2.bridge.", "isaacsim.ros2.nodes.")
+CAMERA_HELPERS = {ns + name for ns in _ROS_NAMESPACES for name in ("ROS2CameraHelper", "ROS2CameraInfoHelper")}
+LIDAR_HELPERS = {ns + "ROS2RtxLidarHelper" for ns in _ROS_NAMESPACES}
+HELPERS = CAMERA_HELPERS | LIDAR_HELPERS
+# sim_tools.sensors names its private capture products this way; save removes the whole prim.
+OWNED_PRODUCT = re.compile(r"IsaacMCP_[0-9a-f]{32}")
+VIEWPORT_PRODUCT_PREFIX = "omni_kit_widget_viewport_"
 MAX_PRIMS = 10000
 MAX_SPECS = 200000
+MAX_GRAPHS = 32
+MAX_REPORTED_HANDLES = 16
+PUBLISHER_NOTE = ("Publisher count is not read from inside Kit: run `ros2 topic info <topic>` in the shell line from "
+                  "sim__stage__info. writer_computes 0 while playing means the writer never ran and the topic is not advertised.")
+STALE_HANDLE_FIX = (
+    "Replicator's attach_hydra_texture skips a product that already has viewportHandle, so a saved handle leaves it "
+    "with no texture: the sensor renders nothing, its ROS writer never runs and the topic is not advertised. "
+    "Rebuilding the graph reuses the same product. Open the file with sim__stage__open, which deactivates a stale "
+    "LiDAR product in the session layer before the first Play, or rebuild the graph with another width/height.")
 
 
 # A reference or payload to a prim path that does not exist contributes no specs, so it cannot hide a
@@ -51,6 +64,27 @@ def runtime_camera_target(stage, producer):
         unsupported(f"Cannot resolve camera for producer {producer.GetPath()}: {str(exc)[:250]}. "
                     "Inspect its cameraPrim target and rebuild or set the camera target before saving.",
                     producer.GetPath(), camera=None)
+
+
+def runtime_node_resolution(stage, producer):
+    """(width, height) of a live producer with unauthored inputs (its OGN default), or None off-stage."""
+    try:
+        import omni.graph.core as og
+        import omni.usd
+
+        if omni.usd.get_context().get_stage() != stage:
+            return None
+        node = og.Controller.node(str(producer.GetPath()))
+        return (int(og.Controller.get(node.get_attribute("inputs:width"))),
+                int(og.Controller.get(node.get_attribute("inputs:height"))))
+    except Exception:  # noqa: BLE001 - no Kit, or a node that is not on this graph: not resolvable
+        return None
+
+
+def session_only(attr, stage):
+    """True when every spec of *attr* is in the session layer: a runtime value, not a saved one."""
+    stack = attr.GetPropertyStack()
+    return bool(stack) and all(spec.layer == stage.GetSessionLayer() for spec in stack)
 
 
 def camera_handles(stage, reset, binding_check, target_resolver=None):
@@ -118,8 +152,10 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
     if not any(p.HasAttribute("viewportHandle") for p in products):
         return [], list(repairs.values())
     for helper in prims:
-        if helper.GetAttribute("node:type").Get() not in HELPERS:
+        helper_type = helper.GetAttribute("node:type").Get()
+        if helper_type not in HELPERS:
             continue
+        lidar_helper = helper_type in LIDAR_HELPERS
         for source in helper.GetAttribute("inputs:renderProductPath").GetConnections():
             producer = stage.GetPrimAtPath(source.GetPrimPath())
             if (not producer or not producer.IsActive() or producer.IsAbstract()
@@ -132,6 +168,9 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
                 cameras = [Sdf.Path(repairs[str(producer.GetPath())]["camera"])]
             width = producer.GetAttribute("inputs:width").Get()
             height = producer.GetAttribute("inputs:height").Get()
+            if lidar_helper and (type(width) is not int or type(height) is not int):
+                # A default LiDAR graph leaves them unauthored; the matches below need the node's real values.
+                width, height = runtime_node_resolution(stage, producer) or (None, None)
             if type(width) is not int or type(height) is not int:
                 unsupported(f"Camera producer {producer.GetPath()} needs explicit integer width and height.", producer.GetPath(),
                             camera=[str(c) for c in cameras])
@@ -140,8 +179,9 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
                             producer.GetPath(), camera=[str(c) for c in cameras])
             # Version 2 (6.0.0.0) has no renderProductPrim input. Never require it.
             explicit = producer.GetRelationship("inputs:renderProductPrim").GetTargets()
+            # An inactive product is not reusable: NVIDIA's lookup only walks active prims.
             matches = [p for p in products
-                       if p.GetRelationship("camera").GetTargets() == cameras
+                       if p.IsActive() and p.GetRelationship("camera").GetTargets() == cameras
                        and tuple(p.GetAttribute("resolution").Get() or ()) == (width, height)]
             if explicit:
                 if len(explicit) != 1:
@@ -161,18 +201,30 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
             attr = product.GetAttribute("viewportHandle")
             entry = dict(path=str(attr.GetPath()), product=str(product.GetPath()),
                          camera=str(cameras[0]), width=width, height=height,
-                         handle=attr.Get(), producer=str(producer.GetPath()))
+                         handle=attr.Get(), producer=str(producer.GetPath()), lidar=lidar_helper,
+                         owned=bool(OWNED_PRODUCT.fullmatch(product.GetName())))
             previous = selected.get(entry["path"])
             if previous and previous != entry:
                 unsupported("Multiple producers share the camera product ambiguously.", attr.GetPath())
             selected[entry["path"]] = entry
     if not selected:
         return [], list(repairs.values())
-    if not reset:
+    # A pack-owned capture product is removed whole by strip_runtime_render_state, so it needs no
+    # export-policy flag. It still passes every check below: ambiguous, authored and dependent refuse.
+    native = sorted(path for path, entry in selected.items() if not entry["owned"])
+    # A LiDAR handle already saved in a file is authored, so it is not normalized, but refusing would lose
+    # the student's unsaved work. It stays in the copy, and save_report warns with the real fix.
+    for path in [p for p in native if selected[p]["lidar"]
+                 and not session_only(stage.GetAttributeAtPath(p), stage)]:
+        del selected[path]
+        native.remove(path)
+    if not selected:
+        return [], list(repairs.values())
+    if native and not reset:
         unsupported(
-            "Camera render handles cannot survive restart. To reset only these runtime fields in the exported copy, "
+            "Camera and LiDAR render handles cannot survive restart. To reset only these runtime fields in the exported copy, "
             "retry with reset_camera_render_handles=true. This is an explicit export policy, not proof of authorship.",
-            next(iter(selected)), properties=sorted(selected),
+            native[0], properties=native,
             retry_with={"reset_camera_render_handles": True})
     # A masked/unloaded composition cannot establish that all dependencies were inspected.
     blocking = blocking_composition_errors(stage.GetCompositionErrors())
@@ -262,6 +314,146 @@ def reset_export_handles(layer, entries):
         spec = layer.GetAttributeAtPath(entry["path"])
         spec.owner.RemoveProperty(spec)
     return sorted(str(p) for p in paths)
+
+
+def remaining_render_handles(layer):
+    """Active non-viewport products still holding viewportHandle in the private copy (bounded)."""
+    out = []
+    stage = Usd.Stage.Open(layer)
+    for prim in stage.Traverse():
+        if (prim.GetTypeName() == "RenderProduct" and prim.HasAttribute("viewportHandle")
+                and not prim.GetName().startswith(VIEWPORT_PRODUCT_PREFIX)):
+            out.append(str(prim.GetPath()))
+    return out
+
+
+def graph_inventory(layer):
+    """OmniGraph paths in the private copy after runtime pipelines are gone, so a checkpoint can be told apart."""
+    stage = Usd.Stage.Open(layer)
+    paths = [str(p.GetPath()) for p in stage.Traverse() if p.GetTypeName() == "OmniGraph"]
+    return paths[:MAX_GRAPHS], len(paths)
+
+
+def save_report(layer):
+    """Fields that describe a saved copy: its graphs, and warnings for handles the export could not reset."""
+    graphs, graph_count = graph_inventory(layer)
+    report = dict(graphs=graphs, graph_count=graph_count, graphs_truncated=graph_count > len(graphs))
+    remaining = remaining_render_handles(layer)
+    if remaining:
+        report["stale_render_handles"] = remaining[:MAX_REPORTED_HANDLES]
+        report["warnings"] = [
+            f"{len(remaining)} render product(s) keep a viewportHandle in this copy. If a graph reuses one after "
+            "reopening (same camera and resolution), its sensor will not publish. " + STALE_HANDLE_FIX]
+    return report
+
+
+def retained_product_paths():
+    """Product paths with a texture retained by Replicator now, or None when that cannot be read."""
+    try:
+        import omni.replicator.core as rep
+
+        textures, _verify = retained_textures(rep.vp_manager.ViewportManager)
+        return {str(texture.get_render_product_path()) for texture in textures}
+    except Exception:  # noqa: BLE001 - private adapter is feature-detected; callers report "unknown"
+        return None
+
+
+def repair_stale_lidar_products(stage, retained):
+    """Deactivate saved LiDAR products in the session layer of a freshly opened stage.
+
+    Their file-authored viewportHandle makes Replicator skip the texture for good. Deactivating is reversible,
+    leaves the file and root layer untouched, and lets IsaacCreateRenderProduct make a new product at Play.
+    Cameras keep their documented contract; anything a graph pins or connects to is reported, not changed.
+    """
+    candidates = []
+    pinned = set()
+    for count, prim in enumerate(Usd.PrimRange.Stage(stage)):
+        if count == MAX_PRIMS:
+            return dict(deactivated=[], skipped=[dict(path="/", reason="stage exceeds 10000 prims")])
+        pin = prim.GetRelationship("inputs:renderProductPrim")
+        if pin:
+            pinned.update(pin.GetTargets())
+        if prim.GetTypeName() != "RenderProduct" or not prim.HasAttribute("viewportHandle"):
+            continue
+        targets = prim.GetRelationship("camera").GetTargets()
+        camera = stage.GetPrimAtPath(targets[0]) if len(targets) == 1 else None
+        if camera and camera.GetTypeName() == "OmniLidar" and not session_only(prim.GetAttribute("viewportHandle"), stage):
+            candidates.append(prim)
+    if not candidates:
+        return dict(deactivated=[], skipped=[])
+    if retained is None:
+        return dict(deactivated=[], skipped=[dict(path=str(p.GetPath()), reason="texture state unreadable")
+                                             for p in candidates])
+    try:
+        scan_dependencies(stage.GetUsedLayers(), conservative=False,
+                          paths={p.GetPath().AppendProperty("viewportHandle") for p in candidates})
+    except Exception as error:  # noqa: BLE001 - a dependency or size limit: leave the content alone
+        return dict(deactivated=[], skipped=[dict(path=str(p.GetPath()), reason=str(error)[:200])
+                                             for p in candidates])
+    deactivated, skipped = [], []
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        for prim in candidates:
+            name = str(prim.GetPath())
+            if name in retained:
+                skipped.append(dict(path=name, reason="has a live texture"))
+            elif prim.GetPath() in pinned:
+                skipped.append(dict(path=name, reason="a graph pins it with inputs:renderProductPrim"))
+            elif prim.SetActive(False):
+                deactivated.append(name)
+            else:
+                skipped.append(dict(path=name, reason="could not be deactivated"))
+    return dict(deactivated=deactivated, skipped=skipped)
+
+
+def classify_helper_product(stage, product, retained, playing):
+    """What a ROS helper's product will do, from the same fields Replicator's reuse path reads."""
+    if product is None:
+        if playing:
+            return "no_product", "No render product exists while playing; inspect the producer's compute errors."
+        return "no_product_yet", None
+    name = str(product.GetPath())
+    if retained is not None and name in retained:
+        return "texture_bound", None
+    attr = product.GetAttribute("viewportHandle")
+    if product.HasAttribute("viewportHandle") and not session_only(attr, stage):
+        return "stale_handle", f"{name} has a saved viewportHandle and no texture. " + STALE_HANDLE_FIX
+    if retained is None:
+        return "unknown", None
+    if product.HasAttribute("viewportHandle"):
+        return "viewport_bound", None
+    if playing:
+        return "no_texture", f"{name} has no render texture while playing, so its sensor is not rendering."
+    return "texture_on_play", None
+
+
+def helper_render_status(stage, helper, runtime_product, retained, playing, resolution_reader=runtime_node_resolution):
+    """One helper's render status. *runtime_product* is its live input, usually empty until the first Play."""
+    product = None
+    if runtime_product:
+        prim = stage.GetPrimAtPath(str(runtime_product))
+        product = prim if prim and prim.IsActive() else None
+    else:
+        for source in helper.GetAttribute("inputs:renderProductPath").GetConnections():
+            producer = stage.GetPrimAtPath(source.GetPrimPath())
+            if not producer or producer.GetAttribute("node:type").Get() != PRODUCER:
+                continue
+            rel = producer.GetRelationship("inputs:cameraPrim")
+            cameras = rel.GetTargets() if rel else []
+            width = producer.GetAttribute("inputs:width").Get()
+            height = producer.GetAttribute("inputs:height").Get()
+            if type(width) is not int or type(height) is not int:
+                width, height = resolution_reader(stage, producer) or (None, None)
+            matches = [p for p in stage.Traverse() if p.GetTypeName() == "RenderProduct"
+                       and p.GetRelationship("camera").GetTargets() == cameras
+                       and tuple(p.GetAttribute("resolution").Get() or ()) == (width, height)]
+            if cameras and matches:
+                product = matches[0]
+                break
+    status, problem = classify_helper_product(stage, product, retained, playing)
+    entry = dict(node=str(helper.GetPath()), render_product=str(product.GetPath()) if product else None, status=status)
+    if problem:
+        entry["problem"] = problem
+    return entry
 
 
 def retained_textures(manager_type):

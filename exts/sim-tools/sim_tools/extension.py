@@ -10,8 +10,12 @@ import omni.timeline
 from isaac_mcp_bridge import get_mcp_bridge, ToolDefinition
 from isaac_mcp.scene_contracts import REGISTRY
 from isaac_mcp.project_assets import AssetError
-from .core import Scene, bounded, facts
+from .core import STAGE_TOOLS, TIMELINE_TOOLS, Scene, attribute_change, bounded, facts, stop_call
 from .render_export import validate_native_binding
+
+# Reads that do not depend on the stage: no session/stage target, and they keep working right when
+# a target has just gone stale (the log is how a stale target gets explained).
+TARGETLESS = {"sim.graph.node_types", "sim.logs.tail"}
 
 
 class Extension(omni.ext.IExt):
@@ -100,18 +104,63 @@ class Extension(omni.ext.IExt):
         for namespace in ("sim", "assets"):
             self.bridge.unregister_owner("generic-" + namespace)
 
+    def _note_change(self, kind, what, certain, stage=None):
+        """Report a stage/timeline change to the Kit log and sim.logs.tail. Diagnostics only: this
+        must never stop the guards in the event handlers from running."""
+        try:
+            import carb
+
+            activity = getattr(getattr(self, "bridge", None), "tool_activity", lambda: None)()
+            attribution = attribute_change(activity, certain)
+            record = self.scene.record_event(kind, what, attribution, stage)
+            line = f"[sim-tools] {what}{': ' + stage if stage else ''} (source: {attribution['source']})"
+            (carb.log_info if attribution["origin"] == "tool" else carb.log_warn)(line)
+            return record
+        except Exception as exc:  # noqa: BLE001
+            try:
+                import carb
+
+                carb.log_error(f"[sim-tools] could not record {what}: {exc}")
+            except Exception:  # noqa: BLE001
+                pass
+            return None
+
     def _stage_event(self, event):
+        types = omni.usd.StageEventType
+        if event.type in (int(types.OPENED), int(types.OPEN_FAILED)):
+            try:
+                ctx = omni.usd.get_context()
+                stage = ctx.get_stage()
+                url = stage.GetRootLayer().identifier if stage else ctx.get_stage_url()
+            except Exception:  # noqa: BLE001 - diagnostics only
+                url = None
+            what = "stage opened" if event.type == int(types.OPENED) else "stage open failed"
+            self._note_change("stage", what, STAGE_TOOLS, url)
         if event.type == int(omni.usd.StageEventType.CLOSING):
+            current = self.scene._stage
+            self._note_change("stage", "stage closing", STAGE_TOOLS,
+                              current.GetRootLayer().identifier if current else None)
             self.follower.stop("stage closing")
             self._runtime_edit_restorer.cancel()
             self.advanced.close_sensors(stage_closing=True)
             self.scene.close_stage()
 
     def _timeline_event(self, event):
-        if event.type == int(omni.timeline.TimelineEventType.STOP):
+        types = omni.timeline.TimelineEventType
+        if event.type == int(types.STOP):
+            self._note_timeline("timeline stopped")
             self._runtime_edit_restorer.stopped()
-        elif event.type == int(omni.timeline.TimelineEventType.PLAY):
+        elif event.type == int(types.PLAY):
+            self._note_timeline("timeline playing")
             self._runtime_edit_restorer.cancel()
+        elif event.type == int(types.PAUSE):
+            self._note_timeline("timeline paused")
+
+    def _note_timeline(self, what):
+        # Only state changes: Replicator can issue a second native Stop while draining.
+        if getattr(self, "_timeline_state", None) != what:
+            self._timeline_state = what
+            self._note_change("timeline", what, TIMELINE_TOOLS)
 
     async def _timeline_control(self, args):
         """sim.timeline.control with its guards: settle a pending Stop before Play, the physics
@@ -191,8 +240,9 @@ class Extension(omni.ext.IExt):
         ids = dict(session_id=args["session_id"], stage_id=args["stage_id"])
         stage = s.target(**ids)
         if not s.timeline.is_stopped():
-            refuse("TIMELINE_ACTIVE", "Stop the timeline first; the tool plays a few frames itself so robots "
-                   "are mapped at their start poses.")
+            refuse("TIMELINE_ACTIVE", "Stop the timeline first with sim__timeline__control action=stop; the tool "
+                   "plays a few frames itself so robots are mapped at their start poses.",
+                   before_retry=stop_call(**ids))
         validate_occupancy(s, stage, args)  # refuse bad arguments before anything plays
 
         async def stop():
@@ -236,22 +286,35 @@ class Extension(omni.ext.IExt):
         s.target(args["session_id"], args["stage_id"])
         self.advanced.invalidate()
         expected = "camera" if name == "sim.camera.capture" else "lidar"
-        entry = self.advanced.sensors.get(args["path"])
-        if entry is None or entry[0] != expected:
-            refuse("NOT_OWNED", "Sensor is not registered in this session.")
+        adopt = args.pop("adopt", False)
+        if type(adopt) is not bool:
+            refuse("INVALID_VALUE", "adopt must be boolean.")
         wait = args.pop("wait_for_render", expected == "camera")
         if type(wait) is not bool:
             refuse("INVALID_VALUE", "wait_for_render must be boolean.")
+        # Refuse what can be refused before adoption creates anything.
+        if wait and expected == "lidar" and not s.timeline.is_playing():
+            refuse(
+                "SENSOR_PAUSED",
+                "LiDAR acquisition requires a playing timeline. Use wait_for_render=false for the latest completed scan, or explicitly play and allow warm-up.",
+            )
+        entry = self.advanced.sensors.get(args["path"])
+        if entry is None or entry[0] != expected:
+            if entry is not None or not adopt:
+                refuse(
+                    "NOT_OWNED",
+                    f"{args['path']} has no {expected} render resources in this session: sensors from an opened "
+                    "file start unregistered, even ones you made before saving. Retry with adopt=true to create "
+                    "them for the sensor at this exact path (session layer only; source files are unchanged), "
+                    f"or create a new sensor with sim__{expected}__create.",
+                    **({} if entry is not None else {"retry_with": {"adopt": True}}),
+                )
+            entry = self.advanced.adopt(s.stage(), args["path"], expected)
         if not wait and expected == "lidar":
             return {
                 "waited": False,
                 "meaning": "latest completed LiDAR scan; freshness not established by this call",
             }, None
-        if expected == "lidar" and not s.timeline.is_playing():
-            refuse(
-                "SENSOR_PAUSED",
-                "LiDAR acquisition requires a playing timeline. Use wait_for_render=false for the latest completed scan, or explicitly play and allow warm-up.",
-            )
         import omni.kit.app
 
         product = entry[1].get("product")
@@ -374,6 +437,10 @@ class Extension(omni.ext.IExt):
     def handler(self, name):
         async def run(**args):
             try:
+                target = REGISTRY[name]["parameters"].get("session_id")
+                if target and target["required"] and not (args.get("session_id") and args.get("stage_id")):
+                    # Reached by clients that do not enforce the published required list.
+                    self.scene.target(args.get("session_id"), args.get("stage_id"))
                 async with self._operation_lock:
                     render_observation = None
                     camera_frame = None
@@ -455,6 +522,10 @@ class Extension(omni.ext.IExt):
 
     def dispatch(self, name, a, *, camera_frame=None):
         s = self.scene
+        if name in TARGETLESS:
+            a.pop("session_id", None)
+            a.pop("stage_id", None)
+            return self.advanced.targetless(name, a)
         if name in {
             "sim.body.state",
             "sim.joints.state",

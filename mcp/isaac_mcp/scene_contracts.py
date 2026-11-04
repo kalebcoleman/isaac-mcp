@@ -7,11 +7,17 @@ def field(kind, description, required=True, **kw):
 
 TARGET = dict(
     session_id=field(
-        "string", "Exact session_id from sim.stage.info (process incarnation)."
+        "string", "Exact session_id from sim__stage__info (call it first; process incarnation)."
     ),
     stage_id=field(
-        "string", "Exact stage_id from sim.stage.info; stale stages are refused."
+        "string", "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
     ),
+)
+# For reads that do not depend on the stage. Older callers still send IDs; refusing them as
+# unknown arguments would break those calls for no benefit.
+UNUSED_TARGET = dict(
+    session_id=field("string", "Not needed; accepted and ignored.", False),
+    stage_id=field("string", "Not needed; accepted and ignored.", False),
 )
 POSE = dict(
     position=field(
@@ -91,7 +97,7 @@ add(
 )
 add(
     "sim.stage.open",
-    "Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage has unsaved edits unless discard_changes=true. Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset.",
+    "Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage really has unsaved edits unless discard_changes=true. Deactivates stale saved LiDAR render products in the session layer so their ROS topics return (reported in stale_render_products; the file is unchanged). Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset.",
     dict(
         **TARGET,
         path=field("string", "Absolute path of the USD file to open (a leading tilde for your home is expanded)."),
@@ -184,14 +190,14 @@ add(
 )
 add(
     "sim.stage.save",
-    "Export a flattened copy, including session edits, to a new basename ending .usda in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
+    "Export a flattened copy, including session edits, to a new basename (.usda is added if absent) in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
     dict(
         **TARGET,
         filename=field("string", "New basename ending .usda; no directories."),
         directory=field("string", "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.", False),
         reset_camera_render_handles=field(
             "boolean",
-            "Explicitly remove validated session-only ROS camera viewportHandle fields from the copy so native textures can rebuild after restart. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
+            "Explicitly remove validated session-only ROS camera and LiDAR viewportHandle fields from the copy so native textures can rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
             False,
             default=False,
         ),
@@ -231,11 +237,12 @@ add(
 )
 add(
     "sim.prim.delete",
-    "Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused.",
+    "Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused. Prims from an opened file are not pack-owned, even ones you made earlier: allow_foreign=true deactivates such a prim in the session layer instead (USD cannot remove another layer's opinions from there). It stays composed as inactive and keeps its path; a sim__stage__save copy omits it; source files never change.",
     dict(
         **TARGET,
-        path=field("string", "Pack-owned root path."),
+        path=field("string", "Pack-owned root path, or any prim with allow_foreign=true."),
         confirm=field("boolean", "Explicit confirmation; false refuses."),
+        allow_foreign=field("boolean", "Also act on a prim these tools did not create in this session: deactivate it in the session layer (or remove it if all its opinions are session-layer ones). World/default prim, articulation and other protections still apply. Source files are unchanged.", False, default=False),
     ),
 )
 add(
@@ -371,11 +378,12 @@ add(
 )
 add(
     "sim.camera.capture",
-    "Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization.",
+    "Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true.",
     dict(
         **TARGET,
-        path=field("string", "Camera created by this pack."),
+        path=field("string", "Camera created by this pack, or an existing Camera with adopt=true."),
         filename=field("string", "New simple basename ending .png."),
+        adopt=field("boolean", "If this exact prim is a Camera with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; the prim itself is not edited and stays non-owned.", False, default=False),
     ),
 )
 add(
@@ -393,11 +401,12 @@ add(
 )
 add(
     "sim.lidar.read",
-    "Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames.",
+    "Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true.",
     dict(
         **TARGET,
-        path=field("string", "Pack-created LiDAR path."),
+        path=field("string", "Pack-created LiDAR path, or an existing OmniLidar with adopt=true."),
         limit=field("integer", "Maximum returned points 1..256.", False, default=64),
+        adopt=field("boolean", "If this exact prim is an OmniLidar with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; settings a read needs are overridden in the session layer only and reported as session_overrides. The prim stays non-owned.", False, default=False),
     ),
 )
 add(
@@ -419,9 +428,9 @@ add(
 )
 add(
     "sim.graph.node_types",
-    "Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions.",
+    "Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions. Only contains is required; a catalog read needs no session_id or stage_id.",
     dict(
-        **TARGET,
+        **UNUSED_TARGET,
         contains=field("string", "Substring of the node type id or its UI name, case-insensitive (<=64 chars)."),
         limit=field("integer", "Maximum node types returned, 1..40.", False, default=20),
         ports=field("boolean", "Include ports (default: only when 5 or fewer types match; at most 8 detailed).", False),
@@ -443,7 +452,7 @@ add(
 )
 add(
     "sim.graph.inspect",
-    "Read an OmniGraph: every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). Read-only.",
+    "Read an OmniGraph: every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). ROS helpers report ros_render_status and writer_computes, which show a sensor that is not rendering; publisher count is not read here, so check with ros2 topic info. Read-only.",
     dict(
         **TARGET,
         path=field("string", "Graph prim path, e.g. /World/ROS_Clock."),
@@ -506,8 +515,8 @@ add(
 )
 add(
     "sim.logs.tail",
-    "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs.",
-    dict(**TARGET, limit=field("integer", "Maximum lines 1..100.", False, default=50)),
+    "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs, plus scene_events: recent stage opens and timeline changes with their source (a tool, or outside the tools such as a person in the GUI). Use it to explain a STALE_TARGET. Needs no session_id or stage_id.",
+    dict(**UNUSED_TARGET, limit=field("integer", "Maximum lines 1..100.", False, default=50)),
 )
 add(
     "sim.controller.create",
@@ -593,3 +602,10 @@ REGISTRY["sim.lidar.read"]["parameters"]["wait_for_render"] = field(
     False,
     default=False,
 )
+
+# Clients validate the required list before a call reaches this server, with their own error text
+# (OpenCode: "session_id: Missing key"), so the description is where to say how to get the IDs.
+for _meta in REGISTRY.values():
+    _target = _meta["parameters"].get("session_id")
+    if _target and _target["required"]:
+        _meta["description"] += " Requires session_id and stage_id from sim__stage__info."
