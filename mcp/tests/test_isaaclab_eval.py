@@ -225,6 +225,17 @@ def test_command_building_keeps_play_arguments_after_the_runner_options():
     assert command[-4:] == ["--task", "Isaac-Cartpole-v0", "--checkpoint", "/lab/model.pt"]
 
 
+def test_the_built_command_parses_back_without_swallowing_play_flags():
+    command = eval_runner.build_command(
+        "/lab/bin/python", "/lab/play.py", ["--task", "T", "--checkpoint", "/lab/m.pt"],
+        "/jobs/x/eval_result.json", num_episodes=7, max_steps=None,
+    )
+    args = eval_runner._parse_args(command[2:])  # drop the interpreter and the runner path (argv[0])
+    assert (args.episodes, args.max_steps, args.play) == (7, 0, "/lab/play.py")
+    assert args.play_args[0] == "--"  # main() strips this separator before setting sys.argv
+    assert args.play_args[1:] == ["--task", "T", "--checkpoint", "/lab/m.pt"]
+
+
 def test_eval_builds_the_runner_command_with_its_options_and_play_flags(tmp_path, monkeypatch):
     scripts = tmp_path / "lab" / "scripts" / "reinforcement_learning"
     scripts.mkdir(parents=True)
