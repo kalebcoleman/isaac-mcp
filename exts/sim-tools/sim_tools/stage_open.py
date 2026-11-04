@@ -125,7 +125,9 @@ async def open_stage(scene, args):
     if not omni.kit.app.get_app().is_app_ready():
         refuse("APP_STARTING", "Kit startup is still running. Wait until sim.stage.info reports app_ready=true; "
                "no stage was opened.")
-    scene.target(args.get("session_id"), args.get("stage_id"))
+    ctx = omni.usd.get_context()
+    if ctx.get_stage() is not None:  # with no stage open there is nothing to protect: this is how to recover
+        scene.target(args.get("session_id"), args.get("stage_id"))
     file, problem = check_path(args.get("path"), output_root=scene.output)
     if problem:
         refuse(*problem)
@@ -135,15 +137,25 @@ async def open_stage(scene, args):
         refuse("TIMELINE_ACTIVE", "Stop the timeline before opening another stage: call sim__timeline__control "
                "action=stop with these IDs, then resend this call.",
                before_retry=stop_call(args.get("session_id"), args.get("stage_id")))
-    ctx = omni.usd.get_context()
     stage = ctx.get_stage()
     dirty = bool(stage) and stage_has_unsaved_work(stage)
     if dirty and not args.get("discard_changes", False):
         refuse("UNSAVED_CHANGES", "The current stage has unsaved edits. Save them first (sim__stage__save), or pass "
                "discard_changes=true to drop them.", source=stage.GetRootLayer().identifier)
+    # Kit closes the current stage before it finds out a file can't be read, so read it first. Holding the layer also
+    # means Kit reuses this parse.
+    from pxr import Sdf
+
+    try:
+        layer = Sdf.Layer.FindOrOpen(str(file))
+    except Exception as exc:  # noqa: BLE001 - USD raises its own error type for a parse failure
+        refuse("OPEN_FAILED", f"{file} is not a readable USD file: {str(exc)[:300]}. The current stage is unchanged.")
+    if layer is None:
+        refuse("OPEN_FAILED", f"{file} is not a readable USD file. The current stage is unchanged.")
     ok, error = await ctx.open_stage_async(str(file))
     if not ok:
-        refuse("OPEN_FAILED", f"Kit could not open {file}: {str(error)[:300]}")
+        refuse("OPEN_FAILED", f"Kit could not open {file}: {str(error)[:300]}. The previous stage may have closed: check "
+               "sim__stage__info, then open another file or call sim__quick_start.")
     app = omni.kit.app.get_app()
     for _ in range(10):  # let stage-open events reach the scene tools and the bridge sessions
         await app.next_update_async()

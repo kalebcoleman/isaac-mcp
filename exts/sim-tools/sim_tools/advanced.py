@@ -324,7 +324,8 @@ class Advanced:
         if s.timeline.is_stopped() or not prim.HasAPI(UsdPhysics.ArticulationRootAPI):
             refuse(
                 "PHYSICS_NOT_READY",
-                "Select an initialized articulation root on a playing/paused timeline.",
+                "The timeline is stopped: play first." if s.timeline.is_stopped() else
+                f"{p} is not an articulation root. sim__physics__inspect lists them, or sim__ros2__tf_setup reports it.",
             )
         sm = physics_manager()
         from .physics import runtime_vector, view_for
@@ -921,6 +922,10 @@ class Advanced:
                     "Use a new stage to release them before reusing this path.",
                 )
             kind = "camera" if name == "sim.camera.create" else "lidar"
+            parent_prim = stage.GetPrimAtPath(str(p).rsplit("/", 1)[0] or "/")
+            if kind == "lidar" and parent_prim.IsA(UsdGeom.Gprim):
+                refuse("INVALID_PARENT", f"{parent_prim.GetPath()} is a {parent_prim.GetTypeName()}, and USD can't nest a sensor "
+                       "under geometry. Use an Xform parent, such as the link above it.")
             frame = a.get("frame", "local")
             lidar_asset = optics = None
             try:

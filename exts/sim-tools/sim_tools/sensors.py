@@ -307,7 +307,7 @@ def adopt(stage, path, kind):
         found = stage.GetPrimAtPath(path)
         refuse(
             "NOT_A_SENSOR",
-            f"{path} is a {found.GetTypeName() or 'typeless prim'}, not an {expected}, and adopt only accepts the "
+            f"{path} is a {found.GetTypeName() or 'typeless prim'}, not {'a' if expected == 'Camera' else 'an'} {expected}, and adopt only accepts the "
             f"sensor at that exact path. Find one with sim__prim__find type_name={expected}.",
         )
     if not prim.IsActive() or prim.IsInstanceProxy():

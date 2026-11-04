@@ -77,3 +77,9 @@ def test_an_oversized_file_keeps_the_safe_answer(stage, monkeypatch):
     monkeypatch.setattr(stage_open, "MAX_COMPARE_BYTES", 0)
     stage.GetRootLayer().customLayerData = {"a": 1}
     assert stage_open.file_stage_has_unsaved_work(stage)
+
+
+def test_a_file_that_cant_be_read_is_refused_before_kit_closes_the_stage():
+    source = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/stage_open.py").read_text(encoding="utf-8")
+    assert source.index("Sdf.Layer.FindOrOpen(str(file))") < source.index("ctx.open_stage_async(str(file))")
+    assert "if ctx.get_stage() is not None:" in source  # no stage: open is the way to recover, so it can't need one

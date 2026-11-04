@@ -361,8 +361,15 @@ class Extension(omni.ext.IExt):
             )
         entry = self.advanced.sensors.get(args["path"])
         if entry is None or entry[0] != expected:
-            if entry is None and not s.stage().GetPrimAtPath(args["path"]).IsValid():
+            from pxr import UsdGeom
+
+            target_prim = s.stage().GetPrimAtPath(args["path"])
+            if entry is None and not target_prim.IsValid():
                 refuse("NOT_FOUND", f"No prim at {args['path']}. Check sim__stage__tree, or create it with sim__{expected}__create.")
+            if entry is not None or target_prim.IsA(UsdGeom.Gprim):
+                what = f"a {entry[0]}" if entry is not None else f"a {target_prim.GetTypeName()}"
+                refuse("NOT_A_SENSOR", f"{args['path']} is {what}, not a {expected}. Find one with sim__prim__find, or "
+                       f"create it with sim__{expected}__create.")
             if entry is not None or not adopt:
                 refuse(
                     "NOT_OWNED",
@@ -598,7 +605,8 @@ class Extension(omni.ext.IExt):
                     )
                 return dict(
                     status="error",
-                    code="APPLICATION_ERROR",
+                    # USD's own parse errors are a bad file, not a fault in this tool.
+                    code="USD_ERROR" if type(e).__name__ == "ErrorException" else "APPLICATION_ERROR",
                     message=str(e)[:1500],
                     effects="unknown; inspect stage before retrying",
                 )

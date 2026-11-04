@@ -35,7 +35,8 @@ def vector(value, n):
             for x in value
         )
     ):
-        refuse("INVALID_POSE", f"Expected {n} finite numbers with magnitude <=1e8.")
+        refuse("INVALID_POSE", f"Expected {n} finite number{'' if n == 1 else 's'} with magnitude <=1e8"
+               + (f", got {len(value)} values." if isinstance(value, (list, tuple)) else "."))
     return value
 
 
@@ -311,7 +312,7 @@ class Scene:
         if st is None:
             refuse(
                 "NO_STAGE",
-                "No stage is open; open a disposable stage in the selected application.",
+                "No stage is open. Call sim__quick_start, or sim__stage__open with any session_id and stage_id.",
             )
         if self._stage != st:
             if self._stage is not None:
@@ -472,7 +473,8 @@ class Scene:
             or parent.IsInstanceProxy()
         ):
             refuse(
-                "INVALID_PARENT", "Parent must exist, be active and not an instance. A new stage has no /World: create it first with sim__prim__create kind=Xform."
+                "INVALID_PARENT", "Parent must exist, be active and not an instance."
+                + (" A new stage has no /World: create it first with sim__prim__create kind=Xform." if not stage.GetPrimAtPath("/World") else "")
             )
         if not stage.GetSessionLayer().permissionToEdit:
             refuse("READ_ONLY", "Session layer is not editable.")
@@ -503,7 +505,7 @@ class Scene:
         ):
             refuse(
                 "UNSUPPORTED_TYPE",
-                "Supported types: Cube, Sphere, Xform, PhysicsScene.",
+                "Supported types: Cube, Sphere, Cylinder, Capsule, Cone, Xform, PhysicsScene.",
             )
         if (
             type(size) not in (int, float)
