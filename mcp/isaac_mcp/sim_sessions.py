@@ -188,7 +188,16 @@ def _claim_is_live(data) -> bool:
     except (KeyError, TypeError, ValueError, RuntimeError):
         return False
     identity = _process_identity(pid)
-    return bool(identity and identity[0] != "Z" and identity[1] == ticks)
+    if identity and identity[0] != "Z" and identity[1] == ticks:
+        return True
+    if identity is None or identity[0] == "Z":
+        # A launcher that didn't exec Kit can exit first. While a member of its group lives, the group ID
+        # cannot be reused and the simulator still holds what the launch claimed.
+        try:
+            return bool(_group_members(pid))
+        except OSError:
+            return False
+    return False
 
 
 def _claimed(kind: str) -> set[int]:
@@ -328,12 +337,15 @@ def _claims():
                 with os.fdopen(fd, "wb") as stream:
                     stream.write(json.dumps(dict(new_owner)).encode())
                 os.replace(tmp, path)
-                held.remove(path)  # a claim that could not be rewritten stays held, so the host releases it
+                held.remove(path)
             except OSError:
                 try:
                     os.unlink(tmp)
                 except OSError:
                     pass
+        # A claim that could not be rewritten still names this host, which outlives the launch: it is kept
+        # (not released) so a failed handover refuses a second launch instead of freeing a live simulator's port.
+        held.clear()
 
     take.handover = handover
     try:

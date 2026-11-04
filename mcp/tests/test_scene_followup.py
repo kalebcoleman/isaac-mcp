@@ -447,11 +447,26 @@ def test_create_rigid_body_enables_contact_reports(scene, monkeypatch):
     assert created["physics"]["rigid_body"] is True
 
 
-def test_contact_capture_keeps_pairs_beyond_the_reply_limit():
-    """Review fix: pair 33 of a report is kept, not dropped before the caller's paths are applied."""
-    names = {i: f"/World/B{i}" for i in range(1, 40)}
-    names[100] = "/World/Ground"
-    headers = [SimpleNamespace(type=0, actor0=i, actor1=100, collider0=i, collider1=100,
-                               contact_data_offset=0, num_contact_data=0) for i in range(1, 40)]
-    pairs = queries._pairs(headers, [], None, lambda v: names[v], limit=queries.MAX_CAPTURE + 1)
-    assert len(pairs) == 39 and pairs[-1]["body_a"] == "/World/B39"
+def test_contact_callback_keeps_pair_33_and_filters_after_capture(monkeypatch):
+    """Review fix, through the real callback: a body whose contact is pair 33 is still found."""
+    import pxr
+
+    monkeypatch.setattr(pxr, "PhysicsSchemaTools", SimpleNamespace(intToSdfPath=lambda value: value), raising=False)
+    headers = [SimpleNamespace(type=0, actor0=f"/World/B{i}", actor1="/World/Ground", collider0=f"/World/B{i}",
+                               collider1="/World/Ground", contact_data_offset=0, num_contact_data=0)
+               for i in range(1, 41)]
+    queries._receive_contact_report(headers, [])
+    assert len(queries._LAST_REPORT["pairs"]) == 40 and not queries._LAST_REPORT["capped"]
+    assert any(p["body_a"] == "/World/B33" for p in queries._LAST_REPORT["pairs"])
+
+
+def test_contact_callback_marks_a_report_over_the_capture_limit(monkeypatch):
+    import pxr
+
+    monkeypatch.setattr(pxr, "PhysicsSchemaTools", SimpleNamespace(intToSdfPath=lambda value: value), raising=False)
+    monkeypatch.setattr(queries, "MAX_CAPTURE", 5)
+    headers = [SimpleNamespace(type=0, actor0=f"/World/B{i}", actor1="/World/Ground", collider0=f"/World/B{i}",
+                               collider1="/World/Ground", contact_data_offset=0, num_contact_data=0)
+               for i in range(1, 9)]
+    queries._receive_contact_report(headers, [])
+    assert queries._LAST_REPORT["capped"] and len(queries._LAST_REPORT["pairs"]) == 5

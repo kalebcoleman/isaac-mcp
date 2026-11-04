@@ -28,6 +28,7 @@ Jobs are launched with ``shell=False`` and an explicit argv list, with
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -510,7 +511,10 @@ def _kill_orphan_group(data: dict) -> bool:
             return False
         try:
             signal.pidfd_send_signal(fd, signal.SIGKILL, None, sim_sessions._PIDFD_SIGNAL_PROCESS_GROUP)
-        except OSError:  # a kernel before 6.9 cannot signal a group by pidfd: members first, then the leader
+        except OSError as exc:
+            if exc.errno != errno.EINVAL:  # ESRCH and the rest: the leader is gone, and its group ID may be reused
+                return False
+            # A kernel before 6.9 cannot signal a group by pidfd: members first, then the leader
             sim_sessions._signal_group_members(pid, signal.SIGKILL)
             signal.pidfd_send_signal(fd, signal.SIGKILL)
         return True

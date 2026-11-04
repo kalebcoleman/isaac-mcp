@@ -1028,3 +1028,32 @@ def test_claims_handed_to_the_simulator_outlive_the_launching_host(runtime):
         sleeper.kill()
         sleeper.wait()
     assert sim._claim("port", 18810, owner)  # simulator gone: stale, so taken
+
+
+def test_a_claim_stays_live_while_a_group_member_outlives_its_launcher(runtime):
+    """Review fix: the launcher exits before Kit; the claim must not go stale until the group is empty."""
+    child = subprocess.Popen([sys.executable, "-c",
+                              "import subprocess,sys,time;"
+                              "subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']);"
+                              "time.sleep(0.2)"], start_new_session=True)
+    try:
+        ticks = sim._process_identity(child.pid)[1]
+        data = {"pid": child.pid, "start_ticks": ticks, "boot_id": sim._boot_id()}
+        child.wait()  # the launcher is gone; its child keeps the group alive
+        assert sim._claim_is_live(data)
+    finally:
+        for member in sim._group_members(child.pid):
+            os.kill(member, signal.SIGKILL)
+    time.sleep(0.2)
+    assert not sim._claim_is_live(data)
+
+
+def test_a_failed_handover_does_not_release_the_claim(runtime, monkeypatch):
+    owner = sim._claim_owner()
+    monkeypatch.setattr(sim.os, "replace", lambda *a: (_ for _ in ()).throw(OSError("full")))
+    with sim._claims() as claim:
+        claim("port", 18820)
+        claim.handover({"pid": 1, "start_ticks": 1, "boot_id": "x"})
+    assert (runtime / "port-18820.claim").exists()
+    with pytest.raises(sim._Refusal):
+        sim._claim("port", 18820, owner)
