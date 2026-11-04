@@ -140,12 +140,17 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         headless: _Headless = True,
         rl_library: _RlLibrary = None,
         extra_args: _ExtraArgs = None,
+        num_episodes: Annotated[int, Field(description="Finished episodes to collect before the run stops itself.")] = 20,
+        max_steps: Annotated[int | None, Field(description="Environment-step bound that also ends the run; null removes it.")] = 20000,
         timeout_s: _Timeout = None,
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
     ) -> str:
-        """Run a policy checkpoint (headless by default) as a job and return its job_id. It plays until cancelled
-        or timeout_s and prints no score, so judge learning from training metrics.
+        """Run a checkpoint as a job and score it. Returns its job_id; when the job ends, isaaclab__runs_status
+        reports `eval_result`: episodes, mean/std/min/max return, mean length, steps, and success_rate if the
+        task reports one. It counts complete episodes, stops after num_episodes (waiting for each environment's
+        first finished episode where possible) or max_steps, then exits by itself. Without a finished episode it
+        reports no return, never a made-up score.
 
         Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true. Video needs optional
         MoviePy/imageio-ffmpeg in the Lab interpreter.
@@ -153,8 +158,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _launch(
             _jobs.eval_,
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
-            rl_library=rl_library, extra_args=extra_args, timeout_s=timeout_s,
-            allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+            rl_library=rl_library, extra_args=extra_args, num_episodes=num_episodes, max_steps=max_steps,
+            timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
     @mcp.tool(name="isaaclab__play", annotations=PYTHON_EXECUTION)

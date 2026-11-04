@@ -138,7 +138,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] `NO_SHARED_STAGING` wrongly said a pack needs no staging; a URDF does
 - [x] A `.urdf` holding xacro reported `USD_UNREADABLE`: now `XACRO`
 - [x] `run.sh` could hang silently on the EULA prompt during its import check
-- [x] Wording: `sim__simulation__step` observe arguments, `sim__joints__state` needs playing or paused, `sim__prim__create` ancestors, `sim__joints__drive` joint paths and stiffness, `sim__stage__save` extensions, Play not being real time, `assets__packs` host and Kit stores, `source: snapshot`, `/objects_poses_sim` format, `/scan` and `resetSimulationTimeOnStop`, `eval` gives no score, doctor's `package://` hint, `--field ranges`
+- [x] Wording: `sim__simulation__step` observe arguments, `sim__joints__state` needs playing or paused, `sim__prim__create` ancestors, `sim__joints__drive` joint paths and stiffness, `sim__stage__save` extensions, Play not being real time, `assets__packs` host and Kit stores, `source: snapshot`, `/objects_poses_sim` format, `/scan` and `resetSimulationTimeOnStop`, `eval`'s score and no-score note, doctor's `package://` hint, `--field ranges`
 
 ### Open: to attempt
 
@@ -173,7 +173,7 @@ Found by the fleet at `e658289`; not fixed yet:
 
 ### Known limitations, to state in the docs
 
-- [ ] `isaaclab__eval` is Lab's `play.py`: it runs until stopped and gives no score
+- [x] `isaaclab__eval` scores a checkpoint instead of only playing `play.py`: it counts complete episodes, stops on its own and returns `eval_result`; `play` is unchanged. **live** on Lab 2.3.2 (four libraries)
 - [ ] `--video` needs MoviePy and imageio-ffmpeg in the Lab environment
 - [ ] A screen recording belongs to the server process that started it, so a client that restarts between calls can't stop it
 - [ ] `timeout_s` with no host running waits until the next status call

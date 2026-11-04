@@ -140,7 +140,7 @@ required or performed by this documentation.
 | `isaaclab__install_info` | Report the Isaac Lab install: interpreter, versions, root, venv |
 | `isaaclab__envs_list` | List registered Isaac Lab task ids (optional substring filter) |
 | `isaaclab__train` | Start a training job (async) and return its `job_id` |
-| `isaaclab__eval` | Run a policy checkpoint as a job (async) |
+| `isaaclab__eval` | Run and score a policy checkpoint as a job (async) |
 | `isaaclab__play` | Play a checkpoint with a window (async, interactive) |
 | `isaaclab__runs_list` | List jobs (running/finished/all) |
 | `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir, window |
@@ -250,11 +250,53 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `headless` | boolean | no | `true` | |
   | `rl_library` | string | no | `null` | |
   | `extra_args` | array[string] | no | `null` | |
-  | `timeout_s` | number | no | `null` | |
+  | `num_episodes` | integer | no | `20` | Finished episodes to collect. Must be at least 1. |
+  | `max_steps` | integer | no | `20000` | Environment-step bound that also ends the run; `null` removes it. |
+  | `timeout_s` | number | no | `null` | Host watchdog, separate from the step bound. |
   | `allow_concurrent` | boolean | no | `false` | |
   | `allow_concurrent_gpu` | boolean | no | `false` | |
-- Returns: same shape as `isaaclab__train`. Runs `play.py` with `--checkpoint` (Isaac Lab has no separate eval entrypoint) and `--viz none|kit`.
-- Example: `{"task": "Isaac-Reach-UR10", "checkpoint": "/abs/path/to/model.pth", "rl_library": "rl_games", "headless": true}`
+- Returns on launch: same shape as `isaaclab__train`. Runs `play.py` with `--checkpoint` (Isaac Lab has no separate
+  eval entrypoint) and `--viz none|kit`, through a scoring launcher (see below). Once it finishes,
+  `isaaclab__runs_status` also returns `eval_result`.
+- Example: `{"task": "Isaac-Reach-UR10", "checkpoint": "/abs/path/to/model.pth", "rl_library": "rl_games", "headless": true, "num_episodes": 20}`
+
+#### How eval produces a score
+
+The job runs `mcp/isaac_mcp/isaaclab/eval_runner.py` with the Isaac Lab interpreter instead of `play.py`
+directly. The runner imports the configured task modules, patches `gymnasium.make` so the environment it
+returns has its `step` wrapped, and then runs the real `play.py` unchanged through `runpy` with the same
+arguments. Isaac Lab itself is not modified, and `isaaclab__play` still runs the plain script.
+
+- The wrapper sits on the object `gymnasium.make` returned, which is what the libraries' vector-environment
+  wrappers (`RslRlVecEnvWrapper`, `RlGamesVecEnvWrapper`, `SkrlVecEnvWrapper`, `Sb3VecEnvWrapper`) call in
+  their own `step`. It therefore sees exactly one call per simulator step, with the reward and
+  terminated/truncated flags the environment produced. Works with torch tensors on any device, numpy or
+  plain Python values.
+- Each environment's reward is summed until that environment is terminated or truncated; that episode's
+  undiscounted return and length (environment steps) are then recorded. Only complete episodes count.
+- The run stops when at least `num_episodes` have finished **and** every parallel environment has finished
+  at least one episode, or when `max_steps` environment steps have been taken. `max_steps` is the bound
+  that makes a run end even when a task never terminates. `stopped_by` says which happened. Waiting for
+  every environment's first finished episode avoids scoring only the fastest environments; a run cut short
+  by `max_steps` says so in `note`.
+- The runner then makes the simulation app's `is_running()` return false, so `play.py` leaves its loop and
+  closes the environment and app itself; the job exits 0. If a play loop ignored that, the second step
+  after the target raises a private exception instead of adding made-up episodes.
+- `eval_result.json` is written atomically in the job folder and is what `runs_status` reports once it is
+  there. Its fields are `episodes`, `mean_return`, `std_return`, `min_return`, `max_return`, `mean_length`,
+  `steps`, `success_rate` (only when the environment reports success), `stopped_by`, `num_envs`,
+  `num_episodes_requested`, `max_steps` and `note`. `steps` counts environment steps (one per simulator
+  step across all parallel environments), not summed per-environment steps.
+- If no episode finishes, `episodes` is `0` and the return fields are `null`, with a `note`; no score is
+  estimated. A play script that never builds its environment through `gymnasium.make`, or never steps it,
+  likewise produces no score: the runner reports that rather than inventing one. An uncaught error is
+  written into the result and still fails the job. A job killed by `timeout_s` or `runs_cancel` may leave
+  no result at all.
+
+Measured on Isaac Lab 2.3.2 with Isaac Sim 5.1 and `Isaac-Cartpole-v0` for `rsl_rl`, `rl_games`, `skrl` and `sb3`:
+eval returned scores for early and trained checkpoints, and the trained checkpoint scored clearly higher.
+Isaac Lab 3's unified `play.py` was not run here, so whether its libraries are wrapped the same way is not
+verified; an unscoreable script shows up as `episodes: 0` / no score, not a number.
 
 ### `isaaclab__play`
 
@@ -293,7 +335,9 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `job_id` | string | yes | — | Validated id. |
 - Returns:
   `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, log_dir, pid}`
-  plus `window: {id, title, width, height}` when the job is live and owns a window. `last_log_lines` is the last 20 lines of `stdout.log`; a failed job also has `last_stderr_lines`, the last 20 of `stderr.log`, where launch and import failures go. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
+  plus `window: {id, title, width, height}` when the job is live and owns a window, and `eval_result`
+  (`episodes`, `mean_return`, ...) for an `isaaclab__eval` job whose runner has written it, including after the
+  host that started the job has gone (it is read from `eval_result.json` in the job folder). `last_log_lines` is the last 20 lines of `stdout.log`; a failed job also has `last_stderr_lines`, the last 20 of `stderr.log`, where launch and import failures go. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
 - Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10"}`
 
 ### `isaaclab__runs_tail`
@@ -400,7 +444,8 @@ Example train call shape (illustrative):
 ### 4. Play / eval a checkpoint
 
 1. `isaaclab__play` (or `isaaclab__eval`) with `task`, `checkpoint`, and options. Returns
-   `{job_id, log_dir, command}`.
+   `{job_id, log_dir, command}`. For eval, wait for the job to finish and read `eval_result` from
+   `isaaclab__runs_status`: it ends on its own after `num_episodes` or `max_steps`, so no cancel is needed.
 2. For a windowed `play`, call `isaaclab__runs_status` to get `window.id`, then use the host
    `screenshot(window_id=...)` / `start_screen_recording(window_id=...)` tools to inspect.
    The viewport is black until the log contains "Completed setting up the environment"; check for it with
@@ -453,7 +498,8 @@ unless that port is configured or advertised.
 ## Job model and state
 
 - State directory: `~/.local/share/isaac-mcp/jobs` (or `ISAACLAB_JOBS_DIR`).
-- Each job writes `job.json`, `stdout.log`, `stderr.log`. Final status on exit is one of
+- Each job writes `job.json`, `stdout.log`, `stderr.log`; an `isaaclab__eval` job also writes
+  `eval_result.json` (atomically) when its scoring runner finishes. Final status on exit is one of
   `succeeded`, `failed`, `cancelled`, `timeout`.
 - Job ids: `YYYYMMDD-HHMMSS-<slug>` of the task, with `-2`, `-3`, ... if two launches land
   in the same second.

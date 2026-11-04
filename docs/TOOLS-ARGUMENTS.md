@@ -231,7 +231,7 @@ List registered Isaac Lab task ids (optionally filtered by substring).
 
 ### `isaaclab__eval`
 
-Run a policy checkpoint (headless by default) as a job and return its job_id. It plays until cancelled or timeout_s and prints no score, so judge learning from training metrics.
+Run a checkpoint as a job and score it. Returns its job_id; when the job ends, isaaclab__runs_status reports `eval_result`: episodes, mean/std/min/max return, mean length, steps, and success_rate if the task reports one. It counts complete episodes, stops after num_episodes (waiting for each environment's first finished episode where possible) or max_steps, then exits by itself. Without a finished episode it reports no return, never a made-up score.
 
 - `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
 - `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
@@ -239,6 +239,8 @@ Run a policy checkpoint (headless by default) as a job and return its job_id. It
 - `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `rl_library` (str | None, default `None`): RL library name, e.g. rsl_rl. Default: the Isaac Lab script's own.
 - `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `num_episodes` (int, default `20`): Finished episodes to collect before the run stops itself.
+- `max_steps` (int | None, default `20000`): Environment-step bound that also ends the run; null removes it.
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
