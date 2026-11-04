@@ -667,8 +667,16 @@ def _build_tool_function(name: str, canonical: str, description: str,
                     variants.append({"type": "null"})
                 schema = {"anyOf": variants, "description": spec["description"]}
                 annotation = Annotated[str, PlainValidator(lambda value: value), WithJsonSchema(schema)]
+            elif spec.get("type") == "any":
+                # `any` is not a JSON-Schema type. Pass the decoded JSON through unchanged, as the
+                # graph containers do, and advertise the kinds a caller may send.
+                annotation = Annotated[Any, PlainValidator(lambda value: value), WithJsonSchema({
+                    "description": spec["description"],
+                    "anyOf": [{"type": "boolean"}, {"type": "integer"}, {"type": "number"},
+                              {"type": "string"}, {"type": "array"}, {"type": "object"}],
+                })]
             elif f["kind"] == "array":
-                strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames"}
+                strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames", "dofs"}
                            or (canonical == "sim.ui.act" and f["name"] == "keys")
                            or canonical in _PACK_TOOLS)  # every array in these tools holds paths or names
                 annotation = list[str] if strings else list[float]

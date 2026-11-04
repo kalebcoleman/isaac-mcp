@@ -137,8 +137,11 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__stage__tree` | Bounded stage hierarchy including inactive prims; `depth` limits levels below `root`; Kit's runtime `/Render` (Replicator) prims are hidden unless `include_runtime=true`. Text is untrusted data. |
 | `sim__prim__get` | Read local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown. |
 | `sim__prim__find` | Bounded literal path substring/type search (not regex). Includes inactive prims. |
-| `sim__prim__create` | Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. |
-| `sim__prim__set_transform` | Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation. |
+| `sim__prim__create` | Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; `size` is the cube edge, the sphere/cylinder/capsule/cone diameter or height, or the Plane's width and length (its axis follows the stage up axis). `mass` (kilograms) or `density` (kg/m^3) authors PhysicsMassAPI on volume geometry; `rigid=true` gives it a runtime effect. |
+| `sim__prim__set_transform` | Set a static local or world pose on **any** Xformable prim in the session layer, reporting the pose before and after; undo with `sim__prim__revert`. Authors one transform op and, when the prim's stack is not already that one op, a session `xformOpOrder` that replaces the composed order. Refuses instance proxies (name the instance root), articulation links other than the root (a joint attaches them; it names the robot Xform to move instead), time-sampled transforms, Kit runtime prims, prims with no Xformable schema and a running or paused timeline. Source files never change. No claim of runtime teleportation. |
+| `sim__prim__set_attribute` | Set one typed attribute on any prim in the session layer, reading the composed value before and after; undo with `sim__prim__revert`. `type` creates a missing attribute (bool, int, uint, int64, uint64, float, double, string, token, asset, float2/3/4, double2/3/4, int2/3, color3f/4f, normal3f, point3f, vector3f, quatf, quatd); without it the attribute must exist. Refuses engine- and schema-owned attributes (`points`, `normals`, `faceVertexIndices`, `faceVertexCounts`, `extent`, `xformOpOrder`, `xformOp:*`, `physics:*`, `physx*:*`), instance proxies and Kit runtime prims. |
+| `sim__prim__revert` | Remove the session-layer opinions these tools recorded on one prim or its subtree, restoring the composed values from the source files; reports what was removed and the values before and after. Source files never change. Prims the pack created stay (delete them with `sim__prim__delete`). Nothing recorded is a no-op, not an error. Only edits recorded in this session and stage can be undone. |
+| `sim__physics__apply` | Add or remove a collider, rigid body and kinematic state, or set `mass` / `density`, on any prim; session layer only and undo with `sim__prim__revert`. `collider=true` may set `approximation` (convexHull, convexDecomposition, boundingSphere, boundingCube, meshSimplification, none). Refuses a rigid body under an existing rigid-body ancestor, a joint or articulation root as a body, both mass and density, and any change while the timeline is active. |
 | `sim__physics__inspect` | Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. |
 | `sim__body__state` | Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Supply `path` (or its aliases `prim` or `prim_path`). Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. |
 | `sim__timeline__control` | Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. |
@@ -172,7 +175,10 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__logs__tail` | Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs. |
 | `sim__controller__create` | OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. |
 | `sim__controller__update` | OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required. |
-| `sim__joints__command` | Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose. A contact can hold the robot short of a target, so compare `sim__joints__state`, and try a fresh scene if unsure. |
+| `sim__joints__command` | Command initialized articulation position targets by name (`targets`) or in DOF order (`positions`), optionally with velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless `clamp=true`, which uses the limit and reports what it clamped; unknown DOF names are refused with the valid ones. Returns the applied targets, their previous values and units, not achieved poses. Runtime only and lost on Stop; `sim__joints__drive` authors USD targets. |
+| `sim__joints__gains` | Read or set an initialized articulation's runtime drive gains: `stiffness`, `damping` and `max_effort` for named `dofs` or every DOF, with values before and after. These are PhysX/Newton runtime values: not USD, lost on Stop and never saved; `sim__joints__drive` authors USD gains. Omit every value to only read. Needs a playing or paused timeline and a valid tensor view. |
+| `sim__joints__move` | Step a **paused**, initialized simulation until named joint targets are within `tolerance` or `max_steps` is used, then report `settled` and every joint's error. A joint held by a contact or a weak drive reports `settled=false` with the blocked joint and its remaining error: clear the path, raise gains with `sim__joints__gains`, or retry with more steps. Runtime only; never pumps the app loop. |
+| `sim__joints__teleport` | Set joint positions directly as a state reset, not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are `{dof name: value}`; needs an initialized (playing or paused) articulation, refuses out-of-limit values, and reports each joint's value before and after. |
 | `assets__import_urdf` | Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves `package://` inside that folder only. Authors drives that hold a pose, lifts the robot out of a ground plane and warns about unusable mass or inertia. Source files never change. See [URDF robots](#urdf-robots). |
 
 Graph build accepts pairs or objects, JSON-encoded individual node/connection entries, and a
@@ -390,6 +396,74 @@ counts it under `extension.reloads`.
 If a sim tool call is running when the reload happens, the sim and asset tools are missing until that call finishes,
 then return by themselves. A wait over 30 s is logged as an error. The UR5e twin does not have this: if a twin call is
 running when `exts/ur5e-dt` reloads, its startup fails with a message saying so, and it needs another reload or a restart.
+
+## Joint control by name, gains, settling and teleport
+
+`sim__joints__gains`, `sim__joints__move` and `sim__joints__teleport` need an initialized articulation
+(playing or paused), like `sim__joints__state`. `sim__joints__gains` and `sim__joints__move` change runtime
+state only: gains, targets and teleported poses are not USD, are never saved, and are lost on Stop.
+
+A typical steer-by-name loop:
+
+```json
+{"session_id": "...", "stage_id": "...", "path": "/World/ur5e/root_joint",
+ "targets": {"shoulder_lift_joint": -1.2, "elbow_joint": 0.6}}
+```
+
+Pass that to `sim__joints__command`. An out-of-limit value is refused with its runtime limits; resend
+with `clamp=true` to use the limit and get a `clamped` entry. A velocity target is a drive target, not the
+measured speed; a wheel usually needs `stiffness=0` with damping, set through `sim__joints__gains`.
+
+To reach a pose rather than acknowledge a target, pause the initialized timeline and call
+`sim__joints__move` with the same `targets`. It steps up to `max_steps` and returns `settled`, the
+steps used, simulated seconds and every joint's error. A joint that cannot reach its target is
+reported in `blocked` with its remaining error, never as success: a low arm can be held by the ground,
+and a weak drive by its load. `sim__joints__teleport` sets positions immediately for a state reset (for
+example after editing a robot's layout); it bypasses motion and leaves drive targets alone, so the next
+steps may pull the joints back.
+
+`sim__joints__command` and `sim__joints__move` validate against the runtime limits from the selected
+backend on Isaac Sim 5.1 and 6.0 through 6.2. `sim__joints__gains` reads and writes whichever gain API
+that build exposes (`get_dof_stiffnesses`/`set_dof_stiffnesses`, or the experimental wrapper's gain pair)
+and refuses with `PHYSICS_API_UNAVAILABLE` when neither exists, rather than changing something else.
+
+## Editing any prim: move, physics, attributes, revert
+
+These tools edit **any** prim on the stage, not only prims this pack created: imported assets, prims
+from your own USD files and, in a disposable session, the twin's prims. Safety comes from how the edit
+is made and undone:
+
+- Every edit is a session-layer opinion. The source USD files and the stage's root layer are never
+  written; `source_files_changed` is always `false`.
+- Each call reports the composed value before and after. `sim__prim__revert` removes the session
+  opinions these tools recorded for one prim (or its subtree), restoring the composed values from the
+  source files, and reports what it removed and the resulting values.
+- While the timeline is playing or paused, these edits refuse with `TIMELINE_ACTIVE`; stop first.
+  `sim__prim__set_transform` and `sim__physics__apply` also refuse while physics is active.
+
+Moving a robot or a table is just `sim__prim__set_transform` with the prim's path. Two limits are real:
+a prim attached by a joint is a link, and moving it would break its joints, so the refusal names the
+robot Xform to move instead; a time-sampled transform would lose its animation, so animate a parent
+Xform or the source clip. An instance proxy inside an instance is read-only: pass the instance root.
+A prim with no Xformable schema (a `Scope`, for example) has no pose to set.
+
+`sim__physics__apply` adds a collider (optionally with an `approximation`), a rigid body, the kinematic
+flag, or `mass`/`density` (not both). A rigid body under an existing rigid-body ancestor is refused as
+`NESTED_BODY`; a joint or articulation root cannot become a body. Turning off a collider or body that a
+source file applies refuses with `READ_ONLY_SOURCE`, because removing another layer's opinion from the
+session layer would not remove the schema: edit the source file instead.
+
+`sim__prim__set_attribute` writes one typed attribute and refuses engine-owned names (`points`,
+`normals`, `faceVertexIndices`, `faceVertexCounts`, `extent`, `xformOpOrder`, `xformOp:*`, `physics:*`,
+`physx*:*`) with the tool that owns them. `value` is JSON; pass `type` to create a missing attribute.
+
+Measured on 6.2.0.0 and 5.1.0.0 (see [evidence](evidence/scene-followup/README.md)): a visual-only cube
+from a USD file took a collider and rigid body, fell onto a moved table and rested; two pack-created
+cubes with masses 2.5 and 5.0 reported exactly those runtime masses through `sim__body__state`
+`include_dynamics`; `revert` restored the table's and cube's authored poses, and the source file's
+SHA-256 was unchanged.
+
+
 
 ## Reopening a saved robot
 

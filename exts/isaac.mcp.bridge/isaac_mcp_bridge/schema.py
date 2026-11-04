@@ -25,7 +25,7 @@ Stdlib-only — importable off-Kit (tests, lint) like the rest of the registry.
 from typing import Any, Dict, List, Optional
 
 # The declared types renderers know how to render; anything else is text.
-_KINDS = ("boolean", "integer", "number", "array", "object", "string")
+_KINDS = ("boolean", "integer", "number", "array", "object", "string", "any")
 
 
 def field_spec(name: str, schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:

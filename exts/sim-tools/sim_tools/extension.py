@@ -657,6 +657,9 @@ class Extension(omni.ext.IExt):
             "sim.body.state",
             "sim.joints.state",
             "sim.joints.command",
+            "sim.joints.gains",
+            "sim.joints.move",
+            "sim.joints.teleport",
             "sim.simulation.step",
             "sim.camera.create",
             "sim.camera.capture",
@@ -690,7 +693,7 @@ class Extension(omni.ext.IExt):
         mutations |= MUTATIONS
         if (
             name in mutations
-            or name == "sim.simulation.step"
+            or name in ("sim.simulation.step", "sim.joints.move")
             or (name == "sim.timeline.control" and a.get("action") != "stop")
         ):
             import omni.kit.app as kit_app

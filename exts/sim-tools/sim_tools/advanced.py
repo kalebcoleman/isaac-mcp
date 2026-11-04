@@ -14,7 +14,7 @@ import shutil
 import uuid
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics, UsdShade
 from isaac_mcp.project_assets import AssetError, refuse
-from .core import bounded, vector
+from .core import KIT_ROOTS, bounded, vector
 
 MUTATIONS = {
     "sim.graph.build",
@@ -26,6 +26,9 @@ MUTATIONS = {
     "sim.material.create",
     "sim.material.apply",
     "sim.physics.configure",
+    "sim.physics.apply",
+    "sim.prim.set_attribute",
+    "sim.prim.revert",
     "sim.joints.drive",
     "sim.camera.create",
     "sim.lidar.create",
@@ -47,13 +50,11 @@ CAPTURE_NAME_RULE = "Use a new name of letters, digits, _ and -, ending .png (<=
 
 def runtime_dof_limits(path):
     """This articulation's [[low, high], ...], or None if this build or backend can't say."""
-    from .physics import view_for
+    from .physics import dof_limits, view_for
 
     try:
-        limits = view_for(path, articulation=True).get_dof_limits()
-        limits = limits.numpy() if hasattr(limits, "numpy") else limits
-        return limits.tolist()[0]
-    except (AttributeError, IndexError, TypeError):
+        return dof_limits(view_for(path, articulation=True))
+    except (AttributeError, IndexError, TypeError, ValueError):
         return None
 
 
@@ -94,6 +95,65 @@ def command_target(value, lo, hi, current):
     if limited is None and abs(value - current) <= STATE_ECHO_TOLERANCE:
         return lo if value < lo else hi
     return limited
+
+
+def bounded_names(names, limit=32):
+    shown = ", ".join(names[:limit])
+    return shown + (f", ... ({len(names)} in all)" if len(names) > limit else "")
+
+
+def resolve_named(values, names, label):
+    """[(index, name, requested)] from {dof name: number}; an unknown name lists the valid ones."""
+    if not isinstance(values, dict) or not values:
+        refuse(
+            "INVALID_VALUE",
+            f"{label} must be a non-empty object of {{dof name: number}}. Valid DOF names: "
+            f"{bounded_names(names)}.",
+        )
+    unknown = [key for key in values if not isinstance(key, str) or key not in names]
+    if unknown:
+        refuse(
+            "UNKNOWN_DOF",
+            f"{label} names {unknown[:8]!r}, which this articulation does not have. Valid DOF names: "
+            f"{bounded_names(names)}.",
+            valid_names=names,
+        )
+    rows = []
+    for name, value in values.items():
+        if type(value) not in (int, float) or not math.isfinite(value):
+            refuse("INVALID_VALUE", f"{label}[{name!r}] must be a finite number, not {value!r}.")
+        rows.append((names.index(name), name, float(value)))
+    return rows
+
+
+def allowed_targets(rows, limits, current, units, clamp, label):
+    """Applied per-DOF targets, plus what was clamped; refuses a real excess unless clamp=true."""
+    applied, clamped, rounded = {}, [], []
+    for index, name, requested in rows:
+        low, high = limits[index]
+        if math.isnan(low) or math.isnan(high) or low > high:
+            refuse("PHYSICS_FORMAT", f"Runtime limits for {name} are invalid; no targets were changed.")
+        limited = command_target(requested, low, high, current[index])
+        if limited is None:
+            if not clamp:
+                refuse(
+                    "JOINT_LIMIT",
+                    f"{label} {requested:g} for {name} ({units[index]}) is outside its runtime limits "
+                    f"[{low:g}, {high:g}]. Resend with clamp=true to use the limit instead, or pick a value "
+                    "inside the limits.",
+                    name=name,
+                    requested=requested,
+                    limits=[low, high],
+                    units=units[index],
+                )
+            limited = low if requested < low else high
+            clamped.append(
+                dict(name=name, requested=requested, applied=limited, limits=[low, high], units=units[index])
+            )
+        elif limited != requested:
+            rounded.append(dict(name=name, requested=requested, applied=limited, units=units[index]))
+        applied[index] = (name, requested, float(limited), low, high, units[index])
+    return applied, clamped, rounded
 
 
 # Visited while looking for an articulation's joints; the caller's limit bounds what is returned.
@@ -160,7 +220,138 @@ def owned(s, stage, p):
     return prim
 
 
-KIT_ROOTS = ("Render", "OmniverseKit_Persp", "OmniverseKit_Front", "OmniverseKit_Top", "OmniverseKit_Right")
+# Attributes the engine or a schema derives from other data (design 4.3). Writing them corrupts a
+# stage in ways this tool could not verify afterwards, so they are refused with the tool that owns them.
+ENGINE_OWNED = ("points", "normals", "faceVertexIndices", "faceVertexCounts", "extent", "xformOpOrder")
+ATTRIBUTE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?::[A-Za-z_][A-Za-z0-9_]*)*")
+VECTOR_TYPES = {
+    "float2": (2, Gf.Vec2f), "double2": (2, Gf.Vec2d), "int2": (2, Gf.Vec2i),
+    "float3": (3, Gf.Vec3f), "double3": (3, Gf.Vec3d), "int3": (3, Gf.Vec3i),
+    "color3f": (3, Gf.Vec3f), "normal3f": (3, Gf.Vec3f), "point3f": (3, Gf.Vec3f),
+    "vector3f": (3, Gf.Vec3f), "float4": (4, Gf.Vec4f), "double4": (4, Gf.Vec4d),
+    "color4f": (4, Gf.Vec4f),
+}
+SCALAR_TYPES = ("bool", "uchar", "int", "uint", "int64", "uint64", "half", "float", "double",
+                "string", "token", "asset")
+SUPPORTED_TYPES = (*SCALAR_TYPES, *VECTOR_TYPES, "quatf", "quatd")
+
+
+def jsonable(value):
+    """A USD value as JSON: vectors, quaternions and paths become plain lists/strings."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Gf.Quatf):
+        return [value.GetReal(), *value.GetImaginary()]
+    if isinstance(value, Gf.Quatd):
+        return [value.GetReal(), *value.GetImaginary()]
+    if isinstance(value, (Sdf.Path, Sdf.AssetPath)):
+        return str(value)
+    try:
+        return list(value)
+    except TypeError:
+        return str(value)
+
+
+def typed_value(value, type_name):
+    """Convert a JSON value to USD's type, refusing what does not fit instead of coercing silently."""
+    if type_name in ("string", "token", "asset"):
+        if not isinstance(value, str):
+            refuse("INVALID_VALUE", f"A {type_name} attribute takes a string, not {value!r}.")
+        return value
+    if type_name == "bool":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.lower() in ("true", "false"):
+            return value.lower() == "true"
+        refuse("INVALID_VALUE", "A bool attribute takes true or false.")
+    if type_name in ("uchar", "int", "uint", "int64", "uint64"):
+        if type(value) is not int:
+            refuse("INVALID_VALUE", f"A {type_name} attribute takes a whole number, not {value!r}.")
+        if type_name in ("uchar", "uint", "uint64") and value < 0:
+            refuse("INVALID_VALUE", f"A {type_name} attribute cannot be negative.")
+        return value
+    if type_name in ("half", "float", "double"):
+        if type(value) not in (int, float) or not math.isfinite(value):
+            refuse("INVALID_VALUE", f"A {type_name} attribute takes a finite number, not {value!r}.")
+        return float(value)
+    if type_name in VECTOR_TYPES:
+        size, factory = VECTOR_TYPES[type_name]
+        if (
+            not isinstance(value, (list, tuple))
+            or len(value) != size
+            or any(type(item) not in (int, float) or not math.isfinite(item) for item in value)
+        ):
+            refuse("INVALID_VALUE", f"A {type_name} attribute takes {size} finite numbers, e.g. [1, 2, 3].")
+        return factory(*value)
+    if type_name in ("quatf", "quatd"):
+        if (
+            not isinstance(value, (list, tuple))
+            or len(value) != 4
+            or any(type(item) not in (int, float) or not math.isfinite(item) for item in value)
+        ):
+            refuse("INVALID_VALUE", "A quaternion attribute takes four finite numbers [w, x, y, z].")
+        if type_name == "quatf":
+            return Gf.Quatf(value[0], Gf.Vec3f(*value[1:]))
+        return Gf.Quatd(value[0], Gf.Vec3d(*value[1:]))
+    refuse(
+        "UNSUPPORTED_TYPE",
+        f"{type_name!r} is not a supported attribute type here. Use one of: {', '.join(SUPPORTED_TYPES)}.",
+    )
+
+
+def attribute_kind(name):
+    """Why this attribute is engine- or schema-owned, or None when the tool may write it."""
+    if name in ENGINE_OWNED:
+        return ("It is derived or schema-managed; writing it corrupts the stage in ways this tool cannot "
+                "verify. Use sim__prim__create or the tool that owns it.")
+    if name.startswith("physics:") or (name.startswith("physx") and ":" in name):
+        return "Physics schema attributes are authored by sim__physics__apply, sim__joints__drive or sim__physics__configure."
+    if name.startswith("xformOp:"):
+        return "Transforms are authored by sim__prim__set_transform, which keeps the op order consistent."
+    return None
+
+
+def source_api_layers(stage, prim, token):
+    """Layers other than this session that apply an API schema to *prim*."""
+    session = stage.GetSessionLayer()
+    found = []
+    for spec in prim.GetPrimStack():
+        if spec.layer == session:
+            continue
+        value = spec.GetInfo("apiSchemas")
+        if value is not None and token in (list(value.prependedItems) + list(value.explicitItems)):
+            found.append(spec.layer.identifier)
+    return found
+
+
+def remove_api_schema(stage, prim, token, alternative):
+    """Remove this session's API application; refuse when another layer applies it."""
+    layers = source_api_layers(stage, prim, token)
+    if layers:
+        refuse(
+            "READ_ONLY_SOURCE",
+            f"{prim.GetPath()} has {token} applied in {layers[0]}, and this tool edits only the session layer. "
+            f"Edit the source file, or use {alternative} on a prim the pack created or imported.",
+            source_layers=layers,
+        )
+    session = stage.GetSessionLayer()
+    spec = session.GetPrimAtPath(prim.GetPath())
+    value = spec.GetInfo("apiSchemas") if spec is not None else None
+    if value is None:
+        return False
+    prepended = [item for item in value.prependedItems if item != token]
+    explicit = [item for item in value.explicitItems if item != token]
+    if (len(prepended), len(explicit)) == (len(list(value.prependedItems)), len(list(value.explicitItems))):
+        return False
+    if prepended or explicit:
+        created = dict(prependedItems=tuple(str(item) for item in prepended))
+        if explicit:
+            created["explicitItems"] = tuple(str(item) for item in explicit)
+        spec.SetInfo("apiSchemas", Sdf.TokenListOp.Create(**created))
+    else:
+        spec.ClearInfo("apiSchemas")
+    return True
+
 
 
 def foreign_prim(s, stage, p, allow_foreign):
@@ -354,14 +545,12 @@ class Advanced:
                 f"{p} is not an articulation root. sim__physics__inspect lists them, or sim__ros2__tf_setup reports it.",
             )
         sm = physics_manager()
-        from .physics import runtime_vector, view_for
+        from .physics import array as observed, runtime_vector, view_for
 
         art = view_for(p, articulation=True)
 
         def values(data):
-            if hasattr(data, "numpy"):
-                data = data.numpy()
-            return data.tolist()[0]
+            return observed(data).tolist()[0]
 
         names = list(art.shared_metatype.dof_names)
         positions = values(art.get_dof_positions())
@@ -504,6 +693,194 @@ class Advanced:
             placement=placement,
             warnings=warnings,
         )
+        return result
+
+    def set_attribute(self, stage, a):
+        s = self.s
+        prim = s.prim(stage, a["path"])
+        if prim.IsInstanceProxy():
+            refuse(
+                "INSTANCE_PROXY",
+                f"{a['path']} is an instance proxy inside an instance and cannot be edited directly. Edit the "
+                "instance root instead.",
+            )
+        if prim.GetPath().GetPrefixes()[0].name in KIT_ROOTS:
+            refuse("PROTECTED_PRIM", "Kit's runtime render and viewport prims are protected.")
+        name = a["attribute"]
+        if not isinstance(name, str) or len(name) > 128 or not ATTRIBUTE_NAME.fullmatch(name):
+            refuse("INVALID_VALUE", "attribute must be a USD property name such as visibility, purposes or "
+                   "user:owner (letters, digits, _ and :, at most 128 characters).")
+        owned = attribute_kind(name)
+        if owned:
+            refuse("ENGINE_OWNED_ATTRIBUTE", f"{name} cannot be set here. {owned}")
+        type_name = a.get("type")
+        if type_name is not None and type_name not in SUPPORTED_TYPES:
+            refuse(
+                "UNSUPPORTED_TYPE",
+                f"type {type_name!r} is not supported. Use one of: {', '.join(SUPPORTED_TYPES)}.",
+            )
+        attr = prim.GetAttribute(name) if prim.HasAttribute(name) else None
+        created = attr is None
+        if attr:
+            type_name = str(attr.GetTypeName())
+            if type_name not in SUPPORTED_TYPES:
+                refuse(
+                    "UNSUPPORTED_TYPE",
+                    f"{name} on {a['path']} has USD type {type_name}, which this tool does not convert. "
+                    f"Supported types: {', '.join(SUPPORTED_TYPES)}.",
+                )
+        elif not type_name:
+            refuse(
+                "INVALID_VALUE",
+                f"{a['path']} has no attribute {name!r}. Pass type to create it, e.g. type=\"float\" or "
+                "type=\"float3\"; supported types: " + ", ".join(SUPPORTED_TYPES) + ".",
+            )
+        value = typed_value(a["value"], type_name)
+        before = attr.Get() if attr else None
+        authored_before = bool(attr and attr.HasAuthoredValueOpinion())
+        with Usd.EditContext(stage, stage.GetSessionLayer()):
+            s.remember_properties(stage, a["path"], [name])
+            if not attr:
+                attr = prim.CreateAttribute(name, Sdf.ValueTypeNames.Find(type_name), custom=True)
+            if not attr or not attr.Set(value):
+                refuse("SET_FAILED", f"Could not author {name} on {a['path']}; inspect the prim before retrying.")
+        after = prim.GetAttribute(name).Get()
+        return dict(
+            path=a["path"],
+            attribute=name,
+            type=type_name,
+            before=jsonable(before),
+            after=jsonable(after),
+            authored_before=authored_before,
+            created_attribute=created,
+            layer="session",
+            source_files_changed=False,
+            revert="sim__prim__revert",
+        )
+
+    def physics_apply(self, stage, a):
+        from pxr import UsdPhysics
+
+        s = self.s
+        path = a["path"]
+        prim = s.prim(stage, path)
+        if prim.IsInstanceProxy():
+            refuse(
+                "INSTANCE_PROXY",
+                f"{path} is an instance proxy inside an instance. Edit the instance root instead.",
+            )
+        if prim.GetPath().GetPrefixes()[0].name in KIT_ROOTS:
+            refuse("PROTECTED_PRIM", "Kit's runtime render and viewport prims are protected.")
+        collider, rigid = a.get("collider"), a.get("rigid_body")
+        kinematic, approximation = a.get("kinematic"), a.get("approximation") or ""
+        mass, density = a.get("mass"), a.get("density")
+        for label, flag in (("collider", collider), ("rigid_body", rigid), ("kinematic", kinematic)):
+            if flag is not None and type(flag) is not bool:
+                refuse("INVALID_VALUE", f"{label} must be true or false.")
+        if collider is None and rigid is None and kinematic is None and mass is None and density is None:
+            refuse("INVALID_VALUE",
+                   "Give at least one of collider, rigid_body, kinematic, mass or density. Nothing was changed.")
+        if approximation and collider is not True:
+            refuse("INVALID_VALUE", "approximation needs collider=true. Nothing was changed.")
+        if approximation and approximation not in (
+                "convexHull", "convexDecomposition", "boundingSphere", "boundingCube",
+                "meshSimplification", "none"):
+            refuse("INVALID_VALUE", "approximation must be convexHull, convexDecomposition, boundingSphere, "
+                   "boundingCube, meshSimplification or none.")
+        if mass is not None and density is not None:
+            refuse("CONFLICT", "Give mass or density, not both: a mass overrides the density-derived one.")
+        for label, value in (("mass", mass), ("density", density)):
+            if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value <= 0):
+                refuse("INVALID_VALUE", f"{label} must be a finite number greater than 0.")
+        if rigid is True:
+            if prim.IsA(UsdPhysics.Joint) or prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+                refuse(
+                    "INVALID_PHYSICS",
+                    f"{path} is a joint or articulation root, not a link; a rigid body belongs on the link "
+                    "prims under it. sim__physics__inspect lists them.",
+                )
+            ancestor = prim.GetParent()
+            while ancestor and not ancestor.IsPseudoRoot():
+                if ancestor.HasAPI(UsdPhysics.RigidBodyAPI):
+                    refuse(
+                        "NESTED_BODY",
+                        f"{ancestor.GetPath()} already carries a rigid body, and a rigid body under another one "
+                        "is not a separate simulation body. Apply it to a link that has no body ancestor.",
+                        body_ancestor=str(ancestor.GetPath()),
+                    )
+                ancestor = ancestor.GetParent()
+        has_body = prim.HasAPI(UsdPhysics.RigidBodyAPI)
+        if kinematic is not None and not (rigid is True or (rigid is None and has_body)):
+            refuse("INVALID_PHYSICS",
+                   "kinematic needs a rigid body on this prim: pass rigid_body=true with it, or apply the body first.")
+        if rigid is False and kinematic is True:
+            refuse("CONFLICT", "A removed rigid body cannot be kinematic. Nothing was changed.")
+        before = s.get(stage, path)
+        with Usd.EditContext(stage, stage.GetSessionLayer()):
+            if collider is True:
+                s.remember_api(stage, path, ["PhysicsCollisionAPI"])
+                UsdPhysics.CollisionAPI.Apply(prim)
+                if approximation:
+                    s.remember_api(stage, path, ["PhysicsMeshCollisionAPI"])
+                    s.remember_properties(stage, path, ["physics:approximation"])
+                    UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr(approximation)
+            elif collider is False:
+                remove_api_schema(stage, prim, "PhysicsCollisionAPI", "collider=true")
+            if rigid is True:
+                s.remember_api(stage, path, ["PhysicsRigidBodyAPI"])
+                UsdPhysics.RigidBodyAPI.Apply(prim)
+            elif rigid is False:
+                remove_api_schema(stage, prim, "PhysicsRigidBodyAPI", "rigid_body=true")
+            if kinematic is not None:
+                s.remember_properties(stage, path, ["physics:kinematicEnabled"])
+                UsdPhysics.RigidBodyAPI(prim).CreateKinematicEnabledAttr(kinematic)
+            if mass is not None or density is not None:
+                s.remember_api(stage, path, ["PhysicsMassAPI"])
+                mass_api = UsdPhysics.MassAPI.Apply(prim)
+                if mass is not None:
+                    s.remember_properties(stage, path, ["physics:mass"])
+                    mass_api.CreateMassAttr(float(mass))
+                else:
+                    s.remember_properties(stage, path, ["physics:density"])
+                    mass_api.CreateDensityAttr(float(density))
+        after = s.get(stage, path)
+        scale = UsdPhysics.GetStageKilogramsPerUnit(stage)
+        result = dict(
+            path=path,
+            before=before,
+            after=after,
+            applied=dict(
+                collider=collider, approximation=approximation or None, rigid_body=rigid,
+                kinematic=kinematic, mass=mass, density=density,
+            ),
+            units=dict(mass="kilograms (stage mass units)", density="kg/m^3, scaled by the stage units"),
+            stage_kilograms_per_unit=scale,
+            layer="session",
+            source_files_changed=False,
+            revert="sim__prim__revert",
+        )
+        mass_value = after["physics"]["mass"]
+        if mass_value is not None:
+            result["authored_mass_kg"] = mass_value * scale
+        if (mass is not None or density is not None) and not after["physics"]["rigid_body"]:
+            result["mass_note"] = ("Authored, but this prim is not a rigid body (and has no body ancestor), so the "
+                                   "value has no runtime effect yet. Apply rigid_body=true for simulation.")
+        if collider is True and not prim.IsA(UsdGeom.Gprim):
+            result["collision_note"] = ("CollisionAPI is authored, but this prim is not geometry; the physics "
+                                        "backend simulates a collider only on geometry such as a mesh or shape.")
+        return result
+
+    def revert(self, stage, a):
+        s = self.s
+        subtree = a.get("subtree", True)
+        if type(subtree) is not bool:
+            refuse("INVALID_VALUE", "subtree must be true or false.")
+        s.prim(stage, a["path"])
+        result = s.revert(stage, a["path"], subtree)
+        if not result["reverted_paths"]:
+            result["note"] = ("No session-layer opinion from these tools is recorded on this prim or its subtree, so "
+                              "nothing was removed. Edits recorded before a stage or session change are not "
+                              "recoverable; the source files were never changed.")
         return result
 
     def execute(self, name, stage, a, *, camera_frame=None):
@@ -748,6 +1125,12 @@ class Advanced:
                                 "MuJoCo timestep unavailable; inspect partial scene configuration.",
                             )
             return dict(path=a["path"], gravity=gravity, dt=1 / rate, requested_dt=dt)
+        if name == "sim.prim.set_attribute":
+            return self.set_attribute(stage, a)
+        if name == "sim.physics.apply":
+            return self.physics_apply(stage, a)
+        if name == "sim.prim.revert":
+            return self.revert(stage, a)
         if name == "sim.joints.inspect":
             nodes, truncated = bounded(stage, a["path"], a.get("limit", 200))
             # An articulation root is often a leaf joint (<robot>/root_joint): the joints that
@@ -827,47 +1210,273 @@ class Advanced:
             )
         if name == "sim.joints.command":
             state = self.joints(stage, a["path"])
-            if not state["names"]:
+            names = state["names"]
+            if not names:
                 refuse("JOINT_COUNT", "Selected articulation has no commandable DOFs.")
-            positions = vector(a["positions"], len(state["names"]))
-            from .physics import view_for
+            positions_arg, targets_arg = a.get("positions"), a.get("targets")
+            if positions_arg is None and targets_arg is None and a.get("velocities") is None:
+                refuse(
+                    "INVALID_VALUE",
+                    "Give positions (one per DOF, in sim__joints__state order), targets ({dof name: value}) "
+                    f"or velocities ({{dof name: value}}). Valid DOF names: {bounded_names(names)}.",
+                )
+            if positions_arg is not None and targets_arg is not None:
+                refuse("CONFLICT", "Give positions or targets, not both. Nothing was changed.")
+            clamp = a.get("clamp", False)
+            if type(clamp) is not bool:
+                refuse("INVALID_VALUE", "clamp must be true or false.")
+            from .physics import array as observed, dof_limits, dof_set, dof_units, view_for
 
             view = view_for(a["path"], articulation=True)
-            limits = view.get_dof_limits()
-            if hasattr(limits, "numpy"):
-                limits = limits.numpy()
-            if getattr(limits, "shape", None) != (1, len(positions), 2):
-                refuse(
-                    "PHYSICS_FORMAT",
-                    "Runtime DOF limit shape does not match the articulation.",
-                )
-            positions = list(positions)
-            for index, (value, bounds) in enumerate(zip(positions, limits[0])):
-                if any(math.isnan(float(b)) for b in bounds) or bounds[0] > bounds[1]:
-                    refuse("PHYSICS_FORMAT", "Runtime DOF limits are invalid.")
-                limited = command_target(value, float(bounds[0]), float(bounds[1]), state["positions"][index])
-                if limited is None:
-                    refuse("JOINT_LIMIT", f"Target {value:g} for {state['names'][index]} is outside the runtime "
-                           f"limits [{float(bounds[0]):g}, {float(bounds[1]):g}].")
-                positions[index] = limited
-            current = view.get_dof_position_targets()
-            import numpy as np
-
-            targets = np.array([positions], dtype=np.float32)
-            indices = np.array([0], dtype=np.uint32)
-            if hasattr(current, "device"):
-                import warp as wp
-
-                targets = wp.array(targets, device=current.device)
-                indices = wp.array(indices, dtype=wp.uint32, device=current.device)
-            view.set_dof_position_targets(targets, indices)
+            if positions_arg is not None:
+                positions = vector(positions_arg, len(names))
+                rows = [(index, name, float(positions[index])) for index, name in enumerate(names)]
+            elif targets_arg is not None:
+                rows = resolve_named(targets_arg, names, "targets")
+            else:
+                rows = []
+            limits, units = dof_limits(view), dof_units(view)
+            applied, clamped, rounded = allowed_targets(
+                rows, limits, state["positions"], units, clamp, "Target"
+            )
+            previous = dict(enumerate(observed(view.get_dof_position_targets()).reshape(-1).tolist()))
+            if applied:
+                dof_set(view, "get_dof_position_targets", "set_dof_position_targets",
+                        {index: row[2] for index, row in applied.items()})
+            velocities = []
+            if a.get("velocities") is not None:
+                velocity_rows = resolve_named(a["velocities"], names, "velocities")
+                before_velocity = observed(view.get_dof_velocity_targets()).reshape(-1).tolist()
+                dof_set(view, "get_dof_velocity_targets", "set_dof_velocity_targets",
+                        {index: value for index, _, value in velocity_rows})
+                for index, name, value in velocity_rows:
+                    velocities.append(dict(name=name, index=index, requested=value, applied=value,
+                                           previous=before_velocity[index],
+                                           units=units[index] + "/s"))
             return dict(
                 path=a["path"],
-                targets=positions,
-                names=state["names"],
-                effect="Targets set; the joints have not moved yet. Compare sim__joints__state while the simulation runs. "
-                       "A joint that stops short is usually in contact (a low arm against the ground) or has a controller "
-                       "replacing its target.",
+                backend=state["backend"],
+                names=names,
+                units="rad for revolute DOFs, stage units for prismatic ones; velocities per second",
+                targets=[
+                    dict(name=row[0], index=index, requested=row[1], applied=row[2], previous=previous.get(index),
+                         limits=[row[3], row[4]], units=row[5], clamped=row[1] != row[2])
+                    for index, row in applied.items()
+                ],
+                **({"velocities": velocities} if velocities else {}),
+                clamped=clamped,
+                rounded=rounded,
+                effect="Targets set; the joints have not moved yet. Compare sim__joints__state while the "
+                       "simulation runs, or settle them with sim__joints__move. A joint that stops short is "
+                       "usually in contact (a low arm against the ground) or has a controller replacing its target.",
+                runtime_only="Lost on Stop and never saved; sim__joints__drive authors USD targets instead.",
+            )
+        if name == "sim.joints.gains":
+            state = self.joints(stage, a["path"])
+            names = state["names"]
+            if not names:
+                refuse("JOINT_COUNT", "Selected articulation has no commandable DOFs.")
+            dofs = a.get("dofs") or []
+            if not isinstance(dofs, list) or any(not isinstance(name, str) for name in dofs):
+                refuse("INVALID_VALUE", f"dofs must be a list of DOF names; valid names: {bounded_names(names)}.")
+            unknown = [name for name in dofs if name not in names]
+            if unknown:
+                refuse(
+                    "UNKNOWN_DOF",
+                    f"dofs names {unknown[:8]!r}, which this articulation does not have. Valid DOF names: "
+                    f"{bounded_names(names)}.",
+                    valid_names=names,
+                )
+            selected = [names.index(name) for name in dofs] if dofs else list(range(len(names)))
+            values = {}
+            for label in ("stiffness", "damping"):
+                if a.get(label) is not None:
+                    values[label] = scalar(a[label])
+            if a.get("max_effort") is not None:
+                values["max_effort"] = scalar(a["max_effort"], 1e-9)
+            from .physics import dof_gains, dof_max_forces, dof_row, dof_write, view_for
+
+            view = view_for(a["path"], articulation=True)
+            before_stiffness, before_damping = dof_gains(view)
+            before_effort = dof_max_forces(view)
+            if "stiffness" in values or "damping" in values:
+                row = dof_row(view, before_stiffness)
+                if "stiffness" in values:
+                    row[0, selected] = values["stiffness"]
+                if "damping" in values:
+                    damping_row = dof_row(view, before_damping)
+                    damping_row[0, selected] = values["damping"]
+                    dof_write(view, "set_dof_dampings", damping_row)
+                dof_write(view, "set_dof_stiffnesses", row)
+            if "max_effort" in values:
+                effort_row = dof_row(view, before_effort)
+                effort_row[0, selected] = values["max_effort"]
+                dof_write(view, "set_dof_max_forces", effort_row)
+            after_stiffness, after_damping = dof_gains(view)
+            after_effort = dof_max_forces(view)
+            report = [
+                dict(name=names[index], index=index,
+                     before=dict(stiffness=before_stiffness[index], damping=before_damping[index],
+                                 max_effort=before_effort[index]),
+                     after=dict(stiffness=after_stiffness[index], damping=after_damping[index],
+                                max_effort=after_effort[index]))
+                for index in selected
+            ]
+            changed = any(
+                item["after"]["stiffness"] != item["before"]["stiffness"]
+                or item["after"]["damping"] != item["before"]["damping"]
+                or item["after"]["max_effort"] != item["before"]["max_effort"]
+                for item in report
+            )
+            return dict(
+                path=a["path"],
+                backend=state["backend"],
+                dofs=report,
+                read_only=not values,
+                applied=changed,
+                units="stiffness: torque per radian (force per stage unit); damping: torque per rad/s; "
+                      "max_effort: torque (force for prismatic)",
+                source=state["backend"] + " tensor view",
+                effect="Runtime gains changed for the selected DOFs; they are not USD, are lost on Stop and "
+                       "are never saved. sim__joints__drive authors USD gains instead.",
+            )
+        if name == "sim.joints.move":
+            if s.timeline.is_stopped() or s.timeline.is_playing():
+                refuse(
+                    "PHYSICS_NOT_READY",
+                    "Pause an initialized simulation first: from a stopped timeline, sim__timeline__control "
+                    "action=play and then action=pause. Move does not initialize by playing or pumping frames.",
+                )
+            s.check_runtime_edit(stage)
+            max_steps, tolerance = a.get("max_steps", 600), a.get("tolerance", 0.01)
+            if type(max_steps) is not int or not 1 <= max_steps <= 600:
+                refuse("LIMIT", "max_steps must be an integer 1..600.")
+            if type(tolerance) not in (int, float) or not math.isfinite(tolerance) or not 0 < tolerance <= 100:
+                refuse("INVALID_VALUE", "tolerance must be a finite number greater than 0.")
+            clamp = a.get("clamp", False)
+            if type(clamp) is not bool:
+                refuse("INVALID_VALUE", "clamp must be true or false.")
+            state = self.joints(stage, a["path"])
+            names = state["names"]
+            if not names:
+                refuse("JOINT_COUNT", "Selected articulation has no commandable DOFs.")
+            from .physics import array as tensor_array, dof_limits, dof_set, dof_units, step, view_for
+
+            view = view_for(a["path"], articulation=True)
+            rows = resolve_named(a["targets"], names, "targets")
+            limits, units = dof_limits(view), dof_units(view)
+            applied, clamped, rounded = allowed_targets(
+                rows, limits, state["positions"], units, clamp, "Target"
+            )
+            dof_set(view, "get_dof_position_targets", "set_dof_position_targets",
+                    {index: row[2] for index, row in applied.items()})
+            sm = physics_manager()
+            before_time, dt = sm.get_simulation_time(), sm.get_physics_dt()
+            if not finite_clock(before_time) or not finite_clock(dt) or dt <= 0:
+                refuse("PHYSICS_CLOCK_INVALID",
+                       "Runtime physics time must be finite and the timestep positive; no steps were taken.")
+            tracked = {index: (row[0], row[2]) for index, row in applied.items()}
+            positions, errors, steps_used, settled = state["positions"], [], 0, False
+            phase = "stepping"
+            try:
+                while steps_used < max_steps and not settled:
+                    chunk = min(10, max_steps - steps_used)
+                    step(stage, chunk)
+                    steps_used += chunk
+                    phase = "observation"
+                    positions = tensor_array(view.get_dof_positions()).reshape(-1).tolist()
+                    errors = [
+                        dict(name=name, index=index, target=target, position=positions[index],
+                             error=positions[index] - target, units=units[index])
+                        for index, (name, target) in tracked.items()
+                    ]
+                    settled = all(abs(item["error"]) <= tolerance for item in errors)
+                phase = "clock_observation"
+                after_time = sm.get_simulation_time()
+            except Exception as exc:  # noqa: BLE001 - report partial execution, never retry
+                if isinstance(exc, AssetError):
+                    raise
+                if any(token in str(exc).lower() for token in
+                       ("cuda error 700", "cudaerrorillegaladdress", "illegal memory access")):
+                    s.device_error = str(exc)[:500]
+                    refuse("DEVICE_ERROR", str(exc)[:1500],
+                           step=dict(steps_used=steps_used, phase=phase, backend=state["backend"]),
+                           effects="GPU context may be unusable. Do not retry runtime operations; inspect, save, "
+                                   "Stop, then restart the disposable Kit.")
+                refuse("STEP_FAILED", str(exc)[:1500],
+                       step=dict(steps_used=steps_used, phase=phase, backend=state["backend"]),
+                       effects="Stepping was attempted and may have changed runtime state; no rollback or retry.")
+            if not finite_clock(after_time):
+                refuse("PHYSICS_CLOCK_INVALID",
+                       "The physics clock is not finite after stepping; inspect the state before continuing.",
+                       steps_used=steps_used, joints=errors)
+            if not math.isclose(after_time - before_time, steps_used * dt, rel_tol=1e-5, abs_tol=1e-7):
+                refuse("STEP_TIMING_MISMATCH",
+                       "Observed physics time does not match the steps taken; inspect state before retrying.",
+                       steps_used=steps_used, physics_time_before=before_time, physics_time_after=after_time,
+                       expected_delta=steps_used * dt, joints=errors)
+            largest = max(errors, key=lambda item: abs(item["error"])) if errors else None
+            return dict(
+                path=a["path"],
+                backend=state["backend"],
+                settled=settled,
+                steps_used=steps_used,
+                max_steps=max_steps,
+                tolerance=tolerance,
+                units="rad / stage units",
+                physics_time_before=before_time,
+                physics_time_after=after_time,
+                simulated_seconds=after_time - before_time,
+                joints=errors,
+                clamped=clamped,
+                rounded=rounded,
+                **({"blocked": dict(
+                    name=largest["name"], error=largest["error"], units=largest["units"],
+                    note="The joint did not reach its target within max_steps. A contact, a too-weak drive or "
+                        "a blocked path can hold it: clear the path, raise stiffness or max_effort with "
+                        "sim__joints__gains, or retry with more steps.",
+                )} if largest and not settled else {}),
+            )
+        if name == "sim.joints.teleport":
+            state = self.joints(stage, a["path"])
+            names = state["names"]
+            if not names:
+                refuse("JOINT_COUNT", "Selected articulation has no commandable DOFs.")
+            from .physics import array as tensor_array, dof_limits, dof_set, dof_units, view_for
+
+            view = view_for(a["path"], articulation=True)
+            rows = resolve_named(a["positions"], names, "positions")
+            limits, units = dof_limits(view), dof_units(view)
+            for index, name, value in rows:
+                low, high = limits[index]
+                if value < low - LIMIT_ROUNDING * max(1.0, abs(low)) or value > high + LIMIT_ROUNDING * max(1.0, abs(high)):
+                    refuse(
+                        "JOINT_LIMIT",
+                        f"Teleport {value:g} for {name} ({units[index]}) is outside its runtime limits "
+                        f"[{low:g}, {high:g}]. Choose a value inside the limits: a state reset outside them is "
+                        "unphysical.",
+                        name=name, limits=[low, high], units=units[index],
+                    )
+            before = {index: state["positions"][index] for index, _, _ in rows}
+            dof_set(view, "get_dof_positions", "set_dof_positions", {index: value for index, _, value in rows})
+            zeroed = True
+            try:
+                dof_set(view, "get_dof_velocities", "set_dof_velocities", {index: 0.0 for index, _, _ in rows})
+            except Exception:  # noqa: BLE001 - state reset still succeeded
+                zeroed = False
+            after = tensor_array(view.get_dof_positions()).reshape(-1).tolist()
+            return dict(
+                path=a["path"],
+                backend=state["backend"],
+                joints=[
+                    dict(name=name, index=index, before=before[index], after=after[index], units=units[index])
+                    for index, name, value in rows
+                ],
+                velocities_zeroed=zeroed,
+                physics_bypassed=True,
+                warning="Joint positions were set directly: no motion, contact response or damping was simulated. "
+                        "Drive targets were left unchanged, so the next steps can pull the joints back; command "
+                        "or move them if the new pose must hold.",
             )
         if name == "sim.joints.state":
             state = self.joints(stage, a["path"])

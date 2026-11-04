@@ -425,7 +425,7 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.create": {
-      "description": "Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -444,12 +444,12 @@
         },
         "kind": {
           "type": "string",
-          "description": "Cube, Sphere, Cylinder, Capsule, Cone, Xform or PhysicsScene.",
+          "description": "Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene.",
           "required": true
         },
         "size": {
           "type": "number",
-          "description": "Positive cube edge or sphere diameter.",
+          "description": "Positive cube edge, sphere/cylinder/capsule/cone diameter or height, or Plane width and length.",
           "required": false,
           "default": 1
         },
@@ -501,6 +501,16 @@
             1,
             1
           ]
+        },
+        "mass": {
+          "type": "number",
+          "description": "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.",
+          "required": false
+        },
+        "density": {
+          "type": "number",
+          "description": "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.",
+          "required": false
         }
       },
       "fields": [
@@ -538,7 +548,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Cube, Sphere, Cylinder, Capsule, Cone, Xform or PhysicsScene."
+          "description": "Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene."
         },
         {
           "name": "size",
@@ -547,7 +557,7 @@
           "required": false,
           "default": 1,
           "has_default": true,
-          "description": "Positive cube edge or sphere diameter."
+          "description": "Positive cube edge, sphere/cylinder/capsule/cone diameter or height, or Plane width and length."
         },
         {
           "name": "rigid",
@@ -615,13 +625,31 @@
           ],
           "has_default": true,
           "description": "Positive local XYZ scale, 1e-6..1e4."
+        },
+        {
+          "name": "mass",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect."
+        },
+        {
+          "name": "density",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect."
         }
       ],
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
     "sim.prim.set_transform": {
-      "description": "Set a static local/world pose for a prim created by this pack. Refuses playing/paused physics and foreign, animated or complex transform stacks. No claim of runtime teleportation. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Set a static local or world pose on any Xformable prim in the session layer, and report the pose before and after; undo with sim__prim__revert. Refuses instance proxies (name the instance root), articulation links other than the root (moving a link breaks its joints), animated transforms, Kit runtime prims and a running or paused timeline. Authors one transform override, so source files never change. No claim of runtime teleportation. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -635,7 +663,7 @@
         },
         "path": {
           "type": "string",
-          "description": "Pack-owned prim path.",
+          "description": "Absolute Xformable prim path.",
           "required": true
         },
         "position": {
@@ -667,13 +695,8 @@
         },
         "scale": {
           "type": "array",
-          "description": "Positive XYZ scale in the requested pose frame.",
-          "required": false,
-          "default": [
-            1,
-            1,
-            1
-          ]
+          "description": "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.",
+          "required": false
         }
       },
       "fields": [
@@ -702,7 +725,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Pack-owned prim path."
+          "description": "Absolute Xformable prim path."
         },
         {
           "name": "position",
@@ -745,13 +768,9 @@
           "kind": "array",
           "enum": null,
           "required": false,
-          "default": [
-            1,
-            1,
-            1
-          ],
-          "has_default": true,
-          "description": "Positive XYZ scale in the requested pose frame."
+          "default": null,
+          "has_default": false,
+          "description": "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it."
         }
       ],
       "namespace": "sim",
@@ -4024,7 +4043,7 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.command": {
-      "description": "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure. Targets are runtime only and are lost on Stop; to keep one, use sim__joints__drive. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Command initialized articulation position targets by name (targets) or in DOF order (positions), and/or velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless clamp=true, which reports what it clamped; unknown names list the valid ones. Returns applied targets and previous values, not achieved poses: compare sim__joints__state. Runtime only and lost on Stop; sim__joints__drive authors USD targets. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -4043,8 +4062,24 @@
         },
         "positions": {
           "type": "array",
-          "description": "One finite position per DOF, in sim.joints.state order.",
-          "required": true
+          "description": "One finite position per DOF, in sim.joints.state order. Give this or targets, not both.",
+          "required": false
+        },
+        "targets": {
+          "type": "object",
+          "description": "{dof name: position}; names come from sim__joints__state. An unknown name is refused with the valid ones.",
+          "required": false
+        },
+        "velocities": {
+          "type": "object",
+          "description": "{dof name: velocity target}, rad/s for revolute and stage units/s for prismatic. A velocity drive needs damping (a wheel usually stiffness 0), so check the response.",
+          "required": false
+        },
+        "clamp": {
+          "type": "boolean",
+          "description": "Use the runtime limit for an out-of-limit value and report it, instead of refusing.",
+          "required": false,
+          "default": false
         }
       },
       "fields": [
@@ -4079,10 +4114,630 @@
           "name": "positions",
           "kind": "array",
           "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "One finite position per DOF, in sim.joints.state order. Give this or targets, not both."
+        },
+        {
+          "name": "targets",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "{dof name: position}; names come from sim__joints__state. An unknown name is refused with the valid ones."
+        },
+        {
+          "name": "velocities",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "{dof name: velocity target}, rad/s for revolute and stage units/s for prismatic. A velocity drive needs damping (a wheel usually stiffness 0), so check the response."
+        },
+        {
+          "name": "clamp",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Use the runtime limit for an out-of-limit value and report it, instead of refusing."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.joints.gains": {
+      "description": "Read or set an initialized articulation's runtime drive gains: stiffness, damping and max_effort (the drive's torque/force cap) for named dofs or every DOF. These are PhysX/Newton runtime values, not USD: they are lost on Stop and never saved; sim__joints__drive authors USD gains. Omit every value to only read. Returns each DOF's values before and after. Needs a playing or paused timeline and a valid tensor view. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Exact initialized articulation root path.",
+          "required": true
+        },
+        "dofs": {
+          "type": "array",
+          "description": "DOF names; empty applies to every DOF. An unknown name is refused with the valid ones.",
+          "required": false,
+          "default": []
+        },
+        "stiffness": {
+          "type": "number",
+          "description": "Nonnegative position-drive stiffness (torque per radian, or force per stage unit).",
+          "required": false
+        },
+        "damping": {
+          "type": "number",
+          "description": "Nonnegative position-drive damping (torque per rad/s, or force per stage unit/s).",
+          "required": false
+        },
+        "max_effort": {
+          "type": "number",
+          "description": "Positive drive cap in torque (revolute) or force (prismatic).",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "One finite position per DOF, in sim.joints.state order."
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact initialized articulation root path."
+        },
+        {
+          "name": "dofs",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": [],
+          "has_default": true,
+          "description": "DOF names; empty applies to every DOF. An unknown name is refused with the valid ones."
+        },
+        {
+          "name": "stiffness",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Nonnegative position-drive stiffness (torque per radian, or force per stage unit)."
+        },
+        {
+          "name": "damping",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Nonnegative position-drive damping (torque per rad/s, or force per stage unit/s)."
+        },
+        {
+          "name": "max_effort",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Positive drive cap in torque (revolute) or force (prismatic)."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.joints.move": {
+      "description": "Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and every joint's error. A joint held by a contact or a weak drive reports settled=false with its remaining error: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only, like sim__joints__command; never pumps the app loop. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Exact initialized articulation root path.",
+          "required": true
+        },
+        "targets": {
+          "type": "object",
+          "description": "{dof name: position}, radians or stage units. An unknown name is refused with the valid ones.",
+          "required": true
+        },
+        "max_steps": {
+          "type": "integer",
+          "description": "Physics steps to try, 1..600.",
+          "required": false,
+          "default": 600
+        },
+        "tolerance": {
+          "type": "number",
+          "description": "Per-joint position error that counts as settled, >0 (radians or stage units).",
+          "required": false,
+          "default": 0.01
+        },
+        "clamp": {
+          "type": "boolean",
+          "description": "Use the runtime limit for an out-of-limit target and report it, instead of refusing.",
+          "required": false,
+          "default": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact initialized articulation root path."
+        },
+        {
+          "name": "targets",
+          "kind": "object",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "{dof name: position}, radians or stage units. An unknown name is refused with the valid ones."
+        },
+        {
+          "name": "max_steps",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 600,
+          "has_default": true,
+          "description": "Physics steps to try, 1..600."
+        },
+        {
+          "name": "tolerance",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 0.01,
+          "has_default": true,
+          "description": "Per-joint position error that counts as settled, >0 (radians or stage units)."
+        },
+        {
+          "name": "clamp",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Use the runtime limit for an out-of-limit target and report it, instead of refusing."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.joints.teleport": {
+      "description": "Set joint positions directly as a state reset, not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are {dof name: value}, radians for revolute and stage units for prismatic. Needs an initialized (playing or paused) articulation and returns each joint's value before and after. Out-of-limit values are refused. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Exact initialized articulation root path.",
+          "required": true
+        },
+        "positions": {
+          "type": "object",
+          "description": "{dof name: position}. Unknown names are refused with the valid ones.",
+          "required": true
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact initialized articulation root path."
+        },
+        {
+          "name": "positions",
+          "kind": "object",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "{dof name: position}. Unknown names are refused with the valid ones."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.prim.set_attribute": {
+      "description": "Set one typed attribute on any prim in the session layer, reporting the composed value before and after, and undo it with sim__prim__revert. Refuses engine- and schema-owned attributes (points, normals, faceVertexIndices, faceVertexCounts, extent, xformOpOrder, xformOp:*, physics:*, physx*:*), instance proxies and Kit runtime prims. type creates a missing attribute; without it the attribute must exist. Values are JSON; quaternions are [w,x,y,z]. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute prim path.",
+          "required": true
+        },
+        "attribute": {
+          "type": "string",
+          "description": "Attribute name, e.g. visibility, purposes, user:owner or a namespaced name.",
+          "required": true
+        },
+        "value": {
+          "type": "any",
+          "description": "New value as JSON: true/false, a number, a string, or a flat list for a vector/quaternion. Converted to the attribute's USD type.",
+          "required": true
+        },
+        "type": {
+          "type": "string",
+          "description": "USD type for a new attribute: bool, int, uint, int64, uint64, float, double, string, token, float2/3/4, double2/3/4, int2/3, color3f/4f, normal3f, point3f, vector3f, quatf, quatd.",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute prim path."
+        },
+        {
+          "name": "attribute",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Attribute name, e.g. visibility, purposes, user:owner or a namespaced name."
+        },
+        {
+          "name": "value",
+          "kind": "any",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "New value as JSON: true/false, a number, a string, or a flat list for a vector/quaternion. Converted to the attribute's USD type."
+        },
+        {
+          "name": "type",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "USD type for a new attribute: bool, int, uint, int64, uint64, float, double, string, token, float2/3/4, double2/3/4, int2/3, color3f/4f, normal3f, point3f, vector3f, quatf, quatd."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.physics.apply": {
+      "description": "Add or remove a collider, rigid body and kinematic state, or set mass / density, on any prim; session layer only, and undo with sim__prim__revert. collider can set an approximation (convexHull, convexDecomposition, boundingSphere, boundingCube, meshSimplification, none). Refuses a rigid body under an existing rigid-body ancestor, a joint or articulation root as a body, both mass and density, and any change while the timeline is active. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute prim path.",
+          "required": true
+        },
+        "collider": {
+          "type": "boolean",
+          "description": "Add (true) or remove (false) UsdPhysics CollisionAPI.",
+          "required": false
+        },
+        "approximation": {
+          "type": "string",
+          "description": "Collider approximation, with collider=true; empty keeps the current one.",
+          "required": false,
+          "default": "",
+          "enum": [
+            "convexHull",
+            "convexDecomposition",
+            "boundingSphere",
+            "boundingCube",
+            "meshSimplification",
+            "none"
+          ]
+        },
+        "rigid_body": {
+          "type": "boolean",
+          "description": "Add (true) or remove (false) UsdPhysics RigidBodyAPI.",
+          "required": false
+        },
+        "kinematic": {
+          "type": "boolean",
+          "description": "Kinematic flag (physics:kinematicEnabled); needs a rigid body on this prim.",
+          "required": false
+        },
+        "mass": {
+          "type": "number",
+          "description": "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density.",
+          "required": false
+        },
+        "density": {
+          "type": "number",
+          "description": "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute prim path."
+        },
+        {
+          "name": "collider",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Add (true) or remove (false) UsdPhysics CollisionAPI."
+        },
+        {
+          "name": "approximation",
+          "kind": "enum",
+          "enum": [
+            "convexHull",
+            "convexDecomposition",
+            "boundingSphere",
+            "boundingCube",
+            "meshSimplification",
+            "none"
+          ],
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "Collider approximation, with collider=true; empty keeps the current one."
+        },
+        {
+          "name": "rigid_body",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Add (true) or remove (false) UsdPhysics RigidBodyAPI."
+        },
+        {
+          "name": "kinematic",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Kinematic flag (physics:kinematicEnabled); needs a rigid body on this prim."
+        },
+        {
+          "name": "mass",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density."
+        },
+        {
+          "name": "density",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.prim.revert": {
+      "description": "Remove the session-layer opinions these tools authored on one prim or its subtree, restoring composed values from the source files, and report what was removed and the values before and after. Source files never change. Prims the pack created stay: delete them with sim__prim__delete. Nothing recorded is a no-op, not an error. Only edits recorded in this session and stage can be undone. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute prim path whose recorded edits are undone.",
+          "required": true
+        },
+        "subtree": {
+          "type": "boolean",
+          "description": "Also revert recorded edits on descendants.",
+          "required": false,
+          "default": true
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute prim path whose recorded edits are undone."
+        },
+        {
+          "name": "subtree",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": true,
+          "has_default": true,
+          "description": "Also revert recorded edits on descendants."
         }
       ],
       "namespace": "sim",
