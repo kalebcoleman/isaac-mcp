@@ -849,9 +849,10 @@ def _dispatch(canonical: str, params: Dict[str, Any],
             try:
                 info = active.get_client().call("sim.stage.info")
                 if not broker.staging or str(broker.staging) != info.get("staging"):
-                    raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. "
-                                     "A URDF needs it even from an asset pack, as does anything from an approved root; a public name or a USD pack "
-                                     "does not. The user can create it with the approval helper in docs/TOOLS-SCENE.md, then restart both.")
+                    raise AssetError("NO_SHARED_STAGING", "Host and Kit must use the same staging folder, and these don't: by default both use "
+                                     "~/.cache/isaac-mcp/staging, so one of them has ISAAC_MCP_ASSET_CONFIG or ISAAC_MCP_STAGING set that the other "
+                                     "lacks, or the folder can't be made private. Give both the same setting and restart both; "
+                                     "docs/TOOLS-SCENE.md has the approval helper.")
                 kind = "urdf" if str(params["robot"]).lower().endswith((".urdf", ".xacro")) else "usd"
                 root_id, relative_path = broker.locate(_quick_start_robot_path(params["robot"]), kind=kind)
                 snapshot = broker.snapshot(root_id, relative_path, kind=kind)
