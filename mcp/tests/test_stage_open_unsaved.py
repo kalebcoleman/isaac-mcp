@@ -54,6 +54,13 @@ def test_kit_turning_saved_viewport_cameras_into_overs_is_not_an_edit(tmp_path):
     assert not stage_open.file_stage_has_unsaved_work(stage)
 
 
+def test_replicator_runtime_graphs_from_a_play_are_not_edits(stage):
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        stage.DefinePrim("/Orchestrator")
+        stage.DefinePrim("/WriterOrchestrator")
+    assert not stage_open.file_stage_has_unsaved_work(stage)
+
+
 def test_a_real_root_layer_edit_is_unsaved_work(stage):
     UsdGeom.Xform.Define(stage, "/World/Added")
     assert stage_open.file_stage_has_unsaved_work(stage)

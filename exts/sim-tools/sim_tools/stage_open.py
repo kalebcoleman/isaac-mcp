@@ -45,7 +45,8 @@ def unsaved_work(anonymous, dirty, top_level_names):
 # Comparing bigger files takes too long; they keep Kit's dirty flag, which can over-report.
 MAX_COMPARE_BYTES = 512 * 1024 * 1024
 # Kit writes these on its own: viewport camera and render settings in customLayerData, and its own cameras.
-KIT_SESSION_ROOTS = KIT_DEFAULT_ROOTS | {"OmniKit_Viewport_LightRig"}
+# The Orchestrators are Replicator's runtime graphs from a Play; saves strip them as process-bound.
+KIT_SESSION_ROOTS = KIT_DEFAULT_ROOTS | {"OmniKit_Viewport_LightRig", "Orchestrator", "WriterOrchestrator"}
 
 
 def _kit_owned(name):

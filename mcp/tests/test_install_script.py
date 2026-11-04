@@ -227,3 +227,10 @@ def test_no_sim_with_a_bad_named_interpreter_warns_and_still_installs_the_host(t
     assert "ISAAC_MCP_PYTHON is set but does not point" in result.stderr
     assert "no interpreter recorded" in result.stderr
     assert "uv sync" not in _calls(log) and "ISAAC_MCP_PYTHON=" not in _calls(log)
+
+
+def test_opencode_entry_uses_the_installed_path_so_it_starts_without_path_setup(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    result = _install(root, env, "--no-sim", "--print-opencode")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f'"command": ["{Path(env["HOME"]) / ".local" / "bin" / "isaac-mcp"}"]' in result.stdout

@@ -427,6 +427,8 @@ Live on 6.2.0.0 headless PhysX. Run 8's own observations, and what it did not ex
 - `/scan`: save and reopen experiments in new Kits established the cause and verified the fix, with real messages received. See the [explanation](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
 - `UNSAVED_CHANGES`: opening a clean file no longer refuses; a tool edit, an unsaved graph and a root-layer edit all still do.
 - `ISAAC_MCP_ASSET_STRICT=1` with a complete asset folder: Quick Start with the RG2 loaded, and every asset reported `source: store`.
+- An existing stale file opened with `sim__stage__open`: product deactivated, `/scan` publishing with messages, and the file's hash unchanged.
+- Independent test of commit `0c109d0` by a separate agent on the OpenCode Go DeepSeek V4.1 Flash model, in a clean worktree: public Quick Start, modified assets with fetch and pin, the `/scan` cycle in new Kits, reopened-scene routes and host checks all behaved as documented. It found a private-path test literal and two wording issues, since fixed. A LiDAR's first adopted read returned `NOT_READY`, then about 68,000 valid returns from 3 s on.
 - Adoption, `allow_foreign` and outside-change reporting were checked with a delayed Kit script standing in for a person. A real GUI click and a real OpenCode client were not.
 
 ### Documentation check (2026-11-03)

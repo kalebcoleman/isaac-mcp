@@ -388,7 +388,7 @@ OpenCode entry (~/.config/opencode/opencode.jsonc):
 
   "isaac": {
     "type": "local",
-    "command": ["isaac-mcp"],
+    "command": ["$CLI_BIN"],
     "environment": { "UR5E_DT_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME"$lab_json }
   }
 EOF

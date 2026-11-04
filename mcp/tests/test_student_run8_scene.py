@@ -104,10 +104,10 @@ def test_logs_tail_returns_scene_changes_and_tagged_lines(tmp_path, monkeypatch)
     monkeypatch.setitem(sys.modules, "carb", SimpleNamespace(settings=carb_settings))
     monkeypatch.setitem(sys.modules, "carb.settings", carb_settings)
     scene = Scene(lambda: None, Timeline(), output=tmp_path)
-    scene.record_event("stage", "stage opened", OUTSIDE, "/home/x/lab.usda")
+    scene.record_event("stage", "stage opened", OUTSIDE, "/tmp/x/lab.usda")
     out = Advanced(scene, None).targetless("sim.logs.tail", {})
     assert out["lines"] == ["x [Info] [sim-tools] timeline playing (source: t)", "x [Warning] w"]
-    assert out["scene_events"][0]["stage"] == "/home/x/lab.usda"
+    assert out["scene_events"][0]["stage"] == "/tmp/x/lab.usda"
     assert "monotonic" not in out["scene_events"][0]
 
 
