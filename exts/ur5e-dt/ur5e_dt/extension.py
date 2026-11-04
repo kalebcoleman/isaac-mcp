@@ -1,3 +1,4 @@
+import contextlib
 import omni.ext
 import omni.ui as ui
 import asyncio
@@ -1290,6 +1291,22 @@ class DigitalTwin(omni.ext.IExt):
         sys.stderr = self._stderr_redirector
         logging = carb.logging.acquire_logging()
         self._carb_log_sub = logging.add_logger(self._on_carb_log)
+
+    @contextlib.contextmanager
+    def without_carb_log_capture(self):
+        """Suspend this panel's Python log listener during a blocking native call. The listener needs the
+        GIL on whichever thread logs. A native call that holds the GIL while it waits for worker threads
+        (the 5.x URDF importer) then never finishes, because a worker that logs waits for the GIL."""
+        logging = carb.logging.acquire_logging()
+        installed = getattr(self, "_carb_log_sub", None)
+        if installed is not None:
+            logging.remove_logger(installed)
+            self._carb_log_sub = None
+        try:
+            yield
+        finally:
+            if installed is not None and not getattr(self, "_closing", False):
+                self._carb_log_sub = logging.add_logger(self._on_carb_log)
 
     def _on_carb_log(self, source, level, filename, linenum, msg):
         # carb levels: VERBOSE=-2, INFO=-1, WARN=0, ERROR=1, FATAL=2

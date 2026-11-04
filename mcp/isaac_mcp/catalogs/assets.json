@@ -10,7 +10,7 @@
       "owner_id": "generic-assets"
     },
     "assets.scan": {
-      "description": "Bounded filename-only USD discovery on the MCP host. No USD parser. Results are untrusted data.",
+      "description": "Bounded filename-only USD and URDF discovery on the MCP host. No USD parser. Results are untrusted data.",
       "parameters": {
         "root_id": {
           "type": "string",
@@ -82,7 +82,7 @@
         },
         "relative_path": {
           "type": "string",
-          "description": "Relative path of the USD or URDF file within that root.",
+          "description": "Relative path of the USD file within that root.",
           "required": true
         }
       },
@@ -121,7 +121,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Relative path of the USD or URDF file within that root."
+          "description": "Relative path of the USD file within that root."
         }
       ],
       "namespace": "assets",
@@ -147,7 +147,7 @@
         },
         "relative_path": {
           "type": "string",
-          "description": "Relative path of the USD or URDF file within that root.",
+          "description": "Relative path of the USD file within that root.",
           "required": true
         },
         "prim_path": {
@@ -218,7 +218,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Relative path of the USD or URDF file within that root."
+          "description": "Relative path of the USD file within that root."
         },
         {
           "name": "prim_path",
@@ -716,7 +716,7 @@
       "owner_id": "generic-assets"
     },
     "assets.pack_build": {
-      "description": "Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Follows MaterialX and MDL textures too. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them. Files that differ need force=true. Checks the new pack afterwards.",
+      "description": "Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them. Files that differ need force=true. Checks the new pack afterwards.",
       "parameters": {
         "pack": {
           "type": "string",
@@ -725,7 +725,7 @@
         },
         "sources": {
           "type": "array",
-          "description": "USD files, 1 to 64: absolute paths, or paths inside from_pack. A scene outside from_pack and layout_root is read for its references and not copied.",
+          "description": "USD or URDF files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.",
           "required": true
         },
         "from_pack": {
@@ -735,7 +735,7 @@
         },
         "layout_root": {
           "type": "string",
-          "description": "Absolute folder the pack layout is relative to. Default: from_pack, or the source's folder.",
+          "description": "Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for.",
           "required": false
         },
         "allow_unresolved": {
@@ -774,7 +774,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "USD files, 1 to 64: absolute paths, or paths inside from_pack. A scene outside from_pack and layout_root is read for its references and not copied."
+          "description": "USD or URDF files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied."
         },
         {
           "name": "from_pack",
@@ -792,7 +792,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Absolute folder the pack layout is relative to. Default: from_pack, or the source's folder."
+          "description": "Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for."
         },
         {
           "name": "allow_unresolved",
@@ -826,7 +826,7 @@
       "owner_id": "generic-assets"
     },
     "assets.import_urdf": {
-      "description": "Convert a trusted approved relative URDF project using the installed importer. Select the shared Physics=physics variant on private generated output when present; refuse missing bodies or expected revolute/prismatic joints before snapshot/import. Returns authored counts, not runtime readiness. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -840,28 +840,40 @@
         },
         "root_id": {
           "type": "string",
-          "description": "Approved trusted project root ID.",
-          "required": true
+          "description": "Approved root ID, with relative_path. Or use source_path.",
+          "required": false
         },
         "relative_path": {
           "type": "string",
-          "description": "Relative path of the USD or URDF file within that root.",
-          "required": true
+          "description": "Path of the .urdf file within that root.",
+          "required": false
+        },
+        "source_path": {
+          "type": "string",
+          "description": "Absolute path of the .urdf file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.",
+          "required": false
         },
         "prim_path": {
           "type": "string",
           "description": "New wrapper prim path.",
           "required": true
         },
+        "fixed_base": {
+          "type": "boolean",
+          "description": "Fix the robot's base to the world. Pass false for a robot that drives or walks; it then falls under gravity.",
+          "required": false,
+          "default": true
+        },
+        "default_drives": {
+          "type": "boolean",
+          "description": "Author position drives that hold a pose; the URDF format has none. A stiffness in a 6.x conversion is kept, and the 5.x importer's own is replaced. With false you get the importer's own: on 6.x stiffness 0, so targets do nothing until sim__joints__drive sets gains.",
+          "required": false,
+          "default": true
+        },
         "position": {
           "type": "array",
-          "description": "Three finite coordinates in stage units.",
-          "required": false,
-          "default": [
-            0,
-            0,
-            0
-          ]
+          "description": "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane. A given position is used as is, with a warning if it starts under the ground.",
+          "required": false
         },
         "orientation": {
           "type": "array",
@@ -904,19 +916,28 @@
           "name": "root_id",
           "kind": "string",
           "enum": null,
-          "required": true,
+          "required": false,
           "default": null,
           "has_default": false,
-          "description": "Approved trusted project root ID."
+          "description": "Approved root ID, with relative_path. Or use source_path."
         },
         {
           "name": "relative_path",
           "kind": "string",
           "enum": null,
-          "required": true,
+          "required": false,
           "default": null,
           "has_default": false,
-          "description": "Relative path of the USD or URDF file within that root."
+          "description": "Path of the .urdf file within that root."
+        },
+        {
+          "name": "source_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute path of the .urdf file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path."
         },
         {
           "name": "prim_path",
@@ -928,17 +949,31 @@
           "description": "New wrapper prim path."
         },
         {
+          "name": "fixed_base",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": true,
+          "has_default": true,
+          "description": "Fix the robot's base to the world. Pass false for a robot that drives or walks; it then falls under gravity."
+        },
+        {
+          "name": "default_drives",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": true,
+          "has_default": true,
+          "description": "Author position drives that hold a pose; the URDF format has none. A stiffness in a 6.x conversion is kept, and the 5.x importer's own is replaced. With false you get the importer's own: on 6.x stiffness 0, so targets do nothing until sim__joints__drive sets gains."
+        },
+        {
           "name": "position",
           "kind": "array",
           "enum": null,
           "required": false,
-          "default": [
-            0,
-            0,
-            0
-          ],
-          "has_default": true,
-          "description": "Three finite coordinates in stage units."
+          "default": null,
+          "has_default": false,
+          "description": "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane. A given position is used as is, with a warning if it starts under the ground."
         },
         {
           "name": "orientation",

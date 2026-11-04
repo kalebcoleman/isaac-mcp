@@ -173,7 +173,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__controller__create` | OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. |
 | `sim__controller__update` | OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required. |
 | `sim__joints__command` | Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose. A contact can hold the robot short of a target, so compare `sim__joints__state`, and try a fresh scene if unsure. |
-| `assets__import_urdf` | Convert a trusted approved relative URDF project using the installed importer. Select shared `Physics=physics` on private generated output when present, then snapshot/import. Refuse missing bodies or expected revolute/prismatic joints. No source overwrite. Reject DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API. |
+| `assets__import_urdf` | Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves `package://` inside that folder only. Authors drives that hold a pose, lifts the robot out of a ground plane and warns about unusable mass or inertia. Source files never change. See [URDF robots](#urdf-robots). |
 
 Graph build accepts pairs or objects, JSON-encoded individual node/connection entries, and a
 JSON string for each whole `nodes`, `connections`, `values` or `targets` container. A target
@@ -281,9 +281,7 @@ are Y-up, or in centimetres, and URDF imports are Z-up in metres. A mismatch ref
 `sim__quick_start`, for example `up_axis="Y"` and `meters_per_unit=0.01`, or open a file authored that way with
 `sim__stage__open`. No tool converts an asset.
 
-**URDF meshes** must be paths relative to the URDF, inside the approved root. `package://`, URLs and
-absolute paths refuse with `INVALID_PATH`, naming the URDF and the mesh. Rewrite them, for example
-`meshes/part.stl`.
+**URDF meshes** can be `package://` or relative paths, inside the approved root or pack. See [URDF robots](#urdf-robots).
 Authored edits require a **stopped** timeline (paused physics is also refused). Saving a composed copy also permits paused physics; playing saves refuse. Physics state
 observations do not establish joint stability, robot fidelity or hardware behavior.
 
@@ -561,11 +559,55 @@ Controller USD edits must respect layer strength (for pack-authored geometry, us
 layer). General graph topology and file/module hot-reload are not implemented. Existing trusted
 `run_python` is unchanged, and is never used as a substitute in the capability mapping.
 
-URDF conversion requires the installed 6.x importer API. Relative mesh filenames must be in
-the approved snapshot; package URLs, absolute paths, DTDs and entities are refused. Conversion
-writes service-owned derived files; the active root/session layers are compared before and after
-conversion. The result passes the same USD dependency and units checks. Unsupported importer
-APIs fail explicitly. See [fork comparison](FORK-COMPARISON.md) for each narrower capability.
+See [fork comparison](FORK-COMPARISON.md) for each narrower capability.
+
+## URDF robots
+
+From a public URDF to a moving joint, with these tools alone:
+
+1. `assets__pack_build` copies the URDF and what it names into a pack. See [Assets](ASSETS.md#build-a-pack-from-a-urdf).
+2. `sim__quick_start robot="<pack>/<file>.urdf"`, or `assets__import_urdf source_path=<file>` in a scene you have.
+   Pass `fixed_base=false` for a robot that drives or walks.
+3. Play, then `sim__joints__state` and `sim__joints__command` on the reported `articulation_root`.
+
+Both importers are supported: the 6.x `URDFImporter` and the 5.x `URDFParseAndImportFile` command. Each is tested on the builds in
+[the record](evidence/urdf-robots-2026-11-04.md). Files are resolved against a verified snapshot, and a rewritten URDF
+with absolute paths into it goes to the importer. It stays in private staging. `mapped_files` and `packages` report the
+mapping. Conversion writes service-owned derived files, the active root and session layers are compared before and after,
+and a repeat import of the same file, options and importer reuses the conversion.
+
+Each robot and option set uses two of the 16 snapshot slots in staging, one for the URDF and one for its conversion. No tool cleans them:
+at `QUOTA`, stop the simulators using them and clear the staging folder yourself.
+
+What the import does, and why:
+
+| It does | Because | Turn it off |
+|---|---|---|
+| Authors position drives on each moving joint, and reports them under `converted_physics.drives` | A URDF has no position gains, so a 6.x conversion has stiffness 0 and a target does nothing | `default_drives=false`, then `sim__joints__drive` |
+| Raises the robot so its lowest point is on a collision ground plane, and reports it in `placement` | A robot whose origin is its body starts partly under the floor. With a fixed base, the contact solver then throws its joints apart | Pass `position`, which is used as given, with a warning if it is under the ground |
+| Fixes the base to the world, and reports `base` | This is what both importers do by default | `fixed_base=false` |
+| Selects the `physics` variant (6.x) or `PhysX` (5.x) on the generated copy | They are the descriptions that hold the joints and masses | - |
+| On 5.x, gives a private copy of a DAE with no `<unit>` the format's default of metres, and lists it in `repaired_meshes` | The 5.x converter crashes Kit on such a file | - |
+
+The gains are upper-bound estimates from the URDF at its zero pose: stiff enough that gravity moves a joint by about 0.5 degrees,
+critically damped for what the joint carries. They hold a pose. They are not a tuned controller. A continuous joint may be a
+wheel, so it is sized for the whole robot. On 6.x a stiffness already in the output is kept (`kept_from_importer`); on 5.x the importer's own value is
+replaced.
+
+`warnings` names problems in the file, which the import does not change: inertia far too small for a link's mass and shape, moving
+links with no mass, impossible inertia, effort limits below the gravity load, and joints whose limits exclude the zero pose (they jump on Play, and a
+free-standing robot can fall over). `sim__joints__state` warns if joints go past their limits at run time.
+
+**Refusals:** `XACRO` (expand it yourself, the message has the command), `PACKAGE_UNRESOLVED`, `PACKAGE_AMBIGUOUS`, `PACKAGE_NAME`, `MESH_MISSING`,
+`OUTSIDE_ROOT`, `UNSAFE_ENTRY` (a symlink), `UNSUPPORTED_URI` (URLs, including `file://` and `model://`), `INVALID_PATH`, `URDF_XML` (DTDs, entities, bad XML),
+`PACK_CORRUPT` and `ROOT_NOT_APPROVED`. Without a pack, a snapshot copies the whole root, so a big repository refuses with
+`LIMIT`: use `assets__pack_build`.
+
+**Up axis:** both importers write Z up in metres. A Y-up stage, or other units, refuses with `UNITS_MISMATCH` and the values to use. Nothing converts it.
+
+**Limits:** drives are position drives, so a wheel takes an angle, not a speed; stronger or velocity control needs `sim__joints__drive`.
+A robot starts at its zero pose: no tool sets a start pose, so a robot whose legs start outside their limits falls first, and then can be commanded.
+A successful import does not prove fidelity: check it with `sim__camera__capture`.
 
 ## Reproduce
 

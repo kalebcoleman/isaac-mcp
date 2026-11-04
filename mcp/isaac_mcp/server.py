@@ -817,7 +817,13 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                                          current_target={k: info.get(k) for k in ("session_id", "stage_id", "pid", "source", "default_prim", "meters_per_unit", "up_axis")})
                     if not broker.staging or str(broker.staging) != info.get("staging"):
                         raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. Remote upload is disabled. The user can create it with the approval helper in docs/TOOLS-SCENE.md, then restart both.")
-                    if canonical in ("assets.prepare_workstation", "assets.import_path"):
+                    if canonical == "assets.import_urdf":
+                        params = dict(params)
+                        source = params.pop("source_path", None)
+                        if (source is None) == (params.get("root_id") is None or params.get("relative_path") is None):
+                            raise AssetError("INVALID_VALUE", "Give source_path, or root_id with relative_path; not both and not neither.")
+                        root_id, relative_path = (params["root_id"], params["relative_path"]) if source is None else broker.locate(source, kind="urdf")
+                    elif canonical in ("assets.prepare_workstation", "assets.import_path"):
                         params = dict(params)
                         root_id, relative_path = broker.locate(params.pop("source_path"))
                     else:
@@ -826,7 +832,7 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                     params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e,"code","FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
-        if canonical == "sim.quick_start" and os.path.isabs(os.path.expanduser(str(params.get("robot") or ""))):
+        if canonical == "sim.quick_start" and _quick_start_needs_host(params.get("robot")):
             # The same approval and snapshot as assets__import_path: no tool can trust a path by itself.
             from .project_assets import Broker, AssetError
             if not hasattr(active, "asset_broker"):
@@ -837,8 +843,9 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                 if not broker.staging or str(broker.staging) != info.get("staging"):
                     raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. "
                                      "A robot from an approved root needs it; a public name or asset pack does not.")
-                root_id, relative_path = broker.locate(params["robot"])
-                snapshot = broker.snapshot(root_id, relative_path, kind="usd")
+                kind = "urdf" if str(params["robot"]).lower().endswith((".urdf", ".xacro")) else "usd"
+                root_id, relative_path = broker.locate(_quick_start_robot_path(params["robot"]), kind=kind)
+                snapshot = broker.snapshot(root_id, relative_path, kind=kind)
                 params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e, "code", "FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
@@ -862,6 +869,32 @@ def _dispatch(canonical: str, params: Dict[str, Any],
         if _needs_bridge_guidance(e) and host_catalog.is_catalog_tool(canonical):
             return _catalog_error(canonical, e, state) + host
         return f"Error: {e}{host}"
+
+
+def _quick_start_needs_host(robot) -> bool:
+    """An absolute path or a URDF needs the host's approval and snapshot; a USD in a pack does not."""
+    text = str(robot or "")
+    return os.path.isabs(os.path.expanduser(text)) or ("/" in text and text.lower().endswith((".urdf", ".xacro")))
+
+
+def _quick_start_robot_path(robot: str) -> str:
+    """An absolute path as given, or the first copy of ``<pack>/<file>`` in the user's asset stores."""
+    if os.path.isabs(os.path.expanduser(robot)):
+        return robot
+    from . import assets
+    from .project_assets import AssetError
+
+    pack, _, rel = robot.partition("/")
+    try:
+        assets.validate_pack_name(pack)
+    except assets.InvalidPackName as exc:
+        raise AssetError("INVALID_VALUE", str(exc)[:300]) from exc
+    stores = assets.Resolver(assets.DEFAULT_PACK).user_stores()
+    for store in stores:
+        if (store / pack / rel).is_file():
+            return str(store / pack / rel)
+    raise AssetError("ASSET_MISSING", f"{rel} is not in pack {pack} in your asset folder ({[str(s) for s in stores]}). "
+                     "A pack named only by a project file's asset_path is not an approval. List packs with assets__packs.")
 
 
 def _post_dispatch(canonical: str, params: Dict[str, Any], result: str) -> str:

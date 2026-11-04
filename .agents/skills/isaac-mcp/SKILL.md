@@ -41,7 +41,7 @@ Pause before saving and check the exported scene after reopening in a fresh proc
 2. **An existing scene:** `sim__stage__info` first. Other `sim__*` and `assets__*` tools need its
    `session_id` and `stage_id`.
 3. **Import your own USD or URDF:** `assets__roots`, then `assets__import_path` or `assets__import_urdf`.
-4. **Copy a USD and its files into your asset folder:** `assets__pack_build`.
+4. **Copy a USD or URDF and its files into your asset folder:** `assets__pack_build`, then `sim__quick_start robot="<pack>/<file>"`.
 5. **Train, evaluate or play a policy:** `isaaclab__install_info`, then `isaaclab__train`. No bridge is needed.
 6. **One lab's UR5e digital twin (RISE lab):** `ur5e_dt__quick_start`, only when that twin is what was asked for.
 7. **See the result:** `screenshot`; for video, `start_screen_recording`.

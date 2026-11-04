@@ -253,6 +253,78 @@ def test_absolute_path_is_snapshotted_before_bridge_dispatch(tmp_path, tool):
     assert denied["code"] == "ROOT_NOT_APPROVED" and len(seen) == 1
 
 
+def _urdf_state(tmp_path):
+    root = tmp_path / "root"
+    (root / "urdf").mkdir(parents=True)
+    source = root / "urdf" / "r.urdf"
+    source.write_text('<robot name="r"><link name="a"/></robot>')
+    staging = tmp_path / "staging"
+    staging.mkdir(mode=0o700)
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps(dict(version=1, profile="trusted_project", roots={"project": str(root)}, staging=str(staging))))
+    state = gw._state_for(gw.build_server({"ISAAC_MCP_ASSET_CONFIG": str(config)}))
+    seen = []
+
+    class Client:
+        def call(self, name, params=None):
+            if name == "sim.stage.info":
+                return dict(session_id="session", stage_id="stage", staging=str(staging))
+            filename, manifest = state.asset_broker.verify(params["snapshot_id"], params["manifest_sha256"], kind="urdf")
+            seen.append((name, params, manifest))
+            assert filename.read_text() == source.read_text() and "source_path" not in params
+            return dict(status="ok")
+
+    state.client = Client()
+    return state, source, seen
+
+
+def test_urdf_by_source_path_or_root_is_snapshotted_before_dispatch(tmp_path):
+    state, source, seen = _urdf_state(tmp_path)
+    ids = dict(session_id="session", stage_id="stage", prim_path="/World/R")
+    assert json.loads(gw._dispatch("assets.import_urdf", {**ids, "source_path": str(source)}, state))["status"] == "ok"
+    assert json.loads(gw._dispatch("assets.import_urdf", {**ids, "root_id": "project", "relative_path": "urdf/r.urdf"}, state))["status"] == "ok"
+    assert [item[2]["entry"] for item in seen] == ["urdf/r.urdf", "urdf/r.urdf"]
+    assert seen[0][2]["root_name"] == "root"
+
+
+@pytest.mark.parametrize("extra,code", [
+    (dict(), "INVALID_VALUE"),
+    (dict(root_id="project"), "INVALID_VALUE"),
+    (dict(source_path="/x/y.urdf", root_id="project", relative_path="urdf/r.urdf"), "INVALID_VALUE"),
+    (dict(source_path="/not/approved.urdf"), "ROOT_NOT_APPROVED"),
+])
+def test_urdf_source_must_be_one_approved_thing(tmp_path, extra, code):
+    state, _, seen = _urdf_state(tmp_path)
+    out = json.loads(gw._dispatch("assets.import_urdf", dict(session_id="session", stage_id="stage", prim_path="/World/R", **extra), state))
+    assert out["code"] == code and not seen
+
+
+def test_quick_start_sends_a_pack_urdf_through_the_host(tmp_path, monkeypatch):
+    store = tmp_path / "store"
+    (store / "bot").mkdir(parents=True)
+    (store / "bot" / "r.urdf").write_text('<robot name="r"><link name="a"/></robot>')
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "none"))
+    state, _, seen = _urdf_state(tmp_path)
+    assert json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/r.urdf"), state))["status"] == "ok"
+    assert seen[0][0] == "sim.quick_start" and seen[0][1]["robot"] == "bot/r.urdf" and seen[0][2]["root_name"] == "bot"
+    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/none.urdf"), state))
+    assert out["code"] == "ASSET_MISSING" and len(seen) == 1
+    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bad..name/r.urdf"), state))
+    assert out["code"] in ("INVALID_VALUE", "ASSET_MISSING") and len(seen) == 1
+
+
+def test_quick_start_refuses_a_pack_xacro_with_the_guidance(tmp_path, monkeypatch):
+    store = tmp_path / "store"
+    (store / "bot").mkdir(parents=True)
+    (store / "bot" / "r.urdf.xacro").write_text("<robot/>")
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "none"))
+    state, _, seen = _urdf_state(tmp_path)
+    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/r.urdf.xacro"), state))
+    assert out["code"] == "XACRO" and not seen
+
+
 def test_a_newer_bridge_parameter_does_not_break_discovery():
     # The two checkouts sync separately: a bridge that already serves sim.ui.act's `window` parameter
     # met an older host registry, and discovery failed for every tool ("invalid bridge tool").

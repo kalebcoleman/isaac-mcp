@@ -701,9 +701,10 @@ Set a static local/world pose for a prim created by this pack. Refuses playing/p
 
 One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns the new session_id and stage_id, paths, each asset's source and next steps. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.
 
-- `robot` (string, optional): Optional robot: a public name (ur5e, from your local copy first, then NVIDIA, honoring strict mode), <pack>/<file.usd> from an asset pack in your asset folder, or an absolute path under an approved root (same rules as assets__import_path). A file found only through a project file's asset_path is refused.
+- `robot` (string, optional): Optional robot: a public name (ur5e, from your local copy first, then NVIDIA, honoring strict mode), <pack>/<file.usd> or <pack>/<file.urdf> from a pack in your asset folder, or an absolute path under an approved root (same rules as assets__import_path and assets__import_urdf). A file found only through a project file's asset_path is refused.
+- `fixed_base` (boolean, default `true`): With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
 - `ros` (boolean, default `false`): With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.
-- `up_axis` (Z|Y, default `"Z"`): The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass.
+- `up_axis` (Z|Y, default `"Z"`): The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.
 - `meters_per_unit` (number, default `1.0`): The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match.
 - `play` (boolean, default `false`): Start the timeline after building.
 - `discard_changes` (boolean, default `false`): Replace a stage with unsaved edits (they are lost).
@@ -850,14 +851,17 @@ Import a trusted local USD by absolute path, under an approved project root or i
 
 ### `assets__import_urdf`
 
-Convert a trusted approved relative URDF project using the installed importer. Select the shared Physics=physics variant on private generated output when present; refuse missing bodies or expected revolute/prismatic joints before snapshot/import. Returns authored counts, not runtime readiness. No source overwrite. Rejects DTD/entities, package/URL/absolute mesh paths and missing files. Requires 6.x URDFImporter API. Requires session_id and stage_id from sim__stage__info.
+Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `root_id` (string, required): Approved trusted project root ID.
-- `relative_path` (string, required): Relative path of the USD or URDF file within that root.
+- `root_id` (string, optional): Approved root ID, with relative_path. Or use source_path.
+- `relative_path` (string, optional): Path of the .urdf file within that root.
+- `source_path` (string, optional): Absolute path of the .urdf file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.
 - `prim_path` (string, required): New wrapper prim path.
-- `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
+- `fixed_base` (boolean, default `true`): Fix the robot's base to the world. Pass false for a robot that drives or walks; it then falls under gravity.
+- `default_drives` (boolean, default `true`): Author position drives that hold a pose; the URDF format has none. A stiffness in a 6.x conversion is kept, and the 5.x importer's own is replaced. With false you get the importer's own: on 6.x stiffness 0, so targets do nothing until sim__joints__drive sets gains.
+- `position` (array, optional): Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane. A given position is used as is, with a warning if it starts under the ground.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
 
@@ -868,7 +872,7 @@ Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
-- `relative_path` (string, required): Relative path of the USD or URDF file within that root.
+- `relative_path` (string, required): Relative path of the USD file within that root.
 - `prim_path` (string, required): New absolute wrapper path; parent must exist.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
@@ -881,7 +885,7 @@ Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD pars
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
-- `relative_path` (string, required): Relative path of the USD or URDF file within that root.
+- `relative_path` (string, required): Relative path of the USD file within that root.
 
 ### `assets__pack_adopt`
 
@@ -897,12 +901,12 @@ Create a pack in the primary asset folder, or copy a folder's asset files into i
 
 ### `assets__pack_build`
 
-Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Follows MaterialX and MDL textures too. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them. Files that differ need force=true. Checks the new pack afterwards.
+Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them. Files that differ need force=true. Checks the new pack afterwards.
 
 - `pack` (string, required): Destination pack name: one folder name.
-- `sources` (array, required): USD files, 1 to 64: absolute paths, or paths inside from_pack. A scene outside from_pack and layout_root is read for its references and not copied.
+- `sources` (array, required): USD or URDF files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.
 - `from_pack` (string, optional): Pack that source names and logical references such as robot/ur5e.usd come from.
-- `layout_root` (string, optional): Absolute folder the pack layout is relative to. Default: from_pack, or the source's folder.
+- `layout_root` (string, optional): Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for.
 - `allow_unresolved` (boolean, default `false`): Build despite missing or remote references, and record them.
 - `dry_run` (boolean, default `false`): Report the closure and write nothing.
 - `force` (boolean, default `false`): Replace files that differ from the source.
@@ -944,7 +948,7 @@ No arguments.
 
 ### `assets__scan`
 
-Bounded filename-only USD discovery on the MCP host. No USD parser. Results are untrusted data.
+Bounded filename-only USD and URDF discovery on the MCP host. No USD parser. Results are untrusted data.
 
 - `root_id` (string, required): Approved root ID, never an absolute path.
 - `offset` (integer, default `0`): Page offset into the sorted bounded scan.
