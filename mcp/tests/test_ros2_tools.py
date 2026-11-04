@@ -1164,3 +1164,22 @@ def test_another_namespace_and_the_clock_graph_are_left_alone():
     other, clock = ros2.graph_path("rg2"), ros2.CLOCK_GRAPH
     plan = ros2.rebuild_plan(own, [own, other, clock], [own, other, clock], {own, other})
     assert plan == dict(graph=own, remove=[own], deactivate=[])
+
+
+def test_disabling_a_saved_graph_also_stops_it_at_runtime():
+    calls = []
+
+    class Graph:
+        def is_valid(self):
+            return True
+
+        def set_disabled(self, value):
+            calls.append(value)
+
+    class Og:
+        get_graph_by_path = staticmethod(lambda path: Graph())
+
+    ros2.disable_runtime_graph(Og, "/Graph/x")
+    assert calls == [True]
+    ros2.disable_runtime_graph(object(), "/Graph/x")  # no such API on this build: not an error
+    assert calls == [True]

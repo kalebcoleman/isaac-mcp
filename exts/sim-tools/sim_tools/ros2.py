@@ -231,6 +231,17 @@ def namespace_for(robot_path, taken=()):
     return candidate
 
 
+def disable_runtime_graph(og, path):
+    """Stop a graph Kit has already loaded. On 6.0.x deactivating its prim is not enough: it still published on Play
+    alongside the rebuild, so /joint_states had two publishers. 6.1 stops on deactivation alone."""
+    try:
+        graph = og.get_graph_by_path(path)
+        if graph and graph.is_valid():
+            graph.set_disabled(True)
+    except AttributeError:  # no such API on this build: deactivation is what's left
+        pass
+
+
 def rebuild_plan(own, graphs, active, owned):
     """Where to build this namespace's graph, and what to clear first. ``graphs`` is every prim beside it and ``active``
     the active ones. A graph this session made is removed. One from an opened file (a saved setup) can only be
@@ -657,6 +668,7 @@ def setup(scene, stage, a):
         for path in plan["remove"]:
             stage.RemovePrim(path)
         for path in plan["deactivate"]:  # from an opened file: a session edit can't delete it, and the file stays as it is
+            disable_runtime_graph(og, path)
             stage.GetPrimAtPath(path).SetActive(False)
     from pxr import Sdf
 

@@ -474,9 +474,9 @@ annotator, including the older 6.0.0.0 API. A `config` LiDAR uses NVIDIA's 6.x
 `Lidar.create(usd_path=<assets root>/Isaac/Sensors/..., tick_rate=...)` with the same annotator.
 On 6.2.0.0 an `Example_Rotary_2D` LiDAR at `/turtlebot3_burger/base_scan/Lidar2D` returned
 points through `sim__lidar__read`, and a `ROS2RtxLidarHelper` (`type=laser_scan`) published
-3600-beam `/scan` messages, both with Motion BVH off. On 6.0.1.0 the helper has no `targetPrim`, and `OnPlaybackTick`'s output is
+3600-beam `/scan` messages, both with Motion BVH off. On 6.0.0.0 through 6.1.0.0 the helper has no `targetPrim`, and `OnPlaybackTick`'s output is
 `outputs:tick`: there, wire `OnPlaybackTick` to `IsaacCreateRenderProduct` (`cameraPrim` = the LiDAR), then to the helper's
-`renderProductPath`, which gave the same `/scan` (3600 beams, windowed, about 2.3 Hz). The full build, running Kit and loaded extensions must match
+`renderProductPath`, which gave the same `/scan` on each of them. The full build, running Kit and loaded extensions must match
 a qualified stack; missing/conflicting identity and unknown builds fail before native creation.
 `sim__stage__info.runtime` reports the actual package, full VERSION, Kit, extension, Warp,
 solver and adapter information. Adding a release requires qualification evidence and a data
