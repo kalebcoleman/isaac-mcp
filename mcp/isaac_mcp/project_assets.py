@@ -182,12 +182,14 @@ class Broker:
         self.missing_roots = {}
         self._pack_roots = {}
         self.staging = None
+        self.default_staging = False
         self.config_error = None
         self.requested_profile = "trusted_project"
         self.config_path = (
             config if config is not None else os.getenv("ISAAC_MCP_ASSET_CONFIG")
         )
         if not self.config_path:
+            self._default_staging()
             return
         try:
             p = Path(self.config_path)
@@ -247,6 +249,30 @@ class Broker:
             self.roots.clear()
             self.missing_roots.clear()
             self.staging = None
+
+    def _default_staging(self):
+        """With no approval file, use one private folder so a URDF from the user's own asset folder loads with no setup.
+
+        The host and Kit compute the same path from the user's home, or from ISAAC_MCP_STAGING. It approves no roots, so it
+        grants nothing a pack in the user's store didn't already have; it only holds the converted copy. Left off if the
+        folder can't be made private and owned by this user, as with no setting before.
+        """
+        folder = Path(os.getenv("ISAAC_MCP_STAGING") or Path.home() / ".cache" / "isaac-mcp" / "staging")
+        try:
+            folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+            fd = open_dir(folder)
+            try:
+                info = os.fstat(fd)
+                if info.st_uid != os.getuid():
+                    return
+                if info.st_mode & 0o077:
+                    os.fchmod(fd, 0o700)
+            finally:
+                os.close(fd)
+        except OSError:
+            return
+        self.staging = folder
+        self.default_staging = True
 
     @staticmethod
     def _overlaps(root, other):

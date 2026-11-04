@@ -249,3 +249,32 @@ def test_scan_and_search_skip_a_too_deep_folder_and_name_it(broker):
     with pytest.raises(a.AssetError, match="depth exceeds 8") as caught:
         broker.snapshot("demo", "robot.usda")
     assert caught.value.code == "LIMIT" and skipped in str(caught.value)
+
+
+def test_with_no_approval_file_both_sides_share_one_private_staging_folder(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_STAGING", raising=False)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    host, kit = a.Broker(), a.Broker()
+    expected = tmp_path / ".cache" / "isaac-mcp" / "staging"
+    assert host.staging == kit.staging == expected and host.default_staging
+    assert (expected.stat().st_mode & 0o777) == 0o700 and not host.roots  # it approves nothing
+
+
+def test_default_staging_can_be_moved_tightened_and_refused(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    where = tmp_path / "elsewhere"
+    monkeypatch.setenv("ISAAC_MCP_STAGING", str(where))
+    assert a.Broker().staging == where
+    where.chmod(0o755)
+    assert a.Broker().staging == where and (where.stat().st_mode & 0o077) == 0  # loose mode is tightened, not trusted
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    monkeypatch.setenv("ISAAC_MCP_STAGING", str(blocker / "inside"))
+    assert a.Broker().staging is None  # can't be made: off, as before
+
+
+def test_an_explicit_approval_file_still_decides_staging(tmp_path, monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_STAGING", str(tmp_path / "default"))
+    broker = a.Broker(str(tmp_path / "missing.json"))
+    assert broker.staging is None and broker.config_error and not broker.default_staging

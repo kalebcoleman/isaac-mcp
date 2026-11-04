@@ -157,7 +157,8 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] 5.1 saves write an empty `/WriterOrchestrator` graph with no nodes. It survives a reopen, `/scan` publishes once, nothing breaks. `graphs` in the save result still lists it, which reads like a saved pipeline
 - [x] A collapsed body after reopening: not reproduced on 6.1 either, with UR5e and Franka across 5 reopens. A Franka sags while playing, the same with or without a save, so it's its drives
 - [x] RViz: `/scan` and TF shown from a windowed 6.2 scene, Global Status OK. The default view (`--distance 3`) can leave a 2.4 m scan outside the frustum
-- [ ] **URDF pack needs one-time approval and staging**, unlike a USD pack. Decide: a default staging folder, or keep it and document
+- [x] URDF packs: with no approval file the host and Kit share a default private staging folder (`~/.cache/isaac-mcp/staging`, or `ISAAC_MCP_STAGING`), approving no roots. Unit tested; live check pending
+- [ ] Live: a URDF in a pack of the user's own store loads with no approval file
 - [x] Windowed 5.1: first `sim__quick_start` failed twice earlier with no error. 5 of 5 pass windowed and 5 of 5 headless, so not reproduced. A returned `ok` can precede the first rendered frame: one screenshot 4 s later was black, and 13 s later showed the arm
 - [ ] Refusals check state before type: `joints__state` on a Cube says "play first", then the real fault. Same for `steps=0`
 - [ ] `NO_SHARED_STAGING` comes before validating a root or path, so a typo reads as an unconfigured install
@@ -273,7 +274,7 @@ Scores track training: rsl_rl cartpole -5.99 early, +4.92 trained; rl_games -4.8
 
 ### Decisions (Kaleb, 2026-11-04)
 
-- [ ] **Default staging folder** so a URDF in the user's own asset folder loads without the one-time approval. Not built yet
+- [x] Default staging folder built (see above)
 - [ ] **Split the PR:** M1 to M5 stay in PR 70. M6 (`assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources) and M7 (viewport screenshot and recording, final demo) go to a second PR from a branch off PR 70's head
 - [ ] Mark Lab 2.3.2 with Sim 5.1 as `tested` after the final retest passes
 - [ ] Keep "Kaleb's work with RISE lab" in the docs (kept, no action)
@@ -282,3 +283,13 @@ Scores track training: rsl_rl cartpole -5.99 early, +4.92 trained; rl_games -4.8
 - [ ] Re-merged M1 to M5 smoke on 6.2: bounds, raycast, contacts, logs and two masses worked together. `sim__joints__move` refused after Stop, as it should; not re-run with the timeline playing on the merged tree
 - [ ] Have a plain-request tester use the new tools (build a tower with light blocks, measure, raycast) and fix whatever it fumbles
 
+
+### Final retest at `f2a189e`
+
+Home PC, run by script, headless:
+
+- [x] 6.2: `smoke_tools` 20/20, M4 on `ur5e` and `franka`, M5 (43 calls, source hashes unchanged)
+- [x] 5.1: the same, all passing
+- [ ] 5.1 with Lab 2.3.2 (running): train, eval score, windowed play, cancel
+- [ ] Lab PC, unreachable at the time: 6.0.0.0, 6.0.0.1, 6.0.1, 6.1 (smoke, M4, M5, the plain-request tests) and Lab 3.0.0 (eval fix, refusal hints)
+- [ ] 6.0.1 `sim__stop` fix, live
