@@ -812,6 +812,9 @@ def build_pack(
             raise PackError(f"{rel} in the closure would collide with the pack's own files", "CONFLICT")
     report = dict(
         files=len(files), bytes=sum(p.stat().st_size for p in files.values()), entries=sorted(entries),
+        # What to pass as sim__quick_start's robot: a pack keeps the source's folder layout, so it isn't just <pack>/<file>.
+        load_as=[f"{pack_folder.name}/{entry}" for entry in sorted(entries)
+                 if entry.lower().endswith((".urdf", ".usd", ".usda", ".usdc", ".usdz"))],
         unresolved=blocked["unresolved"][:MAX_REPORTED], remote=blocked["remote"][:MAX_REPORTED],
         outside=blocked["outside"][:MAX_REPORTED], unreadable=blocked["unreadable"][:MAX_REPORTED],
         runtime_materials=sorted(runtime), material_references=len(followed["references"]),

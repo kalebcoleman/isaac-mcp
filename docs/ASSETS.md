@@ -196,6 +196,8 @@ assets__pack_build  pack="panda" sources=["/abs/example-robot-data/robots/panda_
 sim__quick_start    robot="panda/example-robot-data/robots/panda_description/urdf/panda.urdf"
 ```
 
+A pack keeps the source's folder layout, so the name to load is not `<pack>/panda.urdf`. The build result lists each loadable entry as `load_as`, ready to pass as `robot`; `assets__pack_doctor` lists them as `entries`.
+
 A URDF in a pack of your own asset folder loads with no setup: it's converted first, in a private staging folder, `~/.cache/isaac-mcp/staging` unless `ISAAC_MCP_STAGING` names another, which the host and Kit both use when there's no approval file. That folder approves no roots, so a URDF from anywhere else still needs the [one-time approval](TOOLS-SCENE.md#one-time-approval). The build copies the URDF, each mesh it names and the textures a DAE, OBJ or MTL file names. It copies nothing else, so
 a large repository is fine. No USD parser is needed. The source and the copy in the pack are never rewritten.
 

@@ -375,6 +375,7 @@ def test_build_copies_only_the_closure_keeps_layout_and_pins(lab, env):
     assert set(assets.pins(dest)) == {"gripper/QuickChanger.usda", "gripper/configuration/q.usda",
                                       "robot/SubUSDs/base.usda", "robot/ur5e.usda"}
     assert packs.read_pack_file(dest)["entries"] == ["gripper/QuickChanger.usda", "robot/ur5e.usda"]
+    assert report["load_as"] == ["bricksim/gripper/QuickChanger.usda", "bricksim/robot/ur5e.usda"]  # what quick_start takes
     assert assets.resolve_info("robot/ur5e.usda", pack="bricksim")["status"] == "pinned"
 
 
