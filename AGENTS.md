@@ -209,8 +209,9 @@ After changing a tool registry or contract, run `python3 scripts/gen_host_catalo
 
 Evidence must use neutral `<repo>`, `<worktree>`, `<home>` and `<sim-install>` placeholders.
 `check_docs.py` also scans tracked bytes and nested gzip/tar/zip members for private home and
-worktree paths; it fails closed on unreadable/oversized archives. All tracked files, including
+worktree paths and a former workstation's login, hostname and domain; it fails closed on unreadable/oversized archives. All tracked files, including
 assets and evidence, are scanned without legacy hash exemptions.
+`python3 scripts/check_private_paths.py --commits <range>` also rejects commits whose author or committer email is not a real address.
 Review screenshot pixels separately; the byte scanner cannot recognize text inside images.
 Keep large redacted transcripts and reproduction bundles in the draft evidence release, with
 URL and SHA-256 in the evidence index. Keep only compact summaries and a few images <=400 KB in Git.
