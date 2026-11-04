@@ -56,7 +56,7 @@ def odom_frame(namespace=""):
 
 
 def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", world_frame="world",
-                  link_frames="isaac", extra_prims=(), namespace="", joint_states_topic="joint_states",
+                  link_frames="isaac", extra_prims=(), static_frames=(), namespace="", joint_states_topic="joint_states",
                   base_tf_name=None, publish_clock=True, reset_on_stop=True, attach_parent=None,
                   attach_parent_frame=None, link_prims=None, static_links=()):
     """Return ``(nodes, values, connects, frames)`` for the graph.
@@ -187,6 +187,8 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
             ])
             publishers.append("TFRobotLinks")
             edges.append(dict(parent=links_parent, child="<robot links>", static=False, source="TFRobotLinks"))
+    for index, (parent, name, translation, rotation) in enumerate(static_frames):
+        raw_tf(f"TFStaticFrame{index}", parent, name, True, translation, rotation)
     if extra_prims:
         nodes.append(("TFExtraFrames", "isaacsim.ros2.bridge.ROS2PublishTransformTree"))
         values.extend([
@@ -613,6 +615,31 @@ def plan_clock(mode, publishers):
 NAME_OVERRIDE = "isaac:nameOverride"
 
 
+def extra_frame_parents(extras, link_paths, base_path, base_frame, mode):
+    """Split extra frames into those a transform tree publishes and those published once as a static transform.
+
+    A transform tree logs "[PoseTree] target getObjectType eInvalid" on every tick for a prim that isn't a rigid body, which
+    buried Kit's log (24,135 of 24,547 lines). A sensor mounted below a link doesn't move relative to it, so its pose is known
+    now. Returns (tree paths, [(path, name, parent prim path, parent frame)]). A prim that can move relative to every link,
+    on a mobile robot, stays on the tree and keeps the warning.
+    """
+    links = set(link_paths)
+    tree, static = [], []
+    for path, name in extras:
+        ancestor = path.rsplit("/", 1)[0]
+        while ancestor and ancestor not in links and ancestor != base_path:
+            ancestor = ancestor.rsplit("/", 1)[0]
+        if path in links:
+            tree.append(path)
+        elif ancestor:
+            static.append((path, name, ancestor, None if ancestor == base_path else ancestor.rsplit("/", 1)[-1]))
+        elif mode == "fixed":
+            static.append((path, name, base_path, None))
+        else:
+            tree.append(path)
+    return tree, [(path, name, parent, frame or base_frame) for path, name, parent, frame in static]
+
+
 def tf_name(prim):
     """The frame name Isaac publishes for *prim*: its isaac:nameOverride, else its prim name."""
     attr = prim.GetAttribute(NAME_OVERRIDE)
@@ -770,11 +797,14 @@ def setup(scene, stage, a):
                                       "assumes it restarts at 0. Run the doctor after a stop/play.")
     moving, fixed_links = link_publishing(links, base_path, a.get("base", "fixed"), _joint_bodies(robot))
     static_links = [(tf_name(stage.GetPrimAtPath(path)), *_relative_pose(stage, base, path, mpu)) for path in fixed_links]
+    tree_extras, mounted = extra_frame_parents(extras, [path for path, _ in links], base_path, base_frame, a.get("base", "fixed"))
+    static_frames = [(frame, name, *_relative_pose(stage, stage.GetPrimAtPath(parent), path, mpu))
+                     for path, name, parent, frame in mounted]
     try:
         nodes, values, connects, frames = planned_graph(
             robot=articulation, base_prim=base_path, base_frame=base_frame, base_pose=pose,
             mode=a.get("base", "fixed"), world_frame=a.get("world_frame", "world"),
-            link_frames=a.get("link_frames", "isaac"), extra_prims=extra,
+            link_frames=a.get("link_frames", "isaac"), extra_prims=tree_extras, static_frames=static_frames,
             namespace=a.get("namespace", ""), joint_states_topic=a.get("joint_states_topic", "joint_states"),
             base_tf_name=base_tf_name, publish_clock=False, reset_on_stop=reset_on_stop,
             attach_parent=attach_path or None, attach_parent_frame=attach_name,

@@ -2857,7 +2857,7 @@
         },
         "extra_frames": {
           "type": "array",
-          "description": "Up to 16 more prims (cameras, LiDARs, tool0) to publish relative to the base link; frame name = prim name.",
+          "description": "Up to 16 more prims (cameras, LiDARs, tool0) to publish; frame name = prim name. One mounted on a robot link, or any with a fixed base, is published once as a static transform from its pose now.",
           "required": false,
           "default": []
         },
@@ -2971,7 +2971,7 @@
           "required": false,
           "default": [],
           "has_default": true,
-          "description": "Up to 16 more prims (cameras, LiDARs, tool0) to publish relative to the base link; frame name = prim name."
+          "description": "Up to 16 more prims (cameras, LiDARs, tool0) to publish; frame name = prim name. One mounted on a robot link, or any with a fixed base, is published once as a static transform from its pose now."
         },
         {
           "name": "attach_to",

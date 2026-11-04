@@ -347,6 +347,46 @@ def _public(session: dict) -> dict:
     return {key: value for key, value in session.items() if key not in {"boot_id", "start_ticks"}}
 
 
+def _group_members(leader: int) -> list[int]:
+    """Other processes in this leader's group, from /proc."""
+    found = []
+    for name in os.listdir("/proc"):
+        if not name.isdigit() or int(name) == leader:
+            continue
+        try:
+            with open(f"/proc/{name}/stat", "rb") as stream:
+                fields = stream.read().rsplit(b")", 1)[1].split()
+        except (OSError, IndexError):
+            continue
+        if len(fields) > 2 and fields[2] == str(leader).encode():
+            found.append(int(name))
+    return found
+
+
+def _signal_group_members(leader: int, stop_signal: signal.Signals) -> None:
+    """Signal the group's other members while its live leader keeps the group ID from being reused."""
+    for member in _group_members(leader):
+        try:
+            fd = os.pidfd_open(member, 0)
+        except OSError:
+            continue
+        try:
+            if os.getpgid(member) == leader:
+                signal.pidfd_send_signal(fd, stop_signal)
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
+
+
+def _in_session_group(pid, leader: int) -> bool:
+    """The bridge can be a child of the process a launch recorded, when its launcher didn't exec Kit."""
+    try:
+        return isinstance(pid, int) and os.getpgid(pid) == leader
+    except OSError:
+        return False
+
+
 def _signal_session(session: dict, stop_signal: signal.Signals) -> str:
     """Signal the verified process through a pidfd so PID reuse cannot redirect it."""
     pid = session["pid"]
@@ -366,8 +406,10 @@ def _signal_session(session: dict, stop_signal: signal.Signals) -> str:
         except OSError as exc:
             if exc.errno != errno.EINVAL:
                 raise
-            # Linux before 6.9 cannot signal a process group by pidfd. Do not fall
-            # back to killpg, which could target a reused process group ID.
+            # Linux before 6.9 cannot signal a process group by pidfd. Do not fall back to killpg, which
+            # could target a reused group ID. Members first, each by its own pidfd: a launcher that didn't
+            # exec Kit, such as a build's python.sh, would otherwise die and leave Kit running.
+            _signal_group_members(pid, stop_signal)
             signal.pidfd_send_signal(fd, stop_signal)
             return "process"
     finally:
@@ -744,6 +786,7 @@ def _external_bridges(sessions: Iterable[dict]) -> list[dict]:
     """Advertised bridges no live managed session accounts for: something else launched them.
     This reads their portfiles and only tests that the port accepts a connection."""
     managed = {int(item["pid"]) for item in sessions if _alive(item)}
+    managed |= {member for leader in list(managed) for member in _group_members(leader)}
     return [{"id": _external_id(bridge), "managed": False, "pid": int(bridge["pid"]), "port": int(bridge["port"]),
              "host": bridge.get("host"), "app": bridge.get("app"), "app_version": bridge.get("app_version"),
              "headless": bridge.get("headless"), "started_at": bridge.get("started"), "state": "active"}
@@ -758,7 +801,7 @@ def _bridge_state(host: str | None, port: int, pid: int) -> tuple[str, dict]:
         return "busy", {}
     except (OSError, RuntimeError):
         return "starting_or_unresponsive", {}
-    if response.get("pid") != pid:
+    if response.get("pid") != pid and not _in_session_group(response.get("pid"), pid):
         return "port_conflict", response
     if response.get("app_ready") is True:
         return "running", response

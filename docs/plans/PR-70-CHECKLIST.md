@@ -200,9 +200,10 @@ Fleet runs at `9803f4c` were almost all headless, so a pass there doesn't cover 
 Five builds at once plus one started by hand, on the lab PC, with other agents running. Same scene fired concurrently in all five took 29 s. No crossover: distinct session and stage IDs, each domain saw only its own one `/scan` publisher, each output folder only its own files. Two clients on one bridge queue. A SIGKILL left the others running, and discovery dropped the dead one. About 7 to 7.5 GB of GPU per Kit with a UR5e scene. Start time did not rise with the count.
 
 - [x] Parallel instances: no crossover or crash across 6.0.0.0, 6.0.0.1, 6.0.1, 6.1 and 6.2
-- [ ] **`sim__stop` reports success while Kit keeps running on 6.0.1**: its `python.sh` doesn't `exec`, so `sim__launch` records the bash wrapper. `sim__status` then says `port_conflict`, and the simulator is listed twice. Fix after the port work merges, since it's the same file
-- [ ] `DOORWAY_BUSY` never reaches an MCP caller: a queued call only sees a client timeout, with nothing about what it's waiting for
-- [ ] A SIGKILL mid-call gives `Connection reset by peer`, without naming the tool or saying the simulator is gone
+- [x] `sim__stop` left Kit running on 6.0.1, because its `python.sh` doesn't `exec`. Stop now signals the launcher's group members first, on kernels without group pidfds; status and list treat the child as that session. Unit tested; needs a live check on 6.0.1
+- [ ] Live check of that fix on 6.0.1
+- [x] A queued call that times out now says what the bridge is running, read from `status`. Unit-level only; `DOORWAY_BUSY` itself still doesn't reach an MCP caller
+- [x] A SIGKILL mid-call now names the bridge and tool, says the effects are unknown, and how to check
 - [ ] `ISAAC_MCP_SIM_MAX_INSTANCES` counts the whole machine, and its refusal doesn't say `0` disables it
 - [x] Windowed 5.1 (DeepSeek): capture, screenshot, viewport, `sim__graph__show`, a 141-frame recording, LiDAR and `/scan`, reopen, `create3` drove 1.38 m. No `run_python`
 - [x] Regression from the exit-code wrapper: the recorded pid became the shell, so `runs_status` lost `window`, and cancel could report done with Kit still running. Shell now outlasts the signal; windows match the job's process group
@@ -213,9 +214,9 @@ Five builds at once plus one started by hand, on the lab PC, with other agents r
 
 To fix or attempt:
 
-- [ ] `sim__ros2__tf_setup` `extra_frames` with a LiDAR floods the Kit log: `[PoseTree] target getObjectType eInvalid` every tick, 24,135 of 24,547 lines on 6.1. The worked example does this
-- [ ] `sim__lidar__read` says `NOT_OWNED` for a LiDAR the tool just created, on 6.0.0.0 and 6.1. Check whether `sensor_path`, which can differ from `path`, isn't recognised
-- [ ] Each save of a reopened Franka grows the file: 22.7, 45.3, 67.9 MB
+- [x] `sim__ros2__tf_setup` `extra_frames` flooded the Kit log with `[PoseTree] target getObjectType eInvalid`, 24,135 of 24,547 lines on 6.1. A prim mounted on a link, or any with a fixed base, is now one static transform: 0 lines on 6.2, frame and pose correct, doctor OK
+- [x] `sim__lidar__read` said `NOT_OWNED` for a LiDAR the tool just created when given its `sensor_path`, which a config can nest below `path`. Both now read, on 6.2
+- [x] Each save of a reopened scene with instanced parts grew it (a Franka: 22.7, 45.3, 67.9 MB; 414, 756, 1098 prims), because USD's flatten keeps old `Flattened_Prototype_N` prims. Unused ones are now pruned: 22.67 MB and 414 prims every round, on 6.2
 - [ ] `sim__logs__tail` reads the last 32 KiB: about 2 s of Info lines, so it returned nothing just after 3 warnings. Needs level or text filtering
 - [ ] `z_used` note says anything lower isn't mapped, but on omap 2.3.1 lower geometry was mapped. Also raised even with the floor far below
 - [ ] An all-free map with colliders nowhere in the slice: a tester saw no warning. Check it warns

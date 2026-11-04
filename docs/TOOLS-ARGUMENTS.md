@@ -723,7 +723,7 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 - `base` (string, default `"fixed"`): fixed (arm on a table: static world->base) or mobile (odometry: world->odom->base).
 - `world_frame` (string, default `"world"`): Root frame for RViz's Fixed Frame, e.g. world or map. Empty: publish no world link (a localization node provides map->odom).
 - `link_frames` (string, default `"isaac"`): isaac: Isaac publishes every link frame. robot_state_publisher: Isaac publishes only /joint_states and the base link; run robot_state_publisher with the URDF. Never both.
-- `extra_frames` (array, default `[]`): Up to 16 more prims (cameras, LiDARs, tool0) to publish relative to the base link; frame name = prim name.
+- `extra_frames` (array, default `[]`): Up to 16 more prims (cameras, LiDARs, tool0) to publish; frame name = prim name. One mounted on a robot link, or any with a fixed base, is published once as a static transform from its pose now.
 - `attach_to` (string, default `""`): For a robot that is its own articulation mounted on another (RG2 on a UR5e wrist): the parent link's prim. Publishes parent->base_link dynamically on every tick instead of a static world link, so it follows the arm. Call this tool once per articulation, with a namespace for this one.
 - `namespace` (string, default `""`): ROS node namespace prepended to the topics.
 - `joint_states_topic` (string, default `"joint_states"`): Joint state topic.

@@ -1239,3 +1239,13 @@ def test_publisher_scan_reads_a_clock_nodes_real_topic(monkeypatch):
     sys.modules["omni.graph"].core = core
     monkeypatch.setattr(ros2, "_graphs", lambda og: [Graph()])
     assert [o["publishes"] for o in ros2.other_ros2_publishers("/Graph/own")] == ["/s61clock", "/clock"]
+
+
+def test_a_sensor_on_a_link_is_a_static_frame_and_only_a_free_one_stays_on_the_tree():
+    links = ["/R/base_link", "/R/arm"]
+    extras = [("/R/arm/cam", "cam"), ("/R/base_link/L/lidar", "lidar"), ("/World/lidar", "w"), ("/R/arm", "arm")]
+    tree, static = ros2.extra_frame_parents(extras, links, "/R/base_link", "base_footprint", "mobile")
+    assert tree == ["/World/lidar", "/R/arm"]
+    assert static == [("/R/arm/cam", "cam", "/R/arm", "arm"), ("/R/base_link/L/lidar", "lidar", "/R/base_link", "base_footprint")]
+    tree, static = ros2.extra_frame_parents([("/World/lidar", "w")], links, "/R/base_link", "base_link", "fixed")
+    assert tree == [] and static == [("/World/lidar", "w", "/R/base_link", "base_link")]

@@ -1104,6 +1104,9 @@ class Scene:
             handle, tmp = tempfile.mkstemp(prefix=".isaac-mcp-tmp-", suffix=".usda", dir=folder)
             os.close(handle)
             layer = stage.Flatten()
+            from .flatten import drop_unused_prototypes
+
+            drop_unused_prototypes(layer)
             omitted_render_properties = reset_export_handles(layer, handles)
             restored_camera_targets = restore_export_camera_targets(layer, camera_repairs)
             omitted_render_paths = strip_runtime_render_state(layer)

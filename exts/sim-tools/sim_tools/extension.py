@@ -367,6 +367,10 @@ class Extension(omni.ext.IExt):
                 "SENSOR_PAUSED",
                 "LiDAR acquisition requires a playing timeline. Use wait_for_render=false for the latest completed scan, or explicitly play and allow warm-up.",
             )
+        for key, known in self.advanced.sensors.items():  # a config LiDAR can nest below the path it was created at
+            if known[1].get("sensor_path") == args["path"]:
+                args["path"] = key
+                break
         entry = self.advanced.sensors.get(args["path"])
         if entry is None or entry[0] != expected:
             from pxr import UsdGeom

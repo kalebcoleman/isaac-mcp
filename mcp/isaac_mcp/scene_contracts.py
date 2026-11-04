@@ -515,7 +515,7 @@ add(
         base=field("string", "fixed (arm on a table: static world->base) or mobile (odometry: world->odom->base).", False, default="fixed"),
         world_frame=field("string", "Root frame for RViz's Fixed Frame, e.g. world or map. Empty: publish no world link (a localization node provides map->odom).", False, default="world"),
         link_frames=field("string", "isaac: Isaac publishes every link frame. robot_state_publisher: Isaac publishes only /joint_states and the base link; run robot_state_publisher with the URDF. Never both.", False, default="isaac"),
-        extra_frames=field("array", "Up to 16 more prims (cameras, LiDARs, tool0) to publish relative to the base link; frame name = prim name.", False, default=[]),
+        extra_frames=field("array", "Up to 16 more prims (cameras, LiDARs, tool0) to publish; frame name = prim name. One mounted on a robot link, or any with a fixed base, is published once as a static transform from its pose now.", False, default=[]),
         attach_to=field("string", "For a robot that is its own articulation mounted on another (RG2 on a UR5e wrist): the parent link's prim. Publishes parent->base_link dynamically on every tick instead of a static world link, so it follows the arm. Call this tool once per articulation, with a namespace for this one.", False, default=""),
         namespace=field("string", "ROS node namespace prepended to the topics.", False, default=""),
         joint_states_topic=field("string", "Joint state topic.", False, default="joint_states"),

@@ -1146,3 +1146,26 @@ def test_a_job_window_is_found_on_a_process_in_its_group(monkeypatch):
         import signal
 
         os.killpg(leader.pid, signal.SIGKILL)
+
+
+def test_a_launcher_that_did_not_exec_kit_is_stopped_with_it_and_not_a_port_conflict():
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    from isaac_mcp import sim_sessions
+
+    leader = subprocess.Popen(["/bin/sh", "-c", f"{sys.executable} -c 'import time; time.sleep(30)'; echo done"], start_new_session=True)
+    try:
+        time.sleep(0.3)
+        members = sim_sessions._group_members(leader.pid)
+        assert len(members) == 1 and sim_sessions._in_session_group(members[0], leader.pid)
+        assert not sim_sessions._in_session_group(os.getpid(), leader.pid)
+        sim_sessions._signal_group_members(leader.pid, signal.SIGTERM)
+        time.sleep(0.3)
+        assert not sim_sessions._group_members(leader.pid)
+    finally:
+        leader.kill()
+        leader.wait()

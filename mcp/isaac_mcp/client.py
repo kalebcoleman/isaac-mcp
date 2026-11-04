@@ -403,6 +403,15 @@ class BridgeClient:
             raise BridgeError(f"the bridge sent an unreadable reply ({type(exc).__name__}); disconnected") from exc
         return _decode(reply)
 
+    def _busy_with(self) -> str:
+        """What the bridge says it's running, for a timeout's message. Best effort."""
+        try:
+            running = call("status", host=self.host, port=self.port, timeout=2).get("admission", {}).get("running", [])
+        except Exception:  # noqa: BLE001 - a message must not fail the error it explains
+            return ""
+        names = [f"{item.get('tool')} for {item.get('running_s')} s" for item in running if item.get("tool") != "status"]
+        return f". The bridge is running {', '.join(names)}" if names else ""
+
     def call(self, tool: str, params: Optional[Dict[str, Any]] = None, *,
              timeout: Optional[float] = None,
              execution_reserve_s: Optional[float] = None) -> Any:
@@ -425,11 +434,12 @@ class BridgeClient:
                 self.close()   # response may still arrive on the old socket
                 raise TimeoutError(
                     f"no response for {tool!r} within {t}s (the tool may still "
-                    f"be executing on Kit's main thread)")
-            except (ConnectionError, BrokenPipeError, ConnectionResetError, OSError):
+                    f"be executing on Kit's main thread){self._busy_with()}")
+            except (ConnectionError, BrokenPipeError, ConnectionResetError, OSError) as exc:
                 self.close()
                 if attempt:
-                    raise
+                    raise ConnectionError(f"lost the bridge on {self.host}:{self.port} during {tool!r}: {exc}. The tool's "
+                                          "effects are unknown. If Kit has gone, list_bridges no longer shows it.") from exc
 
 
 class DoorwayHold:
