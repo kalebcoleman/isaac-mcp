@@ -294,6 +294,7 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | `Asset not available: objects/...` | Object tools need your lab files. See [public and lab files](ASSETS.md#public-files-and-lab-files) |
 | `fetch_ur5e_assets.py` exits 1 and lists files it kept | They differ from NVIDIA's. Run `isaac_assets.py pin` if the change is yours, or `--force` to replace them |
 | `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
+| `No module named 'Xlib'` when starting the MCP host | You ran the host with Isaac Sim's Python. It has its own dependencies: use the installed `isaac-mcp`, or `cd mcp && uv run --isolated --with-editable . ...` |
 | `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
 | `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; for the twin that is `/World/UR5e/root_joint`. See the [typical session](TOOLS-SCENE.md#a-typical-session) |

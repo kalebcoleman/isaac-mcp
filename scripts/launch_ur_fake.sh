@@ -123,6 +123,9 @@ case "$ACTION" in
       fi
       exit 2
     fi
+    # A daemon left over from other DDS settings makes every `ros2` call below fail with `!rclpy.ok()`
+    # while the driver itself is healthy (see ros_env.sh). Starting clean makes the wait below reliable.
+    timeout -k 2s 10s ros2 daemon stop >/dev/null 2>&1 || true
     echo "[ur-fake] launching $UR_TYPE fake hardware -> domain $ROS_DOMAIN_ID (Cyclone, localhost_only=$ROS_LOCALHOST_ONLY)"
     # A dedicated process group lets down clean up this driver's children without
     # touching another UR driver that happens to be running on the machine.
@@ -157,6 +160,7 @@ case "$ACTION" in
       fi
     done
     echo "ERROR: joint state broadcaster and trajectory controller not both active within timeout; see $LOG" >&2
+    echo "The driver may still be running: check with 'status', and clean up with 'down' before trying 'up' again." >&2
     tail -20 "$LOG" 2>/dev/null | sed 's/^/  log: /'
     exit 4
     ;;
