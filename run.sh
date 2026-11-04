@@ -93,7 +93,7 @@ if [ "$SHOW_HELP" = 1 ]; then
   cat <<EOF
 Usage: ./run.sh [options] [-- <extra kit args>]
 
-Launch Isaac Sim 6.2 with the Kit MCP bridge and UR5e tools.
+Launch Isaac Sim with the Kit MCP bridge and UR5e tools (6.2 by default; other builds by ISAAC_MCP_PYTHON).
 
 Configuration:
   Port:        $PORT (override with UR5E_DT_PORT or --port)
@@ -169,7 +169,10 @@ if ! "$PY" -c 'import isaacsim' 2>/dev/null; then
 fi
 
 SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))')"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
+# The bundled ROS libraries moved: isaacsim.ros2.bridge on 5.1, isaacsim.ros2.core on 6.x.
+ROS_LIB="$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
+[ -d "$ROS_LIB" ] || ROS_LIB="$SITE/exts/isaacsim.ros2.bridge/$ROS_DISTRO/lib"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROS_LIB"
 
 EXT_ARGS=(--ext-folder "$ROOT/exts")
 

@@ -10,6 +10,8 @@ from pathlib import Path
 
 from pxr import Usd, UsdPhysics
 
+from .compat import composition_errors
+
 from isaac_mcp.project_assets import refuse
 
 
@@ -47,7 +49,7 @@ def prepare_generated_physics(filename, output_root, movable_joints=0):
         with Usd.EditContext(asset, asset.GetSessionLayer()):
             if not variant.SetVariantSelection("physics"):
                 refuse("URDF_PHYSICS", "Cannot compose the converted physics variant.")
-    errors = asset.GetCompositionErrors()
+    errors = composition_errors(asset)
     if errors:
         refuse(
             "URDF_PHYSICS",

@@ -9,6 +9,8 @@ import re
 from pxr import Sdf, Usd, UsdGeom
 from isaac_mcp.project_assets import refuse
 
+from .compat import composition_errors
+
 PRODUCER = "isaacsim.core.nodes.IsaacCreateRenderProduct"
 _ROS_NAMESPACES = ("isaacsim.ros2.bridge.", "isaacsim.ros2.nodes.")
 CAMERA_HELPERS = {ns + name for ns in _ROS_NAMESPACES for name in ("ROS2CameraHelper", "ROS2CameraInfoHelper")}
@@ -227,7 +229,7 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
             native[0], properties=native,
             retry_with={"reset_camera_render_handles": True})
     # A masked/unloaded composition cannot establish that all dependencies were inspected.
-    blocking = blocking_composition_errors(stage.GetCompositionErrors())
+    blocking = blocking_composition_errors(composition_errors(stage))
     if (stage.GetPopulationMask().GetPaths() != [Sdf.Path.absoluteRootPath]
             or blocking
             or any(p.HasPayload() and not p.IsLoaded() for p in prims)):
@@ -237,7 +239,7 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
         attr = stage.GetAttributeAtPath(entry["path"])
         stack = attr.GetPropertyStack()
         if (attr.GetTypeName() != Sdf.ValueTypeNames.Int or type(entry["handle"]) is not int
-                or not 0 <= entry["handle"] < 2**31 or attr.GetNumTimeSamples()
+                or not -1 <= entry["handle"] < 2**31 or attr.GetNumTimeSamples()
                 or attr.GetConnections() or not stack
                 or any(spec.layer != stage.GetSessionLayer() or str(spec.path) != entry["path"]
                        for spec in stack)):

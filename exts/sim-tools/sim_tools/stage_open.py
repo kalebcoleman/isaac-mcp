@@ -128,7 +128,9 @@ async def open_stage(scene, args):
         await app.next_update_async()
     stale = _repair_saved_lidar_products(ctx.get_stage())
     info = scene.stage_info()
-    errors = ctx.get_stage().GetCompositionErrors()
+    from .compat import composition_errors
+
+    errors = composition_errors(ctx.get_stage())
     return dict(
         opened=str(file),
         discarded_changes=dirty,

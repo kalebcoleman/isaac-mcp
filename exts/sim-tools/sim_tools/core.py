@@ -11,6 +11,7 @@ import tempfile
 import time
 import uuid
 from pxr import Ar, Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdUtils
+from .compat import composition_errors
 from isaac_mcp.project_assets import (
     Broker,
     AssetError,
@@ -663,7 +664,7 @@ class Scene:
                     or not child.IsValid()
                 ):
                     refuse("IMPORT_FAILED", "Reference could not be authored/composed.")
-                errors = stage.GetCompositionErrors()
+                errors = composition_errors(stage)
                 if errors:
                     refuse("COMPOSITION_ERROR", str(errors)[:1500])
             self.owned.add(str(p))
@@ -1078,7 +1079,7 @@ class Scene:
             reference = "./" + bundle.name + "/" + manifest["entry"]
             if (
                 not root.GetReferences().AddReference(reference)
-                or staged.GetCompositionErrors()
+                or composition_errors(staged)
             ):
                 refuse(
                     "COMPOSITION_ERROR", "Prepared workstation wrapper did not compose."
@@ -1264,6 +1265,9 @@ def strip_runtime_render_state(layer):
         "isaacsim.core.nodes.IsaacSimulationGate",
         "isaacsim.core.nodes.IsaacReadSimulationTimeAnnotator",
         "isaacsim.core.nodes.IsaacConvertRGBAToRGB",
+        # Isaac Sim 5.1's laser-scan path and Replicator time node; regenerated the same way.
+        "isaacsim.sensors.rtx.IsaacComputeRTXLidarFlatScan",
+        "omni.replicator.core.ReadRpFabricTime",
     }
     # Camera and LiDAR helpers regenerate these session-only writers on playback. A
     # flattened export includes their process handles, unlike a normal USD

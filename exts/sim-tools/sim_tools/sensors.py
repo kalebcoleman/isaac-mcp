@@ -7,6 +7,7 @@ cleanup is attempted and reported, never disguised as a successful creation.
 """
 
 import math
+from pathlib import PurePosixPath
 
 from pxr import Gf, Usd, UsdGeom
 from isaac_mcp.project_assets import refuse
@@ -375,9 +376,12 @@ def _create_config_lidar(stage, path, lidar_asset, tick_rate, sensor):
     asset_path, variant = lidar_asset
     try:
         from isaacsim.sensors.experimental.rtx import Lidar
+    except ImportError:
+        return _create_config_lidar_by_command(stage, path, asset_path, variant)
+    try:
         from isaacsim.storage.native import get_assets_root_path
     except ImportError as e:
-        refuse("SENSOR_API_UNAVAILABLE", "Config LiDARs need isaacsim.sensors.experimental.rtx (Isaac Sim 6.x): " + str(e))
+        refuse("SENSOR_API_UNAVAILABLE", "Config LiDARs need isaacsim.storage.native: " + str(e))
     try:  # read the configured root without probing it: a remote probe can block Kit for its whole timeout
         try:
             root = get_assets_root_path(skip_check=True)
@@ -396,6 +400,28 @@ def _create_config_lidar(stage, path, lidar_asset, tick_rate, sensor):
             break
     if prim is None or not lidar:
         refuse("SENSOR_CREATE_FAILED", f"The NVIDIA asset {asset_path} has no OmniLidar prim.")
+    return prim
+
+
+def _create_config_lidar_by_command(stage, path, asset_path, variant):
+    """Isaac Sim 5.1 has no experimental.rtx; its supported command takes the config name directly."""
+    try:
+        import omni.kit.commands
+        import isaacsim.sensors.rtx  # registers the native command/annotator
+    except ImportError as e:
+        refuse("SENSOR_API_UNAVAILABLE", "Enable isaacsim.sensors.rtx: " + str(e))
+    ok, created = omni.kit.commands.execute(
+        "IsaacSensorCreateRtxLidar", path=str(path), parent=None,
+        config=PurePosixPath(asset_path).stem, variant=variant if isinstance(variant, str) else None,
+    )
+    prim = None
+    if ok and created and stage.GetPrimAtPath(path):
+        for candidate in Usd.PrimRange(stage.GetPrimAtPath(path)):
+            if candidate.GetTypeName() == "OmniLidar":
+                prim = candidate
+                break
+    if prim is None:
+        refuse("SENSOR_CREATE_FAILED", f"The native command made no OmniLidar at {path} for {asset_path}.")
     return prim
 
 

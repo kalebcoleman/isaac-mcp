@@ -11,6 +11,7 @@ import re
 # Official package -> full VERSION shipped in the installations tested here.
 # These are not inferred from the major version or the fork's support claims.
 RELEASE_BUILDS = {
+    "5.1.0.0": "5.1.0-rc.19+release.26219.9c81211b.gl",
     "6.0.0.0": "6.0.0-rc.22+release.33481.407f3ea1.gl",
     "6.0.0.1": "6.0.0-rc.59+release.41464.5f2772bc.gl",
     "6.0.1.0": "6.0.1-rc.7+release.42383.32955d8d.gl",
@@ -22,6 +23,7 @@ RELEASE_BUILDS = {
 # plus live API signature/lifecycle checks. Extension overrides cannot quietly
 # inherit a release's qualification. Adding a release is data + live evidence.
 CPU_SENSOR_STACKS = {
+    "5.1.0.0": ("107.3.3", "1.12.27", "15.8.4"),
     "6.0.0.0": ("110.0.0", "1.13.4", "15.14.1"),
     "6.0.0.1": ("110.1.1", "1.13.25", "15.17.0"),
     "6.0.1.0": ("110.1.2", "1.13.27", "15.17.1"),

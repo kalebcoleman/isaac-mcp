@@ -816,10 +816,10 @@ class Advanced:
                 orientation, rotate_xyz = placement.orientation_args(a.get("orientation"), a.get("rotate_xyz"))
                 tick = placement.tick_rate(a.get("tick_rate")) if kind == "lidar" else None
                 if kind == "lidar" and a.get("config"):
-                    from isaacsim.sensors.experimental.rtx import SUPPORTED_LIDAR_CONFIGS
+                    from .compat import lidar_config_registry
 
                     lidar_asset = placement.resolve_lidar_config(
-                        a["config"], a.get("variant") or None, SUPPORTED_LIDAR_CONFIGS
+                        a["config"], a.get("variant") or None, lidar_config_registry()
                     )
                 elif kind == "lidar" and a.get("variant"):
                     refuse("INVALID_VALUE", "variant needs config.")
@@ -831,7 +831,7 @@ class Advanced:
             except placement.PlacementError as e:
                 refuse(e.code, str(e), **e.details)
             except ImportError as e:
-                refuse("SENSOR_API_UNAVAILABLE", "Config LiDARs need isaacsim.sensors.experimental.rtx: " + str(e))
+                refuse("SENSOR_API_UNAVAILABLE", "Config LiDARs need isaacsim.sensors.rtx: " + str(e))
             pose = s.pose(stage, parent, a.get("position", [0, 0, 0]), orientation, frame)
             if name == "sim.camera.create" and a.get("target") is not None:
                 if frame != "world":

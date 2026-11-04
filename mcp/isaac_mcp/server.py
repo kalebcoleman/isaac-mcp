@@ -646,7 +646,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 schema = {"anyOf": variants, "description": spec["description"]}
                 annotation = Annotated[str, PlainValidator(lambda value: value), WithJsonSchema(schema)]
             elif f["kind"] == "array":
-                strings = f["name"] in {"observe_prims", "observe_joints"} or (canonical == "sim.ui.act" and f["name"] == "keys")
+                strings = f["name"] in {"observe_prims", "observe_joints", "extra_frames"} or (canonical == "sim.ui.act" and f["name"] == "keys")
                 annotation = list[str] if strings else list[float]
                 if canonical == "sim.map.occupancy" and f["name"] == "clear":
                     # A list of [x, y, radius] circles; list[float] rejected every valid value.
@@ -657,7 +657,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 if f["name"] in lengths:
                     bounds = {"min_length": lengths[f["name"]], "max_length": lengths[f["name"]]}
                 else:
-                    bounds = {"max_length": {"observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256}.get(f["name"], 128)}
+                    bounds = {"max_length": {"extra_frames": 16, "observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256}.get(f["name"], 128)}
             if not graph_container:
                 annotation = Annotated[annotation, Field(description=spec["description"], **bounds)]
         if f["required"] and not f["has_default"]:

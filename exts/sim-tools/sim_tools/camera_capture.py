@@ -12,6 +12,8 @@ import time
 
 from isaac_mcp.project_assets import refuse
 
+from .compat import has_drawable_events, observe_drawable_changed
+
 
 @dataclass(frozen=True)
 class CameraFrame:
@@ -112,7 +114,6 @@ async def wait_for_frames(texture, validate, timeout=5):
     try:
         import omni.hydratexture as ht
         import omni.kit.app
-        from carb.eventdispatcher import get_eventdispatcher
 
         state = RenderFrames(texture)
         error = None
@@ -126,12 +127,7 @@ async def wait_for_frames(texture, validate, timeout=5):
                 except Exception as exc:
                     error = exc
 
-        subscription = get_eventdispatcher().observe_event(
-            observer_name="IsaacMCP.SensorRenderWait",
-            event_name=ht.GLOBAL_EVENT_DRAWABLE_CHANGED,
-            on_event=drawable,
-            filter=texture.get_event_key(),
-        )
+        subscription = observe_drawable_changed(ht, texture, drawable, "IsaacMCP.SensorRenderWait")
     except (ImportError, AttributeError) as exc:
         refuse(
             "SENSOR_API_UNAVAILABLE",
@@ -269,12 +265,13 @@ async def capture(sensor, validate, timeout=5, context=None):
         import omni.hydratexture as ht
         import omni.kit.app
         import omni.kit.renderer_capture as rc
-        from carb.eventdispatcher import get_eventdispatcher
 
         texture = sensor["product"].hydra_texture
         renderer = rc.acquire_renderer_capture_interface()
+        if not has_drawable_events(ht, texture):
+            refuse("SENSOR_API_UNAVAILABLE", "This Hydra texture has no drawable-change event API.")
         for obj, methods in (
-            (texture, ("get_frame_info", "get_aov_info", "get_event_key")),
+            (texture, ("get_frame_info", "get_aov_info")),
             (renderer, ("capture_next_frame_rp_resource_callback",)),
             (rc, ("convert_raw_bytes_to_list",)),
         ):
@@ -291,12 +288,7 @@ async def capture(sensor, validate, timeout=5, context=None):
             asyncio.get_running_loop(),
         )
         sensor["readback_pending"] = state
-        subscription = get_eventdispatcher().observe_event(
-            observer_name="IsaacMCP.CameraCapture",
-            event_name=ht.GLOBAL_EVENT_DRAWABLE_CHANGED,
-            on_event=state.drawable,
-            filter=texture.get_event_key(),
-        )
+        subscription = observe_drawable_changed(ht, texture, state.drawable, "IsaacMCP.CameraCapture")
     except Exception as e:
         if state is not None:
             state.close()

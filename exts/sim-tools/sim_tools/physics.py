@@ -25,6 +25,9 @@ def manager():
             "PHYSICS_API_UNAVAILABLE",
             "Enable the installed isaacsim.core.simulation_manager extension.",
         )
+    from .compat import adapt_simulation_manager
+
+    sm = adapt_simulation_manager(sm)
     engine = sm.get_active_physics_engine()
     if engine not in ("physx", "newton") or (
         engine == "newton" and not NEWTON_QUALIFIED
