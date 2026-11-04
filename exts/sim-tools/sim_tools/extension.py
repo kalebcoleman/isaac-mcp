@@ -168,6 +168,12 @@ class Extension(omni.ext.IExt):
         self._stage_events = None
         attempt(self.advanced.close_sensors)
         attempt(self.scene.close_stage)
+        try:
+            from .queries import stop_contact_reports
+
+            stop_contact_reports()
+        except Exception:  # noqa: BLE001 - shutdown must finish every step
+            pass
         for namespace in ("sim", "assets"):
             attempt(self.bridge.unregister_owner, "generic-" + namespace)
 

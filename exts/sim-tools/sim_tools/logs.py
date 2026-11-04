@@ -153,11 +153,11 @@ def _validated_cursor(value):
 
 
 def _window(cursor):
-    """(path, start, end, stat, rotated) for a cursor or the retained window."""
+    """(path, start, end, stat, aligned) for a cursor or the retained window."""
     path = log_path()
     stat = os.stat(path)
     if cursor is None:
-        return path, max(0, stat.st_size - READ_CAP), stat.st_size, stat, False, True
+        return path, max(0, stat.st_size - READ_CAP), stat.st_size, stat, True
     cursor = _validated_cursor(cursor)
     if cursor["file"] != str(path):
         refuse(
@@ -177,7 +177,7 @@ def _window(cursor):
             cursor_offset=cursor["offset"],
             current_size=stat.st_size,
         )
-    return path, cursor["offset"], stat.st_size, stat, False, False
+    return path, cursor["offset"], stat.st_size, stat, False
 
 
 def _level_ok(entry, minimum):
@@ -199,7 +199,7 @@ def tail(args):
     if not isinstance(contains, str) or len(contains) > 128:
         refuse("INVALID_VALUE", "contains must be a string of at most 128 characters.")
     structured = any(key in args for key in ("min_level", "channel", "contains", "cursor"))
-    path, start, end, stat, _rotated, aligned = _window(args.get("cursor"))
+    path, start, end, stat, aligned = _window(args.get("cursor"))
     data = _read(path, start, min(READ_CAP, end - start))
     if aligned:
         data, start = _aligned_start(data, start)
@@ -217,7 +217,7 @@ def tail(args):
         lines=default_lines(
             data.decode(errors="replace").splitlines(), limit
         ),
-        scope=f"last {READ_CAP // 1024} KiB; WARN/ERROR and [sim-tools] scene changes only"
+        scope="last 1 MiB; WARN/ERROR and [sim-tools] scene changes only"
         if args.get("cursor") is None
         else f"after cursor at byte {start}",
         scene_events=args["scene_events"],
@@ -256,7 +256,7 @@ def tail(args):
 
 def summary(args):
     cursor = args.get("cursor")
-    path, start, end, stat, _rotated, aligned = _window(cursor)
+    path, start, end, stat, aligned = _window(cursor)
     data = _read(path, start, min(READ_CAP, end - start))
     if aligned:
         data, start = _aligned_start(data, start)
@@ -285,6 +285,6 @@ def summary(args):
         last_error=_entry(errors[-1]) if errors else None,
         next_cursor=_cursor(path, read_end, stat),
         truncated=more_bytes,
-        scope=f"last {READ_CAP // 1024} KiB" if cursor is None else f"after cursor at byte {start}",
+        scope="last 1 MiB" if cursor is None else f"after cursor at byte {start}",
         note="Counts are of log lines read in this window, not of every event in the simulator.",
     )

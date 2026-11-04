@@ -19,7 +19,7 @@ from pxr import Usd, UsdGeom  # noqa: E402
 from sim_tools import geometry, logs, queries  # noqa: E402
 from sim_tools.core import Scene  # noqa: E402
 from isaac_mcp.project_assets import AssetError  # noqa: E402
-from test_scene_usd import Timeline, scene  # noqa: E402,F401
+from test_scene_usd import scene  # noqa: E402,F401
 
 
 def refusal(call, *args, **kwargs):
@@ -133,7 +133,7 @@ def test_default_tail_reads_one_mib_so_warnings_survive_info_flood(tmp_path, mon
         _line("Warning", "omni.physx", "second warning"),
         _line("Error", "omni.physx", "the error"),
     ]
-    assert "1024 KiB" in result["scope"]
+    assert "last 1 MiB" in result["scope"]
     assert set(result) == {"file", "lines", "scope", "scene_events"}
 
 

@@ -177,6 +177,14 @@ def _receive_contact_report(headers, data):
         _LAST_REPORT["error"] = str(exc)[:300]
 
 
+def stop_contact_reports():
+    """Release the contact-report subscription at extension shutdown or reload."""
+    global _SUBSCRIPTION
+    subscription, _SUBSCRIPTION = _SUBSCRIPTION, None
+    if subscription is not None and callable(getattr(subscription, "unsubscribe", None)):
+        subscription.unsubscribe()
+
+
 def start_contact_reports():
     """Subscribe to PhysX contact reports once. Returns True when subscribed."""
     global _SUBSCRIPTION, _SUBSCRIPTION_ERROR
