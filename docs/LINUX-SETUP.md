@@ -101,7 +101,7 @@ The launcher enables the bridge, generic scene tools, UR5e tools and NVIDIA's bu
 it keeps the UR panel hidden unless `--ur5e-panel` is supplied. Its default backend is **PhysX**.
 The optional Newton flag is not a compatibility promise; see the [matrix](COMPATIBILITY.md).
 
-For a windowless GPU session, use `./run.sh --headless --port 8766` instead. Headless Sim still
+For a windowless GPU session, use `./run.sh --headless --port 8766` instead. To leave either running after your shell or a tool's time limit ends, use `setsid nohup ./run.sh --port 8766 > kit.log 2>&1 < /dev/null &`. Headless Sim still
 requires the NVIDIA runtime and can render sensors, but has no application window for desktop
 capture/input. Windowed tools were exercised on X11/XWayland; native Wayland is not qualified.
 Keep the launch terminal available for startup errors. First startup can take minutes for shader

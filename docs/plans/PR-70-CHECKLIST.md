@@ -128,7 +128,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] Wrong-kind sensor told to retry with `adopt`, which could never work: now `NOT_A_SENSOR`. **live**
 - [x] `ur5e_dt__quick_start` on a reused scene said "simulation running" while stopped: now plays, and reports `playing`. **live**
 - [x] Twin quick starts return robot path, articulation root, camera and bench source; `add_objects` returns object names. **live**
-- [x] Lab job that outlives its host reported `failed` even after succeeding: exit code recorded in the job folder. **live** on Lab 2.3.2
+- [x] Lab job that outlives its host reported `failed` even after succeeding: exit code recorded in the job folder. **live** on Lab 2.3.2 and 3.0: succeeded, failed, timeout and cancelled all held, with process trees gone
 - [x] Lab `timeout_s` died with its host: the next `runs_status` or `runs_list` enforces it. **live** on Lab 2.3.2
 - [x] `latest_checkpoint` picked the unplayable `exported/policy.pt`
 - [x] `envs_list` empty on Lab 2.3: ids read from the checkout's source, marked `scanned`. **live**
@@ -142,18 +142,22 @@ Found by the fleet at `e658289`; not fixed yet:
 
 ### Open: to attempt
 
-- [ ] **`sim__lidar__read` stuck on `NOT_READY`**: 6.0.0.0 and 6.0.1 in the confused-agent runs, with a target in range after 10 s of Play. It worked on the same builds in other runs (6.0.1, 6.0.0.1, 6.1), so a preceding step may matter. Needs a reproduction, and the refusal should report what it observed
+- [x] `sim__lidar__read` stuck on `NOT_READY` on 6.0.1: reproduced. A LiDAR left at the default origin sits inside a robot's base there. At 1.5 m on the same stage it reads, and with no robot at the origin it reads. The refusal now says so
+- [x] The same on 6.0.0.0, 21 fresh Kits: `NOT_READY` means the scan is empty. The stuck run's 1 m cube, 0.5 m from a LiDAR at the default height, hid its wall inside the near range. `sim__stage__clear_owned` removes the ground, so a rigid wall falls out of the scan. No effect from save and reopen, pause and step, or read timing. The refusal now leads with this
 - [x] **Driving a mobile base and Nav2**: merged. NVIDIA robots load by name and drive from `/cmd_vel`, and Nav2 reached a goal with Create 3 and TurtleBot3, on 6.2 and 5.1. Pictures and steps: `docs/evidence/public-robot-nav2-2026-11-04/`
-- [ ] Same on 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1: not run yet, and the first TF loop report came from 6.1
+- [x] Worked example on 6.0.0.0: Create 3 and TurtleBot3 (`--yaw-tolerance 3.2`) reached goals, TF clean, thin floor doesn't drive and thick does, reopened file publishes and drives
+- [ ] Same on 6.0.0.1, 6.0.1 and 6.1: running. The first TF loop report came from 6.1
+- [ ] On 6.0.0.0 a LiDAR read after building a scan graph on a tool-created sensor reported `NOT_OWNED`, then `NOT_READY` while playing. A sensor `sim__lidar__create` made should be registered. Check against the stuck LiDAR read
+- [ ] `[spin] error in rcl_take: error not set` lines in the Kit log on 6.0.0.0: appears harmless, not explained
 - [ ] Carter: drives, but Nav2 stopped 1.2 m short (`Failed to make progress`); not tuned. Nova Carter and Jetbot: drive, Nav2 not run
 - [ ] TurtleBot3 stalls on the final heading without `--yaw-tolerance 3.2`, probably its box caster
 - [ ] A very flat floor already saved in a file gets no warning: only `sim__prim__create` warns
 - [ ] Why a floor scaled 20x20x0.1 gives wheels no contact is measured, not explained (133:1 fails, 100:1 drives on TurtleBot3; Carter erratic from 50:1). Limitation unless the cause turns up
-- [ ] 5.1 saves also write a `/WriterOrchestrator` graph; `/scan` still worked after reopening. Not looked into
+- [x] 5.1 saves write an empty `/WriterOrchestrator` graph with no nodes. It survives a reopen, `/scan` publishes once, nothing breaks. `graphs` in the save result still lists it, which reads like a saved pipeline
 - [ ] A collapsed body after reopening, seen once on 6.1, did not reproduce on 6.2 or 5.1. Cause unknown
 - [ ] RViz not used in these runs: all headless
 - [ ] **URDF pack needs one-time approval and staging**, unlike a USD pack. Decide: a default staging folder, or keep it and document
-- [ ] Windowed 5.1: first `sim__quick_start` failed twice with no error earlier. 5 of 5 pass headless; windowed not retried
+- [x] Windowed 5.1: first `sim__quick_start` failed twice earlier with no error. 5 of 5 pass windowed and 5 of 5 headless, so not reproduced. A returned `ok` can precede the first rendered frame: one screenshot 4 s later was black, and 13 s later showed the arm
 - [ ] Refusals check state before type: `joints__state` on a Cube says "play first", then the real fault. Same for `steps=0`
 - [ ] `NO_SHARED_STAGING` comes before validating a root or path, so a typo reads as an unconfigured install
 - [ ] Range refusals show the value but not the argument name
@@ -163,6 +167,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [ ] `assets__pack_doctor` doesn't list a pack's files
 - [ ] `start_ros_driver backend=ursim status` returns success with Docker missing; its status text can contradict itself
 - [ ] `set_object_pose` and `sync_real_poses` report the requested pose, not where physics left it
+- [ ] Lab: `rl_library` isn't checked against `rl_libraries` before launch: `skrl` on Lab 3 fails after about 80 s
 - [ ] Lab: a task id isn't checked before a roughly 50 s launch; a bad task with no library first blames `--rl_library`
 - [ ] Lab: tqdm bars fill `last_log_lines` for skrl and sb3
 - [ ] Lab: `runs_status.window` was missing on the lab PC, present on the desktop
@@ -185,7 +190,22 @@ Found by the fleet at `e658289`; not fixed yet:
 
 Fleet runs at `9803f4c` were almost all headless, so a pass there doesn't cover a window. Windowed runs started at `8336c4c` on every build.
 
-- [ ] Windowed: `sim__quick_start`, camera capture, viewport tools, `sim__graph__show`, `sim__ui__*`, screenshots and recordings on 5.1, 6.0.0.0, 6.0.0.1, 6.0.1, 6.1 and 6.2
+- [x] Windowed 6.1 (Gemini): UR5e, falling box, viewport, save and reopen in a new windowed Kit, `sim__graph__show`, a 62-frame recording, `create3` and `turtlebot3_burger`. No `run_python`
+- [ ] Windowed: the same on 5.1, 6.0.0.0, 6.0.0.1, 6.0.1 and 6.2, plus `sim__ui__*`
 - [ ] Windowed Isaac Lab `play` on both Lab pairs
 - [ ] RViz against a running scene
+
+### Parallel work
+
+Five builds at once plus one started by hand, on the lab PC, with other agents running. Same scene fired concurrently in all five took 29 s. No crossover: distinct session and stage IDs, each domain saw only its own one `/scan` publisher, each output folder only its own files. Two clients on one bridge queue. A SIGKILL left the others running, and discovery dropped the dead one. About 7 to 7.5 GB of GPU per Kit with a UR5e scene. Start time did not rise with the count.
+
+- [x] Parallel instances: no crossover or crash across 6.0.0.0, 6.0.0.1, 6.0.1, 6.1 and 6.2
+- [ ] **`sim__stop` reports success while Kit keeps running on 6.0.1**: its `python.sh` doesn't `exec`, so `sim__launch` records the bash wrapper. `sim__status` then says `port_conflict`, and the simulator is listed twice. Fix after the port work merges, since it's the same file
+- [ ] `DOORWAY_BUSY` never reaches an MCP caller: a queued call only sees a client timeout, with nothing about what it's waiting for
+- [ ] A SIGKILL mid-call gives `Connection reset by peer`, without naming the tool or saying the simulator is gone
+- [ ] `ISAAC_MCP_SIM_MAX_INSTANCES` counts the whole machine, and its refusal doesn't say `0` disables it
+- [x] Windowed 5.1 (DeepSeek): capture, screenshot, viewport, `sim__graph__show`, a 141-frame recording, LiDAR and `/scan`, reopen, `create3` drove 1.38 m. No `run_python`
+- [x] Regression from the exit-code wrapper: the recorded pid became the shell, so `runs_status` lost `window`, and cancel could report done with Kit still running. Shell now outlasts the signal; windows match the job's process group
+- [x] Windowed `play` and cancel on Lab 2.3.2: `window` reported, and after a full load Kit ignored SIGTERM, so cancel escalated at 10 s and left nothing, twice
+- [ ] The same on Lab 3.0.0
 

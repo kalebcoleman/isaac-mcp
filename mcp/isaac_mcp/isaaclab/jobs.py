@@ -344,8 +344,11 @@ EXIT_FILE = "exit_code"
 
 
 def _exit_recording(command: list[str], job_dir: Path) -> list[str]:
-    """Run *command* so its exit code reaches the job folder even if this host is gone by then. The shell stays the group leader."""
-    return ["/bin/sh", "-c", '"$@"; code=$?; printf %s "$code" > "$0"; exit "$code"', str(job_dir / EXIT_FILE), *command]
+    """Run *command* so its exit code reaches the job folder even if this host is gone by then. The shell stays the group
+    leader and outlasts a signal, so while the recorded pid lives the job does: a signalled shell would look like a stopped
+    job while Kit, which takes a while over SIGTERM, was still running. The trap doesn't pass to the command."""
+    script = 'trap : TERM INT HUP; "$@"; code=$?; printf %s "$code" > "$0"; exit "$code"'
+    return ["/bin/sh", "-c", script, str(job_dir / EXIT_FILE), *command]
 
 
 def _settle_orphan(job_dir: Path, data: dict) -> None:

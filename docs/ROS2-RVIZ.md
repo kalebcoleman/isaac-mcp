@@ -31,7 +31,7 @@ export ROS_DOMAIN_ID=42
 ./run.sh --headless --realtime
 ```
 
-**1. Build the scene.** In your MCP client, call each tool below. `sim__quick_start` needs no IDs. Every later call also takes the `session_id` and `stage_id` it returns.
+**1. Build the scene.** In your MCP client, call each tool below. `sim__quick_start` needs no IDs. Every later call also needs the `session_id` and `stage_id` it returns: add them to each block below. `sim__quick_start` and `sim__stage__info` refuse them.
 
 Tool `sim__quick_start`:
 
@@ -137,7 +137,7 @@ ros2 topic list | grep -E 'clock|cmd_vel|odom|scan|^/tf'
 python3 scripts/ros2_tf_doctor.py --fixed-frame odom
 ```
 
-The doctor should end with `OK: every frame connects to 'odom'`. Drive forward at 0.15 m/s, turn on the spot, and read where the robot thinks it is. The first second or so can be lost while the publisher connects, so expect 0.3 to 0.6 m:
+The doctor should end with `OK: every frame connects to 'odom'`. Drive forward at 0.15 m/s, turn on the spot, and read where the robot thinks it is. The first second or so can be lost while the publisher connects, so expect 0.3 to 0.6 m (the box in this scene stops a Create 3 at about 0.52 m):
 
 ```bash
 python3 scripts/cmd_vel_sequence.py "0.15,0,5;0,0.5,3;0,0,1"

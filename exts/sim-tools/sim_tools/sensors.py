@@ -448,9 +448,10 @@ def read(sensor):
     if data is None or getattr(data, "size", 0) == 0:
         refuse(
             "NOT_READY",
-            "No rendered sensor data yet, or nothing is in range. Allow ordinary rendered frames while playing; warm-up "
-            "can take several seconds. A LiDAR needs visible geometry between its near and far range (1 m to 200 m for "
-            "NVIDIA's Example_Rotary configs). On some builds (measured on 6.0.0.0) the buffer also empties on Pause: read "
+            "The scan is empty: no rendered scan yet, which takes a few seconds of Play, or nothing visible in range. After that, "
+            "retrying won't help. A LiDAR needs a visible surface crossing its scan between its near and far range (1 m to 200 m "
+            "for NVIDIA's Example_Rotary configs), not hidden by anything nearer. A 2D LiDAR at height 0, the default, scans "
+            "along the ground and from inside a robot standing at the origin, so raise it. On some builds (measured on 6.0.0.0) the buffer also empties on Pause: read "
             "while playing. No implicit Play or nested update.",
         )
     return data, info

@@ -170,7 +170,7 @@ before anything starts, naming the flag and the alternative; otherwise a per-lib
 
 **Isaac Lab 2.3.2 with Sim 5.1 is experimental, and `tested` stays false.** Tiny Cartpole jobs ran through these tools on one desktop with `rsl_rl`, `skrl`, `sb3` and
 `rl_games`, including checkpoints, metrics, eval and play; the profile's flags matched each script's real `--help`. That shows the launcher works, not long training or other tasks.
-`rl_games` needs `minibatch_size` to divide `num_envs` times the task's horizon, which varies by task (the job's `seq_length` in the log): a failure is a bare `AssertionError` on `batch_size % minibatch_size`. `extra_args=["agent.params.config.minibatch_size=64"]` fits at 16 or 64 environments on the tasks we ran. `sb3` saves `model.zip`, which counts as a checkpoint only under an `sb3` path.
+`rl_games` needs `minibatch_size` to divide `num_envs` times the task's `horizon_length` from its rl_games config, which varies by task (24 for `Isaac-Reach-UR10`; not the log's `seq_length`). A failure is a bare `AssertionError` on `batch_size % minibatch_size`. Measured on `Isaac-Reach-UR10`: `minibatch_size=64` or `192` at 16 environments, and `1536` at 64. `sb3` saves `model.zip`, which counts as a checkpoint only under an `sb3` path.
 
 `isaaclab__envs_list` can't list tasks on this pair: importing `isaaclab_tasks` needs `pxr`, which exists only once Kit has started. It
 reports `isaac_tasks_unavailable` and lists the ids it can read from the checkout's source, marked `source: "scanned"`. `train` and `play` work with those.
@@ -200,7 +200,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
 ### `isaaclab__install_info`
 
 - Parameters: none.
-- Returns: `{python, isaaclab_version, isaacsim_version, isaaclab_root, venv}` on success;
+- Returns: `{python, isaaclab_version, isaacsim_version, isaaclab_root, venv, source, rl_libraries, tested, profile}` on success, with a `note` if this pair isn't tested;
   `{"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}` (or a probe error)
   on failure. A successful probe can still return null version fields if distributions are absent;
   it does not establish task import, renderer or training readiness.
@@ -230,9 +230,9 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `device` | string | no | `null` | Sets `CUDA_VISIBLE_DEVICES` when not `cpu`. |
   | `headless` | boolean | no | `true` | No window. Normally `--viz none`; `--video` selects Kit with child-only `HEADLESS=1`. `false` selects Kit with `HEADLESS=0`. |
   | `checkpoint` | string | no | `null` | Path to resume from (must be under allowed roots). |
-  | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. |
+  | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. `isaaclab__install_info`'s `rl_libraries` lists the installed ones. One that isn't installed fails after launch. |
   | `extra_args` | array[string] | no | `null` | Validated flags/Hydra overrides. |
-  | `timeout_s` | number | no | `null` | Watchdog kills the process group after this many seconds. |
+  | `timeout_s` | number | no | `null` | The host that started the job kills its process group after this many seconds. If that host has gone, the job runs on until the next `runs_status` or `runs_list`. |
   | `allow_concurrent` | boolean | no | `false` | Override the job-vs-job guard. |
   | `allow_concurrent_gpu` | boolean | no | `false` | Override the Kit-bridge (GPU) guard. |
 - Returns on success: `{job_id, log_dir, command}`. A guard refusal includes `error` and `hint`, along with `running_job_id`/`running_pid` (job guard) or `kit_bridges` (Kit guard). On no install: `{"error": "no Isaac Lab install found", "hint": ...}`.
@@ -280,7 +280,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `state` | string | no | `null` | `"running"`, `"finished"`, `"all"`, or omitted for all; anything else returns an error naming these. |
+  | `state` | string | no | `null` | `"running"`, `"finished"` (any end state, including failed), `"all"`, or omitted for all; anything else returns an error naming these. |
 - Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, log_dir}]}`. Dead pids are reconciled to `failed` ("host restarted") on read.
 - Example: `{"state": "running"}`
 

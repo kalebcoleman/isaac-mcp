@@ -1106,3 +1106,43 @@ def test_the_module_loads_with_a_finished_job_left_from_an_earlier_host(tmp_path
     subprocess.run([sys.executable, "-c", "import isaac_mcp.isaaclab.jobs"], check=True,
                    env={**os.environ, "ISAACLAB_JOBS_DIR": str(tmp_path)})
     assert json.loads((job / "job.json").read_text())["status"] == "succeeded"
+
+
+def test_the_recording_shell_outlasts_sigterm_until_the_job_has_really_exited(tmp_path):
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    from isaac_mcp.isaaclab import jobs
+
+    slow = "import signal,sys,time; signal.signal(signal.SIGTERM, lambda *_: (time.sleep(1), sys.exit(7))); print(1, flush=True); time.sleep(30)"
+    proc = subprocess.Popen(jobs._exit_recording([sys.executable, "-c", slow], tmp_path), stdout=subprocess.PIPE, start_new_session=True)
+    proc.stdout.readline()
+    os.killpg(proc.pid, signal.SIGTERM)
+    time.sleep(0.3)
+    assert proc.poll() is None  # the job is still shutting down, and its leader says so
+    assert proc.wait(timeout=10) == 7 and (tmp_path / jobs.EXIT_FILE).read_text() == "7"
+
+
+def test_a_job_window_is_found_on_a_process_in_its_group(monkeypatch):
+    import subprocess
+    import sys
+
+    from isaac_mcp import screen
+
+    leader = subprocess.Popen(["/bin/sh", "-c", f"{sys.executable} -c 'import time; time.sleep(20)' & wait"], start_new_session=True)
+    try:
+        import time
+
+        time.sleep(0.2)
+        child = int(subprocess.check_output(["pgrep", "-P", str(leader.pid)]).split()[0])
+        monkeypatch.setattr(screen, "_visible_windows", lambda: [dict(id=5, pid=child, width=9, height=9, is_client=True)])
+        assert screen.window_for_pid(leader.pid)["id"] == 5
+        assert screen.window_for_pid(2 ** 22 + 1) is None
+    finally:
+        import os
+        import signal
+
+        os.killpg(leader.pid, signal.SIGKILL)

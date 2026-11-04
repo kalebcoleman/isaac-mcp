@@ -726,12 +726,19 @@ def _auto_window(port: int | None = None) -> dict | None:
     return matches[0]
 
 
+def _in_group(pid: int | None, group: int) -> bool:
+    try:
+        return bool(pid) and os.getpgid(pid) == group
+    except OSError:
+        return False
+
+
 def window_for_pid(pid: int | None) -> dict | None:
-    """Visible client window owned by `pid` (e.g. a Lab job), else None. Never raises."""
+    """Visible client window owned by `pid` or a process in the group it leads (a Lab job's Kit), else None. Never raises."""
     if not pid:
         return None
     try:
-        owned = [w for w in _visible_windows() if w.get("pid") == int(pid)]
+        owned = [w for w in _visible_windows() if w.get("pid") == int(pid) or _in_group(w.get("pid"), int(pid))]
     except Exception:  # noqa: BLE001 - no display
         return None
     owned.sort(key=lambda w: (w.get("is_client", False), w["width"] * w["height"]), reverse=True)
