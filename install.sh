@@ -118,6 +118,11 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+case "$PORT" in
+  ''|*[!0-9]*) echo "port must be a number from 1 to 65535, not '$PORT'" >&2; exit 2 ;;
+esac
+if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then echo "port must be a number from 1 to 65535, not '$PORT'" >&2; exit 2; fi
+
 if [ "$NO_SIM" = 1 ] && [ "$DOWNLOAD_SIM" = 1 ]; then
   echo "--no-sim and --download-sim cannot be combined" >&2
   exit 2
@@ -355,8 +360,6 @@ if not os.path.exists(path):
     print(f"Claude Desktop config not found at {path}; skipped")
     sys.exit(0)
 
-with open(path, encoding="utf-8") as f:
-    config = json.load(f)
 env = {"ISAAC_MCP_PORT": port, "DISPLAY": display}
 if os.environ.get("LAB_PYTHON"):
     env["ISAACLAB_PYTHON"] = os.environ["LAB_PYTHON"]
@@ -364,18 +367,24 @@ if os.environ.get("LAB_ROOT"):
     env["ISAACLAB_ROOT"] = os.environ["LAB_ROOT"]
 if os.environ.get("SIM_PYTHON"):
     env["ISAAC_MCP_PYTHON"] = os.environ["SIM_PYTHON"]
-config.setdefault("mcpServers", {})["isaac"] = {
-    "command": cli_path,
-    "args": [],
-    "env": env,
-}
-backup = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
-shutil.copy2(path, backup)
-tmp = f"{path}.tmp"
-with open(tmp, "w", encoding="utf-8") as f:
-    json.dump(config, f, indent=2)
-    f.write("\n")
-os.replace(tmp, path)
+entry = {"command": cli_path, "args": [], "env": env}
+try:
+    with open(path, encoding="utf-8") as f:
+        config = json.load(f)
+    config.setdefault("mcpServers", {})["isaac"] = entry
+    backup = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+    shutil.copy2(path, backup)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+except (OSError, ValueError, AttributeError) as exc:
+    # The rest of the install succeeded, and this file is the user's: leave it alone and say what to add.
+    print(f"Claude Desktop config not changed: {path}: {exc}", file=sys.stderr)
+    print('Add this under "mcpServers" yourself, then restart Claude Desktop:', file=sys.stderr)
+    print(json.dumps({"isaac": entry}, indent=2), file=sys.stderr)
+    sys.exit(0)
 print(f"updated {path}")
 print(f"backup  {backup}")
 print("restart Claude Desktop to load the new server")

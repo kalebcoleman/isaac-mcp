@@ -73,6 +73,11 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+case "$PORT" in
+  ''|*[!0-9]*) echo "port must be a number from 0 (any free port) to 65535, not '$PORT'" >&2; exit 2 ;;
+esac
+if [ "$PORT" -gt 65535 ]; then echo "port must be a number from 0 to 65535, not '$PORT'" >&2; exit 2; fi
+
 if [ "$PY_AUTODETECT" = 1 ]; then
   if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/scripts/isaac_env.py" ]; then
     # Any Isaac Sim 6.x; the first match in the documented search order wins.

@@ -260,3 +260,20 @@ def test_a_named_older_build_other_than_51_is_still_refused(tmp_path):
     env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / "old", "4.5.0"))
     result = _install(root, env)
     assert result.returncode == 1 and "6.x or 5.1 install" in result.stderr
+
+
+@pytest.mark.parametrize("port", ["abc", "0", "70000", "80 80", ""])
+def test_a_bad_port_stops_before_anything_is_installed(tmp_path, port):
+    root, env, log = _sandbox(tmp_path)[:3]
+    result = _install(root, env, "--no-sim", "--port", port)
+    assert result.returncode == 2 and "port must be a number" in result.stderr
+
+
+def test_a_claude_desktop_config_it_cannot_parse_is_left_alone_with_the_entry_to_add(tmp_path):
+    root, env = _sandbox(tmp_path)[:2]
+    config = Path(env["HOME"]) / ".config/Claude/claude_desktop_config.json"
+    config.parent.mkdir(parents=True)
+    config.write_text('{ // my comment\n"mcpServers": {} }\n')
+    result = _install(root, env, "--no-sim", "--claude-desktop")
+    assert result.returncode == 0 and "not changed" in result.stderr and '"isaac"' in result.stderr
+    assert "Traceback" not in result.stderr and "my comment" in config.read_text()
