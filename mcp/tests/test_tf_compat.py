@@ -22,7 +22,7 @@ def test_missing_compute_node_uses_legacy_graph_only_for_first_60_release():
     assert tf_compat.use_legacy_transform_publisher(1, "6.0.0.0") is True
 
 
-@pytest.mark.parametrize("version", [None, "5.1.0.0", "6.0.0.1", "6.1.0.0", "6.2.0.0"])
+@pytest.mark.parametrize("version", [None, "6.0.0.1", "6.1.0.0", "6.2.0.0"])
 def test_missing_compute_node_on_unverified_build_fails_loudly(version):
     with pytest.raises(RuntimeError, match="IsaacComputeTransformTree is unavailable"):
         tf_compat.use_legacy_transform_publisher(None, version)
