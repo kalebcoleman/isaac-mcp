@@ -1350,9 +1350,11 @@ class Scene:
         if not isinstance(filename, str) or not re.fullmatch(
             r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}\.usda", filename
         ):
+            hint = (" This tool writes text .usda files: pass the name alone, or with .usda, not .usd or .usdc."
+                    if isinstance(filename, str) and filename.lower().endswith((".usd", ".usdc", ".usdz")) else "")
             refuse(
                 "INVALID_OUTPUT",
-                "Use a simple name of letters, digits, _ and -, ending .usda (<=65 characters). No spaces or folders; use directory for a folder.",
+                "Use a simple name of letters, digits, _ and -, ending .usda (<=65 characters). No spaces or folders; use directory for a folder." + hint,
             )
         from .render_export import camera_handles, reset_export_handles, restore_export_camera_targets, save_report
 

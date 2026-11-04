@@ -304,4 +304,5 @@ Home PC, run by script, headless:
 - [x] "Get a Panda from GitHub into a scene, bend its elbow, drop a ball, load it again by name" on 5.1 (Gemini): worked in 24 calls, no `run_python`; the picture shows the bent arm and ball. Costliest gap: a pack keeps the source's folder layout, so the name to load isn't `<pack>/<file>`. `assets__pack_build` now returns `load_as`, ready for `sim__quick_start`
 - [ ] `sim__material__apply` takes `path` for the prim and `material_path`; the agent passed `prim_path`. The refusal named the right field, so left as is
 - [ ] `assets__pack_build` needs the source under an approved root, which an agent can't create. Say in the guide that `isaac_assets.py adopt` (no approval) is the route for an agent, if it's true for a URDF with meshes
+- [x] "Find something simple on GitHub to simulate" (Gemini): picked SO-ARM100 (Apache 2.0, 3 MB, a hobby 6-DOF arm), got it into a scene, posed it and took pictures, 23 calls, no `run_python`. Fixed its two stumbles: `sim__stage__save` now says it writes `.usda` when given `.usd`, and `assets__packs` explains that a folder isn't a pack until pinned
 

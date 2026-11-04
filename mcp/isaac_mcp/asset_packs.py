@@ -437,6 +437,8 @@ def list_packs(stores: list[Path]) -> list[dict]:
                 marked = (child / PINS_FILE).is_file() or (child / PACK_FILE).is_file()
                 if not marked and child.name != assets.DEFAULT_PACK:
                     entry["folders"].append(child.name)
+                    entry["folders_note"] = ("A folder is not a pack until it is pinned, and sim__quick_start only loads from "
+                                             "packs: assets__pack_pin pack=<folder name> pins its files in place.")
                     continue
                 item = dict(name=child.name, pinned=len(assets.pins(child)), symlink=child.is_symlink())
                 try:
