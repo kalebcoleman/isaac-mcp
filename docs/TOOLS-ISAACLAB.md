@@ -31,6 +31,28 @@ For design history and the original job-guard write-up, see [ISAACLAB-TOOLS.md](
    `IsaacLab` checkout with the reinforcement-learning scripts.
 4. The current directory's `.venv` when the current directory is an Isaac Lab checkout.
 
+Between steps 2 and 3, a project named by `ISAAC_MCP_PROJECT` in the server's own environment (a directory or its
+`isaac-mcp.json`) can set `isaaclab_python` and optionally `isaaclab_root`, for a project with its own Lab. Set that variable
+in the `env` of the client's server entry. Relative paths start at that file's folder:
+
+```json
+{"isaaclab_python": ".venv/bin/python", "isaaclab_root": "../IsaacLab"}
+```
+
+A file found only by searching up from the working directory is ignored for these two keys, and `isaaclab__install_info`
+reports `project_setting_ignored` with what to set. Lab tools run this interpreter, and starting a client inside a cloned
+repository must not let that repository choose what runs. The same rule applies to a project file's `asset_path`, which
+is not an approval.
+
+The interpreter must be a virtual environment with Isaac Lab installed, which is checked from its files before anything
+runs it. An invalid setting is an error, not a fallback. That check catches mistakes; it does not stop a deliberately
+faked environment, so name only a project you trust. A model with `put_file` can write any file there. Hide `put_file`
+(`ISAAC_MCP_BUILTINS=0`) if that matters. Explicit `ISAACLAB_PYTHON` or `ISAACLAB_ROOT` win, and then
+`isaaclab__install_info` reports `project_setting_ignored`; remove them from that server's configuration to use the
+project's. It reports `source`, and `tested: false` for a Lab version not in the tested list below, such as 2.3.2 on
+Sim 5.1: the version read works, but jobs on it are untested. A pip-only Lab has no `scripts/reinforcement_learning`, so
+`isaaclab__train`, `eval` and `play` refuse with "Isaac Lab checkout not found" until `isaaclab_root` points at a checkout.
+
 The resolver does not scan the home directory or assume a project-specific path. If no standard
 environment or current checkout is available, set `ISAACLAB_PYTHON` and, when needed,
 `ISAACLAB_ROOT`, or set `ISAACLAB_ROOT` for a checkout with its own `.venv`.
@@ -127,6 +149,33 @@ required or performed by this documentation.
 | `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count) |
 | `isaaclab__tensorboard_tail` | Last points of one TensorBoard scalar |
 
+## What a checkout offers: the profile
+
+`isaaclab__install_info` returns `profile`, read from the checkout's script files once per root, without importing Isaac Lab
+or starting Kit: `lab_version`, `isaaclab_version`, `isaacsim_version`, `layout`, `libraries` and, per script, its declared
+`flags` (including a helper beside it and AppLauncher's when that source is present). `flags: null` means unknown, not none.
+Isaac Lab 3's scripts hand over to a CLI elsewhere, so theirs are unknown. `tested` is a separate statement: whether that Lab and Sim pair
+was verified with real jobs, which so far is only Isaac Lab 3.0.0 on Isaac Sim 6.2.
+
+| `layout` | Scripts | Library | Display |
+|---|---|---|---|
+| `unified` | `scripts/reinforcement_learning/{train,play}.py` | `--rl_library` | `--viz none\|kit` |
+| `per_library` | `scripts/reinforcement_learning/<library>/{train,play}.py` | the folder; `rl_library` is required, and the refusal lists `libraries` | `--headless` when headless and without `--video` |
+| `none` | not found: jobs are refused before starting, naming the expected paths | | |
+
+`train`, `eval` and `play` build their command from this. A flag a script does not declare, generated or in `extra_args`, is refused
+before anything starts, naming the flag and the alternative; otherwise a per-library script would pass it to Hydra after Kit started. With unknown flags nothing is refused.
+`HEADLESS` is always set in the child.
+
+**Isaac Lab 2.3.2 with Sim 5.1 is experimental, and `tested` stays false.** Tiny Cartpole jobs ran through these tools on one desktop with `rsl_rl`, `skrl`, `sb3` and
+`rl_games`, including checkpoints, metrics, eval and play; the profile's flags matched each script's real `--help`. That shows the launcher works, not long training or other tasks.
+`rl_games` at 16 environments needs `extra_args=["agent.params.config.minibatch_size=64"]`. `sb3` saves `model.zip`, which counts as a checkpoint only under an `sb3` path.
+
+**A crash can exit 0.** Kit's shutdown can hide an uncaught exception: seen on Lab 2.3.2 with an unknown task. A job that exits 0 with a traceback at the end of stderr reports `failed` with a note.
+One exception: a `train` job whose run folder already has a checkpoint still reports `succeeded`, so check its log and iteration count if it stopped early.
+
+When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_tasks_unavailable` and leaves out gymnasium's own tasks, such as classic-control `CartPole`.
+
 ## Parameter conventions
 
 - All tools return JSON strings; the tables below list the parsed object shape.
@@ -199,7 +248,7 @@ required or performed by this documentation.
   | `allow_concurrent` | boolean | no | `false` | |
   | `allow_concurrent_gpu` | boolean | no | `false` | |
 - Returns: same shape as `isaaclab__train`. Runs `play.py` with `--checkpoint` (Isaac Lab has no separate eval entrypoint) and `--viz none|kit`.
-- Example: `{"task": "Isaac-Reach-UR10", "checkpoint": "/abs/path/to/model.pth", "headless": true}`
+- Example: `{"task": "Isaac-Reach-UR10", "checkpoint": "/abs/path/to/model.pth", "rl_library": "rl_games", "headless": true}`
 
 ### `isaaclab__play`
 
@@ -216,8 +265,8 @@ required or performed by this documentation.
   | `timeout_s` | number | no | `null` | |
   | `allow_concurrent` | boolean | no | `false` | |
   | `allow_concurrent_gpu` | boolean | no | `false` | |
-- Returns: same shape as `isaaclab__train`. Interactive; stop it with `isaaclab__runs_cancel`. With `headless=false` a window titled "Isaac Lab 3.0.0" opens; `isaaclab__runs_status` reports its `window` (id, title, size) for screenshot/recording.
-- Example: `{"task": "Isaac-Reach-UR10", "checkpoint": "/abs/path/to/model.pth", "num_envs": 4, "headless": false}`
+- Returns: same shape as `isaaclab__train`. Interactive; stop it with `isaaclab__runs_cancel`. With `headless=false` a window opens, titled "Isaac Lab 3.0.0" on that version and "Isaac Sim 5.1.0" on Lab 2.3.2; `isaaclab__runs_status` reports its `window` (id, title, size) for screenshot/recording.
+- Example: `{"task": "Isaac-Reach-UR10", "checkpoint": "/abs/path/to/model.pth", "rl_library": "rl_games", "num_envs": 4, "headless": false}`
 
 ### `isaaclab__runs_list`
 
@@ -225,7 +274,7 @@ required or performed by this documentation.
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `state` | string | no | `null` | `"running"`, `"finished"`, or omitted for all. |
+  | `state` | string | no | `null` | `"running"`, `"finished"`, `"all"`, or omitted for all; anything else returns an error naming these. |
 - Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, log_dir}]}`. Dead pids are reconciled to `failed` ("host restarted") on read.
 - Example: `{"state": "running"}`
 
@@ -238,7 +287,7 @@ required or performed by this documentation.
   | `job_id` | string | yes | — | Validated id. |
 - Returns:
   `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, log_dir, pid}`
-  plus `window: {id, title, width, height}` when the job is live and owns a window. `last_log_lines` is the last 20 lines of `stdout.log`. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
+  plus `window: {id, title, width, height}` when the job is live and owns a window. `last_log_lines` is the last 20 lines of `stdout.log`; a failed job also has `last_stderr_lines`, the last 20 of `stderr.log`, where launch and import failures go. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
 - Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10"}`
 
 ### `isaaclab__runs_tail`
@@ -465,7 +514,11 @@ Historical verification includes:
   extra or install these into a separate Lab environment; `install.sh --no-sim`
   does not install or repair that environment. A job can start successfully and
   later fail for a missing dependency; inspect `runs_status` and `runs_tail`.
-  The RL backend is chosen with `--rl_library` (else the task default); `--num_episodes` was
+  The RL backend is chosen with `--rl_library`; when omitted, Isaac Lab 3.0.0 uses the task's registered `default_agent` if it has one; otherwise Lab exits 2 with "the following argument is required: --rl_library", which a misspelled task id also triggers.
+  Name the library when you load a checkpoint: a task default of `rsl_rl` applied to an `rl_games`
+  checkpoint fails inside the backend with `KeyError: 'actor_state_dict'`. `isaaclab__eval` and `isaaclab__play` therefore
+  use the library named by a checkpoint under `logs/<library>/` when you pass none, and report it as
+  `rl_library_from_checkpoint_path`. `--num_episodes` was
   dropped because only the rlinf backend has it. `extra_args` accepts flags and Hydra
   overrides; rl_games needs `minibatch_size` to divide `num_envs * 24`.
 - Runs land under `<isaaclab_root>/logs/...`, not the job dir; `runs_status` finds the newest

@@ -4,8 +4,12 @@ This module owns the job model for long-running Isaac Lab train/eval/play jobs.
 It is deliberately free of FastMCP imports; the parent server wires these
 functions as MCP tools later. It is pure stdlib Python (>=3.10).
 
-Chosen Isaac Lab entry scripts and flags (relative to the resolved
-``isaaclab_root``):
+Scripts, libraries and accepted flags come from install.lab_profile, read from the checkout. Isaac Lab 2.3's
+per-library layout uses scripts/reinforcement_learning/<library>/{train,play}.py, a required library chosen by path, and
+--headless when headless without --video. Its scripts declare neither --viz nor --rl_library; left unrefused they would
+reach Hydra after Kit starts. Tiny real jobs passed on 2.3.2 with all four libraries; `tested` stays false for that pair.
+
+Isaac Lab 3 entry scripts and flags (relative to the resolved ``isaaclab_root``):
   * train:  scripts/reinforcement_learning/train.py
       flags: --task, --num_envs, --max_iterations, --seed, --checkpoint,
              --device (launcher), --viz none|kit, plus validated extra_args
@@ -210,6 +214,66 @@ def _job_path(job_id: Any) -> Path:
     return jobs_dir() / job_id
 
 
+# What Isaac Lab 3.0.0 accepts for --rl_library; its logs are written under logs/<library>/.
+_RL_LIBRARIES = ("rsl_rl", "rl_games", "skrl", "sb3", "rlinf", "torchrl")
+RUN_STATES = ("running", "finished", "all")
+
+
+def _per_library(root: Any) -> list[str] | None:
+    """The library folders of a per-library checkout, else None (Isaac Lab 3, or no scripts: refused at launch)."""
+    profile = _install.lab_profile(root)
+    return profile["libraries"] if profile["layout"] == _install.PER_LIBRARY else None
+
+
+def _per_library_choice(root: Any, libraries: list[str], lib: str | None) -> str:
+    """The library to run, or a refusal naming the choices, before anything starts."""
+    if lib not in libraries:
+        given = f"has no {lib} scripts" if lib else "needs rl_library"
+        raise ValueError(f"{_install.lab_label(root, _install.lab_profile(root))} {given}: it has one script folder per "
+                         f"library. Choose one of: {', '.join(libraries)}.")
+    return lib
+
+
+def _per_library_display_args(root: Any, library: str, script: str, headless: bool, extras: list[str]) -> list[str]:
+    # With unknown flags, the child's HEADLESS setting still chooses the display.
+    flags = _install.lab_profile(root)["scripts"][library][script]["flags"] or []
+    wanted = headless and "--video" not in extras and "--headless" not in extras and "--headless" in flags
+    return ["--headless"] if wanted else []
+
+
+_FLAG_ALTERNATIVES = {"--viz": "Use the headless argument.", "--visualizer": "Use the headless argument.",
+                      "--rl_library": "Use the rl_library argument."}
+
+
+def _require_accepted(root: Any, library: str | None, script: str, argv: list[str]) -> None:
+    """Refuse a flag the script does not declare, which it might otherwise hand to Hydra after Kit starts."""
+    profile = _install.lab_profile(root)
+    flags = profile["scripts"].get(library or "", {}).get(script, {}).get("flags")
+    if flags is None:
+        return
+    for arg in argv:
+        flag = arg.split("=", 1)[0]
+        if flag.startswith("--") and flag not in flags:
+            alternative = _FLAG_ALTERNATIVES.get(flag, f"It accepts: {', '.join(flags)}.")
+            raise ValueError(f"{_install.lab_label(root, profile)}: {library + '/' if library else ''}{script}.py does not "
+                             f"accept {flag}. {alternative}")
+
+
+def _library_from_checkpoint(checkpoint: str, extras: list[str], libraries: Any = _RL_LIBRARIES) -> str | None:
+    """The library named by a checkpoint under logs/<library>/, unless the caller's arguments choose one.
+
+    Without it Lab picks the task's default_agent, which fails on another library's checkpoint with an
+    opaque KeyError inside the backend.
+    """
+    if any(arg == "--rl_library" or arg.startswith("--rl_library=") for arg in extras):
+        return None
+    parts = Path(checkpoint).parts
+    for index, part in enumerate(parts[:-1]):
+        if part == "logs" and parts[index + 1] in libraries:
+            return parts[index + 1]
+    return None
+
+
 def _validate_library(rl_library: Any) -> str | None:
     if rl_library is None:
         return None
@@ -348,6 +412,8 @@ def _latest_checkpoint(run_dir: Any) -> str | None:
     candidates = []
     for pat in _CHECKPOINT_EXTS:
         candidates.extend(rd.rglob(pat))
+    if "sb3" in rd.parts:  # stable-baselines3 saves model.zip, not a torch file
+        candidates.extend(rd.rglob("*.zip"))
     if not candidates:
         return None
     candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
@@ -442,6 +508,50 @@ def _rehydrate() -> None:
 _rehydrate()
 
 
+_KIT_LOG_LINE_RE = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+Z \[[\d,.]+m?s\] \[")
+_TRACEBACK_HEADER = "Traceback (most recent call last):"
+
+
+def _uncaught_exception(stderr_path: Path) -> str | None:
+    """The exception a stderr ends in, ignoring Kit's shutdown log lines; None if it ends any other way.
+
+    Kit's shutdown can turn an uncaught exception's exit status into 0: seen on Isaac Lab 2.3.2 with an unknown task,
+    which raises before Hydra's own error handling. Only the end of the stream counts, so a traceback some extension
+    printed and recovered from earlier, followed by other output, does not.
+    """
+    try:
+        with stderr_path.open("rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - 65536))
+            lines = f.read().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    lines = [line for line in lines if line.strip() and not _KIT_LOG_LINE_RE.match(line)]
+    headers = [i for i, line in enumerate(lines) if line.strip() == _TRACEBACK_HEADER]
+    if not headers:
+        return None
+    after = lines[headers[-1] + 1:]
+    ends = [i for i, line in enumerate(after) if not line.startswith((" ", "\t"))]
+    # The first unindented line starts the exception message. Much more after it is other output, not this exception.
+    if not ends or len(after) - ends[0] > 8:
+        return None
+    return after[ends[0]][:300]
+
+
+def _crashed_with_exit_zero(job_dir: Path) -> str | None:
+    """Why a job that exited 0 did not really succeed, or None. A checkpoint from training counts as completed work."""
+    data = _read_job(job_dir) or {}
+    log_dir = Path(data.get("log_dir", job_dir))
+    exception = _uncaught_exception(log_dir / "stderr.log")
+    if not exception:
+        return None
+    if data.get("kind") == "train":
+        run_dir = _run_dir_from_log(log_dir / "stdout.log")
+        if run_dir and _latest_checkpoint(run_dir):
+            return None
+    return f"exited 0, but stderr ends in an uncaught exception: {exception}"
+
+
 def _watcher(job_dir: Path, job_id: str, proc: subprocess.Popen, timeout_s: float | None) -> None:
     status = None
     exit_code = None
@@ -480,6 +590,8 @@ def _watcher(job_dir: Path, job_id: str, proc: subprocess.Popen, timeout_s: floa
         if cur.get("status") == "cancelled":
             # runs_cancel already recorded the outcome; do not turn it into "failed (-15)"
             _update_job(job_dir, exit_code=exit_code)
+        elif status == "succeeded" and (crash := _crashed_with_exit_zero(job_dir)):
+            _update_job(job_dir, status="failed", finished_at=_now(), exit_code=exit_code, note=crash)
         else:
             _update_job(job_dir, status=status, finished_at=_now(), exit_code=exit_code)
         _active.pop(job_id, None)
@@ -502,6 +614,7 @@ def _start_job_locked(
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
     headless: bool | None = None,
+    library: str | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     if not allow_concurrent:
@@ -517,7 +630,11 @@ def _start_job_locked(
     root_path = Path(root).resolve()
     # script selection
     script_rel = "train.py" if kind == "train" else "play.py"
-    script_path = root_path / "scripts" / "reinforcement_learning" / script_rel
+    script_path = root_path / "scripts" / "reinforcement_learning" / (library or "") / script_rel
+    if not script_path.is_file():
+        raise ValueError(f"{_install.lab_label(root_path, _install.lab_profile(root_path))} has no "
+                         f"{script_path.relative_to(root_path)}, so no job could start. "
+                         f"Expected {_install.EXPECTED_SCRIPTS}.")
     full_cmd = [str(python), str(script_path)] + list(argv)
     task_modules, task_paths = _install.resolve_task_modules(root_path)
     if task_modules:
@@ -603,8 +720,11 @@ def train(
     lib = _validate_library(rl_library)
     ckpt = _validate_checkpoint(checkpoint, root)
     extras = _validate_extra_args(extra_args)
+    libraries = _per_library(root)
+    if libraries is not None:
+        lib = _per_library_choice(root, libraries, lib)
     argv: list[str] = ["--task", task, "--num_envs", str(num_envs)]
-    if lib:
+    if lib and libraries is None:
         argv += ["--rl_library", lib]
     if max_iterations is not None:
         argv += ["--max_iterations", str(max_iterations)]
@@ -614,12 +734,13 @@ def train(
         argv += ["--checkpoint", ckpt]
     if device is not None:
         argv += ["--device", str(device)]
-    argv += _visualizer_args(headless, extras)
+    argv += _visualizer_args(headless, extras) if libraries is None else _per_library_display_args(root, lib, "train", headless, extras)
     argv += extras
+    _require_accepted(root, lib if libraries is not None else None, "train", argv)
     return _start_job(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-        headless=headless,
+        headless=headless, **({} if libraries is None else {"library": lib}),
     )
 
 
@@ -642,16 +763,23 @@ def eval_(
     if ckpt is None:
         raise ValueError("checkpoint is required for eval")
     extras = _validate_extra_args(extra_args)
+    libraries = _per_library(root)
+    inferred = None if lib else _library_from_checkpoint(ckpt, extras, libraries or _RL_LIBRARIES)
+    lib = lib or inferred
+    if libraries is not None:
+        lib = _per_library_choice(root, libraries, lib)
     argv: list[str] = ["--task", task, "--checkpoint", ckpt]
-    if lib:
+    if lib and libraries is None:
         argv += ["--rl_library", lib]
     if num_envs is not None:
         argv += ["--num_envs", str(num_envs)]
-    argv += _visualizer_args(headless, extras)
+    argv += _visualizer_args(headless, extras) if libraries is None else _per_library_display_args(root, lib, "play", headless, extras)
     argv += extras
-    return _start_job(python, root, "eval", task, argv, timeout_s=timeout_s,
-                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-                      headless=headless)
+    _require_accepted(root, lib if libraries is not None else None, "play", argv)
+    result = _start_job(python, root, "eval", task, argv, timeout_s=timeout_s,
+                        allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+                        headless=headless, **({} if libraries is None else {"library": lib}))
+    return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
 
 def play(
@@ -673,17 +801,26 @@ def play(
     if ckpt is None:
         raise ValueError("checkpoint is required for play")
     extras = _validate_extra_args(extra_args)
+    libraries = _per_library(root)
+    inferred = None if lib else _library_from_checkpoint(ckpt, extras, libraries or _RL_LIBRARIES)
+    lib = lib or inferred
+    if libraries is not None:
+        lib = _per_library_choice(root, libraries, lib)
     argv: list[str] = ["--task", task, "--checkpoint", ckpt, "--num_envs", str(num_envs)]
-    if lib:
+    if lib and libraries is None:
         argv += ["--rl_library", lib]
-    argv += _visualizer_args(headless, extras)
+    argv += _visualizer_args(headless, extras) if libraries is None else _per_library_display_args(root, lib, "play", headless, extras)
     argv += extras
-    return _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
-                      allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-                      headless=headless)
+    _require_accepted(root, lib if libraries is not None else None, "play", argv)
+    result = _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
+                        allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+                        headless=headless, **({} if libraries is None else {"library": lib}))
+    return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
 
 def runs_list(state: str | None = None) -> dict[str, Any]:
+    if state and state not in RUN_STATES:
+        raise ValueError(f"unknown state {state!r}: use one of {', '.join(RUN_STATES)}, or omit it for all")
     runs = []
     for jd in sorted(jobs_dir().iterdir()):
         if not jd.is_dir():
@@ -723,7 +860,7 @@ def runs_status(job_id: str) -> dict[str, Any]:
     jd = _job_path(job_id)
     data = _read_job(jd)
     if not data:
-        raise ValueError(f"unknown job: {job_id}")
+        raise ValueError(f"unknown job: {job_id}; list jobs with isaaclab__runs_list")
     if _orphaned(job_id, data):
         data["status"] = "failed"
         data["finished_at"] = data.get("finished_at") or _now()
@@ -750,12 +887,19 @@ def runs_status(job_id: str) -> dict[str, Any]:
         # the experiment dir (parent of nn/ for rl_games) is the run dir tools like metrics_summary want
         p = Path(ckpt).parent
         run_dir = str(p.parent if p.name == "nn" else p)
+    # A launch or import failure often writes only to stderr, which would leave last_log_lines empty.
+    failure = {}
+    if data.get("status") == "failed":
+        failure = {"last_stderr_lines": _tail_file(Path(data.get("log_dir", jd)) / "stderr.log", 20)}
+    if data.get("status") == "failed" and data.get("note"):
+        failure["note"] = data["note"]
     return {
         "state": data.get("status"),
         "pid_alive": _job_alive(data),
         "elapsed_s": round(elapsed, 3),
         "exit_code": data.get("exit_code"),
         "last_log_lines": last_lines,
+        **failure,
         "latest_checkpoint": ckpt,
         "run_dir": run_dir,
         "log_dir": data.get("log_dir", str(jd)),
@@ -770,7 +914,7 @@ def runs_tail(job_id: str, stream: str = "stdout", lines: int = 100) -> dict[str
     jd = _job_path(job_id)
     data = _read_job(jd)
     if not data:
-        raise ValueError(f"unknown job: {job_id}")
+        raise ValueError(f"unknown job: {job_id}; list jobs with isaaclab__runs_list")
     log_dir = Path(data.get("log_dir", jd))
     fname = "stdout.log" if stream == "stdout" else "stderr.log"
     path = log_dir / fname
@@ -783,7 +927,7 @@ def runs_cancel(job_id: str, grace_s: int = 10) -> dict[str, Any]:
     jd = _job_path(job_id)
     data = _read_job(jd)
     if not data:
-        raise ValueError(f"unknown job: {job_id}")
+        raise ValueError(f"unknown job: {job_id}; list jobs with isaaclab__runs_list")
     if data.get("status") != "running":
         # already finished (succeeded/failed/cancelled/timeout): leave the record alone
         return {"cancelled": False, "state": data.get("status"), "note": f"job already {data.get('status')}"}

@@ -268,3 +268,139 @@ def test_envs_list_real_subprocess_survives_bad_modules(tmp_path):
     res = install.envs_list(env=env)
     assert [e["id"] for e in res["envs"]] == ["Good-v0"]
     assert res["import_errors"] == {"boom": "RuntimeError: boom", "exits": "SystemExit: 3"}
+
+
+# ---- a per-project interpreter (isaac-mcp.json) ----
+
+
+def _project(tmp_path, data):
+    (tmp_path / "isaac-mcp.json").write_text(json.dumps(data))
+    return {"ISAAC_MCP_PROJECT": str(tmp_path)}
+
+
+def _lab_venv(tmp_path):
+    py, root, venv = _make_install(tmp_path)
+    _mark_lab_installed(venv)
+    return py, root, venv
+
+
+def test_project_file_supplies_the_interpreter(tmp_path):
+    py, root, venv = _lab_venv(tmp_path)
+    env = _project(tmp_path, {"isaaclab_python": str(py), "isaaclab_root": str(root)})
+    found = install.locate_install(env)
+    assert found["python"] == str(py) and found["isaaclab_root"] == str(root)
+    assert found["source"].startswith("project:")
+
+
+def test_relative_project_paths_start_at_the_project_file(tmp_path):
+    py, _, _ = _lab_venv(tmp_path)
+    env = _project(tmp_path, {"isaaclab_python": "venv/bin/python"})
+    assert install.locate_install(env)["python"] == str(py)
+
+
+def test_explicit_environment_beats_the_project_file_and_says_so(tmp_path):
+    py, root, _ = _lab_venv(tmp_path)
+    other = tmp_path / "other"
+    other_py, other_root, _ = _lab_venv(other) if other.mkdir() is None else (None, None, None)
+    env = {**_project(tmp_path, {"isaaclab_python": str(py)}), "ISAACLAB_PYTHON": str(other_py), "ISAACLAB_ROOT": str(other_root)}
+    assert install.locate_install(env)["python"] == str(other_py)
+    with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps({"isaaclab": "3.0.0", "isaacsim": "6.2.0.0"}), stderr="")):
+        info = install.install_info(env)
+    assert info["python"] == str(other_py) and "takes priority" in info["project_setting_ignored"]
+    assert info["tested"] is True
+
+
+def test_an_interpreter_without_lab_metadata_is_refused_and_never_run(tmp_path):
+    py, _, _ = _make_install(tmp_path)  # no Isaac Lab installed in it
+    env = _project(tmp_path, {"isaaclab_python": str(py)})
+    assert install.locate_install(env) is None
+    with patch("subprocess.run", side_effect=AssertionError("must not run")):
+        info = install.install_info(env)
+    assert "not the interpreter" in info["error"]
+
+
+def test_a_broken_project_file_does_not_fall_through_silently(tmp_path):
+    (tmp_path / "isaac-mcp.json").write_text("{not json")
+    info = install.install_info({"ISAAC_MCP_PROJECT": str(tmp_path)})
+    assert "cannot read" in info["error"]
+
+
+def test_project_file_without_lab_settings_changes_nothing(tmp_path):
+    env = _project(tmp_path, {"asset_path": ["x"]})
+    assert install.project_lab_setting(env) is None
+
+
+def test_root_without_python_is_refused(tmp_path):
+    env = _project(tmp_path, {"isaaclab_root": str(tmp_path)})
+    assert "without isaaclab_python" in install.project_lab_setting(env)["error"]
+
+
+def test_a_version_not_in_the_tested_list_is_scoped_as_untested(tmp_path):
+    py, root, _ = _lab_venv(tmp_path)
+    root.rmdir()  # pip-only, like BrickSim: no checkout beside the environment
+    env = _project(tmp_path, {"isaaclab_python": str(py)})
+    with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps({"isaaclab": "2.3.2.post1", "isaacsim": "5.1.0.0"}), stderr="")):
+        info = install.install_info(env)
+    assert info["tested"] is False and "not in the tested list" in info["note"]
+    assert "scripts/reinforcement_learning" in info["jobs"]
+
+
+# ---- a project file found only by walking up is not a choice anyone made ----
+
+
+def test_walked_up_file_with_a_hostile_interpreter_never_runs_it(tmp_path, monkeypatch):
+    """Starting a client inside a cloned repository must not let it choose what runs."""
+    marker = tmp_path / "ran"
+    py, _, venv = _make_install(tmp_path)
+    py.write_text(f"#!/bin/sh\ntouch {marker}\n")
+    py.chmod(0o755)
+    _mark_lab_installed(venv)  # forged metadata passes the file check, so only the rule protects this
+    (tmp_path / "isaac-mcp.json").write_text(json.dumps({"isaaclab_python": str(py)}))
+    inner = tmp_path / "src" / "deep"
+    inner.mkdir(parents=True)
+    monkeypatch.chdir(inner)
+    assert install.locate_install({}) is None
+    with patch("subprocess.run", side_effect=AssertionError("must not run")):
+        info = install.install_info({})
+    assert not marker.exists() and "error" in info
+    assert "ISAAC_MCP_PROJECT=" + str(tmp_path) in info["project_setting_ignored"]
+
+
+def test_walked_up_file_is_reported_next_to_an_install_found_another_way(tmp_path, monkeypatch):
+    py, root, _ = _lab_venv(tmp_path)
+    repo = tmp_path / "cloned"
+    repo.mkdir()
+    (repo / "isaac-mcp.json").write_text(json.dumps({"isaaclab_python": "/hostile/bin/python", "isaaclab_root": "/hostile"}))
+    monkeypatch.chdir(repo)
+    env = {"ISAACLAB_PYTHON": str(py), "ISAACLAB_ROOT": str(root)}
+    assert install.locate_install(env)["python"] == str(py)
+    with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps({"isaaclab": "3.0.0", "isaacsim": "6.2.0.0"}), stderr="")):
+        info = install.install_info(env)
+    assert info["source"] == "environment" and "searching up" in info["project_setting_ignored"]
+
+
+def test_walked_up_file_without_lab_keys_or_broken_changes_nothing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert install.project_lab_setting({}) is None
+    (tmp_path / "isaac-mcp.json").write_text(json.dumps({"asset_path": ["x"]}))
+    assert install.project_lab_setting({}) is None
+    (tmp_path / "isaac-mcp.json").write_text("{not json")
+    assert install.project_lab_setting({}) is None
+    assert "project_setting_ignored" not in install.install_info({})
+
+
+def test_naming_the_project_honors_the_same_file_from_anywhere(tmp_path, monkeypatch):
+    py, root, _ = _lab_venv(tmp_path)
+    (tmp_path / "isaac-mcp.json").write_text(json.dumps({"isaaclab_python": str(py), "isaaclab_root": str(root)}))
+    monkeypatch.chdir(tmp_path)
+    assert install.locate_install({}) is None
+    found = install.locate_install({"ISAAC_MCP_PROJECT": str(tmp_path)})
+    assert found["python"] == str(py) and found["source"].startswith("project:")
+    assert install.locate_install({"ISAAC_MCP_PROJECT": str(tmp_path / "isaac-mcp.json")})["python"] == str(py)
+
+
+def test_a_named_project_with_no_file_does_not_fall_back_to_the_walk(tmp_path, monkeypatch):
+    py, _, _ = _lab_venv(tmp_path)
+    (tmp_path / "isaac-mcp.json").write_text(json.dumps({"isaaclab_python": str(py)}))
+    monkeypatch.chdir(tmp_path)
+    assert install.project_lab_setting({"ISAAC_MCP_PROJECT": str(tmp_path / "nowhere")}) is None
