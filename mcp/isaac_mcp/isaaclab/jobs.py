@@ -42,6 +42,7 @@ from typing import Any
 from . import install as _install
 
 _LAUNCHER = Path(__file__).with_name("launcher.py")
+_EVAL_RUNNER = Path(__file__).with_name("eval_runner.py")
 _TASK_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
 _JOB_ID_RE = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]+$")
 _LIB_RE = re.compile(r"^[a-z0-9_]+$")
@@ -138,6 +139,12 @@ def _under(path: Path, root: Path) -> bool:
         return False
 
 
+def _positive_int(value: Any, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
 def _validate_checkpoint(checkpoint: Any, root: Any) -> str | None:
     if checkpoint is None:
         return None
@@ -177,6 +184,15 @@ def _read_job(job_dir: Path) -> dict[str, Any] | None:
         return json.loads(jf.read_text())
     except Exception:
         return None
+
+
+def _eval_result(job_dir: Path) -> dict[str, Any] | None:
+    """The score file an eval job's runner wrote, if it is there and readable."""
+    try:
+        data = json.loads((job_dir / "eval_result.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _write_job(job_dir: Path, data: dict[str, Any]) -> None:
@@ -684,6 +700,7 @@ def _start_job_locked(
     allow_concurrent_gpu: bool = False,
     headless: bool | None = None,
     library: str | None = None,
+    eval_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     if not allow_concurrent:
@@ -704,15 +721,24 @@ def _start_job_locked(
         raise ValueError(f"{_install.lab_label(root_path, _install.lab_profile(root_path))} has no "
                          f"{script_path.relative_to(root_path)}, so no job could start. "
                          f"Expected {_install.EXPECTED_SCRIPTS}.")
-    full_cmd = [str(python), str(script_path)] + list(argv)
     task_modules, task_paths = _install.resolve_task_modules(root_path)
-    if task_modules:
-        # Isaac Lab's stock scripts do not know project tasks: import them first (see launcher.py).
-        full_cmd = [str(python), str(_LAUNCHER), str(script_path)] + list(argv)
-
     job_id = _job_id(task)
     jd = jobs_dir() / job_id
     jd.mkdir(parents=True, exist_ok=True)
+    if eval_options is not None:
+        # The scoring runner replaces play.py as the entry point: it wraps gymnasium.make, then runs
+        # the real script unchanged. It imports ISAACLAB_TASK_MODULES itself (see its module docstring).
+        from .eval_runner import build_command as _eval_command
+
+        full_cmd = _eval_command(
+            python, str(script_path), list(argv), str((jd / "eval_result.json").resolve()),
+            num_episodes=eval_options["num_episodes"], max_steps=eval_options["max_steps"],
+        )
+    elif task_modules:
+        # Isaac Lab's stock scripts do not know project tasks: import them first (see launcher.py).
+        full_cmd = [str(python), str(_LAUNCHER), str(script_path)] + list(argv)
+    else:
+        full_cmd = [str(python), str(script_path)] + list(argv)
     stdout_path = jd / "stdout.log"
     stderr_path = jd / "stderr.log"
     run_dir = jd  # default; training artifacts may live under root/logs but we track job dir
@@ -760,6 +786,8 @@ def _start_job_locked(
         "stdout_log": str(stdout_path.resolve()),
         "stderr_log": str(stderr_path.resolve()),
     }
+    if eval_options is not None:
+        data["eval"] = dict(eval_options)
     _write_job(jd, data)
 
     with _jobs_lock:
@@ -826,6 +854,8 @@ def eval_(
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
+    num_episodes: int = 20,
+    max_steps: int | None = 20000,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
 ) -> dict[str, Any]:
@@ -834,6 +864,9 @@ def eval_(
     ckpt = _validate_checkpoint(checkpoint, root)
     if ckpt is None:
         raise ValueError("checkpoint is required for eval")
+    num_episodes = _positive_int(num_episodes, "num_episodes")
+    if max_steps is not None:
+        max_steps = _positive_int(max_steps, "max_steps")
     extras = _validate_extra_args(extra_args)
     libraries = _per_library(root)
     inferred = None if lib else _library_from_checkpoint(ckpt, extras, libraries or _RL_LIBRARIES)
@@ -851,7 +884,8 @@ def eval_(
     argv += _crash_upload_args(root, extras)  # after the check: its value looks like a flag
     result = _start_job(python, root, "eval", task, argv, timeout_s=timeout_s,
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-                        headless=headless, **({} if libraries is None else {"library": lib}))
+                        headless=headless, eval_options={"num_episodes": num_episodes, "max_steps": max_steps},
+                        **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
 
@@ -963,7 +997,7 @@ def runs_status(job_id: str) -> dict[str, Any]:
         failure = {"last_stderr_lines": _tail_file(Path(data.get("log_dir", jd)) / "stderr.log", 20)}
     if data.get("status") == "failed" and data.get("note"):
         failure["note"] = data["note"]
-    return {
+    out = {
         "state": data.get("status"),
         "pid_alive": _job_alive(data),
         "elapsed_s": round(elapsed, 3),
@@ -975,6 +1009,11 @@ def runs_status(job_id: str) -> dict[str, Any]:
         "log_dir": data.get("log_dir", str(jd)),
         "pid": data.get("pid"),
     }
+    if data.get("kind") == "eval":
+        result = _eval_result(jd)
+        if result is not None:
+            out["eval_result"] = result
+    return out
 
 
 def runs_tail(job_id: str, stream: str = "stdout", lines: int = 100) -> dict[str, Any]:
