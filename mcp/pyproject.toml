@@ -24,6 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest",
+    "pyyaml",  # RViz config validity in test_ros2_tools.py
 ]
 scene-test = ["usd-core>=25.11,<27", "numpy"]  # numpy: occupancy-map tests
 # Isaac Lab tool pack: TensorBoard event-file readout (isaaclab__metrics_*, isaaclab__tensorboard_tail).

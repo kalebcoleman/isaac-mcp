@@ -44,6 +44,10 @@ while [ "$#" -gt 0 ]; do
       PHYSICS_BACKEND="$2"
       shift 2
       ;;
+    --no-hot-reload)
+      ISAAC_MCP_NO_HOT_RELOAD=1
+      shift
+      ;;
     --ur5e-panel|--ur5e-dt)
       SHOW_UR5E_PANEL=1
       shift
@@ -72,8 +76,13 @@ done
 if [ "$PY_AUTODETECT" = 1 ]; then
   if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/scripts/isaac_env.py" ]; then
     # Any Isaac Sim 6.x; the first match in the documented search order wins.
-    if [ "$SHOW_HELP" = 1 ]; then _detect_stderr=/dev/null; else _detect_stderr=/dev/stderr; fi
-    if DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6 2>"$_detect_stderr")" && [ -n "$DETECTED" ]; then
+    # Inherit stderr rather than opening /dev/stderr, which fails when fd 2 is a socket (journald, some CI).
+    if [ "$SHOW_HELP" = 1 ]; then
+      DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6 2>/dev/null)" || DETECTED=""
+    else
+      DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6)" || DETECTED=""
+    fi
+    if [ -n "$DETECTED" ]; then
       PY="$DETECTED"
       if [ "$SHOW_HELP" != 1 ]; then
         echo "run.sh: auto-detected interpreter $PY (pin one with ISAAC_MCP_PYTHON=/path/to/python; list all with scripts/isaac_env.py find)" >&2
@@ -105,6 +114,7 @@ Options:
   --headless     Run without visible window (sets UR5E_DT_HEADLESS=1)
   --motion-bvh   Enable RTX sensor motion compensation (increases GPU memory use)
   --physics-backend physx|newton  Select this new session's engine (default: physx)
+  --no-hot-reload  Do not reload extensions when their files change (or set ISAAC_MCP_NO_HOT_RELOAD=1)
   --ur5e-panel   Show the UR5e panel (the tools are always enabled)
   --ur5e-dt      Compatibility alias for --ur5e-panel
   --port N       Bridge port (default: 8766)
@@ -169,12 +179,29 @@ if ! "$PY" -c 'import isaacsim' 2>/dev/null; then
 fi
 
 SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))')"
-# The bundled ROS libraries moved: isaacsim.ros2.bridge on 5.1, isaacsim.ros2.core on 6.x.
-ROS_LIB="$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
-[ -d "$ROS_LIB" ] || ROS_LIB="$SITE/exts/isaacsim.ros2.bridge/$ROS_DISTRO/lib"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROS_LIB"
+# Refuse here rather than after Kit has started: 5.1 has no Newton extension, and never fall back to PhysX.
+# Extensions sit in <site>/exts in a pip install and two levels above the package in a standalone app.
+if [ "$PHYSICS_BACKEND" = newton ] \
+    && [ ! -d "$SITE/exts/isaacsim.physics.newton" ] && [ ! -d "$(dirname "$(dirname "$SITE")")/exts/isaacsim.physics.newton" ]; then
+  echo "FAIL: this Isaac Sim ($SITE) has no isaacsim.physics.newton extension. Nothing was started and there is no PhysX fallback." >&2
+  echo "      Use --physics-backend physx, or an interpreter with Newton (see docs/COMPATIBILITY.md)." >&2
+  exit 2
+fi
+. "$ROOT/scripts/isaac_ros_libs.sh"
+if ROS_LIB="$(isaac_ros_lib_dir "$SITE" "$ROS_DISTRO")"; then
+  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROS_LIB"
+else
+  echo "run.sh: WARNING: no ROS 2 $ROS_DISTRO libraries bundled under $SITE or its install root;" >&2
+  echo "        the ROS 2 bridge will not start. Set ROS_DISTRO or LD_LIBRARY_PATH if yours are elsewhere." >&2
+fi
 
 EXT_ARGS=(--ext-folder "$ROOT/exts")
+
+# Kit watches extension folders and reloads an extension when a file in it changes, inside the running
+# process. Turn that off for a recorded run, or when another process edits this checkout.
+case "${ISAAC_MCP_NO_HOT_RELOAD:-0}" in
+  1|true|yes) EXT_ARGS+=("--/app/extensions/fsWatcherEnabled=0") ;;
+esac
 
 exec "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
   "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt --enable sim-tools \

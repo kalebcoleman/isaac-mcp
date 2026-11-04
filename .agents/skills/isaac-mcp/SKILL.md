@@ -24,15 +24,30 @@ The supplied launcher enables its bundled ROS bridge even without an external RO
 For ROS camera and LiDAR saves, `sim__stage__save` defaults `reset_camera_render_handles` to `false`.
 An affected export reports `SAVE_UNSUPPORTED` with `properties` and `retry_with`; inspect these
 before explicitly opting in to normalization with `true`. Successful exports report exact
-`omitted_runtime_render_properties`. Ambiguous, authored or unavailable bindings still refuse.
-This changes the private export only; it does not repair an already-stale scene or prove authorship.
-Open saved scenes with `sim__stage__open`, which repairs stale LiDAR products so `/scan` returns. Most scene tools need `session_id` and `stage_id`
+`omitted_runtime_render_properties`. Ambiguous or unavailable bindings and authored camera handles still refuse.
+This changes the private export only and does not prove authorship. Its copy is the rescue for a stale LiDAR file:
+if `sim__stage__open` returns `stale_render_products.rescue`, follow it.
+Open saved scenes with `sim__stage__open`. It repairs stale LiDAR products on builds where that was measured (6.2.0.0, 5.1.0.0); elsewhere it returns `rescue` steps. Most scene tools need `session_id` and `stage_id`
 from `sim__stage__info`; `sim__graph__node_types` and `sim__logs__tail` do not. `sim__logs__tail` also lists recent stage and timeline changes
 (`scene_events`), including ones from outside this session. If `/scan` is missing, check `ros_render_status` from `sim__graph__inspect` and confirm with `ros2 topic info`.
 For a missing active, concrete camera producer relationship, save restores a runtime target in
 the export only when the observed render product confirms the camera and resolution; see
 `restored_camera_targets`.
 Pause before saving and check the exported scene after reopening in a fresh process.
+
+## Which tool do I start with?
+
+1. **Build a new scene:** `sim__quick_start`. It needs no IDs and works for anyone; add `robot` for one.
+2. **An existing scene:** `sim__stage__info` first. Other `sim__*` and `assets__*` tools need its
+   `session_id` and `stage_id`.
+3. **Import your own USD or URDF:** `assets__roots`, then `assets__import_path` or `assets__import_urdf`.
+4. **Copy a USD and its files into your asset folder:** `assets__pack_build`.
+5. **Train, evaluate or play a policy:** `isaaclab__install_info`, then `isaaclab__train`. No bridge is needed.
+6. **One lab's UR5e digital twin (RISE lab):** `ur5e_dt__quick_start`, only when that twin is what was asked for.
+7. **See the result:** `screenshot`; for video, `start_screen_recording`.
+
+`sim__*` and `assets__*` are universal. `ur5e_dt__*` is specific to that twin. If a tool answers that no
+bridge is reachable, go to [First calls in a session](#first-calls-in-a-session).
 
 ## Ground rules
 
@@ -101,9 +116,10 @@ The bridge CLI is `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client` fr
    non-null Lab/Sim versions and the intended interpreter/root before task discovery. See
    `docs/TOOLS-ISAACLAB.md#locating-an-isaac-lab-install`; do not reinstall or rename an existing
    environment merely because a probe fails.
-5. For generic scene or project-asset work, call `sim__stage__info` or `assets__roots`. The
-   48-tool pack (40 `sim`, 8 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
-   `assets__roots`, `assets__scan` and `assets__search` run on the host; the rest need the
+5. For generic scene or project-asset work, call `sim__quick_start` for a new scene, or
+   `sim__stage__info` on an existing one, and `assets__roots` for your own files. The
+   55-tool pack (41 `sim`, 14 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   `assets__roots`, `assets__scan`, `assets__search` and `assets__packs` / `assets__pack_*` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
 
@@ -172,6 +188,10 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   `sim__light__*`, `sim__material__*`, `sim__physics__configure`, `sim__joints__drive`.
   Changes go to the session layer; source USD files are not rewritten. `TIMELINE_ACTIVE` means
   stop the timeline first.
+- **Asset packs:** each project has a subfolder in the user's `isaac-mcp-assets`. `assets__packs` and
+  `assets__pack_doctor` read; `assets__pack_adopt`, `assets__pack_pin` and `assets__pack_build` write
+  only to the primary asset folder and need `force=true` to replace anything. Read refusals such as
+  `UNRESOLVED_DEPENDENCIES` before passing an override. See `docs/ASSETS.md`.
 - **Project assets:** `assets__roots` → `assets__scan` / `assets__search` (filename-only, host
   side) → `assets__info` → `assets__import_usd` or `assets__import_urdf`. Only launch-approved
   trusted roots are accepted; there is no URL input and no untrusted/hostile-USD isolation.
@@ -279,33 +299,11 @@ time (full recipe: `docs/ROS2-RVIZ.md`).
    `resetOnStop=False` on the clock graph RViz drops every scan after the first Stop/Play.
    `True` everywhere is the safe choice when sensor helpers are present.
 
-### ROS 2 from an agent shell (lessons from the TurtleBot3/Nav2 lab)
+### ROS 2 from an agent shell
 
-- Your shell must use the simulator's DDS settings or `ros2 topic list` stays empty while Kit
-  publishes: `sim__stage__info` returns them under `ros` with the exact shell line to run
-  (`sim__graph__build` repeats it for ROS graphs).
-- `source scripts/ros_env.sh [install] [--overlay <nav2 env>]` (after `export ROS_DOMAIN_ID=<sim's>`)
-  sources ROS, then `config/ros_dds.env`, then stops the `ros2` daemon. A daemon started with other
-  DDS settings makes `ros2 topic list` / `node list` empty while data flows; otherwise use
-  `--no-daemon` (`ros2 topic hz` has no such flag).
-- Kit's bridge nodes do not show in `ros2 node list`; verify with topics and `/tf`.
-- Background RViz needs a valid desktop `DISPLAY` exported in the launching shell alongside
-  `ros_env.sh` (for example `export DISPLAY=:0` when that is the desktop's display).
-- The harness kills a tool call's process group when it ends: start RViz and other long-lived
-  processes with `setsid nohup <cmd> > log 2>&1 < /dev/null &`, record `$!`, stop that PID.
-- Save your scene before stopping a managed simulator, then call
-  `sim__stop(session_id=<managed session id>, expected_pid=<its pid>, confirm_discard=true)`.
-- Bound every ROS command: `ros2 topic pub --times N`, `timeout -s KILL <s> ...`. A plain
-  `timeout 6 ros2 topic pub ... | tail` hung 120 s while the robot drove into a wall.
-- Keyboard teleop needs a TTY. Drive with `python3 scripts/cmd_vel_sequence.py "0.15,0,5;0,0.5,3"`
-  (m/s, rad/s, s per step); it always publishes zero at the end, also on Ctrl-C/SIGTERM.
-- Nav2's `map` frame is the world frame: the map YAML `origin` is only the image's corner, so
-  do not offset goals by it.
-- Same distro on both sides: Jazzy on Ubuntu 24.04, Humble on 22.04 (`run.sh` picks by OS unless
-  `ROS_DISTRO` is exported). Jazzy and Humble did not exchange messages with these DDS settings.
-- RViz layout: `scripts/ros2_rviz_config.py --view topdown --scale 80 --target-frame base_link
-  --hide-panels` (top-down, follows the robot, 3D view only). `Hide Left Dock: true` in a
-  config does nothing in RViz2.
+DDS settings, `/scan`, and lessons from the TurtleBot3/Nav2 lab are in
+`references/isaac-sim.md#ros-2-from-an-agent-shell`. The short form: `sim__stage__info` returns the
+exact shell line under `ros`; use it, or `ros2 topic list` stays empty while Kit publishes.
 
 ## Using Isaac Sim's UI (works on a locked or remote PC)
 
@@ -356,5 +354,5 @@ worked while locked on GNOME.
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 48 generic tools: 40 `sim` and 8 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 55 generic tools: 41 `sim` and 14 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.

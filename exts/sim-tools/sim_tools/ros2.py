@@ -12,6 +12,8 @@ Frame tree (REP 105 names):
     <world_frame> --static--> <base_frame> --(Isaac link TF)--> every robot link
     <world_frame> --static--> odom --(odometry)--> <base_frame>      (base="mobile";
                                                                       <ns>_odom with a namespace)
+    <parent link> --dynamic--> <base_frame> --(Isaac link TF)--> every link  (attach_to: a gripper that is
+                                                                      its own articulation on an arm)
 
 ``planned_graph`` is pure (no Kit imports) so the layout can be unit-tested.
 """
@@ -55,15 +57,21 @@ def odom_frame(namespace=""):
 
 def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", world_frame="world",
                   link_frames="isaac", extra_prims=(), namespace="", joint_states_topic="joint_states",
-                  base_tf_name=None, publish_clock=True, reset_on_stop=True):
+                  base_tf_name=None, publish_clock=True, reset_on_stop=True, attach_parent=None,
+                  attach_parent_frame=None):
     """Return ``(nodes, values, connects, frames)`` for the graph.
 
     ``base_pose`` is ``((x, y, z) metres, (qx, qy, qz, qw))`` of the base link in the world at
     setup time; it becomes the static ``world -> base`` (fixed) or ``world -> odom`` (mobile)
     transform. ``frames`` describes the resulting tree for the caller.
+
+    ``attach_parent`` is a prim path: instead of a world link, publish this base link relative to that
+    prim on every tick, so it follows when the parent moves. ``attach_parent_frame`` is its TF name.
     """
     if mode not in ("fixed", "mobile"):
         raise ValueError("base must be 'fixed' or 'mobile'")
+    if attach_parent and mode != "fixed":
+        raise ValueError("attach_to needs base='fixed': the attached robot's pose comes from its parent, not odometry")
     if link_frames not in ("isaac", "robot_state_publisher"):
         raise ValueError("link_frames must be 'isaac' or 'robot_state_publisher'")
     _frame(base_frame, "base frame")
@@ -119,7 +127,19 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
         publishers.append(name)
         edges.append(dict(parent=parent, child=child, static=static, source=name))
 
-    if mode == "fixed":
+    if attach_parent:
+        # Parent and child are separate articulations joined by a fixed joint outside both, so neither
+        # one's link TF covers this edge. The node reads both poses on every tick.
+        nodes.append(("TFAttach", "isaacsim.ros2.bridge.ROS2PublishTransformTree"))
+        values.extend([
+            ("TFAttach.inputs:parentPrim", attach_parent),
+            ("TFAttach.inputs:targetPrims", [base_prim]),
+            ("TFAttach.inputs:topicName", "tf"),
+        ])
+        publishers.append("TFAttach")
+        edges.append(dict(parent=attach_parent_frame or attach_parent.rsplit("/", 1)[-1], child=links_parent,
+                          static=False, source="TFAttach"))
+    elif mode == "fixed":
         if world_frame:
             raw_tf("TFWorldToBase", world_frame, base_frame, True, (tx, ty, tz), (qx, qy, qz, qw))
     else:
@@ -182,16 +202,71 @@ def planned_graph(*, robot, base_prim, base_frame, base_pose, mode="fixed", worl
 
 
 def graph_path(namespace=""):
-    """One graph per robot namespace, so a second robot never replaces the first one's graph.
-    The short hash keeps the mapping one-to-one ('a/b' and 'a_b' get different graphs)."""
+    """One graph per namespace, and so one robot per namespace: two robots need two namespaces, which
+    setup enforces (check_graph_robot). The short hash keeps the mapping one-to-one ('a/b' and 'a_b' get
+    different graphs)."""
     ns = _namespace(namespace)
     if not ns:
         return GRAPH_PATH
     return f"{GRAPH_PATH}_{ns.replace('/', '_')}_{hashlib.sha1(ns.encode()).hexdigest()[:6]}"
 
 
+def graph_robot(stage, graph):
+    """The articulation an existing graph publishes, from its joint state node's target, as USD has it, so a
+    graph saved in a file reads the same. None if that cannot be told."""
+    node = stage.GetPrimAtPath(f"{graph}/PublishJointState")
+    relationship = node.GetRelationship("inputs:targetPrim") if node else None
+    targets = relationship.GetTargets() if relationship else []
+    return str(targets[0]) if len(targets) == 1 else None
+
+
+def namespace_for(robot_path, taken=()):
+    """A valid namespace from the robot's prim name, not in ``taken``."""
+    name = re.sub(r"[^a-z0-9]+", "_", robot_path.rsplit("/", 1)[-1].lower()).strip("_")
+    name = name if name and name[0].isalpha() else f"robot_{name}".rstrip("_")
+    candidate, count = name, 1
+    while candidate in taken:
+        count += 1
+        candidate = f"{name}_{count}"
+    return candidate
+
+
+def check_graph_robot(stage, graph, articulation, robot_path, namespace=""):
+    """Return (code, message, retry_with) when this namespace's graph belongs to another robot, else None.
+    Rebuilding it would silently drop that robot's frames and joint states. Unreadable counts as another robot."""
+    if not stage.GetPrimAtPath(graph):
+        return None
+    current = graph_robot(stage, graph)
+    if current == articulation:
+        return None
+    candidates, taken = [namespace_for(robot_path)], set()
+    while stage.GetPrimAtPath(graph_path(candidates[-1])):
+        taken.add(candidates[-1])
+        candidates.append(namespace_for(robot_path, taken))
+    owner = f"robot {current}" if current else "a robot this tool cannot read from it"
+    where = f"namespace {namespace!r}" if namespace else "no namespace"
+    return ("ROBOT_GRAPH_CONFLICT", f"{graph} is the ROS 2 graph for {where}, and it already publishes {owner}. Setting up "
+            f"{robot_path} there would replace it, and that robot's joint states and frames would disappear. Nothing was "
+            f"changed. Each robot needs its own namespace: resend with namespace={candidates[-1]}.",
+            dict(namespace=candidates[-1]))
+
+
+def check_attachment(links, robot_path, parent_path, parent_tf_name, is_body):
+    """Return ``(code, message)`` when ``attach_to`` cannot work, else None."""
+    if parent_path == robot_path or parent_path.startswith(robot_path.rstrip("/") + "/"):
+        return ("ATTACH_LOOP", f"attach_to {parent_path} is inside the robot {robot_path}, so its frame would "
+                "depend on itself. Pass a link of the other robot, e.g. the arm's wrist link.")
+    if not is_body:
+        return ("ATTACH_NOT_A_LINK", f"attach_to {parent_path} is not a rigid body, so physics does not move it. "
+                "Pass the link the robot is mounted on, e.g. the arm's wrist link.")
+    if parent_tf_name in {n for _, n in links}:
+        return ("DUPLICATE_FRAME_NAMES", f"attach_to {parent_path} publishes TF name {parent_tf_name!r}, which a "
+                f"link of {robot_path} also uses. Rename one or set isaac:nameOverride.")
+    return None
+
+
 def check_frames(links, base_path, base_frame, base_tf_name, extras, world_frame, mode, link_frames,
-                 namespace=""):
+                 namespace="", attached=False):
     """Return ``(code, message)`` for a frame layout that would break the TF tree, else None.
 
     ``links`` and ``extras`` are ``(prim path, TF name)`` pairs; the TF name is what Isaac
@@ -201,9 +276,11 @@ def check_frames(links, base_path, base_frame, base_tf_name, extras, world_frame
     if base_path not in paths:
         return ("BASE_NOT_A_LINK", f"base_link {base_path} is not one of the robot's rigid-body links; "
                 "pass its root link (the one the robot is mounted or driven by).")
-    if base_frame != base_tf_name and (link_frames == "isaac" or extras):
+    if base_frame != base_tf_name and (link_frames == "isaac" or extras or attached):
         # Isaac names the parent of the link TF and of extra frames after the base prim.
-        hint = ("Extra frames are parented to the base prim's TF name, so base_frame must match it: leave "
+        hint = ("With attach_to, Isaac publishes the base prim under its TF name, so base_frame must match it: leave "
+                "base_frame empty or set isaac:nameOverride on the prim." if attached and not extras else
+                "Extra frames are parented to the base prim's TF name, so base_frame must match it: leave "
                 "base_frame empty or set isaac:nameOverride on the prim." if extras else
                 "Leave base_frame empty, set isaac:nameOverride on the prim, or use link_frames=robot_state_publisher.")
         return ("BASE_FRAME_MISMATCH", f"base_frame {base_frame!r} differs from the name Isaac publishes for "
@@ -276,6 +353,91 @@ def other_ros2_publishers(own_graph):
             if kind:
                 found.append(dict(node=node.get_prim_path(), publishes=kind,
                                   tool=path == GRAPH_PATH or path.startswith(GRAPH_PATH + "_")))
+    return found
+
+
+def resolved_topic(topic, namespace=""):
+    """The absolute ROS topic a node's topicName and nodeNamespace give."""
+    topic = topic or ""
+    if topic.startswith("/"):
+        return topic
+    ns = (namespace or "").strip("/")
+    return f"/{ns}/{topic}" if ns else f"/{topic}"
+
+
+def joint_state_loop(topic, namespace, subscribers):
+    """Graph nodes that would drive a robot from this tool's own joint state publisher.
+
+    ``subscribers`` is ``(node path, topicName, nodeNamespace)``. Quick Start's graph mirrors a real robot
+    from /joint_states. Publishing the simulated state there makes the articulation chase its own delayed
+    position, and it oscillates at its velocity limit as soon as the timeline plays."""
+    published = resolved_topic(topic.lstrip("/"), namespace)
+    return [node for node, sub_topic, sub_namespace in subscribers
+            if resolved_topic(sub_topic, sub_namespace) == published]
+
+
+# The .ogn defaults, for a node that authored no topic.
+_DEFAULT_TOPICS = {"ROS2PublishJointState": "joint_states", "ROS2SubscribeJointState": "joint_command"}
+MAX_LOOP_SCAN_PRIMS = 200000
+
+
+def find_joint_state_loops(nodes):
+    """Topics that have both a joint state publisher and subscriber in one stage, whatever the order they
+    were made in. ``nodes`` is (node path, node type, topicName or None, nodeNamespace)."""
+    topics = {}
+    for path, kind, topic, namespace in nodes:
+        short = kind.rsplit(".", 1)[-1]
+        if short in _DEFAULT_TOPICS:
+            name = resolved_topic(topic or _DEFAULT_TOPICS[short], namespace)
+            side = "publishers" if short == "ROS2PublishJointState" else "subscribers"
+            topics.setdefault(name, dict(topic=name, publishers=[], subscribers=[]))[side].append(path)
+    return [entry for _, entry in sorted(topics.items()) if entry["publishers"] and entry["subscribers"]]
+
+
+def stage_graph_nodes(stage, limit=MAX_LOOP_SCAN_PRIMS):
+    """OmniGraph nodes as USD has them, so a saved file is seen without waiting for its graphs to load."""
+    from pxr import Usd
+
+    found = []
+    for count, prim in enumerate(Usd.PrimRange(stage.GetPseudoRoot())):
+        if count >= limit:
+            break
+        if prim.GetTypeName() == "OmniGraphNode":
+            kind = prim.GetAttribute("node:type").Get()
+            value = lambda name: (prim.GetAttribute(name).Get() if prim.HasAttribute(name) else None)
+            found.append((str(prim.GetPath()), str(kind or ""), value("inputs:topicName"), value("inputs:nodeNamespace")))
+    return found
+
+
+def joint_state_loop_report(stage):
+    """For sim.stage.open: a result field when this file contains the loop, else nothing. Changes nothing."""
+    loops = find_joint_state_loops(stage_graph_nodes(stage))
+    if not loops:
+        return {}
+    graph = loops[0]["publishers"][0].rsplit("/", 1)[0]  # sim.prim.delete acts on a graph, not one of its nodes
+    return dict(joint_state_loop=dict(
+        loops=loops,
+        effect="The subscriber drives a robot from the topic this simulation publishes its own joint state on. If they "
+               "are the same robot, it chases its own state and oscillates at its velocity limit once playing.",
+        fix=f"The file was not changed. On a stopped timeline, call sim__prim__delete with path={graph}, allow_foreign=true and "
+            "confirm=true: it deactivates that whole graph in the session layer, so its TF stops too. To publish TF and joint "
+            "states again, call sim__ros2__tf_setup with a namespace. sim__stage__save then writes a copy without the loop.",
+    ))
+
+
+def joint_state_subscribers(own_graph):
+    """ROS 2 joint state subscribers outside *own_graph*: (node path, topicName, nodeNamespace)."""
+    import omni.graph.core as og
+
+    found = []
+    for graph in _graphs(og):
+        path = graph.get_path_to_graph()
+        if path == own_graph or path.startswith(own_graph + "/"):
+            continue
+        for node in graph.get_nodes():
+            if node.get_type_name().rsplit(".", 1)[-1] == "ROS2SubscribeJointState":
+                value = lambda name: (node.get_attribute(name).get() if node.get_attribute_exists(name) else "")
+                found.append((node.get_prim_path(), value("inputs:topicName"), value("inputs:nodeNamespace")))
     return found
 
 
@@ -394,10 +556,21 @@ def setup(scene, stage, a):
     if len(extra) > 16:
         refuse("LIMIT", "At most 16 extra_frames.")
     extras = [(p, tf_name(scene.prim(stage, p))) for p in extra]
+    attach_path = a.get("attach_to") or ""
+    attach_name = None
+    if attach_path:
+        attach_prim = scene.prim(stage, attach_path)
+        attach_name = tf_name(attach_prim)
+        from pxr import UsdPhysics
+
+        problem = check_attachment(links, robot_path, attach_path, attach_name,
+                                   attach_prim.HasAPI(UsdPhysics.RigidBodyAPI))
+        if problem:
+            refuse(*problem)
     try:
         problem = check_frames(links, base_path, base_frame, base_tf_name, extras,
                                a.get("world_frame", "world"), a.get("base", "fixed"), link_mode,
-                               a.get("namespace", ""))
+                               a.get("namespace", ""), attached=bool(attach_path))
     except ValueError as exc:
         refuse("INVALID_VALUE", str(exc))
     if problem:
@@ -412,6 +585,14 @@ def setup(scene, stage, a):
         own = graph_path(a.get("namespace", ""))
     except ValueError as exc:
         refuse("INVALID_VALUE", str(exc))
+    state_topic = a.get("joint_states_topic", "joint_states")
+    loop = joint_state_loop(state_topic, a.get("namespace", ""), joint_state_subscribers(own))
+    if loop:
+        refuse("JOINT_STATE_LOOP", f"{', '.join(loop)} drives a robot from the topic this tool would publish joint "
+               f"states on ({resolved_topic(state_topic.lstrip('/'), a.get('namespace', ''))}), so the robot would chase its "
+               "own state and oscillate at its velocity limit once playing. Nothing was changed. Publish elsewhere, "
+               "e.g. joint_states_topic=isaac/joint_states; TF does not depend on this topic.",
+               subscribers=loop, retry_with=dict(joint_states_topic="isaac/joint_states"))
     others = other_ros2_publishers(own)
     try:
         clock = plan_clock(a.get("clock", "auto"), others)
@@ -436,6 +617,7 @@ def setup(scene, stage, a):
             link_frames=a.get("link_frames", "isaac"), extra_prims=extra,
             namespace=a.get("namespace", ""), joint_states_topic=a.get("joint_states_topic", "joint_states"),
             base_tf_name=base_tf_name, publish_clock=False, reset_on_stop=reset_on_stop,
+            attach_parent=attach_path or None, attach_parent_frame=attach_name,
         )
     except ValueError as exc:
         refuse("INVALID_VALUE", str(exc))
@@ -445,6 +627,9 @@ def setup(scene, stage, a):
     graph = own
     had_scope = bool(stage.GetPrimAtPath("/Graph"))
     existing = bool(stage.GetPrimAtPath(graph))  # read before removal: a removed prim is falsy
+    conflict = check_graph_robot(stage, graph, articulation, robot_path, a.get("namespace", ""))
+    if conflict:
+        refuse(conflict[0], conflict[1], current_robot=graph_robot(stage, graph), graph=graph, retry_with=conflict[2])
     if existing:
         if graph not in scene.owned:
             refuse("CONFLICT", f"{graph} exists and was not created by this tool in this session; "
@@ -550,9 +735,15 @@ def setup(scene, stage, a):
             + ("--robot-model " if rsp else "") + "then: rviz2 -d <file>.rviz --ros-args -p use_sim_time:=true",
             f"python3 scripts/ros2_tf_doctor.py --fixed-frame {fixed}  (ROS 2 sourced, or add --isaac-ros) "
             "before trusting RViz",
+        ] + ([
+            f"{attach_name}->{base_frame} is published on every tick and follows the parent. Set up the robot that "
+            f"owns {attach_name} too, with this tool and a different namespace from this call (one namespace holds one "
+            f"robot), so {attach_name} connects to {fixed}. Do not also give "
+            f"{base_frame} a world link: a frame with two parents makes RViz jump.",
+        ] if attach_path else [
             "The world->base (or world->odom) transform is the pose at setup time: stop and call this tool "
             "again after moving the robot.",
-        ] + ([
+        ]) + ([
             "Run robot_state_publisher with the robot's URDF and use_sim_time:=true; it turns /joint_states "
             "into the link frames. Isaac does not publish them in this mode, so nothing is published twice. "
             f"base_frame ({base_frame!r}) must be the URDF's root link.",
@@ -566,6 +757,7 @@ def setup(scene, stage, a):
             f"and set that node's odom_frame_id to {frames['odom']}.",
         ] if a.get("base", "fixed") == "mobile" else []),
         rebuilt=existing,
+        **({"attached_to": dict(prim=attach_path, frame=attach_name)} if attach_path else {}),
         clock=dict(source=clock["source"] or "none", shared_tool_clock=clock["publish"],
                    tool_clock_present=bool(stage.GetPrimAtPath(CLOCK_GRAPH)),
                    stamps_reset_on_stop=reset_on_stop, robot_graphs_updated=updated,

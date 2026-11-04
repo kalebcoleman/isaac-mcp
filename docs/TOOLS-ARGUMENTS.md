@@ -14,47 +14,47 @@ Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 12 tools.
 
 ### `join_videos`
 
-Join 2-8 video clips into one new MP4 with the bundled ffmpeg: mode=concat plays them one after another (each scaled and padded to the first clip's size), hstack puts them side by side (scaled to a common height), vstack stacks them top to bottom (common width). For a synchronized side-by-side demo, prefer start_screen_recording(window_ids=[...]) over stacking separate clips. inputs: absolute paths or file names in ~/Videos/screen-mcp; only files under your home folder or that folder are read. output: a new file name (saved in ~/Videos/screen-mcp) or an absolute path under home ending in .mp4; never overwrites (default joined-<time>.mp4). max_width (default 1920) caps the output width; fps defaults to the fastest input (max 60). With hstack/vstack a shorter clip freezes on its last frame unless shortest=true ends the video with the shortest one. Audio is dropped. Encoding is bounded to 15 minutes and the result to 1 hour of video.
+Join 2-8 finished video clips into one new MP4 with the bundled ffmpeg, in order or stacked. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour.
 
-- `inputs` (list[str], required)
-- `mode` (str, default `'concat'`)
-- `output` (str | None, default `None`)
-- `max_width` (int, default `1920`)
-- `fps` (int | None, default `None`)
-- `shortest` (bool, default `False`)
+- `inputs` (list[str], required): 2-8 absolute paths under home, or file names in ~/Videos/screen-mcp.
+- `mode` (str, default `'concat'`): concat (one after another), hstack (side by side) or vstack (top to bottom).
+- `output` (str | None, default `None`): New file name in ~/Videos/screen-mcp, or an absolute .mp4 path under home. Default joined-<time>.mp4.
+- `max_width` (int, default `1920`): Output width cap in pixels.
+- `fps` (int | None, default `None`): Output rate, at most 60. Default: the fastest input.
+- `shortest` (bool, default `False`): hstack/vstack: end with the shortest clip instead of freezing it on its last frame.
 
 ### `list_windows`
 
-List visible top-level windows. `filter` matches title or WM class.
+List visible top-level windows with id, title, class, PID and size. Use it first to get the window_id other window tools need.
 
-- `filter` (str | None, default `None`)
+- `filter` (str | None, default `None`): Keep windows whose title or WM class contains this.
 
 ### `move_window`
 
-Move and resize a window (pixels, top-left origin), e.g. to put Isaac Sim and RViz side by side before a screen recording. By default x, y, width, height are the client area (the window's content, what window captures record); frame=true places the outer frame including the title bar instead. The window manager's frame offset (_NET_FRAME_EXTENTS) is accounted for. Un-maximizes it first; returns the client and frame geometry actually applied and whether the window manager clamped it. expected_pid rejects an unexpected owner. To lay out several windows at once use tile_windows.
+Move and resize one window, e.g. to place Isaac Sim and RViz before a recording. Get its id from list_windows; for several windows use tile_windows. Un-maximizes it first, and returns the geometry applied and whether the window manager clamped it.
 
-- `x` (int, required)
-- `y` (int, required)
-- `width` (int, required)
-- `height` (int, required)
-- `window` (str | None, default `None`)
-- `window_id` (int | None, default `None`)
-- `expected_pid` (int | None, default `None`)
-- `frame` (bool, default `False`)
+- `x` (int, required): Left edge in pixels, from the screen's top-left.
+- `y` (int, required): Top edge in pixels, from the screen's top-left.
+- `width` (int, required): Width in pixels.
+- `height` (int, required): Height in pixels.
+- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
+- `window_id` (int | None, default `None`): Window id from list_windows.
+- `expected_pid` (int | None, default `None`): Refuse unless the window belongs to this PID, from list_windows.
+- `frame` (bool, default `False`): true: place the outer frame with its title bar. Default: the client area that captures record.
 
 ### `raise_window`
 
-Activate a window and give it focus; expected_pid rejects an unexpected owner.
+Activate a window and give it focus. Get its id from list_windows first.
 
-- `window` (str | None, default `None`)
-- `window_id` (int | None, default `None`)
-- `expected_pid` (int | None, default `None`)
+- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
+- `window_id` (int | None, default `None`): Window id from list_windows.
+- `expected_pid` (int | None, default `None`): Refuse unless the window belongs to this PID, from list_windows.
 
 ### `refresh_tools`
 
-Re-discover the bridge registry and register any new tools (use after the bridge's reload_tools, after enabling a project, or after Kit restarts).
+Re-discover the bridge's tools and register new ones. Use after Kit starts or restarts, after reload_tools, or when tools seem missing.
 
-- `wait_s` (float, default `0`)
+- `wait_s` (float, default `0`): Seconds to keep polling while no bridge answers, 0-180. A first Kit start can take 120-180.
 
 ### `screen_info`
 
@@ -70,26 +70,29 @@ No arguments.
 
 ### `screenshot`
 
-Capture the screen, one monitor, or a window. Returns the image and its PNG path.
+Capture the screen, a monitor or a window to see the result of your work. Returns the image and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise the primary monitor. A window capture works even when another window covers it.
 
-- `monitor` (int | None, default `None`)
-- `window` (str | None, default `None`)
-- `window_id` (int | None, default `None`)
-- `max_width` (int, default `1600`)
+- `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
+- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
+- `window_id` (int | None, default `None`): Window id from list_windows.
+- `max_width` (int, default `1600`): Inline image width cap in pixels, 320-3840. The saved PNG stays full size.
 
 ### `start_screen_recording`
 
-Start a desktop MP4 recording. One at a time; stop it with stop_screen_recording.
+Start a desktop MP4 recording, e.g. for a demo; one at a time, no audio. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open. A window recording reads that window's own pixels, so it works when covered or on a locked screen. Details: docs/TOOLS-HOST.md. For a clean viewport render of the UR5e twin, use ur5e_dt__start_recording; to combine clips, join_videos.
 
-- `monitor` (int | None, default `None`)
-- `window` (str | None, default `None`)
-- `window_id` (int | None, default `None`)
-- `fps` (int, default `15`)
-- `max_width` (int | None, default `None`)
-- `max_seconds` (int, default `600`)
-- `full_screen` (bool | None, default `None`)
-- `window_ids` (list[int] | None, default `None`)
-- `layout` (str, default `'side_by_side'`)
+- `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
+- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
+- `window_id` (int | None, default `None`): Window id from list_windows.
+- `fps` (int, default `15`): Frames per second, clamped to 1-30. Frames repeat if capture falls behind.
+- `max_width` (int | None, default `None`): Output width cap in pixels; never scales up. Default 1920.
+- `max_seconds` (int, default `600`): Stops by itself after this long, clamped to 5-3600 seconds.
+- `full_screen` (bool | None, default `None`): true: letterbox into the primary monitor's shape. Default: the native capture size.
+- `window_ids` (list[int] | None, default `None`): 2-6 window ids from list_windows, recorded in sync into one video.
+- `layout` (str, default `'side_by_side'`): With window_ids: side_by_side, top_bottom or grid.
+- `wait_for_window` (float, default `0`): With window: seconds (max 600) to wait for a match. Returns at once, so launch the app next.
+- `stop_on_log_marker` (str | None, default `None`): End when this text is added to the selected bridge's Kit log or stop_log_file.
+- `stop_log_file` (str | None, default `None`): A .log file in Kit's log folder or under ~/.local/share/isaac-mcp, for stop_on_log_marker.
 
 ### `stop_screen_recording`
 
@@ -99,18 +102,18 @@ No arguments.
 
 ### `tile_windows`
 
-Tile 2-6 windows over a monitor's work area (the screen minus panels, _NET_WORKAREA), e.g. Isaac Sim left and RViz 2 right for a demo video. layout: left_right (one row), top_bottom (one column) or grid. Each window's outer frame (title bar included) fills its tile, so title bars do not overlap. monitor: 1-based index from screen_info (default: the monitor holding the first window). gap: pixels between tiles. Reports each window's final client geometry and whether the window manager clamped it; record the result with start_screen_recording(window_ids=...).
+Tile 2-6 windows over a monitor's work area, e.g. Isaac Sim left and RViz 2 right for a demo. Get ids from list_windows. Reports each window's final geometry and whether the window manager clamped it; then record them with start_screen_recording(window_ids=...).
 
-- `window_ids` (list[int], required)
-- `layout` (str, default `'left_right'`)
-- `monitor` (int | None, default `None`)
-- `gap` (int, default `0`)
+- `window_ids` (list[int], required): 2-6 window ids from list_windows.
+- `layout` (str, default `'left_right'`): left_right (one row), top_bottom (one column) or grid.
+- `monitor` (int | None, default `None`): 1-based index from screen_info. Default: the monitor holding the first window.
+- `gap` (int, default `0`): Pixels between tiles.
 
 ### `use_bridge`
 
 Switch this MCP server to another running Kit bridge on this machine.
 
-- `port` (int, required)
+- `port` (int, required): Bridge TCP port from --list-bridges or list_bridges.
 
 ## Desktop input (opt-in: `screen_input`)
 
@@ -120,57 +123,57 @@ Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 5 tools.
 
 Click a visible point in one selected X11 window. Coordinates are original window pixels.
 
-- `window_id` (int, required)
-- `expected_pid` (int, required)
-- `x` (int, required)
-- `y` (int, required)
-- `expected_width` (int, required)
-- `expected_height` (int, required)
-- `button` (str, default `'left'`)
-- `clicks` (int, default `1`)
+- `window_id` (int, required): Window id from list_windows.
+- `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
+- `x` (int, required): X in original window pixels, from a fresh screenshot.
+- `y` (int, required): Y in original window pixels, from a fresh screenshot.
+- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
+- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
+- `button` (str, default `'left'`): left, middle or right.
+- `clicks` (int, default `1`): 1 or 2.
 
 ### `window_drag`
 
 Drag with the left mouse button between two points in the same X11 window.
 
-- `window_id` (int, required)
-- `expected_pid` (int, required)
-- `x` (int, required)
-- `y` (int, required)
-- `end_x` (int, required)
-- `end_y` (int, required)
-- `expected_width` (int, required)
-- `expected_height` (int, required)
+- `window_id` (int, required): Window id from list_windows.
+- `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
+- `x` (int, required): X in original window pixels, from a fresh screenshot.
+- `y` (int, required): Y in original window pixels, from a fresh screenshot.
+- `end_x` (int, required): Drag end X in original window pixels.
+- `end_y` (int, required): Drag end Y in original window pixels.
+- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
+- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
 
 ### `window_key`
 
 Send one navigation/editing key or ASCII letter/digit to the focused X11 window.
 
-- `window_id` (int, required)
-- `expected_pid` (int, required)
-- `key` (str, required)
-- `modifiers` (list[str] | None, default `None`)
+- `window_id` (int, required): Window id from list_windows.
+- `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
+- `key` (str, required): A navigation or editing key name, or an ASCII letter or digit, e.g. enter, tab, a.
+- `modifiers` (list[str] | None, default `None`): Any of ctrl, shift, alt, super.
 
 ### `window_scroll`
 
 Scroll up, down, left or right at a visible window point, at most ten steps per call.
 
-- `window_id` (int, required)
-- `expected_pid` (int, required)
-- `x` (int, required)
-- `y` (int, required)
-- `expected_width` (int, required)
-- `expected_height` (int, required)
-- `direction` (str, required)
-- `steps` (int, default `1`)
+- `window_id` (int, required): Window id from list_windows.
+- `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
+- `x` (int, required): X in original window pixels, from a fresh screenshot.
+- `y` (int, required): Y in original window pixels, from a fresh screenshot.
+- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
+- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
+- `direction` (str, required): up, down, left or right.
+- `steps` (int, default `1`): Scroll steps, 1-10.
 
 ### `window_type`
 
 Type up to 200 printable ASCII characters into the focused selected X11 window.
 
-- `window_id` (int, required)
-- `expected_pid` (int, required)
-- `text` (str, required)
+- `window_id` (int, required): Window id from list_windows.
+- `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
+- `text` (str, required): Up to 200 printable ASCII characters.
 
 ## Simulator sessions (opt-in: `sim_launch`)
 
@@ -178,36 +181,36 @@ Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-simulator-sessions). 4 tools.
 
 ### `sim__launch`
 
-Launch a managed Isaac Sim instance using a distinct local port and ROS domain.
+Launch a separate managed Isaac Sim instance on its own port and ROS domain, when explicitly asked.
 
-- `port` (int, required)
-- `ros_domain` (int, required)
-- `headless` (bool, default `False`)
-- `allow_shared_domain` (bool, default `False`)
-- `show_ur5e_panel` (bool, default `False`)
-- `enable_motion_bvh` (bool, default `False`)
-- `physics_backend` (Literal['physx', 'newton'], default `'physx'`)
+- `port` (int, required): A free local TCP port for its bridge, e.g. 18766.
+- `ros_domain` (int, required): ROS_DOMAIN_ID 0-231, distinct from other sessions.
+- `headless` (bool, default `False`): true: no window.
+- `allow_shared_domain` (bool, default `False`): true: allow a ROS domain another session already uses.
+- `show_ur5e_panel` (bool, default `False`): true: show the UR5e twin's panel in a graphical session.
+- `enable_motion_bvh` (bool, default `False`): true: accurate RTX LiDAR motion compensation; costs rendering time and GPU memory.
+- `physics_backend` (Literal['physx', 'newton'], default `'physx'`): Engine for this new process. Missing Newton dependencies fail with no fallback.
 
 ### `sim__list`
 
-List managed simulator sessions, including those started before this server restarted.
+List simulators: managed sessions (managed=true), including those started before this server restarted, and advertised bridges started some other way (managed=false; PID, port, app, version).
 
-No arguments.
+- `include_exited` (bool, default `False`): List every exited session, not only the most recent few.
 
 ### `sim__status`
 
-Report a managed simulator's process, Kit readiness and current resources.
+Report a simulator's process and Kit readiness, by an id from sim__list.
 
-- `session_id` (str, required)
+- `session_id` (str, required): id from sim__list or sim__launch.
 
 ### `sim__stop`
 
-Stop only the identified managed process; unsaved changes can be lost.
+Stop only the identified managed process; unsaved changes can be lost. Refuses external bridges.
 
-- `session_id` (str, required)
-- `expected_pid` (int, required)
-- `confirm_discard` (bool, default `False`)
-- `force` (bool, default `False`)
+- `session_id` (str, required): id from sim__list or sim__launch.
+- `expected_pid` (int, required): PID from sim__status; a different process is refused.
+- `confirm_discard` (bool, default `False`): true: accept losing unsaved changes.
+- `force` (bool, default `False`): true: SIGKILL its process group; only if normal shutdown failed.
 
 ## Isaac Lab
 
@@ -215,30 +218,30 @@ Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 12 tools.
 
 ### `isaaclab__checkpoints_list`
 
-List policy checkpoints (*.pt / *.pth), newest first, under a run dir or the configured logs.
+List policy checkpoints (*.pt / *.pth, and stable-baselines3's .zip), newest first, under a run dir or the configured logs.
 
-- `run_dir` (str | None, default `None`)
-- `task` (str | None, default `None`)
+- `run_dir` (str | None, default `None`): Run folder. Default: search the configured logs.
+- `task` (str | None, default `None`): Keep runs of this task id.
 
 ### `isaaclab__envs_list`
 
 List registered Isaac Lab task ids (optionally filtered by substring).
 
-- `filter` (str | None, default `None`)
+- `filter` (str | None, default `None`): Keep task ids containing this text.
 
 ### `isaaclab__eval`
 
 Run a policy checkpoint (headless by default) as a job and return its job_id.
 
-- `task` (str, required)
-- `checkpoint` (str, required)
-- `num_envs` (int | None, default `None`)
-- `headless` (bool, default `True`)
-- `rl_library` (str | None, default `None`)
-- `extra_args` (list[str] | None, default `None`)
-- `timeout_s` (float | None, default `None`)
-- `allow_concurrent` (bool, default `False`)
-- `allow_concurrent_gpu` (bool, default `False`)
+- `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole-v0.
+- `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
+- `num_envs` (int | None, default `None`): Parallel environments. Default: the task's own.
+- `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
+- `rl_library` (str | None, default `None`): RL library name, e.g. rsl_rl. Default: the Isaac Lab script's own.
+- `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
+- `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
+- `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
 
 ### `isaaclab__install_info`
 
@@ -250,74 +253,74 @@ No arguments.
 
 Summarise TensorBoard scalars of a run (last, min, max, step, count per tag).
 
-- `run_dir` (str, required)
-- `tags` (list[str] | None, default `None`)
+- `run_dir` (str, required): Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status.
+- `tags` (list[str] | None, default `None`): Scalar tags to include. Default: all.
 
 ### `isaaclab__play`
 
 Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel.
 
-- `task` (str, required)
-- `checkpoint` (str, required)
-- `num_envs` (int, default `1`)
-- `headless` (bool, default `False`)
-- `rl_library` (str | None, default `None`)
-- `extra_args` (list[str] | None, default `None`)
-- `timeout_s` (float | None, default `None`)
-- `allow_concurrent` (bool, default `False`)
-- `allow_concurrent_gpu` (bool, default `False`)
+- `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole-v0.
+- `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
+- `num_envs` (int, default `1`): Parallel environments.
+- `headless` (bool, default `False`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
+- `rl_library` (str | None, default `None`): RL library name, e.g. rsl_rl. Default: the Isaac Lab script's own.
+- `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
+- `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
+- `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
 
 ### `isaaclab__runs_cancel`
 
 Stop a job: SIGTERM to its process group, SIGKILL after grace_s seconds.
 
-- `job_id` (str, required)
-- `grace_s` (int, default `10`)
+- `job_id` (str, required): job_id from isaaclab__train, eval or play, or isaaclab__runs_list.
+- `grace_s` (int, default `10`): Seconds between SIGTERM and SIGKILL.
 
 ### `isaaclab__runs_list`
 
-List jobs; state is 'running', 'finished' or omitted for all.
+List Isaac Lab jobs, to find a job_id.
 
-- `state` (str | None, default `None`)
+- `state` (str | None, default `None`): running or finished. Default: all.
 
 ### `isaaclab__runs_status`
 
 State, exit code, elapsed time, last log lines and newest checkpoint of a job. For a windowed job also `window` (id, title, size): pass its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result. Reconciles orphaned jobs by updating their stored metadata.
 
-- `job_id` (str, required)
+- `job_id` (str, required): job_id from isaaclab__train, eval or play, or isaaclab__runs_list.
 
 ### `isaaclab__runs_tail`
 
 Last lines of a job's stdout or stderr log. Creates the jobs directory if missing.
 
-- `job_id` (str, required)
-- `stream` (str, default `'stdout'`)
-- `lines` (int, default `100`)
+- `job_id` (str, required): job_id from isaaclab__train, eval or play, or isaaclab__runs_list.
+- `stream` (str, default `'stdout'`): stdout or stderr.
+- `lines` (int, default `100`): How many of the last lines to return.
 
 ### `isaaclab__tensorboard_tail`
 
-Last points of one TensorBoard scalar (training curve).
+Last points of one TensorBoard scalar (a training curve). Find tags with isaaclab__metrics_summary.
 
-- `run_dir` (str, required)
-- `tag` (str, required)
-- `last_n` (int, default `50`)
+- `run_dir` (str, required): Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status.
+- `tag` (str, required): Scalar tag, from isaaclab__metrics_summary.
+- `last_n` (int | None, default `50`): How many of the newest points to return.
 
 ### `isaaclab__train`
 
 Start a training job and return its job_id immediately; follow it with isaaclab__runs_status/tail.
 
-- `task` (str, required)
-- `num_envs` (int, default `64`)
-- `max_iterations` (int | None, default `None`)
-- `seed` (int | None, default `None`)
-- `device` (str | None, default `None`)
-- `headless` (bool, default `True`)
-- `checkpoint` (str | None, default `None`)
-- `rl_library` (str | None, default `None`)
-- `extra_args` (list[str] | None, default `None`)
-- `timeout_s` (float | None, default `None`)
-- `allow_concurrent` (bool, default `False`)
-- `allow_concurrent_gpu` (bool, default `False`)
+- `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole-v0.
+- `num_envs` (int, default `64`): Parallel environments.
+- `max_iterations` (int | None, default `None`): Training iterations. Default: the task's own.
+- `seed` (int | None, default `None`): Random seed.
+- `device` (str | None, default `None`): e.g. cuda:0 or cpu. Default: Isaac Lab's choice.
+- `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
+- `checkpoint` (str | None, default `None`): Checkpoint file to resume from, from isaaclab__checkpoints_list.
+- `rl_library` (str | None, default `None`): RL library name, e.g. rsl_rl. Default: the Isaac Lab script's own.
+- `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
+- `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
+- `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
 
 ## Bridge built-ins
 
@@ -371,7 +374,7 @@ No arguments.
 
 ## Generic scene (`sim__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 40 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 41 tools.
 
 ### `sim__body__state`
 
@@ -433,7 +436,7 @@ OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request
 
 ### `sim__graph__build`
 
-Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Containers or individual node/connection entries may be JSON-encoded strings; flat alternating node and connection lists also work. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types. Requires session_id and stage_id from sim__stage__info.
+Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Find node types and ports first with sim__graph__node_types. Checks every port, lists the real ones on a typo, and rolls the graph back on any error. Timeline stopped. Returns it as sim__graph__inspect does. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -466,7 +469,7 @@ Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e
 
 ### `sim__graph__show`
 
-Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands and arranges nodes, writing positions into the stage; stop first, or use layout=false while playing. TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window; it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info.
+Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit, e.g. for a demo video. layout=true arranges nodes and writes positions into the stage, so stop first or use layout=false while playing; TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. Uses the editor's internal API and refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -478,7 +481,7 @@ Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit 
 
 ### `sim__joints__command`
 
-Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose. Requires session_id and stage_id from sim__stage__info.
+Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -516,7 +519,7 @@ Read initialized articulation DOF positions/velocities on selected PhysX or qual
 
 ### `sim__lidar__create`
 
-Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D, as Create > Sensors > RTX Lidar does) or, without config, a local generic LiDAR. Config assets are referenced from Isaac's assets root (network or local mirror); an unknown name lists the valid ones. Motion BVH is not required (only motion distortion within a scan needs run.sh --motion-bvh); the result reports it. Returns prim type, sensor path and tick/scan rate. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.
+Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. Config assets come from Isaac's assets root; an unknown name lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -694,6 +697,17 @@ Set a static local/world pose for a prim created by this pack. Refuses playing/p
 - `frame` (string, default `"local"`): Pose frame: local or world.
 - `scale` (array, default `[1, 1, 1]`): Positive XYZ scale in the requested pose frame.
 
+### `sim__quick_start`
+
+One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns the new session_id and stage_id, paths, each asset's source and next steps. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.
+
+- `robot` (string, optional): Optional robot: a public name (ur5e, from your local copy first, then NVIDIA, honoring strict mode), <pack>/<file.usd> from an asset pack in your asset folder, or an absolute path under an approved root (same rules as assets__import_path). A file found only through a project file's asset_path is refused.
+- `ros` (boolean, default `false`): With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.
+- `up_axis` (Z|Y, default `"Z"`): The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass.
+- `meters_per_unit` (number, default `1.0`): The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match.
+- `play` (boolean, default `false`): Start the timeline after building.
+- `discard_changes` (boolean, default `false`): Replace a stage with unsaved edits (they are lost).
+
 ### `sim__ros2__tf_setup`
 
 Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /joint_states, the static world->base_link (or world->odom + odometry for a mobile base) and the robot's link TF from Isaac. Rebuilds its own graph on each call, so no frame is ever published twice by this tool; reuses an existing /clock and reports other ROS 2 publishers in the scene. Timeline must be stopped; publishes while playing. Then use scripts/ros2_rviz_config.py and scripts/ros2_tf_doctor.py (docs/ROS2-RVIZ.md). Requires session_id and stage_id from sim__stage__info.
@@ -706,7 +720,8 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 - `base` (string, default `"fixed"`): fixed (arm on a table: static world->base) or mobile (odometry: world->odom->base).
 - `world_frame` (string, default `"world"`): Root frame for RViz's Fixed Frame, e.g. world or map. Empty: publish no world link (a localization node provides map->odom).
 - `link_frames` (string, default `"isaac"`): isaac: Isaac publishes every link frame. robot_state_publisher: Isaac publishes only /joint_states and the base link; run robot_state_publisher with the URDF. Never both.
-- `extra_frames` (array, default `[]`): Up to 16 more prims (cameras, LiDARs) to publish relative to the base link; frame name = prim name.
+- `extra_frames` (array, default `[]`): Up to 16 more prims (cameras, LiDARs, tool0) to publish relative to the base link; frame name = prim name.
+- `attach_to` (string, default `""`): For a robot that is its own articulation mounted on another (RG2 on a UR5e wrist): the parent link's prim. Publishes parent->base_link dynamically on every tick instead of a static world link, so it follows the arm. Call this tool once per articulation, with a namespace for this one.
 - `namespace` (string, default `""`): ROS node namespace prepended to the topics.
 - `joint_states_topic` (string, default `"joint_states"`): Joint state topic.
 - `clock` (auto|publish|skip, default `"auto"`): auto: reuse an existing /clock, else publish one shared clock for all robots (two clocks make RViz reset constantly); publish: always keep the tool's clock; skip: never create one.
@@ -737,16 +752,16 @@ No arguments.
 
 ### `sim__stage__open`
 
-Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage really has unsaved edits unless discard_changes=true. Deactivates stale saved LiDAR render products in the session layer so their ROS topics return (reported in stale_render_products; the file is unchanged). Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info.
+Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's output folder) as the current stage, like File > Open, with the timeline stopped. Refuses to drop unsaved edits unless discard_changes=true. Reports stale saved LiDAR render products and never changes the file. Returns the new session_id and stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Absolute path of the USD file to open (a leading tilde for your home is expanded).
+- `path` (string, required): Absolute path of the USD file to open, under your home or this simulator's output folder, where sim__stage__save writes by default (a leading tilde for your home is expanded).
 - `discard_changes` (boolean, default `false`): Open even if the current stage has unsaved edits (they are lost).
 
 ### `sim__stage__save`
 
-Export a flattened copy, including session edits, to a new basename (.usda is added if absent) in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save. Requires session_id and stage_id from sim__stage__info.
+Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -786,7 +801,7 @@ Drive Isaac Sim's own UI through Kit's input system, not the desktop: click, dou
 - `text` (string, optional): Text for action=type (1..500 characters, no newlines; send enter with keypress).
 - `keys` (array, optional): For action=keypress: one key plus optional modifiers, e.g. ["ctrl", "s"], ["enter"], ["shift", "tab"].
 - `window` (string, optional): For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'.
-- `menu` (string, optional): For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube', or a top-level menu such as 'Layouts' (opened to list its items, then closed again).
+- `menu` (string, optional): For action=menu: a menu path, e.g. 'Create/Mesh/Cube' (a menu an extension adds exists only once it has loaded), or a top-level menu such as 'Layouts' (opened to list its items, then closed again).
 - `scroll_x` (integer, default `0`): Horizontal wheel steps for action=scroll (-20..20).
 - `scroll_y` (integer, default `0`): Vertical wheel steps for action=scroll (-20..20; negative scrolls down).
 - `frames` (integer, default `3`): Frames to wait after the action so the UI updates (0..600).
@@ -801,7 +816,7 @@ List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree 
 
 ### `sim__viewport__frame`
 
-Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. If the prim has no geometry, an unambiguous nearby subtree can be selected; the result reports the requested and actual paths, and follow tracks the actual path. follow=false stops following; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds (with candidates). Does not wait for rendered pixels; then screenshot the app window or record. Requires session_id and stage_id from sim__stage__info.
+Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -813,11 +828,17 @@ Point the active viewport camera. path alone: Kit's native select-and-frame. pat
 
 ## Assets (`assets__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 8 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 14 tools.
+
+### `assets__dependencies`
+
+Compute USD dependency closures with UsdUtils.ComputeAllDependencies for files under an approved root or a user asset store. Uses a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit. Native USD parsing is NOT sandboxed. Copies nothing.
+
+- `paths` (array, required): Absolute USD file paths, 1 to 64.
 
 ### `assets__import_path`
 
-Import a trusted local USD from an absolute path under an approved project root. Copies and validates its project dependencies before authoring a reference; source files remain unchanged. Requires session_id and stage_id from sim__stage__info.
+Import a trusted local USD by absolute path, under an approved project root or in a pack of the user's asset store. Copies and validates its project dependencies before authoring a reference; source files remain unchanged. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -861,6 +882,51 @@ Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD pars
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
 - `relative_path` (string, required): Relative USD file path within that root.
+
+### `assets__pack_adopt`
+
+Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A different file already there is refused unless force=true; nothing is written inside the repository.
+
+- `pack` (string, required): Pack name: one folder name, no path separators.
+- `source_path` (string, optional): Absolute folder under an approved root. Omit to create an empty pack.
+- `include` (array, optional): Extra file extensions to copy.
+- `files` (array, optional): Copy only these files or folders, relative to source_path. A named file is copied whatever its type.
+- `entries` (array, optional): Root USD files, relative to the pack, for assets__pack_doctor. Default: a sole top-level USD.
+- `dry_run` (boolean, default `false`): Report the plan and write nothing.
+- `force` (boolean, default `false`): Replace files that differ from the source.
+
+### `assets__pack_build`
+
+Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Follows MaterialX and MDL textures too. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them. Files that differ need force=true. Checks the new pack afterwards.
+
+- `pack` (string, required): Destination pack name: one folder name.
+- `sources` (array, required): USD files, 1 to 64: absolute paths, or paths inside from_pack. A scene outside from_pack and layout_root is read for its references and not copied.
+- `from_pack` (string, optional): Pack that source names and logical references such as robot/ur5e.usd come from.
+- `layout_root` (string, optional): Absolute folder the pack layout is relative to. Default: from_pack, or the source's folder.
+- `allow_unresolved` (boolean, default `false`): Build despite missing or remote references, and record them.
+- `dry_run` (boolean, default `false`): Report the closure and write nothing.
+- `force` (boolean, default `false`): Replace files that differ from the source.
+
+### `assets__pack_doctor`
+
+Check a pack without changing it: corrupt, missing and unpinned files, then the USD dependencies of its entry files (unresolved, unreadable, remote, outside the pack). Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false.
+
+- `pack` (string, optional): Pack name. Default: the selected pack.
+- `entries` (array, optional): Files in the pack that are its roots. Default: recorded in the pack, or the twin's known names for ur5e-dt.
+
+### `assets__pack_pin`
+
+Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true.
+
+- `pack` (string, optional): Pack name. Default: the selected pack.
+- `files` (array, optional): Pin only these relative paths, accepting their changes.
+- `force` (boolean, default `false`): Accept every changed and removed file.
+
+### `assets__packs`
+
+List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing.
+
+No arguments.
 
 ### `assets__prepare_workstation`
 
@@ -909,7 +975,7 @@ Uses your own lab files from the asset folder, which cannot be downloaded (see d
 
 ### `ur5e_dt__delete_objects`
 
-Delete all objects from /World/Objects and the associated pose publisher graph.
+Delete all objects from /World/Objects of the UR5e twin and the associated pose publisher graph.
 
 No arguments.
 
@@ -927,7 +993,7 @@ No arguments.
 
 ### `ur5e_dt__load_workstation`
 
-Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.
+Load the Vention bench as visual context under the lab's UR5e twin, at /World/Vention with its top at z=0. Uses your own lab file from the asset folder, which cannot be downloaded (see docs/ASSETS.md); a placeholder bench is used without it. Additive (cleared by new_stage), visual-only and safe while playing. Does not move the robot.
 
 No arguments.
 
@@ -945,25 +1011,25 @@ No arguments.
 
 ### `ur5e_dt__quick_start`
 
-One-click scene setup from public assets: loads the scene, imports NVIDIA's UR5e with action graphs, creates a workspace camera and starts simulation. Adds the RG2 gripper only when its files are in the asset folder; the result's gripper field says which happened. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.
+RISE lab UR5e digital twin; for a generic start, see sim__quick_start. One-click scene setup from public assets: loads the scene, imports NVIDIA's UR5e with action graphs, creates a workspace camera and starts simulation. Adds the RG2 gripper only when its files are in the asset folder; the result's gripper field says which happened. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.
 
 No arguments.
 
 ### `ur5e_dt__quick_start_with_workstation`
 
-Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.
+RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.
 
 No arguments.
 
 ### `ur5e_dt__quick_start_with_workstation_and_simple_room`
 
-Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.
+RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.
 
 No arguments.
 
 ### `ur5e_dt__randomize_object_poses`
 
-Randomize the positions of non-base objects in /World/Objects.
+Randomize the positions of non-base objects in /World/Objects of the UR5e twin, after ur5e_dt__add_objects.
 
 No arguments.
 
@@ -975,13 +1041,13 @@ Randomize the position of a single named object in a clear workspace area, keepi
 
 ### `ur5e_dt__restore_scene_state`
 
-Restore scene object poses from a previously saved JSON file. Returns: result: "success" or "failure" error: failure reason (only on failure)
+Restore the UR5e twin's object poses from a JSON file made by ur5e_dt__save_scene_state. Returns result and, on failure, error.
 
 - `json_file_path` (string, optional): Path to restore from. If omitted, the most recent save is used.
 
 ### `ur5e_dt__save_scene_state`
 
-Save current scene object poses to a JSON file. Returns: result: "success" or "failure" file_path: path to the saved JSON file error: failure reason (only on failure)
+Save the UR5e twin's object poses to a JSON file in its scene_states folder, for ur5e_dt__restore_scene_state. A file of that name is replaced; with no name it gets a timestamp. Returns result, file_path and, on failure, error.
 
 - `json_file_path` (string, optional): Path to save file. If omitted, a timestamped filename is used.
 
@@ -1002,7 +1068,7 @@ No arguments.
 
 ### `ur5e_dt__setup_pose_publisher`
 
-Create an action graph to publish object poses to ROS2 topic 'objects_poses_sim'.
+Create an action graph publishing the UR5e twin's object poses to ROS 2 topic objects_poses_sim, after ur5e_dt__add_objects.
 
 No arguments.
 
@@ -1016,7 +1082,7 @@ Start real-time viewport video recording using ffmpeg. Records frames from the v
 
 ### `ur5e_dt__start_ros_driver`
 
-Bring the ROS2 robot driver up/down/status so robot-motion tools (ros-mcp-server move_home/move_to_grasp/...) have a driver to talk to. Two backends: backend='fake' (default) uses scripts/launch_ur_fake.sh — the apt ur_robot_driver with fake/mock hardware, no Docker and no ~/ros2_ws needed, ready in a few seconds (sim only); backend='ursim' uses scripts/sim_bringup.sh — URSim docker + ur_bringup, hands-free no PolyScope clicks, ~110s, and is the path that supports mode='real' (lab UR5e, not yet enabled). Both end at /joint_states live + scaled_joint_trajectory_controller accepting FollowJointTrajectory, on the same DDS island (the ROS domain from config/ros_dds.env (default 0), Cyclone, localhost-only). Managed sim__launch sessions support only the fake backend; URSim uses shared host resources. The fake launcher refuses startup when another UR driver is detected. Stop the fake driver before stopping its simulator. Use once at startup.
+Bring the ROS 2 driver of the lab's UR5e twin up, down or report status, so robot-motion tools have a driver. backend='fake' (default) is sim only, with mock hardware and no Docker, ready in seconds; 'ursim' needs Docker and is the path to mode='real' (not yet enabled). Refuses if another UR driver is detected. Stop the fake driver before stopping its simulator. Managed sim__launch sessions support only fake. Use once at startup.
 
 - `mode` (sim|real, optional): 'sim' (default) or 'real' (lab UR5e — not yet enabled; requires backend='ursim').
 - `action` (up|down|status, optional): 'up' (default) brings the driver up, 'down' tears it down, 'status' reports state.
@@ -1030,7 +1096,7 @@ No arguments.
 
 ### `ur5e_dt__stop_scene`
 
-Stop the simulation timeline in Isaac Sim.
+Stop the UR5e twin's simulation timeline, e.g. before generic sim__* edits. Stop rewinds physics to the authored start pose. For other scenes use sim__timeline__control.
 
 No arguments.
 

@@ -493,3 +493,9 @@ def test_bridge_reports_running_and_just_finished_tools():
     assert seen == [{"t.work": True}]
     assert bridge.tool_activity() == {"t.work": False}
     assert bridge.tool_activity(recent_s=0) == {}
+
+
+def test_reading_a_sensor_that_was_never_created_says_not_found():
+    # A failed create leaves nothing: suggesting adopt=true would send the caller after a prim that isn't there.
+    text = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/extension.py").read_text(encoding="utf-8")
+    assert text.index('refuse("NOT_FOUND", f"No prim at {args[\'path\']}') < text.index('"NOT_OWNED",\n                    f"{args[\'path\']} has no {expected}')

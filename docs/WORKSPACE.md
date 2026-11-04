@@ -76,7 +76,7 @@ untested.
    python3 scripts/isaac_assets.py add /path/to/lab-assets.tar.gz --store "$ISAAC_MCP_WORKSPACE/isaac-mcp-assets"
    python3 scripts/isaac_assets.py doctor
    python3 scripts/isaac_env.py where
-   ./run.sh --port 8766
+   ./run.sh --port 8766   # not if a Kit already holds this port; choose another with --port
    ```
 
 ## I already have Isaac Sim installed
@@ -97,15 +97,15 @@ Pick one:
 ```bash
 python3 scripts/isaac_env.py resolve-python                       # print the chosen interpreter
 python3 scripts/isaac_env.py resolve-python --require-version 6.2 # only a matching version
-python3 scripts/isaac_env.py resolve-python --lab                 # Isaac Lab environment
+python3 scripts/isaac_env.py resolve-python --lab                 # prefer an environment that also has Isaac Lab
 ```
 
 Then confirm it before you rely on it:
 
 ```bash
-PY="$(python3 scripts/isaac_env.py resolve-python)"
-"$PY" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
-uv pip check --python "$PY"
+PY="$(python3 scripts/isaac_env.py resolve-python)" &&
+  "$PY" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))' &&
+  uv pip check --python "$PY"
 ```
 
 **Pin it.** Auto-detect is a convenience. To make the choice explicit, set

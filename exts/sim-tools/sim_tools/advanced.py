@@ -4,6 +4,7 @@ No app.update(), render(), World.step(), network fetch or arbitrary attribute se
 """
 
 import hashlib
+import itertools
 import math
 import os
 from pathlib import Path
@@ -35,6 +36,61 @@ def scalar(x, lo=0, hi=1e8):
     if type(x) not in (float, int) or not math.isfinite(x) or not lo <= x <= hi:
         refuse("INVALID_VALUE", f"Finite number in [{lo},{hi}] required.")
     return x
+
+
+# Joint limits are stored as float32, and a radian target is converted to degrees as float64, so a
+# target exactly at a limit can land a few float32 steps past it (RG2: 1.0 rad is 57.29577951 degrees,
+# authored as 57.29577637). About 8 float32 steps, relative to the limit's size.
+LIMIT_ROUNDING = 1e-6
+
+
+def to_limit(value, lo, hi):
+    """``value``, or the limit it only rounds past; None when it is really outside [lo, hi]."""
+    for limit, past in ((lo, lo is not None and value < lo), (hi, hi is not None and value > hi)):
+        if past:
+            return limit if abs(value - limit) <= LIMIT_ROUNDING * max(1.0, abs(limit)) else None
+    return value
+
+
+# Visited while looking for an articulation's joints; the caller's limit bounds what is returned.
+MAX_ARTICULATION_SCAN_PRIMS = 20000
+
+
+def articulation_joints(stage, root, limit):
+    """(joints, truncated) of the articulation whose root is the joint ``root``: the joints reached from it
+    through their body0/body1 links, in stage order. A joint excluded from the articulation is left out, and
+    so is another articulation under the same parent."""
+    parent = root.GetParent()
+    scan = stage.GetPseudoRoot() if parent.IsPseudoRoot() else parent
+    found, truncated = [], False
+    for count, prim in enumerate(Usd.PrimRange(scan)):
+        if count >= MAX_ARTICULATION_SCAN_PRIMS:
+            truncated = True
+            break
+        if prim.IsA(UsdPhysics.Joint):
+            found.append(prim)
+
+    def bodies(prim):
+        joint = UsdPhysics.Joint(prim)
+        return {str(t) for rel in (joint.GetBody0Rel(), joint.GetBody1Rel()) for t in rel.GetTargets()}
+
+    reached = bodies(root)
+    joints = [root]
+    pending = [p for p in found if p != root and not UsdPhysics.Joint(p).GetExcludeFromArticulationAttr().Get()]
+    grew = True
+    while grew:
+        grew = False
+        for prim in list(pending):
+            if bodies(prim) & reached:
+                reached |= bodies(prim)
+                joints.append(prim)
+                pending.remove(prim)
+                grew = True
+    order = {prim: index for index, prim in enumerate(found)}
+    joints.sort(key=lambda prim: order[prim])
+    if len(joints) > limit:
+        return joints[:limit], True
+    return joints, truncated
 
 
 def finite_clock(value):
@@ -86,6 +142,9 @@ def foreign_prim(s, stage, p, allow_foreign):
     return prim
 
 
+MAX_SENSOR_SUBTREE = 10000
+
+
 def deletable(s, stage, p, direct_sensor=False, sensor_paths=(), foreign=False):
     prim = s.prim(stage, p) if foreign else owned(s, stage, p)
     # USD traversal cannot see children below inactive prims, or registered
@@ -101,9 +160,14 @@ def deletable(s, stage, p, direct_sensor=False, sensor_paths=(), foreign=False):
         and stage.GetDefaultPrim().GetPath().HasPrefix(prim.GetPath())
     ):
         refuse("PROTECTED_PRIM", "World/default prim or its ancestor is protected.")
-    nodes, truncated = bounded(stage, p, 200)
+    # A sensor the pack registered can bring a large config subtree; its slot must stay releasable.
+    if direct_sensor:
+        nodes = list(itertools.islice(Usd.PrimRange(prim, Usd.PrimAllPrimsPredicate), MAX_SENSOR_SUBTREE + 1))
+        truncated = len(nodes) > MAX_SENSOR_SUBTREE
+    else:
+        nodes, truncated = bounded(stage, p, 200)
     if truncated:
-        refuse("LIMIT", "Subtree deletion exceeds 200 prims.")
+        refuse("LIMIT", f"Subtree deletion exceeds {MAX_SENSOR_SUBTREE if direct_sensor else 200} prims.")
     # Direct deletion releases only this sensor, never sensors below it.
     if any(
         n.HasAPI(UsdPhysics.ArticulationRootAPI)
@@ -273,7 +337,7 @@ class Advanced:
         )
 
     def import_urdf(self, stage, snapshot_id, manifest_sha256, prim_path, **pose):
-        from isaac_mcp.project_assets import relative, signature
+        from isaac_mcp.project_assets import signature, urdf_dependency
 
         s = self.s
         s.new_path(stage, prim_path)
@@ -288,8 +352,7 @@ class Advanced:
             refuse("URDF_XML", "Root must be robot.")
         for element in tree.iter():
             if "filename" in element.attrib:
-                rel = relative(element.attrib["filename"])
-                candidate = str(Path(manifest["entry"]).parent / rel)
+                candidate = urdf_dependency(manifest["entry"], element.attrib["filename"])
                 if candidate not in manifest["files"]:
                     refuse("DEPENDENCIES", "URDF file dependency missing: " + candidate)
         try:
@@ -589,6 +652,13 @@ class Advanced:
             return dict(path=a["path"], gravity=gravity, dt=1 / rate, requested_dt=dt)
         if name == "sim.joints.inspect":
             nodes, truncated = bounded(stage, a["path"], a.get("limit", 200))
+            # An articulation root is often a leaf joint (<robot>/root_joint): the joints that
+            # matter are its siblings, connected through the links, not below it.
+            root_prim = s.prim(stage, a["path"])
+            scope = {}
+            if root_prim.HasAPI(UsdPhysics.ArticulationRootAPI) and root_prim.IsA(UsdPhysics.Joint):
+                nodes, truncated = articulation_joints(stage, root_prim, a.get("limit", 200))
+                scope = dict(scope="articulation", articulation_root=a["path"])
             joints = []
             for prim in nodes:
                 if prim.IsA(UsdPhysics.Joint):
@@ -600,6 +670,11 @@ class Advanced:
                             "drive:angular:physics:targetPosition",
                             "drive:angular:physics:stiffness",
                             "drive:angular:physics:damping",
+                            "drive:angular:physics:maxForce",
+                            "drive:linear:physics:targetPosition",
+                            "drive:linear:physics:stiffness",
+                            "drive:linear:physics:damping",
+                            "drive:linear:physics:maxForce",
                         )
                         if prim.HasAttribute(key)
                     }
@@ -613,6 +688,7 @@ class Advanced:
             return dict(
                 joints=joints,
                 truncated=truncated,
+                **scope,
                 units="USD angular degrees; prismatic stage units",
                 source="authored USD, not DOF positions",
             )
@@ -628,8 +704,13 @@ class Advanced:
             usd_target = math.degrees(target) if angular else target
             lo = prim.GetAttribute("physics:lowerLimit").Get()
             hi = prim.GetAttribute("physics:upperLimit").Get()
-            if lo is not None and usd_target < lo or hi is not None and usd_target > hi:
-                refuse("JOINT_LIMIT", "Requested target exceeds authored joint limits.")
+            limited = to_limit(usd_target, lo, hi)
+            if limited is None:
+                unit = "degrees" if angular else "stage units"
+                refuse("JOINT_LIMIT", f"Requested target ({usd_target:g} {unit}) is outside the authored joint "
+                       f"limits [{lo}, {hi}] {unit}.", target=usd_target, lower=lo, upper=hi, unit=unit)
+            at_limit = limited != usd_target
+            usd_target = limited
             with Usd.EditContext(stage, stage.GetSessionLayer()):
                 drive = UsdPhysics.DriveAPI.Apply(
                     prim, "angular" if angular else "linear"
@@ -644,6 +725,7 @@ class Advanced:
                 authored_target=usd_target,
                 unit="degrees" if angular else "stage units",
                 effect="drive target authored; motion unverified until runtime observation",
+                **({"note": "Target rounded onto the authored limit, which is stored as float32."} if at_limit else {}),
             )
         if name == "sim.joints.command":
             state = self.joints(stage, a["path"])
@@ -661,11 +743,15 @@ class Advanced:
                     "PHYSICS_FORMAT",
                     "Runtime DOF limit shape does not match the articulation.",
                 )
-            for value, bounds in zip(positions, limits[0]):
+            positions = list(positions)
+            for index, (value, bounds) in enumerate(zip(positions, limits[0])):
                 if any(math.isnan(float(b)) for b in bounds) or bounds[0] > bounds[1]:
                     refuse("PHYSICS_FORMAT", "Runtime DOF limits are invalid.")
-                if value < float(bounds[0]) or value > float(bounds[1]):
-                    refuse("JOINT_LIMIT", "Target exceeds runtime joint limits.")
+                limited = to_limit(value, float(bounds[0]), float(bounds[1]))
+                if limited is None:
+                    refuse("JOINT_LIMIT", f"Target {value:g} for {state['names'][index]} is outside the runtime "
+                           f"limits [{float(bounds[0]):g}, {float(bounds[1]):g}].")
+                positions[index] = limited
             current = view.get_dof_position_targets()
             import numpy as np
 
@@ -1014,12 +1100,19 @@ class Advanced:
                 fd = open_dir(s.output)
                 try:
                     # Exclusive descriptor creation prevents symlink/overwrite races.
-                    out = os.open(
-                        filename,
-                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                        0o600,
-                        dir_fd=fd,
-                    )
+                    try:
+                        out = os.open(
+                            filename,
+                            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                            0o600,
+                            dir_fd=fd,
+                        )
+                    except FileExistsError:
+                        refuse(
+                            "CONFLICT",
+                            f"{filename} already exists; use another filename. No overwrite. "
+                            "The acquisition stays cached, so wait_for_render=false can save it.",
+                        )
                     with os.fdopen(out, "wb") as stream:
                         Image.fromarray(array).save(stream, format="PNG")
                 finally:

@@ -988,7 +988,7 @@ def test_missing_assets_does_not_skip_a_corrupt_file(monkeypatch):
     def corrupt(relpath):
         raise module.AssetCorrupt(relpath, Path("x"), "a", "b", "sha256 mismatch")
 
-    monkeypatch.setattr(module, "resolve_uri", corrupt)
+    monkeypatch.setattr(module._TWIN, "resolve_uri", corrupt)
     with pytest.raises(module.AssetCorrupt):
         module.missing_assets(["gripper/QuickChanger.usd"])
 
@@ -997,7 +997,7 @@ def test_a_local_copy_wins_over_the_online_one_and_the_source_says_so(monkeypatc
     module = load_module()
     monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path))
     monkeypatch.delenv("ISAAC_MCP_ASSET_STRICT", raising=False)
-    monkeypatch.setattr(module, "remote_uri", lambda relpath: "https://example.invalid/" + relpath)
+    monkeypatch.setattr(module._TWIN, "remote_uri", lambda relpath: "https://example.invalid/" + relpath)
     assert module.asset_source("x/robot.usd") == {
         "asset": "x/robot.usd", "source": "remote", "location": "https://example.invalid/x/robot.usd"}
     local = tmp_path / "ur5e-dt" / "x" / "robot.usd"
@@ -1011,5 +1011,5 @@ def test_strict_mode_reports_a_missing_asset_rather_than_an_online_source(monkey
     module = load_module()
     monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path))
     monkeypatch.setenv("ISAAC_MCP_ASSET_STRICT", "1")
-    monkeypatch.setattr(module, "remote_uri", lambda relpath: "https://example.invalid/" + relpath)
+    monkeypatch.setattr(module._TWIN, "remote_uri", lambda relpath: "https://example.invalid/" + relpath)
     assert module.asset_source("x/robot.usd")["source"] == "missing"

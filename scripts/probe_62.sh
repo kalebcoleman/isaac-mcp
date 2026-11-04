@@ -66,7 +66,8 @@ if [ -z "${ROS_DISTRO:-}" ]; then
 fi
 export ROS_DISTRO
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
+. "$ROOT/scripts/isaac_ros_libs.sh"
+ROS_LIB="$(isaac_ros_lib_dir "$SITE" "$ROS_DISTRO")" && export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROS_LIB"
 export ISAAC_MCP_PORT="$PORT"  # shared endpoint, opened after the twin registers
 export ISAAC_MCP_DEFER_START=1
 export UR5E_DT_PORT="$PORT"

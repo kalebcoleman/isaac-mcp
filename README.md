@@ -49,14 +49,14 @@ scene needs a live bridge, and a call without one returns an error that says wha
 
 | Tools | Count | Examples | Needs |
 |---|--:|---|---|
-| Generic scene and assets | 48 | `sim__stage__info`, `sim__graph__build`, `assets__import_path` | Kit with `sim-tools` (three asset tools run on the host) |
-| UR5e digital twin | 23 | `ur5e_dt__quick_start`, `ur5e_dt__add_objects` | Kit with `ur5e-dt`; [some need lab files](docs/ASSETS.md#public-files-and-lab-files) |
+| Generic scene and assets | 55 | `sim__quick_start`, `sim__stage__info`, `sim__graph__build`, `assets__import_path` | Any robot. Kit with `sim-tools` (eight asset tools run on the host) |
+| UR5e digital twin | 23 | `ur5e_dt__quick_start`, `ur5e_dt__add_objects` | RISE lab's twin, Kaleb's work with that robot. Kit with `ur5e-dt`; [some need lab files](docs/ASSETS.md#public-files-and-lab-files) |
 | Isaac Lab | 12 | `isaaclab__train`, `isaaclab__metrics_summary` | An Isaac Lab install for job tools |
 | Host gateway and desktop | 12 | `refresh_tools`, `screenshot`, `tile_windows` | A display for the desktop tools |
 | Bridge built-ins | 7 | `status`, `run_python`, `put_file` | Any Kit with the bridge |
 | Optional: desktop input, managed sessions | 9 | `window_click`, `sim__launch` | Explicit opt-in |
 
-A client lists **102 tools** by default, or **111** with both optional groups.
+A client lists **109 tools** by default, or **118** with both optional groups.
 [Filters and tiers](AGENTS.md#what-you-can-reach-by-tier) explain any other number.
 
 > [!NOTE]
@@ -81,6 +81,7 @@ git clone https://github.com/kalebcoleman/isaac-mcp.git
 cd isaac-mcp
 python3 scripts/isaac_env.py find     # check this lists your Isaac Sim first
 ./install.sh --no-sim --claude-code   # omit --claude-code to skip client registration
+export PATH="$HOME/.local/bin:$PATH"  # so this shell finds isaac-mcp; add it to your shell profile
 ```
 
 If `find` shows nothing, export `ISAAC_MCP_PYTHON=/path/to/python` or `ISAACSIM_PATH=/path/to/isaac-sim` and run it again.
@@ -130,22 +131,46 @@ python3 mcp/isaac_mcp/client.py status --port 8766
 
 ### 4. Try a scene
 
-Ask your agent to call `ur5e_dt__quick_start`. It builds a working scene from public files: NVIDIA's UR5e, a ground plane, a
-camera and a running simulation, with nothing to supply. To keep working offline, download those files once:
+Ask your agent to call `sim__quick_start`. It needs nothing from you and builds a ground plane, physics scene, lights and a
+camera aimed at the scene. Its result has the new `session_id` and `stage_id`, the paths and the next steps. Other generic
+tools work from there, with any robot. Most of them that touch the scene take those two IDs, which stop a call landing on the
+wrong stage. For example, to drop a cube on the ground, stop the timeline if it's playing, then call `sim__prim__create` with:
+
+```json
+{"session_id": "<from the result>", "stage_id": "<from the result>",
+ "path": "/World/Cube", "kind": "Cube", "size": 0.2, "rigid": true, "position": [0, 0, 1]}
+```
+
+Lost the IDs? `sim__stage__info` returns them. [Every tool's arguments](docs/TOOLS-ARGUMENTS.md) are generated from the code.
+
+To add a robot, pass `robot="ur5e"` for NVIDIA's public UR5e. If you already have a scene, it refuses with `UNSAVED_CHANGES`
+rather than lose it: save first, or add `discard_changes=true`. It uses your local copy first, then NVIDIA's URL. You can also
+pass `<pack>/<file.usd>` from an [asset pack](docs/ASSETS.md), or a path under an approved root. The result reports the
+articulation root that the joint tools need, and where each file came from. `ros=true` also sets up ROS 2 TF and joint states.
+
+**If you have a UR5e:** the same call is almost plug and play. Play, then use `sim__joints__state`, `sim__joints__command`,
+`sim__simulation__step`, `sim__ros2__tf_setup` and `sim__camera__capture` on it, with no twin tool involved.
+It starts at all joints zero, stretched out low to the ground. That can look collapsed, but it is the expected pose.
+
+### 5. The RISE lab UR5e digital twin
+
+The `ur5e_dt__*` tools are Kaleb's work with RISE lab's UR5e: a digital twin that mirrors a real robot over ROS 2, with its
+gripper, bench and object tools. `ur5e_dt__quick_start` builds that twin's scene from public files and starts it running. To
+keep working offline, download those files once:
 
 ```bash
 python3 scripts/fetch_ur5e_assets.py          # about 26 MB; applicable asset terms apply
 python3 scripts/fetch_ur5e_assets.py --check
 ```
 
-**Your own assets always win.** Each user has one asset folder, `isaac-mcp-assets` next to the checkout, with a subfolder per project.
+**Your own assets always win.** Each user has an asset folder, by default `isaac-mcp-assets` next to the checkout, with a subfolder per project.
 A file there is used instead of the online copy and is not replaced by a download, so a lab-modified robot stays yours.
-Quick Start's result says which file each part came from. See [Assets](docs/ASSETS.md).
+Both quick starts report which file each part came from. See [Assets](docs/ASSETS.md).
 
 > [!NOTE]
-> The RG2 gripper, Vention bench and FMB objects belong to the lab twin this project grew from. Those tools remain, but they need
-> [your own lab files](docs/ASSETS.md#public-files-and-lab-files), which cannot be hosted. Without them Quick Start skips the gripper
-> and the bench becomes a placeholder.
+> The RG2 gripper, Vention bench and FMB objects belong to the lab twin. Those tools remain, but they need
+> [your own lab files](docs/ASSETS.md#public-files-and-lab-files), which cannot be hosted. Without them Quick Start skips the gripper,
+> and the workstation tools build a placeholder bench.
 
 ## Where to go next
 

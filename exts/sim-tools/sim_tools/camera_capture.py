@@ -6,6 +6,7 @@ Only public Kit APIs are used. No CUDA pointer access or orchestrator stepping.
 """
 
 import asyncio
+from contextlib import asynccontextmanager
 import copy
 from dataclasses import dataclass
 import time
@@ -21,6 +22,41 @@ class CameraFrame:
 
     data: object
     fresh: bool
+
+
+VIEWPORT_GRID_SETTING = "/app/viewport/grid/enabled"
+
+
+# A frame drawn before the setting changed can still be the one read back.
+GRID_SETTLE_FRAMES = 12
+
+
+@asynccontextmanager
+async def without_viewport_grid(playing, next_update=None):
+    """Leave Kit's grid and axis lines out of a stopped-timeline capture, then restore the setting.
+
+    The legacy viewport gizmos draw them into every render product, including ours, unless the timeline is playing.
+    The setting is process-wide with no per-product form, so a window's grid is hidden during the capture too. It is
+    not persistent. Nothing changes when it is already off, absent (a build without it) or the timeline is playing.
+    """
+    settings = None
+    if not playing:
+        try:
+            import carb.settings
+
+            settings = carb.settings.get_settings()
+        except ImportError:
+            pass
+    if settings is None or settings.get(VIEWPORT_GRID_SETTING) is not True:
+        yield
+        return
+    settings.set(VIEWPORT_GRID_SETTING, False)
+    try:
+        for _ in range(GRID_SETTLE_FRAMES):
+            await next_update()
+        yield
+    finally:
+        settings.set(VIEWPORT_GRID_SETTING, True)
 
 
 def invalidate(sensor):

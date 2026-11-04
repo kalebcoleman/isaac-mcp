@@ -7,7 +7,7 @@ This page covers the host package and adding your own tools. For the project ove
 
 ## Install
 
-Install it as an editable tool, shared by every MCP client. Linux x86_64 only.
+Install it as an editable tool, shared by every MCP client. The simulator and desktop tools are Linux x86_64 only.
 
 ```bash
 # From the repository root:
@@ -168,7 +168,7 @@ with BridgeClient() as c:                            # persistent + reconnect
 python3 mcp/isaac_mcp/client.py <tool> ['{"json":"params"}'] [--port N]
 python3 mcp/isaac_mcp/client.py --list-bridges      # what's running
 # Or `python -m isaac_mcp.client ...` from an environment with the package installed.
-# exit codes: 0 success · 1 bridge answered with an error · 2 unreachable
+# exit codes: 0 success · 1 bridge answered with an error · 2 unreachable or bad usage
 ```
 
 With exactly one bridge running you need no port: the client discovers it

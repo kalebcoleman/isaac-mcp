@@ -7,12 +7,13 @@ These are real USD policy tests; the reopen itself is verified live.
 
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdRender
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdRender
 from isaac_mcp.project_assets import AssetError
 from sim_tools import render_export
 from sim_tools.core import Scene
@@ -136,21 +137,70 @@ def test_camera_producer_still_needs_explicit_resolution(camera, monkeypatch):
     for name in ("inputs:width", "inputs:height"):
         producer.RemoveProperty(name)
     add_product(stage, PRODUCT, "/World/Camera")
-    monkeypatch.setattr(render_export, "runtime_node_resolution", lambda s, p: pytest.fail("camera rule changed"))
-    with pytest.raises(AssetError, match="explicit integer width and height"):
+    monkeypatch.setattr(render_export, "runtime_node_resolution", lambda s, p: None)  # off-stage: nothing proves it
+    with pytest.raises(AssetError, match="explicit integer width and height.*inputs:width and inputs:height"):
         scene.save(stage, "camera.usda", reset_camera_render_handles=True)
 
 
-@pytest.mark.parametrize("reset", [False, True])
-def test_saved_lidar_handle_saves_with_a_warning_naming_the_fix(lidar, reset):
-    """A file opened outside sim__stage__open: refusing would lose unsaved work, so warn and leave it authored."""
+def test_saved_lidar_handle_saves_with_a_warning_naming_the_fix(lidar):
+    """A stale file without the flag: refusing would lose unsaved work, so warn and leave it authored."""
     scene, stage, _, _, checked = lidar
     add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
-    result = scene.save(stage, "stale.usda", reset_camera_render_handles=reset)
-    assert has_handle(result["file"], PRODUCT), "an authored handle is not normalized"
+    result = scene.save(stage, "stale.usda")
+    assert has_handle(result["file"], PRODUCT), "an authored handle is not normalized without the flag"
     assert result["omitted_runtime_render_properties"] == [] and not checked
     assert result["stale_render_handles"] == [PRODUCT]
-    assert "will not publish" in result["warnings"][0] and "sim__stage__open" in result["warnings"][0]
+    assert "will not publish" in result["warnings"][0] and "reset_camera_render_handles" in result["warnings"][0]
+
+
+def test_flag_drops_a_saved_lidar_handle_so_the_copy_is_clean(lidar):
+    """The rescue for a stale file. No texture exists for that handle, so there is no binding to validate."""
+    scene, stage, _, _, checked = lidar
+    add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
+    root = stage.GetRootLayer().ExportToString()
+    result = scene.save(stage, "rescued.usda", reset_camera_render_handles=True)
+    assert not has_handle(result["file"], PRODUCT)
+    assert result["omitted_runtime_render_properties"] == [PRODUCT + "." + HANDLE]
+    assert "warnings" not in result and not checked
+    assert stage.GetRootLayer().ExportToString() == root, "only the copy changes"
+
+
+def test_a_file_with_a_saved_pipeline_is_reported_with_the_rescue_not_deactivated(lidar):
+    _, stage, _, _, _ = lidar
+    add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
+    stage.DefinePrim(PRODUCT + "/PostRender/SDGPipeline", "OmniGraph")
+    repair = render_export.repair_stale_lidar_products(stage, set())
+    assert repair["deactivated"] == [] and "saved runtime pipeline" in repair["skipped"][0]["reason"]
+    assert "sim__stage__save" in repair["rescue"] and "reset_camera_render_handles=true" in repair["rescue"]
+    assert stage.GetPrimAtPath(PRODUCT).IsActive()
+
+
+def test_a_pipeline_kit_made_this_session_is_not_a_saved_one(lidar):
+    _, stage, _, _, _ = lidar
+    add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        stage.DefinePrim("/Render/PostProcess/SDGPipeline", "OmniGraph")
+    assert render_export.saved_runtime_pipeline(stage) == []
+    assert render_export.repair_stale_lidar_products(stage, set())["deactivated"] == [PRODUCT]
+
+
+def test_an_unproven_build_leaves_the_stage_alone_and_gives_the_rescue(lidar):
+    _, stage, _, _, _ = lidar
+    add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
+    repair = render_export.repair_stale_lidar_products(stage, set(), allowed=False)
+    assert repair["deactivated"] == [] and "not proven" in repair["skipped"][0]["reason"] and repair["rescue"]
+    assert stage.GetPrimAtPath(PRODUCT).IsActive()
+
+
+@pytest.mark.parametrize("version, proven", [("6.2.0", True), ("6.1.0", False), ("6.0.1", False), ("6.0.0", False), ("5.1.0", True)])
+def test_the_repair_is_applied_only_on_measured_builds(monkeypatch, version, proven):
+    from sim_tools.compat import stale_lidar_repair_proven
+
+    module = SimpleNamespace(get_version=lambda: (version, "", ""))
+    monkeypatch.setitem(sys.modules, "isaacsim", SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "isaacsim.core", SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "isaacsim.core.version", module)
+    assert stale_lidar_repair_proven() is proven
 
 
 def test_saved_camera_handle_still_refuses(camera):
@@ -232,9 +282,11 @@ def test_repair_skips_a_product_whose_handle_is_connected(lidar):
 
 
 def test_open_reports_a_repair_only_when_there_is_one(lidar, monkeypatch):
+    from sim_tools import compat
     from sim_tools.stage_open import _repair_saved_lidar_products as fields
 
     _, stage, _, _, _ = lidar
+    monkeypatch.setattr(compat, "stale_lidar_repair_proven", lambda: True)
     monkeypatch.setattr(render_export, "retained_product_paths", lambda: set())
     assert fields(stage) == {}
     add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
@@ -247,7 +299,7 @@ def test_open_never_fails_because_of_the_repair(lidar, monkeypatch):
 
     _, stage, _, _, _ = lidar
 
-    def broken(*args):
+    def broken(*args, **kwargs):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(render_export, "repair_stale_lidar_products", broken)
@@ -330,12 +382,13 @@ def test_owned_product_with_a_dependent_still_refuses(camera):
         scene.save(stage, "dependent.usda")
 
 
-def test_owned_product_sharing_a_camera_is_still_ambiguous(camera):
+def test_owned_product_sharing_a_camera_leaves_the_graph_product_needing_the_flag(camera):
     scene, stage, _ = camera
     add_product(stage, OWNED, "/World/Camera")
     add_product(stage, PRODUCT, "/World/Camera", handle=3)
-    with pytest.raises(AssetError, match="Multiple render products"):
-        scene.save(stage, "ambiguous.usda")
+    with pytest.raises(AssetError, match="cannot survive restart") as err:
+        scene.save(stage, "needs-flag.usda")
+    assert err.value.details["retry_with"] == {"reset_camera_render_handles": True}
 
 
 def test_owned_product_failed_binding_still_refuses(tmp_path):
@@ -445,3 +498,171 @@ def test_helper_status_ignores_a_deactivated_product(lidar):
     add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
     render_export.repair_stale_lidar_products(stage, set())
     assert render_export.helper_render_status(stage, helper, "", set(), False)["status"] == "no_product_yet"
+
+
+@pytest.mark.parametrize("entry, playing, flagged", [
+    (dict(status="texture_bound", writer_computes=0), True, True),
+    (dict(status="texture_bound", writer_computes=0), False, False),  # not expected to run yet
+    (dict(status="texture_bound", writer_computes=42), True, False),
+    (dict(status="texture_bound", writer_computes=None), True, False),  # no writer node to judge
+    (dict(status="no_texture", writer_computes=0), True, False),  # already has its own problem
+])
+def test_texture_bound_with_an_idle_writer_is_a_problem_only_while_playing(entry, playing, flagged):
+    problem = render_export.writer_problem(dict(entry, render_product=PRODUCT), playing)
+    assert bool(problem) is flagged
+    if flagged:
+        assert PRODUCT in problem and "sim__logs__tail" in problem
+
+
+# ---- Fleet 5: scenes that could not be saved at all
+
+
+def test_our_capture_product_does_not_make_the_graph_product_ambiguous(camera):
+    scene, stage, _ = camera
+    add_product(stage, PRODUCT, "/World/Camera")
+    add_product(stage, OWNED, "/World/Camera")
+    out = scene.save(stage, "captured.usda", reset_camera_render_handles=True)
+    assert out["omitted_runtime_render_properties"] == [PRODUCT + ".viewportHandle"]
+    assert not has_handle(out["file"], PRODUCT) and not Usd.Stage.Open(out["file"]).GetPrimAtPath(OWNED)
+
+
+def test_two_non_owned_products_are_still_ambiguous(camera):
+    scene, stage, _ = camera
+    add_product(stage, PRODUCT, "/World/Camera")
+    add_product(stage, PRODUCT + "_other", "/World/Camera")
+    with pytest.raises(AssetError, match="Multiple render products"):
+        scene.save(stage, "ambiguous.usda", reset_camera_render_handles=True)
+
+
+def test_two_producers_sharing_one_product_are_not_ambiguous(lidar):
+    scene, stage, producer, _, _ = lidar
+    add_product(stage, PRODUCT, "/World/Lidar2D")
+    add_graph(stage, "/World/Lidar2D", "isaacsim.ros2.bridge.ROS2RtxLidarHelper", graph="/Graph2")
+    out = scene.save(stage, "both.usda", reset_camera_render_handles=True)
+    assert out["omitted_runtime_render_properties"] == [PRODUCT + ".viewportHandle"]
+    assert not has_handle(out["file"], PRODUCT)
+
+
+def test_producers_that_disagree_about_a_shared_product_still_refuse(lidar):
+    # One sees it as a LiDAR product, the other as a camera product: not the same entry.
+    scene, stage, *_ = lidar
+    add_product(stage, PRODUCT, "/World/Lidar2D")
+    add_graph(stage, "/World/Lidar2D", "isaacsim.ros2.bridge.ROS2CameraHelper", graph="/Graph2")
+    with pytest.raises(AssetError, match="share the camera product ambiguously"):
+        scene.save(stage, "disagree.usda", reset_camera_render_handles=True)
+
+
+def test_camera_with_unauthored_resolution_uses_the_live_node_when_a_product_proves_it(camera, monkeypatch):
+    scene, stage, _ = camera
+    producer = stage.GetPrimAtPath("/Graph/rp")
+    for name in ("inputs:width", "inputs:height"):
+        producer.RemoveProperty(name)
+    add_product(stage, PRODUCT, "/World/Camera")
+    resolution = tuple(stage.GetPrimAtPath(PRODUCT).GetAttribute("resolution").Get())
+    monkeypatch.setattr(render_export, "runtime_node_resolution", lambda s, p: resolution)
+    out = scene.save(stage, "camera.usda", reset_camera_render_handles=True)
+    assert out["omitted_runtime_render_properties"] == [PRODUCT + ".viewportHandle"]
+
+
+def test_ros_domain_note_only_for_a_fixed_domain_that_differs():
+    from sim_tools.graph import _ros_domain_note
+
+    def node(domain, use_env):
+        return dict(type="isaacsim.ros2.bridge.ROS2Context", path="/G/ctx", inputs={
+            "inputs:domain_id": dict(value=domain), "inputs:useDomainIDEnvVar": dict(value=use_env)})
+
+    note = _ros_domain_note([node(0, False)], {"ROS_DOMAIN_ID": "81"})["ros_domain_note"]
+    assert note["authored_domains"] == {"/G/ctx": 0} and note["ros_domain_id"] == "81"
+    assert _ros_domain_note([node(81, False)], {"ROS_DOMAIN_ID": "81"}) == {}
+    assert _ros_domain_note([node(0, True)], {"ROS_DOMAIN_ID": "81"}) == {}
+    assert _ros_domain_note([dict(type="other", path="/x", inputs={})], {}) == {}
+
+
+def test_save_explains_a_large_flattened_file(tmp_path, monkeypatch):
+    from sim_tools import core
+
+    scene = core.Scene(lambda: stage, SimpleNamespace(is_playing=lambda: False), output=tmp_path)
+    stage = Usd.Stage.CreateInMemory()
+    monkeypatch.setattr(core, "LARGE_SAVE_BYTES", 10)
+    big = scene.save(stage, "big.usda", directory=None)
+    assert "flattened" in big["size_note"] and "MB" in big["size_note"]
+    monkeypatch.setattr(core, "LARGE_SAVE_BYTES", 10**9)
+    assert "size_note" not in scene.save(stage, "small.usda", directory=None)
+
+
+def test_save_size_note_names_the_size():
+    from sim_tools.core import flattened_size_note
+
+    assert "359 MB" in flattened_size_note(359 * 1024 * 1024)
+
+
+# ---- Fleet 10
+
+
+def _occupancy_world(monkeypatch, tmp_path, hits):
+    """occupancy_map with Kit's generator returning an all-free buffer and PhysX reporting *hits*."""
+    from sim_tools import graph
+
+    scene = SimpleNamespace(output=tmp_path)
+    plan = dict(lo=(-1.0, -1.0), hi=(1.0, 1.0), z=(0.2, 0.8), cell=0.5, start=(0.0, 0.0), base="m", clear=[],
+                pgm_path=tmp_path / "m.pgm", yaml_path=tmp_path / "m.yaml")
+    monkeypatch.setattr(graph, "validate_occupancy", lambda *a: plan)
+    monkeypatch.setattr(graph, "_enable", lambda name: True)
+    monkeypatch.setattr(graph, "_start_in_collider", lambda *a: False)
+    interface = SimpleNamespace(
+        set_cell_size=lambda *a: None, set_transform=lambda *a: None, update=lambda: None, generate=lambda: None,
+        get_dimensions=lambda: SimpleNamespace(x=4, y=4), get_buffer=lambda: [0.0] * 16,
+        get_min_bound=lambda: (-1.0, -1.0))
+    _omap = SimpleNamespace(acquire_omap_interface=lambda: interface, release_omap_interface=lambda om: None)
+    bindings = SimpleNamespace(_omap=_omap)
+    for name in ("isaacsim", "isaacsim.asset", "isaacsim.asset.gen", "isaacsim.asset.gen.omap"):
+        monkeypatch.setitem(sys.modules, name, SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "isaacsim.asset.gen.omap.bindings", bindings)
+    query = SimpleNamespace(overlap_box=lambda half, center, rot, report, any_hit: [
+        report(SimpleNamespace(collision=hit, rigid_body="")) for hit in hits])
+    physx = SimpleNamespace(get_physx_scene_query_interface=lambda: query)
+    monkeypatch.setitem(sys.modules, "omni", SimpleNamespace(physx=physx))
+    monkeypatch.setitem(sys.modules, "omni.physx", physx)
+    stage = Usd.Stage.CreateInMemory()
+    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+    return graph, scene, stage
+
+
+def test_an_all_free_map_with_colliders_in_the_volume_is_refused_and_writes_nothing(monkeypatch, tmp_path):
+    graph, scene, stage = _occupancy_world(monkeypatch, tmp_path, ["/World/Wall"])
+    with pytest.raises(AssetError, match="/World/Wall") as err:
+        graph.occupancy_map(scene, stage, {})
+    assert err.value.code == "MAP_NO_OBSTACLES" and err.value.details["colliders"] == ["/World/Wall"]
+    assert not (tmp_path / "m.pgm").exists() and not (tmp_path / "m.yaml").exists()
+
+
+def test_an_all_free_map_with_nothing_in_the_volume_still_succeeds_with_its_warning(monkeypatch, tmp_path):
+    graph, scene, stage = _occupancy_world(monkeypatch, tmp_path, [])
+    result = graph.occupancy_map(scene, stage, {})
+    assert (tmp_path / "m.pgm").exists() and "No occupied cells" in result["warning"]
+
+
+def test_a_saved_pipeline_alone_is_reported_with_the_rescue(lidar):
+    from sim_tools.stage_open import _repair_saved_lidar_products as fields
+
+    _, stage, _, _, _ = lidar
+    stage.DefinePrim("/Render/PostProcess/SDGPipeline", "OmniGraph")
+    stale = fields(stage)["stale_render_products"]
+    assert stale["saved_runtime_pipeline"] == ["/Render/PostProcess/SDGPipeline"] and stale["rescue"]
+
+
+def test_the_flag_still_refuses_a_saved_lidar_handle_something_depends_on(lidar):
+    scene, stage, _, _, _ = lidar
+    add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
+    user = stage.DefinePrim("/World/User")
+    user.CreateAttribute("inputs:handle", Sdf.ValueTypeNames.Int).SetConnections([Sdf.Path(PRODUCT + "." + HANDLE)])
+    with pytest.raises(AssetError, match="depends on a camera runtime handle"):
+        scene.save(stage, "dependent.usda", reset_camera_render_handles=True)
+
+
+def test_the_flag_refuses_an_animated_saved_lidar_handle(lidar):
+    scene, stage, _, _, _ = lidar
+    product = add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
+    product.GetAttribute(HANDLE).Set(3, 1.0)
+    with pytest.raises(AssetError, match="connected, animated"):
+        scene.save(stage, "animated.usda", reset_camera_render_handles=True)

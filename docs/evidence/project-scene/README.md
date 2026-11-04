@@ -36,7 +36,7 @@ in both modes on exact `2c8ce63`. Generic scripted checks completed, but the twi
 workflow lost Kit; a separate fresh control stalled during room loading. Private
 pause/thread controls did not establish a remedy. The index preserves those
 distinctions and six later real-MCP error-envelope checks on `826b84b`, which fix
-host reporting only. [Failure details](FINAL-VALIDATION.md#newton-60001-failures-and-separate-host-error-reporting)
+host reporting only. [Failure details](FINAL-VALIDATION.md#newton-6001-failures-and-separate-host-error-reporting)
 and the draft bundle exclude raw crash dumps and environment metadata.
 
 The [6.0.1 Newton state/rendering supplement](RECENT-NEWTON-601-STATE-20261102.json)

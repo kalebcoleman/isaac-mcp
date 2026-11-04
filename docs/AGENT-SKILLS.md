@@ -21,6 +21,20 @@ and when to stop and ask.
 The skill only helps if the client also has the MCP server configured; see
 [client configuration](MCP-SERVER.md#4-client-configuration).
 
+## What each layer is for
+
+An agent learns this project from four layers. Put new text in the first one that fits its reader.
+
+| Layer | Loaded | Holds | Keep it |
+|---|---|---|---|
+| Tool listing (names, descriptions, parameter descriptions, hints) | Always, in every client | What a tool does, when to use it, what to call first, safety warnings and trust limits | Short: 600 characters per tool and 450 per parameter, enforced by `mcp/tests/test_tool_listing.py` |
+| Server instructions (`SERVER_INSTRUCTIONS` in `server.py`) | Always, in clients that show them | Which tool to start with, what is universal and what is one lab's twin, how to find a bridge | A few sentences |
+| This skill | When a task matches, where the client supports skills | Order of calls, decisions, when to stop and ask, lessons from real runs | A decision path first; detail in `references/` |
+| `docs/` | When someone opens them | Everything else: limits, refusal codes, per-tool reference, evidence | Complete |
+
+A weak model that reads only the listing should still reach a working result; the other layers save it
+calls and mistakes.
+
 ## Where each client finds it
 
 Inside this repository nothing needs installing: start the agent in the checkout.

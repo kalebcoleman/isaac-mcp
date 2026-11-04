@@ -97,3 +97,30 @@ def lidar_config_registry():
         from isaacsim.sensors.rtx.impl.supported_lidar_configs import SUPPORTED_LIDAR_CONFIGS
     return SUPPORTED_LIDAR_CONFIGS
 
+
+# Builds where deactivating a stale LiDAR product (in a file with no saved runtime pipeline) brought its topic back.
+# The one exception to detecting from the API: a working repair cannot be read from one, so this lists what was measured.
+# Others get a report and the save-and-reopen rescue.
+STALE_LIDAR_REPAIR_PROVEN = ("6.2.", "5.1.")
+
+
+def stale_lidar_repair_proven():
+    """True on a build where the session-layer repair of a stale LiDAR product was measured to work."""
+    try:
+        from isaacsim.core.version import get_version
+
+        return str(get_version()[0]).startswith(STALE_LIDAR_REPAIR_PROVEN)
+    except (ImportError, IndexError, OSError):
+        return False
+
+
+def metadata_keys():
+    """OmniGraph's MetadataKeys: 6.2 moved it to omni.graph.tools.ogn and warns on the old name."""
+    try:
+        from omni.graph.tools.ogn import MetadataKeys
+
+        return MetadataKeys
+    except (ImportError, AttributeError):
+        import omni.graph.core as og
+
+        return og.MetadataKeys

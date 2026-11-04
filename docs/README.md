@@ -77,8 +77,8 @@ time and are not rewritten later, so paths, counts and versions in them can be o
 ## Scripts
 
 Run these from the checkout root. **Disposable** means the script changes the stage, so point it at a session you can throw
-away. Scripts that import `mcp` need `uv run --isolated --project mcp --python 3.12 python scripts/<name>`;
-a plain `python3` will not find it.
+away. Scripts that import `mcp` need `uv run --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>`
+(`scene-test` adds the `pxr` and `numpy` the scene validators import); a plain `python3` will not find them.
 
 | Purpose | Scripts |
 |---|---|

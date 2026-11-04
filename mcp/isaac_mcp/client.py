@@ -479,7 +479,7 @@ def main(argv=None) -> int:
         description="Call one tool on the isaac.mcp.bridge bridge. "
                     "Exit codes: 0 success, 1 bridge error, 2 unreachable/usage.")
     parser.add_argument("tool", nargs="?",
-                        help="canonical tool name, e.g. list_tools or arm.play_scene")
+                        help="canonical tool name, e.g. list_tools or sim.stage.info")
     parser.add_argument("--list-bridges", action="store_true",
                         help="list running bridges advertised in the runtime dir")
     parser.add_argument("params", nargs="?", default="{}",

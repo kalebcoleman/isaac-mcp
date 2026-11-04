@@ -42,6 +42,34 @@ exposes only `robot_demo.*` — no `run_python` — for agents that should stay 
 stable API. `run_python` is the operator's escape hatch and how tools are
 prototyped; registered tools are what agents rely on.
 
+## A project's own tools
+
+Agents otherwise reach a project's state through `run_python`, which means guessing its internals and writing Python on
+each call. Give them tools instead: typed arguments, one place for the rules, and they keep working with
+`ISAAC_MCP_BUILTINS=0`. `mcp/examples/demo_tools` is a working example: `demo.project_state` reads a connection state and
+thresholds, and `demo.set_threshold` validates and sets one, refusing with `ToolError` outside its range.
+
+```python
+MCP_NAMESPACE = "demo"
+DOORWAY_ADMISSION = 1
+THRESHOLD_RANGES = {"grip_force_n": (0.0, 40.0), "contact_distance_m": (0.0, 0.05)}
+
+def register(registrar):
+    @registrar.tool("Read this demo project's connection state and thresholds.", {})
+    def project_state():
+        from . import _state
+        return {"connection": _state.connection, "thresholds": dict(_state.thresholds)}
+```
+
+Live values go in the `_state.py` submodule, so they survive `reload_tools`. Load it when Kit starts:
+
+```bash
+ISAAC_MCP_TOOL_PATHS=<project> ISAAC_MCP_TOOL_MODULES=demo_tools ./run.sh --headless --port 18800
+```
+
+Then call `refresh_tools`. The tools appear as `demo__project_state` and `demo__set_threshold`, and `status` lists the
+`demo` namespace. For your project, change the namespace and keep the same shape.
+
 ## Hot reload
 
 Edit tool code, then (via any client): `reload_tools {"module": "myproj_tools"}`

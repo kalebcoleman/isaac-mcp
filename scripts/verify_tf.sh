@@ -9,7 +9,8 @@ export ROS_DISTRO="${ROS_DISTRO:-humble}" RMW_IMPLEMENTATION=rmw_cyclonedds_cpp 
 # Canonical DDS settings (localhost-only + Cyclone profile) so the sim and tf_capture.py discover each other.
 . "$ROOT/config/ros_dds.env"
 SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))')"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SITE/exts/isaacsim.ros2.core/$ROS_DISTRO/lib"
+. "$ROOT/scripts/isaac_ros_libs.sh"
+ROS_LIB="$(isaac_ros_lib_dir "$SITE" "$ROS_DISTRO")" && export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROS_LIB"
 mkdir -p "$OUT"; LOG="$OUT/verify_tf_app.log"
 "$PY" "$ROOT/scripts/run_ur5e_dt.py" --ext-folder "$ROOT/exts" --enable isaac.mcp.bridge --enable ur5e-dt --enable isaacsim.ros2.bridge > "$LOG" 2>&1 &
 APP=$!

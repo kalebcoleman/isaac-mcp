@@ -302,3 +302,29 @@ def test_a_policy_that_cannot_install_FAILS_THE_LOAD(bridge, tool_dir):
     assert bridge.pre_dispatch_hooks() == 0
     # And the tools go with it: a half-loaded package must not leave callable tools behind.
     assert asyncio.run(bridge.dispatch("badpol.do_a_thing", {}))["status"] == "error"
+
+
+def test_demo_tools_example_serves_a_project_state_through_the_bridge(bridge, monkeypatch):
+    """The documented example of a project shipping its own tools (mcp/docs/tool-authoring.md)."""
+    from pathlib import Path
+
+    from isaac_mcp_bridge.protocol import ToolError
+
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "examples"))
+    for name in [m for m in sys.modules if m.startswith("demo_tools")]:
+        monkeypatch.delitem(sys.modules, name)
+    load_tool_modules(bridge, modules=["demo_tools"], paths=[])
+    tools = bridge.get_registered_tools()
+    assert {"demo.project_state", "demo.set_threshold"} <= set(tools)
+    handler = {t.canonical_name: t.definition.handler for t in bridge._tools.values()}
+    assert handler["demo.project_state"]()["connection"] == "disconnected"
+    assert handler["demo.set_threshold"](name="grip_force_n", value=12.5) == {"name": "grip_force_n", "value": 12.5}
+    assert handler["demo.project_state"]()["thresholds"]["grip_force_n"] == 12.5
+    with pytest.raises(ToolError, match="between"):
+        handler["demo.set_threshold"](name="grip_force_n", value=99)
+    with pytest.raises(ToolError, match="unknown threshold"):
+        handler["demo.set_threshold"](name="nope", value=1)
+    reload_tool_module(bridge, "demo_tools")
+    assert handler["demo.project_state"]()["thresholds"]["grip_force_n"] == 12.5  # _state survived
+    for name in [m for m in sys.modules if m.startswith("demo_tools")]:
+        sys.modules.pop(name, None)

@@ -8,10 +8,11 @@ import omni.ext
 import omni.usd
 import omni.timeline
 from isaac_mcp_bridge import get_mcp_bridge, ToolDefinition
-from isaac_mcp.scene_contracts import REGISTRY
+from isaac_mcp.scene_contracts import HOST_ONLY, REGISTRY
 from isaac_mcp.project_assets import AssetError
 from .core import STAGE_TOOLS, TIMELINE_TOOLS, Scene, attribute_change, bounded, facts, stop_call
 from .render_export import validate_native_binding
+from .reload import draining, register_when_free
 
 # Reads that do not depend on the stage: no session/stage target, and they keep working right when
 # a target has just gone stale (the log is how a stale target gets explained).
@@ -74,35 +75,95 @@ class Extension(omni.ext.IExt):
             )
             carb.settings.get_settings().set("/app/omni.graph.scriptnode/opt_in", True)
         self.bridge = get_mcp_bridge()
-        for namespace in ("sim", "assets"):
-            registrar = self.bridge.register_owner(
-                "generic-" + namespace, namespace, display_name="Generic " + namespace
+        self._pending_registration = None
+        self._note_reload()
+        if draining(self.bridge):
+            # A tool call from before this reload is still running. It needs this event loop to
+            # finish, so wait for it in the background instead of failing startup.
+            self._pending_registration = asyncio.ensure_future(
+                register_when_free(self.bridge, self._register_tools, self._report_reload)
             )
-            for canonical, meta in REGISTRY.items():
-                ns, name = canonical.split(".", 1)
-                if ns == namespace and canonical not in (
-                    "assets.roots",
-                    "assets.scan",
-                    "assets.search",
-                ):
-                    registrar.add(
-                        ToolDefinition(
-                            name=name,
-                            description=meta["description"],
-                            parameters=meta["parameters"],
-                            handler=self.handler(canonical),
+        else:
+            self._register_tools()
+
+    def _register_tools(self):
+        registered = []
+        try:
+            for namespace in ("sim", "assets"):
+                registrar = self.bridge.register_owner(
+                    "generic-" + namespace, namespace, display_name="Generic " + namespace
+                )
+                registered.append("generic-" + namespace)
+                for canonical, meta in REGISTRY.items():
+                    ns, name = canonical.split(".", 1)
+                    if ns == namespace and canonical not in HOST_ONLY:
+                        registrar.add(
+                            ToolDefinition(
+                                name=name,
+                                description=meta["description"],
+                                parameters=meta["parameters"],
+                                handler=self.handler(canonical),
+                            )
                         )
-                    )
+        except BaseException:
+            # Kit does not call on_shutdown after a failed startup: leave nothing half registered.
+            for owner in registered:
+                self.bridge.unregister_owner(owner)
+            raise
+
+    def _note_reload(self):
+        """Say that this extension restarted inside a running Kit. Diagnostics only."""
+        try:
+            import carb
+            from isaac_mcp_bridge.source_state import note_start
+
+            started = note_start("sim-tools")
+            self.scene.previous_sessions = list(started.get("session_ids", []))
+            if started["reload"]:
+                what = (f"sim-tools reloaded in this Kit process (reload {started['reload']}): a file in its folder "
+                        "changed, or it was toggled. New session_id; ownership and scene events from before were forgotten")
+                self.scene.record_event("extension", what, dict(origin="extension_reload", source="Kit extension manager"))
+                carb.log_warn(f"[sim-tools] {what}.")
+        except Exception as exc:  # noqa: BLE001
+            self._report_reload(f"could not record this start: {exc}", True)
+
+    def _report_reload(self, message, error):
+        """For the background registration task: the Kit log and sim.logs.tail."""
+        try:
+            import carb
+
+            self.scene.record_event("extension", message, dict(origin="extension_reload", source="sim-tools"))
+            (carb.log_error if error else carb.log_warn)(f"[sim-tools] {message}")
+        except Exception:  # noqa: BLE001 - diagnostics only
+            pass
 
     def on_shutdown(self):
-        self.follower.stop("extension shutdown")
+        # Every step runs even if an earlier one fails: an owner left registered would make the next
+        # start fail with "already registered".
+        import carb
+
+        def attempt(step, *args):
+            try:
+                step(*args)
+            except Exception as exc:  # noqa: BLE001
+                carb.log_error(f"[sim-tools] shutdown step failed: {exc}")
+
+        def remember_session():
+            from isaac_mcp_bridge.source_state import note_stop
+
+            note_stop("sim-tools", session_ids=(self.scene.previous_sessions + [self.scene.session_id])[-8:])
+
+        attempt(remember_session)
+        if getattr(self, "_pending_registration", None) is not None:
+            self._pending_registration.cancel()
+        attempt(self.follower.stop, "extension shutdown")
         self._timeline_events = None
-        self._runtime_edit_restorer.cancel()
+        attempt(self._runtime_edit_restorer.cancel)
         self._stage_events = None
-        self.advanced.close_sensors()
-        self.scene.close_stage()
+        attempt(self.advanced.close_sensors)
+        attempt(self.scene.close_stage)
         for namespace in ("sim", "assets"):
-            self.bridge.unregister_owner("generic-" + namespace)
+            attempt(self.bridge.unregister_owner, "generic-" + namespace)
 
     def _note_change(self, kind, what, certain, stage=None):
         """Report a stage/timeline change to the Kit log and sim.logs.tail. Diagnostics only: this
@@ -300,6 +361,8 @@ class Extension(omni.ext.IExt):
             )
         entry = self.advanced.sensors.get(args["path"])
         if entry is None or entry[0] != expected:
+            if entry is None and not s.stage().GetPrimAtPath(args["path"]).IsValid():
+                refuse("NOT_FOUND", f"No prim at {args['path']}. Check sim__stage__tree, or create it with sim__{expected}__create.")
             if entry is not None or not adopt:
                 refuse(
                     "NOT_OWNED",
@@ -327,7 +390,7 @@ class Extension(omni.ext.IExt):
         begin = time.monotonic()
         timeline_before = s.timeline.get_current_time()
         if expected == "camera":
-            from .camera_capture import CameraFrame, cached, capture
+            from .camera_capture import CameraFrame, cached, capture, without_viewport_grid
 
             def validate():
                 s.target(args["session_id"], args["stage_id"])
@@ -364,7 +427,8 @@ class Extension(omni.ext.IExt):
                 )
 
             if wait:
-                data, observation = await capture(entry[1], validate, context=context)
+                async with without_viewport_grid(s.timeline.is_playing(), omni.kit.app.get_app().next_update_async):
+                    data, observation = await capture(entry[1], validate, context=context)
             else:
                 data, observation = cached(entry[1], validate)
             observation.update(
@@ -453,6 +517,10 @@ class Extension(omni.ext.IExt):
                         from .stage_open import open_stage
 
                         result = await open_stage(self.scene, args)
+                    elif name == "sim.quick_start":
+                        from .quick_start import run as quick_start
+
+                        result = await quick_start(self, args)
                     elif name in ("sim.ui.find", "sim.ui.act"):
                         # Kit UI, not the stage: no session/stage target (the UI outlives stage changes).
                         from .ui import UIRefusal, act, find
@@ -520,8 +588,32 @@ class Extension(omni.ext.IExt):
 
         return run
 
+    def _asset_dependencies(self, paths):
+        """Closures for files this Kit may parse: under its approved roots or user stores.
+
+        Not project stores: a project file found from the working directory is not an approval."""
+        from isaac_mcp import assets
+        from isaac_mcp.project_assets import refuse
+        from isaac_mcp.usd_closure import closures, split_runtime
+
+        self.scene.broker.require_profile()
+        folders = [root for root, _ in self.scene.broker.roots.values()]
+        folders += assets.user_stores()
+        folders = [folder.resolve() for folder in folders]
+        if not isinstance(paths, list) or not 1 <= len(paths) <= 64:
+            refuse("LIMIT", "paths must list 1..64 USD files.")
+        for path in paths:
+            real = Path(str(path)).resolve()
+            if not any(real.is_relative_to(folder) for folder in folders):
+                refuse("ROOT_NOT_APPROVED", "This Kit's approved roots and user stores do not include: " + str(real))
+        import isaacsim
+
+        return dict(results=split_runtime(closures(paths), Path(isaacsim.__file__).parent.resolve()))
+
     def dispatch(self, name, a, *, camera_frame=None):
         s = self.scene
+        if name == "assets.dependencies":
+            return self._asset_dependencies(a["paths"])
         if name in TARGETLESS:
             a.pop("session_id", None)
             a.pop("stage_id", None)

@@ -23,7 +23,9 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Annotated, Callable, Iterable
+
+from pydantic import Field
 
 import mss
 from PIL import Image as PILImage
@@ -35,9 +37,18 @@ from mcp.server.fastmcp import FastMCP, Image
 
 from .local_tools import ADDITIVE, IDEMPOTENT_WRITE, READ_ONLY, ScopedTools
 
+_WindowTitle = Annotated[str | None, Field(description="Window title or WM class substring, from list_windows.")]
+_WindowId = Annotated[int | None, Field(description="Window id from list_windows.")]
+_ExpectedPid = Annotated[int | None, Field(description="Refuse unless the window belongs to this PID, from list_windows.")]
+_Monitor = Annotated[int | None, Field(description="1-based monitor index from screen_info; 0 means all monitors combined.")]
+
 DISPLAY = os.environ.get("DISPLAY") or ":0"
 os.environ.setdefault("DISPLAY", DISPLAY)
 
+MAX_WINDOW_WAIT_S = 600
+WINDOW_WAIT_POLL_S = 0.5
+MAX_LOG_MARKER_CHARS = 256
+LOG_MARKER_WARN_S = 30.0
 SHOT_DIR = Path.home() / "Pictures" / "screen-mcp"
 VIDEO_DIR = Path.home() / "Videos" / "screen-mcp"
 
@@ -71,10 +82,14 @@ class Recording:
     captured: int = 0  # distinct captures; frames - captured were repeated to keep real time
     warnings: list[str] = field(default_factory=list)
     warned: set = field(default_factory=set)
+    stopped_by: str | None = None  # why it ended by itself on request, e.g. a log marker
 
 
 _lock = threading.Lock()
 _current: Recording | None = None
+# A start_screen_recording(wait_for_window=...) whose window is not there yet, and how the last one ended.
+_window_wait: dict | None = None
+_window_wait_error: str | None = None
 _last: dict | None = None
 
 DEFAULT_MAX_WIDTH = 1920
@@ -332,6 +347,65 @@ def _record_loop(rec: Recording) -> None:
         rec.stop.set()
 
 
+def _log_marker_file_allowed(path: Path) -> bool:
+    """Only what this project's logs can be: a marker test tells the model whether a file holds a string,
+    so it must not reach arbitrary files. Managed session and Lab job logs, or Kit's own log folder."""
+    resolved = path.resolve()
+    if resolved.suffix != ".log":
+        return False
+    managed = (Path.home() / ".local/share/isaac-mcp").resolve()
+    parts = resolved.parts
+    return managed in resolved.parents or any(parts[i:i + 2] == ("logs", "Kit") for i in range(len(parts)))
+
+
+def _kit_log_file(port_provider: Callable[[], int | None] | None) -> Path | None:
+    """The log of the selected bridge's Kit, from sim.logs.tail; None until a bridge answers."""
+    from . import client
+
+    try:
+        answer = client.call("sim.logs.tail", {"limit": 1}, port=port_provider() if port_provider else None, timeout=5)
+        path = Path(str(answer.get("file") or ""))
+    except Exception:  # noqa: BLE001 - Kit may still be starting; the watcher asks again
+        return None
+    return path if path.is_absolute() and _log_marker_file_allowed(path) else None
+
+
+def _watch_log_marker(rec: Recording, marker: str, resolve: Callable[[], Path | None], poll_s: float = 0.25) -> None:
+    """Stop ``rec`` when ``marker`` appears in text added to the log after this watcher found it.
+
+    Reads at most 1 MiB per poll and keeps only enough to catch a marker split between reads. The
+    recording's max_seconds bounds how long this runs."""
+    needle = marker.encode("utf-8", "replace")
+    path, offset, carry = None, 0, b""
+    started = time.monotonic()
+    while not rec.stop.is_set():
+        try:
+            if path is None:
+                path = resolve()
+                if path is not None and path.exists():
+                    offset = path.stat().st_size
+                if path is None and time.monotonic() - started > LOG_MARKER_WARN_S and "log marker" not in rec.warned:
+                    rec.warned.add("log marker")
+                    rec.warnings.append(f"no Kit log found to watch for {marker!r} yet (no bridge answered "
+                                        "sim.logs.tail), so it could not stop this recording")
+                rec.stop.wait(poll_s if path is not None else 1.0)
+                continue
+            with path.open("rb") as log:
+                if log.seek(0, os.SEEK_END) < offset:  # replaced or truncated
+                    offset, carry = 0, b""
+                log.seek(offset)
+                chunk = log.read(1024 * 1024)
+            offset += len(chunk)
+            if needle in carry + chunk:
+                rec.stopped_by = f"log marker {marker!r} in {path}"
+                rec.stop.set()
+                return
+            carry = (carry + chunk)[-(len(needle) - 1):] if len(needle) > 1 else b""
+        except OSError:
+            pass  # not created yet, or rotated: keep trying
+        rec.stop.wait(poll_s)
+
+
 def _finish(rec: Recording) -> dict:
     try:
         rec.proc.wait(timeout=30)
@@ -374,6 +448,8 @@ def _finish(rec: Recording) -> dict:
         result[f"window_warning{'' if i == 0 else i + 1}"] = warning
     if rec.error:
         result["warning"] = rec.error
+    if rec.stopped_by:
+        result["stopped_by"] = rec.stopped_by
     if size == 0:
         result["error"] = "ffmpeg produced an empty file"
         if stderr:
@@ -560,9 +636,9 @@ def _match_window(query: str | None, window_id: int | None, require_unique: bool
         for win in windows:
             if win["id"] == window_id:
                 return win
-        raise ValueError(f"no visible window with id {window_id}")
+        raise ValueError(f"no visible window with id {window_id}; get a current id from list_windows")
     if not query:
-        raise ValueError("pass window (title substring) or window_id")
+        raise ValueError("pass window (title substring) or window_id, from list_windows")
     needle = query.lower()
     matches = [
         w for w in windows if needle in w["title"].lower() or needle in w["class"].lower()
@@ -710,7 +786,7 @@ def _bbox(monitor: int = 0) -> dict:
     with mss.MSS() as sct:
         monitors = sct.monitors
         if monitor < 0 or monitor >= len(monitors):
-            raise ValueError(f"monitor {monitor} out of range (0-{len(monitors) - 1})")
+            raise ValueError(f"monitor {monitor} out of range (0-{len(monitors) - 1}); see screen_info")
         m = monitors[monitor]
         return {
             "left": m["left"],
@@ -1271,8 +1347,9 @@ def register_screen_tools(
         return "\n".join(lines)
 
     @mcp.tool(annotations=READ_ONLY)
-    def list_windows(filter: str | None = None) -> str:
-        """List visible top-level windows. `filter` matches title or WM class.
+    def list_windows(filter: Annotated[str | None, Field(description="Keep windows whose title or WM class contains this.")] = None) -> str:
+        """List visible top-level windows with id, title, class, PID and size. Use it first to get the
+        window_id other window tools need.
 
         Privacy: window titles are returned to the model.
         """
@@ -1296,9 +1373,9 @@ def register_screen_tools(
         return "\n".join(lines)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
-    def raise_window(window: str | None = None, window_id: int | None = None,
-                     expected_pid: int | None = None) -> str:
-        """Activate a window and give it focus; expected_pid rejects an unexpected owner."""
+    def raise_window(window: _WindowTitle = None, window_id: _WindowId = None,
+                     expected_pid: _ExpectedPid = None) -> str:
+        """Activate a window and give it focus. Get its id from list_windows first."""
         # Share the input lock so activation cannot steal focus mid-action from another
         # cooperating server. Import lazily because desktop_input uses screen helpers.
         from .desktop_input import _action_lock
@@ -1332,16 +1409,15 @@ def register_screen_tools(
                 disp.close()
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
-    def move_window(x: int, y: int, width: int, height: int, window: str | None = None,
-                    window_id: int | None = None, expected_pid: int | None = None,
-                    frame: bool = False) -> str:
-        """Move and resize a window (pixels, top-left origin), e.g. to put Isaac Sim and RViz side
-        by side before a screen recording. By default x, y, width, height are the client area (the
-        window's content, what window captures record); frame=true places the outer frame including
-        the title bar instead. The window manager's frame offset (_NET_FRAME_EXTENTS) is accounted for.
-        Un-maximizes it first; returns the client and frame geometry actually applied and whether the
-        window manager clamped it. expected_pid rejects an unexpected owner. To lay out several
-        windows at once use tile_windows."""
+    def move_window(x: Annotated[int, Field(description="Left edge in pixels, from the screen's top-left.")],
+                    y: Annotated[int, Field(description="Top edge in pixels, from the screen's top-left.")],
+                    width: Annotated[int, Field(description="Width in pixels.")],
+                    height: Annotated[int, Field(description="Height in pixels.")],
+                    window: _WindowTitle = None, window_id: _WindowId = None, expected_pid: _ExpectedPid = None,
+                    frame: Annotated[bool, Field(description="true: place the outer frame with its title bar. Default: the client area that captures record.")] = False) -> str:
+        """Move and resize one window, e.g. to place Isaac Sim and RViz before a recording. Get its id
+        from list_windows; for several windows use tile_windows. Un-maximizes it first, and returns the
+        geometry applied and whether the window manager clamped it."""
         from .desktop_input import _action_lock
 
         if width < 100 or height < 100 or width > 16384 or height > 16384:
@@ -1357,14 +1433,13 @@ def register_screen_tools(
                 disp.close()
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
-    def tile_windows(window_ids: list[int], layout: str = "left_right", monitor: int | None = None,
-                     gap: int = 0) -> str:
-        """Tile 2-6 windows over a monitor's work area (the screen minus panels, _NET_WORKAREA), e.g.
-        Isaac Sim left and RViz 2 right for a demo video. layout: left_right (one row), top_bottom (one
-        column) or grid. Each window's outer frame (title bar included) fills its tile, so title bars
-        do not overlap. monitor: 1-based index from screen_info (default: the monitor holding the first
-        window). gap: pixels between tiles. Reports each window's final client geometry and whether
-        the window manager clamped it; record the result with start_screen_recording(window_ids=...)."""
+    def tile_windows(window_ids: Annotated[list[int], Field(description="2-6 window ids from list_windows.")],
+                     layout: Annotated[str, Field(description="left_right (one row), top_bottom (one column) or grid.")] = "left_right",
+                     monitor: Annotated[int | None, Field(description="1-based index from screen_info. Default: the monitor holding the first window.")] = None,
+                     gap: Annotated[int, Field(description="Pixels between tiles.")] = 0) -> str:
+        """Tile 2-6 windows over a monitor's work area, e.g. Isaac Sim left and RViz 2 right for a demo.
+        Get ids from list_windows. Reports each window's final geometry and whether the window manager
+        clamped it; then record them with start_screen_recording(window_ids=...)."""
         from .desktop_input import _action_lock
 
         if layout not in TILE_LAYOUTS:
@@ -1414,20 +1489,14 @@ def register_screen_tools(
 
     @mcp.tool(annotations=ADDITIVE)
     def screenshot(
-        monitor: int | None = None,
-        window: str | None = None,
-        window_id: int | None = None,
-        max_width: int = 1600,
+        monitor: _Monitor = None,
+        window: _WindowTitle = None,
+        window_id: _WindowId = None,
+        max_width: Annotated[int, Field(description="Inline image width cap in pixels, 320-3840. The saved PNG stays full size.")] = 1600,
     ):
-        """Capture the screen, one monitor, or a window. Returns the image and its PNG path.
-
-        With no arguments this captures the Isaac Sim window when one is open,
-        so the shot is just the sim; otherwise it captures the primary monitor.
-        Pass `window` (title/class substring) or `window_id` for another window,
-        `monitor=N` for one monitor, or `monitor=0` for all monitors combined.
-        A window capture reads that window's own pixels, so it works even when
-        another window covers it. The PNG on disk is full resolution; the inline
-        image is downscaled to max_width (default 1600).
+        """Capture the screen, a monitor or a window to see the result of your work. Returns the image
+        and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise
+        the primary monitor. A window capture works even when another window covers it.
 
         Privacy: the image (and any text visible in it) is sent to the model and saved on this machine.
         """
@@ -1481,41 +1550,88 @@ def register_screen_tools(
 
     @mcp.tool(annotations=ADDITIVE)
     def start_screen_recording(
-        monitor: int | None = None,
-        window: str | None = None,
-        window_id: int | None = None,
-        fps: int = 15,
-        max_width: int | None = None,
-        max_seconds: int = 600,
-        full_screen: bool | None = None,
-        window_ids: list[int] | None = None,
-        layout: str = "side_by_side",
+        monitor: _Monitor = None,
+        window: _WindowTitle = None,
+        window_id: _WindowId = None,
+        fps: Annotated[int, Field(description="Frames per second, clamped to 1-30. Frames repeat if capture falls behind.")] = 15,
+        max_width: Annotated[int | None, Field(description="Output width cap in pixels; never scales up. Default 1920.")] = None,
+        max_seconds: Annotated[int, Field(description="Stops by itself after this long, clamped to 5-3600 seconds.")] = 600,
+        full_screen: Annotated[bool | None, Field(description="true: letterbox into the primary monitor's shape. Default: the native capture size.")] = None,
+        window_ids: Annotated[list[int] | None, Field(description="2-6 window ids from list_windows, recorded in sync into one video.")] = None,
+        layout: Annotated[str, Field(description="With window_ids: side_by_side, top_bottom or grid.")] = "side_by_side",
+        wait_for_window: Annotated[float, Field(description="With window: seconds (max 600) to wait for a match. Returns at once, so launch the app next.")] = 0,
+        stop_on_log_marker: Annotated[str | None, Field(description="End when this text is added to the selected bridge's Kit log or stop_log_file.")] = None,
+        stop_log_file: Annotated[str | None, Field(description="A .log file in Kit's log folder or under ~/.local/share/isaac-mcp, for stop_on_log_marker.")] = None,
     ) -> str:
-        """Start a desktop MP4 recording. One at a time; stop it with stop_screen_recording.
+        """Start a desktop MP4 recording, e.g. for a demo; one at a time, no audio. Stop it with
+        stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window
+        if one is open. A window recording reads that window's own pixels, so it works when covered or
+        on a locked screen. Details: docs/TOOLS-HOST.md. For a clean viewport render of the UR5e twin,
+        use ur5e_dt__start_recording; to combine clips, join_videos.
 
-        With no arguments this records the Isaac Sim window when one is open,
-        so the video is just the sim and not the desktop. Otherwise pass
-        `window`/`window_id`, `monitor=N`, or `monitor=0` for all monitors.
-        A window recording reads that window's own pixels, so another window
-        covering it does not appear in the video, and it works while the
-        screen is locked. `window_ids=[a, b, ...]` (2-6 windows, e.g. Isaac Sim
-        and RViz 2) records them into ONE video, read from each window's own
-        pixels every frame, so they stay in sync: `layout` is side_by_side
-        (default), top_bottom or grid; aspect ratios are kept and cells padded.
-        Output size: the native capture size scaled down to `max_width`
-        (default 1920), never up. full_screen=true instead letterboxes into
-        the primary monitor's shape (also capped by max_width). A monitor
-        recording while the screen is locked is composed from the windows'
-        own pixels each frame instead of recording black. fps is clamped to
-        1-30, max_seconds to 5-3600 (default 600). If capturing falls behind
-        fps, frames are repeated so the video keeps real time. No audio. For a
-        clean Isaac Sim viewport render, use the Kit tool start_recording.
-        Join or stack finished clips with join_videos.
-
-        Privacy: the recording is saved on this machine; stop_screen_recording reports its path, and window
-        titles and pixels can reach the model through the other screen tools.
+        Privacy: the recording is saved on this machine; window titles and pixels can reach the model
+        through the other screen tools.
         """
-        global _current
+        global _current, _window_wait, _window_wait_error
+        marker_file = None
+        if stop_on_log_marker is not None:
+            if not isinstance(stop_on_log_marker, str) or not 1 <= len(stop_on_log_marker) <= MAX_LOG_MARKER_CHARS:
+                raise ValueError(f"stop_on_log_marker: 1..{MAX_LOG_MARKER_CHARS} characters")
+            if stop_log_file:
+                marker_file = Path(stop_log_file).expanduser()
+                if not marker_file.is_absolute() or not _log_marker_file_allowed(marker_file):
+                    raise ValueError("stop_log_file must be an absolute path to a .log in Kit's log folder (.../logs/Kit/...) "
+                                     "or under ~/.local/share/isaac-mcp")
+        elif stop_log_file:
+            raise ValueError("stop_log_file needs stop_on_log_marker")
+        wait_s = float(wait_for_window)
+        if not 0 <= wait_s <= MAX_WINDOW_WAIT_S:
+            raise ValueError(f"wait_for_window: 0..{MAX_WINDOW_WAIT_S} seconds")
+        if wait_s:
+            if not window or window_id is not None or monitor is not None or window_ids:
+                raise ValueError("wait_for_window needs window (a title substring) and no window_id, monitor or window_ids: "
+                                 "a window that does not exist yet has no ID")
+            try:
+                _match_window(window, None)
+            except ValueError:
+                with _lock:
+                    if _current is not None or _window_wait is not None:
+                        raise RuntimeError("a recording or a window wait is already active; call stop_screen_recording first")
+                    cancel = threading.Event()
+                    deadline = time.monotonic() + wait_s
+                    _window_wait = {"window": window, "cancel": cancel, "deadline": deadline}
+                    _window_wait_error = None
+                arguments = dict(window=window, fps=fps, max_width=max_width, max_seconds=max_seconds,
+                                 full_screen=full_screen, stop_on_log_marker=stop_on_log_marker,
+                                 stop_log_file=stop_log_file)
+
+                def wait_then_start() -> None:
+                    global _window_wait, _window_wait_error
+                    while not cancel.wait(WINDOW_WAIT_POLL_S):
+                        expired = time.monotonic() >= deadline
+                        try:
+                            _match_window(window, None)
+                        except Exception:  # noqa: BLE001 - not there yet, or the display hiccuped
+                            if not expired:
+                                continue
+                            _window_wait_error = f"no window matching {window!r} appeared within {wait_s:g} s; nothing was recorded"
+                            break
+                        with _lock:
+                            if cancel.is_set():
+                                return
+                            _window_wait = None
+                        try:
+                            start_screen_recording(**arguments)
+                        except Exception as exc:  # noqa: BLE001 - no caller left to raise to
+                            _window_wait_error = f"the window appeared but recording did not start: {exc}"
+                        return
+                    with _lock:
+                        if _window_wait is not None and _window_wait["cancel"] is cancel:
+                            _window_wait = None
+
+                threading.Thread(target=wait_then_start, daemon=True).start()
+                return (f"waiting up to {wait_s:g} s for a window matching {window!r}; recording starts when it appears. "
+                        "Check screen_recording_status; stop_screen_recording cancels the wait.")
         fps = max(1, min(int(fps), 30))
         max_seconds = max(5, min(int(max_seconds), 3600))
         max_width = max(320, min(int(max_width if max_width is not None else DEFAULT_MAX_WIDTH), 3840))
@@ -1535,6 +1651,9 @@ def register_screen_tools(
                     f"already recording to {_current.path}; "
                     "call stop_screen_recording first"
                 )
+            if _window_wait is not None:
+                raise RuntimeError(f"waiting for a window matching {_window_wait['window']!r}; "
+                                   "call stop_screen_recording first")
             target = None
             targets: list[dict] = []
             cells = None
@@ -1622,6 +1741,10 @@ def register_screen_tools(
             rec.thread = threading.Thread(target=_record_loop, args=(rec,), daemon=True)
             rec.thread.start()
             _current = rec
+            if stop_on_log_marker is not None:
+                threading.Thread(target=_watch_log_marker, args=(
+                    rec, stop_on_log_marker, (lambda: marker_file) if marker_file else (lambda: _kit_log_file(port_provider)),
+                ), daemon=True).start()
         if targets:
             source = f"{len(targets)} windows, {layout}: " + ", ".join(
                 f"{w['title']!r} (id={w['id']}, {w['width']}x{w['height']})" for w in targets)
@@ -1638,21 +1761,19 @@ def register_screen_tools(
             f"source: {source}\n"
             f"output: {output}\n"
             f"fps: {fps}, limit: {max_seconds}s. Call stop_screen_recording when done."
-        ) + (LOCKED_RECORD_NOTE if locked else "")
+        ) + (f"\nstops when the log gets: {stop_on_log_marker!r}" if stop_on_log_marker else "") + (
+            LOCKED_RECORD_NOTE if locked else "")
 
     @mcp.tool(annotations=ADDITIVE)
-    def join_videos(inputs: list[str], mode: str = "concat", output: str | None = None,
-                    max_width: int = DEFAULT_MAX_WIDTH, fps: int | None = None, shortest: bool = False) -> str:
-        """Join 2-8 video clips into one new MP4 with the bundled ffmpeg: mode=concat plays them one after
-        another (each scaled and padded to the first clip's size), hstack puts them side by side (scaled
-        to a common height), vstack stacks them top to bottom (common width). For a synchronized
-        side-by-side demo, prefer start_screen_recording(window_ids=[...]) over stacking separate clips.
-        inputs: absolute paths or file names in ~/Videos/screen-mcp; only files under your home folder
-        or that folder are read. output: a new file name (saved in ~/Videos/screen-mcp) or an absolute
-        path under home ending in .mp4; never overwrites (default joined-<time>.mp4). max_width (default
-        1920) caps the output width; fps defaults to the fastest input (max 60). With hstack/vstack a
-        shorter clip freezes on its last frame unless shortest=true ends the video with the shortest one.
-        Audio is dropped. Encoding is bounded to 15 minutes and the result to 1 hour of video.
+    def join_videos(inputs: Annotated[list[str], Field(description="2-8 absolute paths under home, or file names in ~/Videos/screen-mcp.")],
+                    mode: Annotated[str, Field(description="concat (one after another), hstack (side by side) or vstack (top to bottom).")] = "concat",
+                    output: Annotated[str | None, Field(description="New file name in ~/Videos/screen-mcp, or an absolute .mp4 path under home. Default joined-<time>.mp4.")] = None,
+                    max_width: Annotated[int, Field(description="Output width cap in pixels.")] = DEFAULT_MAX_WIDTH,
+                    fps: Annotated[int | None, Field(description="Output rate, at most 60. Default: the fastest input.")] = None,
+                    shortest: Annotated[bool, Field(description="hstack/vstack: end with the shortest clip instead of freezing it on its last frame.")] = False) -> str:
+        """Join 2-8 finished video clips into one new MP4 with the bundled ffmpeg, in order or stacked.
+        Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...).
+        Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour.
 
         Privacy: reads and writes video files on this machine only; returns paths and sizes.
         """
@@ -1732,9 +1853,14 @@ def register_screen_tools(
 
         Privacy: the MP4 stays on this machine; only its path, duration and size are returned.
         """
-        global _current, _last
+        global _current, _last, _window_wait
         with _lock:
             rec = _current
+            if rec is None and _window_wait is not None:
+                query = _window_wait["window"]
+                _window_wait["cancel"].set()
+                _window_wait = None
+                return f"cancelled the wait for a window matching {query!r}; nothing was recorded"
             if rec is None:
                 return "no screen recording is active"
             rec.stop.set()
@@ -1750,10 +1876,14 @@ def register_screen_tools(
         """Show whether a desktop recording is running and for how long."""
         with _lock:
             rec = _current
+            waiting = _window_wait
+        if waiting is not None:
+            return (f"waiting for a window matching {waiting['window']!r}, "
+                    f"{max(0.0, waiting['deadline'] - time.monotonic()):.0f} s left")
         if rec is None:
             return "no screen recording is active" + (
                 f"\nlast: {_last['path']} ({_last['duration_s']}s)" if _last else ""
-            )
+            ) + (f"\nlast window wait: {_window_wait_error}" if _window_wait_error else "")
         return (
             f"recording: {rec.path}\n"
             f"elapsed: {time.monotonic() - rec.started:.1f}s\n"
@@ -1761,4 +1891,4 @@ def register_screen_tools(
             f"region: {rec.bbox['width']}x{rec.bbox['height']}"
             f"+{rec.bbox['left']}+{rec.bbox['top']}\n"
             f"source: {_recording_source(rec)}"
-        )
+        ) + (f"\nstopped by: {rec.stopped_by}; call stop_screen_recording for the file" if rec.stopped_by else "")

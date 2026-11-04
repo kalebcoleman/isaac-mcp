@@ -133,7 +133,7 @@ For the equivalent read-only terminal check, use the repository's standard-libra
 # From checkout root; no Sim imports and no host-package installation needed for this CLI.
 python3 mcp/isaac_mcp/client.py --list-bridges
 # Set these to the intended endpoint from that listing, not an arbitrary visible window.
-BRIDGE_HOST=127.0.0.1
+BRIDGE_HOST=localhost
 BRIDGE_PORT=8766
 python3 mcp/isaac_mcp/client.py status --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
 python3 mcp/isaac_mcp/client.py sim.stage.info '{}' --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
@@ -179,6 +179,9 @@ A plain Python `import omni` failure outside Kit does not prove the installation
 Consult NVIDIA's version-specific [6.0 install guide](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/installation/install_python.html)
 or [6.0.1 guide](https://docs.isaacsim.omniverse.nvidia.com/6.0.1/installation/install_python.html)
 when obtaining older builds. **Do not run the root 6.2 sync in those environments.**
+Run their `uv pip install` from outside this checkout or with `--no-config`: inside it, `uv` applies the
+root `pyproject.toml`'s 6.2 overrides (`torch`, `numpy`, `packaging`), which caused false conflicts and a
+failing `uv pip check` on 6.0.0.1 and 6.1.0.0 until the environments were rebuilt.
 The [compatibility record](COMPATIBILITY.md) is authoritative for measured scope: later save,
 viewport and URDF follow-ups have superseded some early pending checks, while the original
 6.0.1 windowed native-step stall and remaining matrix gates remain open.
@@ -283,7 +286,7 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | `isaac-mcp` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
 | Interpreter missing | Run `python3 scripts/isaac_env.py find`, select a compatible `ISAAC_MCP_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
 | `uv pip check` fails | Record exact versions and conflicts. Use a new isolated locked environment for comparison; do not infer a native failure's cause from metadata alone |
-| 102 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
+| 109 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
@@ -291,7 +294,7 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | `Asset not available: objects/...` | Object tools need your lab files. See [public and lab files](ASSETS.md#public-files-and-lab-files) |
 | `fetch_ur5e_assets.py` exits 1 and lists files it kept | They differ from NVIDIA's. Run `isaac_assets.py pin` if the change is yours, or `--force` to replace them |
 | `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
-| `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK: `uv run --isolated --project mcp --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
+| `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
 | `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; for the twin that is `/World/UR5e/root_joint`. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
 | `./verify.sh` stops with `FAILED: checkpoint` | A pre-migration `checkpoints/*.usda` has dead references. Inspect it and move it aside. See [Verification](VERIFICATION.md#live-ur5e-baseline) |

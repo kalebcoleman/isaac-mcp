@@ -31,7 +31,7 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 +---------------------------------------v---------------------------------------+
 | Layer 3: Tool packs on the shared bridge                                      |
 | Generic scene tools (exts/sim-tools/), Extension ID: sim-tools                |
-| - Registers sim.* and assets.* tools (48), robot-agnostic                     |
+| - Registers sim.* and assets.* tools (55), robot-agnostic                     |
 | UR5e Digital Twin (exts/ur5e-dt/), Package: ur5e_dt, Extension ID: ur5e-dt    |
 | - Registers ur5e_dt.* tools (23)                                              |
 | - Builds and manages the workstation scene (UR5e, RG2 gripper, QuickChanger)  |
@@ -168,7 +168,7 @@ In Isaac Sim 6.2, transform publication was modernized to use the standard OmniG
 USD Stage Prims ──► IsaacComputeTransformTree ──► ROS2PublishTransformTree ──► /tf, /tf_cam, /objects_poses_sim
 ```
 
-This supersedes the deprecated 5.1 `targetPrims` pose-tree interface, which generates `[PoseTree] parent getObjectType eInvalid` warnings and fails to publish transforms reliably in 6.2.
+On 6.x builds that have the compute node, this replaces the deprecated `targetPrims` pose-tree interface. 5.1.0.0 and 6.0.0.0 don't have that node and use the older publisher. On 6.2 the older interface still published the whole tree in testing, but logs a deprecation warning.
 
 ### Frame Naming Preservation
 

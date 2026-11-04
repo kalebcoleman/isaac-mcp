@@ -332,7 +332,10 @@ def isaac_ros_env(env=None):
         roots = [Path(purelib) / "isaacsim"]
     distro = env.get("ROS_DISTRO") or ("humble" if "jammy" in Path("/etc/os-release").read_text(errors="replace")
                                         else "jazzy")
+    # The bundled ROS 2 is in isaacsim.ros2.core on 6.x and isaacsim.ros2.bridge on 5.1.
     base = roots[0] / "exts" / "isaacsim.ros2.core" / distro
+    if not (base / "rclpy").is_dir() and (roots[0] / "exts" / "isaacsim.ros2.bridge" / distro / "rclpy").is_dir():
+        base = roots[0] / "exts" / "isaacsim.ros2.bridge" / distro
     if not (base / "rclpy").is_dir():
         raise RuntimeError(f"Isaac Sim has no bundled ROS 2 {distro} at {base}")
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(base / "rclpy"), env.get("PYTHONPATH")]))

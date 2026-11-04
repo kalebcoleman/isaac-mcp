@@ -235,3 +235,11 @@ def test_stale_readme_row_is_reported():
     errors = []
     check_docs.check_readme_counts(errors, text=text)
     assert any("'UR5e digital twin' row" in error for error in errors)
+
+
+def test_generic_count_catches_a_stale_page_and_passes_the_real_ones():
+    errors = []
+    check_docs.check_generic_counts(errors)
+    assert errors == []
+    check_docs.check_generic_counts(errors, pages={"x.md": "the 54-tool pack and 40 generic tools"}, generic=55)
+    assert len(errors) == 2

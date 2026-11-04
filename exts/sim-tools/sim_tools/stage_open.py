@@ -11,7 +11,22 @@ from pathlib import Path
 SUFFIXES = (".usd", ".usda", ".usdc", ".usdz")
 
 
-def check_path(path, home=None):
+def _is_own_output(file, output_root):
+    """Inside this process's own output folder, where sim.stage.save writes by default. Resolved first, so a symlink
+    out of it or a sibling folder does not count. Not a shared folder, which someone else could have filled."""
+    if output_root is None:
+        return False
+    root = Path(output_root).resolve()
+    if root not in file.parents:
+        return False
+    try:
+        info = root.stat()
+    except OSError:
+        return False
+    return info.st_uid == os.getuid() and not info.st_mode & 0o002
+
+
+def check_path(path, home=None, output_root=None):
     """The resolved file to open, or (code, message) explaining why not."""
     if not isinstance(path, str) or not path:
         return None, ("INVALID_VALUE", "path: an absolute path to a .usd/.usda/.usdc/.usdz file.")
@@ -22,8 +37,9 @@ def check_path(path, home=None):
     if file.suffix.lower() not in SUFFIXES:
         return None, ("INVALID_VALUE", f"{file.name} is not a USD file ({', '.join(SUFFIXES)}).")
     home = Path(home or Path.home()).resolve()
-    if home not in file.parents:
-        return None, ("OUTSIDE_HOME", f"Only files under {home} can be opened with this tool.")
+    if home not in file.parents and not _is_own_output(file, output_root):
+        own = f" or this simulator's own output folder ({Path(output_root).resolve()})" if output_root is not None else ""
+        return None, ("OUTSIDE_HOME", f"Only files under {home}{own} can be opened with this tool.")
     if not file.is_file():
         return None, ("NOT_FOUND", f"{file} does not exist.")
     if not os.access(file, os.R_OK):
@@ -94,6 +110,12 @@ def file_stage_has_unsaved_work(stage):
         not layer.anonymous and layer_edited(layer) for layer in stage.GetLayerStack(includeSessionLayers=False))
 
 
+def stage_has_unsaved_work(stage):
+    """The rule sim.stage.open and sim.quick_start share."""
+    return unsaved_work(stage.GetRootLayer().anonymous, file_stage_has_unsaved_work(stage),
+                        [p.GetName() for p in stage.GetPseudoRoot().GetChildren()])
+
+
 async def open_stage(scene, args):
     """Open *path* after checking the current target, the timeline and unsaved edits."""
     import omni.kit.app
@@ -104,7 +126,7 @@ async def open_stage(scene, args):
         refuse("APP_STARTING", "Kit startup is still running. Wait until sim.stage.info reports app_ready=true; "
                "no stage was opened.")
     scene.target(args.get("session_id"), args.get("stage_id"))
-    file, problem = check_path(args.get("path"))
+    file, problem = check_path(args.get("path"), output_root=scene.output)
     if problem:
         refuse(*problem)
     if not scene.timeline.is_stopped():
@@ -115,8 +137,7 @@ async def open_stage(scene, args):
                before_retry=stop_call(args.get("session_id"), args.get("stage_id")))
     ctx = omni.usd.get_context()
     stage = ctx.get_stage()
-    dirty = bool(stage) and unsaved_work(stage.GetRootLayer().anonymous, file_stage_has_unsaved_work(stage),
-                                         [p.GetName() for p in stage.GetPseudoRoot().GetChildren()])
+    dirty = bool(stage) and stage_has_unsaved_work(stage)
     if dirty and not args.get("discard_changes", False):
         refuse("UNSAVED_CHANGES", "The current stage has unsaved edits. Save them first (sim__stage__save), or pass "
                "discard_changes=true to drop them.", source=stage.GetRootLayer().identifier)
@@ -127,6 +148,7 @@ async def open_stage(scene, args):
     for _ in range(10):  # let stage-open events reach the scene tools and the bridge sessions
         await app.next_update_async()
     stale = _repair_saved_lidar_products(ctx.get_stage())
+    loop = _joint_state_loop(ctx.get_stage())
     info = scene.stage_info()
     from .compat import composition_errors
 
@@ -140,22 +162,34 @@ async def open_stage(scene, args):
         composition_error_samples=[str(e)[:200] for e in errors[:3]],
         note="Use the new session_id and stage_id for later sim__* calls. run_python sessions were reset.",
         **stale,
+        **loop,
     )
 
 
+def _joint_state_loop(stage):
+    """Result fields for a saved publisher and subscriber on one joint state topic. Never fails the open."""
+    from .ros2 import joint_state_loop_report
+
+    try:
+        return joint_state_loop_report(stage)
+    except Exception as error:  # noqa: BLE001 - the stage is open; a diagnostic must not fail that
+        return dict(joint_state_loop_unchecked=str(error)[:200])
+
+
 def _repair_saved_lidar_products(stage):
-    """Result fields for stale saved LiDAR handles, repaired before the first Play. Never fails the open."""
+    """Result fields for stale saved LiDAR handles, repaired before the first Play where proven. Never fails the open."""
+    from .compat import stale_lidar_repair_proven
     from .render_export import repair_stale_lidar_products, retained_product_paths
 
     try:
-        repair = repair_stale_lidar_products(stage, retained_product_paths())
+        repair = repair_stale_lidar_products(stage, retained_product_paths(), allowed=stale_lidar_repair_proven())
     except Exception as error:  # noqa: BLE001 - the stage is open; report instead of failing
         return dict(stale_render_products=dict(deactivated=[], skipped=[dict(path="/", reason=str(error)[:200])]))
-    if not repair["deactivated"] and not repair["skipped"]:
+    if not repair["deactivated"] and not repair["skipped"] and not repair.get("rescue"):
         return {}
     return dict(stale_render_products=dict(
         **repair,
-        note="This file saved a LiDAR product's viewportHandle, which stops its ROS topic. Deactivated products use "
+        note="This file saved a LiDAR product's viewportHandle or Replicator's runtime pipeline, which stops its ROS topics. Deactivated products use "
              "the session layer only; the file is unchanged, and a new product is created at Play. Skipped ones "
-             "still will not publish if reused; sim__graph__inspect shows them.",
+             "still will not publish if reused; sim__graph__inspect shows them, and rescue says how to fix them if given.",
     ))

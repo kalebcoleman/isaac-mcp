@@ -18,7 +18,9 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Collection, Literal, Iterable, Mapping
+from typing import Annotated, Callable, Collection, Literal, Iterable, Mapping
+
+from pydantic import Field
 
 try:
     import fcntl
@@ -30,14 +32,19 @@ from mcp.server.fastmcp import FastMCP
 from . import client
 from .isaaclab import jobs as lab_jobs
 from .local_tools import PYTHON_EXECUTION, ScopedTools
+from .sim_versions import NEWTON_STACKS
 
 _SESSION_ID = re.compile(r"^[0-9a-f]{32}$")
+# An advertised bridge this server did not launch. Its ID is built from the listing, never stored.
+_EXTERNAL_ID = re.compile(r"^external-(\d+)-(\d+)$")
 _DEFAULT_ROOT = Path(__file__).resolve().parents[2]
 # Linux 6.9 added a pidfd signal scope for an entire process group. Older
 # kernels get a race-safe signal to the leader only.
 _PIDFD_SIGNAL_PROCESS_GROUP = 1 << 2
 # How far above a refused bridge port to look for a free one to suggest.
 _PORT_SEARCH_SPAN = 64
+# sim__list shows this many exited sessions by default, newest first.
+_RECENT_EXITED_LISTED = 3
 
 
 def _config_int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -241,6 +248,43 @@ def _domain_refusal(ros_domain: int, holder: str) -> ValueError:
                       "you choose.")
 
 
+def _configured_launcher(env: Mapping[str, str]) -> Path | None:
+    """The launcher named by ISAAC_MCP_SIM_LAUNCHER, or None for this repository's run.sh.
+
+    It comes only from the server's environment, which the MCP client configuration sets. A tool
+    argument or a project file could be written by the model (put_file has no path limits), and a
+    launcher is an arbitrary command. It is checked again before each launch. A launcher gets the
+    same arguments as run.sh and must exec Kit, so that the process it started is the bridge."""
+    value = (env.get("ISAAC_MCP_SIM_LAUNCHER") or "").strip()
+    if not value:
+        return None
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        raise RuntimeError(f"ISAAC_MCP_SIM_LAUNCHER must be an absolute path, not {value!r}")
+    try:
+        info = path.stat()
+    except OSError as exc:
+        raise RuntimeError(f"ISAAC_MCP_SIM_LAUNCHER {value!r} cannot be read: {exc}") from exc
+    if not path.is_file() or not os.access(path, os.X_OK):
+        raise RuntimeError(f"ISAAC_MCP_SIM_LAUNCHER {value!r} is not an executable file")
+    if info.st_uid not in (os.getuid(), 0) or info.st_mode & 0o022:
+        raise RuntimeError(f"ISAAC_MCP_SIM_LAUNCHER {value!r} must belong to you (or root) and not be "
+                           "writable by group or others")
+    return path
+
+
+def _interpreter_release(env: Mapping[str, str], root: Path) -> str | None:
+    """The Isaac Sim release of the interpreter run.sh will use, read from its package metadata without
+    running it. None when it cannot be told, e.g. when run.sh has to auto-detect or for a standalone install."""
+    named = env.get("ISAAC_MCP_PYTHON") or env.get("UR5E_DT_PYTHON")
+    python = Path(named).expanduser() if named else root / ".venv" / "bin" / "python"
+    for prefix in (python.parent.parent, python.resolve().parent.parent):
+        found = sorted(prefix.glob("lib/python3.*/site-packages/isaacsim-*.dist-info"))
+        if found:
+            return found[-1].name[len("isaacsim-"):-len(".dist-info")]
+    return None
+
+
 def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
             allow_shared_domain: bool, show_ur5e_panel: bool = False,
             enable_motion_bvh: bool = False, physics_backend: Literal["physx", "newton"] = "physx") -> dict:
@@ -252,10 +296,19 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
     # domain 232 those discovery ports extend beyond UDP's 65535 limit.
     if not 0 <= ros_domain <= 231:
         raise ValueError("ros_domain must be between 0 and 231 for the bundled Cyclone DDS profile")
-    root = Path(env.get("ISAAC_MCP_SIM_ROOT", str(_DEFAULT_ROOT))).expanduser().resolve()
-    launcher = root / "run.sh"
-    if not launcher.is_file() or not os.access(launcher, os.X_OK):
-        raise RuntimeError("Isaac Sim launcher not found; set ISAAC_MCP_SIM_ROOT to the repository root")
+    custom = _configured_launcher(env)
+    if custom is not None:
+        launcher, root = custom, custom.parent
+    else:
+        root = Path(env.get("ISAAC_MCP_SIM_ROOT", str(_DEFAULT_ROOT))).expanduser().resolve()
+        launcher = root / "run.sh"
+        if not launcher.is_file() or not os.access(launcher, os.X_OK):
+            raise RuntimeError("Isaac Sim launcher not found; set ISAAC_MCP_SIM_ROOT to the repository root")
+        release = _interpreter_release(env, root)
+        if physics_backend == "newton" and release and release not in NEWTON_STACKS:
+            raise ValueError(f"Isaac Sim {release} has no Newton backend here (the selected interpreter's package "
+                             "metadata; see docs/COMPATIBILITY.md). Nothing was started and there is no fallback: "
+                             "use physics_backend=physx, or a 6.x interpreter for the Newton workflow.")
     min_gpu = _config_int(env, "ISAAC_MCP_SIM_MIN_FREE_VRAM_MIB", 8192)
     min_ram = _config_int(env, "ISAAC_MCP_SIM_MIN_FREE_RAM_MIB", 4096)
     max_instances = _config_int(env, "ISAAC_MCP_SIM_MAX_INSTANCES", 2)
@@ -332,6 +385,7 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
                   "show_ur5e_panel_on_start": show_ur5e_panel,
                   "enable_motion_bvh": enable_motion_bvh,
                   "physics_backend": physics_backend,
+                  **({"launcher": str(custom)} if custom is not None else {}),
                   "started_at": time.time(),
                   "log": str(log), "output_dir": str(output), "user_config": str(user_config),
                   "initial_resources": resources}
@@ -346,35 +400,74 @@ def _launch(env: Mapping[str, str], port: int, ros_domain: int, headless: bool,
                                    f"inspect {log}: {cleanup}") from exc
             raise
         threading.Thread(target=proc.wait, daemon=True).start()
-        return {**_public(record), "state": "starting",
+        return {**_public(record), "managed": True, "state": "starting",
                 "note": (f"Use sim__status to confirm bridge readiness, then use_bridge(port={port}) "
                          "to send tool calls to this simulator. If this is the only managed session "
                          "and the configured port does not answer, refresh_tools(wait_s=120) waits "
                          "for this session and selects it instead.")}
 
 
+def _external_id(bridge: Mapping) -> str:
+    return f"external-{int(bridge['pid'])}-{int(bridge['port'])}"
+
+
+def _external_bridges(sessions: Iterable[dict]) -> list[dict]:
+    """Advertised bridges no live managed session accounts for: something else launched them.
+    This reads their portfiles and only tests that the port accepts a connection."""
+    managed = {int(item["pid"]) for item in sessions if _alive(item)}
+    return [{"id": _external_id(bridge), "managed": False, "pid": int(bridge["pid"]), "port": int(bridge["port"]),
+             "host": bridge.get("host"), "app": bridge.get("app"), "app_version": bridge.get("app_version"),
+             "headless": bridge.get("headless"), "started_at": bridge.get("started"), "state": "active"}
+            for bridge in client.discover_bridges() if int(bridge["pid"]) not in managed]
+
+
+def _bridge_state(host: str | None, port: int, pid: int) -> tuple[str, dict]:
+    """Readiness from the bridge's own ``status``, checked against the PID expected on that port."""
+    try:
+        response = client.call("status", host=host or "127.0.0.1", port=port, timeout=2)
+    except (OSError, RuntimeError, client.BridgeError):
+        return "starting_or_unresponsive", {}
+    if response.get("pid") != pid:
+        return "port_conflict", response
+    if response.get("app_ready") is True:
+        return "running", response
+    # Older or non-Kit bridges cannot attest to application readiness.
+    return ("starting" if response.get("app_ready") is False else "readiness_unknown"), response
+
+
+def _external_status(session_id: str) -> dict:
+    match = _EXTERNAL_ID.fullmatch(session_id)
+    pid, port = int(match.group(1)), int(match.group(2))
+    bridge = next((b for b in client.discover_bridges() if _external_id(b) == session_id), None)
+    if bridge is None:
+        raise ValueError(f"no advertised bridge has PID {pid} and port {port}; it may have exited or restarted. "
+                         "Call sim__list.")
+    state, response = _bridge_state(bridge.get("host"), port, pid)
+    result = {"id": session_id, "managed": False, "pid": pid, "port": port, "host": bridge.get("host"),
+              "app": response.get("app") or bridge.get("app"),
+              "app_version": response.get("app_version") or bridge.get("app_version"),
+              "headless": bridge.get("headless"), "started_at": bridge.get("started"), "state": state,
+              "stop": "sim__stop does not stop this: it was started outside isaac-mcp, so stop it where it was started."}
+    if state in ("running", "readiness_unknown"):
+        result["next"] = f"use_bridge(port={port}) sends tool calls to this simulator, after you confirm it is the one you mean."
+    return result
+
+
 def _status(env: Mapping[str, str], session_id: str) -> dict:
+    if isinstance(session_id, str) and _EXTERNAL_ID.fullmatch(session_id):
+        return _external_status(session_id)
     session = _read(_sessions_dir(env), session_id)
     if not _alive(session):
-        return {**_public(session), "state": "exited"}
-    try:
-        response = client.call("status", host="127.0.0.1", port=session["port"], timeout=2)
-        if response.get("pid") != session["pid"]:
-            state = "port_conflict"
-        elif response.get("app_ready") is True:
-            state = "running"
-        elif response.get("app_ready") is False:
-            state = "starting"
-        else:
-            # Older or non-Kit bridges cannot attest to application readiness.
-            state = "readiness_unknown"
-    except (OSError, RuntimeError, client.BridgeError):
-        state = "starting_or_unresponsive"
+        return {**_public(session), "managed": True, "state": "exited"}
+    state, _ = _bridge_state("127.0.0.1", session["port"], session["pid"])
     try:
         resources = _resources()
     except RuntimeError as exc:
         resources = {"error": str(exc)}
-    result = {**_public(session), "state": state, "current_resources": resources}
+    result = {**_public(session), "managed": True, "state": state, "current_resources": resources}
+    if state == "port_conflict" and session.get("launcher"):
+        result["note"] = ("Another PID answers this session's port. A custom launcher must exec Kit rather than "
+                          "fork it, or the process recorded here is not the simulator.")
     if state in ("running", "readiness_unknown"):
         # The MCP server keeps dialling its configured port (UR5E_DT_PORT/ISAAC_MCP_PORT) while it
         # answers, and refresh_tools then does not switch: a student run on a lab PC lost time here.
@@ -386,6 +479,9 @@ def _status(env: Mapping[str, str], session_id: str) -> dict:
 
 def _stop(env: Mapping[str, str], session_id: str, expected_pid: int, confirm_discard: bool,
           force: bool = False) -> dict:
+    if isinstance(session_id, str) and _EXTERNAL_ID.fullmatch(session_id):
+        raise ValueError(f"{session_id} is not a managed session: isaac-mcp did not start it, so sim__stop will not "
+                         "stop it. Stop it where it was started.")
     if not confirm_discard:
         force_arg = ", force=true" if force else ""
         raise ValueError(f"Stopping can discard unsaved scene changes. After saving, retry: "
@@ -415,22 +511,20 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
     settings = dict(os.environ if env is None else env)
 
     @mcp.tool(name="sim__launch", annotations=PYTHON_EXECUTION)
-    def sim_launch(port: int, ros_domain: int, headless: bool = False,
-                   allow_shared_domain: bool = False, show_ur5e_panel: bool = False,
-                   enable_motion_bvh: bool = False, physics_backend: Literal["physx", "newton"] = "physx") -> dict:
-        """Launch a managed Isaac Sim instance using a distinct local port and ROS domain.
+    def sim_launch(port: Annotated[int, Field(description="A free local TCP port for its bridge, e.g. 18766.")],
+                   ros_domain: Annotated[int, Field(description="ROS_DOMAIN_ID 0-231, distinct from other sessions.")],
+                   headless: Annotated[bool, Field(description="true: no window.")] = False,
+                   allow_shared_domain: Annotated[bool, Field(description="true: allow a ROS domain another session already uses.")] = False,
+                   show_ur5e_panel: Annotated[bool, Field(description="true: show the UR5e twin's panel in a graphical session.")] = False,
+                   enable_motion_bvh: Annotated[bool, Field(description="true: accurate RTX LiDAR motion compensation; costs rendering time and GPU memory.")] = False,
+                   physics_backend: Annotated[Literal["physx", "newton"], Field(description="Engine for this new process. Missing Newton dependencies fail with no fallback.")] = "physx") -> dict:
+        """Launch a separate managed Isaac Sim instance on its own port and ROS domain, when explicitly asked.
 
-        Checks a configurable instance limit, port, known ROS domains and current free resources.
-        ROS domains 0–231 are allowed with the bundled Cyclone DDS profile.
-        UR5e tools are enabled either way; set show_ur5e_panel=true to show their panel
-        in a graphical session. Resource checks are snapshots, not reservations.
-        Set enable_motion_bvh=true for accurate RTX LiDAR motion compensation;
-        it increases rendering cost and GPU memory use in this new session.
-        physics_backend selects physx (default) or newton for this new process;
-        missing Newton dependencies fail without switching back to PhysX.
-        Fake-driver records are session-scoped; stop the driver before stopping the session.
-        The URSim driver backend is unavailable because its resources are host-wide.
-        Launching runs configured local code.
+        Checks an instance limit, the port, known ROS domains and free resources; these are snapshots,
+        not reservations. Returns before the bridge is ready: poll sim__status, then use_bridge. Stop a
+        fake ROS driver before stopping the session; URSim is unavailable here.
+        Launching runs configured local code: run.sh, or the launcher in the server's
+        ISAAC_MCP_SIM_LAUNCHER setting. No tool argument can name a command.
         """
         record = _launch(settings, port, ros_domain, headless, allow_shared_domain, show_ur5e_panel, enable_motion_bvh, physics_backend)
         if on_launch is not None:
@@ -438,20 +532,43 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
         return record
 
     @mcp.tool(name="sim__list", annotations=PYTHON_EXECUTION)
-    def sim_list() -> dict:
-        """List managed simulator sessions, including those started before this server restarted."""
-        return {"sessions": [{**_public(session), "state": "active" if _alive(session) else "exited"}
-                             for session in _sessions(_sessions_dir(settings))]}
+    def sim_list(include_exited: Annotated[bool, Field(description="List every exited session, not only the most recent few.")] = False) -> dict:
+        """List simulators: managed sessions (managed=true), including those started before this server
+        restarted, and advertised bridges started some other way (managed=false; PID, port, app, version).
+
+        Use each entry's id with sim__status. sim__stop refuses managed=false entries.
+        Exited sessions are kept on disk with their logs, and only the most recent few are
+        listed unless include_exited=true.
+        """
+        sessions = _sessions(_sessions_dir(settings))
+        live = [session for session in sessions if _alive(session)]
+        exited = sorted((session for session in sessions if not _alive(session)),
+                        key=lambda session: session.get("started_at") or 0, reverse=True)
+        shown = exited if include_exited else exited[:_RECENT_EXITED_LISTED]
+        result = {"sessions": ([{**_public(session), "managed": True, "state": "active"} for session in live]
+                               + [{**_public(session), "managed": True, "state": "exited"} for session in shown]
+                               + _external_bridges(sessions))}
+        if len(shown) < len(exited):
+            result["exited_omitted"] = len(exited) - len(shown)
+            result["note"] = (f"{result['exited_omitted']} older exited session(s) not listed; "
+                              "include_exited=true lists them. Their records and logs stay on disk.")
+        return result
 
     @mcp.tool(name="sim__status", annotations=PYTHON_EXECUTION)
-    def sim_status(session_id: str) -> dict:
-        """Report a managed simulator's process, Kit readiness and current resources."""
+    def sim_status(session_id: Annotated[str, Field(description="id from sim__list or sim__launch.")]) -> dict:
+        """Report a simulator's process and Kit readiness, by an id from sim__list.
+
+        A managed session also reports current resources. An external one (id external-<pid>-<port>)
+        reports its live PID, port, app and version; the PID must match its advertisement.
+        """
         return _status(settings, session_id)
 
     @mcp.tool(name="sim__stop", annotations=PYTHON_EXECUTION)
-    def sim_stop(session_id: str, expected_pid: int, confirm_discard: bool = False,
-                 force: bool = False) -> dict:
-        """Stop only the identified managed process; unsaved changes can be lost.
+    def sim_stop(session_id: Annotated[str, Field(description="id from sim__list or sim__launch.")],
+                 expected_pid: Annotated[int, Field(description="PID from sim__status; a different process is refused.")],
+                 confirm_discard: Annotated[bool, Field(description="true: accept losing unsaved changes.")] = False,
+                 force: Annotated[bool, Field(description="true: SIGKILL its process group; only if normal shutdown failed.")] = False) -> dict:
+        """Stop only the identified managed process; unsaved changes can be lost. Refuses external bridges.
 
         Use force=true only if normal shutdown failed: it sends SIGKILL to the process group.
         """

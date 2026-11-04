@@ -26,24 +26,36 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Match the system ROS distribution to the simulator. Never guess the mock-hardware
 # argument for an unsupported distro: an unrecognized launch argument can otherwise
 # leave the driver in real-hardware mode.
-if [ -z "${ROS_DISTRO:-}" ]; then
+# A named ROS_SETUP (a nonstandard install or a RoboStack prefix) says its own distribution.
+if [ -z "${ROS_DISTRO:-}" ] && [ -z "${ROS_SETUP:-}" ]; then
   case "$(. /etc/os-release 2>/dev/null; echo "${VERSION_CODENAME:-}")" in
     jammy) ROS_DISTRO=humble ;;
     noble) ROS_DISTRO=jazzy ;;
     *) echo "ERROR: set ROS_DISTRO to humble or jazzy for the fake driver" >&2; exit 1 ;;
   esac
 fi
-case "$ROS_DISTRO" in
+if [ -z "${ROS_SETUP:-}" ]; then
+  case "$ROS_DISTRO" in
+    humble|jazzy) ;;
+    *) echo "ERROR: fake driver does not support ROS_DISTRO=$ROS_DISTRO" >&2; exit 1 ;;
+  esac
+fi
+# An activated environment (RoboStack, conda) has no /opt/ros, and needs nothing sourced.
+if [ -z "${ROS_SETUP:-}" ] && [ ! -f "/opt/ros/$ROS_DISTRO/setup.bash" ] && command -v ros2 >/dev/null 2>&1; then
+  ROS_SETUP=""
+else
+  ROS_SETUP="${ROS_SETUP:-/opt/ros/$ROS_DISTRO/setup.bash}"
+  if [ ! -f "$ROS_SETUP" ]; then
+    echo "ERROR: ROS setup not found: $ROS_SETUP" >&2
+    exit 1
+  fi
+  source "$ROS_SETUP"
+fi
+case "${ROS_DISTRO:-}" in
   humble) MOCK_ARG=use_fake_hardware ;;
   jazzy) MOCK_ARG=use_mock_hardware ;;
-  *) echo "ERROR: fake driver does not support ROS_DISTRO=$ROS_DISTRO" >&2; exit 1 ;;
+  *) echo "ERROR: fake driver does not support ROS_DISTRO=${ROS_DISTRO:-unset} (after sourcing $ROS_SETUP); set ROS_DISTRO to humble or jazzy" >&2; exit 1 ;;
 esac
-ROS_SETUP="${ROS_SETUP:-/opt/ros/$ROS_DISTRO/setup.bash}"
-if [ ! -f "$ROS_SETUP" ]; then
-  echo "ERROR: ROS setup not found: $ROS_SETUP" >&2
-  exit 1
-fi
-source "$ROS_SETUP"
 source "$REPO/config/ros_dds.env"
 # Optional overlay workspace (apt ur_robot_driver works without it; source if present).
 WS_SETUP="${WS_SETUP:-$HOME/ros2_ws/install/setup.bash}"

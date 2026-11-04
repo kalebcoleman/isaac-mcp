@@ -24,10 +24,13 @@ MAX_REPORTED_HANDLES = 16
 PUBLISHER_NOTE = ("Publisher count is not read from inside Kit: run `ros2 topic info <topic>` in the shell line from "
                   "sim__stage__info. writer_computes 0 while playing means the writer never ran and the topic is not advertised.")
 STALE_HANDLE_FIX = (
-    "Replicator's attach_hydra_texture skips a product that already has viewportHandle, so a saved handle leaves it "
+    "On 6.2, Replicator's attach_hydra_texture skips a product that already has viewportHandle, so a saved handle leaves it "
     "with no texture: the sensor renders nothing, its ROS writer never runs and the topic is not advertised. "
-    "Rebuilding the graph reuses the same product. Open the file with sim__stage__open, which deactivates a stale "
-    "LiDAR product in the session layer before the first Play, or rebuild the graph with another width/height.")
+    "Rebuilding the graph reuses the same product. Save a clean copy with reset_camera_render_handles=true and open it "
+    "with sim__stage__open, or rebuild the graph with another width/height.")
+STALE_RESCUE = (
+    "With the timeline stopped, call sim__stage__save with a new filename and reset_camera_render_handles=true, then "
+    "sim__stage__open the new file. It has no saved LiDAR handle or runtime pipeline, and Play builds both again.")
 
 
 # A reference or payload to a prim path that does not exist contributes no specs, so it cannot hide a
@@ -168,11 +171,13 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
                 cameras = [Sdf.Path(repairs[str(producer.GetPath())]["camera"])]
             width = producer.GetAttribute("inputs:width").Get()
             height = producer.GetAttribute("inputs:height").Get()
-            if lidar_helper and (type(width) is not int or type(height) is not int):
-                # A default LiDAR graph leaves them unauthored; the matches below need the node's real values.
+            if type(width) is not int or type(height) is not int:
+                # A default graph leaves them unauthored (OGN default 1280x720). The node's real values are only a
+                # candidate: the matches below still need a product with this camera and that authored resolution.
                 width, height = runtime_node_resolution(stage, producer) or (None, None)
             if type(width) is not int or type(height) is not int:
-                unsupported(f"Camera producer {producer.GetPath()} needs explicit integer width and height.", producer.GetPath(),
+                unsupported(f"Camera producer {producer.GetPath()} needs explicit integer width and height: "
+                            "set its inputs:width and inputs:height.", producer.GetPath(),
                             camera=[str(c) for c in cameras])
             if len(cameras) != 1:
                 unsupported(f"Camera producer {producer.GetPath()} needs exactly one camera target.",
@@ -189,6 +194,8 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
                 matches = [p for p in matches if p.GetPath() == explicit[0]]
                 if not matches:
                     unsupported("Explicit camera product does not match camera/resolution.", producer.GetPath())
+            # Our capture product is removed whole from the copy, so it cannot compete with the graph's own.
+            matches = [p for p in matches if not OWNED_PRODUCT.fullmatch(p.GetName())] or matches
             if not any(p.HasAttribute("viewportHandle") for p in matches):
                 continue
             if len(matches) != 1:
@@ -204,7 +211,9 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
                          handle=attr.Get(), producer=str(producer.GetPath()), lidar=lidar_helper,
                          owned=bool(OWNED_PRODUCT.fullmatch(product.GetName())))
             previous = selected.get(entry["path"])
-            if previous and previous != entry:
+            # Several producers can reuse one product (a LaserScan and a PointCloud on one LiDAR). Dropping that one
+            # handle is safe unless they disagree about what it is.
+            if previous and dict(previous, producer=None) != dict(entry, producer=None):
                 unsupported("Multiple producers share the camera product ambiguously.", attr.GetPath())
             selected[entry["path"]] = entry
     if not selected:
@@ -212,13 +221,15 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
     # A pack-owned capture product is removed whole by strip_runtime_render_state, so it needs no
     # export-policy flag. It still passes every check below: ambiguous, authored and dependent refuse.
     native = sorted(path for path, entry in selected.items() if not entry["owned"])
-    # A LiDAR handle already saved in a file is authored, so it is not normalized, but refusing would lose
-    # the student's unsaved work. It stays in the copy, and save_report warns with the real fix.
+    # A LiDAR handle already saved in a file is authored. Refusing would lose unsaved work, so without the flag it
+    # stays in the copy and save_report warns. With it, the copy drops it: that is the rescue for a stale file.
+    authored = []
     for path in [p for p in native if selected[p]["lidar"]
                  and not session_only(stage.GetAttributeAtPath(p), stage)]:
-        del selected[path]
+        authored.append(selected.pop(path))
         native.remove(path)
-    if not selected:
+    authored = authored if reset else []
+    if not selected and not authored:
         return [], list(repairs.values())
     if native and not reset:
         unsupported(
@@ -235,6 +246,12 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
             or any(p.HasPayload() and not p.IsLoaded() for p in prims)):
         unsupported("Complete loaded composition is required to check render-handle dependencies.", "/",
                     composition_errors=[str(e)[:300] for e in blocking[:5]])
+    # An authored LiDAR handle has no session spec or live binding to check; everything else still applies.
+    for entry in authored:
+        attr = stage.GetAttributeAtPath(entry["path"])
+        if (attr.GetTypeName() != Sdf.ValueTypeNames.Int or type(entry["handle"]) is not int
+                or attr.GetNumTimeSamples() or attr.GetConnections()):
+            unsupported("Saved LiDAR handle is connected, animated, or has an unsupported type; cannot normalize it.", entry["path"])
     for entry in selected.values():
         attr = stage.GetAttributeAtPath(entry["path"])
         stack = attr.GetPropertyStack()
@@ -252,7 +269,7 @@ def camera_handles(stage, reset, binding_check, target_resolver=None):
     scan_dependencies(stage.GetUsedLayers(), conservative=True)
     for entry in selected.values():
         binding_check(entry)
-    return list(selected.values()), list(repairs.values())
+    return list(selected.values()) + authored, list(repairs.values())
 
 
 def restore_export_camera_targets(layer, repairs):
@@ -360,11 +377,32 @@ def retained_product_paths():
         return None
 
 
-def repair_stale_lidar_products(stage, retained):
-    """Deactivate saved LiDAR products in the session layer of a freshly opened stage.
+def saved_runtime_pipeline(stage):
+    """File-authored Replicator state, which strip_runtime_render_state omits from a normal save.
 
-    Their file-authored viewportHandle makes Replicator skip the texture for good. Deactivating is reversible,
-    leaves the file and root layer untouched, and lets IsaacCreateRenderProduct make a new product at Play.
+    A raw Stage.Export keeps it. OmniGraph loads it at open, so deactivating a product afterward leaves graphs behind
+    that break every later writer ("Invalid object in Py_Graph"), and deactivating the pipeline itself stops Kit
+    creating nodes at that path. Only a clean copy recovers such a file.
+    """
+    session = stage.GetSessionLayer()
+    found = []
+    for count, prim in enumerate(Usd.PrimRange.Stage(stage)):
+        if count == MAX_PRIMS:
+            break
+        name = str(prim.GetPath())
+        # /WriterOrchestrator is not listed: a clean save keeps it and reopens fine.
+        native = name == "/Orchestrator" or (name.startswith("/Render/") and prim.GetName() == "SDGPipeline")
+        if native and any(spec.layer != session for spec in prim.GetPrimStack()):
+            found.append(name)
+    return found
+
+
+def repair_stale_lidar_products(stage, retained, allowed=True):
+    """Deactivate saved LiDAR products in the session layer of a freshly opened stage, where that is known to work.
+
+    Their file-authored viewportHandle stops the sensor. Deactivating is reversible, leaves the file and root layer
+    untouched, and lets IsaacCreateRenderProduct make a new product at Play, but only in a file with no saved runtime
+    pipeline, on a build where this was measured. Anything else is reported with the rescue, not changed.
     Cameras keep their documented contract; anything a graph pins or connects to is reported, not changed.
     """
     candidates = []
@@ -381,8 +419,16 @@ def repair_stale_lidar_products(stage, retained):
         camera = stage.GetPrimAtPath(targets[0]) if len(targets) == 1 else None
         if camera and camera.GetTypeName() == "OmniLidar" and not session_only(prim.GetAttribute("viewportHandle"), stage):
             candidates.append(prim)
-    if not candidates:
+    pipeline = saved_runtime_pipeline(stage)
+    if not candidates and not pipeline:
         return dict(deactivated=[], skipped=[])
+    if not candidates:
+        return dict(deactivated=[], skipped=[], saved_runtime_pipeline=pipeline[:MAX_REPORTED_HANDLES], rescue=STALE_RESCUE)
+    if pipeline or not allowed:
+        reason = (f"the file also holds a saved runtime pipeline ({pipeline[0]})" if pipeline
+                  else "this repair is not proven on this build")
+        return dict(deactivated=[], skipped=[dict(path=str(p.GetPath()), reason=reason) for p in candidates],
+                    rescue=STALE_RESCUE)
     if retained is None:
         return dict(deactivated=[], skipped=[dict(path=str(p.GetPath()), reason="texture state unreadable")
                                              for p in candidates])
@@ -456,6 +502,15 @@ def helper_render_status(stage, helper, runtime_product, retained, playing, reso
     if problem:
         entry["problem"] = problem
     return entry
+
+
+def writer_problem(entry, playing):
+    """A problem for a helper whose product has a texture yet whose writer has never run while playing."""
+    if not playing or entry.get("status") != "texture_bound" or entry.get("writer_computes") != 0:
+        return None
+    return (f"{entry['render_product']} has a render texture but its writer has not run, so the topic is not "
+            "advertised. Right after Play this can be temporary; if writer_computes stays 0, look for the writer's "
+            "attach error with sim__logs__tail.")
 
 
 def retained_textures(manager_type):

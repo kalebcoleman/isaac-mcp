@@ -64,7 +64,8 @@ if [ -x "$PY" ]; then
   [ "$isv" = "6.2.0.0" ] && ok "isaacsim $isv" || bad "isaacsim 6.2.0.0 required, found: ${isv:-none}"
   case "$codename" in jammy) rd=humble ;; *) rd=jazzy ;; esac
   site=$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))' 2>/dev/null)
-  [ -d "$site/exts/isaacsim.ros2.core/$rd/lib" ] && ok "ROS 2 $rd libs bundled with Isaac Sim" || bad "missing $site/exts/isaacsim.ros2.core/$rd/lib"
+  . "$ROOT/scripts/isaac_ros_libs.sh"
+  isaac_ros_lib_dir "$site" "$rd" >/dev/null && ok "ROS 2 $rd libs bundled with Isaac Sim" || bad "missing ROS 2 $rd libs under $site or its install root"
   # Blackwell needs a cu128+ torch build: it imports fine on an older one and fails at the first kernel.
   tinfo=$("$PY" - <<'PYEOF' 2>&1
 import torch

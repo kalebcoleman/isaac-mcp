@@ -28,6 +28,7 @@ from .object_pose import read_local_pose, set_local_pose
 from .robot_visuals import prepare_robot_visuals
 from .bridge_binding import OWNER_ID as MCP_OWNER_ID, attach as attach_twin_bridge
 from .recording import FramePacer
+from .joint_state_guard import check_stage as check_joint_state_loop
 from .tf_compat import use_legacy_transform_publisher
 from .world_compat import initialized_twin_world, paused_scene_edit, twin_play_edit
 from .physics_compat import (
@@ -63,7 +64,8 @@ else:
 # Local asset paths (no Nucleus dependency)
 _ext_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if not VIDEOS_DIR:
-    VIDEOS_DIR = os.path.join(_ext_dir, "videos")
+    _scene_output = os.getenv("ISAAC_MCP_SCENE_OUTPUT", "").strip()
+    VIDEOS_DIR = os.path.join(os.path.abspath(_scene_output) if _scene_output else _ext_dir, "videos")
 
 # Environment scene USDs (relative to Isaac assets root). Verified against Isaac 5.0.
 ENVIRONMENTS = {
@@ -436,6 +438,11 @@ def _local_asset(relpath):
     return resolve_uri(relpath)
 
 
+def _failure_detail(exc):
+    """A missing asset is an expected refusal whose message already names the fix."""
+    return {} if isinstance(exc, AssetMissing) else {"traceback": traceback.format_exc()}
+
+
 def _assembly_layout(relpath):
     """Return the local path of an assembly layout JSON in the asset folder, or ``""``."""
     try:
@@ -497,7 +504,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "stop_scene": {
-        "description": "Stop the simulation timeline in Isaac Sim.",
+        "description": "Stop the UR5e twin's simulation timeline, e.g. before generic sim__* edits. Stop rewinds physics to the authored start pose. For other scenes use sim__timeline__control.",
         "parameters": {}
     },
     "setup_camera_tf_graph": {
@@ -515,7 +522,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "randomize_object_poses": {
-        "description": "Randomize the positions of non-base objects in /World/Objects.",
+        "description": "Randomize the positions of non-base objects in /World/Objects of the UR5e twin, after ur5e_dt__add_objects.",
         "parameters": {}
     },
     "randomize_single_object": {
@@ -528,7 +535,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "save_scene_state": {
-        "description": "Save current scene object poses to a JSON file.\n\nReturns:\n    result: \"success\" or \"failure\"\n    file_path: path to the saved JSON file\n    error: failure reason (only on failure)",
+        "description": "Save the UR5e twin's object poses to a JSON file in its scene_states folder, for ur5e_dt__restore_scene_state. A file of that name is replaced; with no name it gets a timestamp. Returns result, file_path and, on failure, error.",
         "parameters": {
             "json_file_path": {
                 "type": "string",
@@ -537,7 +544,7 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "restore_scene_state": {
-        "description": "Restore scene object poses from a previously saved JSON file.\n\nReturns:\n    result: \"success\" or \"failure\"\n    error: failure reason (only on failure)",
+        "description": "Restore the UR5e twin's object poses from a JSON file made by ur5e_dt__save_scene_state. Returns result and, on failure, error.",
         "parameters": {
             "json_file_path": {
                 "type": "string",
@@ -556,15 +563,15 @@ MCP_TOOL_REGISTRY = {
         }
     },
     "delete_objects": {
-        "description": "Delete all objects from /World/Objects and the associated pose publisher graph.",
+        "description": "Delete all objects from /World/Objects of the UR5e twin and the associated pose publisher graph.",
         "parameters": {}
     },
     "setup_pose_publisher": {
-        "description": "Create an action graph to publish object poses to ROS2 topic 'objects_poses_sim'.",
+        "description": "Create an action graph publishing the UR5e twin's object poses to ROS 2 topic objects_poses_sim, after ur5e_dt__add_objects.",
         "parameters": {}
     },
     "start_ros_driver": {
-        "description": "Bring the ROS2 robot driver up/down/status so robot-motion tools (ros-mcp-server move_home/move_to_grasp/...) have a driver to talk to. Two backends: backend='fake' (default) uses scripts/launch_ur_fake.sh — the apt ur_robot_driver with fake/mock hardware, no Docker and no ~/ros2_ws needed, ready in a few seconds (sim only); backend='ursim' uses scripts/sim_bringup.sh — URSim docker + ur_bringup, hands-free no PolyScope clicks, ~110s, and is the path that supports mode='real' (lab UR5e, not yet enabled). Both end at /joint_states live + scaled_joint_trajectory_controller accepting FollowJointTrajectory, on the same DDS island (the ROS domain from config/ros_dds.env (default 0), Cyclone, localhost-only). Managed sim__launch sessions support only the fake backend; URSim uses shared host resources. The fake launcher refuses startup when another UR driver is detected. Stop the fake driver before stopping its simulator. Use once at startup.",
+        "description": "Bring the ROS 2 driver of the lab's UR5e twin up, down or report status, so robot-motion tools have a driver. backend='fake' (default) is sim only, with mock hardware and no Docker, ready in seconds; 'ursim' needs Docker and is the path to mode='real' (not yet enabled). Refuses if another UR driver is detected. Stop the fake driver before stopping its simulator. Managed sim__launch sessions support only fake. Use once at startup.",
         "parameters": {
             "mode": {
                 "type": "string",
@@ -592,7 +599,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "quick_start": {
-        "description": "One-click scene setup from public assets: loads the scene, imports NVIDIA's UR5e with action graphs, creates a workspace camera and starts simulation. Adds the RG2 gripper only when its files are in the asset folder; the result's gripper field says which happened. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
+        "description": "RISE lab UR5e digital twin; for a generic start, see sim__quick_start. One-click scene setup from public assets: loads the scene, imports NVIDIA's UR5e with action graphs, creates a workspace camera and starts simulation. Adds the RG2 gripper only when its files are in the asset folder; the result's gripper field says which happened. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
         "parameters": {}
     },
     "start_recording": {
@@ -621,11 +628,11 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "load_workstation": {
-        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Load the Vention workstation bench as visual context under the robot. Additive (cleared by new_stage): references the operator-supplied or cached vention.usd at /World/Vention, or builds a simple placeholder bench when it is not installed, and places it so the tabletop top is exactly at z=0 — coincident with the work plane where the robot base and objects already sit (ROBOT_BASE_Z stays 0.0, so ROS pose parity is untouched). The default ground plane's z=0 collider is retained and only its visual is hidden. The bench is visual-only (no colliders) so it is safe to add while the sim is playing. Does not move the robot or alter any other tool.",
+        "description": "Load the Vention bench as visual context under the lab's UR5e twin, at /World/Vention with its top at z=0. Uses your own lab file from the asset folder, which cannot be downloaded (see docs/ASSETS.md); a placeholder bench is used without it. Additive (cleared by new_stage), visual-only and safe while playing. Does not move the robot.",
         "parameters": {}
     },
     "quick_start_with_workstation": {
-        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.",
+        "description": "RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.",
         "parameters": {}
     },
     "load_simple_room": {
@@ -633,7 +640,7 @@ MCP_TOOL_REGISTRY = {
         "parameters": {}
     },
     "quick_start_with_workstation_and_simple_room": {
-        "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.",
+        "description": "RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.",
         "parameters": {}
     },
     "set_object_pose": {
@@ -3004,6 +3011,7 @@ class DigitalTwin(omni.ext.IExt):
         from pxr import Gf, Sdf, UsdGeom
 
         require_newton_mount_support(selected_engine())
+        check_joint_state_loop()
 
         print("=== Quick Start ===")
 
@@ -6389,7 +6397,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Failed to add objects: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     def _cmd_delete_objects(self) -> Dict[str, Any]:
@@ -6518,7 +6526,7 @@ class DigitalTwin(omni.ext.IExt):
         return "the Vention workstation"
 
     async def _cmd_quick_start(self) -> Dict[str, Any]:
-        """MCP handler: full scene setup (table, UR5e, gripper, camera, play)."""
+        """MCP handler: full scene setup (ground, UR5e, gripper if present, camera, play). No table: see load_workstation."""
         try:
             await self.quick_start()
             return {
@@ -6535,7 +6543,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Quick start failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     async def _cmd_setup_camera_tf_graph(self) -> Dict[str, Any]:
@@ -6564,7 +6572,7 @@ class DigitalTwin(omni.ext.IExt):
             await self.load_workstation()
             return {
                 "status": "success",
-                "message": "Workstation loaded at /World/Vention (tabletop top at z=0; robot and object physics unchanged; ground plane visual hidden)."
+                "message": f"Loaded {self._bench_label()} at /World/Vention (tabletop top at z=0; robot and object physics unchanged; ground plane visual hidden)."
             }
         except Exception as e:
             carb.log_error(f"Error in load_workstation: {e}")
@@ -6572,7 +6580,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Load workstation failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     async def _cmd_quick_start_with_workstation(self) -> Dict[str, Any]:
@@ -6591,7 +6599,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Quick start with workstation failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     async def _cmd_load_simple_room(self) -> Dict[str, Any]:
@@ -6608,7 +6616,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Load simple room failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     async def _cmd_quick_start_with_workstation_and_simple_room(self) -> Dict[str, Any]:
@@ -6627,7 +6635,7 @@ class DigitalTwin(omni.ext.IExt):
             return {
                 "status": "error",
                 "message": f"Quick start with workstation and simple room failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                **_failure_detail(e)
             }
 
     def _cmd_setup_pose_publisher(self) -> Dict[str, Any]:

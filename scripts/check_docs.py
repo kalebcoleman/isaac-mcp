@@ -171,6 +171,21 @@ README_ROWS = {"Generic scene and assets": ("generic",), "UR5e digital twin": ("
                "Optional: desktop input, managed sessions": ("desktop_input", "sim_sessions")}
 
 
+GENERIC_COUNT_PAGES = ("AGENTS.md", "docs/ARCHITECTURE.md", "docs/TOOLS-HOST.md", ".agents/skills/isaac-mcp/SKILL.md")
+GENERIC_COUNT = re.compile(r"\b(\d+)(?:-tool pack| generic (?:`?sim|tools))")
+
+
+def check_generic_counts(errors, pages=None, generic=None):
+    """The generic pack's size wherever a current page states it. COMPATIBILITY.md is excluded: its
+    dated records say how many tools a past run exercised."""
+    generic = tier_counts()["generic"] if generic is None else generic
+    pages = pages if pages is not None else {name: (ROOT / name).read_text(encoding="utf-8") for name in GENERIC_COUNT_PAGES}
+    for name, text in pages.items():
+        for match in GENERIC_COUNT.finditer(text):
+            if int(match.group(1)) != generic:
+                errors.append(f"{name}: says {match.group(0)!r}, but the generic pack has {generic} tools")
+
+
 def check_readme_counts(errors, text=None, counts=None):
     """The README states the totals and a count per row; keep them equal to the code."""
     text = (ROOT / "README.md").read_text() if text is None else text
@@ -231,6 +246,7 @@ def main():
     check_skill_tool_names(errors)
     check_agent_guide(errors)
     check_readme_counts(errors)
+    check_generic_counts(errors)
     check_tool_reference(errors)
     for error in errors:
         print(f"FAIL: {error}")

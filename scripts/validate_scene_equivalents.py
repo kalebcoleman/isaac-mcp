@@ -14,6 +14,13 @@ from mcp.client.stdio import stdio_client
 from scene_mcp_client import parameters, call
 
 
+def require_root(listing, root_id):
+    """Stop with the fix when a needed asset root is not approved; there is no fallback robot."""
+    if not any(root.get("root_id") == root_id for root in listing.get("roots", [])):
+        raise SystemExit(f"Asset root '{root_id}' is not approved. Clone the Agilebot gbt-c5a folder named in "
+                         "docs/VENDORING.md and approve it as in docs/TOOLS-SCENE.md, then run this again.")
+
+
 async def validate(port, output):
     records = []
     async with stdio_client(parameters(port)) as (r, w):
@@ -138,6 +145,7 @@ async def validate(port, output):
             await invoke(
                 "sim__lidar__create", **t, path="/World/Lidar", position=[-3, 0, 1]
             )
+            require_root(await invoke("assets__roots"), "agilebot")
             await invoke(
                 "assets__info", **t, root_id="agilebot", relative_path="gbt-c5a.usd"
             )

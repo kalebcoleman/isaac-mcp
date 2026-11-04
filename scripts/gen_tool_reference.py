@@ -49,10 +49,33 @@ def one_line(text):
     return " ".join((text or "").split())
 
 
+def annotated_parts(annotation, aliases):
+    """Return (type source, description) of a signature annotation, seeing through Annotated.
+
+    The module-level alias form (``_WindowId = Annotated[...]``) counts as well. Only the source is
+    read, so this stays free of pydantic and of the SDK.
+    """
+    if isinstance(annotation, ast.Name) and annotation.id in aliases:
+        annotation = aliases[annotation.id]
+    if not (isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name)
+            and annotation.value.id == "Annotated" and isinstance(annotation.slice, ast.Tuple)):
+        return ast.unparse(annotation), ""
+    base, *metadata = annotation.slice.elts
+    for item in metadata:
+        if isinstance(item, ast.Call) and getattr(item.func, "id", "") == "Field":
+            for keyword in item.keywords:
+                if keyword.arg == "description" and isinstance(keyword.value, ast.Constant):
+                    return ast.unparse(base), keyword.value.value
+    return ast.unparse(base), ""
+
+
 def local_tools(path):
-    """Return {tool name: (description, [(arg, type, required, default)])} for one host module."""
+    """Return {tool name: (description, [(arg, type, required, default, detail)])} for one host module."""
     tools = {}
     tree = ast.parse(path.read_text())
+    aliases = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
+               and isinstance(node.value, ast.Subscript)
+               for target in node.targets if isinstance(target, ast.Name)}
     # A default such as DEFAULT_MAX_WIDTH reads better, and matches the MCP schema, as its value.
     constants = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
                  and isinstance(node.value, ast.Constant)
@@ -73,11 +96,11 @@ def local_tools(path):
                                 defaults + list(node.args.kw_defaults)):
             if arg.arg in ("self", "ctx"):
                 continue
-            kind = ast.unparse(arg.annotation) if arg.annotation is not None else "any"
+            kind, detail = annotated_parts(arg.annotation, aliases) if arg.annotation is not None else ("any", "")
             if isinstance(default, ast.Name):
                 default = constants.get(default.id, default)
             arguments.append((arg.arg, kind, default is None,
-                              None if default is None else ast.unparse(default)))
+                              None if default is None else ast.unparse(default), one_line(detail)))
         doc = ast.get_docstring(node) or ""
         tools[name] = (one_line(doc.split("\n\n", 1)[0]), arguments)
     return tools

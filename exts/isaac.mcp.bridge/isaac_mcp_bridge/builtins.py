@@ -349,6 +349,12 @@ def cmd_status(bridge) -> Dict[str, Any]:
         "hold": bridge.hold_report(),
         "doorway_hold": HOLD_CAPABILITY,
     })
+    # Which code this Kit runs: commit, uncommitted edits and in-place reloads. Never a process.
+    try:
+        from .source_state import report as source_report
+        ident["extension"] = source_report()
+    except Exception as e:  # noqa: BLE001 - optional detail; status must remain available
+        ident["extension"] = {"commit": "unknown", "dirty": None, "error": str(e)[:200]}
     return ident
 
 

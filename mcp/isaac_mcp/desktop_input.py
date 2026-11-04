@@ -13,7 +13,9 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable
+from typing import Annotated, Iterable
+
+from pydantic import Field
 
 try:
     import fcntl
@@ -28,6 +30,13 @@ from . import screen
 from .local_tools import DESKTOP_INPUT, ScopedTools
 
 _input_lock = threading.Lock()
+_WindowId = Annotated[int, Field(description="Window id from list_windows.")]
+_Pid = Annotated[int, Field(description="The window's PID from list_windows; a different owner is refused.")]
+_X = Annotated[int, Field(description="X in original window pixels, from a fresh screenshot.")]
+_Y = Annotated[int, Field(description="Y in original window pixels, from a fresh screenshot.")]
+_Width = Annotated[int, Field(description="The window width you inspected, in pixels; a changed size is refused.")]
+_Height = Annotated[int, Field(description="The window height you inspected, in pixels; a changed size is refused.")]
+
 _MAX_TEXT = 200
 _MAX_SCROLL = 10
 _BUTTONS = {"left": 1, "middle": 2, "right": 3}
@@ -261,9 +270,10 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
     mcp = ScopedTools(server, groups)
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_click(window_id: int, expected_pid: int, x: int, y: int,
-                     expected_width: int, expected_height: int,
-                     button: str = "left", clicks: int = 1) -> str:
+    def window_click(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
+                     expected_width: _Width, expected_height: _Height,
+                     button: Annotated[str, Field(description="left, middle or right.")] = "left",
+                     clicks: Annotated[int, Field(description="1 or 2.")] = 1) -> str:
         """Click a visible point in one selected X11 window. Coordinates are original window pixels.
 
         Obtain window_id, PID and size from list_windows; inspect a fresh screenshot first.
@@ -279,8 +289,10 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         return f"sent click to window {window_id} at ({x}, {y}); verify the resulting UI"
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_drag(window_id: int, expected_pid: int, x: int, y: int, end_x: int, end_y: int,
-                    expected_width: int, expected_height: int) -> str:
+    def window_drag(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
+                    end_x: Annotated[int, Field(description="Drag end X in original window pixels.")],
+                    end_y: Annotated[int, Field(description="Drag end Y in original window pixels.")],
+                    expected_width: _Width, expected_height: _Height) -> str:
         """Drag with the left mouse button between two points in the same X11 window.
 
         Coordinates are original window pixels; inspect a fresh screenshot and size first.
@@ -312,9 +324,10 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         return f"sent drag in window {window_id} from ({x}, {y}) to ({end_x}, {end_y}); verify the resulting UI"
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_scroll(window_id: int, expected_pid: int, x: int, y: int,
-                      expected_width: int, expected_height: int,
-                      direction: str, steps: int = 1) -> str:
+    def window_scroll(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
+                      expected_width: _Width, expected_height: _Height,
+                      direction: Annotated[str, Field(description="up, down, left or right.")],
+                      steps: Annotated[int, Field(description="Scroll steps, 1-10.")] = 1) -> str:
         """Scroll up, down, left or right at a visible window point, at most ten steps per call.
 
         Coordinates are original window pixels; inspect a fresh screenshot and size first.
@@ -331,7 +344,8 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         return f"sent {steps} scroll step(s) {direction} to window {window_id}; verify the resulting UI"
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_type(window_id: int, expected_pid: int, text: str) -> str:
+    def window_type(window_id: _WindowId, expected_pid: _Pid,
+                    text: Annotated[str, Field(description="Up to 200 printable ASCII characters.")]) -> str:
         """Type up to 200 printable ASCII characters into the focused selected X11 window.
 
         It does not use the clipboard. Caps Lock and unsupported key mappings are rejected.
@@ -365,8 +379,9 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         return f"sent {len(text)} character(s) to window {window_id}; wait for the UI and verify the text"
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_key(window_id: int, expected_pid: int, key: str,
-                   modifiers: list[str] | None = None) -> str:
+    def window_key(window_id: _WindowId, expected_pid: _Pid,
+                   key: Annotated[str, Field(description="A navigation or editing key name, or an ASCII letter or digit, e.g. enter, tab, a.")],
+                   modifiers: Annotated[list[str] | None, Field(description="Any of ctrl, shift, alt, super.")] = None) -> str:
         """Send one navigation/editing key or ASCII letter/digit to the focused X11 window.
 
         Modifiers may contain ctrl, shift, alt and super. Input can trigger destructive or external actions.

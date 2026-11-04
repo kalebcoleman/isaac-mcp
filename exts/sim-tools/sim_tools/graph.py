@@ -242,10 +242,10 @@ def _headless():
 
 
 def _allowed_tokens(attr):
-    import omni.graph.core as og
+    from .compat import metadata_keys
 
     try:
-        raw = attr.get_metadata(og.MetadataKeys.ALLOWED_TOKENS)
+        raw = attr.get_metadata(metadata_keys().ALLOWED_TOKENS)
     except Exception:  # noqa: BLE001
         return []
     return [t for t in (raw or "").split(",") if t]
@@ -307,9 +307,29 @@ def inspect_graph(stage, path, limit=64):
     return dict(graph=path, evaluator=graph.get_evaluator_name(), node_count=len(nodes),
                 truncated=len(nodes) > limit, nodes=out,
                 **_ros_render_status(stage, nodes[:limit]),
+                **_ros_domain_note(out),
                 **({"nodes_with_errors": failing,
                     "note": "Compute errors come from the last time the graph ran (play the timeline first)."}
                    if failing else {}))
+
+
+def _ros_domain_note(records, env=None):
+    """A saved ROS2Context can override ROS_DOMAIN_ID, which is all sim__stage__info reports."""
+    env_domain = str((os.environ if env is None else env).get("ROS_DOMAIN_ID", "0"))
+    fixed = {}
+    for record in records:
+        if record["type"].rsplit(".", 1)[-1] != "ROS2Context":
+            continue
+        inputs = record["inputs"]
+        domain = inputs.get("inputs:domain_id", {}).get("value")
+        if inputs.get("inputs:useDomainIDEnvVar", {}).get("value") is False and str(domain) != env_domain:
+            fixed[record["path"]] = domain
+    if not fixed:
+        return {}
+    return dict(ros_domain_note=dict(
+        authored_domains=fixed, ros_domain_id=env_domain,
+        note="These ROS2Context nodes publish on their authored domain_id, not ROS_DOMAIN_ID (useDomainIDEnvVar is off). "
+             "Use that domain in your ROS shell, or turn the option on."))
 
 
 def _writer_computes(stage, product_path):
@@ -336,7 +356,7 @@ def _ros_render_status(stage, nodes):
     import omni.graph.core as og
     import omni.timeline
 
-    from .render_export import HELPERS, PUBLISHER_NOTE, helper_render_status, retained_product_paths
+    from .render_export import HELPERS, PUBLISHER_NOTE, helper_render_status, retained_product_paths, writer_problem
 
     helpers = [node for node in nodes if node.get_type_name() in HELPERS]
     if not helpers:
@@ -350,6 +370,9 @@ def _ros_render_status(stage, nodes):
             runtime = og.Controller.get(node.get_attribute("inputs:renderProductPath"))
             entry = helper_render_status(stage, helper, runtime, retained, playing)
             entry["writer_computes"] = _writer_computes(stage, entry["render_product"])
+            problem = writer_problem(entry, playing)
+            if problem:
+                entry["problem"] = problem
         except Exception as exc:  # noqa: BLE001 - diagnostics must never break inspection
             entry = dict(node=node.get_prim_path(), status="unknown", error=f"{type(exc).__name__}: {str(exc)[:200]}")
         status.append(entry)
@@ -632,6 +655,26 @@ def _start_in_collider(stage, start, z_mid, cell, to_su):
         return False
 
 
+def _colliders_in_bounds(lo, hi, z, to_su, limit=5):
+    """Colliders PhysX finds in the mapped volume. Unlike a bounding box, this tests a mesh room's walls, not the
+    space they enclose, so the inside of a large room counts as empty. Physics is playing during generation."""
+    try:
+        from omni.physx import get_physx_scene_query_interface
+
+        half = tuple((high - low) * 0.5 * to_su for low, high in zip((*lo, z[0]), (*hi, z[1])))
+        center = tuple((high + low) * 0.5 * to_su for low, high in zip((*lo, z[0]), (*hi, z[1])))
+        found = set()
+
+        def report(hit):
+            found.add(str(hit.collision or hit.rigid_body))
+            return len(found) < limit
+
+        get_physx_scene_query_interface().overlap_box(half, center, (0.0, 0.0, 0.0, 1.0), report, False)
+        return sorted(found)
+    except Exception:  # noqa: BLE001 - no scene query available: nothing proves the map is wrong
+        return []
+
+
 def occupancy_map(scene, stage, a):
     """Generate a 2D occupancy map from the stage's colliders and write a Nav2 PGM + YAML."""
     from isaac_mcp.project_assets import refuse
@@ -671,6 +714,11 @@ def occupancy_map(scene, stage, a):
         refuse("START_BLOCKED", f"start {start} {reason}. The generator flood-fills free space from it, so the "
                "map would be empty or wrong. Move start to open floor next to (not on) the robot; `clear` only "
                "edits the saved image. No files were written.", cells=counts)
+    colliders = _colliders_in_bounds(lo, hi, z, to_su) if counts["occupied"] == 0 else []
+    if colliders:
+        refuse("MAP_NO_OBSTACLES", f"The generator marked no cell occupied, but colliders are inside the bounds and z "
+               f"slice ({', '.join(colliders)}), so this map would be wrong. Check that they are enabled and that "
+               "physics has run since they were added. No files were written.", colliders=colliders, cells=counts)
     scene.output.mkdir(mode=0o700, parents=True, exist_ok=True)
     pgm_path.write_bytes(pgm)
     yaml_text = (f"image: {base}.pgm\nmode: trinary\nresolution: {cell:g}\n"

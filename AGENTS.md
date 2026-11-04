@@ -46,9 +46,11 @@ When saving a scene with native ROS camera or LiDAR render handles, `sim__stage_
 `properties` and `retry_with`. After inspecting that response, explicitly retry with the flag set
 to `true` only if normalization of those runtime fields in the exported copy is intended. The
 result reports `omitted_runtime_render_properties`; cameras and source/live layers remain intact.
-The flag does not bypass ambiguous, authored, dependent or unavailable-binding refusals, prove
-property authorship, or repair an already-stale opened file. This tool's own `IsaacMCP_*` capture products need no flag.
-`sim__stage__open` deactivates stale saved LiDAR products in the session layer, so `/scan` returns; see
+The flag does not bypass ambiguous, dependent or unavailable-binding refusals, or an authored camera handle,
+and does not prove property authorship. A LiDAR handle saved in the file is dropped from the copy, and saves omit
+Replicator's runtime pipeline, so saving with the flag and opening the copy is the rescue for a stale LiDAR file
+([saved LiDAR scenes](docs/TOOLS-SCENE.md#saved-lidar-scenes-and-scan)). This tool's own `IsaacMCP_*` capture products need no flag.
+On builds where it was measured (6.2.0.0 and 5.1.0.0), `sim__stage__open` deactivates stale saved LiDAR products in the session layer, so `/scan` returns. On other builds it reports them and its `rescue` field gives the fix; see
 [why a saved LiDAR lost its topic](docs/TOOLS-SCENE.md#saved-lidar-scenes-and-scan). Pause before saving and verify the
 new file in a fresh process. See [save limitations](docs/TOOLS-SCENE.md).
 
@@ -74,10 +76,10 @@ configured filters.
 | Simulator sessions (optional) | 4 (`sim__*`) | only when `sim_launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
 | Isaac Lab (`isaaclab__*`) | 12 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
-| Generic scene and assets | 48 (`assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots/scan/search run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
-| UR5e twin (`ur5e_dt__*`) | 23 | listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
+| Generic scene and assets | 55 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
+| UR5e twin (`ur5e_dt__*`) | 23 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, a client lists exactly 102 tools from startup:
+With default groups and no namespace filter, a client lists exactly 109 tools from startup:
 the host, Isaac Lab, bridge built-in, generic and UR5e catalog tiers, whether or not Kit is running.
 A listed tool does not prove that a bridge exists: catalogued tools dial the selected bridge when
 called and return an actionable error if none answers. Use `status` (or the CLI check below) to
@@ -92,7 +94,7 @@ find out. Fewer tools mean a filter:
 
 The other 7 tools (bridge built-ins) are listed from the same kind of snapshot as the twin and
 scene tools, so clients that ignore `tools/list_changed` (OpenCode) can call them at once. With
-the standard groups and bridge built-ins visible there are 102 tools in total. The optional desktop input and
+the standard groups and bridge built-ins visible there are 109 tools in total. The optional desktop input and
 simulator session groups add 9 more. The initial generic tools are documented in `docs/TOOLS-SCENE.md`; the broader
 `docs/GENERIC-SIM-TOOLS.md` design includes capabilities not yet implemented. Untrusted
 loading and remote upload remain disabled; bounded trusted USDZ packages are supported.
@@ -195,7 +197,7 @@ See [docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md).
 - Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). The job
   inspection and Python probe tools can have side effects and are not in `readonly`;
   `screenshot` writes files and returns desktop pixels. Annotations are hints, not enforcement.
-  Generic scene/asset tools carry conservative host annotations; legacy bridge tools are unchanged.
+  Generic scene/asset tools, bridge built-ins and the UR5e twin carry host annotations. Tools a project's own extension registers carry none.
 
 ## Changing tools
 

@@ -120,6 +120,12 @@ class Live:
 
 def main(argv: list[str]) -> int:
     mode = argv[1] if len(argv) > 1 else "offline"
+    if mode in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    if mode not in ("offline", "live") or (mode == "live" and len(argv) < 3):
+        print("usage: smoke_mcp_surface.py offline | live PLAN.json [OUT.json]", file=sys.stderr)
+        return 2
     if mode == "offline":
         os.environ["UR5E_DT_PORT"] = OFFLINE_PORT
     plan = OFFLINE_PLAN if mode == "offline" else [(p["tool"], p.get("args", {})) for p in json.load(open(argv[2]))]

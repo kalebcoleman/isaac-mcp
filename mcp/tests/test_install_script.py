@@ -234,3 +234,29 @@ def test_opencode_entry_uses_the_installed_path_so_it_starts_without_path_setup(
     result = _install(root, env, "--no-sim", "--print-opencode")
     assert result.returncode == 0, result.stdout + result.stderr
     assert f'"command": ["{Path(env["HOME"]) / ".local" / "bin" / "isaac-mcp"}"]' in result.stdout
+
+
+def test_an_explicitly_named_51_is_used_with_a_clear_warning(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / "bricksim", "5.1.0.0"))
+    result = _install(root, env, "--claude-code")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "uv sync" not in _calls(log)
+    assert "explicitly pinned older build" in result.stderr and "auto-detection never picks it" in result.stderr
+    assert f"ISAAC_MCP_PYTHON={env['ISAAC_MCP_PYTHON']}" in _calls(log)
+
+
+def test_auto_detection_never_picks_51(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    old = _fake_isaac(root.parent / "older-project" / ".venv", "5.1.0.0")
+    new = _fake_isaac(root.parent / "other-project" / ".venv", "6.2.0.0")
+    result = _install(root, env, "--claude-code", "--no-sim")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"ISAAC_MCP_PYTHON={new}" in _calls(log) and str(old) not in _calls(log)
+
+
+def test_a_named_older_build_other_than_51_is_still_refused(tmp_path):
+    root, env, _ = _sandbox(tmp_path)
+    env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / "old", "4.5.0"))
+    result = _install(root, env)
+    assert result.returncode == 1 and "6.x or 5.1 install" in result.stderr

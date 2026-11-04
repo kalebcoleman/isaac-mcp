@@ -1,6 +1,6 @@
 # Host MCP Server: `isaac-mcp`
 
-The project provides a single host-side Model Context Protocol (MCP) server that exposes both the live Omniverse Kit digital twin tools and desktop screen capture capabilities.
+The project provides a single host-side Model Context Protocol (MCP) server that exposes Isaac Sim's scene and asset tools, Isaac Lab jobs and desktop capture to any MCP client. One lab's UR5e digital twin is included as a separate tool group.
 
 The server package is located at `mcp/` (Python package `isaac_mcp`). The primary CLI executable is `isaac-mcp`. There is one command name and no aliases.
 
@@ -56,14 +56,6 @@ unrelated file or symlink already occupies that path. Direct `uv tool install` d
 
 ## 2. Available Tools
 
-### Simulator Tools (`ur5e_dt__*`)
-The host lists a packaged catalog of UR5e tools even before a simulator is running. Calls require an Isaac Sim
-session running `exts/ur5e-dt`; when connected, the bridge's live metadata takes precedence. Kit's
-canonical `ur5e_dt.<tool>` names appear to MCP clients as `ur5e_dt__<tool>`. The pack includes scene setup,
-`play_scene`/`stop_scene`, object management, ROS graphs and viewport recording. See the complete
-[UR5e tool reference](TOOLS-UR5E.md) for actual names, parameters and side effects. Joint-position and pause tools
-are not registered by this pack.
-
 ### Generic scene and assets (`sim__*`, `assets__*`)
 
 The generic tools are catalog-listed by default. `assets__roots`, `assets__scan` and
@@ -75,6 +67,14 @@ The twin's own robot, sensor and bench files are resolved separately from these 
 Set `ISAAC_MCP_ASSET_PATH` (deprecated alias `UR5E_DT_ASSET_CACHE`) and optionally
 `ISAAC_MCP_ASSET_STRICT=1` (alias `UR5E_DT_OFFLINE`) in the **Kit** environment. See
 [Assets: stores, project file and doctor](ASSETS.md).
+
+### RISE lab's UR5e twin (`ur5e_dt__*`)
+The host lists a packaged catalog of UR5e tools even before a simulator is running. Calls require an Isaac Sim
+session running `exts/ur5e-dt`; when connected, the bridge's live metadata takes precedence. Kit's
+canonical `ur5e_dt.<tool>` names appear to MCP clients as `ur5e_dt__<tool>`. The pack includes scene setup,
+`play_scene`/`stop_scene`, object management, ROS graphs and viewport recording. See the complete
+[UR5e tool reference](TOOLS-UR5E.md) for actual names, parameters and side effects. Joint-position and pause tools
+are not registered by this pack.
 
 ### Bridge discovery and selection
 
@@ -157,7 +157,7 @@ Do not launch a real robot driver for a simulation-only task.
 
 ## 3. Multi-Session Configuration (Ports)
 
-By default, the twin bridge binds to port **8766**. When running multiple concurrent simulation sessions, assign distinct ports using `UR5E_DT_PORT`:
+By default, the bridge binds to port **8766**. When running multiple concurrent simulation sessions, assign distinct ports using `UR5E_DT_PORT`:
 
 ```bash
 # Terminal 1: Primary session
@@ -170,7 +170,7 @@ By default, the twin bridge binds to port **8766**. When running multiple concur
 An MCP client connected to port 8766 can switch to the second session at runtime:
 
 ```python
-use_bridge(8767)
+use_bridge(port=8767)
 ```
 
 The switch persists until the MCP server process restarts.
@@ -197,7 +197,7 @@ Run `./install.sh --no-sim --claude-code`, or configure it with the `claude mcp`
 ```bash
 claude mcp add --scope user isaac \
   -e DISPLAY="${DISPLAY:-:0}" \
-  -e UR5E_DT_PORT=8766 \
+  -e ISAAC_MCP_PORT=8766 \
   -- "$(command -v isaac-mcp || echo "$HOME/.local/bin/isaac-mcp")"
 ```
 
@@ -212,7 +212,7 @@ Add the server to `~/.config/Claude/claude_desktop_config.json`, or run `./insta
       "command": "isaac-mcp",
       "args": [],
       "env": {
-        "UR5E_DT_PORT": "8766",
+        "ISAAC_MCP_PORT": "8766",
         "DISPLAY": ":0"
       }
     }
@@ -230,7 +230,7 @@ Add the server to `~/.config/opencode/opencode.jsonc` (`./install.sh --no-sim --
   "type": "local",
   "command": ["isaac-mcp"],
   "environment": {
-    "UR5E_DT_PORT": "8766",
+    "ISAAC_MCP_PORT": "8766",
     "DISPLAY": ":0"
   }
 }
@@ -242,7 +242,7 @@ Add the server with the Codex CLI, or as a `[mcp_servers.isaac]` table in `~/.co
 (the key is `mcp_servers`, not `mcpServers`):
 
 ```bash
-codex mcp add isaac --env DISPLAY="${DISPLAY:-:0}" --env UR5E_DT_PORT=8766 \
+codex mcp add isaac --env DISPLAY="${DISPLAY:-:0}" --env ISAAC_MCP_PORT=8766 \
   -- "$(command -v isaac-mcp || echo "$HOME/.local/bin/isaac-mcp")"
 ```
 
@@ -252,7 +252,7 @@ command = "<home>/.local/bin/isaac-mcp"
 
 [mcp_servers.isaac.env]
 DISPLAY = ":0"
-UR5E_DT_PORT = "8766"
+ISAAC_MCP_PORT = "8766"
 # For the isaaclab__* job tools:
 # ISAACLAB_PYTHON = "<workspace>/envs/lab-3.0/bin/python"
 # ISAACLAB_ROOT = "<workspace>/IsaacLab"
@@ -273,7 +273,7 @@ config**. The file does not allow comments.
       "args": [],
       "env": {
         "DISPLAY": ":0",
-        "UR5E_DT_PORT": "8766"
+        "ISAAC_MCP_PORT": "8766"
       }
     }
   }

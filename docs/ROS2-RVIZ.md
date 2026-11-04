@@ -102,6 +102,26 @@ Tool `sim__ros2__tf_setup`, with the IDs from `sim__stage__info`:
 | Mobile base with AMCL/SLAM | `base=mobile`, `base_link=<chassis prim>`, `world_frame=""` |
 | Cameras, LiDARs, `tool0` | `extra_frames=["/World/.../tool0", "/World/camera"]` (published relative to the base link) |
 | Several robots | one call per robot, each with its own `namespace` (its own graph; `/joint_states` and `/odom` are namespaced, TF stays on `/tf`). Their link names must differ: set `isaac:nameOverride`. A namespaced mobile base gets its own odometry frame `<ns>_odom`. Each graph also publishes `/clock` (same sim time) |
+| A gripper that is its own articulation on an arm | one call for the arm, then one for the gripper: `robot=/World/RG2_Gripper`, `base_link=/World/RG2_Gripper/rg2_base_link`, `namespace=rg2`, `attach_to=/World/UR5e/wrist_3_link` |
+
+A gripper joined to an arm by a fixed joint with `excludeFromArticulation` is a separate articulation, so neither one's
+link TF covers the joint, and the doctor reports its frames as not connected to `world`. A static transform would be wrong
+once the arm moves. `attach_to` publishes `wrist_3_link -> rg2_base_link` on every playback tick from the two live poses,
+in place of the world link. The parent must be a rigid body outside this robot, and the arm needs its own call so its
+link connects to `world`. Do not also give the gripper a world link. Checked on 6.2 with Quick Start's UR5e and RG2: the
+doctor found 17 frames all connected to `world`, and with the arm moving the gripper followed it about 1 m while the edge
+stayed about constant.
+
+One namespace holds one robot, because each namespace has one graph. Setting up a second robot in a namespace already used
+refuses with `ROBOT_GRAPH_CONFLICT`, names the robot there, and gives a free namespace in `retry_with`, so the first robot's
+joint states and frames stay. Repeating setup on the same robot rebuilds its graph as before. This also holds for a graph saved
+in a file and reopened.
+
+The tool refuses with `JOINT_STATE_LOOP` when another graph subscribes to the joint state topic it would publish. On a
+Quick Start scene, `ur5e_dt__*`'s graph mirrors a real robot from `/joint_states`, so publish the simulated state elsewhere:
+`joint_states_topic=isaac/joint_states`. Without this, the arm chased its own state and oscillated at about 3.14 rad/s once
+playing (checked on 6.2). The check sees graphs that exist at setup time: running `ur5e_dt__quick_start` after this tool
+creates the same loop, so call this tool again afterwards, which refuses until you pick another topic.
 
 The tool finds the articulation root itself (often a fixed `root_joint` below the robot prim).
 It refuses a `base_link` that is not one of the robot's links, a `base_frame` that differs from
@@ -143,7 +163,8 @@ the dock edge and use File > Save Config to keep a larger image.
 
 ## Agent shells: environment and driving
 
-`scripts/ros_env.sh` must be **sourced**. It sources a ROS 2 install (a path, or auto-detected:
+`scripts/ros_env.sh` must be **sourced**, and not in a pipeline: `source scripts/ros_env.sh ... | tail`
+runs it in a subshell, so the environment is silently lost (redirect to a file instead). It sources a ROS 2 install (a path, or auto-detected:
 `ROS_DISTRO` if exported, else Humble on 22.04 and Jazzy on 24.04, in `/opt/ros/<distro>` and
 `~/ros2/<distro>`), any `--overlay` on top of it, then `config/ros_dds.env`, then runs
 `ros2 daemon stop`, and prints what it chose:
@@ -156,10 +177,14 @@ source scripts/ros_env.sh --dry-run          # print the choice only
 ```
 
 RoboStack prefixes are activated with micromamba (stacked for an overlay, with the overlay first on
-`AMENT_PREFIX_PATH`). The daemon matters: one started earlier with other DDS settings answers
+`AMENT_PREFIX_PATH`). Prefer this to `micromamba run` for `ros2` commands: `micromamba run` takes a lock
+on the prefix, which breaks concurrent `ros2` calls. The daemon matters: one started earlier with other DDS settings answers
 `ros2 topic list` and `ros2 node list` with nothing while data flows. `--keep-daemon` skips the
 stop; `ros2 topic list --no-daemon` avoids the daemon (`ros2 topic hz` has no such flag). Kit's
 bridge nodes do not appear in `ros2 node list` at all; check topics and `/tf` instead.
+
+`ros2 topic echo` truncates long arrays, so a LaserScan can look all invalid: judge `/scan` with
+`--field` or a small `rclpy` subscriber.
 
 Without a TTY there is no keyboard teleop. Drive with timed steps (linear m/s, angular rad/s,
 seconds):

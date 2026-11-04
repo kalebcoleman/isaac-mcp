@@ -282,3 +282,39 @@ def test_other_managed_and_unmanaged_sessions_cannot_stop_a_managed_driver(fake_
                     os.killpg(managed_pid, signal.SIGKILL)
             except (FileNotFoundError, ProcessLookupError):
                 pass
+
+
+def test_named_ros_setup_decides_the_distribution(fake_ros, tmp_path):
+    """A RoboStack prefix or other install: ROS_SETUP says its distribution, whatever the OS is."""
+    root, env = fake_ros
+    prefix = tmp_path / "ros2-humble"
+    prefix.mkdir()
+    (prefix / "setup.bash").write_text(f'. "{env["ROS_SETUP"]}"\nexport ROS_DISTRO=humble\n')
+    env.pop("ROS_DISTRO", None)
+    env.update(ROS_SETUP=str(prefix / "setup.bash"), ADVERTISED_ARG="use_fake_hardware")
+    result = subprocess.run(["bash", str(SCRIPT), "up"], env=env, text=True, capture_output=True, timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "use_fake_hardware:=true" in (root / "args").read_text().splitlines()
+
+
+def test_named_ros_setup_that_sets_no_distribution_refuses(fake_ros, tmp_path):
+    root, env = fake_ros
+    setup = tmp_path / "plain.bash"
+    setup.write_text(f'. "{env["ROS_SETUP"]}"\nunset ROS_DISTRO\n')
+    env.pop("ROS_DISTRO", None)
+    env.update(ROS_SETUP=str(setup), ADVERTISED_ARG="use_mock_hardware")
+    result = subprocess.run(["bash", str(SCRIPT), "up"], env=env, text=True, capture_output=True)
+    assert result.returncode != 0 and "does not support ROS_DISTRO" in result.stderr
+    assert not (root / "args").exists()
+
+
+def test_activated_environment_needs_no_setup_file(fake_ros):
+    """RoboStack activated: ROS_DISTRO set, ros2 on PATH, no /opt/ros, no ROS_SETUP."""
+    if Path("/opt/ros/humble/setup.bash").exists():
+        pytest.skip("this machine has a real /opt/ros/humble")
+    root, env = fake_ros
+    env.pop("ROS_SETUP")
+    env.update(ROS_DISTRO="humble", ADVERTISED_ARG="use_fake_hardware")
+    result = subprocess.run(["bash", str(SCRIPT), "up"], env=env, text=True, capture_output=True, timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "use_fake_hardware:=true" in (root / "args").read_text().splitlines()

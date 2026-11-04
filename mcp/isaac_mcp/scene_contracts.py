@@ -81,7 +81,7 @@ add(
 )
 add(
     "assets.import_path",
-    "Import a trusted local USD from an absolute path under an approved project root. Copies and validates its project dependencies before authoring a reference; source files remain unchanged.",
+    "Import a trusted local USD by absolute path, under an approved project root or in a pack of the user's asset store. Copies and validates its project dependencies before authoring a reference; source files remain unchanged.",
     dict(
         **TARGET,
         source_path=field(
@@ -97,11 +97,23 @@ add(
 )
 add(
     "sim.stage.open",
-    "Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage really has unsaved edits unless discard_changes=true. Deactivates stale saved LiDAR render products in the session layer so their ROS topics return (reported in stale_render_products; the file is unchanged). Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset.",
+    "Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's output folder) as the current stage, like File > Open, with the timeline stopped. Refuses to drop unsaved edits unless discard_changes=true. Reports stale saved LiDAR render products and never changes the file. Returns the new session_id and stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info.",
     dict(
         **TARGET,
-        path=field("string", "Absolute path of the USD file to open (a leading tilde for your home is expanded)."),
+        path=field("string", "Absolute path of the USD file to open, under your home or this simulator's output folder, where sim__stage__save writes by default (a leading tilde for your home is expanded)."),
         discard_changes=field("boolean", "Open even if the current stage has unsaved edits (they are lost).", False, default=False),
+    ),
+)
+add(
+    "sim.quick_start",
+    "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns the new session_id and stage_id, paths, each asset's source and next steps. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
+    dict(
+        robot=field("string", "Optional robot: a public name (ur5e, from your local copy first, then NVIDIA, honoring strict mode), <pack>/<file.usd> from an asset pack in your asset folder, or an absolute path under an approved root (same rules as assets__import_path). A file found only through a project file's asset_path is refused.", False),
+        ros=field("boolean", "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.", False, default=False),
+        up_axis=field("string", "The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass.", False, default="Z", enum=["Z", "Y"]),
+        meters_per_unit=field("number", "The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match.", False, default=1.0),
+        play=field("boolean", "Start the timeline after building.", False, default=False),
+        discard_changes=field("boolean", "Replace a stage with unsaved edits (they are lost).", False, default=False),
     ),
 )
 add(
@@ -190,7 +202,7 @@ add(
 )
 add(
     "sim.stage.save",
-    "Export a flattened copy, including session edits, to a new basename (.usda is added if absent) in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save.",
+    "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info.",
     dict(
         **TARGET,
         filename=field("string", "New basename ending .usda; no directories."),
@@ -205,7 +217,7 @@ add(
 )
 add(
     "sim.viewport.frame",
-    "Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. If the prim has no geometry, an unambiguous nearby subtree can be selected; the result reports the requested and actual paths, and follow tracks the actual path. follow=false stops following; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds (with candidates). Does not wait for rendered pixels; then screenshot the app window or record.",
+    "Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info.",
     dict(
         **TARGET,
         path=field("string", "Absolute prim path to frame or follow.", False, default=""),
@@ -233,6 +245,88 @@ add(
             default="",
         ),
         limit=field("integer", "Maximum results 1..100.", False, default=50),
+    ),
+)
+# These run in the MCP host and work without Kit. Kit must not serve them.
+HOST_ONLY = {
+    "assets.roots",
+    "assets.scan",
+    "assets.search",
+    "assets.packs",
+    "assets.pack_doctor",
+    "assets.pack_adopt",
+    "assets.pack_pin",
+    "assets.pack_build",
+}
+add(
+    "assets.packs",
+    "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing.",
+)
+add(
+    "assets.pack_doctor",
+    "Check a pack without changing it: corrupt, missing and unpinned files, then the USD dependencies of its entry files (unresolved, unreadable, remote, outside the pack). Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false.",
+    dict(
+        pack=field("string", "Pack name. Default: the selected pack.", False),
+        entries=field(
+            "array",
+            "Files in the pack that are its roots. Default: recorded in the pack, or the twin's known names for ur5e-dt.",
+            False,
+        ),
+    ),
+)
+add(
+    "assets.dependencies",
+    "Compute USD dependency closures with UsdUtils.ComputeAllDependencies for files under an approved root or a user asset store. Uses a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit. Native USD parsing is NOT sandboxed. Copies nothing.",
+    dict(paths=field("array", "Absolute USD file paths, 1 to 64.")),
+)
+add(
+    "assets.pack_adopt",
+    "Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A different file already there is refused unless force=true; nothing is written inside the repository.",
+    dict(
+        pack=field("string", "Pack name: one folder name, no path separators."),
+        source_path=field(
+            "string", "Absolute folder under an approved root. Omit to create an empty pack.", False
+        ),
+        include=field("array", "Extra file extensions to copy.", False),
+        files=field("array", "Copy only these files or folders, relative to source_path. A named file is copied whatever its type.", False),
+        entries=field("array", "Root USD files, relative to the pack, for assets__pack_doctor. Default: a sole top-level USD.", False),
+        dry_run=field("boolean", "Report the plan and write nothing.", False, default=False),
+        force=field("boolean", "Replace files that differ from the source.", False, default=False),
+    ),
+)
+add(
+    "assets.pack_pin",
+    "Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true.",
+    dict(
+        pack=field("string", "Pack name. Default: the selected pack.", False),
+        files=field("array", "Pin only these relative paths, accepting their changes.", False),
+        force=field("boolean", "Accept every changed and removed file.", False, default=False),
+    ),
+)
+add(
+    "assets.pack_build",
+    "Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Follows MaterialX and MDL textures too. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them. Files that differ need force=true. Checks the new pack afterwards.",
+    dict(
+        pack=field("string", "Destination pack name: one folder name."),
+        sources=field(
+            "array",
+            "USD files, 1 to 64: absolute paths, or paths inside from_pack. A scene outside from_pack and layout_root is read for its references and not copied.",
+        ),
+        from_pack=field(
+            "string",
+            "Pack that source names and logical references such as robot/ur5e.usd come from.",
+            False,
+        ),
+        layout_root=field(
+            "string",
+            "Absolute folder the pack layout is relative to. Default: from_pack, or the source's folder.",
+            False,
+        ),
+        allow_unresolved=field(
+            "boolean", "Build despite missing or remote references, and record them.", False, default=False
+        ),
+        dry_run=field("boolean", "Report the closure and write nothing.", False, default=False),
+        force=field("boolean", "Replace files that differ from the source.", False, default=False),
     ),
 )
 add(
@@ -388,7 +482,7 @@ add(
 )
 add(
     "sim.lidar.create",
-    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D, as Create > Sensors > RTX Lidar does) or, without config, a local generic LiDAR. Config assets are referenced from Isaac's assets root (network or local mirror); an unknown name lists the valid ones. Motion BVH is not required (only motion distortion within a scan needs run.sh --motion-bvh); the result reports it. Returns prim type, sensor path and tick/scan rate. At most eight sensors; delete an exact owned sensor path to release resources.",
+    "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. Config assets come from Isaac's assets root; an unknown name lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.",
     dict(
         **TARGET,
         path=field("string", "Unused LiDAR prim path; its parent prim (e.g. a robot link) must exist."),
@@ -420,7 +514,8 @@ add(
         base=field("string", "fixed (arm on a table: static world->base) or mobile (odometry: world->odom->base).", False, default="fixed"),
         world_frame=field("string", "Root frame for RViz's Fixed Frame, e.g. world or map. Empty: publish no world link (a localization node provides map->odom).", False, default="world"),
         link_frames=field("string", "isaac: Isaac publishes every link frame. robot_state_publisher: Isaac publishes only /joint_states and the base link; run robot_state_publisher with the URDF. Never both.", False, default="isaac"),
-        extra_frames=field("array", "Up to 16 more prims (cameras, LiDARs) to publish relative to the base link; frame name = prim name.", False, default=[]),
+        extra_frames=field("array", "Up to 16 more prims (cameras, LiDARs, tool0) to publish relative to the base link; frame name = prim name.", False, default=[]),
+        attach_to=field("string", "For a robot that is its own articulation mounted on another (RG2 on a UR5e wrist): the parent link's prim. Publishes parent->base_link dynamically on every tick instead of a static world link, so it follows the arm. Call this tool once per articulation, with a namespace for this one.", False, default=""),
         namespace=field("string", "ROS node namespace prepended to the topics.", False, default=""),
         joint_states_topic=field("string", "Joint state topic.", False, default="joint_states"),
         clock=field("string", "auto: reuse an existing /clock, else publish one shared clock for all robots (two clocks make RViz reset constantly); publish: always keep the tool's clock; skip: never create one.", False, default="auto", enum=["auto", "publish", "skip"]),
@@ -438,7 +533,7 @@ add(
 )
 add(
     "sim.graph.build",
-    "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Containers or individual node/connection entries may be JSON-encoded strings; flat alternating node and connection lists also work. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types.",
+    "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Find node types and ports first with sim__graph__node_types. Checks every port, lists the real ones on a typo, and rolls the graph back on any error. Timeline stopped. Returns it as sim__graph__inspect does. Requires session_id and stage_id from sim__stage__info.",
     dict(
         **TARGET,
         path=field("string", "Graph prim path to create, e.g. /World/ROS_Clock or /turtlebot3_burger/ROS_Drive."),
@@ -461,7 +556,7 @@ add(
 )
 add(
     "sim.graph.show",
-    "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands and arranges nodes, writing positions into the stage; stop first, or use layout=false while playing. TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window; it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed.",
+    "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit, e.g. for a demo video. layout=true arranges nodes and writes positions into the stage, so stop first or use layout=false while playing; TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. Uses the editor's internal API and refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info.",
     dict(
         **TARGET,
         path=field("string", "Graph prim path (not needed with close=true).", False, default=""),
@@ -493,7 +588,7 @@ add(
         text=field("string", "Text for action=type (1..500 characters, no newlines; send enter with keypress).", False),
         keys=field("array", "For action=keypress: one key plus optional modifiers, e.g. [\"ctrl\", \"s\"], [\"enter\"], [\"shift\", \"tab\"].", False),
         window=field("string", "For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'.", False),
-        menu=field("string", "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube', or a top-level menu such as 'Layouts' (opened to list its items, then closed again).", False),
+        menu=field("string", "For action=menu: a menu path, e.g. 'Create/Mesh/Cube' (a menu an extension adds exists only once it has loaded), or a top-level menu such as 'Layouts' (opened to list its items, then closed again).", False),
         scroll_x=field("integer", "Horizontal wheel steps for action=scroll (-20..20).", False, default=0),
         scroll_y=field("integer", "Vertical wheel steps for action=scroll (-20..20; negative scrolls down).", False, default=0),
         frames=field("integer", "Frames to wait after the action so the UI updates (0..600).", False, default=3),
@@ -541,7 +636,7 @@ add(
 
 add(
     "sim.joints.command",
-    "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose.",
+    "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure.",
     dict(
         **TARGET,
         path=field("string", "Exact initialized articulation root path."),

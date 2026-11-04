@@ -27,6 +27,8 @@ MCP_NAMESPACE = "demo"
 #: Written against the bridge's request-admission contract (README, "Request admission"). A
 #: package that declares nothing has its tools refused: its frame-pumping tools would be unmarked.
 DOORWAY_ADMISSION = 1
+#: Each settable threshold's allowed range, so the rule lives in the tool and not in each caller.
+THRESHOLD_RANGES = {"grip_force_n": (0.0, 40.0), "contact_distance_m": (0.0, 0.05)}
 
 
 def register(registrar):
@@ -61,3 +63,37 @@ def register(registrar):
         cube = UsdGeom.Cube.Define(stage, path)
         cube.GetSizeAttr().Set(size)
         return {"path": path, "size": size}
+
+    # A project's own state as tools, instead of asking agents to run_python against its internals:
+    # typed arguments, one place for the rules, and they still work with ISAAC_MCP_BUILTINS=0, which
+    # hides run_python. See "A project's own tools" in mcp/docs/tool-authoring.md.
+
+    @registrar.tool(
+        "Read this demo project's connection state and thresholds.",
+        {},
+    )
+    def project_state():
+        from . import _state
+
+        return {"connection": _state.connection, "thresholds": dict(_state.thresholds)}
+
+    @registrar.tool(
+        "Set one of this demo project's thresholds. Refuses an unknown name or a value outside its range.",
+        {
+            "name": {"type": "string", "required": True, "enum": sorted(THRESHOLD_RANGES),
+                     "description": "Threshold to set."},
+            "value": {"type": "number", "required": True, "description": "New value, inside the threshold's range."},
+        },
+    )
+    def set_threshold(name: str, value: float):
+        from isaac_mcp_bridge import ToolError
+
+        from . import _state
+
+        if name not in THRESHOLD_RANGES:
+            raise ToolError(f"unknown threshold {name!r}", details={"known": sorted(THRESHOLD_RANGES)})
+        low, high = THRESHOLD_RANGES[name]
+        if not low <= value <= high:
+            raise ToolError(f"{name} must be between {low} and {high}, not {value}", details={"range": [low, high]})
+        _state.thresholds[name] = value
+        return {"name": name, "value": value}

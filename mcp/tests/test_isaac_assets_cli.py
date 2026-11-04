@@ -102,7 +102,7 @@ def test_where_json_schema(cli, capsys, tmp_path, monkeypatch):
     code, out, _ = run(cli, capsys, "where", "--json")
     data = json.loads(out)
     assert code == 0
-    assert set(data) == {"project_file", "stores", "strict", "deprecated_env"}
+    assert set(data) == {"project_file", "pack", "pack_source", "stores", "strict", "deprecated_env"}
     assert data["project_file"] is None
     assert data["stores"] == [{"path": str(store.resolve()), "origin": "user"}]
     assert data["strict"] is False
@@ -1033,7 +1033,7 @@ def test_v3_a_failed_cleanup_does_not_hide_the_original_error(cli, capsys, tmp_p
             raise PermissionError(errno.EACCES, "cleanup denied")
         return real_unlink(path, *args, **kwargs)
 
-    monkeypatch.setattr(cli, "_publish", failing_publish)
+    monkeypatch.setattr(cli.packs, "publish", failing_publish)
     monkeypatch.setattr(cli.os, "unlink", failing_unlink)
     code, _, err = run(cli, capsys, "add", str(source))
     assert code == 2
@@ -1331,7 +1331,7 @@ def test_migrate_moves_an_old_cache_and_keeps_nvidia_files_unpinned(cli, capsys,
     old = tmp_path / "home@host" / ".cache" / "ur5e-dt" / "assets"
     (old / "workstation").mkdir(parents=True)
     (old / "workstation" / "vention.usd").write_bytes(b"bench")
-    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
     code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 0, err
     pack = store / "ur5e-dt"
@@ -1447,7 +1447,7 @@ def test_migrate_keeps_a_pinned_lab_robot_over_nvidias_cached_copy(cli, capsys, 
     manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
         {"target": "robot/ur5e.usd", "source": "x", "sha256": sha(b"nvidia robot"), "size": 12}]}]}))
     monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
-    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
     code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 0, err
     assert "keeping 1 file(s) you pinned yourself" in out
@@ -1496,7 +1496,7 @@ def test_migrate_keeps_a_pin_from_an_old_asset_folder(cli, capsys, tmp_path, mon
     (old / "ur5e-dt" / "robot").mkdir(parents=True)
     (old / "ur5e-dt" / "robot" / "ur5e.usd").write_bytes(b"lab robot")
     (old / "ur5e-dt" / "SHA256SUMS").write_text(f"{sha(b'lab robot')}  robot/ur5e.usd\n")
-    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
     code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 0, err
     assert read_pins(store / "ur5e-dt")["robot/ur5e.usd"] == sha(b"lab robot")
@@ -1509,7 +1509,7 @@ def test_migrate_skips_a_file_that_no_longer_matches_its_old_pin(cli, capsys, tm
     (old / "workstation" / "vention.usd").write_bytes(b"damaged")
     (old / "workstation" / "ok.usd").write_bytes(b"fine")
     (old / "SHA256SUMS").write_text(f"{sha(b'bench')}  workstation/vention.usd\n")
-    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
     code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 1 and "does not match its pin" in err and "vention.usd" in err
     assert not (store / "ur5e-dt" / "workstation" / "vention.usd").exists()
@@ -1546,7 +1546,7 @@ def test_migrate_leaves_other_packs_in_an_old_folder_alone(cli, capsys, tmp_path
     (old / "mylab" / "SHA256SUMS").write_text(f"{sha(b'x')}  x.usd\n")
     (old / "workstation").mkdir()
     (old / "workstation" / "vention.usd").write_bytes(b"bench")
-    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
     code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 0, err
     assert "separate asset pack" in out and "adopt" in out
@@ -1572,7 +1572,7 @@ def test_migrate_skips_an_unpinned_old_nvidia_file_with_the_wrong_bytes(cli, cap
     old = tmp_path / "old-cache"
     (old / "robot").mkdir(parents=True)
     (old / "robot" / "ur5e.usd").write_bytes(b"truncated")
-    monkeypatch.setattr(cli.asset_cache, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
     code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 1 and "never pinned" in err  # nothing else to migrate, still an error
     assert not (store / "ur5e-dt" / "robot" / "ur5e.usd").exists()
@@ -1624,3 +1624,108 @@ def test_migrate_moves_nvidias_sensor_from_its_old_name_to_its_canonical_place(c
     assert (pack / "Isaac" / "Sensors" / "rsd455.usd").read_bytes() == b"sensor"
     assert not (pack / "sensors").exists()
     assert "Isaac/Sensors/rsd455.usd" not in read_pins(pack)
+
+
+# ---------------------------------------------- named packs
+
+
+def test_add_goes_to_the_selected_pack(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    source = tmp_path / "a.usd"
+    source.write_bytes(b"a")
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PACK", "bricksim")
+    assert run(cli, capsys, "add", str(source))[0] == 0
+    assert read_pins(store / "bricksim") == {"a.usd": sha(b"a")}
+    assert run(cli, capsys, "pin")[0] == 0
+
+
+@pytest.mark.parametrize("command", ["add", "pin", "adopt"])
+def test_an_invalid_pack_name_is_refused(cli, capsys, tmp_path, monkeypatch, command):
+    make_store(tmp_path, monkeypatch)
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "a.usd").write_bytes(b"a")
+    args = {"add": ["add", str(source)], "pin": ["pin"], "adopt": ["adopt", str(source)]}[command]
+    code, _, err = run(cli, capsys, *args, "--pack", "../escape")
+    assert code == 2 and "Invalid pack name" in err
+    assert not (tmp_path / "escape").exists()
+
+
+def test_invalid_selected_pack_stops_the_cli(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PACK", "a/b")
+    code, _, err = run(cli, capsys, "where")
+    assert code == 2 and "ISAAC_MCP_ASSET_PACK" in err
+
+
+def test_where_names_the_pack_and_its_source(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    assert "pack:         ur5e-dt (default)" in run(cli, capsys, "where")[1]
+    monkeypatch.setenv("ISAAC_MCP_ASSET_PACK", "bricksim")
+    assert json.loads(run(cli, capsys, "where", "--json")[1])["pack_source"] == "env"
+
+
+def test_packs_and_create(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    assert run(cli, capsys, "create", "fresh")[0] == 0
+    assert (store / "fresh" / cli.asset_cache.PACK_FILE).is_file()
+    assert run(cli, capsys, "create", "../bad")[0] == 2
+    code, out, _ = run(cli, capsys, "packs", "--json")
+    assert code == 0 and json.loads(out)["listing"][0]["packs"][0]["name"] == "fresh"
+    assert "fresh" in run(cli, capsys, "packs")[1]
+
+
+def test_unpin_command_keeps_the_file(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    source = tmp_path / "a.usd"
+    source.write_bytes(b"a")
+    run(cli, capsys, "add", str(source))
+    code, out, _ = run(cli, capsys, "unpin", "a.usd")
+    assert code == 0 and "fetch_ur5e_assets.py --force" in out
+    assert read_pins(store / "ur5e-dt") == {} and (store / "ur5e-dt" / "a.usd").is_file()
+    code, _, err = run(cli, capsys, "unpin", "a.usd")
+    assert code == 2 and "not pinned" in err
+
+
+def test_doctor_pack_pins_only_and_no_parser(cli, capsys, tmp_path, monkeypatch):
+    store = make_store(tmp_path, monkeypatch)
+    source = tmp_path / "a.usd"
+    source.write_bytes(b"a")
+    run(cli, capsys, "add", str(source), "--pack", "p")
+    monkeypatch.setattr(cli.packs, "usd_python", lambda: None)
+    code, out, _ = run(cli, capsys, "doctor", "--pack", "p")
+    assert code == 1 and "NOT CHECKED" in out and "ISAAC_MCP_USD_PYTHON" in out
+    code, out, _ = run(cli, capsys, "doctor", "--pack", "p", "--pins-only")
+    assert code == 0 and "OK for pins" in out
+    (store / "p" / "a.usd").write_bytes(b"changed")
+    code, out, _ = run(cli, capsys, "doctor", "--pack", "p", "--pins-only", "--json")
+    assert code == 1 and json.loads(out)["folders"][0]["files"]["corrupt"][0]["file"] == "a.usd"
+    assert run(cli, capsys, "doctor", "--pack", "absent")[0] == 2
+
+
+def test_doctor_without_a_pack_is_unchanged(cli, capsys, tmp_path, monkeypatch):
+    make_store(tmp_path, monkeypatch)
+    data = json.loads(run(cli, capsys, "doctor", "--json")[1])
+    assert set(data) == {"project_file", "stores", "strict", "assets", "problems", "ok"}
+
+
+def test_pack_build_and_doctor_on_real_usd(cli, capsys, tmp_path, monkeypatch):
+    pytest.importorskip("pxr")
+    import sys as _sys
+
+    store = make_store(tmp_path, monkeypatch)
+    source = store / "ur5e-dt"
+    (source / "robot/SubUSDs").mkdir(parents=True)
+    (source / "robot/ur5e.usda").write_text('#usda 1.0\ndef "R" (\n references = @./SubUSDs/base.usda@\n) {}\ndef "M" (\n references = @./SubUSDs/gone.usda@\n) {}\n')
+    (source / "robot/SubUSDs/base.usda").write_text("#usda 1.0\n")
+    args = ["robot/ur5e.usda", "--pack", "bricksim", "--from-pack", "ur5e-dt", "--usd-python", _sys.executable]
+    code, _, err = run(cli, capsys, "pack-build", *args)
+    assert code == 2 and "incomplete" in err and "gone.usda" in err and not (store / "bricksim").exists()
+    code, out, _ = run(cli, capsys, "pack-build", *args, "--dry-run", "--allow-unresolved")
+    assert code == 0 and "would copy" in out and "gone.usda" in out and not (store / "bricksim").exists()
+    code, out, _ = run(cli, capsys, "pack-build", *args, "--allow-unresolved")
+    assert code == 0 and "self-contained" in out
+    code, out, _ = run(cli, capsys, "doctor", "--pack", "bricksim", "--usd-python", _sys.executable)
+    assert code == 0 and "accepted unresolved: robot/SubUSDs/gone.usda" in out
+    code, out, _ = run(cli, capsys, "doctor", "--pack", "ur5e-dt", "--entry", "robot/ur5e.usda", "--usd-python", _sys.executable)
+    assert code == 1 and "UNRESOLVED: robot/SubUSDs/gone.usda" in out

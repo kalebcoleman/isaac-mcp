@@ -12,7 +12,9 @@ import time
 import uuid
 from pxr import Ar, Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdUtils
 from .compat import composition_errors
+from isaac_mcp import material_refs
 from isaac_mcp.project_assets import (
+    units_mismatch_message,
     Broker,
     AssetError,
     refuse,
@@ -81,7 +83,7 @@ def bounded(stage, root, limit, depth=None, include_runtime=True):
         refuse("LIMIT", "depth must be 1..64.")
     p = stage.GetPrimAtPath(path(root, True))
     if not p:
-        refuse("NOT_FOUND", "No prim at requested root.")
+        refuse("NOT_FOUND", "No prim at requested root. List paths with sim__stage__tree root=\"/\".")
     base = p.GetPath().pathElementCount
     skip = () if include_runtime or any(str(p.GetPath()).startswith(r) for r in RUNTIME_ROOTS) else RUNTIME_ROOTS
     it = iter(Usd.PrimRange(p, Usd.PrimAllPrimsPredicate))
@@ -121,8 +123,9 @@ def facts(prim):
 
 # Tools which change the stage or timeline themselves, by event family. Anything else that may
 # run code (run_python, twin tools, Kit UI input) can only be reported as "was running".
-STAGE_TOOLS = {"sim.stage.open": "sim__stage__open"}
-TIMELINE_TOOLS = {"sim.timeline.control": "sim__timeline__control", "sim.map.occupancy": "sim__map__occupancy"}
+STAGE_TOOLS = {"sim.stage.open": "sim__stage__open", "sim.quick_start": "sim__quick_start"}
+TIMELINE_TOOLS = {"sim.timeline.control": "sim__timeline__control", "sim.map.occupancy": "sim__map__occupancy",
+                  "sim.quick_start": "sim__quick_start"}
 INERT_TOOLS = {"status", "list_bridges", "list_tools", "reload_tools", "stat_file", "get_file", "put_file"}
 
 
@@ -149,6 +152,16 @@ def attribute_change(activity, certain):
                     "script may have done it")
     return dict(origin="outside_tools",
                 source="outside the MCP tools: no tool call was running, so a person in the GUI or a Kit script")
+
+
+LARGE_SAVE_BYTES = 100 * 1024 * 1024
+
+
+def flattened_size_note(size):
+    """Why a saved copy can be far bigger than the scene file it came from."""
+    return (f"This file is {size / (1024 * 1024):.0f} MB because it is flattened: the meshes and other data of every "
+            "referenced USD file are copied into this one file, in text. It keeps no references to them. "
+            "Texture files stay external. Check free disk space before saving often.")
 
 
 def stop_call(session_id, stage_id):
@@ -179,6 +192,7 @@ class Scene:
         self.render_binding = render_binding
         self.events = collections.deque(maxlen=32)  # stage/timeline changes, for sim.logs.tail
         self._retired_stages = {}  # old stage_id -> what replaced it, for STALE_TARGET
+        self.previous_sessions = []  # session_ids of earlier instances in this Kit (hot reload)
 
     def record_event(self, kind, what, attribution, stage=None):
         """Remember a stage or timeline change (never frame-rate events); returns its record."""
@@ -201,6 +215,10 @@ class Scene:
                 self._retired_stages.pop(next(iter(self._retired_stages)))
 
     def _stale_reason(self, session_id, stage_id, source):
+        if session_id in self.previous_sessions:
+            return ("Session changed: sim-tools hot-reloaded inside this same Kit process (a file in its folder "
+                    "changed), so that session_id ended. The stage is unchanged, but the tools forgot which prims "
+                    "they created. See sim__logs__tail; launch with ISAAC_MCP_NO_HOT_RELOAD=1 to prevent this."), None
         if session_id != self.session_id:
             return ("Session changed: this session_id is not this Kit process (Kit restarted, or the IDs "
                     "came from another bridge)."), None
@@ -246,13 +264,34 @@ class Scene:
         stage.SetEditTarget(stage.GetSessionLayer())
 
     def check_runtime_edit(self, stage):
-        if (
-            self._runtime_edit_target is None
-            or stage.GetEditTarget().GetLayer() != stage.GetSessionLayer()
-        ):
+        if self._runtime_edit_target is None:
+            # Play came from outside these tools (the UI, a script, ur5e_dt__quick_start), so this
+            # session never moved physics writeback to the session layer. It cannot be moved now:
+            # frames already played wrote to the selected layer, and Stop would restore poses to a
+            # different layer than those writes, leaving them behind.
+            # The event that started it, not a later pause by these same tools.
+            last = next((e for e in reversed(self.events) if e["what"] == "timeline playing"), None)
+            ids = dict(session_id=self.session_id, stage_id=self.stage_id)
             refuse(
                 "EDIT_TARGET_CHANGED",
-                "Physics writeback requires the managed session edit target. Stop, inspect the selected layer, then play with sim.timeline.control before stepping.",
+                "This timeline was not started by sim__timeline__control"
+                + (" (last change: " + last["what"] + ", " + last["source"] + ")" if last else "")
+                + ", so physics writeback is not on the session layer and a tool step could write into your "
+                "scene's own layers. To step: call sim__timeline__control with action=stop, then action=play, "
+                "then action=pause, then resend this call. Stop rewinds physics and returns robots to their start "
+                "pose; save first (sim__stage__save needs the timeline paused or stopped) if the current state matters.",
+                before_retry=stop_call(**ids),
+                then=[dict(tool="sim__timeline__control", arguments=dict(**ids, action=action))
+                      for action in ("play", "pause")],
+                started_outside_tools=True,
+                **({"timeline_change": {k: v for k, v in last.items() if k != "monotonic"}} if last else {}),
+            )
+        if stage.GetEditTarget().GetLayer() != stage.GetSessionLayer():
+            refuse(
+                "EDIT_TARGET_CHANGED",
+                "Physics writeback requires the managed session edit target, but another editor selected a different "
+                "layer during this run. Stop, inspect the selected layer, then play with sim__timeline__control before stepping.",
+                before_retry=stop_call(self.session_id, self.stage_id),
             )
 
     def end_runtime_edit(self, stage):
@@ -369,7 +408,7 @@ class Scene:
     def prim(self, stage, value):
         p = stage.GetPrimAtPath(path(value))
         if not p:
-            refuse("NOT_FOUND", "No prim at " + value)
+            refuse("NOT_FOUND", "No prim at " + value + ". Find it with sim__prim__find or sim__stage__tree.")
         return p
 
     def get(self, stage, path):
@@ -424,7 +463,7 @@ class Scene:
                 "path, or save a copy with sim__stage__save (it omits the prim) and open that.",
             )
         if existing:
-            refuse("CONFLICT", "Destination already exists; no overwrite.")
+            refuse("CONFLICT", "Destination already exists; no overwrite. Choose a free path, or delete it with sim__prim__delete.")
         parent = stage.GetPrimAtPath(p.GetParentPath())
         if (
             not parent
@@ -433,7 +472,7 @@ class Scene:
             or parent.IsInstanceProxy()
         ):
             refuse(
-                "INVALID_PARENT", "Parent must exist, be active and not an instance."
+                "INVALID_PARENT", "Parent must exist, be active and not an instance. A new stage has no /World: create it first with sim__prim__create kind=Xform."
             )
         if not stage.GetSessionLayer().permissionToEdit:
             refuse("READ_ONLY", "Session layer is not editable.")
@@ -481,7 +520,9 @@ class Scene:
         if kind == "PhysicsScene" and any(
             p.IsA(UsdPhysics.Scene) for p in stage.Traverse()
         ):
-            refuse("CONFLICT", "A PhysicsScene already exists.")
+            existing = next(str(p.GetPath()) for p in stage.Traverse() if p.IsA(UsdPhysics.Scene))
+            refuse("CONFLICT", f"A PhysicsScene already exists at {existing} (creating a sensor adds one). "
+                   "Change it with sim__physics__configure instead of creating another.", existing=existing)
         ancestor = parent
         while ancestor and not ancestor.IsPseudoRoot():
             if rigid and ancestor.HasAPI(UsdPhysics.RigidBodyAPI):
@@ -593,7 +634,7 @@ class Scene:
             )
         asset = Usd.Stage.Open(str(filename))
         if not asset or not asset.GetDefaultPrim():
-            refuse("DEFAULT_PRIM", "Asset needs a valid defaultPrim.")
+            refuse("DEFAULT_PRIM", "Asset needs a valid defaultPrim. Set defaultPrim in the file, or import a USD that has one.")
         count = 0
         for prim in asset.TraverseAll():
             count += 1
@@ -652,7 +693,10 @@ class Scene:
         ):
             refuse(
                 "UNITS_MISMATCH",
-                "Asset and target up-axis/units must match; no automatic conversion.",
+                units_mismatch_message(
+                    info["up_axis"], info["meters_per_unit"],
+                    str(UsdGeom.GetStageUpAxis(stage)), UsdGeom.GetStageMetersPerUnit(stage),
+                ),
             )
         try:
             with Usd.EditContext(stage, stage.GetSessionLayer()):
@@ -681,8 +725,12 @@ class Scene:
 
     def validate_project_materials(self, snapshot_id, manifest_sha256):
         """Validate bounded literal MDL and MaterialX project dependencies."""
-        import xml.etree.ElementTree as ET
+        try:
+            return self._validate_project_materials(snapshot_id, manifest_sha256)
+        except material_refs.MaterialRefError as exc:
+            refuse(exc.code, str(exc))
 
+    def _validate_project_materials(self, snapshot_id, manifest_sha256):
         filename, manifest = self.broker.verify(snapshot_id, manifest_sha256)
         root = filename.parents[len(Path(manifest["entry"]).parts) - 1]
         layers, assets, missing = UsdUtils.ComputeAllDependencies(
@@ -726,19 +774,7 @@ class Scene:
         materialx = []
 
         def reference(parent, value, kind):
-            if (
-                not value
-                or value.startswith("/")
-                or ":" in value
-                or "\\" in value
-                or any(c in value for c in "<>$#?{}")
-            ):
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    kind
-                    + " contains an absolute, network or dynamic reference: "
-                    + value,
-                )
+            material_refs.check_value(value, kind)
             target = Path(os.path.normpath(str(parent / value)))
             try:
                 rel = target.relative_to(root).as_posix()
@@ -788,50 +824,7 @@ class Scene:
                 refuse(
                     "DEPENDENCIES", "MDL material missing from the snapshot: " + mdl_rel
                 )
-            text = dep.read_text(encoding="utf-8")
-            # Comments do not describe texture resources. For safety reject
-            # escaped/expressive arguments rather than guessing at MDL syntax.
-            text = re.sub(
-                r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*',
-                lambda match: match.group() if match.group().startswith('"') else "",
-                text,
-                flags=re.S,
-            )
-            # We support only absolute MDL module names. A relative or otherwise
-            # nonstandard import could hide another file with its own resources.
-            without_using = re.sub(
-                r"\busing\s+::[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*\s+import\s+[^;]+;",
-                "",
-                text,
-            )
-            if re.search(
-                r"\busing\s+|\bimport(?!\s*::)\s+|#\s*include\b", without_using
-            ):
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    "A relative or unsupported MDL import cannot be validated: "
-                    + mdl_rel,
-                )
-            allowed = {
-                "OmniPBR",
-                "tex",
-                "state",
-                "base",
-                "df",
-                "math",
-                "anno",
-                "limits",
-                "debug",
-                "scene",
-            }
-            modules = re.findall(
-                r"\b(?:using|import)\s+::([A-Za-z_][A-Za-z_0-9]*)", text
-            )
-            if any(module not in allowed for module in modules):
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    "A custom MDL module cannot be validated: " + mdl_rel,
-                )
+            resources, modules = material_refs.scan_mdl(dep.read_text(encoding="utf-8"), mdl_rel)
             if "OmniPBR" in modules:
                 runtime = self.runtime_assets.get("OmniPBR.mdl")
                 if (
@@ -844,31 +837,7 @@ class Scene:
                         "DEPENDENCIES",
                         "The required installed OmniPBR MDL module is missing or changed.",
                     )
-            resource = r"(texture_(?:2d|3d|cube|ptex)|light_profile|bsdf_measurement)"
-            starts = list(re.finditer(r"\b" + resource + r"\s*\(", text))
-            calls = list(re.finditer(r"\b" + resource + r"\s*\(([^()]*)\)", text))
-            if len(starts) != len(calls):
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    "A complex MDL resource expression cannot be validated: " + mdl_rel,
-                )
-            for call in calls:
-                kind = (
-                    "MDL texture"
-                    if call.group(1).startswith("texture_")
-                    else "MDL resource"
-                )
-                arg = call.group(2).strip()
-                if not arg:
-                    continue
-                match = re.match(r'^"([^"\\]+)"(?:\s*,.*)?$', arg, flags=re.S)
-                if not match or "<" in arg:
-                    refuse(
-                        "DEPENDENCIES_UNSUPPORTED",
-                        "A non-literal, escaped or tiled MDL resource cannot be validated: "
-                        + mdl_rel,
-                    )
-                value = match.group(1)
+            for kind, value in resources:
                 _, rel = reference(dep.parent, value, kind)
                 (textures if kind == "MDL texture" else other_mdl_resources).append(rel)
         visited = set()
@@ -889,47 +858,13 @@ class Scene:
                     "DEPENDENCIES", "Missing or excessive MaterialX dependency: " + rel
                 )
             visited.add(rel)
-            data = dep.read_bytes()
-            if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
-                refuse(
-                    "DEPENDENCIES_UNSUPPORTED",
-                    "MaterialX XML declarations/entities are unsupported: " + rel,
-                )
-            try:
-                xml = ET.fromstring(data)
-            except ET.ParseError:
-                refuse("DEPENDENCIES_UNSUPPORTED", "Invalid MaterialX document: " + rel)
-            for element in xml.iter():
-                if element.get("fileprefix"):
-                    refuse(
-                        "DEPENDENCIES_UNSUPPORTED",
-                        "MaterialX fileprefix requires resolver support: " + rel,
-                    )
-                values = []
-                if element.get("type") == "filename" and element.get("value"):
-                    values.append(element.get("value"))
-                for key in ("file", "filename", "href"):
-                    if element.get(key):
-                        values.append(element.get(key))
-                for value in values:
-                    target, name = reference(dep.parent, value, "MaterialX dependency")
-                    materialx.append(name)
-                    if target.suffix.lower() == ".mtlx":
-                        pending_mtlx.append(target)
-                    elif target.suffix.lower() in {
-                        ".mdl",
-                        ".usd",
-                        ".usda",
-                        ".usdc",
-                        ".usdz",
-                        ".abc",
-                        ".xml",
-                    }:
-                        refuse(
-                            "DEPENDENCIES_UNSUPPORTED",
-                            "Nested material or scene dependency requires additional validation: "
-                            + name,
-                        )
+            for value in material_refs.scan_materialx(dep.read_bytes(), rel):
+                target, name = reference(dep.parent, value, "MaterialX dependency")
+                materialx.append(name)
+                if target.suffix.lower() == ".mtlx":
+                    pending_mtlx.append(target)
+                else:
+                    material_refs.check_materialx_target(target, name)
         return dict(
             mdl_literal_textures=textures[:32],
             mdl_texture_count=len(textures),
@@ -1179,10 +1114,12 @@ class Scene:
                 os.link(tmp, filename, dst_dir_fd=fd, follow_symlinks=False)
             except FileExistsError:
                 refuse("CONFLICT", "Output already exists; no overwrite.")
+            size = os.stat(filename, dir_fd=fd).st_size
             return dict(
                 file=str(folder / filename),
-                bytes=os.stat(filename, dir_fd=fd).st_size,
+                bytes=size,
                 flattened=True,
+                **({"size_note": flattened_size_note(size)} if size > LARGE_SAVE_BYTES else {}),
                 stage_switched=False,
                 runtime_pose_count=len(runtime_poses or []),
                 omitted_runtime_render_paths=omitted_render_paths,

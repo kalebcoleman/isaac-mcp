@@ -1,5 +1,9 @@
 # UR5e Digital Twin MCP Tools (`ur5e_dt__*`)
 
+**These tools are RISE lab's UR5e digital twin: Kaleb's work with that lab and that robot.** Every other tool in this project is
+robot-agnostic. For a generic start with any robot, including a UR5e without the twin, use
+[`sim__quick_start`](TOOLS-SCENE.md#start-a-scene).
+
 This document covers the 23 tools registered by `exts/ur5e-dt/ur5e_dt/extension.py`
 on the shared Kit bridge. It is the implementation reference. Generic tools are in
 [TOOLS-SCENE.md](TOOLS-SCENE.md), and every argument is listed in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#ur5e-twin-ur5e_dt__).
@@ -15,7 +19,7 @@ on the shared Kit bridge. It is the implementation reference. Generic tools are 
   (`screenshot`, `start_screen_recording`, …) carry **no** `ur5e_dt__` prefix.
 
 Most of these tools serve one lab's digital twin. `ur5e_dt__quick_start` works for anyone from public files, while the gripper, workstation and
-object tools need [your own lab files](ASSETS.md#public-files-and-lab-files), which cannot be hosted. Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` before generic scene edits.
+object tools need [your own lab files](ASSETS.md#public-files-and-lab-files), which cannot be hosted. `ur5e_dt__quick_start` builds no table; the bench comes from `ur5e_dt__load_workstation`. At its zero pose the arm reaches out low, with the wrist about 6 cm above the ground, which can look collapsed but is not a fault: check `sim__joints__state` and command a pose. `ur5e_dt__quick_start` refuses if this stage already publishes joint states on `/joint_states` (`sim__ros2__tf_setup`'s default topic), because the twin's graph drives the arm from that topic and the arm would oscillate; the error gives the fix. Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` before generic scene edits.
 
 The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
 `ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
@@ -303,7 +307,7 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 - Purpose: bring the ROS 2 robot driver up/down/status so motion tools (ros-mcp-server `move_home`, `move_to_grasp`, …) have a driver.
 - Side effects: spawns a host subprocess (`scripts/launch_ur_fake.sh` or `scripts/sim_bringup.sh`) with a sanitized environment; no USD changes. Subprocess cap 240 s for `up`, 60 s otherwise. Both backends end at `/joint_states` live and `scaled_joint_trajectory_controller` accepting `FollowJointTrajectory` on the configured ROS domain (default 0, Cyclone, localhost-only).
 - Real-hardware/ROS constraints: `backend="fake"` is simulation-only; `mode="real"` is not yet enabled in this codebase. Do not launch a real robot driver for a simulation-only task.
-- The fake backend discovers the standard ROS setup for Ubuntu 22.04/Humble or Ubuntu 24.04/Jazzy. On Jazzy, install `ros-jazzy-ur-robot-driver`, `ros-jazzy-ros2controlcli`, and `ros-jazzy-rmw-cyclonedds-cpp` through the system package manager. The launcher checks the driver's advertised mock-hardware argument and refuses to start if it cannot verify it; use `ROS_SETUP` for a nonstandard sourced ROS installation.
+- The fake backend discovers the standard ROS setup for Ubuntu 22.04/Humble or Ubuntu 24.04/Jazzy. On Jazzy, install `ros-jazzy-ur-robot-driver`, `ros-jazzy-ros2controlcli`, and `ros-jazzy-rmw-cyclonedds-cpp` through the system package manager. The launcher checks the driver's advertised mock-hardware argument and refuses to start if it cannot verify it; use `ROS_SETUP` for a nonstandard sourced ROS installation or a RoboStack prefix, in which case the distribution comes from what that file sets. An environment that is already activated (`ROS_DISTRO` set, `ros2` on `PATH`, no `/opt/ros/<distro>`) needs no `ROS_SETUP`.
 - Fake-driver startup waits until both the joint-state broadcaster and scaled trajectory controller are active; controller queries are bounded when the manager is unavailable.
 - Fake-driver shutdown targets the verified mock process recorded by this launcher and its dedicated process group; it does not globally stop other UR drivers. If its PID file is missing or stale, inspect the host's processes instead of assuming an unrelated driver was stopped.
 - Managed `sim__launch` sessions use separate fake-driver records and logs, with an ownership marker checked before

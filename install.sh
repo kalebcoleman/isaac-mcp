@@ -15,7 +15,7 @@
 #   --claude-code     Configure Claude Code only
 #   --claude-desktop  Configure Claude Desktop only
 #   --print-opencode  Print configuration snippet for OpenCode
-#   --port N          Twin bridge port for MCP client configuration (default: 8766)
+#   --port N          Bridge port for MCP client configuration (default: 8766)
 #   --isaaclab-python PATH  Isaac Lab venv python -> ISAACLAB_PYTHON in client configs ($ISAACLAB_PYTHON by default)
 #   --isaaclab-root PATH    Isaac Lab checkout -> ISAACLAB_ROOT in client configs ($ISAACLAB_ROOT by default)
 #   --accept-eula     Acknowledge the NVIDIA Omniverse EULA (sets OMNI_KIT_ACCEPT_EULA=YES)
@@ -46,11 +46,12 @@ Options:
                     Isaac Sim 6.x is still found and recorded in client configurations
   --download-sim    Download the locked Isaac Sim 6.2 environment into .venv even when an
                     Isaac Sim 6.x is already installed (by default an existing install is used)
+  (5.1 is used only when named: ISAAC_MCP_PYTHON=/path/to/5.1/python ./install.sh --no-sim)
   --claude          Configure both Claude Code and Claude Desktop
   --claude-code     Configure Claude Code only
   --claude-desktop  Configure Claude Desktop only
   --print-opencode  Print configuration snippet for OpenCode
-  --port N          Twin bridge port for MCP client configuration (default: 8766)
+  --port N          Bridge port for MCP client configuration (default: 8766)
   --isaaclab-python PATH  Isaac Lab venv python, written to client configs as ISAACLAB_PYTHON
                           (default: $ISAACLAB_PYTHON if set)
   --isaaclab-root PATH    Isaac Lab checkout, written as ISAACLAB_ROOT (default: $ISAACLAB_ROOT if set)
@@ -146,8 +147,8 @@ listed = subprocess.run([sys.executable, tool, "find", "--json"], capture_output
 if listed.returncode:
     print(listed.stderr.strip() or "isaac_env.py find failed", file=sys.stderr)
     sys.exit(3)
-cands = [c for c in json.loads(listed.stdout or "[]")
-         if str(c.get("isaacsim") or "").split(".")[0] == "6"]
+found = json.loads(listed.stdout or "[]")
+cands = [c for c in found if str(c.get("isaacsim") or "").split(".")[0] == "6"]
 # Same precedence as isaac_env.py: an interpreter variable wins over an install-root variable.
 # Only the variables the user named count (not an activated VIRTUAL_ENV/CONDA_PREFIX), so a typo
 # is reported instead of being replaced by whatever environment happens to be active.
@@ -157,10 +158,12 @@ if not named:
     named = [v for v in ROOT_VARS if os.environ.get(v, "").strip()]
     wanted = {f"standalone:{v}" for v in named}
 if named:
-    # The user chose an install: it must be Isaac Sim 6.x; never fall back to a download.
-    chosen = [c for c in cands if c.get("source") in wanted]
+    # The user chose an install: it must be Isaac Sim 6.x, or 5.1 when named this way (auto-detection
+    # never picks 5.1); never fall back to a download.
+    chosen = [c for c in found if c.get("source") in wanted and (
+        c in cands or str(c.get("isaacsim") or "").split(".")[:2] == ["5", "1"])]
     if not chosen:
-        print(f"{', '.join(named)} is set but does not point at an Isaac Sim 6.x install "
+        print(f"{', '.join(named)} is set but does not point at an Isaac Sim 6.x or 5.1 install "
               "(check it with: python3 scripts/isaac_env.py find). Fix or unset it; "
               "pass --download-sim only if you want the locked 6.2 download.", file=sys.stderr)
         sys.exit(3)
@@ -184,6 +187,9 @@ PY
     echo "   Pass --download-sim to install the locked 6.2 environment instead."
     case "$SIM_VERSION" in
       6.2*) ;;
+      5.1*)
+        echo "WARNING: Isaac Sim $SIM_VERSION is an explicitly pinned older build. It is used only because you named it;" >&2
+        echo "         auto-detection never picks it. PhysX only, no Newton, and fewer checks than 6.2: see docs/COMPATIBILITY.md." >&2 ;;
       *) echo "WARNING: Isaac Sim $SIM_VERSION is not the tested 6.2 release; see docs/COMPATIBILITY.md" >&2 ;;
     esac
     case "$SIM_SOURCE" in
@@ -325,7 +331,7 @@ if [ "$DO_CLAUDE_CODE" = 1 ]; then
     [ -n "$LAB_ROOT" ] && lab_env+=(-e "ISAACLAB_ROOT=$LAB_ROOT")
     [ -n "$SIM_PYTHON" ] && lab_env+=(-e "ISAAC_MCP_PYTHON=$SIM_PYTHON")
     claude mcp add --scope user isaac \
-      -e "DISPLAY=$DISPLAY_NAME" -e "UR5E_DT_PORT=$PORT" "${lab_env[@]}" \
+      -e "DISPLAY=$DISPLAY_NAME" -e "ISAAC_MCP_PORT=$PORT" "${lab_env[@]}" \
       -- "$CLI_BIN"
   else
     echo "== claude CLI not found; skipped Claude Code configuration" >&2
@@ -351,7 +357,7 @@ if not os.path.exists(path):
 
 with open(path, encoding="utf-8") as f:
     config = json.load(f)
-env = {"UR5E_DT_PORT": port, "DISPLAY": display}
+env = {"ISAAC_MCP_PORT": port, "DISPLAY": display}
 if os.environ.get("LAB_PYTHON"):
     env["ISAACLAB_PYTHON"] = os.environ["LAB_PYTHON"]
 if os.environ.get("LAB_ROOT"):
@@ -389,7 +395,7 @@ OpenCode entry (~/.config/opencode/opencode.jsonc):
   "isaac": {
     "type": "local",
     "command": ["$CLI_BIN"],
-    "environment": { "UR5E_DT_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME"$lab_json }
+    "environment": { "ISAAC_MCP_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME"$lab_json }
   }
 EOF
 fi

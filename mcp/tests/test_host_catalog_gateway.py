@@ -773,10 +773,16 @@ def test_the_host_tool_collision_check_still_protects_local_tools(monkeypatch):
         gw.discover_and_register_tools(server)
 
 
-def test_the_offline_proxies_carry_no_local_tool_groups_or_annotations():
+def test_the_offline_proxies_carry_hints_from_their_own_table():
     server = build({lt.ENV_VAR: "none"})
     tool = server._tool_manager._tools[PLAY]
-    assert tool.annotations is None                       # bridge tools are not annotated
+    assert tool.annotations.readOnlyHint is False and tool.annotations.destructiveHint is False
+
+
+def test_a_tool_from_a_projects_own_extension_gets_no_hints():
+    server = build({lt.ENV_VAR: "none"})
+    gw.register_dynamic_tool(server, "demo__ping", "demo.ping", {"description": "d", "parameters": {}, "fields": []})
+    assert server._tool_manager._tools["demo__ping"].annotations is None
 
 
 def test_instructions_say_the_tools_are_always_listed():

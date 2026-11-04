@@ -203,6 +203,31 @@ def token_map(raw):
     return {}
 
 
+def type_shape(og_type):
+    """An OmniGraph type as (base, tuple count, array depth, role), lower-case names."""
+    name = lambda value: str(value).rsplit(".", 1)[-1].lower()
+    return name(og_type.base_type), og_type.tuple_count, og_type.array_depth, name(og_type.role)
+
+
+TEXT_TYPES = {"token", "string", "path", "uchar"}
+
+
+def type_mismatch(source, target):
+    """Why these two types can't connect, or None. Only what OmniGraph cannot convert: numeric widths convert, so they
+    pass, and an extended ("any") port has no base type until it is connected, so it passes too."""
+    if "unknown" in (source[0], target[0]):
+        return None
+    if (source[3] == "execution") != (target[3] == "execution"):
+        return "one is an execution port and the other carries data"
+    if source[2] != target[2]:
+        return "one is an array and the other is not"
+    if source[1] != target[1]:
+        return f"tuple sizes differ ({source[1]} and {target[1]})"
+    if (source[0] in TEXT_TYPES) != (target[0] in TEXT_TYPES):
+        return "one is text and the other is a number"
+    return None
+
+
 def token_value(value, allowed_raw):
     """(value to store, note) for a token input with allowed tokens; raises on a bad value."""
     allowed_raw = token_map(allowed_raw)
@@ -294,7 +319,9 @@ def build(stage, a, stopped):
             a_ = attr(node, port, True)
             raw = None
             try:
-                raw = a_.get_metadata(og.MetadataKeys.ALLOWED_TOKENS_RAW)
+                from .compat import metadata_keys
+
+                raw = a_.get_metadata(metadata_keys().ALLOWED_TOKENS_RAW)
             except Exception:  # noqa: BLE001
                 pass
             try:
@@ -322,13 +349,23 @@ def build(stage, a, stopped):
             return "outputs:" + port[1:]  # attr() then refuses with the node's real ports
 
         for (s_node, s_port), (d_node, d_port) in spec["connections"]:
-            og.Controller.connect(attr(s_node, source_port(s_node, s_port), False), attr(d_node, d_port, True))
+            source, target = attr(s_node, source_port(s_node, s_port), False), attr(d_node, d_port, True)
+            try:
+                mismatch = type_mismatch(type_shape(source.get_resolved_type()), type_shape(target.get_resolved_type()))
+            except AttributeError:  # no type information on this build: let Kit decide, as before
+                mismatch = None
+            if mismatch:
+                raise SpecError("TYPE_MISMATCH", f"{s_node}.{s_port} cannot drive {d_node}.{d_port}: {mismatch} "
+                                f"({source.get_resolved_type()} to {target.get_resolved_type()}). Nothing was built. "
+                                "sim__graph__node_types lists each node's ports and types.")
+            og.Controller.connect(source, target)
         for node, port, value in deferred:
             try:
                 attr(node, port, False)
                 set_value(node, port, value)
             except Exception as exc:  # noqa: BLE001
-                raise SpecError("INVALID_VALUE", f"Cannot set {node}.{port} = {value!r}: {str(exc)[:200]}") from exc
+                raise SpecError("INVALID_VALUE", f"Cannot set {node}.{port} (type {attr(node, port, False).get_resolved_type()}) "
+                                f"= {value!r}: {str(exc)[:200]}") from exc
         for node, port, paths in spec["targets"]:
             prim = stage.GetPrimAtPath(f"{path}/{node}")
             rel = prim.GetRelationship(port)

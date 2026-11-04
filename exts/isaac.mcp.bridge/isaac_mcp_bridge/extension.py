@@ -33,6 +33,7 @@ from .bind import declared_bind_refusal
 from .autoload import (ToolModuleLoadRefusal, has_autoload_request,
                        load_configured_tool_modules, refuse_boot)
 from .bridge import _create_bridge, _destroy_bridge
+from .source_state import note_start
 
 
 def _resolve_port() -> int:
@@ -55,6 +56,10 @@ class McpBridgeExtension(omni.ext.IExt):
         # carb.log_*, not print(): Kit routes print() into its log sink under a
         # generic [py stdout] channel; carb.log_* stays greppable per-channel.
         carb.log_info("[isaac.mcp.bridge] startup")
+        started = note_start("isaac.mcp.bridge")
+        if started["reload"]:
+            carb.log_warn(f"[isaac.mcp.bridge] extension reloaded in place (reload {started['reload']} in this process): "
+                          "a file in its folder changed, or it was toggled. Clients must reconnect.")
         bridge = _create_bridge()
         self._stage_sub = _guard_sessions_against_stage_open(bridge)
 

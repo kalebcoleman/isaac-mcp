@@ -106,7 +106,7 @@ qualify rendering and units on a later source, without advancing physics or back
 | `6.0.0.1` | Partial test; further validation needed | Headless and windowed 20-check smoke runs completed, including a decodable recording. A fresh window had the panel docked, and simulated object and camera transforms were received. Kit logged asynchronous task errors; a panel was undocked after one extension reload. Lab and physical hardware were not tested. |
 | `6.0.0.0` | Partial test; further validation needed | The initial object-pose graph failed because this release uses an older ROS publisher. With the compatibility fix, headless and windowed 20-check smoke runs passed, the optional panel was docked, and simulated object and camera transforms were received. Kit logged asynchronous task errors; Lab and physical hardware were not tested. |
 | Other 6.x releases | Not tested | A shared major version does not establish that this bridge, the twin or Lab jobs work on a new release. |
-| `5.1.0.0` | Experimental; not supported by the default launcher | The bridge and twin registered, but Quick Start failed with the default 6.2 ROS library path. With a temporary 5.1 ROS library path, Quick Start and stop returned success and the panel was checked, but Kit logged asynchronous task errors. The complete workflow was not verified. |
+| `5.1.0.0` | Experimental; not auto-detected, so name its interpreter with `ISAAC_MCP_PYTHON`. `run.sh` finds its bundled ROS libraries and `sim-tools` has adapters for its older APIs | Earlier result, before those adapters: The bridge and twin registered, but Quick Start failed with the default 6.2 ROS library path. With a temporary 5.1 ROS library path, Quick Start and stop returned success and the panel was checked, but Kit logged asynchronous task errors. The complete workflow was not verified. |
 | Earlier releases | Not tested | No compatibility claim. |
 
 `scripts/smoke_tools.py` is a scoped check: it does not exercise a physical robot, a real pose publisher or every
@@ -129,6 +129,8 @@ transform checks with that version. Existing environments created from the earli
 - Historical short training and windowed play checks used Isaac Lab **3.0.0 / Isaac Sim 6.2.0.0** on the machines
   described in the [Lab guide](TOOLS-ISAACLAB.md#verified-vs-version-and-platform-limitations). Those checks do not
   establish long-running training, every task, or Lab behavior on the older Sim probes above.
+- Isaac Lab 2.3.2 with Sim 5.1 is **experimental**: job launching follows its per-library script layout. Tiny real Cartpole jobs passed through the tools with all four RL
+  libraries on one desktop, but no long training or other tasks ran, and `isaaclab__install_info` reports `tested: false`.
 - NVIDIA's published Isaac Lab and Sim pairings are shown below. The release dates are UTC. They describe NVIDIA's
   versions, not additional MCP tests: the 6.0 and 6.1 Sim smoke checks above did **not** test Isaac Lab.
 
@@ -188,7 +190,7 @@ workspace for other environments; a delivered transform is not a physical-robot 
 
 ## Project asset and generic scene preview (separate feature gates)
 
-The current 39-tool pack has its own [evidence and version matrix](evidence/project-scene/README.md),
+The current 55-tool pack has its own [evidence and version matrix](evidence/project-scene/README.md),
 separate from the historical UR5e/PR #9 runs above. The same-host trusted-project workflow,
 explicit stage targeting, units, authored/runtime distinction, and PhysX step/joint paths were
 exercised on 6.2.0.0, then representative paths on 6.0.0.0, 6.0.0.1, 6.0.1.0 and 6.1.0.0.
@@ -213,7 +215,7 @@ exports. Newton <=6.0.1 requires a scoped native playing-flag correction for pau
 all tested Newton paths avoid stale captured CUDA graphs and publish poses through Fabric.
 Runtime observations use the selected engine, with no PhysX/USD substitution. Newton is
 qualified only for the recorded stacks and meter stages, with scoped MuJoCo evidence.
-The [per-release matrix](evidence/project-scene/RUNS.md) records all37 tools on each installed
+The [per-release matrix](evidence/project-scene/RUNS.md) records all 37 tools on each installed
 PhysX release, independent agents, repeated captures, known failures and later retests. Newton trials
 are not a claim that every backend/asset/edge case passed. Later
 [6.0.0.1 twin failures](#6001-newton-failures-and-separate-host-envelope-checks-2026-11-02)
@@ -231,12 +233,12 @@ This is not an archive sandbox. Isolated untrusted import, authenticated remote 
 named manifests remain unfinished. No version match or passed asset validator supplies those
 missing enforcement/transport guarantees. See [tool setup](TOOLS-SCENE.md).
 
-Owner decision2026-11-01: PR11 is a first slice. Its measured support does not include isolated
+Owner decision 2026-11-01: PR11 is a first slice. Its measured support does not include isolated
 untrusted loading, authenticated remote upload, named presets or full fork parity. Those gates
 remain open. New native failures and harness failures are retained in the draft evidence release.
 The latest UR5e World adapter initializes asynchronously even when `/physicsScene` already exists;
 it restores the temporary terminal-launch flag before awaiting and avoids nested Kit updates.
-See the final validation attachment for the6.2 verify/smoke/motion and existing-scene checks.
+See the final validation attachment for the 6.2 verify/smoke/motion and existing-scene checks.
 
 The earlier 6.0.0.0 fresh-process saved-scene evidence remains partial: geometry/resting body
 state and new sensor creation worked, but camera readout stayed `NOT_READY` after extended

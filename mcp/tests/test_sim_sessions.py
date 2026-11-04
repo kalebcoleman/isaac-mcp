@@ -481,3 +481,221 @@ def test_live_sessions_reports_the_session_id(setup, monkeypatch):
     monkeypatch.setattr(sim, "_alive", lambda data: True)
     assert sim.live_sessions(setup) == [
         {"id": data["id"], "port": data["port"], "pid": data["pid"], "started_at": None}]
+
+
+def _tool_server(env):
+    """The registered tool functions, called directly."""
+    tools = {}
+
+    class Fake:
+        def tool(self, name=None, **_):
+            def decorate(fn):
+                tools[name or fn.__name__] = fn
+                return fn
+            return decorate
+
+    sim.register_sim_session_tools(Fake(), groups=["sim_launch"], env=env)
+    return tools
+
+
+# ---- externally launched bridges ----
+
+EXTERNAL = {"pid": 4242, "port": 18800, "host": "localhost", "app": "BrickSim", "app_version": "5.1.0",
+            "headless": True, "started": 123.0}
+
+
+def test_list_includes_external_bridges_labeled_unmanaged(setup, monkeypatch):
+    server = _tool_server(setup)
+    monkeypatch.setattr(sim.client, "discover_bridges", lambda: [dict(EXTERNAL)])
+    entry = server["sim__list"]()["sessions"][0]
+    assert entry["managed"] is False and entry["id"] == "external-4242-18800"
+    assert (entry["pid"], entry["port"], entry["app"], entry["app_version"]) == (4242, 18800, "BrickSim", "5.1.0")
+
+
+def test_listing_does_not_dial_an_external_bridge(setup, monkeypatch):
+    server = _tool_server(setup)
+    monkeypatch.setattr(sim.client, "discover_bridges", lambda: [dict(EXTERNAL)])
+    monkeypatch.setattr(sim.client, "call", lambda *a, **k: pytest.fail("sim__list must not call a bridge"))
+    assert server["sim__list"]()["sessions"]
+
+
+def test_a_managed_session_is_not_also_listed_as_external(setup, monkeypatch):
+    server = _tool_server(setup)
+    record = sim._launch(setup, 18766, 9, True, False)
+    monkeypatch.setattr(sim.client, "discover_bridges", lambda: [{**EXTERNAL, "pid": record["pid"], "port": 18766}])
+    monkeypatch.setattr(sim, "_alive", lambda session: True)
+    sessions = server["sim__list"]()["sessions"]
+    assert [s["managed"] for s in sessions] == [True] and sessions[0]["id"] == record["id"]
+
+
+def test_status_of_an_external_bridge_checks_identity(setup, monkeypatch):
+    monkeypatch.setattr(sim.client, "discover_bridges", lambda: [dict(EXTERNAL)])
+    answers = {"pid": 4242, "app_ready": True, "app": "BrickSim", "app_version": "5.1.0"}
+    monkeypatch.setattr(sim.client, "call", lambda *a, **k: dict(answers))
+    result = sim._status(setup, "external-4242-18800")
+    assert result["managed"] is False and result["state"] == "running" and result["app_version"] == "5.1.0"
+    assert "use_bridge(port=18800)" in result["next"] and "does not stop" in result["stop"]
+    answers["pid"] = 999  # something else now answers that port
+    assert sim._status(setup, "external-4242-18800")["state"] == "port_conflict"
+
+
+def test_status_of_a_gone_external_bridge_says_so(setup):
+    with pytest.raises(ValueError, match="no advertised bridge"):
+        sim._status(setup, "external-4242-18800")
+
+
+def test_stop_refuses_an_external_bridge_without_signalling(setup, monkeypatch):
+    monkeypatch.setattr(sim.client, "discover_bridges", lambda: [dict(EXTERNAL)])
+    monkeypatch.setattr(sim, "_signal_session", lambda *a: pytest.fail("must not signal"))
+    with pytest.raises(ValueError, match="not a managed session"):
+        sim._stop(setup, "external-4242-18800", 4242, True)
+    with pytest.raises(ValueError, match="not a managed session"):
+        sim._stop(setup, "external-4242-18800", 4242, True, force=True)
+
+
+def test_managed_entries_say_so(setup):
+    record = sim._launch(setup, 18766, 9, True, False)
+    assert record["managed"] is True
+    assert sim._status(setup, record["id"])["managed"] is True
+
+
+# ---- a server-configured launcher ----
+
+
+def launcher(tmp_path, mode=0o755):
+    path = tmp_path / "project-launch.sh"
+    path.write_text("#!/bin/sh\nexit 0\n")
+    path.chmod(mode)
+    return path
+
+
+def test_configured_launcher_runs_with_run_sh_arguments_and_is_recorded(setup, tmp_path, monkeypatch):
+    path = launcher(tmp_path)
+    setup["ISAAC_MCP_SIM_LAUNCHER"] = str(path)
+    seen = {}
+    real = sim.subprocess.Popen
+
+    def popen(args, **kw):
+        seen.update(args=args, cwd=kw["cwd"])
+        return real(["/bin/true"], **{k: v for k, v in kw.items() if k != "cwd"})
+
+    monkeypatch.setattr(sim.subprocess, "Popen", popen)
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 1))
+    record = sim._launch(setup, 18766, 9, True, False)
+    assert seen["args"][:4] == [str(path), "--port", "18766", "--headless"] and seen["cwd"] == str(tmp_path)
+    assert record["launcher"] == str(path)
+
+
+@pytest.mark.parametrize("value,error", [("relative/launch.sh", "absolute"), ("/no/such/launcher", "cannot be read")])
+def test_configured_launcher_bad_paths(setup, value, error):
+    setup["ISAAC_MCP_SIM_LAUNCHER"] = value
+    with pytest.raises(RuntimeError, match=error):
+        sim._launch(setup, 18766, 9, True, False)
+
+
+def test_configured_launcher_must_not_be_writable_by_others(setup, tmp_path):
+    setup["ISAAC_MCP_SIM_LAUNCHER"] = str(launcher(tmp_path, 0o775))
+    with pytest.raises(RuntimeError, match="writable"):
+        sim._launch(setup, 18766, 9, True, False)
+
+
+def test_configured_launcher_must_be_executable(setup, tmp_path):
+    setup["ISAAC_MCP_SIM_LAUNCHER"] = str(launcher(tmp_path, 0o644))
+    with pytest.raises(RuntimeError, match="not an executable"):
+        sim._launch(setup, 18766, 9, True, False)
+
+
+def test_no_tool_argument_can_name_a_command(setup):
+    import inspect
+
+    server = _tool_server(setup)
+    assert set(inspect.signature(server["sim__launch"]).parameters) == {
+        "port", "ros_domain", "headless", "allow_shared_domain", "show_ur5e_panel", "enable_motion_bvh", "physics_backend"}
+
+
+def test_launcher_setting_is_read_when_the_server_starts_not_at_each_call(setup, tmp_path, monkeypatch):
+    server = _tool_server(setup)
+    monkeypatch.setenv("ISAAC_MCP_SIM_LAUNCHER", "/no/such/launcher")
+    assert "ISAAC_MCP_SIM_LAUNCHER" not in setup
+    assert server["sim__launch"](port=18766, ros_domain=9)["managed"] is True
+
+
+# ---- Newton on a build without it ----
+
+
+def fake_interpreter(prefix, release):
+    python = prefix / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text("")
+    (prefix / "lib" / "python3.11" / "site-packages" / f"isaacsim-{release}.dist-info").mkdir(parents=True)
+    return python
+
+
+def test_newton_on_51_refuses_before_starting_anything(setup, tmp_path, monkeypatch):
+    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
+    monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
+    with pytest.raises(ValueError, match="5.1.0.0 has no Newton") as error:
+        sim._launch(setup, 18766, 9, True, False, physics_backend="newton")
+    assert "no fallback" in str(error.value)
+
+
+def test_physx_on_51_and_newton_on_62_are_not_refused(setup, tmp_path):
+    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
+    assert sim._launch(setup, 18766, 9, True, False)["physics_backend"] == "physx"
+    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py62", "6.2.0.0"))
+    assert sim._launch(setup, 18767, 10, True, False, physics_backend="newton")["physics_backend"] == "newton"
+
+
+# ---- exited sessions in the listing ----
+
+
+def _exited_record(base, session_id, started, pid=1):
+    folder = base / session_id
+    folder.mkdir(parents=True)
+    (folder / "session.json").write_text(json.dumps(
+        {"id": session_id, "pid": pid, "start_ticks": 1, "boot_id": "other-boot", "port": 18000, "ros_domain": 1,
+         "started_at": started, "log": str(folder / "sim.log")}))
+    (folder / "sim.log").write_text("kept")
+    return folder
+
+
+def test_listing_bounds_old_exited_sessions_without_deleting_them(setup, tmp_path):
+    base = Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"])
+    folders = [_exited_record(base, f"{i:032x}", float(i)) for i in range(7)]
+    server = _tool_server(setup)
+    listed = server["sim__list"]()
+    assert [s["id"] for s in listed["sessions"]] == [f"{i:032x}" for i in (6, 5, 4)]
+    assert listed["exited_omitted"] == 4 and "include_exited" in listed["note"]
+    assert len(server["sim__list"](include_exited=True)["sessions"]) == 7
+    assert all((f / "session.json").is_file() and (f / "sim.log").is_file() for f in folders)
+    assert sim._status(setup, f"{0:032x}")["state"] == "exited"  # an unlisted one still answers
+
+
+def test_listing_never_omits_a_live_session(setup, monkeypatch):
+    base = Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"])
+    for i in range(6):
+        _exited_record(base, f"{i:032x}", float(i))
+    monkeypatch.setattr(sim, "_alive", lambda session: session["id"] == f"{0:032x}")
+    listed = _tool_server(setup)["sim__list"]()
+    assert listed["sessions"][0]["id"] == f"{0:032x}" and listed["sessions"][0]["state"] == "active"
+
+
+def test_a_launch_inherits_the_servers_environment_and_scrubs_the_documented_keys(setup, monkeypatch):
+    """docs/TOOLS-HOST.md says ISAAC_MCP_ASSET_PATH and DISPLAY come from the server's environment."""
+    seen = {}
+    real = sim.subprocess.Popen
+
+    def popen(args, **kw):
+        seen.update(kw["env"])
+        return real(["/bin/true"], **{k: v for k, v in kw.items() if k != "cwd"})
+
+    monkeypatch.setattr(sim.subprocess, "Popen", popen)
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 1))
+    for key, value in {"ISAAC_MCP_ASSET_PATH": "/assets", "DISPLAY": ":7", "PYTHONPATH": "/x", "UR5E_DT_HEADLESS": "1",
+                       "UR5E_DT_SHOW_PANEL": "1", "ISAAC_MCP_HOLD_TOKEN": "t", "ISAAC_MCP_HOLD_TOKEN_FILE": "f"}.items():
+        monkeypatch.setenv(key, value)
+    sim._launch(setup, 18766, 9, True, False)
+    assert seen["ISAAC_MCP_ASSET_PATH"] == "/assets" and seen["DISPLAY"] == ":7"
+    for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_SHOW_PANEL", "ISAAC_MCP_HOLD_TOKEN", "ISAAC_MCP_HOLD_TOKEN_FILE"):
+        assert key not in seen
+    assert seen["ISAAC_MCP_PYTHON"] == setup["ISAAC_MCP_PYTHON"]  # scrubbed, then set from the server's settings

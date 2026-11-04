@@ -169,3 +169,33 @@ the twin.
 4. Change: one named tool (`sim__*`, `assets__*`, `ur5e_dt__*`) or one small `run_python` edit.
 5. Verify: read the changed prim back, `screenshot` again.
 6. Report what changed, with the PID, port and (for generic tools) the session/stage IDs.
+
+## ROS 2 from an agent shell
+
+Lessons from the TurtleBot3/Nav2 lab.
+
+- Your shell must use the simulator's DDS settings or `ros2 topic list` stays empty while Kit
+  publishes: `sim__stage__info` returns them under `ros` with the exact shell line to run
+  (`sim__graph__build` repeats it for ROS graphs).
+- `source scripts/ros_env.sh [install] [--overlay <nav2 env>]` (after `export ROS_DOMAIN_ID=<sim's>`)
+  sources ROS, then `config/ros_dds.env`, then stops the `ros2` daemon. A daemon started with other
+  DDS settings makes `ros2 topic list` / `node list` empty while data flows; otherwise use
+  `--no-daemon` (`ros2 topic hz` has no such flag).
+- Kit's bridge nodes do not show in `ros2 node list`; verify with topics and `/tf`.
+- Background RViz needs a valid desktop `DISPLAY` exported in the launching shell alongside
+  `ros_env.sh` (for example `export DISPLAY=:0` when that is the desktop's display).
+- The harness kills a tool call's process group when it ends: start RViz and other long-lived
+  processes with `setsid nohup <cmd> > log 2>&1 < /dev/null &`, record `$!`, stop that PID.
+- Save your scene before stopping a managed simulator, then call
+  `sim__stop(session_id=<managed session id>, expected_pid=<its pid>, confirm_discard=true)`.
+- Bound every ROS command: `ros2 topic pub --times N`, `timeout -s KILL <s> ...`. A plain
+  `timeout 6 ros2 topic pub ... | tail` hung 120 s while the robot drove into a wall.
+- Keyboard teleop needs a TTY. Drive with `python3 scripts/cmd_vel_sequence.py "0.15,0,5;0,0.5,3"`
+  (m/s, rad/s, s per step); it always publishes zero at the end, also on Ctrl-C/SIGTERM.
+- Nav2's `map` frame is the world frame: the map YAML `origin` is only the image's corner, so
+  do not offset goals by it.
+- Same distro on both sides: Jazzy on Ubuntu 24.04, Humble on 22.04 (`run.sh` picks by OS unless
+  `ROS_DISTRO` is exported). Jazzy and Humble did not exchange messages with these DDS settings.
+- RViz layout: `scripts/ros2_rviz_config.py --view topdown --scale 80 --target-frame base_link
+  --hide-panels` (top-down, follows the robot, 3D view only). `Hide Left Dock: true` in a
+  config does nothing in RViz2.

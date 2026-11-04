@@ -10,7 +10,7 @@
       "owner_id": "generic-sim"
     },
     "sim.stage.open": {
-      "description": "Open a USD file (.usd/.usda/.usdc/.usdz under your home) as the current stage, like File > Open, with the timeline stopped. Refuses when the current stage really has unsaved edits unless discard_changes=true. Deactivates stale saved LiDAR render products in the session layer so their ROS topics return (reported in stale_render_products; the file is unchanged). Returns the new session_id/stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's output folder) as the current stage, like File > Open, with the timeline stopped. Refuses to drop unsaved edits unless discard_changes=true. Reports stale saved LiDAR render products and never changes the file. Returns the new session_id and stage_id for later sim__* calls; run_python sessions reset. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -24,7 +24,7 @@
         },
         "path": {
           "type": "string",
-          "description": "Absolute path of the USD file to open (a leading tilde for your home is expanded).",
+          "description": "Absolute path of the USD file to open, under your home or this simulator's output folder, where sim__stage__save writes by default (a leading tilde for your home is expanded).",
           "required": true
         },
         "discard_changes": {
@@ -60,7 +60,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Absolute path of the USD file to open (a leading tilde for your home is expanded)."
+          "description": "Absolute path of the USD file to open, under your home or this simulator's output folder, where sim__stage__save writes by default (a leading tilde for your home is expanded)."
         },
         {
           "name": "discard_changes",
@@ -70,6 +70,111 @@
           "default": false,
           "has_default": true,
           "description": "Open even if the current stage has unsaved edits (they are lost)."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.quick_start": {
+      "description": "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns the new session_id and stage_id, paths, each asset's source and next steps. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
+      "parameters": {
+        "robot": {
+          "type": "string",
+          "description": "Optional robot: a public name (ur5e, from your local copy first, then NVIDIA, honoring strict mode), <pack>/<file.usd> from an asset pack in your asset folder, or an absolute path under an approved root (same rules as assets__import_path). A file found only through a project file's asset_path is refused.",
+          "required": false
+        },
+        "ros": {
+          "type": "boolean",
+          "description": "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.",
+          "required": false,
+          "default": false
+        },
+        "up_axis": {
+          "type": "string",
+          "description": "The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass.",
+          "required": false,
+          "default": "Z",
+          "enum": [
+            "Z",
+            "Y"
+          ]
+        },
+        "meters_per_unit": {
+          "type": "number",
+          "description": "The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match.",
+          "required": false,
+          "default": 1.0
+        },
+        "play": {
+          "type": "boolean",
+          "description": "Start the timeline after building.",
+          "required": false,
+          "default": false
+        },
+        "discard_changes": {
+          "type": "boolean",
+          "description": "Replace a stage with unsaved edits (they are lost).",
+          "required": false,
+          "default": false
+        }
+      },
+      "fields": [
+        {
+          "name": "robot",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional robot: a public name (ur5e, from your local copy first, then NVIDIA, honoring strict mode), <pack>/<file.usd> from an asset pack in your asset folder, or an absolute path under an approved root (same rules as assets__import_path). A file found only through a project file's asset_path is refused."
+        },
+        {
+          "name": "ros",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator."
+        },
+        {
+          "name": "up_axis",
+          "kind": "enum",
+          "enum": [
+            "Z",
+            "Y"
+          ],
+          "required": false,
+          "default": "Z",
+          "has_default": true,
+          "description": "The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass."
+        },
+        {
+          "name": "meters_per_unit",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 1.0,
+          "has_default": true,
+          "description": "The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match."
+        },
+        {
+          "name": "play",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Start the timeline after building."
+        },
+        {
+          "name": "discard_changes",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Replace a stage with unsaved edits (they are lost)."
         }
       ],
       "namespace": "sim",
@@ -850,7 +955,7 @@
       "owner_id": "generic-sim"
     },
     "sim.stage.save": {
-      "description": "Export a flattened copy, including session edits, to a new basename (.usda is added if absent) in the configured output root, or in `directory` (an existing folder under your home, e.g. a lab work folder). Never overwrite or switch the current stage. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. Process-bound SyntheticData pipelines and pack render products are omitted from the copy; cameras, LiDAR definitions and user graphs remain. Unknown native pipeline content refuses save. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -930,7 +1035,7 @@
       "owner_id": "generic-sim"
     },
     "sim.viewport.frame": {
-      "description": "Point the active viewport camera. path alone: Kit's native select-and-frame. path+margin: frame the prim's current bounds plus margin metres, keeping the view direction. eye+target (world, stage units): place the camera exactly; with path, target defaults to the prim's centre. If the prim has no geometry, an unambiguous nearby subtree can be selected; the result reports the requested and actual paths, and follow tracks the actual path. follow=false stops following; it also stops on stage change, camera switch or a new call. Edits only the active camera in the session layer; no Kit undo entry. Refuses look-through targets, unsafe session-sublayer camera opinions and empty bounds (with candidates). Does not wait for rendered pixels; then screenshot the app window or record. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Point the active viewport camera, e.g. before a screenshot. path alone frames a prim; path+margin frames its bounds plus margin metres; eye+target places the camera exactly; follow tracks the prim. Edits only the active camera in the session layer, with no undo entry. Refuses look-through targets and empty bounds, listing candidates. Does not wait for rendered pixels. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2420,7 +2525,7 @@
       "owner_id": "generic-sim"
     },
     "sim.lidar.create": {
-      "description": "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D, as Create > Sensors > RTX Lidar does) or, without config, a local generic LiDAR. Config assets are referenced from Isaac's assets root (network or local mirror); an unknown name lists the valid ones. Motion BVH is not required (only motion distortion within a scan needs run.sh --motion-bvh); the result reports it. Returns prim type, sensor path and tick/scan rate. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. Config assets come from Isaac's assets root; an unknown name lists the valid ones. Returns prim type, sensor path and rates. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2737,9 +2842,15 @@
         },
         "extra_frames": {
           "type": "array",
-          "description": "Up to 16 more prims (cameras, LiDARs) to publish relative to the base link; frame name = prim name.",
+          "description": "Up to 16 more prims (cameras, LiDARs, tool0) to publish relative to the base link; frame name = prim name.",
           "required": false,
           "default": []
+        },
+        "attach_to": {
+          "type": "string",
+          "description": "For a robot that is its own articulation mounted on another (RG2 on a UR5e wrist): the parent link's prim. Publishes parent->base_link dynamically on every tick instead of a static world link, so it follows the arm. Call this tool once per articulation, with a namespace for this one.",
+          "required": false,
+          "default": ""
         },
         "namespace": {
           "type": "string",
@@ -2845,7 +2956,16 @@
           "required": false,
           "default": [],
           "has_default": true,
-          "description": "Up to 16 more prims (cameras, LiDARs) to publish relative to the base link; frame name = prim name."
+          "description": "Up to 16 more prims (cameras, LiDARs, tool0) to publish relative to the base link; frame name = prim name."
+        },
+        {
+          "name": "attach_to",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "For a robot that is its own articulation mounted on another (RG2 on a UR5e wrist): the parent link's prim. Publishes parent->base_link dynamically on every tick instead of a static world link, so it follows the arm. Call this tool once per articulation, with a namespace for this one."
         },
         {
           "name": "namespace",
@@ -2963,7 +3083,7 @@
       "owner_id": "generic-sim"
     },
     "sim.graph.build": {
-      "description": "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Containers or individual node/connection entries may be JSON-encoded strings; flat alternating node and connection lists also work. Checks every port against the created nodes and lists the real ports on a typo; creates Make Array-style inputs (inputs:input1, ...) itself; stores a token's value when given its key (Scale To/From Stage Units: 'toStage' -> 'Convert to stage units'); sets prim targets (e.g. an Articulation Controller's inputs:targetPrim) as USD relationships. Timeline stopped. Rolls the graph back on any error; returns it as sim__graph__inspect does. Find node types and ports first with sim__graph__node_types. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Find node types and ports first with sim__graph__node_types. Checks every port, lists the real ones on a typo, and rolls the graph back on any error. Timeline stopped. Returns it as sim__graph__inspect does. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -3175,7 +3295,7 @@
       "owner_id": "generic-sim"
     },
     "sim.graph.show": {
-      "description": "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit its nodes (on every call), e.g. to show graphs in a demo video (then screenshot or start_screen_recording). layout=true expands and arranges nodes, writing positions into the stage; stop first, or use layout=false while playing. TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. An undocked editor is a Kit window floating inside the Isaac Sim window; it is kept inside the main window. Uses the editor's internal API; refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit, e.g. for a demo video. layout=true arranges nodes and writes positions into the stage, so stop first or use layout=false while playing; TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. Uses the editor's internal API and refuses cleanly if it changed. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -3404,7 +3524,7 @@
         },
         "menu": {
           "type": "string",
-          "description": "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube', or a top-level menu such as 'Layouts' (opened to list its items, then closed again).",
+          "description": "For action=menu: a menu path, e.g. 'Create/Mesh/Cube' (a menu an extension adds exists only once it has loaded), or a top-level menu such as 'Layouts' (opened to list its items, then closed again).",
           "required": false
         },
         "scroll_x": {
@@ -3528,7 +3648,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "For action=menu: a menu path, e.g. 'Window/Graph Editors/Action Graph' or 'Create/Mesh/Cube', or a top-level menu such as 'Layouts' (opened to list its items, then closed again)."
+          "description": "For action=menu: a menu path, e.g. 'Create/Mesh/Cube' (a menu an extension adds exists only once it has loaded), or a top-level menu such as 'Layouts' (opened to list its items, then closed again)."
         },
         {
           "name": "scroll_x",
@@ -3889,7 +4009,7 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.command": {
-      "description": "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Command initialized articulation position targets on selected PhysX or qualified Newton backend in DOF order. Radians for revolute, stage units for prismatic; validates runtime limits. Returns target acknowledgment, not achieved pose: a contact can hold the robot short of a target, so compare sim__joints__state, and a fresh scene if unsure. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
