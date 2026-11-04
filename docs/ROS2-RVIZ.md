@@ -137,7 +137,7 @@ ros2 topic list | grep -E 'clock|cmd_vel|odom|scan|^/tf'
 python3 scripts/ros2_tf_doctor.py --fixed-frame odom
 ```
 
-The doctor should end with `OK: every frame connects to 'odom'`. Drive forward at 0.15 m/s, turn on the spot, and read where the robot thinks it is. The first second or so can be lost while the publisher connects, so expect 0.3 to 0.6 m (the box in this scene stops a Create 3 at about 0.52 m):
+The doctor should end with `OK: every frame connects to 'odom'`. Drive forward at 0.15 m/s, turn on the spot, and read where the robot thinks it is. The first second or so can be lost while the publisher connects, so expect 0.3 to 0.6 m (the box in this scene stops a Create 3 at about 0.52 m). These times assume real time: `--realtime` is only a cap, and on a loaded machine we measured 0.08 to 0.4 of it. Compare `/clock` with the wall clock, and allow Nav2 longer if it's slow:
 
 ```bash
 python3 scripts/cmd_vel_sequence.py "0.15,0,5;0,0.5,3;0,0,1"
@@ -194,7 +194,7 @@ Tool `sim__camera__capture`:
 {"path": "/World/TopCamera", "filename": "goal.png"}
 ```
 
-**9. Clean up and save.** `pkill -INT -f '[p]arams_file:=/tmp/isaac_nav2.yaml'` stops this Nav2 and not anyone else's. The brackets stop it matching your own shell. Then stop the timeline and save a copy. The flag removes this session's render handles from the copy; without it, the save refuses and says so. In the saved file, the drive and LiDAR graphs make their own render products at Play, so `/scan` comes back when you open it with `sim__stage__open`.
+**9. Clean up and save.** `pkill -INT -f '[p]arams_file:=/tmp/isaac_nav2.yaml'` stops this Nav2 and not anyone else's; the brackets stop it matching your own shell. A launch backgrounded by a script can ignore SIGINT, and SIGTERM on the launch alone can leave its nodes running, so confirm with `ros2 node list` and stop any left by PID. Then stop the timeline and save a copy. The flag removes this session's render handles from the copy; without it, the save refuses and says so. In the saved file, the drive and LiDAR graphs make their own render products at Play, so `/scan` comes back when you open it with `sim__stage__open`.
 
 Tool `sim__timeline__control`:
 
@@ -433,7 +433,7 @@ stop; `ros2 topic list --no-daemon` avoids the daemon (`ros2 topic hz` has no su
 bridge nodes do not appear in `ros2 node list` at all; check topics and `/tf` instead.
 
 `ros2 topic echo` truncates long arrays, so a LaserScan can look all invalid: judge `/scan` with a small
-`rclpy` subscriber that prints the count and the range. `--field ranges` works too, but prints every value on one line.
+`rclpy` subscriber that prints the count and the range. `--field ranges` works too, but prints every value on one line. With nothing in range a LiDAR publishes no messages at all, and just after Play a scan can be all `-1.0`, so put something in range and wait before judging it.
 
 Without a TTY there is no keyboard teleop. Drive with timed steps (linear m/s, angular rad/s,
 seconds):

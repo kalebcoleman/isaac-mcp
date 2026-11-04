@@ -191,7 +191,7 @@ assets__pack_build  pack="panda" sources=["/abs/example-robot-data/robots/panda_
 sim__quick_start    robot="panda/example-robot-data/robots/panda_description/urdf/panda.urdf"
 ```
 
-The build copies the URDF, each mesh it names and the textures a DAE, OBJ or MTL file names. It copies nothing else, so
+Loading a URDF needs the one-time staging setup even from a pack, because it's converted first; a USD pack doesn't ([one-time approval](TOOLS-SCENE.md#one-time-approval)). The build copies the URDF, each mesh it names and the textures a DAE, OBJ or MTL file names. It copies nothing else, so
 a large repository is fine. No USD parser is needed. The source and the copy in the pack are never rewritten.
 
 `package://<pkg>/<path>` is looked for inside the approved root or pack only, in this order:

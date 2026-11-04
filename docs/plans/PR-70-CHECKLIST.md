@@ -241,13 +241,13 @@ To fix or attempt:
 
 To state in the docs:
 
-- [ ] `/scan` can publish all invalid ranges at first, and nothing at all with no return in range
-- [ ] `--realtime` is a cap: on a loaded machine the sim ran at 0.08 to 0.4 of wall time, so wall-clock distances and Nav2 timeouts stretch. Check `/clock`
-- [ ] Nav2 stop: SIGINT can be ignored when the launch was backgrounded by a script, and SIGTERM on the launch can leave nodes behind
+- [x] `/scan` can publish all invalid ranges at first, and nothing at all with no return in range
+- [x] `--realtime` is a cap: on a loaded machine the sim ran at 0.08 to 0.4 of wall time, so wall-clock distances and Nav2 timeouts stretch. Check `/clock`
+- [x] Nav2 stop: SIGINT can be ignored when the launch was backgrounded by a script, and SIGTERM on the launch can leave nodes behind
 - [ ] Map rasterising: a collider marks every cell it touches, so a thin wall can show a cell wider
 - [ ] With a robot on the origin, pass `start` on open floor
 - [ ] `nav2_params.py` needs ROS sourced
-- [ ] An agent's background Kit dies with its shell or tool limit: use the detached start
+- [x] An agent's background Kit dies with its shell or tool limit: use the detached start
 
 ### Early-phase proposals still to build (`SIM-TOOLS-FOLLOWUP.md`)
 
