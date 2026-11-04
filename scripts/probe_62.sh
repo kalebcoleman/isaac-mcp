@@ -46,7 +46,8 @@ if ! "$PY" -c 'import isaacsim' 2>/dev/null; then
   exit 1
 fi
 
-ISAAC_VER="$("$PY" -c 'import importlib.metadata as m;print(m.version("isaacsim"))')"
+. "$ROOT/scripts/isaac_ros_libs.sh"
+ISAAC_VER="$(isaac_sim_version "$PY")"
 case "$ISAAC_VER" in
   6.*) ;;
   *) echo "FAIL: $PY has isaacsim $ISAAC_VER; this probe needs 6.x." >&2; exit 1 ;;

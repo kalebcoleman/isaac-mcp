@@ -188,3 +188,11 @@ def test_start_on_a_cell_edge_checks_the_touching_cells(np):
     pgm, origin, _ = graph.pgm_and_origin(buf.tolist(), dims, dims, (0.0, 0.0, 0.0), 0.1, 1.0)
     assert len(graph.cells_at(pgm, dims, dims, origin, 0.1, 0.3, 0.3)) == 4   # a corner: four cells
     assert len(graph.cells_at(pgm, dims, dims, origin, 0.1, 0.35, 0.35)) == 1  # a cell centre: one
+
+
+def test_map_slice_rises_past_a_floor_only_while_nothing_is_occupied():
+    raised = graph.raised_slice(0.05, 0.3, 0.05, 0, 0)
+    assert raised == pytest.approx(0.11)
+    assert graph.raised_slice(0.05, 0.3, 0.05, 12, 0) is None  # a real map: leave it alone
+    assert graph.raised_slice(0.05, 0.3, 0.05, 0, graph.FLOOR_RETRIES) is None
+    assert graph.raised_slice(0.28, 0.3, 0.05, 0, 0) is None  # no room left in the slice

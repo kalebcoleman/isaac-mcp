@@ -675,6 +675,18 @@ def _colliders_in_bounds(lo, hi, z, to_su, limit=5):
         return []
 
 
+FLOOR_RETRIES = 3
+
+
+def raised_slice(z_low, z_high, cell, occupied, attempt):
+    """The next bottom of the z slice to try, or None to stop. A floor within one cell of the bottom makes the generator
+    mark nothing occupied (measured on 6.0.1: floor top 0, cell 0.05, z_min 0.05 fails and 0.06 works)."""
+    if occupied or attempt >= FLOOR_RETRIES:
+        return None
+    raised = z_low + cell * 1.2
+    return raised if raised < z_high else None
+
+
 def occupancy_map(scene, stage, a):
     """Generate a 2D occupancy map from the stage's colliders and write a Nav2 PGM + YAML."""
     from isaac_mcp.project_assets import refuse
@@ -691,34 +703,41 @@ def occupancy_map(scene, stage, a):
 
     in_collider = _start_in_collider(stage, start, (z[0] + z[1]) / 2, cell, to_su)
     om = _omap.acquire_omap_interface()
+    z_low = z[0]
     try:
-        # The generator flood-fills free space from this origin ("must be in unoccupied space").
-        cz = (z[0] + z[1]) / 2 * to_su
-        cx, cy = start[0] * to_su, start[1] * to_su
-        om.set_cell_size(cell * to_su)
-        om.set_transform((cx, cy, cz), (lo[0] * to_su - cx, lo[1] * to_su - cy, z[0] * to_su - cz),
-                         (hi[0] * to_su - cx, hi[1] * to_su - cy, z[1] * to_su - cz))
-        om.update()
-        om.generate()
-        dims = om.get_dimensions()
-        buffer = om.get_buffer()
-        min_bound = om.get_min_bound()
+        for attempt in range(FLOOR_RETRIES + 1):
+            # The generator flood-fills free space from this origin ("must be in unoccupied space").
+            cz = (z_low + z[1]) / 2 * to_su
+            cx, cy = start[0] * to_su, start[1] * to_su
+            om.set_cell_size(cell * to_su)
+            om.set_transform((cx, cy, cz), (lo[0] * to_su - cx, lo[1] * to_su - cy, z_low * to_su - cz),
+                             (hi[0] * to_su - cx, hi[1] * to_su - cy, z[1] * to_su - cz))
+            om.update()
+            om.generate()
+            dims = om.get_dimensions()
+            buffer = om.get_buffer()
+            min_bound = om.get_min_bound()
+            if not len(buffer) or dims.x * dims.y != len(buffer):
+                refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) "
+                       "inside the bounds and a UsdPhysics.Scene on the stage.")
+            pgm, origin, counts = pgm_and_origin(buffer, dims.x, dims.y, min_bound, cell * to_su, mpu, clear)
+            next_low = raised_slice(z_low, z[1], cell, counts["occupied"], attempt)
+            if next_low is None or not _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su):
+                break
+            z_low = next_low
     finally:
         _omap.release_omap_interface(om)
-    if not len(buffer) or dims.x * dims.y != len(buffer):
-        refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) "
-               "inside the bounds and a UsdPhysics.Scene on the stage.")
-    pgm, origin, counts = pgm_and_origin(buffer, dims.x, dims.y, min_bound, cell * to_su, mpu, clear)
     reason = start_blocked(counts, cells_at(pgm, dims.x, dims.y, origin, cell, start[0], start[1]), in_collider)
     if reason:
         refuse("START_BLOCKED", f"start {start} {reason}. The generator flood-fills free space from it, so the "
                "map would be empty or wrong. Move start to open floor next to (not on) the robot; `clear` only "
                "edits the saved image. No files were written.", cells=counts)
-    colliders = _colliders_in_bounds(lo, hi, z, to_su) if counts["occupied"] == 0 else []
+    colliders = _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su) if counts["occupied"] == 0 else []
     if colliders:
         refuse("MAP_NO_OBSTACLES", f"The generator marked no cell occupied, but colliders are inside the bounds and z "
-               f"slice ({', '.join(colliders)}), so this map would be wrong. Check that they are enabled and that "
-               "physics has run since they were added. No files were written.", colliders=colliders, cells=counts)
+               f"slice ({', '.join(colliders)}), so this map would be wrong. Raising the slice's bottom by up to "
+               f"{FLOOR_RETRIES} steps did not help. If a floor is one of them, set z above it; check that the others are "
+               "enabled and that physics has run since they were added. No files were written.", colliders=colliders, cells=counts)
     scene.output.mkdir(mode=0o700, parents=True, exist_ok=True)
     pgm_path.write_bytes(pgm)
     yaml_text = (f"image: {base}.pgm\nmode: trinary\nresolution: {cell:g}\n"
@@ -733,7 +752,9 @@ def occupancy_map(scene, stage, a):
         warn = "No occupied cells reached from start: nothing with a collider intersects the z slice there."
     else:
         warn = None
-    return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=dims.x, height=dims.y, resolution=cell,
+    raised = {"z_used": [round(z_low, 4), z[1]], "z_note": "Bottom of the slice raised: a floor within one cell of it left the "
+              "generator with no obstacles. Anything lower than z_used is not mapped."} if z_low != z[0] else {}
+    return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=dims.x, height=dims.y, resolution=cell, **raised,
                 origin=[round(origin[0], 4), round(origin[1], 4), 0.0], cells=counts, yaml_text=yaml_text,
                 **({"warning": warn} if warn else {}),
                 usage="ros2 launch nav2_bringup localization_launch.py map:=<yaml> use_sim_time:=true")

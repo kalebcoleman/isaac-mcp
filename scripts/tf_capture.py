@@ -57,7 +57,9 @@ def ros_dirs():
     if not locations:
         sys.exit('tf_capture: isaacsim is not an installed package in this interpreter; '
                  'run with an Isaac Sim interpreter, such as .venv/bin/python')
-    base = Path(locations[0]) / ROS_CORE
+    # A pip install keeps exts/ in the package; a standalone app has <app>/python_packages/isaacsim and <app>/exts.
+    package = Path(locations[0])
+    base = next((b for b in (package / ROS_CORE, package.parents[1] / ROS_CORE) if (b / 'rclpy').is_dir()), package / ROS_CORE)
     rclpy_dir, lib_dir = base / 'rclpy', base / 'lib'
     if not rclpy_dir.is_dir() or not lib_dir.is_dir():
         sys.exit(f'tf_capture: bundled ROS 2 install not found under {base}')

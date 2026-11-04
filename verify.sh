@@ -42,14 +42,8 @@ fi
 # Version agreement rule (§3):
 # Asserts importlib.metadata.version("isaacsim") matches in whichever interpreter the twin is launched with.
 EXPECTED_VER="${VERIFY_SIM_VERSION:-6.2.0.0}"
-if [ "$(basename "$PY")" = "python.sh" ] && [ -f "$(dirname "$PY")/VERSION" ]; then
-  # A standalone app has no isaacsim package, and its python.sh prints errors to stdout. Its VERSION file
-  # reads like 6.0.1-rc.12+release: keep the number, padded to the four parts of a package version.
-  ISAAC_VER="$(sed -n 's/^\([0-9][0-9.]*\).*/\1/p;q' "$(dirname "$PY")/VERSION")"
-  case "$ISAAC_VER" in *.*.*.*) ;; *.*.*) ISAAC_VER="$ISAAC_VER.0" ;; esac
-else
-  ISAAC_VER="$("$PY" -c 'import importlib.metadata as m; print(m.version("isaacsim"))' 2>/dev/null || true)"
-fi
+. "$(dirname "$0")/scripts/isaac_ros_libs.sh"
+ISAAC_VER="$(isaac_sim_version "$PY")"
 if [ "$ISAAC_VER" != "$EXPECTED_VER" ]; then
   echo "FAIL: $PY has isaacsim version '${ISAAC_VER:-unknown}', expected '$EXPECTED_VER' (set VERIFY_SIM_VERSION for another build)" >&2
   exit 1

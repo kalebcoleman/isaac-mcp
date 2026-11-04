@@ -18,3 +18,16 @@ isaac_ros_lib_dir() {
   done
   return 1
 }
+
+# The Isaac Sim version of an interpreter, four parts. A standalone app has no isaacsim package and its
+# python.sh prints errors to stdout, so it reads that app's VERSION file (like 6.0.1-rc.12+release).
+isaac_sim_version() {
+  local py="$1" version
+  if [ "$(basename "$py")" = "python.sh" ] && [ -f "$(dirname "$py")/VERSION" ]; then
+    version="$(sed -n 's/^\([0-9][0-9.]*\).*/\1/p;q' "$(dirname "$py")/VERSION")"
+    case "$version" in *.*.*.*) ;; *.*.*) version="$version.0" ;; esac
+    printf '%s\n' "$version"
+  else
+    "$py" -c 'import importlib.metadata as m; print(m.version("isaacsim"))' 2>/dev/null || true
+  fi
+}
