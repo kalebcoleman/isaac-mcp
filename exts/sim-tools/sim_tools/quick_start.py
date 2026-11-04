@@ -293,8 +293,9 @@ async def run(ext, args):
     if not reuse:
         discarded = bool(stage) and stage_has_unsaved_work(stage)
         if discarded and not discard:
-            refuse("UNSAVED_CHANGES", "The current stage has unsaved edits. Save them first (sim__stage__save), or pass "
-                   "discard_changes=true to drop them.", source=stage.GetRootLayer().identifier)
+            refuse("UNSAVED_CHANGES", "The current stage has edits this file does not hold. sim__stage__save writes them to a new "
+                   "file but does not clear this, so after saving, or to drop them, pass discard_changes=true.",
+                   source=stage.GetRootLayer().identifier)
         ok, error = await ctx.new_stage_async()
         if not ok:
             refuse("OPEN_FAILED", f"Kit could not make a new stage: {str(error)[:300]}")

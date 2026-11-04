@@ -207,8 +207,10 @@ def pins(base: Path) -> dict[str, str]:
     for line in text.split("\n"):
         line = line.rstrip("\r")
         digest = line[:64]
-        if len(line) < 66 or line[64] != " " or any(c not in _HEX for c in digest):
+        if not line.strip() or line.lstrip().startswith("#"):
             continue
+        if len(line) < 66 or line[64] != " " or any(c not in _HEX for c in digest):
+            raise ValueError(f"{path} has a malformed line, so its pins can't be trusted: {line[:80]!r}")
         # "<hash> <mode><name>": mode is " " (text) or "*" (binary); a single
         # space followed directly by the name is also accepted.
         name = line[66:] if line[65] in " *" else line[65:]

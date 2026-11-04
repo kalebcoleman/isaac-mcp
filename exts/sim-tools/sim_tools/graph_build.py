@@ -203,6 +203,16 @@ def token_map(raw):
     return {}
 
 
+SCRIPT_PORTS = ("inputs:script", "inputs:scriptPath")
+
+
+def scripts_disabled():
+    """A node that runs Python from its inputs is code execution, like sim__controller__create: same consent."""
+    import os
+
+    return os.getenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS") != "1"
+
+
 def type_shape(og_type):
     """An OmniGraph type as (base, tuple count, array depth, role), lower-case names."""
     name = lambda value: str(value).rsplit(".", 1)[-1].lower()
@@ -313,6 +323,12 @@ def build(stage, a, stopped):
     try:
         og.Controller.edit({"graph_path": path, "evaluator_name": spec["evaluator"]},
                            {keys.CREATE_NODES: spec["nodes"]})
+
+        for name, kind in spec["nodes"]:
+            created = og.Controller.node(f"{path}/{name}")
+            if scripts_disabled() and any(created.get_attribute_exists(p) for p in SCRIPT_PORTS):
+                raise SpecError("SCRIPT_DISABLED", f"{name} ({kind}) runs Python, which is off unless the user starts Kit "
+                                "with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1. Nothing was built.")
 
         def attr(node, port, create_dynamic):
             n = og.Controller.node(f"{path}/{node}")

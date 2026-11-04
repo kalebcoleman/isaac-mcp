@@ -27,6 +27,7 @@ import hmac
 import inspect
 import json
 import os
+import stat
 import re
 import socket
 import struct
@@ -1900,7 +1901,13 @@ def _app_identity() -> Dict[str, Any]:
 def _write_portfile(host: str, port: int) -> None:
     """Best-effort advertisement; never fatal."""
     try:
-        os.makedirs(_runtime_dir(), exist_ok=True)
+        folder = _runtime_dir()
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        if hasattr(os, "getuid"):  # /tmp/isaac-mcp-<uid> is a predictable name another local user could create first
+            info = os.lstat(folder)
+            if info.st_uid != os.getuid() or not stat.S_ISDIR(info.st_mode):
+                raise OSError(f"{folder} is not a directory owned by this user")
+            os.chmod(folder, 0o700)
         _sweep_stale_portfiles()
         dial_host = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
         payload = {"pid": os.getpid(), "port": port, "host": dial_host,

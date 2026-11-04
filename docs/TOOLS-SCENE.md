@@ -153,7 +153,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__material__create` | Create a UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs. |
 | `sim__material__apply` | Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. |
 | `sim__physics__configure` | Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch. |
-| `sim__joints__inspect` | Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim. On an articulation root that is a joint (often `<robot>/root_joint`), it returns the joints connected to it through their links, with their authored limits and drives, plus `scope` and `articulation_root`; `limit` then caps the joints returned. A joint excluded from the articulation is left out. |
+| `sim__joints__inspect` | Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim. On an articulation root that is a joint (often `<robot>/root_joint`), it returns the joints connected to it through their links, with their authored limits and drives, plus `scope` and `articulation_root`; `limit` then caps the prims visited to find joints. A joint excluded from the articulation is left out. |
 | `sim__joints__drive` | Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. A target that is past an authored limit only by float32 rounding is put on the limit, and the result says so: a limit authored from 1.0 rad is stored as 57.2957764 degrees, one step below the exact conversion. `sim__joints__command` does the same with runtime limits. |
 | `sim__joints__state` | Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. |
 | `sim__simulation__step` | Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. |
@@ -553,7 +553,7 @@ conversion. Validation is scoped to the recorded Newton/MuJoCo and PhysX configu
 
 Controller tools execute arbitrary Python through ScriptNode and require the user's launch-time
 `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`. That explicitly enables Kit's ScriptNode consent setting;
-it is not OS isolation. By default both tools return `SCRIPT_DISABLED`. The graph topology is
+it is not OS isolation. By default both tools return `SCRIPT_DISABLED`, and `sim__graph__build` refuses any node that takes `inputs:script` or `inputs:scriptPath` the same way. A file you open can still hold a ScriptNode; opening a file is trusting it, as Kit's own consent setting applies. The graph topology is
 fixed to playback tick → inline ScriptNode; update recompiles owned code while stopped.
 Controller USD edits must respect layer strength (for pack-authored geometry, use its session
 layer). General graph topology and file/module hot-reload are not implemented. Existing trusted

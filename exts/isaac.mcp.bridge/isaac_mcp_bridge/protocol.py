@@ -16,6 +16,7 @@ exactly once. ``ToolError`` lets a handler attach structured diagnostics
 """
 
 import json
+import math
 from typing import Any, Dict, Iterator, Optional
 
 
@@ -45,15 +46,33 @@ def error(message: str, **extra: Any) -> Dict[str, Any]:
     return frame
 
 
+def _finite(obj: Any) -> Any:
+    """Replace NaN and infinities with strings: they are not JSON, and strict parsers reject the whole frame."""
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: _finite(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_finite(v) for v in obj]
+    return obj
+
+
 def encode_frame(obj: Any) -> bytes:
     """One JSON object -> one NDJSON line (UTF-8, newline-terminated)."""
-    return json.dumps(obj, default=_json_fallback).encode("utf-8") + b"\n"
+    try:
+        text = json.dumps(obj, default=_json_fallback, allow_nan=False)
+    except ValueError:  # NaN or infinity somewhere; only this rare frame pays for the walk
+        text = json.dumps(_finite(obj), default=_json_fallback)
+    return text.encode("utf-8") + b"\n"
 
 
 def _json_fallback(obj: Any) -> str:
     """Last-resort serializer so a handler returning e.g. a Gf.Vec3d or numpy
     scalar degrades to its repr instead of killing the response frame."""
     return repr(obj)
+
+
+MAX_FRAME_BYTES = 256 * (1 << 20)  # a request is small; files go base64 in one frame, so this stays generous
 
 
 class FrameDecoder:
@@ -64,17 +83,33 @@ class FrameDecoder:
     error response and the connection stays healthy.
     """
 
-    def __init__(self) -> None:
-        self._buffer = b""
+    def __init__(self, max_frame: int = MAX_FRAME_BYTES) -> None:
+        self._buffer = bytearray()
+        self._max_frame = max_frame
+        self._skipping = False  # inside a frame already refused as too long: drop it up to its newline
 
     def feed(self, data: bytes) -> Iterator[tuple]:
+        if self._skipping:
+            end = data.find(b"\n")
+            if end < 0:
+                return
+            data, self._skipping = data[end + 1:], False
+        scanned = len(self._buffer)  # search only new bytes, so a long frame costs linear time, not quadratic
         self._buffer += data
-        while b"\n" in self._buffer:
-            line, self._buffer = self._buffer.split(b"\n", 1)
-            line = line.strip()
+        while True:
+            end = self._buffer.find(b"\n", scanned)
+            if end < 0:
+                break
+            line = bytes(self._buffer[:end]).strip()
+            del self._buffer[:end + 1]
+            scanned = 0
             if not line:
                 continue
             try:
                 yield json.loads(line.decode("utf-8")), None
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 yield None, f"invalid JSON frame: {e}"
+        if len(self._buffer) > self._max_frame:
+            self._buffer.clear()
+            self._skipping = True
+            yield None, f"frame longer than the {self._max_frame // (1 << 20)} MiB limit was dropped"

@@ -56,8 +56,8 @@ def _guard(fn: Callable[[], Any]) -> str:
 
 _WINDOW_HINT = (
     "A window opens within ~30 s but the scene is empty/black until loading finishes. Poll "
-    "isaaclab__runs_status(job_id) until it reports `window` AND last_log_lines contains "
-    "'Completed setting up the environment', wait ~5 s, then screenshot(window_id=...) or a short "
+    "isaaclab__runs_status(job_id) until it reports `window`, and isaaclab__runs_tail(job_id, lines=200) until it contains "
+    "'Completed setting up the environment' (later lines can push it out of last_log_lines), wait ~5 s, then screenshot(window_id=...) or a short "
     "start_screen_recording(window_id=...) to inspect the result, and isaaclab__runs_cancel when done."
 )
 

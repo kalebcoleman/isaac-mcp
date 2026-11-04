@@ -1252,3 +1252,11 @@ def test_approval_helper_refuses_a_second_root_rather_than_dropping_the_first(tm
                       "--root-id", "b", "--root", str(tmp_path)])
     assert "can be given once" in capsys.readouterr().err
     assert not (tmp_path / "c.json").exists()
+
+
+def test_doctor_names_a_symlink_that_import_would_refuse(tmp_path):
+    from isaac_mcp import asset_packs
+
+    (tmp_path / "a.usda").write_text("#usda 1.0\n")
+    (tmp_path / "link.usda").symlink_to(tmp_path / "a.usda")
+    assert asset_packs._pack_symlinks(tmp_path) == ["link.usda"]

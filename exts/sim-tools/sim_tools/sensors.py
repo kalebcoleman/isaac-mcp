@@ -441,7 +441,8 @@ def read(sensor):
             "NOT_READY",
             "No rendered sensor data yet, or nothing is in range. Allow ordinary rendered frames while playing; warm-up "
             "can take several seconds. A LiDAR needs visible geometry between its near and far range (1 m to 200 m for "
-            "NVIDIA's Example_Rotary configs). No implicit Play or nested update.",
+            "NVIDIA's Example_Rotary configs). On some builds (measured on 6.0.0.0) the buffer also empties on Pause: read "
+            "while playing. No implicit Play or nested update.",
         )
     return data, info
 

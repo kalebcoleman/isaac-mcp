@@ -303,11 +303,23 @@ def _validate_library(rl_library: Any) -> str | None:
     return rl_library
 
 
+def _process_start(pid: Any) -> str | None:
+    """A process's start time, from /proc. None where that can't be read."""
+    try:
+        with open(f"/proc/{int(pid)}/stat", encoding="utf-8", errors="replace") as f:
+            return f.read().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError, TypeError, ValueError):
+        return None
+
+
 def _job_alive(data: dict) -> bool:
     """True only if the recorded pid is alive AND still runs this job's script (guards pid reuse
     after a host restart: we must never signal an unrelated process group)."""
     pid = data.get("pid")
     if not _pid_alive(pid):
+        return False
+    started = data.get("pid_start")
+    if started is not None and _process_start(pid) not in (started, None):
         return False
     cmd = data.get("command") or []
     marker = cmd[1] if len(cmd) > 1 else None
@@ -701,6 +713,7 @@ def _start_job_locked(
         "task": task,
         "command": full_cmd,
         "pid": proc.pid,
+        "pid_start": _process_start(proc.pid),
         "started_at": started,
         "finished_at": None,
         "status": "running",
@@ -960,6 +973,8 @@ def runs_cancel(job_id: str, grace_s: int = 10) -> dict[str, Any]:
     pid = data.get("pid")
     cancelled = False
     if _job_alive(data):
+        if os.getpgid(int(pid)) != int(pid):  # jobs lead their own group; a killpg here would miss, or hit another
+            return {"cancelled": False, "state": "cancelled", "note": f"pid {pid} does not lead a process group, so this record is not from a job this tool started. Nothing was signalled."}
         try:
             os.killpg(int(pid), signal.SIGTERM)
             cancelled = True
@@ -982,6 +997,8 @@ def runs_cancel(job_id: str, grace_s: int = 10) -> dict[str, Any]:
                 proc.wait(timeout=5)
             except Exception:
                 pass
+    if not cancelled:
+        return {"cancelled": False, "state": "cancelled", "note": "The process had already gone, so nothing was signalled. The record now says cancelled."}
     return {"cancelled": True, "state": "cancelled"}
 
 

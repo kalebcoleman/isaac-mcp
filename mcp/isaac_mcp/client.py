@@ -53,6 +53,7 @@ Exit codes: 0 = success · 1 = bridge answered with an error ·
 
 import json
 import os
+import stat
 import re
 import secrets
 import socket
@@ -160,10 +161,32 @@ def _valid_portfile(name: str, info) -> bool:
             and "\0" not in info.get("host", "127.0.0.1"))
 
 
+def _runtime_dir_trusted(folder: str) -> bool:
+    """Only a folder this user owns and others can't write to: a local user could otherwise pre-create
+    the predictable /tmp/isaac-mcp-<uid> and point this client at a bridge of theirs."""
+    if not hasattr(os, "getuid"):
+        return True
+    try:
+        info = os.lstat(folder)
+    except OSError:
+        return False
+    return stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
+
+
+def _pid_is_ours(pid: int) -> bool:
+    """False for a live process of another user. No /proc: not knowable, so the liveness check stands."""
+    try:
+        return os.stat(f"/proc/{pid}").st_uid == os.getuid()
+    except (AttributeError, OSError):
+        return True
+
+
 def discover_bridges() -> list:
     """Live advertised bridges: [{pid, port, host, app, started}]. Stale
     portfiles (dead pid or dead socket) are pruned best-effort."""
     found = []
+    if not _runtime_dir_trusted(_runtime_dir()):
+        return found
     try:
         names = os.listdir(_runtime_dir())
     except OSError:
@@ -177,7 +200,7 @@ def discover_bridges() -> list:
                 info = json.load(f)
             if not _valid_portfile(name, info):
                 continue
-            if not _pid_alive(info["pid"]):
+            if not _pid_alive(info["pid"]) or not _pid_is_ours(info["pid"]):
                 raise OSError("stale portfile: process gone")
             probe = socket.create_connection(
                 (info.get("host", DEFAULT_HOST), int(info["port"])), timeout=0.5)

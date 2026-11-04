@@ -652,7 +652,7 @@ def test_pins_parser_accepts_coreutils_forms(tmp_path):
     module = load_module()
     digest = hashlib.sha256(b"x").hexdigest()
     (tmp_path / "SHA256SUMS").write_text(
-        f"{digest}  a/one.usd\n{digest} *b/two.usd\n{digest}  ./c/three.usd\nnot a line\n",
+        f"# a comment\n\n{digest}  a/one.usd\n{digest} *b/two.usd\n{digest}  ./c/three.usd\n",
         encoding="utf-8",
     )
     assert module.pins(tmp_path) == {
@@ -660,6 +660,14 @@ def test_pins_parser_accepts_coreutils_forms(tmp_path):
         "b/two.usd": digest,
         "c/three.usd": digest,
     }
+
+
+def test_a_malformed_pins_file_is_refused_rather_than_losing_coverage(tmp_path):
+    module = load_module()
+    digest = hashlib.sha256(b"x").hexdigest()
+    (tmp_path / "SHA256SUMS").write_text(f"{digest}  a/one.usd\nnot a line\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="malformed"):
+        module.pins(tmp_path)
 
 
 def test_directory_assets_resolve_from_every_layer(monkeypatch, tmp_path):

@@ -14,7 +14,8 @@ For design history and the original job-guard write-up, see [ISAACLAB-TOOLS.md](
 - MCP tool names cannot contain dots, so they appear as `isaaclab__<tool>`
   (double underscore). There is no `isaaclab.` bridge namespace behind them.
 - Every tool returns a JSON string. Failures come back as `{"error": ...}` (often with
-  `hint`) rather than exceptions, so a client can read and retry.
+  `hint`) rather than exceptions, so a client can read and retry. An argument of the wrong type or a missing
+  one is refused earlier by the MCP layer, as an MCP error.
 
 ## Setup and configuration
 
@@ -170,6 +171,9 @@ before anything starts, naming the flag and the alternative; otherwise a per-lib
 **Isaac Lab 2.3.2 with Sim 5.1 is experimental, and `tested` stays false.** Tiny Cartpole jobs ran through these tools on one desktop with `rsl_rl`, `skrl`, `sb3` and
 `rl_games`, including checkpoints, metrics, eval and play; the profile's flags matched each script's real `--help`. That shows the launcher works, not long training or other tasks.
 `rl_games` at 16 environments needs `extra_args=["agent.params.config.minibatch_size=64"]`. `sb3` saves `model.zip`, which counts as a checkpoint only under an `sb3` path.
+
+`isaaclab__envs_list` can't list tasks on this pair: importing `isaaclab_tasks` needs `pxr`, which exists only once Kit has started. It
+reports `isaac_tasks_unavailable`, and `train` and `play` still work, so use a task name from Lab's docs.
 
 **A crash can exit 0.** Kit's shutdown can hide an uncaught exception: seen on Lab 2.3.2 with an unknown task. A job that exits 0 with a traceback at the end of stderr reports `failed` with a note.
 One exception: a `train` job whose run folder already has a checkpoint still reports `succeeded`, so check its log and iteration count if it stopped early.
@@ -397,8 +401,8 @@ Example train call shape (illustrative):
    `{job_id, log_dir, command}`.
 2. For a windowed `play`, call `isaaclab__runs_status` to get `window.id`, then use the host
    `screenshot(window_id=...)` / `start_screen_recording(window_id=...)` tools to inspect.
-   The viewport is black until the log contains "Completed setting up the environment"; wait
-   ~5 s after that line before capturing.
+   The viewport is black until the log contains "Completed setting up the environment"; check for it with
+   `isaaclab__runs_tail`, since later lines can push it out of `last_log_lines`, then wait ~5 s before capturing.
 3. Stop with `isaaclab__runs_cancel` when done.
 
 Example play call shape (illustrative):
@@ -535,8 +539,9 @@ Limitations and not verified:
   that the complete twin and Lab stack support 5.1.
 - The Kit guard only probes the configured port plus advertised portfiles; two separate host
   processes can still race the guard.
-- `metrics_summary` returned no scalars for one very short run even though an event file existed; the cause was not
-  confirmed.
+- `metrics_summary` returns no scalars for a run too short to log any. Measured on Lab 2.3.2: `sb3` logs every
+  `--log_interval` timesteps (default 100,000), `skrl` writes no event file when `max_iterations` is very small, and
+  `rl_games` wrote nothing at 3 epochs. For a short `sb3` run, pass `extra_args=["--log_interval=1000"]`.
 - `randomize_single_object` (UR5e twin, not Lab) can fail with its fixed narrow strip; not
   relevant to Lab tools but noted for completeness.
 - The npm/PyPI published install paths are not verified.

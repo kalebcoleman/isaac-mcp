@@ -140,8 +140,9 @@ async def open_stage(scene, args):
     stage = ctx.get_stage()
     dirty = bool(stage) and stage_has_unsaved_work(stage)
     if dirty and not args.get("discard_changes", False):
-        refuse("UNSAVED_CHANGES", "The current stage has unsaved edits. Save them first (sim__stage__save), or pass "
-               "discard_changes=true to drop them.", source=stage.GetRootLayer().identifier)
+        refuse("UNSAVED_CHANGES", "The current stage has edits this file does not hold. sim__stage__save writes them to a new "
+               "file but does not clear this, so after saving, or to drop them, pass discard_changes=true.",
+               source=stage.GetRootLayer().identifier)
     # Kit closes the current stage before it finds out a file can't be read, so read it first. Holding the layer also
     # means Kit reuses this parse.
     from pxr import Sdf

@@ -247,6 +247,9 @@ def metrics_summary(run_dir, tags=None) -> Dict[str, Any]:
             "count": len(values),
         }
 
+    if not scalars:
+        return {"scalars": scalars, "note": "No TensorBoard scalars under this folder. A very short run may have logged none; "
+                "a job's own folder holds logs, and its results are in run_dir from isaaclab__runs_status."}
     return {"scalars": scalars}
 
 

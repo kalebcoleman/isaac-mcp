@@ -891,6 +891,15 @@ def twin_entries(folder: Path, manifest: dict) -> list[str]:
     return sorted(set(found))
 
 
+def _pack_symlinks(folder: Path) -> list[str]:
+    """Symlinks anywhere in a pack, files or folders. An import refuses the pack for them."""
+    found = []
+    for current, dirs, files in os.walk(folder, followlinks=False):
+        found += [(Path(current) / name).relative_to(folder).as_posix() for name in [*dirs, *files]
+                  if (Path(current) / name).is_symlink()]
+    return sorted(found)
+
+
 def doctor_folder(folder: Path, *, closure=None, entries: list | None = None, manifest: dict | None = None) -> dict:
     """Check one pack folder: pins, then the dependency closure of its entry files. Read only.
 
@@ -969,6 +978,7 @@ def doctor_folder(folder: Path, *, closure=None, entries: list | None = None, ma
         problems += [f"{u['reference']}: unreadable USD" for u in deps["unreadable"]]
         problems += [f"{u['reference']}: remote, referenced by {u['referenced_by']}" for u in deps["remote"]]
         problems += [f"{u['file']}: outside the pack, referenced by {u['referenced_by']}" for u in deps["outside_pack"]]
+    problems += [f"{rel}: symlink; an import refuses this pack" for rel in _pack_symlinks(folder)]
     if deps["checked"] and deps["unfollowable"]:
         result["warnings"] = [UNFOLLOWABLE_NOTE]
     result["problems"] = problems[:MAX_REPORTED]

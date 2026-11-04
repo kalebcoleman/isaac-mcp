@@ -302,3 +302,12 @@ def test_wire_dropped_tells_a_refused_connection_from_a_made_one():
     assert gb.wire_dropped(source, _Attr("/g/b.inputs:y", []))
     assert gb.wire_dropped(source, _Attr("/g/b.inputs:y", [_Attr("/g/other.outputs:z")]))
     assert not gb.wire_dropped(source, object())  # nothing to read on this build: Kit's choice stands
+
+
+def test_script_nodes_stay_off_without_the_users_consent(monkeypatch):
+    # sim__graph__build must not be a way around SCRIPT_DISABLED: a ScriptNode runs Python on Play.
+    monkeypatch.delenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS", raising=False)
+    assert gb.scripts_disabled()
+    monkeypatch.setenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS", "1")
+    assert not gb.scripts_disabled()
+    assert set(gb.SCRIPT_PORTS) == {"inputs:script", "inputs:scriptPath"}

@@ -877,3 +877,43 @@ def test_lab_jobs_keep_crash_dumps_local_unless_asked(monkeypatch, tmp_path):
     assert jobs._crash_upload_args(tmp_path, ["--kit_args=x"]) == []  # the caller's choice stands
     monkeypatch.setenv("ISAAC_MCP_CRASH_UPLOAD", "1")
     assert jobs._crash_upload_args(tmp_path, []) == []
+
+
+def test_discovery_ignores_a_runtime_folder_others_could_have_made(monkeypatch, tmp_path):
+    import json
+
+    from isaac_mcp import client
+
+    folder = tmp_path / "isaac-mcp"
+    folder.mkdir(mode=0o700)
+    (folder / "1-18000.json").write_text(json.dumps({"pid": 1, "port": 18000, "host": "127.0.0.1"}))
+    monkeypatch.setattr(client, "_runtime_dir", lambda: str(folder))
+    assert client._runtime_dir_trusted(str(folder))
+    folder.chmod(0o777)
+    assert not client._runtime_dir_trusted(str(folder))
+    assert client.discover_bridges() == []
+    assert (folder / "1-18000.json").exists()  # not ours to clean up either
+    link = tmp_path / "link"
+    link.symlink_to(folder)
+    assert not client._runtime_dir_trusted(str(link))
+
+
+def test_cancel_signals_nothing_for_a_process_that_is_not_the_recorded_job(monkeypatch, tmp_path):
+    import json
+    import subprocess
+
+    from isaac_mcp.isaaclab import jobs
+
+    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path))
+    proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
+    try:
+        # A forged record: a live process whose start time doesn't match.
+        record = {"job_id": "20260101-000000-Fake", "pid": proc.pid, "pid_start": "1", "status": "running", "command": ["x", "sleep"]}
+        job_dir = tmp_path / record["job_id"]
+        job_dir.mkdir()
+        (job_dir / "job.json").write_text(json.dumps(record))
+        result = jobs.runs_cancel(record["job_id"], grace_s=0.1)
+        assert result["cancelled"] is False and proc.poll() is None
+    finally:
+        proc.kill()
+        proc.wait()
