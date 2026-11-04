@@ -552,6 +552,13 @@ class Scene:
                         UsdPhysics.CollisionAPI.Apply(prim)
                     if rigid:
                         UsdPhysics.RigidBodyAPI.Apply(prim)
+                        # Let sim.physics.contacts read this body's contacts without a later edit.
+                        try:
+                            from pxr import PhysxSchema
+
+                            PhysxSchema.PhysxContactReportAPI.Apply(prim).CreateThresholdAttr().Set(0)
+                        except ImportError:  # no PhysX schema on this build; contacts will refuse
+                            pass
             self.owned.add(str(p))
             return self.get(stage, str(p))
         except Exception:

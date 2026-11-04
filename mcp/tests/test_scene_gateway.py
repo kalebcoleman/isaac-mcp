@@ -131,7 +131,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
     visible = gw.build_server({})
     # The 7 bridge built-ins are listed offline too (PR D), so offline == with a bridge.
     assert len(hidden._tool_manager._tools) == 54
-    assert len(visible._tool_manager._tools) == 109
+    assert len(visible._tool_manager._tools) == 116
     assert "run_python" in visible._tool_manager._tools and "status" in hidden._tool_manager._tools
     assert "sim__stage__info" in visible._tool_manager._tools
     assert "sim__stage__info" not in hidden._tool_manager._tools
@@ -143,7 +143,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
         gw._state_for(visible).client = BridgeClient(port=bridge.port)
 
         async def run():
-            for server, enabled, count in ((hidden, False, 54), (visible, True, 109)):
+            for server, enabled, count in ((hidden, False, 54), (visible, True, 116)):
                 async with create_connected_server_and_client_session(
                     server._mcp_server
                 ) as client:

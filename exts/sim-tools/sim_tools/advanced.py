@@ -323,26 +323,17 @@ class Advanced:
         """Reads with no stage dependency. Deliberately no invalidate(): its sensor cleanup must
         follow a real stage check, and these run without one."""
         if name == "sim.logs.tail":
-            import carb.settings
+            from . import logs
 
-            log = carb.settings.get_settings().get("/log/file")
-            limit = a.get("limit", 50)
-            if type(limit) is not int or not 1 <= limit <= 100:
-                refuse("LIMIT", "limit 1..100 required.")
-            if not log or not Path(log).is_file():
-                refuse("LOG_UNAVAILABLE", "Kit did not expose an existing /log/file.")
-            with open(log, "rb") as stream:
-                stream.seek(0, 2)
-                stream.seek(max(0, stream.tell() - 32768))
-                lines = stream.read(32768).decode(errors="replace").splitlines()
-            return dict(
-                file=str(log),
-                lines=[x[:512] for x in lines if "Warning" in x or "Error" in x or "[sim-tools]" in x][
-                    -limit:
-                ],
-                scope="last 32 KiB; WARN/ERROR and [sim-tools] scene changes only",
-                scene_events=self.s.public_events(),
-            )
+            return logs.tail({**a, "scene_events": self.s.public_events()})
+        if name == "sim.logs.mark":
+            from . import logs
+
+            return logs.mark()
+        if name == "sim.logs.summary":
+            from . import logs
+
+            return logs.summary(a)
         from . import graph
 
         contains = a.get("contains")
@@ -524,6 +515,25 @@ class Advanced:
     def execute(self, name, stage, a, *, camera_frame=None):
         s = self.s
         self.invalidate()
+        if name in ("sim.prim.bounds", "sim.prim.measure"):
+            from . import geometry
+
+            if name == "sim.prim.bounds":
+                return geometry.world_bound(stage, a["path"], a.get("purpose", "default"))
+            return geometry.measure(stage, a["path_a"], a["path_b"])
+        if name == "sim.camera.list":
+            from . import geometry
+
+            return geometry.cameras(stage, a.get("root", "/"), a.get("limit", 100))
+        if name in ("sim.physics.raycast", "sim.physics.contacts"):
+            from . import queries
+
+            if name == "sim.physics.raycast":
+                return queries.raycast(
+                    a["origin"], a["direction"], a.get("max_distance", 100),
+                    a.get("all", False), timeline=s.timeline,
+                )
+            return queries.contacts(a["paths"], stage, timeline=s.timeline)
         if name == "sim.prim.delete":
             if a["confirm"] is not True:
                 refuse("CONFIRM_REQUIRED", "confirm=true required.")

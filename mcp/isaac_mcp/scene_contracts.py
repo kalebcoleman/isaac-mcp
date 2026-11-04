@@ -146,6 +146,39 @@ add(
     ),
 )
 add(
+    "sim.prim.bounds",
+    "World-space bounds of one prim at default USD time from UsdGeom.BBoxCache.ComputeWorldBound: axis-aligned min/max, centre and size, plus the oriented box's world corners. purpose selects default, render, proxy or guide geometry. Stage units; empty says the prim has no boundable content. Authored USD, not a runtime physics observation.",
+    dict(
+        **TARGET,
+        path=field("string", "Absolute prim path."),
+        purpose=field(
+            "string",
+            "Geometry purpose whose bounds to measure.",
+            False,
+            default="default",
+            enum=["default", "render", "proxy", "guide"],
+        ),
+    ),
+)
+add(
+    "sim.prim.measure",
+    "Distance between two prims' world bounds at default USD time: centre-to-centre and the shortest gap (0 when the axis-aligned bounds overlap), in stage units, with each prim's axis-aligned bound. Refuses when either prim has no bounds, naming it and pointing to sim__prim__bounds. Authored USD, not runtime physics.",
+    dict(
+        **TARGET,
+        path_a=field("string", "First absolute prim path."),
+        path_b=field("string", "Second absolute prim path."),
+    ),
+)
+add(
+    "sim.camera.list",
+    "List Camera prims under root with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by limit and a 10,000-prim visit cap; truncated says which. No viewport (headless) reports viewport_available=false instead of guessing. Authored USD, not a rendered image.",
+    dict(
+        **TARGET,
+        root=field("string", "Absolute subtree root.", False, default="/"),
+        limit=field("integer", "Maximum cameras 1..100.", False, default=100),
+    ),
+)
+add(
     "sim.prim.create",
     "Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units.",
     dict(
@@ -178,6 +211,25 @@ add(
         **TARGET,
         root=field("string", "Absolute subtree path.", False, default="/"),
         limit=field("integer", "Maximum visited nodes 1..200.", False, default=100),
+    ),
+)
+add(
+    "sim.physics.raycast",
+    "Cast one ray into the PhysX scene: hits with position, normal, distance, collider and rigid-body paths. all=false returns the closest; all=true returns up to 32 sorted by distance. max_distance 0..100 stage units; direction is normalised and the result says so. scene_ready=false before physics initialises. Newton refuses RAYCAST_UNSUPPORTED. No app update is pumped.",
+    dict(
+        **TARGET,
+        origin=field("array", "Ray origin [x, y, z] in world stage units."),
+        direction=field("array", "Ray direction [x, y, z]; normalised before use."),
+        max_distance=field("number", "Maximum distance in stage units, >0 and <=100.", False, default=100),
+        all=field("boolean", "Return every hit up to 32 instead of only the closest.", False, default=False),
+    ),
+)
+add(
+    "sim.physics.contacts",
+    "Read current PhysX contact pairs and impulses for up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with PhysxContactReportAPI report; paths without it are listed with the fix, and a call where none report refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED. No app update is pumped.",
+    dict(
+        **TARGET,
+        paths=field("array", "1..32 absolute rigid-body or collider paths."),
     ),
 )
 add(
@@ -611,8 +663,42 @@ add(
 )
 add(
     "sim.logs.tail",
-    "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs, plus scene_events: recent stage opens and timeline changes with their source (a tool, or outside the tools such as a person in the GUI). Use it to explain a STALE_TARGET. Needs no session_id or stage_id.",
-    dict(**UNUSED_TARGET, limit=field("integer", "Maximum lines 1..100.", False, default=50)),
+    "Read a bounded tail of the selected Kit log file, never arbitrary files. Default: last 1 MiB, warnings/errors and [sim-tools] lines in `lines`. With min_level, channel, contains or cursor: parsed `entries` (timestamp, level, channel, message capped at 2 KB), `next_cursor` and `truncated`; a cursor comes from sim__logs__mark or a previous next_cursor. Reads at most 1 MiB per call and never installs a log callback. Redacts obvious secrets. Also returns recent scene_events. Needs no session_id or stage_id.",
+    dict(
+        **UNUSED_TARGET,
+        limit=field("integer", "Maximum entries or lines 1..100.", False, default=50),
+        min_level=field(
+            "string",
+            "Lowest level to return, e.g. warning.",
+            False,
+            default="warning",
+            enum=["debug", "info", "warning", "error", "fatal"],
+        ),
+        channel=field("string", "Case-insensitive substring of the log channel, e.g. omni.physx (<=64 characters).", False, default=""),
+        contains=field("string", "Case-insensitive substring of the message (<=128 characters).", False, default=""),
+        cursor=field(
+            "object",
+            "Cursor from sim__logs__mark or a previous next_cursor; reads only lines after it and detects rotation/truncation.",
+            False,
+        ),
+    ),
+)
+add(
+    "sim.logs.mark",
+    "Cursor at the current end of Kit's log file: byte offset plus file identity (device, inode, size, mtime). Pass it to sim__logs__tail or sim__logs__summary to read only what happens next; rotation or truncation is reported instead of unrelated lines. Reads the log path only; installs no log callback. Needs no session_id or stage_id.",
+    dict(**UNUSED_TARGET),
+)
+add(
+    "sim.logs.summary",
+    "Counts by level and channel since a sim__logs__mark cursor (or the retained 1 MiB window when omitted), with the first and last error. Reads at most 1 MiB per call; `truncated` and `next_cursor` say whether more remains. Same file parser and secret redaction as sim__logs__tail; installs no log callback. Needs no session_id or stage_id.",
+    dict(
+        **UNUSED_TARGET,
+        cursor=field(
+            "object",
+            "Cursor from sim__logs__mark or a previous next_cursor; omit for the retained 1 MiB window.",
+            False,
+        ),
+    ),
 )
 add(
     "sim.controller.create",

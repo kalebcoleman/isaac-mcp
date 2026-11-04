@@ -16,7 +16,7 @@ from .reload import draining, register_when_free
 
 # Reads that do not depend on the stage: no session/stage target, and they keep working right when
 # a target has just gone stale (the log is how a stale target gets explained).
-TARGETLESS = {"sim.graph.node_types", "sim.logs.tail"}
+TARGETLESS = {"sim.graph.node_types", "sim.logs.tail", "sim.logs.mark", "sim.logs.summary"}
 
 
 class Extension(omni.ext.IExt):
@@ -41,6 +41,12 @@ class Extension(omni.ext.IExt):
         from .advanced import Advanced
 
         self.advanced = Advanced(self.scene, self.dispatch)
+        try:
+            from .queries import start_contact_reports
+
+            start_contact_reports()
+        except Exception:  # noqa: BLE001 - PhysX may not be ready yet; PLAY retries
+            pass
         from .viewport import Follower
 
         self.follower = Follower()
@@ -162,6 +168,12 @@ class Extension(omni.ext.IExt):
         self._stage_events = None
         attempt(self.advanced.close_sensors)
         attempt(self.scene.close_stage)
+        try:
+            from .queries import stop_contact_reports
+
+            stop_contact_reports()
+        except Exception:  # noqa: BLE001 - shutdown must finish every step
+            pass
         for namespace in ("sim", "assets"):
             attempt(self.bridge.unregister_owner, "generic-" + namespace)
 
@@ -212,6 +224,12 @@ class Extension(omni.ext.IExt):
             self._note_timeline("timeline stopped")
             self._runtime_edit_restorer.stopped()
         elif event.type == int(types.PLAY):
+            try:
+                from .queries import start_contact_reports
+
+                start_contact_reports()
+            except Exception:  # noqa: BLE001 - contact reading then refuses with its own code
+                pass
             self._note_timeline("timeline playing")
             self._runtime_edit_restorer.cancel()
         elif event.type == int(types.PAUSE):
@@ -662,6 +680,8 @@ class Extension(omni.ext.IExt):
             "sim.joints.state",
             "sim.joints.command",
             "sim.simulation.step",
+            "sim.physics.raycast",
+            "sim.physics.contacts",
             "sim.camera.create",
             "sim.camera.capture",
             "sim.lidar.create",

@@ -376,7 +376,7 @@ No arguments.
 
 ## Generic scene (`sim__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 41 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 48 tools.
 
 ### `sim__body__state`
 
@@ -417,6 +417,15 @@ Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path
 - `horizontal_aperture` (number, optional): Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height.
 - `clipping_range` (array, default `[0.01, 1000.0]`): [near, far] clipping distances in metres.
 - `target` (array, optional): Optional world look-at point; requires frame=world and explicit position. Overrides orientation.
+
+### `sim__camera__list`
+
+List Camera prims under root with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by limit and a 10,000-prim visit cap; truncated says which. No viewport (headless) reports viewport_available=false instead of guessing. Authored USD, not a rendered image. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `root` (string, default `"/"`): Absolute subtree root.
+- `limit` (integer, default `100`): Maximum cameras 1..100.
 
 ### `sim__controller__create`
 
@@ -569,13 +578,32 @@ Set intensity and color (both required) of a pack-owned light on a stopped timel
 - `intensity` (number, required): USD light intensity.
 - `color` (array, required): RGB linear color 0..1.
 
-### `sim__logs__tail`
+### `sim__logs__mark`
 
-Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs, plus scene_events: recent stage opens and timeline changes with their source (a tool, or outside the tools such as a person in the GUI). Use it to explain a STALE_TARGET. Needs no session_id or stage_id.
+Cursor at the current end of Kit's log file: byte offset plus file identity (device, inode, size, mtime). Pass it to sim__logs__tail or sim__logs__summary to read only what happens next; rotation or truncation is reported instead of unrelated lines. Reads the log path only; installs no log callback. Needs no session_id or stage_id.
 
 - `session_id` (string, optional): Not needed; accepted and ignored.
 - `stage_id` (string, optional): Not needed; accepted and ignored.
-- `limit` (integer, default `50`): Maximum lines 1..100.
+
+### `sim__logs__summary`
+
+Counts by level and channel since a sim__logs__mark cursor (or the retained 1 MiB window when omitted), with the first and last error. Reads at most 1 MiB per call; `truncated` and `next_cursor` say whether more remains. Same file parser and secret redaction as sim__logs__tail; installs no log callback. Needs no session_id or stage_id.
+
+- `session_id` (string, optional): Not needed; accepted and ignored.
+- `stage_id` (string, optional): Not needed; accepted and ignored.
+- `cursor` (object, optional): Cursor from sim__logs__mark or a previous next_cursor; omit for the retained 1 MiB window.
+
+### `sim__logs__tail`
+
+Read a bounded tail of the selected Kit log file, never arbitrary files. Default: last 1 MiB, warnings/errors and [sim-tools] lines in `lines`. With min_level, channel, contains or cursor: parsed `entries` (timestamp, level, channel, message capped at 2 KB), `next_cursor` and `truncated`; a cursor comes from sim__logs__mark or a previous next_cursor. Reads at most 1 MiB per call and never installs a log callback. Redacts obvious secrets. Also returns recent scene_events. Needs no session_id or stage_id.
+
+- `session_id` (string, optional): Not needed; accepted and ignored.
+- `stage_id` (string, optional): Not needed; accepted and ignored.
+- `limit` (integer, default `50`): Maximum entries or lines 1..100.
+- `min_level` (debug|info|warning|error|fatal, default `"warning"`): Lowest level to return, e.g. warning.
+- `channel` (string, default `""`): Case-insensitive substring of the log channel, e.g. omni.physx (<=64 characters).
+- `contains` (string, default `""`): Case-insensitive substring of the message (<=128 characters).
+- `cursor` (object, optional): Cursor from sim__logs__mark or a previous next_cursor; reads only lines after it and detects rotation/truncation.
 
 ### `sim__map__occupancy`
 
@@ -625,6 +653,14 @@ Set explicitly selected PhysicsScene gravity and time step while stopped. No imp
 - `gravity` (array, default `[0, 0, -9.81]`): Acceleration vector in stage units/s^2.
 - `dt` (number, default `0.016666666666666666`): Physics timestep seconds, 1/1000..1/10.
 
+### `sim__physics__contacts`
+
+Read current PhysX contact pairs and impulses for up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with PhysxContactReportAPI report; paths without it are listed with the fix, and a call where none report refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `paths` (array, required): 1..32 absolute rigid-body or collider paths.
+
 ### `sim__physics__inspect`
 
 Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. Requires session_id and stage_id from sim__stage__info.
@@ -633,6 +669,26 @@ Bounded authored collision/body/mass/joint/articulation report. Does not assert 
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root` (string, default `"/"`): Absolute subtree path.
 - `limit` (integer, default `100`): Maximum visited nodes 1..200.
+
+### `sim__physics__raycast`
+
+Cast one ray into the PhysX scene: hits with position, normal, distance, collider and rigid-body paths. all=false returns the closest; all=true returns up to 32 sorted by distance. max_distance 0..100 stage units; direction is normalised and the result says so. scene_ready=false before physics initialises. Newton refuses RAYCAST_UNSUPPORTED. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `origin` (array, required): Ray origin [x, y, z] in world stage units.
+- `direction` (array, required): Ray direction [x, y, z]; normalised before use.
+- `max_distance` (number, default `100`): Maximum distance in stage units, >0 and <=100.
+- `all` (boolean, default `false`): Return every hit up to 32 instead of only the closest.
+
+### `sim__prim__bounds`
+
+World-space bounds of one prim at default USD time from UsdGeom.BBoxCache.ComputeWorldBound: axis-aligned min/max, centre and size, plus the oriented box's world corners. purpose selects default, render, proxy or guide geometry. Stage units; empty says the prim has no boundable content. Authored USD, not a runtime physics observation. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Absolute prim path.
+- `purpose` (default|render|proxy|guide, default `"default"`): Geometry purpose whose bounds to measure.
 
 ### `sim__prim__clone`
 
@@ -686,6 +742,15 @@ Read local/world matrices and authored physics at default USD time. Runtime phys
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Absolute prim path.
+
+### `sim__prim__measure`
+
+Distance between two prims' world bounds at default USD time: centre-to-centre and the shortest gap (0 when the axis-aligned bounds overlap), in stage units, with each prim's axis-aligned bound. Refuses when either prim has no bounds, naming it and pointing to sim__prim__bounds. Authored USD, not runtime physics. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path_a` (string, required): First absolute prim path.
+- `path_b` (string, required): Second absolute prim path.
 
 ### `sim__prim__set_transform`
 

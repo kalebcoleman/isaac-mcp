@@ -424,6 +424,215 @@
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
+    "sim.prim.bounds": {
+      "description": "World-space bounds of one prim at default USD time from UsdGeom.BBoxCache.ComputeWorldBound: axis-aligned min/max, centre and size, plus the oriented box's world corners. purpose selects default, render, proxy or guide geometry. Stage units; empty says the prim has no boundable content. Authored USD, not a runtime physics observation. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute prim path.",
+          "required": true
+        },
+        "purpose": {
+          "type": "string",
+          "description": "Geometry purpose whose bounds to measure.",
+          "required": false,
+          "default": "default",
+          "enum": [
+            "default",
+            "render",
+            "proxy",
+            "guide"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute prim path."
+        },
+        {
+          "name": "purpose",
+          "kind": "enum",
+          "enum": [
+            "default",
+            "render",
+            "proxy",
+            "guide"
+          ],
+          "required": false,
+          "default": "default",
+          "has_default": true,
+          "description": "Geometry purpose whose bounds to measure."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.prim.measure": {
+      "description": "Distance between two prims' world bounds at default USD time: centre-to-centre and the shortest gap (0 when the axis-aligned bounds overlap), in stage units, with each prim's axis-aligned bound. Refuses when either prim has no bounds, naming it and pointing to sim__prim__bounds. Authored USD, not runtime physics. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path_a": {
+          "type": "string",
+          "description": "First absolute prim path.",
+          "required": true
+        },
+        "path_b": {
+          "type": "string",
+          "description": "Second absolute prim path.",
+          "required": true
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path_a",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "First absolute prim path."
+        },
+        {
+          "name": "path_b",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Second absolute prim path."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.camera.list": {
+      "description": "List Camera prims under root with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by limit and a 10,000-prim visit cap; truncated says which. No viewport (headless) reports viewport_available=false instead of guessing. Authored USD, not a rendered image. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "root": {
+          "type": "string",
+          "description": "Absolute subtree root.",
+          "required": false,
+          "default": "/"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum cameras 1..100.",
+          "required": false,
+          "default": 100
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "root",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "/",
+          "has_default": true,
+          "description": "Absolute subtree root."
+        },
+        {
+          "name": "limit",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 100,
+          "has_default": true,
+          "description": "Maximum cameras 1..100."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
     "sim.prim.create": {
       "description": "Create a Cube, Sphere, Xform, or PhysicsScene in session layer. No arbitrary references/attributes. Stopped timeline, parent and no-conflict required. Dimensions are stage units. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
@@ -819,6 +1028,152 @@
           "default": 100,
           "has_default": true,
           "description": "Maximum visited nodes 1..200."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.physics.raycast": {
+      "description": "Cast one ray into the PhysX scene: hits with position, normal, distance, collider and rigid-body paths. all=false returns the closest; all=true returns up to 32 sorted by distance. max_distance 0..100 stage units; direction is normalised and the result says so. scene_ready=false before physics initialises. Newton refuses RAYCAST_UNSUPPORTED. No app update is pumped. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "origin": {
+          "type": "array",
+          "description": "Ray origin [x, y, z] in world stage units.",
+          "required": true
+        },
+        "direction": {
+          "type": "array",
+          "description": "Ray direction [x, y, z]; normalised before use.",
+          "required": true
+        },
+        "max_distance": {
+          "type": "number",
+          "description": "Maximum distance in stage units, >0 and <=100.",
+          "required": false,
+          "default": 100
+        },
+        "all": {
+          "type": "boolean",
+          "description": "Return every hit up to 32 instead of only the closest.",
+          "required": false,
+          "default": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "origin",
+          "kind": "array",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Ray origin [x, y, z] in world stage units."
+        },
+        {
+          "name": "direction",
+          "kind": "array",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Ray direction [x, y, z]; normalised before use."
+        },
+        {
+          "name": "max_distance",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 100,
+          "has_default": true,
+          "description": "Maximum distance in stage units, >0 and <=100."
+        },
+        {
+          "name": "all",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Return every hit up to 32 instead of only the closest."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.physics.contacts": {
+      "description": "Read current PhysX contact pairs and impulses for up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with PhysxContactReportAPI report; paths without it are listed with the fix, and a call where none report refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED. No app update is pumped. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "paths": {
+          "type": "array",
+          "description": "1..32 absolute rigid-body or collider paths.",
+          "required": true
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "paths",
+          "kind": "array",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "1..32 absolute rigid-body or collider paths."
         }
       ],
       "namespace": "sim",
@@ -3842,7 +4197,7 @@
       "owner_id": "generic-sim"
     },
     "sim.logs.tail": {
-      "description": "Read bounded tail of selected Kit log, not arbitrary files. Returns warnings/errors and source path, without clearing shared logs, plus scene_events: recent stage opens and timeline changes with their source (a tool, or outside the tools such as a person in the GUI). Use it to explain a STALE_TARGET. Needs no session_id or stage_id.",
+      "description": "Read a bounded tail of the selected Kit log file, never arbitrary files. Default: last 1 MiB, warnings/errors and [sim-tools] lines in `lines`. With min_level, channel, contains or cursor: parsed `entries` (timestamp, level, channel, message capped at 2 KB), `next_cursor` and `truncated`; a cursor comes from sim__logs__mark or a previous next_cursor. Reads at most 1 MiB per call and never installs a log callback. Redacts obvious secrets. Also returns recent scene_events. Needs no session_id or stage_id.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -3856,9 +4211,39 @@
         },
         "limit": {
           "type": "integer",
-          "description": "Maximum lines 1..100.",
+          "description": "Maximum entries or lines 1..100.",
           "required": false,
           "default": 50
+        },
+        "min_level": {
+          "type": "string",
+          "description": "Lowest level to return, e.g. warning.",
+          "required": false,
+          "default": "warning",
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error",
+            "fatal"
+          ]
+        },
+        "channel": {
+          "type": "string",
+          "description": "Case-insensitive substring of the log channel, e.g. omni.physx (<=64 characters).",
+          "required": false,
+          "default": ""
+        },
+        "contains": {
+          "type": "string",
+          "description": "Case-insensitive substring of the message (<=128 characters).",
+          "required": false,
+          "default": ""
+        },
+        "cursor": {
+          "type": "object",
+          "description": "Cursor from sim__logs__mark or a previous next_cursor; reads only lines after it and detects rotation/truncation.",
+          "required": false
         }
       },
       "fields": [
@@ -3887,7 +4272,137 @@
           "required": false,
           "default": 50,
           "has_default": true,
-          "description": "Maximum lines 1..100."
+          "description": "Maximum entries or lines 1..100."
+        },
+        {
+          "name": "min_level",
+          "kind": "enum",
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error",
+            "fatal"
+          ],
+          "required": false,
+          "default": "warning",
+          "has_default": true,
+          "description": "Lowest level to return, e.g. warning."
+        },
+        {
+          "name": "channel",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "Case-insensitive substring of the log channel, e.g. omni.physx (<=64 characters)."
+        },
+        {
+          "name": "contains",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "",
+          "has_default": true,
+          "description": "Case-insensitive substring of the message (<=128 characters)."
+        },
+        {
+          "name": "cursor",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Cursor from sim__logs__mark or a previous next_cursor; reads only lines after it and detects rotation/truncation."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.logs.mark": {
+      "description": "Cursor at the current end of Kit's log file: byte offset plus file identity (device, inode, size, mtime). Pass it to sim__logs__tail or sim__logs__summary to read only what happens next; rotation or truncation is reported instead of unrelated lines. Reads the log path only; installs no log callback. Needs no session_id or stage_id.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Not needed; accepted and ignored.",
+          "required": false
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Not needed; accepted and ignored.",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Not needed; accepted and ignored."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Not needed; accepted and ignored."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.logs.summary": {
+      "description": "Counts by level and channel since a sim__logs__mark cursor (or the retained 1 MiB window when omitted), with the first and last error. Reads at most 1 MiB per call; `truncated` and `next_cursor` say whether more remains. Same file parser and secret redaction as sim__logs__tail; installs no log callback. Needs no session_id or stage_id.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Not needed; accepted and ignored.",
+          "required": false
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Not needed; accepted and ignored.",
+          "required": false
+        },
+        "cursor": {
+          "type": "object",
+          "description": "Cursor from sim__logs__mark or a previous next_cursor; omit for the retained 1 MiB window.",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Not needed; accepted and ignored."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Not needed; accepted and ignored."
+        },
+        {
+          "name": "cursor",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Cursor from sim__logs__mark or a previous next_cursor; omit for the retained 1 MiB window."
         }
       ],
       "namespace": "sim",
