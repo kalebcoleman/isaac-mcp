@@ -170,6 +170,23 @@ def test_graph_paths_accept_unicode_and_refuse_property_paths(monkeypatch):
             graph._graph_path(bad)
 
 
+def test_buffer_from_occupied_keeps_last_row_and_floods_from_start():
+    # 119 cells: native getDimensions truncates this span to 118, and the last-row leaf overruns its buffer.
+    cell = 0.05
+    lo, hi = (-3.0, -3.0), (2.95, 2.95)
+    wall = [(-3.0 + (i + 0.5) * cell, 2.925) for i in range(119)]  # the whole last row
+    buf, w, h = graph.buffer_from_occupied(wall, lo, hi, cell, (-2.0, -2.0))
+    assert (w, h, len(buf)) == (119, 119, 119 * 119)
+    assert buf.count(1.0) == 119 and buf[118 * 119:] == [1.0] * 119
+    assert buf.count(0.0) == 118 * 119 and buf.count(0.5) == 0
+
+
+def test_buffer_from_occupied_leaves_unreachable_cells_unknown():
+    wall = [(0.25, 0.05 + i * 0.1) for i in range(4)]  # a column that splits the 4x4 map
+    buf, w, h = graph.buffer_from_occupied(wall, (0.0, 0.0), (0.4, 0.4), 0.1, (0.05, 0.05))
+    assert (w, h) == (4, 4) and buf.count(1.0) == 4 and buf.count(0.0) == 8 and buf.count(0.5) == 4
+
+
 def test_start_blocked_decisions():
     walls_mostly_unknown = {"occupied": 50, "free": 100, "unknown": 850}  # big bounds, walls exist
     assert graph.start_blocked(walls_mostly_unknown, [254]) is None

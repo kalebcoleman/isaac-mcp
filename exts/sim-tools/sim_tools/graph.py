@@ -675,12 +675,60 @@ def _colliders_in_bounds(lo, hi, z, to_su, limit=5):
         return []
 
 
+def _omap_before_2_3_3():
+    """True for omap 2.2.1, 2.3.1 and 2.3.2 (Isaac Sim 6.0.0.0, 6.0.0.1, 6.0.1); False if the version is unreadable."""
+    try:
+        import omni.kit.app
+
+        em = omni.kit.app.get_app().get_extension_manager()
+        version = em.get_extension_dict(em.get_enabled_extension_id("isaacsim.asset.gen.omap")).get("package", {}).get("version")
+        return tuple(int(x) for x in str(version).split(".")[:3]) < (2, 3, 3)
+    except (ImportError, AttributeError, TypeError, ValueError):
+        return False
+
+
+def buffer_from_occupied(points, min_xy, max_xy, cell, start_xy):
+    """The buffer MapGenerator::getBuffer() means to return, built without calling it, because calling it can crash Kit.
+    Native getBuffer sizes the grid by truncating (max - min) / cell in float32, so it can be a cell short (118 for 119
+    rows), then writes every occupied leaf with no bounds check: a leaf on the last row overruns the heap block and Kit
+    aborts in malloc. Measured on 6.0.0.0 through 6.2, and the code is the same in omap 2.2.1 to 2.3.5. Layout matches
+    native: x descending, y ascending, 1.0 occupied, 0.0 free, 0.5 unknown. Like native, the flood fill replaces whatever
+    value the start cell holds."""
+    width = int(round((max_xy[0] - min_xy[0]) / cell))
+    height = int(round((max_xy[1] - min_xy[1]) / cell))
+    grid = [0.5] * (width * height)
+
+    def index(x, y):
+        col = min(width - 1, max(0, int((max_xy[0] - x) / cell)))
+        return min(height - 1, max(0, int((y - min_xy[1]) / cell))) * width + col
+
+    for x, y in points:
+        grid[index(x, y)] = 1.0
+    first = index(*start_xy)
+    target, stack = grid[first], [first]
+    if target != 0.0:
+        while stack:
+            i = stack.pop()
+            if grid[i] != target:
+                continue
+            grid[i] = 0.0
+            if i % width:
+                stack.append(i - 1)
+            if i % width != width - 1:
+                stack.append(i + 1)
+            if i >= width:
+                stack.append(i - width)
+            if i + width < len(grid):
+                stack.append(i + width)
+    return grid, width, height
+
+
 FLOOR_RETRIES = 3
 
 
 def raised_slice(z_low, z_high, cell, occupied, attempt):
-    """The next bottom of the z slice to try, or None to stop. A floor within one cell of the bottom makes the generator
-    mark nothing occupied (measured on 6.0.1: floor top 0, cell 0.05, z_min 0.05 fails and 0.06 works)."""
+    """The next bottom of the z slice to try, or None to stop. A floor in the slice marks every cell occupied, and the flood fill
+    from start then turns them all free (measured on 6.0.1: floor top 0, cell 0.05, z_min 0.05 fails and 0.06 works)."""
     if occupied or attempt >= FLOOR_RETRIES:
         return None
     raised = z_low + cell * 1.2
@@ -703,7 +751,8 @@ def occupancy_map(scene, stage, a):
 
     in_collider = _start_in_collider(stage, start, (z[0] + z[1]) / 2, cell, to_su)
     om = _omap.acquire_omap_interface()
-    z_low = z[0]
+    # Before omap 2.3.3 a collider within one cell below a positive z_min still hits: a floor at z=0 fills the default slice.
+    z_low = min(z[0] + 1.01 * cell, (z[0] + z[1]) / 2) if _omap_before_2_3_3() and z[0] > 0 else z[0]
     try:
         for attempt in range(FLOOR_RETRIES + 1):
             # The generator flood-fills free space from this origin ("must be in unoccupied space").
@@ -714,20 +763,21 @@ def occupancy_map(scene, stage, a):
                              (hi[0] * to_su - cx, hi[1] * to_su - cy, z[1] * to_su - cz))
             om.update()
             om.generate()
-            dims = om.get_dimensions()
-            buffer = om.get_buffer()
-            min_bound = om.get_min_bound()
-            if not len(buffer) or dims.x * dims.y != len(buffer):
+            min_bound, top = om.get_min_bound(), om.get_max_bound()
+            buffer, width, height = buffer_from_occupied(
+                [(p.x, p.y) for p in om.get_occupied_positions()], (min_bound[0], min_bound[1]), (top[0], top[1]),
+                cell * to_su, (cx, cy))
+            if not len(buffer) or width * height != len(buffer):
                 refuse("MAP_EMPTY", "The occupancy map came back empty. It needs colliders (UsdPhysics.CollisionAPI) "
                        "inside the bounds and a UsdPhysics.Scene on the stage.")
-            pgm, origin, counts = pgm_and_origin(buffer, dims.x, dims.y, min_bound, cell * to_su, mpu, clear)
+            pgm, origin, counts = pgm_and_origin(buffer, width, height, min_bound, cell * to_su, mpu, clear)
             next_low = raised_slice(z_low, z[1], cell, counts["occupied"], attempt)
             if next_low is None or not _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su):
                 break
             z_low = next_low
     finally:
         _omap.release_omap_interface(om)
-    reason = start_blocked(counts, cells_at(pgm, dims.x, dims.y, origin, cell, start[0], start[1]), in_collider)
+    reason = start_blocked(counts, cells_at(pgm, width, height, origin, cell, start[0], start[1]), in_collider)
     if reason:
         refuse("START_BLOCKED", f"start {start} {reason}. The generator flood-fills free space from it, so the "
                "map would be empty or wrong. Move start to open floor next to (not on) the robot; `clear` only "
@@ -752,9 +802,9 @@ def occupancy_map(scene, stage, a):
         warn = "No occupied cells reached from start: nothing with a collider intersects the z slice there."
     else:
         warn = None
-    raised = {"z_used": [round(z_low, 4), z[1]], "z_note": "Bottom of the slice raised: a floor within one cell of it left the "
-              "generator with no obstacles. Anything lower than z_used is not mapped."} if z_low != z[0] else {}
-    return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=dims.x, height=dims.y, resolution=cell, **raised,
+    raised = {"z_used": [round(z_low, 4), z[1]], "z_note": "Bottom of the slice raised, because a floor within one cell of it "
+              "fills the slice. Anything lower than z_used is not mapped."} if z_low != z[0] else {}
+    return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=width, height=height, resolution=cell, **raised,
                 origin=[round(origin[0], 4), round(origin[1], 4), 0.0], cells=counts, yaml_text=yaml_text,
                 **({"warning": warn} if warn else {}),
                 usage="ros2 launch nav2_bringup localization_launch.py map:=<yaml> use_sim_time:=true")

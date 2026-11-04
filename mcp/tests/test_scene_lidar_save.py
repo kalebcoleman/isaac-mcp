@@ -611,8 +611,9 @@ def _occupancy_world(monkeypatch, tmp_path, hits):
     monkeypatch.setattr(graph, "_start_in_collider", lambda *a: False)
     interface = SimpleNamespace(
         set_cell_size=lambda *a: None, set_transform=lambda *a: None, update=lambda: None, generate=lambda: None,
-        get_dimensions=lambda: SimpleNamespace(x=4, y=4), get_buffer=lambda: [0.0] * 16,
-        get_min_bound=lambda: (-1.0, -1.0))
+        get_occupied_positions=lambda: [], get_max_bound=lambda: (1.0, 1.0), get_min_bound=lambda: (-1.0, -1.0),
+        # Calling Kit's get_buffer can overrun the heap and crash the app, on every 6.x build. It must stay unused.
+        get_buffer=lambda: pytest.fail("get_buffer must not be called"))
     _omap = SimpleNamespace(acquire_omap_interface=lambda: interface, release_omap_interface=lambda om: None)
     bindings = SimpleNamespace(_omap=_omap)
     for name in ("isaacsim", "isaacsim.asset", "isaacsim.asset.gen", "isaacsim.asset.gen.omap"):

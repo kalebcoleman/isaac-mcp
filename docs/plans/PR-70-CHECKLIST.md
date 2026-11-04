@@ -10,7 +10,7 @@ When PR 70 merges, move what is left to the roadmap and delete this file.
 Claude codes and reviews. DeepSeek V4.1 Flash on OpenCode Go scouts and tests, as a deliberately weaker user.
 
 - [x] First round on the ASU PC, reporting to `<home>/isaac-mcp-test-logs/pr70-fleet/`: host and docs, generic scene, windowed, UR5e twin, ROS 2, 6.0.1, Isaac Lab, sessions, then 6.0.0.0, 6.0.0.1 and 6.1.0.0
-- [x] Fix what the fleet found (in progress)
+- [ ] Fix what the fleet found (in progress)
 - [x] Re-test round on every build at the pushed commit, including goal-only briefs with no hand-holding
 - [x] Run `validate_scene_equivalents.py` and `validate_scene_clear.py`, which need the Agilebot pack
 - [ ] End-to-end asset pack test with public GitHub assets. First run: the build tool failed for the chess set. A pass means no workaround:
@@ -96,8 +96,8 @@ Keep as they are: `run_python`, `use_bridge` with `status`, `sim__ros2__tf_setup
 
 Found by the fleet at `e658289`; not fixed yet:
 
-- [ ] `sim__map__occupancy` wedged or crashed on 6.0.0.0 and 6.0.0.1 at `e658289`; 3 of 3 clean headless on each at `c90e0ab`. Windowed retest with the root-cause run
-- [ ] Reopened workstation had non-finite physics on 6.0.0.1 windowed at `e658289`; 0 errors headless at `c90e0ab`. Windowed retest with the root-cause run
+- [x] `sim__map__occupancy` crashes: NVIDIA `getBuffer()` heap overrun on all 6.x builds; the tool no longer calls it. Older-build retest of the crash scenes pending
+- [x] Non-finite physics after reopening: a collider overlapping the robot, not save or reopen. Documented
 - [x] `/scan` on 6.0.0.0, and the config LiDAR on 6.1: both work with a target beyond the 1 m near range
 - [ ] `start_ros_driver up` fails on a cold first launch and leaves a healthy driver; `status` always exits 0
 - [x] `verify.sh` version gate fails on the standalone layout (needs the ASU retest)
@@ -106,3 +106,4 @@ Found by the fleet at `e658289`; not fixed yet:
 - [ ] URDF packs: `assets__import_urdf` has no pack route, the `package://` fix text is incomplete, and an unstable robot reads `status: ok`
 - [ ] Approval helper silently keeps one of several roots
 - [ ] A client exiting mid-recording leaves a tiny MP4
+- [ ] Kit uploads crash minidumps to NVIDIA by default: decide whether `run.sh` turns this off, and document it
