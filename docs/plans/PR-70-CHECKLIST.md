@@ -248,3 +248,15 @@ To state in the docs:
 - [ ] `nav2_params.py` needs ROS sourced
 - [ ] An agent's background Kit dies with its shell or tool limit: use the detached start
 
+### Early-phase proposals still to build (`SIM-TOOLS-FOLLOWUP.md`)
+
+- [ ] M1: `sim__prim__bounds`, `sim__prim__measure`, `sim__camera__list`
+- [ ] M2: `sim__logs__tail` filters and cursors, `sim__logs__mark`, `sim__logs__summary`
+- [ ] M3: `sim__physics__raycast`, `sim__physics__contacts`
+- [ ] M4: `sim__joints__command` by name with clamp, `sim__joints__gains`, `sim__joints__move`, `sim__joints__teleport`
+- [ ] M5: `sim__prim__set_attribute`, `sim__physics__apply` (colliders, rigid body, mass, density), `sim__prim__revert`, `sim__prim__set_transform` on any prim, `Plane`
+- [ ] M6: `assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources
+- [ ] M7: `sim__viewport__screenshot`, `sim__viewport__record_start`, `sim__viewport__record_stop`, and the final demo
+- [ ] Twin: `SCENE-TOOLS-AGENT-UX.md` proposals still unbuilt: to be listed by a scout
+- [ ] Keep, combine or remove review of the tool surface: **needs Kaleb's review before any removal**
+
