@@ -180,3 +180,12 @@ Found by the fleet at `e658289`; not fixed yet:
 - [ ] Real-robot mode is not enabled; `ursim` needs Docker
 - [ ] `randomize_single_object` often can't fit: a 4 cm by 20 cm strip with 0.18 m separation, not configurable
 - [ ] `sim__launch` suggests a free port, which may belong to another agent on a shared machine: it can't know
+
+### Windowed coverage
+
+Fleet runs at `9803f4c` were almost all headless, so a pass there doesn't cover a window. Windowed runs started at `8336c4c` on every build.
+
+- [ ] Windowed: `sim__quick_start`, camera capture, viewport tools, `sim__graph__show`, `sim__ui__*`, screenshots and recordings on 5.1, 6.0.0.0, 6.0.0.1, 6.0.1, 6.1 and 6.2
+- [ ] Windowed Isaac Lab `play` on both Lab pairs
+- [ ] RViz against a running scene
+
