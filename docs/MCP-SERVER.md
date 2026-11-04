@@ -261,7 +261,7 @@ ISAAC_MCP_PORT = "8766"
 
 ### Antigravity
 
-Add the server to `~/.gemini/config/mcp_config.json` (or a workspace's `.agents/mcp_config.json`),
+Add the server to `~/.gemini/config/mcp_config.json` (a workspace's `.agents/mcp_config.json` is not read; inside a workspace, only a plugin's `plugins/<name>/mcp_config.json` is),
 or open the agent panel's **…** menu → **MCP Servers** → **Manage MCP Servers** → **View raw
 config**. The file does not allow comments.
 

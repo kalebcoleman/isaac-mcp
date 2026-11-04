@@ -109,3 +109,7 @@ Found by the fleet at `e658289`; not fixed yet:
 - [x] Kit uploads crash minidumps to NVIDIA by default: off for `run.sh` and Lab jobs, `ISAAC_MCP_CRASH_UPLOAD=1` opts in
 - [ ] Decide on git history: four public commits carry a university address and machine hostname as committer. Rewriting needs Kaleb's decision
 - [ ] Windowed `sim__graph__show` on 6.0.0.1 logs a Kit `ZeroDivisionError` in its own zoom-to-fit, with the graph still fitted. Kit's code
+- [ ] License: `mcp/` and the bridge derive from `omni-kit-mcp`, whose upstream has no license file. Kaleb to ask its author for a grant
+- [ ] Decide what stays public: `docs/plans`, "student run" wording, course names, "Kaleb's work" wording
+- [ ] Enable private vulnerability reporting on the repository, which SECURITY.md points to
+

@@ -10,7 +10,7 @@ MCP client config:
 
 ```json
 { "mcpServers": { "isaac": { "command": "npx", "args": ["-y", "isaac-mcp"],
-  "env": { "DISPLAY": ":0", "UR5E_DT_PORT": "8766" } } } }
+  "env": { "DISPLAY": ":0", "ISAAC_MCP_PORT": "8766" } } } }
 ```
 
 This package only launches the Python server through [uv](https://docs.astral.sh/uv/) (`uvx`). The server
