@@ -125,6 +125,14 @@ unit scaling of the rotation rows on a non-metre stage. A reachable target conve
 over-constrained case would show the weighting, so this is a known test gap, not a fixed one. The live trials above were run again
 on this code with the same results.
 
+## Isaac Sim 5.1 as well
+
+The final code was run on Isaac Sim 5.1.0 too (headless, PhysX, the same machine): the Franka and UR5e trials gave the same
+numbers as 6.2 to the last digit shown above, and the SO-ARM100 reached 12 of 12 in-limit full-pose targets (solver 0.05 to
+0.64 mm, hand 1.7 to 2.7 mm and 0.8 to 1.2 deg after the move). Sim 5.1's URDF importer lays that robot out differently from
+6.2 (the articulation root is `Asset/root_joint`, and a joint prim shares the name `gripper` with its link); the tool's
+self-check passed on both layouts. Not run: Sim 6.0.x and 6.1 (the lab PC was unavailable) and Newton.
+
 ## What this does not show
 
 - One session on six robots, one run each. The unit tests cover a synthetic arm with revolute and prismatic joints, reversed
