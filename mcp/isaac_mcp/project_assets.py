@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import stat
 import tempfile
@@ -40,6 +41,15 @@ def refuse(code, message, **details):
     raise AssetError(code, message, **details)
 
 
+def _shell_word(value: str) -> str:
+    """A path as one word for a shell. A placeholder (<...>) and a ~/ path without special characters stay readable."""
+    if value.startswith("<"):
+        return value
+    if value.startswith("~/") and shlex.quote(value[2:]) == value[2:]:
+        return value
+    return shlex.quote(value)
+
+
 def approval_help(folder=None) -> str:
     """What the *user* does to approve a folder, as a filled-in command an agent can pass on.
 
@@ -50,7 +60,7 @@ def approval_help(folder=None) -> str:
     if folder and Path(str(folder)).suffix:  # a file was named: the folder to approve is the one holding it
         folder = Path(str(folder)).parent
     target = str(folder) if folder else "<the folder>"
-    parts = [x for x in str(folder).rstrip("/").split("/") if x]
+    parts = [x for x in str(folder).rstrip("/").split("/") if x] if folder else []
     name = parts[-1] if parts else "project"
     if name.lower() in {"assets", "downloads", "data", "models", "robots"} and len(parts) > 1:
         name = f"{parts[-2]}-{name}"  # "assets" alone names nothing: say whose
@@ -58,10 +68,10 @@ def approval_help(folder=None) -> str:
     # The helper refuses to run without --trust-project, and needs --staging while it creates the config file.
     new_file = "<" in config or not Path(config).expanduser().exists()
     staging = os.environ.get("ISAAC_MCP_STAGING", "").strip() or "~/.cache/isaac-mcp/staging"
-    extra = f" --staging {staging}" if new_file else ""
-    return (f" To approve {target}, ask the user to run this in their own shell (an agent cannot): "
-            f"\"$(uv tool dir)/isaac-mcp/bin/python\" -m isaac_mcp.project_assets --config {config} "
-            f"--root-id {root_id} --root {target}{extra} --trust-project"
+    extra = f" --staging {_shell_word(staging)}" if new_file else ""
+    return (f" To approve {_shell_word(target) if folder else target}, ask the user to run this in their own shell (an agent cannot): "
+            f"\"$(uv tool dir)/isaac-mcp/bin/python\" -m isaac_mcp.project_assets --config {_shell_word(config)} "
+            f"--root-id {root_id} --root {_shell_word(target)}{extra} --trust-project"
             " , then to reconnect the MCP server and restart Kit, because both read the approval file at startup. "
             "Approve the smallest folder that holds the files: every import copies the whole approved folder "
             "(at most 1000 files or 256 MiB), so a large parent folder such as a workspace's projects folder fails with LIMIT.")

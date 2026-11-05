@@ -15,7 +15,7 @@ def test_the_approval_command_is_filled_in(monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_ASSET_CONFIG", "/srv/isaac/approval.json")
     text = a.approval_help("/work/projects/arm demo/assets")
     assert "--config /srv/isaac/approval.json" in text
-    assert "--root /work/projects/arm demo/assets" in text and "--root-id arm-demo-assets" in text
+    assert "--root '/work/projects/arm demo/assets'" in text and "--root-id arm-demo-assets" in text  # one shell word
     assert "ask the user to run" in text and "an agent cannot" in text
     assert "reconnect the MCP server and restart Kit" in text  # both read the file at startup
     assert "smallest folder" in text and "1000 files" in text  # a large parent fails with LIMIT: do not advise it
@@ -127,3 +127,24 @@ def test_a_kit_that_predates_the_report_gives_no_warning(tmp_path, monkeypatch):
     (tmp_path / "store").mkdir()
     out = packs.run_tool("assets.packs", {}, a.Broker(), kit_call=lambda t, x: {"status": "ok"})
     assert "warnings" not in out
+
+
+def test_a_path_with_a_space_is_printed_as_one_shell_word_and_the_helper_accepts_it(tmp_path, monkeypatch):
+    import shlex
+
+    config = tmp_path / "my private" / "approval.json"
+    monkeypatch.setenv("ISAAC_MCP_ASSET_CONFIG", str(config))
+    monkeypatch.setenv("ISAAC_MCP_STAGING", str(tmp_path / "my private" / "staging"))
+    folder = tmp_path / "arm demo" / "assets"
+    folder.mkdir(parents=True)
+    text = a.approval_help(str(folder / "robot.urdf"))
+    argv = shlex.split(text[text.index("project_assets") + len("project_assets"):].split(" , then")[0])
+    assert str(config) in argv and str(folder) in argv  # each path survived as a single argument
+    config.parent.mkdir(mode=0o700)
+    assert a.main(argv) in (0, None) and config.exists()
+
+
+def test_no_folder_gives_a_placeholder_and_a_sensible_root_id(monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    text = a.approval_help(None)
+    assert "--root-id project " in text and "--root-id None" not in text and "--root <the folder>" in text
