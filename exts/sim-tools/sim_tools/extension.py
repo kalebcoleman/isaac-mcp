@@ -723,6 +723,7 @@ class Extension(omni.ext.IExt):
             return result
         mutations = {
             "assets.import_urdf",
+            "assets.import_mjcf",
             "assets.import_usd",
             "assets.import_path",
             "sim.prim.create",
@@ -819,6 +820,8 @@ class Extension(omni.ext.IExt):
             a.pop("relative_path", None)
             if name == "assets.import_urdf":
                 return self.advanced.import_urdf(stage, **a)
+            if name == "assets.import_mjcf":
+                return self.advanced.import_mjcf(stage, **a)
             if name == "assets.info":
                 return s.inspect_asset(**a)[2]
             if name == "assets.prepare_workstation":

@@ -192,6 +192,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__joints__move` | Step a **paused**, initialized simulation until named joint targets are within `tolerance` or `max_steps` is used, then report `settled` and every joint's error. A joint held by a contact or a weak drive reports `settled=false` with the blocked joint and its remaining error: clear the path, raise gains with `sim__joints__gains`, or retry with more steps. Runtime only; never pumps the app loop. |
 | `sim__joints__teleport` | Set joint positions directly as a state reset, not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are `{dof name: value}`; needs an initialized (playing or paused) articulation, refuses out-of-limit values, and reports each joint's value before and after. |
 | `assets__import_urdf` | Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves `package://` inside that folder only. Authors drives that hold a pose, lifts the robot out of a ground plane and warns about unusable mass or inertia. Source files never change. See [URDF robots](#urdf-robots). |
+| `assets__import_mjcf` | Convert a MuJoCo MJCF model (`.xml`) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows `<include>` files, meshes, textures and height fields inside that folder only. Source files never change. See [MuJoCo (MJCF) models](#mujoco-mjcf-models). |
 
 Graph build accepts pairs or objects, JSON-encoded individual node/connection entries, and a
 JSON string for each whole `nodes`, `connections`, `values` or `targets` container. A target
@@ -694,9 +695,38 @@ free-standing robot can fall over). `sim__joints__state` warns if joints go past
 
 **Up axis:** both importers write Z up in metres. A Y-up stage, or other units, refuses with `UNITS_MISMATCH` and the values to use. Nothing converts it.
 
-**Limits:** drives are position drives, so a wheel takes an angle, not a speed; stronger or velocity control needs `sim__joints__drive`.
+**Limits:** drives are position drives, so a wheel takes an angle, not a speed. To drive a wheel by speed, set its `stiffness=0` with some `damping` through `sim__joints__gains`, then give `sim__joints__command` `velocities` (see [Joint control](#joint-control-by-name-gains-settling-and-teleport)); for ROS 2, use the `/cmd_vel` graph that `sim__quick_start` returns for a wheeled robot. Stronger drives that persist need `sim__joints__drive`.
+Check a URDF before launching Kit with `assets__dependencies`, which reads it on the host and reports missing meshes and packages.
 A robot starts at its zero pose: no tool sets a start pose, so a robot whose legs start outside their limits falls first, and then can be commanded.
 A successful import does not prove fidelity: check it with `sim__camera__capture`.
+
+## MuJoCo (MJCF) models
+
+Most robots in [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) (the Franka, UR5e, quadrupeds and humanoids)
+ship only as MuJoCo XML. `assets__import_mjcf` brings one in with the importer Isaac Sim 6.x ships (`isaacsim.asset.importer.mjcf`):
+
+1. Download the model folder (a named source: see [Where assets come from](ASSETS.md#where-assets-come-from)), and have the user approve
+   **that folder**: the whole folder is copied for each import, so approve the one robot's folder, not the whole repository.
+2. `assets__import_mjcf source_path=<folder>/<model>.xml prim_path=/World/<name>` in a scene you have. Leave `fixed_base` out to keep what the
+   model says: an arm without a free joint is fixed, a quadruped or humanoid with one floats and falls. Pass `fixed_base=true` to pin a
+   floating robot, or `false` to free an arm.
+3. Play, then `sim__joints__state`, `sim__joints__command` and `sim__joints__move` on the reported `articulation_root`.
+
+**What is checked first, on the host:** every file the model names (`<include>`, `<mesh>`, `<texture>`, `<hfield>`, `<skin>`,
+`<model>`, `<flexcomp>`), found the way MuJoCo finds them (relative to the model's folder, through `<compiler meshdir>`,
+`texturedir` and `assetdir`), must be inside the approved folder. An absolute path, a URL, a backslash, a symlink or a path that
+climbs out of the folder is refused, so a model cannot make the importer read a file you did not approve. DTDs and entities are
+refused. The import then reads only the verified snapshot.
+
+**Refusals:** `MJCF_XML` (bad XML, a DTD, or not a MuJoCo file), `MESH_MISSING`, `OUTSIDE_ROOT`, `UNSAFE_ENTRY`, `UNSUPPORTED_URI`,
+`INVALID_PATH`, `UNSUPPORTED_FORMAT` (a URDF or a USD sent to the wrong tool), `ROOT_NOT_APPROVED`, `LIMIT`, `IMPORTER_UNAVAILABLE`
+(Isaac Sim 5.0 and earlier have no MJCF importer) and `MJCF_PHYSICS` (the converted model lost joints or bodies).
+`assets__dependencies` lists the same closure for a `.xml` model without importing it.
+
+What it does: selects the shared `physics` variant of the converted copy, raises a floating robot whose lowest point is under a collision
+ground plane (reported in `placement`, at most 3 m), and reports `base`, `converted_physics`, `articulation_root` and the included files.
+MuJoCo-only features (tendons, equality constraints, sensors, plugins) are whatever the importer converts; check the result with
+`sim__joints__inspect` and `sim__camera__capture`.
 
 ## Reproduce
 

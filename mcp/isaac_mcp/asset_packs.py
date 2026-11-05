@@ -19,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from . import assets, material_refs, urdf_refs
+from . import assets, material_refs, mjcf_refs, urdf_refs
 
 
 def approval_help(folder=None):
@@ -578,6 +578,11 @@ def run_closure(closure, paths: list[str], folder_of, projects: dict | None = No
     projects = {} if projects is None else projects
     results, usd = [], []
     for path in paths:
+        if mjcf_refs.is_mjcf(path) and not path.endswith("package.xml"):
+            folder = Path(folder_of(path))
+            project = projects.setdefault(str(folder), urdf_refs.project_from_folder(folder))
+            results.append(mjcf_refs.closure_result(path, project, folder))
+            continue
         if not urdf_refs.is_urdf(path):
             usd.append(path)
             continue
@@ -741,6 +746,9 @@ def build_pack(
         if urdf_refs.is_xacro(path):
             raise PackError(f"{path.name} is a xacro file, not a URDF. {urdf_refs.XACRO_HELP}", "XACRO")
         is_urdf = urdf_refs.is_urdf(path)
+        if path.suffix.lower() == ".xml":
+            raise PackError(f"{path.name} looks like a MuJoCo model. Packs hold USD and URDF only for now: import it from its approved "
+                            "folder with assets__import_mjcf.", "UNSUPPORTED_FORMAT")
         if path.suffix.lower() not in USD_SUFFIXES and not is_urdf:
             raise PackError(f"source is not a USD or URDF file: {path}", "UNSUPPORTED_FORMAT")
         base = layout_for(path)

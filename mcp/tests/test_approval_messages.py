@@ -222,3 +222,78 @@ def test_more_file_suffixes_name_a_file_when_it_is_not_on_disk(monkeypatch, name
     monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
     argv = _printed_argv(a.approval_help(f"/work/p/assets/{name}"))
     assert argv[argv.index("--root") + 1] == "/work/p/assets"
+
+
+def _root_of(text):
+    argv = _printed_argv(text)
+    return argv[argv.index("--root") + 1]
+
+
+def test_a_urdf_in_a_ros_package_approves_the_package_not_its_urdf_folder(tmp_path, monkeypatch):
+    """Found by an agent test: the command offered `<package>/urdf`, whose meshes (package://...) live above it."""
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    pkg = tmp_path / "repo" / "robots" / "go2_description"
+    (pkg / "urdf").mkdir(parents=True)
+    (pkg / "package.xml").write_text("<package/>")
+    (pkg / "urdf" / "go2.urdf").write_text("<robot/>")
+    (pkg / "urdf" / "deep" / "x").mkdir(parents=True)
+    (pkg / "urdf" / "deep" / "x" / "other.urdf").write_text("<robot/>")
+    assert _root_of(a.approval_help(str(pkg / "urdf" / "go2.urdf"))) == str(pkg)
+    assert _root_of(a.approval_help(str(pkg / "urdf" / "deep" / "x" / "other.urdf"))) == str(pkg)
+
+
+def test_a_urdf_folder_beside_meshes_widens_to_its_parent_without_a_package_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    robot = tmp_path / "robot"
+    (robot / "urdf").mkdir(parents=True)
+    (robot / "meshes").mkdir()
+    (robot / "urdf" / "r.urdf").write_text("<robot/>")
+    assert _root_of(a.approval_help(str(robot / "urdf" / "r.urdf"))) == str(robot)
+    lone = tmp_path / "lone"
+    lone.mkdir()
+    (lone / "r.urdf").write_text("<robot/>")
+    assert _root_of(a.approval_help(str(lone / "r.urdf"))) == str(lone)  # nothing to widen to
+
+
+def test_the_package_search_never_reaches_the_home_folder_or_above(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home" / "work").mkdir(parents=True)
+    (tmp_path / "home" / "package.xml").write_text("<package/>")  # a stray file in the home folder
+    (tmp_path / "home" / "work" / "r.urdf").write_text("<robot/>")
+    assert _root_of(a.approval_help(str(tmp_path / "home" / "work" / "r.urdf"))) == str(tmp_path / "home" / "work")
+
+
+def test_a_usd_or_mjcf_file_still_approves_its_own_folder(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    (tmp_path / "m").mkdir()
+    (tmp_path / "m" / "package.xml").write_text("<package/>")
+    for name in ("a.usd", "a.xml"):
+        assert _root_of(a.approval_help(str(tmp_path / "m" / "sub" / name))) == str(tmp_path / "m" / "sub")
+
+
+@pytest.mark.parametrize("path", ["/etc/hostname", "/etc", "/usr/share/x/robot.urdf", "/root/m.xml", "/", "/var/lib/x/y.usd", "/proc/self/environ"])
+def test_no_command_is_offered_for_a_system_folder(path, monkeypatch):
+    """An agent can name any path in a refusal; the user must not be handed a one-line command to approve /etc."""
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    text = a.approval_help(path)
+    assert "isaac_mcp.project_assets" not in text and "no approval command is offered" in text
+
+
+def test_no_command_is_offered_for_the_home_folder_or_its_private_folders(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for sub in (".ssh", ".gnupg", ".aws", ".config/x", ".local/share"):
+        (tmp_path / sub).mkdir(parents=True)
+        assert "isaac_mcp.project_assets" not in a.approval_help(str(tmp_path / sub / "k.urdf")), sub
+    assert "isaac_mcp.project_assets" not in a.approval_help(str(tmp_path / "robot.urdf"))  # the home folder itself
+    (tmp_path / "projects" / "robot").mkdir(parents=True)
+    assert "isaac_mcp.project_assets" in a.approval_help(str(tmp_path / "projects" / "robot" / "r.urdf"))  # a project folder is fine
+
+
+def test_a_symlink_into_a_system_folder_is_judged_by_where_it_points(tmp_path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    (tmp_path / "link").symlink_to("/etc")
+    assert "isaac_mcp.project_assets" not in a.approval_help(str(tmp_path / "link" / "hostname"))

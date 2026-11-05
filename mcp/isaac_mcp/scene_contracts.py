@@ -902,7 +902,7 @@ add(
 )
 add(
     "assets.import_urdf",
-    "Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Returns authored values, not runtime readiness.",
+    "Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Check a URDF first with assets__dependencies. Returns authored values, not runtime readiness.",
     dict(
         **TARGET,
         root_id=field("string", "Approved root ID, with relative_path. Or use source_path.", False),
@@ -912,6 +912,21 @@ add(
         fixed_base=field("boolean", "Fix the robot's base to the world. Pass false for a robot that drives or walks; it then falls under gravity.", False, default=True),
         default_drives=field("boolean", "Author position drives that hold a pose; the URDF format has none. A stiffness in a 6.x conversion is kept, and the 5.x importer's own is replaced. With false you get the importer's own: on 6.x stiffness 0, so targets do nothing until sim__joints__drive sets gains.", False, default=True),
         position=field("array", "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane. A given position is used as is, with a warning if it starts under the ground.", False),
+        orientation=POSE["orientation"],
+        frame=POSE["frame"],
+    ),
+)
+add(
+    "assets.import_mjcf",
+    "Convert a MuJoCo MJCF model (.xml) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows <include> files, meshes, textures and height fields inside that folder only, and refuses absolute paths, URLs and anything that leaves it. A model with a free joint floats and falls; fixed_base left out keeps what the file says. Source files never change. Z up, metres. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.",
+    dict(
+        **TARGET,
+        root_id=field("string", "Approved root ID, with relative_path. Or use source_path.", False),
+        relative_path=field("string", "Path of the MJCF .xml file within that root.", False),
+        source_path=field("string", "Absolute path of the MJCF .xml file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.", False),
+        prim_path=field("string", "New wrapper prim path."),
+        fixed_base=field("boolean", "true: fix the robot's base to the world. false: make it floating, so it falls under gravity. Leave out to keep what the model says.", False),
+        position=field("array", "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane (at most 3 m). A given position is used as is, with a warning if it starts under the ground.", False),
         orientation=POSE["orientation"],
         frame=POSE["frame"],
     ),

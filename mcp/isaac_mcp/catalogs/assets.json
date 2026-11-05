@@ -840,7 +840,7 @@
       "owner_id": "generic-assets"
     },
     "assets.import_urdf": {
-      "description": "Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Check a URDF first with assets__dependencies. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -988,6 +988,167 @@
           "default": null,
           "has_default": false,
           "description": "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane. A given position is used as is, with a warning if it starts under the ground."
+        },
+        {
+          "name": "orientation",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "has_default": true,
+          "description": "Unit quaternion [w,x,y,z]."
+        },
+        {
+          "name": "frame",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "local",
+          "has_default": true,
+          "description": "Pose frame: local or world."
+        }
+      ],
+      "namespace": "assets",
+      "owner_id": "generic-assets"
+    },
+    "assets.import_mjcf": {
+      "description": "Convert a MuJoCo MJCF model (.xml) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows <include> files, meshes, textures and height fields inside that folder only, and refuses absolute paths, URLs and anything that leaves it. A model with a free joint floats and falls; fixed_base left out keeps what the file says. Source files never change. Z up, metres. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "root_id": {
+          "type": "string",
+          "description": "Approved root ID, with relative_path. Or use source_path.",
+          "required": false
+        },
+        "relative_path": {
+          "type": "string",
+          "description": "Path of the MJCF .xml file within that root.",
+          "required": false
+        },
+        "source_path": {
+          "type": "string",
+          "description": "Absolute path of the MJCF .xml file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.",
+          "required": false
+        },
+        "prim_path": {
+          "type": "string",
+          "description": "New wrapper prim path.",
+          "required": true
+        },
+        "fixed_base": {
+          "type": "boolean",
+          "description": "true: fix the robot's base to the world. false: make it floating, so it falls under gravity. Leave out to keep what the model says.",
+          "required": false
+        },
+        "position": {
+          "type": "array",
+          "description": "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane (at most 3 m). A given position is used as is, with a warning if it starts under the ground.",
+          "required": false
+        },
+        "orientation": {
+          "type": "array",
+          "description": "Unit quaternion [w,x,y,z].",
+          "required": false,
+          "default": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        "frame": {
+          "type": "string",
+          "description": "Pose frame: local or world.",
+          "required": false,
+          "default": "local"
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "root_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Approved root ID, with relative_path. Or use source_path."
+        },
+        {
+          "name": "relative_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Path of the MJCF .xml file within that root."
+        },
+        {
+          "name": "source_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute path of the MJCF .xml file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path."
+        },
+        {
+          "name": "prim_path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "New wrapper prim path."
+        },
+        {
+          "name": "fixed_base",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "true: fix the robot's base to the world. false: make it floating, so it falls under gravity. Leave out to keep what the model says."
+        },
+        {
+          "name": "position",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane (at most 3 m). A given position is used as is, with a warning if it starts under the ground."
         },
         {
           "name": "orientation",
