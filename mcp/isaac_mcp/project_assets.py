@@ -55,11 +55,16 @@ def approval_help(folder=None) -> str:
     if name.lower() in {"assets", "downloads", "data", "models", "robots"} and len(parts) > 1:
         name = f"{parts[-2]}-{name}"  # "assets" alone names nothing: say whose
     root_id = re.sub(r"[^A-Za-z0-9_.-]+", "-", name).strip("-.") or "project"
+    # The helper refuses to run without --trust-project, and needs --staging while it creates the config file.
+    new_file = "<" in config or not Path(config).expanduser().exists()
+    staging = os.environ.get("ISAAC_MCP_STAGING", "").strip() or "~/.cache/isaac-mcp/staging"
+    extra = f" --staging {staging}" if new_file else ""
     return (f" To approve {target}, ask the user to run this in their own shell (an agent cannot): "
             f"\"$(uv tool dir)/isaac-mcp/bin/python\" -m isaac_mcp.project_assets --config {config} "
-            f"--root-id {root_id} --root {target}"
+            f"--root-id {root_id} --root {target}{extra} --trust-project"
             " , then to reconnect the MCP server and restart Kit, because both read the approval file at startup. "
-            "Approving a parent folder such as the workspace's projects folder covers every project under it.")
+            "Approve the smallest folder that holds the files: every import copies the whole approved folder "
+            "(at most 1000 files or 256 MiB), so a large parent folder such as a workspace's projects folder fails with LIMIT.")
 
 
 def relative(value):

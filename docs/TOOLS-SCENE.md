@@ -82,7 +82,7 @@ No manifest or hand-written Python is needed. Approval is explicit configuration
 MCP approval dialog. No tool can grant roots. Launching outside the project works because paths
 are absolute. Default configuration grants no roots.
 
-A refused path now ends with this command filled in for that folder, for the agent to hand to you. Approving a parent folder, such as a workspace's `projects` folder, covers every project under it.
+A refused path now ends with this command filled in for that folder, for the agent to hand to you. Approve the smallest folder that holds the files: each import copies the whole approved folder (at most 1000 files or 256 MiB), so approving a large parent such as a workspace's `projects` folder makes imports fail with `LIMIT`.
 
 Run the helper again with another `--root-id` and `--root` to add a folder; it only adds, and cannot
 repoint an existing root or change staging. `--staging` alone, with no root, sets up staging for

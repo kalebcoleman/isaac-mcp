@@ -18,7 +18,33 @@ def test_the_approval_command_is_filled_in(monkeypatch):
     assert "--root /work/projects/arm demo/assets" in text and "--root-id arm-demo-assets" in text
     assert "ask the user to run" in text and "an agent cannot" in text
     assert "reconnect the MCP server and restart Kit" in text  # both read the file at startup
-    assert "parent folder" in text
+    assert "smallest folder" in text and "1000 files" in text  # a large parent fails with LIMIT: do not advise it
+    assert "covers every project" not in text
+    assert "--trust-project" in text  # the helper exits with an error without it
+    assert "--staging" in text  # the file does not exist yet, and the helper needs staging to create it
+
+
+def test_an_existing_approval_file_needs_no_staging(tmp_path, monkeypatch):
+    config = tmp_path / "approval.json"
+    config.write_text("{}")
+    monkeypatch.setenv("ISAAC_MCP_ASSET_CONFIG", str(config))
+    text = a.approval_help("/work/projects/demo")
+    assert "--trust-project" in text and "--staging" not in text
+
+
+def test_the_printed_command_is_accepted_by_the_helper(tmp_path, monkeypatch):
+    """Run the command the refusal prints (as its argv): the helper must not reject it."""
+    import shlex
+
+    config = tmp_path / "private" / "approval.json"
+    monkeypatch.setenv("ISAAC_MCP_ASSET_CONFIG", str(config))
+    monkeypatch.setenv("ISAAC_MCP_STAGING", str(tmp_path / "private" / "staging"))
+    (tmp_path / "projects" / "demo").mkdir(parents=True)
+    text = a.approval_help(str(tmp_path / "projects" / "demo" / "robot.urdf"))
+    argv = shlex.split(text[text.index("project_assets") + len("project_assets"):].split(" , then")[0])
+    config.parent.mkdir(mode=0o700)
+    assert a.main(argv) in (0, None)  # parser.error would raise SystemExit
+    assert config.exists()
 
 
 def test_a_file_is_turned_into_the_folder_to_approve(monkeypatch):
