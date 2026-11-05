@@ -579,3 +579,38 @@ def test_orphan_timeout_not_recorded_when_the_kill_did_not_happen(tmp_path, monk
     monkeypatch.setattr(jobs, "_kill_orphan_group", lambda _d: True)
     jobs._enforce_orphan_timeout("j2", d, data)
     assert data["status"] == "timeout"
+
+
+REAL_LOG_HEAD = (
+    "\x1b[38;2;118;185;0m│ Physics       newton_mjwarp                    │\x1b[0m  banner art\n"
+    "\tPhysics step-size     : 0.005\n\tReplicate physics     : True\n"
+    "[INFO]: Completed setting up the environment...\n"
+)
+
+
+def _job_with_log(job_id, text, **record):
+    jd = jobs.jobs_dir() / job_id
+    jd.mkdir(parents=True)
+    (jd / "stdout.log").write_text(text)
+    jobs._write_job(jd, {"status": "running", "run_dir": str(jd), "log_dir": str(jd), **record})
+    return jd
+
+
+def test_status_names_the_physics_engine_and_says_when_the_environment_is_ready():
+    """A task chooses its own engine, and Newton is not PhysX: the status says which, and later log lines do not hide readiness."""
+    _job_with_log("20261105-120000-G1", REAL_LOG_HEAD + "noise\n" * 5000)
+    result = jobs.runs_status("20261105-120000-G1")
+    assert result["physics"] == "newton_mjwarp" and result["environment_ready"] is True
+
+
+def test_status_before_the_environment_is_built_reports_not_ready_and_no_engine():
+    _job_with_log("20261105-120001-G1", "starting Kit\nloading extensions\n")
+    result = jobs.runs_status("20261105-120001-G1")
+    assert result["environment_ready"] is False and "physics" not in result
+
+
+def test_a_physx_banner_is_reported_as_physx_and_a_step_size_line_is_not_an_engine():
+    _job_with_log("20261105-120002-Cartpole", "│ Physics       physx            │\n\tPhysics step-size     : 0.005\n")
+    assert jobs.runs_status("20261105-120002-Cartpole")["physics"] == "physx"
+    _job_with_log("20261105-120003-Cartpole", "\tPhysics step-size     : 0.005\n")
+    assert "physics" not in jobs.runs_status("20261105-120003-Cartpole")

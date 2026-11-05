@@ -287,7 +287,7 @@ List Isaac Lab jobs, to find a job_id.
 
 ### `isaaclab__runs_status`
 
-State, exit code, elapsed time, last log lines, newest checkpoint and, for an eval job, its `eval_result` score once written. For a windowed job also `window` (id, title, size): pass its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result. Reconciles orphaned jobs by updating their stored metadata.
+State, exit code, elapsed time, last log lines, newest checkpoint, `physics` (the engine Lab announced, such as newton_mjwarp or physx), `environment_ready`, and, for an eval job, its `eval_result` score once written. For a windowed job also `window` (id, title, size): pass its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result. Reconciles orphaned jobs by updating their stored metadata.
 
 - `job_id` (str, required): job_id from isaaclab__train, eval or play, or isaaclab__runs_list.
 

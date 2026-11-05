@@ -689,6 +689,30 @@ def _run_dir_from_log(log_path: Path) -> str | None:
     return str(Path(root) / name)
 
 
+_PHYSICS_RE = re.compile(r"Physics {2,}([A-Za-z][A-Za-z0-9_]*)")
+_ENVIRONMENT_READY = "Completed setting up the environment"
+
+
+def _log_facts(log_path: Path) -> dict[str, Any]:
+    """What the start of a Lab log says about the run: its physics engine, and whether the environment is built.
+
+    Lab prints a banner line such as ``Physics       newton_mjwarp``. A task picks its own engine, and Newton is not PhysX,
+    so a caller should see which one a job used without reading the log. The setup line is near the start of the log
+    but later output can push it out of ``last_log_lines``, so it is read from the head. Bounded, and absent when unknown.
+    """
+    try:
+        with log_path.open("rb") as f:
+            head = f.read(1 << 20).decode("utf-8", errors="replace")
+    except OSError:
+        return {}
+    head = _ANSI_RE.sub("", head)
+    facts: dict[str, Any] = {"environment_ready": _ENVIRONMENT_READY in head}
+    found = _PHYSICS_RE.search(head)
+    if found:
+        facts["physics"] = found.group(1)
+    return facts
+
+
 def _checkpoint_from_log(log_path: Path) -> str | None:
     """Last checkpoint the training library announced in the log (e.g. rl_games prints
     "=> saving checkpoint '<path>'"). Isaac Lab writes runs under its own logs/ dir, not the job dir."""
@@ -1192,6 +1216,7 @@ def runs_status(job_id: str) -> dict[str, Any]:
     }
     if data.get("timeout_s") is not None:
         out["timeout_s"] = data["timeout_s"]
+    out.update(_log_facts(Path(data.get("log_dir", jd)) / "stdout.log"))
     if data.get("kind") == "eval":
         result = _eval_result(jd)
         if result is not None:
