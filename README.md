@@ -20,32 +20,93 @@ It works with Claude Code, Codex, OpenCode or any [MCP](https://modelcontextprot
 
 ## Things you can ask
 
-You don't name tools. Describe the goal and the agent picks them. These are prompts that have worked.
+You don't name tools. Describe the goal and the agent picks them. These are prompts that have worked, with what the
+agent built. The pictures are real captures from this server's camera tool, not mock-ups.
 
-**Build a scene**
-> Make me a scene with a ground plane and a red cube dropped from one metre, then step the physics and tell me where it lands.
+### Drop in a public robot by name
 
-> Build a tower of 36 small blocks like a Jenga tower. Let it run for ten seconds and tell me whether it is still standing.
+> Add NVIDIA's Franka Panda arm to the scene with a few colored blocks, and take a picture of it.
 
-> Add NVIDIA's public UR5e robot to the scene, move its joints to a pose I describe, and take a picture from the camera.
+![NVIDIA's public Franka Panda arm standing beside a red cube, a blue cube and a yellow ball](docs/media/franka-public-robot.png)
 
-**Sense and navigate**
-> Put a wheeled robot in a room with a few walls, give it a LiDAR, and tell me how far it can see in each direction.
+`sim__quick_start` loads the robot from NVIDIA's public asset server when you give it a name: `franka`, `ur5e`,
+`nova_carter`, `carter_v1`, `create3`, `turtlebot3_burger` or `jetbot`. Nothing to download first.
 
-> Set up ROS 2 TF and a LiDAR on a Create 3, build an occupancy map, and send it to a goal with Nav2.
+### Build something from scratch and test it
 
-**Use your own files**
-> Import the URDF in my asset folder, find its articulation root, and list its joints and limits.
+> Build a tower of 36 small blocks like a Jenga tower, give each block a mass of 15 grams, let it run for ten seconds and
+> tell me if it is still standing.
 
-> Turn my folder of USD props into a named asset pack, check it, and load one prop by name.
+![A tower of 36 wooden blocks, twelve layers high, still standing after six seconds of physics](docs/media/block-tower.png)
 
-**Look at it**
+The agent made 36 box shapes, gave them mass and a material, pressed play and checked their positions. It stood.
+
+### Put a wheeled robot in a room
+
+> Put a Nova Carter in a room with some walls and boxes, give it a LiDAR, and tell me how far it can see.
+
+![A Nova Carter wheeled robot in a walled room with an inner wall and three orange boxes, seen from above](docs/media/nova-carter-room.png)
+
+Add ROS 2 and the same scene runs Nav2: `Set up ROS 2 TF, build an occupancy map, and send the robot to a goal.`
+
+### Load your own robot from an open-source repo
+
+> I put the SO-ARM100 robot folder in my asset folder. Load it into a new scene.
+
+![The open-source SO-ARM100 arm, loaded from a user asset folder](docs/media/so100-own-pack.png)
+
+This is the open-source [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) arm (Apache-2.0) as a URDF file. See
+[your own assets](#your-own-assets-or-online-ones) for how that works.
+
+### More prompts
+
+**Look and measure**
 > Take a screenshot of the Isaac Sim window and tell me what you see. Then record ten seconds of it.
+
+> How tall is the tower, and which block is furthest from the middle?
+
+**Move a robot**
+> Raise the arm to a pose I describe, read back the joint angles, and tell me how far each joint is from its target.
 
 **Train and evaluate (Isaac Lab)**
 > Train the cartpole task for a few hundred iterations, watch the reward, then evaluate the latest checkpoint and give me the score.
 
 > Compare rsl_rl with rl_games on the Reach task and report which learned faster in the same time.
+
+Pictures: Isaac Sim 6.2.0.0, PhysX, headless camera captures. Details in [media notes](docs/media/README.md).
+
+## Your assets, or online ones
+
+The repository ships no robots or props, so anything you load comes from one of three places.
+
+| Source | How you use it | Good for |
+|---|---|---|
+| **A public name** | Say `franka`, `nova_carter`, `ur5e`... in the prompt. It loads from NVIDIA's asset server. | Trying things quickly. |
+| **Your asset folder** | Put a project folder in `isaac-mcp-assets/` (next to the checkout) and load it by name, such as `so_arm100/so100.urdf`. | Your own robots, props and scenes, and open-source ones you download. |
+| **Any other folder** | You approve the folder once as a trusted root, then the agent can import from it. | A project that has to stay where it is. |
+
+**Your asset folder** is one folder on your machine, `isaac-mcp-assets` by default, with a subfolder per project. Each
+subfolder is called a **pack**. To add one:
+
+1. Copy the project into it, for example `isaac-mcp-assets/so_arm100/` holding `so100.urdf` and its meshes.
+2. Ask your agent: *"List my asset packs, then pin the so_arm100 folder."* A folder only becomes a pack once it is
+   pinned, which records a checksum of every file so a changed file is noticed.
+3. Ask for it by name: *"Make a scene with the so_arm100/so100.urdf robot."*
+
+The agent uses `assets__packs`, `assets__pack_pin` and `sim__quick_start`. From a terminal, the same is
+`python3 scripts/isaac_assets.py adopt <folder>`. To keep the folder somewhere else, set `ISAAC_MCP_ASSET_PATH` before
+starting Isaac Sim and restart it.
+
+**Good to know**
+- **Your files win.** If your folder has a file with the same name as an online one, yours is used, and nothing is
+  silently replaced.
+- **Online loading is optional.** Set `ISAAC_MCP_ASSET_STRICT=1` and nothing is fetched from NVIDIA; a missing file is an
+  error. Each result says where every file came from.
+- **Trust.** Loading USD and URDF runs native parsers that are not sandboxed, so only load files you trust. Approving
+  other folders is deliberately something only you can do, not the agent.
+- **Packs of USD scenes** work the same way. `assets__pack_build` copies a USD and only the files it needs into a pack.
+
+Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
 
 ## The tools
 
