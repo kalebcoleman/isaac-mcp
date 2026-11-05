@@ -91,3 +91,11 @@ Agilebot work and state that former third-party gripper/camera integrations were
 Only the selected robot folder was imported. Robot files are not bundled; screenshots are attributed
 in the evidence. The license notice is retained in `docs/provenance/agilebot-LICENSE`.
 The generated multifile regression fixture is original CC0 data, not third-party robot geometry.
+
+README pictures (`docs/media/`) are renders and screen captures made with Isaac Sim; no robot or asset files are shipped
+with them. NVIDIA's Omniverse licence lets users distribute stills and screen captures they make with Omniverse
+(`LICENSE.txt` in the installed `isaacsim` package, section 2.1). The Franka Panda, Nova Carter, UR5e and the Isaac Lab
+G1 in the walking clip are NVIDIA Isaac Sim assets. The G1 in `g1-github-scene.png` is from
+[unitreerobotics/unitree_ros](https://github.com/unitreerobotics/unitree_ros) (BSD-3-Clause, Copyright Unitree Robotics),
+and the SO-ARM100 is from [TheRobotStudio/SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) (Apache-2.0). Each
+picture says which in `docs/media/README.md`. This is a reading of the licences, not legal advice.
