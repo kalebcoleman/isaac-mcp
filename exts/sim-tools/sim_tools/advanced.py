@@ -1039,8 +1039,7 @@ class Advanced:
         found = mjcf_refs.resolve(entry, project)
         if found["problems"]:
             mjcf_refs.refusal_for(found["problems"], entry)
-        trees = [mjcf_refs.parse(project.read(rel), rel) for rel in [entry, *found["includes"]] if mjcf_refs.is_mjcf(rel)]
-        movable = movable_joint_count(trees)
+        movable = movable_joint_count(found["trees"].values())
         workspace = s.broker.staging / snapshot_id
         key = hashlib.sha256(json.dumps([importer_identity(), fixed_base, manifest_sha256]).encode()).hexdigest()[:24]
         output = workspace / f"mjcf-converted-{key}"

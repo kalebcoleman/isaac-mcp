@@ -578,7 +578,7 @@ def run_closure(closure, paths: list[str], folder_of, projects: dict | None = No
     projects = {} if projects is None else projects
     results, usd = [], []
     for path in paths:
-        if mjcf_refs.is_mjcf(path) and not path.endswith("package.xml"):
+        if mjcf_refs.is_mjcf(path) and Path(path).name.lower() != "package.xml":
             folder = Path(folder_of(path))
             project = projects.setdefault(str(folder), urdf_refs.project_from_folder(folder))
             results.append(mjcf_refs.closure_result(path, project, folder))

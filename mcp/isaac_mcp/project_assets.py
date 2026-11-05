@@ -106,7 +106,7 @@ def _approval_folder(path: Path) -> Path:
 
 _SYSTEM_FOLDERS = {"/", "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/var", "/boot", "/sys", "/proc", "/dev", "/root", "/run",
                    "/opt", "/srv", "/mnt", "/media", "/home", "/tmp", "/snap"}
-_PRIVATE_HOME_FOLDERS = {".ssh", ".gnupg", ".aws", ".kube", ".config", ".local", ".cache", ".docker", ".password-store", ".mozilla"}
+_PRIVATE_HOME_FOLDERS = {".ssh", ".gnupg", ".aws", ".kube", ".config", ".docker", ".password-store", ".mozilla"}
 
 
 def _unsafe_to_approve(folder: Path) -> bool:

@@ -139,3 +139,86 @@ def test_closure_result_has_the_shape_the_pack_tools_read(tmp_path):
     assert result["assets"] == [str(root / "assets" / "base_0.obj"), str(root / "assets" / "link.stl"), str(root / "ur5e.xml")]
     bad = m.closure_result(root / "ur5e.urdf", project_from_folder(root), root)
     assert "UNSUPPORTED_FORMAT" in bad["error"]
+
+
+# ---------------------------------------------------------------- review round 1: compiler folders, includes, sub-models
+
+
+def codes(found):
+    return [p["code"] for p in found["problems"]]
+
+
+@pytest.mark.parametrize("directory, code", [("../../../etc", "OUTSIDE_ROOT"), ("/etc", "INVALID_PATH"), ("C:\\\\x", "UNSUPPORTED_URI")])  # a drive letter looks like a URI scheme
+def test_a_compiler_folder_in_an_included_file_is_checked_even_after_the_references_that_use_it(directory, code):
+    """MuJoCo expands includes in place and applies the final <compiler> folder to every mesh, so an included file can
+    point meshdir anywhere: that must be refused, not recorded."""
+    files = {"s/m.xml": '<mujoco><asset><mesh file="x.stl"/></asset><include file="i.xml"/></mujoco>',
+             "s/i.xml": f'<mujoco><compiler meshdir="{directory}"/></mujoco>', "s/x.stl": "x"}
+    found = m.resolve("s/m.xml", project(files))
+    assert code in codes(found), found["problems"]
+
+
+def test_a_folder_that_is_overridden_later_is_still_checked():
+    files = {"m.xml": '<mujoco><compiler meshdir="/etc"/><include file="i.xml"/><asset><mesh file="x.stl"/></asset></mujoco>',
+             "i.xml": '<mujoco><compiler meshdir="assets"/></mujoco>', "assets/x.stl": "x"}
+    found = m.resolve("m.xml", project(files))
+    assert "INVALID_PATH" in codes(found)  # the hostile value never "wins", but it is not accepted either
+
+
+def test_the_last_compiler_folder_wins_and_applies_to_references_before_it():
+    files = {"m.xml": '<mujoco><compiler meshdir="a"/><asset><mesh file="x.stl"/></asset><include file="i.xml"/></mujoco>',
+             "i.xml": '<mujoco><compiler meshdir="b"/></mujoco>', "a/x.stl": "a", "b/x.stl": "b"}
+    found = m.resolve("m.xml", project(files))
+    assert found["problems"] == [] and found["mapped"]["mesh:x.stl"] == "b/x.stl" and found["compiler"]["meshdir"] == "b"
+    assert "a/x.stl" not in found["files"]
+
+
+@pytest.mark.parametrize("name", ["i.txt", "i.inc", "i.mjcf", "i"])
+def test_an_include_is_scanned_whatever_its_name(name):
+    files = {"m.xml": f'<mujoco><include file="{name}"/></mujoco>',
+             name: '<mujocoinclude><asset><mesh file="/etc/passwd"/></asset></mujocoinclude>'}
+    found = m.resolve("m.xml", project(files))
+    assert "INVALID_PATH" in codes(found) and name in found["files"], found
+
+
+def test_a_mujocoinclude_root_is_allowed_for_an_included_file_only():
+    files = {"m.xml": '<mujoco><include file="i.xml"/></mujoco>', "i.xml": '<mujocoinclude><asset/></mujocoinclude>'}
+    assert m.resolve("m.xml", project(files))["problems"] == []
+    with pytest.raises(AssetError):
+        m.parse(b"<mujocoinclude/>", "m.xml")  # the model you start from must be <mujoco>
+    assert m.parse(b"<mujocoinclude/>", "i.xml", included=True).tag == "mujocoinclude"
+
+
+def test_an_included_file_that_is_not_xml_is_a_problem_not_a_crash():
+    found = m.resolve("m.xml", project({"m.xml": '<mujoco><include file="i.bin"/></mujoco>', "i.bin": b"\x00\x01\x02 not xml"}))
+    assert "MJCF_XML" in codes(found)
+
+
+def test_a_sub_model_is_resolved_against_its_own_folder_and_its_own_includes():
+    files = {"m.xml": '<mujoco><asset><model name="s" file="sub/sub.xml"/></asset></mujoco>',
+             "sub/sub.xml": '<mujoco><compiler meshdir="meshes"/><asset><mesh file="p.stl"/></asset></mujoco>', "sub/meshes/p.stl": "p"}
+    found = m.resolve("m.xml", project(files))
+    assert found["problems"] == [] and "sub/meshes/p.stl" in found["files"] and "sub/sub.xml" in found["files"]
+
+
+def test_a_sub_model_cannot_name_a_file_outside_the_folder_either():
+    files = {"m.xml": '<mujoco><asset><model name="s" file="sub/sub.xml"/></asset></mujoco>',
+             "sub/sub.xml": '<mujoco><asset><mesh file="/etc/passwd"/><mesh file="../../up.stl"/></asset></mujoco>'}
+    found = m.resolve("m.xml", project(files))
+    assert {"INVALID_PATH", "OUTSIDE_ROOT"} <= set(codes(found))
+
+
+def test_a_model_that_includes_itself_and_a_deep_chain_end_cleanly():
+    own = m.resolve("m.xml", project({"m.xml": '<mujoco><asset><model name="s" file="m.xml"/></asset></mujoco>'}))
+    assert isinstance(own["problems"], list)  # no recursion error
+    chain = {f"f{i}.xml": f'<mujoco><include file="f{i + 1}.xml"/></mujoco>' for i in range(40)}
+    chain["f40.xml"] = "<mujoco/>"
+    deep = m.resolve("f0.xml", project(chain))
+    assert "LIMIT" in codes(deep)
+
+
+def test_the_resolver_returns_every_parsed_tree_for_the_kit_side():
+    files = {"m.xml": '<mujoco><include file="i.xml"/><worldbody><body><joint/></body></worldbody></mujoco>',
+             "i.xml": '<mujocoinclude><worldbody><body><joint/><joint/></body></worldbody></mujocoinclude>'}
+    found = m.resolve("m.xml", project(files))
+    assert set(found["trees"]) == {"m.xml", "i.xml"} and found["includes"] == ["i.xml"]

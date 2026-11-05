@@ -285,7 +285,7 @@ def test_no_command_is_offered_for_a_system_folder(path, monkeypatch):
 def test_no_command_is_offered_for_the_home_folder_or_its_private_folders(tmp_path, monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
-    for sub in (".ssh", ".gnupg", ".aws", ".config/x", ".local/share"):
+    for sub in (".ssh", ".gnupg", ".aws", ".config/x", ".kube", ".mozilla/y"):
         (tmp_path / sub).mkdir(parents=True)
         assert "isaac_mcp.project_assets" not in a.approval_help(str(tmp_path / sub / "k.urdf")), sub
     assert "isaac_mcp.project_assets" not in a.approval_help(str(tmp_path / "robot.urdf"))  # the home folder itself
@@ -297,3 +297,18 @@ def test_a_symlink_into_a_system_folder_is_judged_by_where_it_points(tmp_path, m
     monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
     (tmp_path / "link").symlink_to("/etc")
     assert "isaac_mcp.project_assets" not in a.approval_help(str(tmp_path / "link" / "hostname"))
+
+
+def test_the_users_own_local_and_cache_folders_are_ordinary_project_homes(tmp_path, monkeypatch):
+    """~/.local/share/<tool> is where many tools keep their data: a robot folder there is not a secret."""
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for sub in (".local/share/robots/go2", ".cache/models/x"):
+        (tmp_path / sub).mkdir(parents=True)
+        assert "isaac_mcp.project_assets" in a.approval_help(str(tmp_path / sub / "m.xml")), sub
+
+
+@pytest.mark.parametrize("path", ["/tmp/robot/m.xml", "/opt/robots/m.xml", "/mnt/data/robots/m.xml", "/srv/robots/m.xml"])
+def test_a_folder_under_tmp_opt_mnt_or_srv_is_offered(path, monkeypatch):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    assert "isaac_mcp.project_assets" in a.approval_help(path)

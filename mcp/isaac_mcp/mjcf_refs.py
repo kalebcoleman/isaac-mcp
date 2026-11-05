@@ -35,12 +35,16 @@ def check_mjcf_path(path) -> None:
         refuse("UNSUPPORTED_FORMAT", f"{path} is a URDF, not an MJCF: use assets__import_urdf.")
     if not is_mjcf(path):
         refuse("UNSUPPORTED_FORMAT", f"Expected a MuJoCo .xml file, not {path}.")
-    if PurePosixPath(str(path)).name == "package.xml":
+    if PurePosixPath(str(path)).name.lower() == "package.xml":
         refuse("UNSUPPORTED_FORMAT", f"{path} is a ROS package description, not a MuJoCo model.")
 
 
-def parse(data: bytes, name: str = "MJCF") -> ET.Element:
-    """The ``<mujoco>`` element, or a refusal naming what is wrong."""
+def parse(data: bytes, name: str = "MJCF", included: bool = False) -> ET.Element:
+    """The ``<mujoco>`` element, or a refusal naming what is wrong.
+
+    An included file may have any root element (MuJoCo's own include files use ``<mujocoinclude>``): only the model
+    you start from must be ``<mujoco>``.
+    """
     if len(data) > MAX_XML:
         refuse("LIMIT", f"{name} exceeds 64 MiB.")
     upper = data.upper()
@@ -50,7 +54,7 @@ def parse(data: bytes, name: str = "MJCF") -> ET.Element:
         tree = ET.fromstring(data)
     except ET.ParseError as exc:
         refuse("MJCF_XML", f"{name} is not valid XML: {exc}")
-    if tree.tag != "mujoco":
+    if tree.tag != "mujoco" and not included:
         hint = " It looks like a URDF: use assets__import_urdf." if tree.tag == "robot" else ""
         refuse("MJCF_XML", f"{name}: the root element must be mujoco, not {str(tree.tag)[:64]}.{hint}")
     return tree
@@ -60,30 +64,15 @@ def _local(tag) -> str:
     return tag.split("}")[-1] if isinstance(tag, str) else ""
 
 
-def compiler_dirs(tree: ET.Element) -> dict:
-    """The ``<compiler>`` folders a model sets: ``meshdir`` and ``texturedir``, each falling back to ``assetdir``."""
-    found = {}
-    for element in tree.iter():
-        if _local(element.tag) == "compiler":
-            for key in ("assetdir", "meshdir", "texturedir"):
-                if key in element.attrib and key not in found:
-                    found[key] = element.attrib[key]
-    return {
-        "meshdir": found.get("meshdir", found.get("assetdir", "")),
-        "texturedir": found.get("texturedir", found.get("assetdir", "")),
-    }
-
-
 def references(tree: ET.Element) -> list[tuple[str, str, str]]:
-    """``(kind, element, file)`` for every file the model names. ``kind`` is include, mesh or texture."""
+    """``(kind, element, file)`` for every file a tree names, in document order. ``kind`` is include, mesh or texture."""
     found = []
     for element in tree.iter():
         name = _local(element.tag)
         for table, kind in ((_PLAIN, "include"), (_MESH_DIR, "mesh"), (_TEXTURE_DIR, "texture")):
             for attribute in table.get(name, ()):
                 if attribute in element.attrib:
-                    kind_name = "include" if name in ("include", "model", "flexcomp") else kind
-                    found.append((kind_name, name, element.attrib[attribute]))
+                    found.append(("include" if name in ("include", "model", "flexcomp") else kind, name, element.attrib[attribute]))
     return found
 
 
@@ -98,80 +87,149 @@ def _bad_value(value: str):
     return None
 
 
-def resolve(entry: str, project: Project, read=None) -> dict:
-    """Map every file *entry* names, through its includes, to a file in *project*.
+def resolve(entry: str, project: Project, read=None, _depth: int = 0) -> dict:
+    """Map every file *entry* names, through its includes and sub-models, to a file in *project*.
 
-    Returns ``mapped`` (reference -> relative file), ``files`` (every file used, the entry and its includes
-    included), ``includes``, ``compiler`` (the folder settings) and ``problems`` (each with kind, code,
-    reference, reason). Refuses nothing about the references, so a caller can report all of them.
+    MuJoCo expands an ``<include>`` where it stands, and a later ``<compiler>`` setting overrides an earlier one for the
+    whole model, so the model is walked in document order with includes expanded in place, and every mesh and texture is
+    resolved against the final folders. Every ``<compiler>`` folder anywhere is checked, even one that is overridden, and
+    every included file is scanned whatever its name.
+
+    Returns ``mapped`` (reference -> relative file), ``files`` (every file used), ``includes``, ``trees`` (each parsed
+    file, by name), ``compiler`` (the final folder settings) and ``problems`` (each with kind, code, reference, reason).
+    Refuses nothing about the references, so a caller can report all of them.
     """
     base = _parent(entry)
     read = read or project.read
-    problems, mapped, files, includes = [], {}, {entry}, []
-    queue, seen, compiler = [(entry, 0)], set(), None
-    while queue:
-        current, depth = queue.pop(0)
-        if current in seen:
-            continue
-        seen.add(current)
-        if depth > MAX_INCLUDE_DEPTH or len(seen) > MAX_FILES:
-            problems.append(_problem("unresolved", "LIMIT", current, "too many nested or included files"))
-            break
+    problems, files, includes, trees = [], {entry}, [], {}
+    state = {"assetdir": "", "meshdir": None, "texturedir": None}
+    wanted = []  # (kind, element, value) in document order, resolved after the walk
+    stack = []
+
+    def note(problem):
+        if not any(p["reference"] == problem["reference"] and p["code"] == problem["code"] for p in problems):
+            problems.append(problem)
+
+    def check_folder(value, key):
+        """A ``<compiler>`` folder must be a relative path that stays inside the approved folder."""
+        if value == "":
+            return
+        bad = _bad_value(value)
+        if bad:
+            note(_problem("outside", bad["code"], value, f"<compiler {key}>: {bad['reason']}"))
+        elif normal_path(base, value) is None:
+            note(_problem("outside", "OUTSIDE_ROOT", value, f"<compiler {key}> climbs out of this folder"))
+
+    def locate(value, folders):
+        """The first existing project file for *value* under one of *folders*; False for a symlink, None for none."""
+        for folder in folders:
+            rel = normal_path(folder, value) if folder is not None else None
+            if rel is None or rel == "":
+                continue
+            if project._unsafe(rel):
+                note(_problem("outside", "UNSAFE_ENTRY", value, f"{rel} is a symlink, which is refused"))
+                return False
+            if rel in project.files:
+                return rel
+        return None
+
+    def missing(value, folders):
+        escapes = all(normal_path(f, value) is None for f in folders if f is not None)
+        if escapes:
+            note(_problem("outside", "OUTSIDE_ROOT", value, "the path climbs out of this folder"))
+        else:
+            note(_problem("unresolved", "MESH_MISSING", value, f"{value} is not in this folder (looked relative to {folders[0] or 'the root'})"))
+
+    def visit(element, current, depth):
+        name = _local(element.tag)
+        if name == "compiler":
+            for key in ("assetdir", "meshdir", "texturedir"):
+                if key in element.attrib:
+                    check_folder(element.attrib[key], key)
+                    state[key] = element.attrib[key]
+        for attribute in _PLAIN.get(name, ()):
+            if attribute in element.attrib:
+                follow(name, element.attrib[attribute], current, depth)
+        for attribute in _MESH_DIR.get(name, ()):
+            if attribute in element.attrib:
+                wanted.append(("mesh", name, element.attrib[attribute]))
+        for attribute in _TEXTURE_DIR.get(name, ()):
+            if attribute in element.attrib:
+                wanted.append(("texture", name, element.attrib[attribute]))
+        for child in list(element):
+            visit(child, current, depth)
+
+    def follow(name, value, current, depth):
+        bad = _bad_value(value)
+        if bad:
+            note(bad)
+            return
+        folders = [base, _parent(current)] if _parent(current) != base else [base]
+        chosen = locate(value, folders)
+        if chosen is False:
+            return
+        if chosen is None:
+            missing(value, folders)
+            return
+        mapped[value] = chosen
+        files.add(chosen)
+        if name == "model":
+            sub = resolve(chosen, project, read, _depth + 1)  # a sub-model has its own folders and includes
+            for key, rel in sub["mapped"].items():
+                mapped[f"{chosen}:{key}"] = rel
+            files.update(sub["files"])
+            includes.extend(sub["includes"])
+            trees.update(sub["trees"])
+            problems.extend(p for p in sub["problems"] if p not in problems)
+        elif name == "include":
+            includes.append(chosen)
+            expand(chosen, depth + 1)
+
+    def expand(rel, depth):
+        if rel in stack:  # an include cycle ends here
+            return
+        if depth > MAX_INCLUDE_DEPTH or len(trees) > MAX_FILES:
+            note(_problem("unresolved", "LIMIT", rel, "too many nested or included files"))
+            return
         try:
-            tree = parse(read(current), current)
+            tree = parse(read(rel), rel, included=rel != entry)
         except (AssetError, OSError) as exc:
-            problems.append(_problem("unresolved", getattr(exc, "code", "FILESYSTEM"), current, str(exc)[:200]))
+            note(_problem("unresolved", getattr(exc, "code", "FILESYSTEM"), rel, str(exc)[:200]))
+            return
+        trees[rel] = tree
+        stack.append(rel)
+        try:
+            visit(tree, rel, depth)
+        finally:
+            stack.pop()
+
+    mapped = {}
+    if _depth > MAX_INCLUDE_DEPTH:
+        return dict(mapped={}, files=[entry], includes=[], trees={}, compiler={}, problems=[
+            _problem("unresolved", "LIMIT", entry, "sub-models are nested too deeply")])
+    expand(entry, 0)
+    final = {
+        "meshdir": state["meshdir"] if state["meshdir"] is not None else state["assetdir"],
+        "texturedir": state["texturedir"] if state["texturedir"] is not None else state["assetdir"],
+    }
+    for kind, element, value in wanted:
+        bad = _bad_value(value)
+        if bad:
+            note(bad)
             continue
-        # The first model file that sets a folder decides it, as the entry file does in MuJoCo's own order.
-        found = compiler_dirs(tree)
-        if compiler is None:
-            compiler = {"meshdir": "", "texturedir": ""}
-        for key in compiler:
-            if not compiler[key] and found[key]:
-                compiler[key] = found[key]
-        for kind, element, value in references(tree):
-            bad = _bad_value(value)
-            if bad:
-                if not any(p["reference"] == bad["reference"] for p in problems):
-                    problems.append(bad)
-                continue
-            if kind == "include":
-                candidates = [base, _parent(current)] if _parent(current) != base else [base]
-            else:
-                directory = (compiler or {}).get("meshdir" if kind == "mesh" else "texturedir", "")
-                bad = _bad_value(directory) if directory else None
-                if bad:
-                    problems.append(_problem("outside", bad["code"], directory, f"<compiler> folder: {bad['reason']}"))
-                    continue
-                candidates = [normal_path(base, directory) if directory else base]
-            chosen = None
-            for folder in candidates:
-                rel = normal_path(folder, value) if folder is not None else None
-                if rel is None or rel == "":
-                    continue
-                if project._unsafe(rel):
-                    problems.append(_problem("outside", "UNSAFE_ENTRY", value, f"{rel} is a symlink, which is refused"))
-                    chosen = False
-                    break
-                if rel in project.files:
-                    chosen = rel
-                    break
-            if chosen is False:
-                continue
-            if chosen is None:
-                escapes = all((normal_path(f, value) is None) for f in candidates if f is not None)
-                code, text = (("OUTSIDE_ROOT", "the path climbs out of this folder") if escapes
-                              else ("MESH_MISSING", "is not in this folder"))
-                problems.append(_problem("outside" if escapes else "unresolved", code, value,
-                                         text if escapes else f"{value} {text} (looked relative to {candidates[0] or 'the root'})"))
-                continue
-            mapped[value if kind == "include" else f"{element}:{value}"] = chosen
-            files.add(chosen)
-            if kind == "include":
-                includes.append(chosen)
-                if is_mjcf(chosen):
-                    queue.append((chosen, depth + 1))
-    return dict(mapped=mapped, files=sorted(files), includes=includes, compiler=compiler or {}, problems=problems)
+        directory = final["meshdir" if kind == "mesh" else "texturedir"]
+        folder = normal_path(base, directory) if directory and _bad_value(directory) is None else base
+        if folder is None:
+            continue  # the folder itself was reported
+        chosen = locate(value, [folder])
+        if chosen is False:
+            continue
+        if chosen is None:
+            missing(value, [folder])
+            continue
+        mapped[f"{element}:{value}"] = chosen
+        files.add(chosen)
+    return dict(mapped=mapped, files=sorted(files), includes=includes, trees=trees, compiler=final, problems=problems)
 
 
 def closure_result(path, project: Project, folder) -> dict:
