@@ -135,7 +135,7 @@ add(
 )
 add(
     "sim.prim.find",
-    "Bounded search of prim paths: `contains` is a literal substring (not a regex), `type_name` an exact type. Includes inactive prims.",
+    "Bounded search of prim paths: `contains` is a literal substring (not a regex), `type_name` an exact type, `root` limits it to one subtree. Includes inactive prims.",
     dict(
         **TARGET,
         contains=field(
@@ -143,6 +143,7 @@ add(
         ),
         type_name=field("string", "Exact USD type or empty.", False, default=""),
         limit=field("integer", "Maximum matches 1..200.", False, default=100),
+        root=field("string", "Only search under this prim, such as a robot's path. Default: the whole stage.", False, default="/"),
     ),
 )
 add(
