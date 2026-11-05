@@ -415,6 +415,12 @@ the dock edge and use File > Save Config to keep a larger image.
 
 ## Agent shells: environment and driving
 
+**Keep the ROS environment out of the MCP client's shell.** After `source scripts/ros_env.sh` (especially with a RoboStack overlay), do not start the MCP server,
+`call.py` or any `uv run` / `uv tool` program from that same shell: they pick up the overlay's Python libraries and fail on import, for example
+`ImportError: libssl.so.3: version 'OPENSSL_3.2.0' not found` from `cryptography` (reproduced with a Jazzy + Nav2 RoboStack environment). Run the
+simulator and the MCP client from one terminal, and ROS 2 commands from another. A script that does both must start the client with the
+environment before sourcing it.
+
 `scripts/ros_env.sh` must be **sourced**, and not in a pipeline: `source scripts/ros_env.sh ... | tail`
 runs it in a subshell, so the environment is silently lost (redirect to a file instead). It sources a ROS 2 install (a path, or auto-detected:
 `ROS_DISTRO` if exported, else Humble on 22.04 and Jazzy on 24.04, in `/opt/ros/<distro>` and

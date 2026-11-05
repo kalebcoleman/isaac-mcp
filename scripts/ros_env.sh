@@ -21,6 +21,11 @@
 # Auto-detection looks at ROS_DISTRO (if exported), then the OS default, in /opt/ros/<distro>
 # and ~/ros2/<distro> (ISAAC_ROS_SEARCH overrides those roots, colon-separated).
 
+# Do NOT start the MCP server, scripts/call.py or any `uv run` / `uv tool` program from a shell where this was sourced:
+# a RoboStack environment puts its own Python libraries first, and those programs then fail to import (for example
+# "libssl.so.3: version `OPENSSL_3.2.0' not found" from cryptography). Use one terminal for the simulator and the MCP
+# client, and a second one for ROS 2 commands.
+#
 # zsh/sh: BASH_SOURCE, word splitting and setup.bash all differ, and dash cannot even parse the bash
 # below; refuse before defining anything instead of half-working.
 if [ -z "${BASH_VERSION:-}" ]; then
