@@ -58,6 +58,31 @@ Add ROS 2 and the same scene runs Nav2: `Set up ROS 2 TF, build an occupancy map
 This is the open-source [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) arm (Apache-2.0) as a URDF file. See
 [your own assets](#your-own-assets-or-online-ones) for how that works.
 
+### Pull a real humanoid from GitHub
+
+> I'm starting a robotics project. Pick a well-known open-source robot from GitHub, clone it, get it into a simulated scene, make it move, and show me a picture. Then put some objects around it, add a camera and a LiDAR, and see what happens when something hits it.
+
+![A Unitree G1 humanoid with its arms posed beside a table holding a red can, a blue box and a gold ball](docs/media/g1-github-scene.png)
+
+A small, fast model, given only that request, chose Unitree's G1, cloned `unitreerobotics/unitree_ros`, and found the repo too
+big to import in one go (1,597 files). It built a pack with `assets__pack_build` (the one URDF and its 36 meshes, 19 MB),
+loaded it by name, posed the arms and waist, built the table and objects, added a camera and a LiDAR (118,000 points), and
+dropped a 2 kg ball on it. It then did the same for Google's Barkour quadruped from MuJoCo Menagerie. The G1 was loaded with
+a fixed base, so it holds a pose; it does not balance or walk.
+
+### Train a humanoid to walk
+
+> Train the Unitree G1 to walk on flat ground, tell me how it did, and show it to me in a window.
+
+![Six Unitree G1 humanoids walking on a grid floor in the Isaac Sim window; the arrows show the speed each one is told to follow](docs/media/g1-walk.gif)
+
+That used Isaac Lab's built-in G1 task, `Isaac-Velocity-Flat-G1-v0`, with NVIDIA's own G1 model (not the GitHub one
+above): `isaaclab__train` with 1,024 environments and 300 iterations took **152 seconds**, then `isaaclab__eval` ran 16
+episodes of 1,000 steps and **all 16 stayed up** (mean return 13.3), and `isaaclab__play` opened the window above. The
+arrows are the speed commands each robot follows. This is a short run, so expect a rough gait, and running it for 1,500
+iterations (about 13 minutes) would be the next step. Training a robot of your own through these tools is not supported yet;
+it is on the [checklist](docs/plans/CHECKLIST.md#3-new-tools-for-robotics-and-rl-from-the-live-tests-2026-11-04).
+
 ### More prompts
 
 **Look and measure**
