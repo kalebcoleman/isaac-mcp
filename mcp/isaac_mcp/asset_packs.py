@@ -396,13 +396,29 @@ def read_pack_file(folder: Path) -> dict:
     return data
 
 
-def write_pack_file(folder: Path, entries, accepted_unresolved=()) -> None:
+MAX_ORIGIN_CHARS = 300
+
+
+def clean_origin(value) -> str | None:
+    """A one-line note of where a pack's files came from, such as a repository URL and commit."""
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or len(value) > MAX_ORIGIN_CHARS or any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise PackError(f"origin: one line of text, at most {MAX_ORIGIN_CHARS} characters", "INVALID_VALUE")
+    return value.strip() or None
+
+
+def write_pack_file(folder: Path, entries, accepted_unresolved=(), origin=None) -> None:
     """Record a pack's entry files. Existing entries stay; this file holds no absolute path."""
     old = read_pack_file(folder)
+    origins = [o for o in old.get("origin", []) if isinstance(o, str)]
+    if origin and origin not in origins:
+        origins.append(origin)
     doc = dict(
         version=1,
         entries=sorted({*old.get("entries", []), *entries}),
         accepted_unresolved=sorted({*old.get("accepted_unresolved", []), *accepted_unresolved}),
+        **({"origin": origins} if origins else {}),
     )
     _replace_text(folder, PACK_FILE, json.dumps(doc, indent=2) + "\n")
 
@@ -449,7 +465,10 @@ def list_packs(stores: list[Path]) -> list[dict]:
                     continue
                 item = dict(name=child.name, pinned=len(assets.pins(child)), symlink=child.is_symlink())
                 try:
-                    item["entries"] = len(read_pack_file(child).get("entries", []))
+                    described = read_pack_file(child)
+                    item["entries"] = len(described.get("entries", []))
+                    if described.get("origin"):
+                        item["origin"] = described["origin"]
                 except PackError as exc:
                     item["error"] = str(exc)
                 entry["packs"].append(item)
@@ -668,6 +687,7 @@ def build_pack(
     force: bool = False,
     notes: list | None = None,
     urdf_root=None,
+    source_note: str | None = None,
 ) -> dict:
     """Copy USD or URDF files and only what they depend on into a pack, keeping relative layout, and pin.
 
@@ -854,7 +874,7 @@ def build_pack(
         pins.setdefault(rel, sha256(pack_folder / rel))
     write_pins(pack_folder, pins)
     accepted = sorted({_accepted_name(item["reference"], base_of) for item in blocked["unresolved"]})
-    write_pack_file(pack_folder, entries, accepted)
+    write_pack_file(pack_folder, entries, accepted, source_note)
     try:
         verified = check_closure(pack_folder, sorted(entries), closure)
         verified.pop("used", None)
@@ -1385,6 +1405,7 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
             folder, sources, closure, from_pack_dirs=from_dirs, layout_root=layout, trusted=trusted,
             allow_unresolved=bool(params.get("allow_unresolved", False)), dry_run=bool(params.get("dry_run", False)),
             force=bool(params.get("force", False)), notes=notes, urdf_root=urdf_root,
+            source_note=clean_origin(params.get("origin")),
         )
         return dict(status="ok", **context, backend=closure.name, notes=notes, **report)
 

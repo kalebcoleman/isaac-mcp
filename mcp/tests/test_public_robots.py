@@ -231,3 +231,16 @@ def test_a_file_with_no_time_code_range_is_reported():
     assert "startTimeCode" in time_code_report(stage)["time_code_note"]
     stage.SetEndTimeCode(1000000.0)
     assert time_code_report(stage) == {}
+
+
+@pytest.mark.parametrize("name, tail", [("unitree_h1", "Unitree/H1/h1.usd"), ("unitree_g1", "Unitree/G1/g1.usd")])
+def test_the_humanoids_load_by_name_from_this_builds_root(name, tail):
+    url = f"{ROOT}/Isaac/Robots/{tail}"
+    found = _locate(name, existing={url})
+    assert found["uri"] == url and found["wheels"] is None
+
+
+def test_a_humanoid_missing_from_a_build_is_refused_with_the_names():
+    with pytest.raises(AssetError) as exc:
+        _locate("unitree_h1", existing=set())
+    assert "unitree_g1" in str(exc.value)

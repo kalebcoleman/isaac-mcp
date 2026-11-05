@@ -215,6 +215,24 @@ def lowest_point(stage, path):
     return None if box.IsEmpty() else box.GetMin()[2]
 
 
+def _raise_prim(prim, step):
+    """Move *prim* by *step* (a vector in its parent's frame) in the current edit target, whatever its first transform op is."""
+    xform = UsdGeom.Xformable(prim)
+    ops = xform.GetOrderedXformOps()
+    first = ops[0] if ops else None
+    if first is not None and first.GetOpType() == UsdGeom.XformOp.TypeTransform and not first.IsInverseOp():
+        matrix = Gf.Matrix4d(first.Get())
+        matrix.SetTranslateOnly(matrix.ExtractTranslation() + step)
+        first.Set(matrix)
+    elif first is not None and first.GetOpType() == UsdGeom.XformOp.TypeTranslate and not first.IsInverseOp():
+        moved = Gf.Vec3d(first.Get() or (0, 0, 0)) + step
+        first.Set(Gf.Vec3f(moved) if first.GetPrecision() == UsdGeom.XformOp.PrecisionFloat else moved)
+    else:  # none, or a rotation or scale first: a translate placed first acts in the parent's frame
+        lift = xform.AddTranslateOp(opSuffix="lift")
+        lift.Set(step)
+        xform.SetXformOpOrder([lift, *ops])
+
+
 def place_above_ground(stage, path, position_given):
     """A robot whose origin is its body starts partly under the floor at the origin, and the contact
     solver then throws it apart. Lift it onto the ground, or warn if the caller chose the position."""
@@ -232,10 +250,7 @@ def place_above_ground(stage, path, position_given):
         prim = stage.GetPrimAtPath(path)
         parent = UsdGeom.Xformable(prim.GetParent()).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
         step = parent.GetInverse().TransformDir(Gf.Vec3d(0, 0, lift))
-        op = UsdGeom.Xformable(prim).GetOrderedXformOps()[0]
-        matrix = Gf.Matrix4d(op.Get())
-        matrix.SetTranslateOnly(matrix.ExtractTranslation() + step)
-        op.Set(matrix)
+        _raise_prim(prim, step)
     report["lifted_by"] = lift
     report["note"] = (f"The robot's lowest point was {ground - lowest:.3f} under the ground plane, so it was raised by "
                       f"{lift:.3f}. Pass position to choose the height yourself.")

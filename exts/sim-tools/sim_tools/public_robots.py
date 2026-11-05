@@ -30,6 +30,8 @@ NVIDIA_ROBOTS = {
                       wheels=_wheels("left_wheel", "right_wheel", 0.24, 0.54, "chassis_link")),
     "nova_carter": dict(prim="NovaCarter", paths=[ROBOTS + "NVIDIA/NovaCarter/nova_carter.usd"],
                         wheels=_wheels("joint_wheel_left", "joint_wheel_right", 0.14, 0.413, "chassis_link")),
+    "unitree_h1": dict(prim="UnitreeH1", paths=[ROBOTS + "Unitree/H1/h1.usd"]),
+    "unitree_g1": dict(prim="UnitreeG1", paths=[ROBOTS + "Unitree/G1/g1.usd"]),
     "jetbot": dict(prim="Jetbot", paths=[ROBOTS + "NVIDIA/Jetbot/jetbot.usd"],
                    wheels=_wheels("left_wheel_joint", "right_wheel_joint", 0.03, 0.1125, "chassis")),
     "create3": dict(prim="Create3", paths=[ROBOTS + "iRobot/Create3/create_3.usd"],

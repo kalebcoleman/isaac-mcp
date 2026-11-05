@@ -79,7 +79,7 @@ Capture the screen, a monitor or a window to see the result of your work. Return
 
 ### `start_screen_recording`
 
-Start a desktop MP4 recording, e.g. for a demo; one at a time, no audio. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open. A window recording reads that window's own pixels, so it works when covered or on a locked screen. Details: docs/TOOLS-HOST.md. For a clean viewport render of the UR5e twin, use ur5e_dt__start_recording; to combine clips, join_videos.
+Start a desktop MP4 recording, e.g. for a demo; one at a time, no audio. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open; a window recording works when covered or on a locked screen. The recording ends if this MCP server process exits, so keep one client connected from start to stop. Details: docs/TOOLS-HOST.md. UR5e twin render: ur5e_dt__start_recording; to combine clips, join_videos.
 
 - `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
 - `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
@@ -880,7 +880,7 @@ Set a static local or world pose on any Xformable prim in the session layer, and
 
 One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.
 
-- `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from a pack in your asset folder, or an absolute path under an approved root (as for assets__import_path and assets__import_urdf). Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (from this simulator's own assets root). A file found only through a project file's asset_path is refused.
+- `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from your asset folder, or an absolute path under an approved root. Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, unitree_h1, unitree_g1 (humanoids), turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (this simulator's own assets root). A file found only through a project file's asset_path is refused.
 - `fixed_base` (boolean, default `true`): With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
 - `ros` (boolean, default `false`): With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.
 - `up_axis` (Z|Y, default `"Z"`): The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.
@@ -1086,6 +1086,7 @@ Copy USD or URDF files and only what they depend on into a pack in the primary a
 - `sources` (array, required): USD or URDF files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.
 - `from_pack` (string, optional): Pack that source names and logical references such as robot/ur5e.usd come from.
 - `layout_root` (string, optional): Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for.
+- `origin` (string, optional): Where these files came from, one line (for example a repository URL and commit). Recorded in the pack's isaac-mcp-pack.json and listed by assets__packs, so you can see later what a pack used.
 - `allow_unresolved` (boolean, default `false`): Build despite missing or remote references, and record them.
 - `dry_run` (boolean, default `false`): Report the closure and write nothing.
 - `force` (boolean, default `false`): Replace files that differ from the source.

@@ -374,6 +374,14 @@ async def run(ext, args):
         else:
             robot_path = reference_robot(stage, wanted["name"], wanted["uri"])
         await app.next_update_async()
+        placement = None
+        if not is_urdf and not wanted.get("snapshot"):
+            from .urdf import place_above_ground
+
+            # A robot whose origin is its body (a humanoid's pelvis) would start half inside the floor.
+            placement = place_above_ground(stage, robot_path, False)
+            if placement["lifted_by"]:
+                await app.next_update_async()
         roots = _articulation_roots(stage.GetPrimAtPath(robot_path))
         errors = composition_errors(stage)
         if not stage.GetPrimAtPath(robot_path).GetChildren():
@@ -389,6 +397,8 @@ async def run(ext, args):
                                expanded_visuals=expanded, composition_errors=len(errors),
                                **({"composition_error_samples": [str(e)[:200] for e in errors[:3]]} if errors else {}),
                                **({} if root else {"note": "No articulation root found, so the joint tools will not work on it."}))
+        if placement and placement["lifted_by"]:
+            result["robot"]["placement"] = placement
         if is_urdf:
             result["robot"]["urdf"] = urdf_report
         result["assets"] = wanted["assets"]

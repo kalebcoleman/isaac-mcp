@@ -654,3 +654,36 @@ def test_the_twin_puts_its_listener_back_unless_closing(monkeypatch):
     with twin.without_carb_log_capture():
         pass
     assert log == []  # nothing installed: nothing removed or added
+
+
+def test_a_robot_referenced_by_name_has_no_transform_and_is_still_lifted():
+    """sim__quick_start references a public robot as a bare Xform: a humanoid's pelvis is its origin, so its legs start under the floor."""
+    stage = ground_stage()
+    UsdGeom.Xformable(stage.GetPrimAtPath("/World/R")).ClearXformOpOrder()
+    assert not UsdGeom.Xformable(stage.GetPrimAtPath("/World/R")).GetOrderedXformOps()
+    report = place_above_ground(stage, "/World/R", False)
+    assert report["lifted_by"] == pytest.approx(0.505)
+    assert lowest_point(stage, "/World/R") == pytest.approx(0.005)
+    assert len(UsdGeom.Xformable(stage.GetPrimAtPath("/World/R")).GetOrderedXformOps()) == 1
+
+
+@pytest.mark.parametrize("first_op", ["translate", "translate_float", "rotate_then_translate", "scale"])
+def test_every_kind_of_first_transform_op_is_lifted_in_the_parent_frame(first_op):
+    """The H1's USD brings its own translate op; others start with a rotation or scale. Lift must work on each."""
+    stage = ground_stage()
+    xform = UsdGeom.Xformable(stage.GetPrimAtPath("/World/R"))
+    xform.ClearXformOpOrder()
+    if first_op == "translate":
+        xform.AddTranslateOp().Set(Gf.Vec3d(1, 2, 0))
+    elif first_op == "translate_float":
+        xform.AddTranslateOp(precision=UsdGeom.XformOp.PrecisionFloat).Set(Gf.Vec3f(1, 2, 0))
+    elif first_op == "rotate_then_translate":
+        xform.AddRotateZOp().Set(90.0)
+        xform.AddTranslateOp().Set(Gf.Vec3d(1, 0, 0))
+    else:
+        xform.AddScaleOp().Set(Gf.Vec3f(1, 1, 1))
+    report = place_above_ground(stage, "/World/R", False)
+    assert report["lifted_by"] == pytest.approx(0.505)
+    assert lowest_point(stage, "/World/R") == pytest.approx(0.005, abs=1e-4)
+    world = xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
+    assert world[2] == pytest.approx(0.505, abs=1e-4)  # straight up, whatever the robot's own rotation
