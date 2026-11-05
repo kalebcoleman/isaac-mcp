@@ -21,7 +21,39 @@ building anything with many parts is slow and costly. **Goal: that tower in 5 ca
 - [ ] Test: the tower in 5 calls or fewer, in a unit test and live on 6.2; record the before and after call counts here
 - [ ] Look for other N-call patterns (joints, physics apply, lights) in the earlier test transcripts and fix the worst
 
-## 2. Poke a running scene
+## 2. Tool surface review: combine or remove
+
+131 tools is a lot for an agent to choose from, and some do nearly the same job. Review all of them, and merge or
+drop the ones that earn no place. **Nothing is removed or combined until Kaleb has approved the list**; Kaleb said the
+review itself is fine to do, and to land as its own branch.
+
+- [ ] **Inventory.** One table of every tool: group, what it does, the tools it overlaps, and how often agents used it in the fleet and plain-request runs (count calls from the saved transcripts, not by guess)
+- [ ] **Classify** each as keep, combine, rename, or remove, with a one-line reason and a risk: who might call it (README prompts, the skill, the UR5e twin, the docs, other repos)
+- [ ] **Bring the list to Kaleb.** He approves, changes or rejects each line before any code moves
+- [ ] **Implement the approved list** on its own branch: a merged tool keeps the old name as a thin alias for one release with a note in its description, and a removed one is documented
+- [ ] Update everything the counts touch: `AGENTS.md`, the README tier table, the skill, `docs/TOOLS-*.md`, the generated catalog and tool reference (`check_docs.py` and `gen_host_catalog.py --write` enforce this)
+- [ ] Re-run a plain-request tester afterwards to check an agent does at least as well with the smaller set (fewer wrong tool picks, same or fewer calls)
+
+Candidates to look at first (not decisions): the three step/play/pause paths (`sim__simulation__step`, `sim__timeline__control`, `sim__joints__move`); the joint family (`state`, `command`, `drive`, `gains`, `move`, `teleport`, `inspect`); the pack tools (`pack_adopt`, `pack_build`, `pack_pin`, `pack_doctor`, `packs`); the camera pair and the many `ur5e_dt__quick_start*` variants; `sim__prim__get`, `bounds` and `measure`; the desktop `window_*` tools.
+
+### Twin tools (`ur5e_dt__*`, 23 of them)
+
+The plan in `SCENE-TOOLS-AGENT-UX.md` is to make the lab twin's tools predictable for an agent, without breaking the lab's
+current use. In short:
+
+- Each tool says exactly what it did: what it created, what it skipped, what was left half-done, how long it waited. Today most return only "success" and a message, and a few descriptions promise fields the code doesn't return (`save_scene_state` and `restore_scene_state`)
+- Prerequisites and side effects are written down (for example `add_objects` stops and replays the timeline; `new_stage` and `delete_objects` destroy things without a confirmation)
+- One `setup_scene(workstation, simple_room, ...)` replaces the pile of `quick_start*` combinations, which stay as wrappers
+- Destructive tools ask for `confirm=true`, as the generic `sim__prim__delete` does
+- Parameter descriptions and read-only/destructive hints reach the agent
+- Long calls report their real waits and, on timeout, say the outcome is unknown rather than failing silently
+- Part of the plan is already done by the generic tools (`sim__stage__info`, `sim__stage__tree`, `sim__prim__get` now inspect any scene), so the twin does not need its own inspector
+
+- [ ] Scout re-checks the plan against today's code and lists which proposals are still unbuilt
+- [ ] Fold the twin tools into the review above: decide which `quick_start*` variants stay
+- [ ] Then build what is left, in the plan's order: descriptions and recipes first, honest outcomes next, setup and confirmations after
+
+## 3. Poke a running scene
 
 Authoring needs a stopped timeline, and Stop rewinds physics, so an agent could not nudge a block while playing.
 Jenga, LEGO and manipulation need it.
@@ -31,14 +63,14 @@ Jenga, LEGO and manipulation need it.
 - [ ] Test: nudge the top block of the tower and watch it move; pull a block out of a layer and see what falls
 - [ ] Docs and the example prompts in the README
 
-## 3. Second PR: M6 and M7 (branched from `main`)
+## 4. Second PR: M6 and M7 (branched from `main`)
 
 - [ ] M6: `assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources
 - [ ] M7: `sim__viewport__screenshot`, `sim__viewport__record_start`, `sim__viewport__record_stop`, and the final demo
 - [ ] For LEGO and Jenga: an arm with a gripper in `sim__quick_start`, and a route from a saved scene to a Lab task
 - [ ] Update `docs/TOOLS-*.md`, the counts, and regenerate the catalog and tool reference (`check_docs.py` enforces this)
 
-## 4. Small fixes
+## 5. Small fixes
 
 Host layer and refusals
 - [ ] A queued call that times out should say what the bridge is running (do it in the host layer's error formatting; the client attempt broke 11 tests)
@@ -86,7 +118,7 @@ Map and Nav2
 Optional
 - [ ] Start a recording before a window exists, or stop on a log marker
 
-## 5. Testing still owed
+## 6. Testing still owed
 
 - [ ] **Lab PC, when Kaleb says it is back** (it was down, shared workstation): 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1 with the smoke test, M1 to M5 and the plain-request tests; Lab 3.0.0 with the eval fix and the refusal hints
 - [ ] 6.0.1 `sim__stop` fix, live (stop must leave nothing running)
@@ -98,7 +130,7 @@ Optional
 - [ ] Re-run the README example prompts, including the LiDAR one, and fix any that fail
 - [ ] Merged M1 to M5 with the timeline playing: `sim__joints__move` was only checked after Stop
 
-## 6. Known limitations to state in the docs
+## 7. Known limitations to state in the docs
 
 - [ ] `--video` needs MoviePy and imageio-ffmpeg in the Lab environment
 - [ ] A screen recording belongs to the server process that started it, so a client that restarts between calls can't stop it
@@ -108,13 +140,12 @@ Optional
 - [ ] `[spin] error in rcl_take: error not set` lines in the Kit log on 6.0.0.0: appears harmless, not explained
 - [ ] One `sim__camera__capture` had the selection outline in it after a prim was selected by hand; not reproduced in 4 tries
 
-## 7. For Kaleb to decide
+## 8. For Kaleb to decide
 
-- [ ] **Keep, combine or remove review of the tool surface.** Nothing is removed or combined without Kaleb's review. Bring a list
-- [ ] Twin tool proposals from `SCENE-TOOLS-AGENT-UX.md` that are still unbuilt (a scout is to list them)
+- [ ] Approve, change or reject the keep/combine/remove list when it arrives (section 2)
 - [ ] Aldrin licence: Kaleb handles it. Update VENDORING, README and LICENSE only when he reports; do not ask again
 
-## 8. Last of all
+## 9. Last of all
 
 Run only after the tool work, all builds, Lab setup and merges, and only with Kaleb's go-ahead.
 
