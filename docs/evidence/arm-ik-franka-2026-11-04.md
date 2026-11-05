@@ -80,6 +80,33 @@ Eight first-round cases did not reach. Each was checked, and four things changed
 - **UR5e at its zero pose** is fully stretched out and singular: a 10 cm forward target there is beyond reach, which the tool
   reports as not reached.
 
+## Code review, round 1 (Claude Sonnet 5.5, medium effort)
+
+A read-only review of `ik.py` and the arm code found no error in the core joint convention but ten ways to get a wrong or
+unusable answer. Each was fixed or answered:
+
+- **Self-check refused instead of skipping** when the end-effector link is not a body physics reports; now skipped with a note.
+- **Forward kinematics swallowed every simulation error**, so an invalid or quarantined state looked like "not running"; now
+  only "not running" falls back to the authored pose.
+- **No time bound:** an unreachable target on a 16-joint chain took 5.8 s. Added a 3 s budget (`timed_out` in the result),
+  cheaper rigid inverses, and a per-axis step cap.
+- **Continuous joints** could be returned a whole turn away from the current angle; they are now turned to the nearest
+  equivalent angle where the limits allow.
+- **The self-check cannot reveal a flipped axis at the all-zero pose;** the result now says so when every joint is at zero.
+  An unknown axis token and reversed limits are refused.
+- **Duplicate joint names** in one chain are refused; **a scaled base** no longer makes a non-rigid base pose; **the last
+  accepted solver step** is now judged; orientation is weighted against position on non-metre stages; a truncated
+  articulation scan is named in the "no chain" refusal.
+
+Tests went from 18 to 32 and now include a hand-composed forward-kinematics check with rotated joint frames, offset child
+frames, an X-axis revolute and a Z-axis prismatic joint (the earlier straight arm could not catch a swapped frame), and
+mocked-runtime tests for the self-check, a mismatch, the base frame, a missing degree of freedom and duplicate names.
+Each fix was checked by putting its bug back and watching a test fail; two first attempts at that (a poor mutation, and a
+missing test that `solve` applies the wrap-around) were redone. The live trials above were run again on the final code with
+the same results.
+
+Not changed: mimic joints are still treated as independent (the contract now says so).
+
 ## What this does not show
 
 - One session on six robots, one run each. The unit tests cover a synthetic arm with revolute and prismatic joints, reversed

@@ -696,12 +696,14 @@ class Advanced:
         root = a["path"]
         try:
             state = self.joints(stage, root)  # needs an initialized articulation, so a playing or paused timeline
-        except AssetError:
-            if need_state:
+        except AssetError as exc:
+            # Only "the simulation is not running" lets forward kinematics fall back to the authored pose; an invalid or
+            # quarantined state must still reach the caller.
+            if need_state or getattr(exc, "code", None) != "PHYSICS_NOT_READY":
                 raise
             state = None
         root_prim = s.prim(stage, root)
-        joint_prims, _truncated = articulation_joints(stage, root_prim, 400)
+        joint_prims, truncated = articulation_joints(stage, root_prim, 400)
         bodies = sorted({b for j in joint_prims for b in ik._bodies(j) if b})
 
         def body(value, label):
@@ -739,9 +741,20 @@ class Advanced:
                 notes.append("Base pose taken from the authored USD, not read from physics.")
         else:
             notes.append("The simulation is not running, so the base pose is the authored USD pose.")
-        chain = ik.build_chain(stage, joint_prims, base, ee, base_pose)
+        try:
+            chain = ik.build_chain(stage, joint_prims, base, ee, base_pose)
+        except AssetError as exc:
+            if truncated and getattr(exc, "code", None) == "IK_NO_CHAIN":
+                refuse("IK_NO_CHAIN", f"{exc} The articulation scan stopped at its limit, so the chain may be cut off: "
+                       "name a base_link nearer the end effector.", **getattr(exc, "details", {}))
+            raise
         if not chain.names:
             refuse("IK_NO_JOINTS", f"No movable joints between {base} and {ee}.")
+        if len(set(chain.names)) != len(chain.names):
+            dupes = sorted({n for n in chain.names if chain.names.count(n) > 1})
+            refuse("IK_DUPLICATE_JOINT", f"Joints in this chain share a name {dupes}, so their values cannot be told apart "
+                   "by name. Rename them in the source, or pick a shorter chain with base_link.", joints=chain.names)
+        chain.length_scale = 1.0 / mpu
         q_now = None
         if state is not None:
             dof = {n: i for i, n in enumerate(state["names"])}
@@ -752,8 +765,14 @@ class Advanced:
         check = {"status": "skipped"}
         if q_now is not None:  # the model must put the end effector where physics says it is right now
             predicted = chain.fk(q_now)
+            actual = None
             try:
                 actual = body_state(ee, now_time, False, stage)
+            except AssetError as exc:
+                notes.append(f"Self-check skipped: physics reports no body at {ee} ({getattr(exc, 'code', 'error')}).")
+            except Exception as exc:  # the link is not a rigid body physics can report
+                notes.append(f"Self-check skipped: {str(exc)[:120]}")
+            if actual is not None:
                 ax = ik.pose_matrix(actual["world_position"], ik.quat_to_matrix(*actual["orientation_wxyz"]))
                 pos_err = float(np.linalg.norm(ax[:3, 3] - predicted[:3, 3]))
                 rot_err = float(np.linalg.norm(ik.rotation_vector(ax[:3, :3] @ predicted[:3, :3].T)))
@@ -763,10 +782,9 @@ class Advanced:
                            "physics reports it, so its answers would not be trusted. The usual causes are a joint frame the model "
                            "reads differently (a scaled body, a reversed joint, a mimic joint on the chain) or a robot still "
                            "settling: pause, then retry.", check=check, chain=chain.names)
-            except AssetError:
-                raise
-            except Exception as exc:  # the link is not a rigid body physics can report
-                notes.append(f"Self-check skipped: {str(exc)[:120]}")
+                if float(np.max(np.abs(q_now))) < 1e-3:
+                    notes.append("The self-check was made with every joint at zero, a pose that cannot reveal a flipped joint "
+                                 "axis or sign. After a first small move, sim__arm__fk with the current joints is a better check.")
         offset = a.get("offset")
         if offset is not None:
             chain.set_tip(vector(offset, 3))
@@ -805,6 +823,7 @@ class Advanced:
             chain=dict(base=base, end_effector=ee, joints=chain.names),
             iterations=out["iterations"],
             attempts=out["attempts"],
+            **({"timed_out": True} if out.get("timed_out") else {}),
             check=m["check"],
             units="radians for revolute joints, stage units for prismatic; errors in stage units and radians",
             next=(f"Move there: sim__joints__move with path={root!r} and targets={targets!r}. Solve only: nothing was commanded, "

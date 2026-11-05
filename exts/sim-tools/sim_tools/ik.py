@@ -10,6 +10,7 @@ revolute and prismatic joints only, and a chain that crosses a different joint t
 """
 
 import math
+import time
 
 import numpy as np
 
@@ -57,6 +58,14 @@ def pose_matrix(position, rotation):
     m[:3, :3] = rotation
     m[:3, 3] = position
     return m
+
+
+def inverse_rigid(m):
+    """Inverse of a rotation-plus-translation matrix, without a general matrix inverse."""
+    out = np.eye(4)
+    out[:3, :3] = m[:3, :3].T
+    out[:3, 3] = -m[:3, :3].T @ m[:3, 3]
+    return out
 
 
 def rotation_vector(r):
@@ -107,6 +116,8 @@ class Chain:
         self.tip = np.eye(4)  # a point fixed in the end-effector link's frame, such as a fingertip; the link origin by default
         self.movable = [i for i, s in enumerate(steps) if s[1] != "fixed"]
         self.names = [steps[i][0] for i in self.movable]
+        self.kinds = [steps[i][1] for i in self.movable]
+        self.length_scale = 1.0  # stage units per metre: weighs radians against positions and sizes a prismatic step
         self.lower = np.array([steps[i][6] for i in self.movable], dtype=float)
         self.upper = np.array([steps[i][7] for i in self.movable], dtype=float)
 
@@ -120,7 +131,7 @@ class Chain:
                 value = float(q[k])
                 k += 1
             step = t0 @ (np.eye(4) if kind == "fixed" else motion(kind, axis, value)) @ t1_inv
-            t = t @ (np.linalg.inv(step) if reverse else step)
+            t = t @ (inverse_rigid(step) if reverse else step)
         return t @ self.tip
 
     def set_tip(self, offset):
@@ -143,8 +154,8 @@ class Chain:
 def _task_error(chain, q, target, use_orientation):
     current = chain.fk(q)
     err = [target[:3, 3] - current[:3, 3]]
-    if use_orientation:
-        err.append(rotation_vector(target[:3, :3] @ current[:3, :3].T))
+    if use_orientation:  # radians, scaled so one radian weighs one metre's worth of stage units
+        err.append(rotation_vector(target[:3, :3] @ current[:3, :3].T) * chain.length_scale)
     return np.concatenate(err), current
 
 
@@ -159,68 +170,104 @@ def _jacobian(chain, q, target, use_orientation, eps=1e-6):
     return jac
 
 
-def _descend(chain, q0, target, use_orientation, pos_tol, rot_tol, iterations):
+def _errors(chain, err, use_orientation):
+    pos = float(np.linalg.norm(err[:3]))
+    rot = float(np.linalg.norm(err[3:])) / chain.length_scale if use_orientation else 0.0
+    return pos, rot
+
+
+def _descend(chain, q0, target, use_orientation, pos_tol, rot_tol, iterations, deadline):
     """Levenberg-Marquardt: a damped least-squares step whose damping falls while steps help and rises when one does not,
     so it is cautious near singular poses and still converges tightly (the fixed-damping version stalled a few
-    millimetres short on a five-joint arm)."""
+    millimetres short on a five-joint arm). Stops at ``deadline`` (a time.monotonic() value)."""
     q = np.clip(q0.astype(float), chain.lower, chain.upper)
     err, _ = _task_error(chain, q, target, use_orientation)
     damping = 0.1
+    step_cap = np.array([0.3 * (chain.length_scale if kind == "prismatic" else 1.0) for kind in chain.kinds])
     best_q, best_cost = q.copy(), math.inf
+    used = 0
     for count in range(1, iterations + 1):
-        pos = float(np.linalg.norm(err[:3]))
-        rot = float(np.linalg.norm(err[3:])) if use_orientation else 0.0
-        cost = pos + rot
+        used = count
+        pos, rot = _errors(chain, err, use_orientation)
+        cost = pos + rot * chain.length_scale
         if cost < best_cost:
             best_q, best_cost = q.copy(), cost
         if pos <= pos_tol and rot <= rot_tol:
             return q, count, True
+        if time.monotonic() > deadline:
+            return best_q, count, False
         jac = _jacobian(chain, q, target, use_orientation)
         step = jac.T @ np.linalg.solve(jac @ jac.T + damping ** 2 * np.eye(jac.shape[0]), err)
-        norm = float(np.linalg.norm(step))
-        if norm > 0.3:
-            step *= 0.3 / norm
+        over = float(np.max(np.abs(step) / step_cap))
+        if over > 1.0:
+            step /= over
         trial = np.clip(q + step, chain.lower, chain.upper)
         trial_err, _ = _task_error(chain, trial, target, use_orientation)
-        trial_cost = float(np.linalg.norm(trial_err[:3])) + (float(np.linalg.norm(trial_err[3:])) if use_orientation else 0.0)
-        if trial_cost < cost:
+        tpos, trot = _errors(chain, trial_err, use_orientation)
+        if tpos + trot * chain.length_scale < cost:
             q, err = trial, trial_err
             damping = max(damping * 0.5, 1e-6)
         else:
             damping = min(damping * 4.0, 10.0)
-    return best_q, iterations, False
+    pos, rot = _errors(chain, err, use_orientation)  # the last accepted step is judged too
+    if pos <= pos_tol and rot <= rot_tol:
+        return q, used, True
+    return best_q, used, False
 
 
-def solve(chain, q_now, target, use_orientation=True, pos_tol=1e-3, rot_tol=1e-2, iterations=200, restarts=16, seed=0):
+def wrap_toward(chain, q, q_now):
+    """Turn each revolute joint by whole turns, where its limits allow, so it ends the fewest radians from where it is now:
+    -3.1 rad and 3.18 rad are the same pose, and the arm should not swing 6.3 rad to tell them apart."""
+    out = np.array(q, dtype=float)
+    for i, kind in enumerate(chain.kinds):
+        if kind != "revolute":
+            continue
+        near = q_now[i] + ((out[i] - q_now[i] + math.pi) % (2 * math.pi) - math.pi)
+        if chain.lower[i] - 1e-9 <= near <= chain.upper[i] + 1e-9:
+            out[i] = near
+    return out
+
+
+def solve(chain, q_now, target, use_orientation=True, pos_tol=1e-3, rot_tol=1e-2, iterations=200, restarts=16, seed=0,
+          time_budget_s=3.0):
     """Joint values that put the end effector at ``target`` (4x4, world), nearest to ``q_now`` among solutions found.
 
-    Returns a dict with q, reached, position_error, orientation_error, iterations, attempts (how many starts were tried). The first try starts
-    from the current pose; further tries start from seeded random poses inside the limits, and the success closest to
-    the current pose wins. If nothing reaches the tolerance, the least-error result is returned with reached False.
+    Returns a dict with q, reached, position_error, orientation_error, iterations, attempts (how many starts were tried)
+    and timed_out. The first try starts from the current pose; further tries start from seeded random poses inside the
+    limits, and the success closest to the current pose wins. If nothing reaches the tolerance, the least-error result
+    is returned with reached False. After ``time_budget_s`` seconds no further start is made.
     """
     q_now = np.array(q_now, dtype=float)
+    deadline = time.monotonic() + time_budget_s
     rng = np.random.default_rng(seed)
     results = []
     total = 0
+    timed_out = False
+    span = np.array([math.pi if kind == "revolute" else chain.length_scale for kind in chain.kinds])
     for attempt in range(restarts + 1):
         if attempt == 0:
             start = q_now
         else:
-            lo = np.where(np.isfinite(chain.lower), chain.lower, -math.pi)
-            hi = np.where(np.isfinite(chain.upper), chain.upper, math.pi)
+            lo = np.where(np.isfinite(chain.lower), chain.lower, -span)
+            hi = np.where(np.isfinite(chain.upper), chain.upper, span)
             start = rng.uniform(lo, hi)
-        q, used, ok = _descend(chain, start, target, use_orientation, pos_tol, rot_tol, iterations)
+        q, used, ok = _descend(chain, start, target, use_orientation, pos_tol, rot_tol, iterations, deadline)
         total += used
         err, _ = _task_error(chain, q, target, use_orientation)
-        results.append((q, ok, float(np.linalg.norm(err[:3])), float(np.linalg.norm(err[3:])) if use_orientation else 0.0, attempt))
+        pos, rot = _errors(chain, err, use_orientation)
+        results.append((q, ok, pos, rot, attempt))
+        if time.monotonic() > deadline:
+            timed_out = not ok
+            break
         if ok and attempt == 0:
             break
         if ok and attempt >= 1 and sum(1 for r in results if r[1]) >= 2:
             break
     good = [r for r in results if r[1]]
-    pick = min(good, key=lambda r: float(np.linalg.norm(r[0] - q_now))) if good else min(results, key=lambda r: r[2] + r[3])
-    return dict(q=pick[0], reached=bool(pick[1]), position_error=pick[2], orientation_error=pick[3],
-                iterations=total, attempts=len(results))
+    pick = min(good, key=lambda r: float(np.linalg.norm(r[0] - q_now))) if good else min(results, key=lambda r: r[2] + r[3] * chain.length_scale)
+    q_out = wrap_toward(chain, pick[0], q_now)
+    return dict(q=q_out, reached=bool(pick[1]), position_error=pick[2], orientation_error=pick[3],
+                iterations=total, attempts=len(results), timed_out=bool(timed_out))
 
 
 # ---- reading the chain from USD ----------------------------------------------------------------------------
@@ -250,6 +297,7 @@ def body_world_pose(stage, path):
     from pxr import UsdGeom
 
     m = UsdGeom.XformCache().GetLocalToWorldTransform(stage.GetPrimAtPath(path))
+    m = m.RemoveScaleShear()  # a scaled body must not make the base a non-rigid transform
     return np.array([[m[r][c] for c in range(4)] for r in range(4)]).T  # USD matrices are row-vector style
 
 
@@ -304,7 +352,12 @@ def build_chain(stage, joint_prims, base_body, ee_body, base_pose=None):
         scale = math.pi / 180.0 if kind == "revolute" else 1.0
         lo = -math.inf if lower is None or not math.isfinite(lower) else float(lower) * scale
         hi = math.inf if upper is None or not math.isfinite(upper) else float(upper) * scale
-        steps.append((name, kind, AXES.get(axis_token, AXES["X"]), t0, t1_inv, reverse, lo, hi))
+        if axis_token not in AXES:
+            refuse("IK_UNSUPPORTED_AXIS", f"{joint.GetPath()} has the joint axis {axis_token!r}; only X, Y and Z are supported.",
+                   joint=str(joint.GetPath()))
+        if lo > hi:
+            refuse("IK_BAD_LIMITS", f"{joint.GetPath()} has a lower limit above its upper limit ({lo} > {hi}).", joint=str(joint.GetPath()))
+        steps.append((name, kind, AXES[axis_token], t0, t1_inv, reverse, lo, hi))
     base = base_pose if base_pose is not None else body_world_pose(stage, base_body)
     return Chain(steps, base)
 

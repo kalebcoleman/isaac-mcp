@@ -4586,7 +4586,7 @@
       "owner_id": "generic-sim"
     },
     "sim.arm.ik": {
-      "description": "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -4620,7 +4620,7 @@
         },
         "base_link": {
           "type": "string",
-          "description": "Chain start: a link name or path. Default: the articulation root's body.",
+          "description": "Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).",
           "required": false
         },
         "offset": {
@@ -4709,7 +4709,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Chain start: a link name or path. Default: the articulation root's body."
+          "description": "Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world)."
         },
         {
           "name": "offset",

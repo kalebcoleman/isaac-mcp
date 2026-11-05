@@ -727,14 +727,14 @@ add(
 
 add(
     "sim.arm.ik",
-    "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits.",
+    "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits.",
     dict(
         **TARGET,
         path=field("string", "Articulation root, as for sim__joints__state."),
         link=field("string", "The link to place: its name (such as panda_hand) or absolute path."),
         position=field("array", "Target [x, y, z] in stage units, in the world frame unless frame=base."),
         orientation=field("array", "Optional target orientation [w, x, y, z]. Omit to place the link by position only.", False),
-        base_link=field("string", "Chain start: a link name or path. Default: the articulation root's body.", False),
+        base_link=field("string", "Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).", False),
         offset=field("array", "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.", False),
         frame=field("string", "world (default) or base: the frame position and orientation are given in.", False, default="world"),
         position_tolerance=field("number", "Metres of position error that counts as reached.", False, default=0.001),

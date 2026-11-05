@@ -259,3 +259,199 @@ def test_many_poses_built_from_known_joints_are_all_reached(arm):
         if not out["reached"]:
             misses.append((k, out["position_error"], out["orientation_error"]))
     assert not misses, misses
+
+
+# ---- review round 1: harder conventions, and the tool paths a live run cannot cover --------------------------------
+
+def _rx(a):
+    c, s = math.cos(a), math.sin(a)
+    return np.array([[1, 0, 0, 0], [0, c, -s, 0], [0, s, c, 0], [0, 0, 0, 1.0]])
+
+
+def _rz(a):
+    c, s = math.cos(a), math.sin(a)
+    return np.array([[c, -s, 0, 0], [s, c, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1.0]])
+
+
+def _t(x, y, z):
+    m = np.eye(4)
+    m[:3, 3] = [x, y, z]
+    return m
+
+
+def test_forward_kinematics_with_rotated_joint_frames_and_offset_child_frames():
+    """Conventions the straight arm cannot show: a joint frame rotated in its parent (rot0), a joint frame offset in its child
+    (pos1), an X-axis revolute and a Z-axis prismatic joint. The expected matrix is composed by hand, not by sim_tools."""
+    stage = Usd.Stage.CreateInMemory()
+    UsdGeom.Xform.Define(stage, "/Arm")
+    for name, at in (("base", (0, 0, 0)), ("link1", (0, 0.1, 0)), ("hand", (0, 0.1, 0.2))):
+        _body(stage, f"/Arm/{name}", at)
+    quarter = (math.cos(math.pi / 4), 0, 0, math.sin(math.pi / 4))  # 90 degrees about Z, as (w, x, y, z)
+    j1 = _joint(stage, "/Arm/j1", "revolute", "/Arm/base", "/Arm/link1", (0, 0.1, 0), "X", pos1=(0.05, 0, 0), rot0=quarter)
+    j2 = _joint(stage, "/Arm/j2", "prismatic", "/Arm/link1", "/Arm/hand", (0, 0, 0.2), "Z", limits=(-0.5, 0.5), pos1=(0, 0.01, 0))
+    chain = ik.build_chain(stage, [j1, j2], "/Arm/base", "/Arm/hand")
+    for q1, q2 in ((0.0, 0.0), (0.7, 0.0), (-0.4, 0.15), (1.2, -0.3)):
+        expected = _t(0, 0.1, 0) @ _rz(math.pi / 2) @ _rx(q1) @ _t(-0.05, 0, 0) @ _t(0, 0, 0.2) @ _t(0, 0, q2) @ _t(0, -0.01, 0)
+        assert np.allclose(chain.fk(np.array([q1, q2])), expected, atol=1e-6), (q1, q2)
+
+
+def test_build_chain_refuses_reversed_limits_and_an_unknown_axis(arm):
+    stage, joints = arm
+    joints[0].GetAttribute("physics:lowerLimit").Set(10.0)
+    joints[0].GetAttribute("physics:upperLimit").Set(-10.0)
+    with pytest.raises(AssetError) as error:
+        ik.build_chain(stage, joints, "/Arm/base", "/Arm/hand")
+    assert error.value.code == "IK_BAD_LIMITS"
+    joints[0].GetAttribute("physics:lowerLimit").Set(-170.0)
+    joints[0].GetAttribute("physics:upperLimit").Set(170.0)
+    joints[1].GetAttribute("physics:axis").Set("W")
+    with pytest.raises(AssetError) as error:
+        ik.build_chain(stage, joints, "/Arm/base", "/Arm/hand")
+    assert error.value.code == "IK_UNSUPPORTED_AXIS"
+
+
+def test_a_scaled_base_still_gives_a_rigid_base_pose(arm):
+    stage, _joints = arm
+    UsdGeom.Xformable(stage.GetPrimAtPath("/Arm/base")).AddScaleOp().Set(Gf.Vec3f(2, 2, 2))
+    base = ik.body_world_pose(stage, "/Arm/base")
+    assert np.allclose(base[:3, :3] @ base[:3, :3].T, np.eye(3), atol=1e-9)
+
+
+def _continuous_chain():
+    step = ("j", "revolute", (0.0, 0.0, 1.0), pose_of(0.3, 0, 0), np.eye(4), False, -math.inf, math.inf)
+    return ik.Chain([step], np.eye(4))
+
+
+def pose_of(x, y, z):
+    return _t(x, y, z)
+
+
+def test_a_continuous_joint_is_turned_to_the_nearest_equivalent_angle():
+    """-3.1 rad and 3.18 rad are one pose; from 3.0 rad the arm must not swing 6.3 rad to tell them apart."""
+    chain = _continuous_chain()
+    out = ik.wrap_toward(chain, np.array([-3.1]), np.array([3.0]))
+    assert out[0] == pytest.approx(3.0 + 0.1832, abs=1e-3)
+    tight = ik.Chain([("j", "revolute", (0.0, 0.0, 1.0), pose_of(0.3, 0, 0), np.eye(4), False, -3.14, 3.14)], np.eye(4))
+    assert ik.wrap_toward(tight, np.array([-3.1]), np.array([3.0]))[0] == pytest.approx(-3.1)  # the limits forbid turning it
+
+
+def test_solving_gives_up_at_the_time_budget_and_says_so(arm):
+    stage, joints = arm
+    chain = ik.build_chain(stage, joints, "/Arm/base", "/Arm/hand")
+    out = ik.solve(chain, np.zeros(4), ik.pose_matrix([5.0, 0, 0.2], np.eye(3)), use_orientation=False, time_budget_s=0.0)
+    assert out["reached"] is False and out["timed_out"] is True and out["attempts"] == 1
+
+
+def test_the_last_step_is_judged_before_giving_up(arm):
+    stage, joints = arm
+    chain = ik.build_chain(stage, joints, "/Arm/base", "/Arm/link2")
+    target = chain.fk(np.array([0.02, 0.02]))
+    out = ik.solve(chain, np.zeros(2), target, use_orientation=False, pos_tol=5e-3, iterations=1)
+    assert out["reached"]  # one accepted step lands within tolerance; it must not be thrown away
+
+
+@pytest.fixture
+def runtime(arm_in_scene, monkeypatch):
+    """A fake running simulation for the arm built in the scene: joint values at zero, and body poses from the model itself."""
+    advanced, stage = arm_in_scene
+    from sim_tools import physics
+
+    joint_prims = [stage.GetPrimAtPath(f"/Arm/{n}") for n in ("j1", "j2", "j3")]
+    model = ik.build_chain(stage, joint_prims, "/Arm/base", "/Arm/hand")
+    state = dict(names=["j1", "j2", "j3"], positions=[0.0, 0.0, 0.0], velocities=[0.0] * 3)
+    monkeypatch.setattr(advanced, "joints", lambda stage_, path: dict(state))
+
+    def pose(m):
+        return dict(world_position=m[:3, 3].tolist(), orientation_wxyz=ik.matrix_to_quat(m[:3, :3]))
+
+    seen = {"ee": pose(model.fk(np.zeros(3))), "fail": None}
+
+    def body_state(path, now, dynamics=False, stage_=None):
+        if path == "/Arm/hand":
+            if seen["fail"]:
+                raise seen["fail"]
+            return seen["ee"]
+        return pose(np.eye(4))
+
+    monkeypatch.setattr(physics, "body_state", body_state)
+    return advanced, stage, state, seen, model
+
+
+def test_ik_on_a_running_arm_solves_and_the_self_check_agrees(runtime):
+    advanced, stage, _state, _seen, model = runtime
+    target = model.fk(np.array([0.3, -0.4, 0.5]))
+    result = advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=target[:3, 3].tolist()))
+    assert result["reached"] and result["check"]["status"] == "ok" and result["check"]["position_error"] < 1e-9
+    assert any("every joint at zero" in n for n in result["notes"])  # the zero-pose self-check says what it cannot reveal
+    assert set(result["joint_targets"]) == {"j1", "j2", "j3"}
+
+
+def test_a_link_physics_does_not_report_skips_the_self_check_instead_of_refusing(runtime):
+    advanced, stage, _state, seen, model = runtime
+    seen["fail"] = AssetError("PHYSICS_NOT_READY", "PhysX has no initialized body at this path.")
+    result = advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=model.fk(np.array([0.2, 0.1, 0.1]))[:3, 3].tolist()))
+    assert result["check"]["status"] == "skipped" and any("Self-check skipped" in n for n in result["notes"])
+
+
+def test_a_model_that_disagrees_with_physics_is_refused(runtime):
+    advanced, stage, _state, seen, _model = runtime
+    seen["ee"] = dict(world_position=[0.9, 0.0, 0.2], orientation_wxyz=[1.0, 0.0, 0.0, 0.0])  # physics says the hand is elsewhere
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=[0.5, 0.0, 0.2]))
+    assert error.value.code == "IK_MODEL_MISMATCH" and error.value.details["check"]["position_error"] > 0.1
+
+
+def test_forward_kinematics_does_not_hide_an_invalid_simulation_state(arm_in_scene, monkeypatch):
+    advanced, stage = arm_in_scene
+
+    def broken(stage_, path):
+        raise AssetError("PHYSICS_STATE_INVALID", "NaN joint positions.")
+
+    monkeypatch.setattr(advanced, "joints", broken)
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.arm.fk", stage, dict(path="/Arm", link="hand"))
+    assert error.value.code == "PHYSICS_STATE_INVALID"  # only "not running" may fall back to the authored pose
+
+
+def test_a_target_in_the_base_frame_matches_the_world_frame(runtime):
+    advanced, stage, _state, _seen, model = runtime
+    target = model.fk(np.array([0.3, -0.4, 0.5]))
+    world = advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=target[:3, 3].tolist()))
+    based = advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=target[:3, 3].tolist(), frame="base"))
+    assert world["reached"] and based["reached"]  # the base sits at the origin, so the two frames agree
+    assert advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=[0, 0, 0], frame="elsewhere")) if False else True
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=[0.4, 0.0, 0.2], frame="elsewhere"))
+    assert error.value.code == "INVALID_FRAME"
+
+
+def test_a_degree_of_freedom_the_simulation_lacks_is_refused(runtime):
+    advanced, stage, state, _seen, _model = runtime
+    state["names"] = ["j1", "j2"]
+    state["positions"] = [0.0, 0.0]
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=[0.4, 0.0, 0.2]))
+    assert error.value.code == "IK_DOF_MISSING"
+
+
+def test_joints_sharing_a_name_in_one_chain_are_refused(advanced):
+    stage = advanced.s.stage()
+    UsdGeom.Xform.Define(stage, "/Arm")
+    for name, at in (("base", (0, 0, 0)), ("link1", (0.3, 0, 0)), ("hand", (0.6, 0, 0))):
+        _body(stage, f"/Arm/{name}", at)
+    UsdGeom.Xform.Define(stage, "/Arm/a")
+    UsdGeom.Xform.Define(stage, "/Arm/b")
+    _joint(stage, "/Arm/a/j", "revolute", "/Arm/base", "/Arm/link1", (0.3, 0, 0), "Z")
+    _joint(stage, "/Arm/b/j", "revolute", "/Arm/link1", "/Arm/hand", (0.3, 0, 0), "Z")
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.arm.fk", stage, dict(path="/Arm", link="hand"))
+    assert error.value.code == "IK_DUPLICATE_JOINT"
+
+
+def test_solve_applies_the_wrap_around_to_what_it_returns(arm, monkeypatch):
+    stage, joints = arm
+    chain = ik.build_chain(stage, joints, "/Arm/base", "/Arm/hand")
+    called = []
+    monkeypatch.setattr(ik, "wrap_toward", lambda c, q, q_now: (called.append(1), q)[1])
+    ik.solve(chain, np.zeros(4), chain.fk(np.array([0.2, 0.1, 0.1, 0.0])), use_orientation=False)
+    assert called

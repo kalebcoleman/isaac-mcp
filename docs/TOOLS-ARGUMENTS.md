@@ -392,7 +392,7 @@ Forward kinematics: where a link (the hand) would be for given joint values, fro
 
 ### `sim__arm__ik`
 
-Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.
+Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -400,7 +400,7 @@ Inverse kinematics for any robot with revolute or prismatic joints, read from it
 - `link` (string, required): The link to place: its name (such as panda_hand) or absolute path.
 - `position` (array, required): Target [x, y, z] in stage units, in the world frame unless frame=base.
 - `orientation` (array, optional): Optional target orientation [w, x, y, z]. Omit to place the link by position only.
-- `base_link` (string, optional): Chain start: a link name or path. Default: the articulation root's body.
+- `base_link` (string, optional): Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).
 - `offset` (array, optional): Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.
 - `frame` (string, default `"world"`): world (default) or base: the frame position and orientation are given in.
 - `position_tolerance` (number, default `0.001`): Metres of position error that counts as reached.
