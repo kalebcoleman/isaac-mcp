@@ -727,6 +727,34 @@ add(
 )
 
 add(
+    "sim.arm.ik",
+    "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits.",
+    dict(
+        **TARGET,
+        path=field("string", "Articulation root, as for sim__joints__state."),
+        link=field("string", "The link to place: its name (such as panda_hand) or absolute path."),
+        position=field("array", "Target [x, y, z] in stage units, in the world frame unless frame=base."),
+        orientation=field("array", "Optional target orientation [w, x, y, z]. Omit to place the link by position only.", False),
+        base_link=field("string", "Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).", False),
+        offset=field("array", "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.", False),
+        frame=field("string", "world (default) or base: the frame position and orientation are given in.", False, default="world"),
+        position_tolerance=field("number", "Metres of position error that counts as reached.", False, default=0.001),
+        orientation_tolerance=field("number", "Radians of orientation error that counts as reached.", False, default=0.01),
+    ),
+)
+add(
+    "sim.arm.fk",
+    "Forward kinematics: where a link (the hand) would be for given joint values, from the robot's own USD joints, in the world and base frames. Joints you leave out use their current values when the simulation runs, else zero. Commands nothing; pair it with sim__arm__ik. Works stopped or running; when running it first checks its model against physics.",
+    dict(
+        **TARGET,
+        path=field("string", "Articulation root, as for sim__joints__state."),
+        link=field("string", "The link: its name (such as panda_hand) or absolute path."),
+        joints=field("object", "Optional {joint name: value}: radians for revolute, stage units for prismatic, e.g. sim__arm__ik's joint_targets.", False),
+        offset=field("array", "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.", False),
+        base_link=field("string", "Chain start: a link name or path. Default: the articulation root's body.", False),
+    ),
+)
+add(
     "sim.joints.command",
     "Command initialized articulation position targets by name (targets) or in DOF order (positions), and/or velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless clamp=true, which reports what it clamped; unknown names list the valid ones. Returns applied targets and previous values, not achieved poses: compare sim__joints__state. Runtime only and lost on Stop; sim__joints__drive authors USD targets.",
     dict(

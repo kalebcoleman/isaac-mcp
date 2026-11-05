@@ -685,7 +685,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 if canonical == "sim.map.occupancy" and f["name"] == "clear":
                     # A list of [x, y, radius] circles; list[float] rejected every valid value.
                     annotation = list[Annotated[list[float], Field(min_length=3, max_length=3)]]
-                lengths = {"position": 3, "orientation": 4, "scale": 3,
+                lengths = {"position": 3, "offset": 3, "orientation": 4, "scale": 3,
                            "color": 3, "gravity": 3, "target": 3,
                            "rotate_xyz": 3, "eye": 3, "clipping_range": 2}
                 if f["name"] in lengths:
