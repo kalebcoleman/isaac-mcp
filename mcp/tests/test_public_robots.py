@@ -231,3 +231,26 @@ def test_a_file_with_no_time_code_range_is_reported():
     assert "startTimeCode" in time_code_report(stage)["time_code_note"]
     stage.SetEndTimeCode(1000000.0)
     assert time_code_report(stage) == {}
+
+
+@pytest.mark.parametrize("name, tail", [("unitree_h1", "Unitree/H1/h1.usd"), ("unitree_g1", "Unitree/G1/g1.usd")])
+def test_the_humanoids_load_by_name_from_this_builds_root(name, tail):
+    url = f"{ROOT}/Isaac/Robots/{tail}"
+    found = _locate(name, existing={url})
+    assert found["uri"] == url and found["wheels"] is None
+
+
+def test_a_humanoid_missing_from_a_build_is_refused_with_the_names():
+    with pytest.raises(AssetError) as exc:
+        _locate("unitree_h1", existing=set())
+    assert "unitree_g1" in str(exc.value)
+
+
+def test_only_the_humanoids_are_lifted_onto_the_ground():
+    """A humanoid's origin is its pelvis. Carter's and Nova Carter's files read 50 to 1,500 m below the ground, so they must never be lifted."""
+    lifted = sorted(name for name, entry in pr.NVIDIA_ROBOTS.items() if entry.get("lift_to_ground"))
+    assert lifted == ["unitree_g1", "unitree_h1"]
+    url = f"{ROOT}/Isaac/Robots/Unitree/H1/h1.usd"
+    assert _locate("unitree_h1", existing={url})["lift_to_ground"] is True
+    franka = f"{ROOT}/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+    assert _locate("franka", existing={franka})["lift_to_ground"] is False

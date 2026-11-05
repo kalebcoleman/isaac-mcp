@@ -1057,3 +1057,46 @@ def test_a_failed_handover_does_not_release_the_claim(runtime, monkeypatch):
     assert (runtime / "port-18820.claim").exists()
     with pytest.raises(sim._Refusal):
         sim._claim("port", 18820, owner)
+
+
+_NEXT = {"n": 0}
+
+
+def _launch_env(setup, monkeypatch):
+    captured = {}
+    _NEXT["n"] += 1
+
+    def popen(args, **kwargs):
+        captured["env"] = kwargs["env"]
+        return SimpleNamespace(pid=511, wait=lambda: 0)
+
+    monkeypatch.setattr(sim.subprocess, "Popen", popen)
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
+    monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
+    sim._launch(setup, 18890 + _NEXT["n"], 190 + _NEXT["n"], True, False)
+    return captured["env"]
+
+
+def test_a_launched_kit_gets_the_project_this_host_resolves(setup, monkeypatch, tmp_path):
+    """Kit starts in another folder; without this it would never read the project's pack or asset_path."""
+    project = tmp_path / "proj" / "isaac-mcp.json"
+    monkeypatch.delenv("ISAAC_MCP_PROJECT", raising=False)
+    monkeypatch.setattr(sim, "_host_project_file", lambda: project)
+    assert _launch_env(setup, monkeypatch)["ISAAC_MCP_PROJECT"] == str(project)
+
+
+def test_an_explicit_project_setting_is_kept_and_no_project_adds_nothing(setup, monkeypatch, tmp_path):
+    monkeypatch.setenv("ISAAC_MCP_PROJECT", "/chosen/project")
+    monkeypatch.setattr(sim, "_host_project_file", lambda: tmp_path / "other" / "isaac-mcp.json")
+    assert _launch_env(setup, monkeypatch)["ISAAC_MCP_PROJECT"] == "/chosen/project"
+    monkeypatch.delenv("ISAAC_MCP_PROJECT")
+    monkeypatch.setattr(sim, "_host_project_file", lambda: None)
+    assert "ISAAC_MCP_PROJECT" not in _launch_env(setup, monkeypatch)
+
+
+def test_session_records_carry_the_argument_name_the_other_tools_take():
+    """sim__launch and sim__list say `id`, while sim__status and sim__stop ask for `session_id`: give both."""
+    record = sim._public({"id": "abc123", "pid": 5, "boot_id": "x", "start_ticks": 1})
+    assert record["session_id"] == "abc123" and record["id"] == "abc123"
+    assert "boot_id" not in record and "start_ticks" not in record
+    assert "session_id" not in sim._public({"pid": 5})

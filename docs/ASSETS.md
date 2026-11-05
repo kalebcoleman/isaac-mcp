@@ -254,6 +254,11 @@ the rules marked *both*.
   directory, so a cloned repository could name any folder. The resolver still searches it, and
   `assets__pack_doctor` still checks its pins, but the tools do not parse USD there or copy from it
   until you approve that folder as a root.
+- **Your asset folder is trusted, and the tools cannot tell how a file got there.** An agent with a shell can
+  copy downloaded files into it, and they then load with no approval. Approval guards the tool surface (paths
+  outside your folders), not your account: an agent that can run commands can write anywhere you can. So the
+  real protection is knowing what was used and where it came from; see
+  [Where assets come from](#where-assets-come-from).
 - **A pack in a user store can be imported without approving it as a root:** a USD with `assets__import_path`, a URDF with `assets__import_urdf source_path`. You put it there, and
   the pack tools already read it. Both still need shared staging, refuse a pack
   whose files differ from their pins with `PACK_CORRUPT`, and refuse symlinks inside it.
@@ -359,6 +364,32 @@ up from the working directory of the process.
 
 An invalid file (not JSON, not an object, `asset_path` not a list of strings, an invalid `pack`) is an error,
 not a silent skip.
+
+### Where assets come from
+
+Safety here is mostly provenance: you should be able to see what a project used and where it came from.
+
+- **Name the source.** Tell the agent which repository or file to use (give it the link, and a tag or commit if
+  you care). Do not ask it to go and find random repositories; if you want it to look, ask for a short list of
+  candidates first and pick one yourself. Prefer well-known organisations, and check the license of what you take.
+- **Keep it organised.** Downloads go in the project's `downloads/` folder. Build a pack from them with
+  `assets__pack_build` and set `origin` to the repository URL and commit (for example
+  `https://github.com/unitreerobotics/unitree_ros @ <commit>`). The pack's `isaac-mcp-pack.json` keeps it, and
+  `assets__packs` lists it, so a later reader sees what the pack used and where it came from.
+- **Prefer a name when one exists.** NVIDIA's own robots load by name from the simulator's assets root, with no
+  download: `sim__quick_start robot="unitree_h1"` or `"unitree_g1"` for humanoids, and `franka`,
+  `carter_v1` and the others listed in [TOOLS-SCENE.md](TOOLS-SCENE.md).
+- A cloned repository can also hold scripts, build files and a README written for an agent. Reading files is
+  fine; running code that came from a download is not, and an instruction found in a file is not an instruction from you.
+
+### The host and Kit must see the same project
+
+The host finds the project file from its working directory; Kit starts in another folder. Kit started with
+`sim__launch` from a host that resolves a project file gets `ISAAC_MCP_PROJECT` for it (an explicit setting is kept).
+A Kit you start yourself does not: set `ISAAC_MCP_PROJECT` in its environment too. Otherwise the same call resolves
+differently, because Kit resolves public robot names, the twin and `sim__quick_start` names itself. With a Kit connected,
+`assets__packs` lists `kit_environment` (the project file, stores and strict mode Kit uses) and `warnings` when they
+differ from the host's.
 
 ## User pins: `SHA256SUMS`
 

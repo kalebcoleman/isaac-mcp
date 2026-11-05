@@ -22,6 +22,7 @@ from isaac_mcp.urdf_physics import usd_gains, usd_name
 
 GROUND_CLEARANCE_M = 0.005
 LOWEST_TOLERANCE_M = 0.001
+MAX_AUTO_LIFT_M = 3.0  # a bigger "lowest point" is stray geometry, not a robot standing in the floor: report it, do not move the robot
 MAX_GROUND_SEARCH = 50000
 # 6.x offers a shared "physics" description; the 5.x importer's only one is called "PhysX".
 SHARED_PHYSICS_VARIANTS = ("physics", "PhysX")
@@ -215,7 +216,25 @@ def lowest_point(stage, path):
     return None if box.IsEmpty() else box.GetMin()[2]
 
 
-def place_above_ground(stage, path, position_given):
+def _raise_prim(prim, step):
+    """Move *prim* by *step* (a vector in its parent's frame) in the current edit target, whatever its first transform op is."""
+    xform = UsdGeom.Xformable(prim)
+    ops = xform.GetOrderedXformOps()
+    first = ops[0] if ops else None
+    if first is not None and first.GetOpType() == UsdGeom.XformOp.TypeTransform and not first.IsInverseOp():
+        matrix = Gf.Matrix4d(first.Get())
+        matrix.SetTranslateOnly(matrix.ExtractTranslation() + step)
+        first.Set(matrix)
+    elif first is not None and first.GetOpType() == UsdGeom.XformOp.TypeTranslate and not first.IsInverseOp():
+        moved = Gf.Vec3d(first.Get() or (0, 0, 0)) + step
+        first.Set(Gf.Vec3f(moved) if first.GetPrecision() == UsdGeom.XformOp.PrecisionFloat else moved)
+    else:  # none, or a rotation or scale first: a translate placed first acts in the parent's frame
+        lift = xform.AddTranslateOp(opSuffix="lift")
+        lift.Set(step)
+        xform.SetXformOpOrder([lift, *ops], resetXformStack=xform.GetResetXformStack())
+
+
+def place_above_ground(stage, path, position_given, max_lift=None):
     """A robot whose origin is its body starts partly under the floor at the origin, and the contact
     solver then throws it apart. Lift it onto the ground, or warn if the caller chose the position."""
     ground, lowest = ground_height(stage), lowest_point(stage, path)
@@ -228,14 +247,15 @@ def place_above_ground(stage, path, position_given):
                              f"throws the joints far past their limits: raise position by at least {lift:.3f}.")
         return report
     lift = ground - lowest + GROUND_CLEARANCE_M
+    if max_lift is not None and lift > max_lift:
+        report["warning"] = (f"The robot's lowest point reads {ground - lowest:.1f} m below the ground plane, more than the {max_lift:g} m "
+                             "an automatic lift allows (stray geometry in the file is the usual cause), so it was not moved.")
+        return report
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         prim = stage.GetPrimAtPath(path)
         parent = UsdGeom.Xformable(prim.GetParent()).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
         step = parent.GetInverse().TransformDir(Gf.Vec3d(0, 0, lift))
-        op = UsdGeom.Xformable(prim).GetOrderedXformOps()[0]
-        matrix = Gf.Matrix4d(op.Get())
-        matrix.SetTranslateOnly(matrix.ExtractTranslation() + step)
-        op.Set(matrix)
+        _raise_prim(prim, step)
     report["lifted_by"] = lift
     report["note"] = (f"The robot's lowest point was {ground - lowest:.3f} under the ground plane, so it was raised by "
                       f"{lift:.3f}. Pass position to choose the height yourself.")

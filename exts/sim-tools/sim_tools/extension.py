@@ -667,6 +667,20 @@ class Extension(omni.ext.IExt):
 
         return dict(results=split_runtime(closures(paths), Path(isaacsim.__file__).parent.resolve()))
 
+    @staticmethod
+    def _asset_environment():
+        """What this Kit's asset resolver uses, so the host can tell when it differs from its own."""
+        try:
+            from isaac_mcp import assets
+
+            resolver = assets.resolver()
+            project = assets.project_file()
+            return dict(project_file=str(project) if project else None,
+                        stores=[str(p) for p in resolver.stores()],
+                        packs=list(resolver.packs()), strict=bool(resolver.offline()))
+        except Exception as exc:  # noqa: BLE001 - reporting must never break stage_info
+            return dict(error=str(exc)[:200])
+
     def dispatch(self, name, a, *, camera_frame=None):
         s = self.scene
         if name == "assets.dependencies":
@@ -699,6 +713,7 @@ class Extension(omni.ext.IExt):
             import omni.kit.app as kit_app
 
             result["runtime"] = runtime_identity()
+            result["asset_environment"] = self._asset_environment()
             result["app_ready"] = kit_app.get_app().is_app_ready()
             result["sensor_resources"] = {
                 "count": len(self.advanced.sensors),

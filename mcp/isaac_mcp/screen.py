@@ -1572,9 +1572,9 @@ def register_screen_tools(
     ) -> str:
         """Start a desktop MP4 recording, e.g. for a demo; one at a time, no audio. Stop it with
         stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window
-        if one is open. A window recording reads that window's own pixels, so it works when covered or
-        on a locked screen. Details: docs/TOOLS-HOST.md. For a clean viewport render of the UR5e twin,
-        use ur5e_dt__start_recording; to combine clips, join_videos.
+        if one is open; a window recording works when covered or on a locked screen. The recording ends
+        if this MCP server process exits, so keep one client connected from start to stop.
+        Details: docs/TOOLS-HOST.md. UR5e twin render: ur5e_dt__start_recording; to combine clips, join_videos.
 
         Privacy: the recording is saved on this machine; window titles and pixels can reach the model
         through the other screen tools.

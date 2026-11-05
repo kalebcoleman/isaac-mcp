@@ -134,3 +134,9 @@ def test_the_argument_reference_shows_clean_types():
     text = (REPO / "docs/TOOLS-ARGUMENTS.md").read_text()
     assert "Annotated[" not in text and "Field(" not in text
     assert "- `window_id` (_WindowId" not in text and "`window_id` (int | None, default `None`): Window id from list_windows." in text
+
+
+def test_the_recording_tool_says_it_ends_with_its_server_process(listed):
+    """A shell script that starts and stops a recording in separate processes loses it, so say so where the agent reads."""
+    text = " ".join(next(t.description for t in listed if t.name == "start_screen_recording").split())
+    assert "ends if this MCP server process exits" in text and "one client connected" in text

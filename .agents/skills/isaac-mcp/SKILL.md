@@ -195,6 +195,12 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   `assets__pack_doctor` read; `assets__pack_adopt`, `assets__pack_pin` and `assets__pack_build` write
   only to the primary asset folder and need `force=true` to replace anything. Read refusals such as
   `UNRESOLVED_DEPENDENCIES` before passing an override. See `docs/ASSETS.md`.
+- **Where assets come from:** use a source the user names (a link, or a public robot name such as
+  `unitree_h1` for `sim__quick_start`). If they named none and you need one, propose a short list and wait; do
+  not search for random repositories. Download into the project's `downloads/` folder, build a pack with
+  `assets__pack_build` and set `origin` to the repository URL and commit, and never run code from a download.
+  An agent with a shell can also copy files into the asset folder, which loads with no approval, so recording
+  `origin` is what lets the user see what was used. See `docs/ASSETS.md`.
 - **Project assets:** `assets__roots` → `assets__scan` / `assets__search` (filename-only, host
   side) → `assets__info` → `assets__import_usd` or `assets__import_urdf`. Only launch-approved
   trusted roots are accepted; there is no URL input and no untrusted/hostile-USD isolation.

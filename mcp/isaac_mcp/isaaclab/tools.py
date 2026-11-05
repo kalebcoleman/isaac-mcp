@@ -197,7 +197,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
 
     @mcp.tool(name="isaaclab__runs_status", annotations=DESTRUCTIVE)
     def isaaclab_runs_status(job_id: _JobId) -> str:
-        """State, exit code, elapsed time, last log lines, newest checkpoint and, for an eval job, its
+        """State, exit code, elapsed time, last log lines, newest checkpoint, `physics` (the engine Lab
+        announced, such as newton_mjwarp or physx), `environment_ready`, and, for an eval job, its
         `eval_result` score once written. For a windowed job also `window` (id, title, size): pass its id to
         screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result. Reconciles
         orphaned jobs by updating their stored metadata."""

@@ -1286,3 +1286,33 @@ def test_adopt_reports_a_symlink_it_did_not_copy(env, broker):
                          {"pack": "linked2", "source_path": str(root), "dry_run": True}, broker)
     assert dry["skipped_symlinks"] == ["alias.usda", "link/"]
     assert not (env / "linked2").exists()
+
+
+def test_origin_is_recorded_once_kept_and_listed(lab, env, tmp_path):
+    dest = env / "bricksim"
+    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()], source_note="https://example.test/repo @ abc123")
+    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()], source_note="https://example.test/repo @ abc123")
+    assert packs.read_pack_file(dest)["origin"] == ["https://example.test/repo @ abc123"]  # the same note is not added twice
+    packs.write_pack_file(dest, [])  # a later write without a note keeps it
+    assert packs.read_pack_file(dest)["origin"] == ["https://example.test/repo @ abc123"]
+    packs.write_pack_file(dest, [], origin="a second source")
+    assert packs.read_pack_file(dest)["origin"] == ["https://example.test/repo @ abc123", "a second source"]
+    listed = packs.list_packs([env])[0]["packs"]
+    assert [p["origin"] for p in listed if p["name"] == "bricksim"] == [["https://example.test/repo @ abc123", "a second source"]]
+
+
+def test_a_pack_with_no_origin_lists_none_and_writes_no_field(lab, env):
+    dest = env / "plain"
+    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
+    assert "origin" not in packs.read_pack_file(dest)
+
+
+@pytest.mark.parametrize("bad", ["two\nlines", "x" * 301, "tab\there", 5, ["a"]])
+def test_origin_must_be_one_short_line_of_text(bad):
+    with pytest.raises(packs.PackError) as caught:
+        packs.clean_origin(bad)
+    assert caught.value.code == "INVALID_VALUE"
+
+
+def test_origin_blank_means_none():
+    assert packs.clean_origin(None) is None and packs.clean_origin("") is None and packs.clean_origin("   ") is None

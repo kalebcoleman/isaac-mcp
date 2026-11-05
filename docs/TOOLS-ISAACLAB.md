@@ -338,7 +338,7 @@ verified; an unscoreable script shows up as `episodes: 0` / no score, not a numb
   |---|---|---|---|---|
   | `job_id` | string | yes | — | Validated id. |
 - Returns:
-  `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, log_dir, pid}`
+  `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, log_dir, pid, environment_ready}` and `physics` (the engine Lab's banner names, such as `newton_mjwarp` or `physx`; a task picks its own, and Newton is not PhysX)
   plus `window: {id, title, width, height}` when the job is live and owns a window, and `eval_result`
   (`episodes`, `mean_return`, ...) for an `isaaclab__eval` job whose runner has written it, including after the
   host that started the job has gone (it is read from `eval_result.json` in the job folder). `last_log_lines` is the last 20 useful lines of `stdout.log` (a progress-bar line keeps only its newest text after a carriage return, and a line that is only a bar is dropped, so skrl and sb3 tails show log text rather than bars); a failed job also has `last_stderr_lines`, the last 20 of `stderr.log`, where launch and import failures go. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.

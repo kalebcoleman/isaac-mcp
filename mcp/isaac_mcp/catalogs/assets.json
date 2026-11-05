@@ -488,7 +488,7 @@
       "owner_id": "generic-assets"
     },
     "assets.packs": {
-      "description": "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs.",
+      "description": "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs. With a Kit connected it also lists kit_environment and warns when Kit and this host use different project files, stores or strict mode.",
       "parameters": {},
       "fields": [],
       "namespace": "assets",
@@ -738,6 +738,11 @@
           "description": "Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for.",
           "required": false
         },
+        "origin": {
+          "type": "string",
+          "description": "Where these files came from, one line (for example a repository URL and commit). Recorded in the pack's isaac-mcp-pack.json and listed by assets__packs, so you can see later what a pack used.",
+          "required": false
+        },
         "allow_unresolved": {
           "type": "boolean",
           "description": "Build despite missing or remote references, and record them.",
@@ -793,6 +798,15 @@
           "default": null,
           "has_default": false,
           "description": "Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for."
+        },
+        {
+          "name": "origin",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Where these files came from, one line (for example a repository URL and commit). Recorded in the pack's isaac-mcp-pack.json and listed by assets__packs, so you can see later what a pack used."
         },
         {
           "name": "allow_unresolved",

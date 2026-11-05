@@ -108,7 +108,7 @@ add(
     "sim.quick_start",
     "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
     dict(
-        robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from a pack in your asset folder, or an absolute path under an approved root (as for assets__import_path and assets__import_urdf). Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (from this simulator's own assets root). A file found only through a project file's asset_path is refused.", False),
+        robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from your asset folder, or an absolute path under an approved root. Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, unitree_h1, unitree_g1 (humanoids), turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (this simulator's own assets root). A file found only through a project file's asset_path is refused.", False),
         fixed_base=field("boolean", "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False, default=True),
         ros=field("boolean", "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.", False, default=False),
         up_axis=field("string", "The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.", False, default="Z", enum=["Z", "Y"]),
@@ -317,7 +317,7 @@ HOST_ONLY = {
 }
 add(
     "assets.packs",
-    "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs.",
+    "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs. With a Kit connected it also lists kit_environment and warns when Kit and this host use different project files, stores or strict mode.",
 )
 add(
     "assets.pack_doctor",
@@ -377,6 +377,11 @@ add(
         layout_root=field(
             "string",
             "Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for.",
+            False,
+        ),
+        origin=field(
+            "string",
+            "Where these files came from, one line (for example a repository URL and commit). Recorded in the pack's isaac-mcp-pack.json and listed by assets__packs, so you can see later what a pack used.",
             False,
         ),
         allow_unresolved=field(

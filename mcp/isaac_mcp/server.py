@@ -894,7 +894,7 @@ def _quick_start_robot_path(robot: str) -> str:
     if os.path.isabs(os.path.expanduser(robot)):
         return robot
     from . import assets
-    from .project_assets import AssetError
+    from .project_assets import AssetError, approval_help
 
     pack, _, rel = robot.partition("/")
     try:
@@ -906,7 +906,7 @@ def _quick_start_robot_path(robot: str) -> str:
         if (store / pack / rel).is_file():
             return str(store / pack / rel)
     raise AssetError("ASSET_MISSING", f"{rel} is not in pack {pack} in your asset folder ({[str(s) for s in stores]}). "
-                     "A pack named only by a project file's asset_path is not an approval. List packs with assets__packs.")
+                     "A pack named only by a project file's asset_path is not an approval. List packs with assets__packs." + approval_help(next(iter(assets.project_stores()), None)))
 
 
 def _post_dispatch(canonical: str, params: Dict[str, Any], result: str) -> str:

@@ -30,6 +30,10 @@ NVIDIA_ROBOTS = {
                       wheels=_wheels("left_wheel", "right_wheel", 0.24, 0.54, "chassis_link")),
     "nova_carter": dict(prim="NovaCarter", paths=[ROBOTS + "NVIDIA/NovaCarter/nova_carter.usd"],
                         wheels=_wheels("joint_wheel_left", "joint_wheel_right", 0.14, 0.413, "chassis_link")),
+    # A humanoid's origin is its pelvis, so at the world origin its legs start inside the floor: lift it onto the ground.
+    # Only these are lifted: Carter's and Nova Carter's USD carry stray geometry that reads as 50 to 1,500 m below the ground.
+    "unitree_h1": dict(prim="UnitreeH1", paths=[ROBOTS + "Unitree/H1/h1.usd"], lift_to_ground=True),
+    "unitree_g1": dict(prim="UnitreeG1", paths=[ROBOTS + "Unitree/G1/g1.usd"], lift_to_ground=True),
     "jetbot": dict(prim="Jetbot", paths=[ROBOTS + "NVIDIA/Jetbot/jetbot.usd"],
                    wheels=_wheels("left_wheel_joint", "right_wheel_joint", 0.03, 0.1125, "chassis")),
     "create3": dict(prim="Create3", paths=[ROBOTS + "iRobot/Create3/create_3.usd"],
@@ -85,7 +89,8 @@ async def locate(name, root, stat, offline=False):
         try:
             if await stat(url):
                 report = dict(asset=path, source="nvidia_assets_root", location=url)
-                return dict(name=entry["prim"], uri=url, assets=[report], wheels=entry.get("wheels"))
+                return dict(name=entry["prim"], uri=url, assets=[report], wheels=entry.get("wheels"),
+                            lift_to_ground=bool(entry.get("lift_to_ground")))
         except (OSError, asyncio.TimeoutError) as exc:  # unreachable is not the same as absent
             failed = f"{type(exc).__name__}: {str(exc)[:120]}"
     if failed:
