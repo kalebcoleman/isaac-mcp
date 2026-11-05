@@ -138,21 +138,65 @@ That is it. From there, use any prompt above. Trouble connecting? See
 
 ## How it fits together
 
+Three programs are involved, and it helps to know which does what.
+
+1. **Your AI agent** (Claude Code, Codex, OpenCode). It talks to this project using MCP, a standard way for an agent to
+   call tools. It never touches Isaac Sim directly.
+2. **The isaac-mcp server**, a small ordinary Python program your agent starts. It lists the tools and passes each call
+   on to the right place. It does not need Isaac Sim installed, which is why the tool list appears instantly, even when
+   no simulator is running.
+3. **Isaac Sim**, which does the real work. Isaac Sim is built on NVIDIA's *Kit*, an application framework, so a running
+   Isaac Sim is often called "a Kit process". `./run.sh` starts one with this project's extensions loaded.
+
 ```mermaid
 flowchart LR
-    client["MCP client<br/>Claude Code · Codex · OpenCode"] -- "stdio MCP" --> host["<b>isaac-mcp</b> host server<br/>plain Python, no Isaac Sim needed"]
-    host -- "NDJSON over TCP<br/>:8766 by default" --> bridge
-    host --> desktop["Screenshots<br/>and window tools"]
-    host --> lab["Isaac Lab jobs"]
-    subgraph kit["Isaac Sim (Kit process)"]
-        bridge["isaac.mcp.bridge"]
-        sim["sim-tools<br/>sim__*, assets__*"] --> bridge
-        twin["ur5e-dt<br/>ur5e_dt__*"] --> bridge
+    agent["<b>Your AI agent</b><br/>Claude Code, Codex, OpenCode"] -- "MCP" --> server["<b>isaac-mcp server</b><br/>plain Python, starts instantly"]
+
+    server -- "port 8766<br/>(live scene tools)" --> sim
+    server -- "starts a separate job,<br/>reads its files<br/>(no port)" --> lab
+    server -- "screen and window tools" --> screen["Your desktop<br/>screenshots, recordings"]
+
+    subgraph sim["<b>Isaac Sim you started</b> (run.sh)"]
+        bridge["bridge extension<br/>listens on port 8766"] --> scene["The live scene<br/>(USD stage)"]
+    end
+
+    subgraph lab["<b>Isaac Lab job</b> (its own Isaac Sim)"]
+        train["training, evaluation<br/>or play script"]
     end
 ```
 
-The host starts instantly and lists its tools before Isaac Sim is running. A call that needs a scene returns an error
-that says what to do if no simulator is up. See [Architecture](docs/ARCHITECTURE.md).
+**Why the scene tools use port 8766.** A scene (a USD *stage*, the 3D world Isaac Sim holds in memory) can only be
+changed from inside the Isaac Sim process that holds it. So Isaac Sim loads a small *bridge* extension that listens on a
+local network port, 8766 by default. When you ask for a cube, the server sends "create a cube here" to the bridge, the
+bridge makes it inside the running scene, and the answer comes back. That is every `sim__*`, `assets__*`, `ur5e_dt__*`
+and built-in tool such as `run_python`.
+
+**Why Isaac Lab does not.** Isaac Lab is a robot-learning framework built on top of Isaac Sim. A Lab training run is a
+separate program: it starts *its own* Isaac Sim, builds many copies of a task, trains for minutes or hours, then exits.
+There is no scene of yours to reach into, so there is nothing for a bridge to do. The server starts the job, then watches
+its log, metrics, checkpoints and exit code (`isaaclab__runs_status`, `isaaclab__metrics_summary`). Because a Lab job and
+your interactive Isaac Sim are each a full simulator, they compete for the GPU. On a 16 GB card, a Lab job refuses to start
+while your bridge is running unless you pass `allow_concurrent_gpu=true`.
+
+**The desktop tools** take screenshots and recordings of windows on your screen, so they need neither.
+
+A call that needs the bridge when no simulator is running returns an error that says what to do, and
+`refresh_tools` finds a simulator you have started. More detail: [Architecture](docs/ARCHITECTURE.md).
+
+### Words used in these docs
+
+| Term | Meaning |
+|---|---|
+| **MCP** | Model Context Protocol: the standard way an AI agent calls tools. |
+| **Host server** | The isaac-mcp program your agent starts. Plain Python, no Isaac Sim needed. |
+| **Kit** | NVIDIA's application framework. Isaac Sim is a Kit app, so "a Kit process" means a running Isaac Sim. |
+| **Bridge** | The extension inside Isaac Sim that listens on port 8766 and runs the host's requests on the live scene. |
+| **USD stage** | The 3D scene Isaac Sim holds, made of "prims" (objects, lights, cameras, robots). |
+| **Prim** | One item in the scene, found by a path such as `/World/Cube`. |
+| **Articulation / joints** | A robot's linked parts and the motors between them. |
+| **Isaac Lab** | NVIDIA's robot-learning framework built on Isaac Sim. Each job runs its own Isaac Sim. |
+| **Headless** | Running with no window. A GPU is still needed. |
+| **ROS 2, Nav2, RViz** | A robotics software stack, its navigation package and its viewer, for the ROS tools. |
 
 ## Where to go next
 
