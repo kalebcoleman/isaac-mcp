@@ -20,8 +20,11 @@ It works with Claude Code, Codex, OpenCode or any [MCP](https://modelcontextprot
 
 ## Things you can ask
 
-You don't name tools. Describe the goal and the agent picks them. These are prompts that have worked, with what the
-agent built. The pictures are real captures from this server's camera tool, not mock-ups.
+You don't name tools. Describe the goal and the agent picks them. Each example shows a prompt and what came out. The
+pictures are real captures from this server, not mock-ups. **How each one was made, which model, and the exact prompt where
+an agent was given one** are in [the prompts and models record](docs/evidence/readme-examples-prompts-and-models-2026-11-04.md).
+In short: the first four pictures were built with scripted tool calls (the prompt is an example of what you could say), the
+GitHub humanoid came from a tester agent running Gemini 3.8 Flash, and the walking run was driven directly by Claude Sonnet 5.5.
 
 ### Drop in a public robot by name
 
@@ -64,7 +67,7 @@ This is the open-source [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100)
 
 ![A Unitree G1 humanoid with its arms posed beside a table holding a red can, a blue box and a gold ball](docs/media/g1-github-scene.png)
 
-A small, fast model, given only that request, chose Unitree's G1, cloned `unitreerobotics/unitree_ros`, and found the repo too
+A small, fast model (Gemini 3.8 Flash), given a request like that one (the [exact prompt](docs/evidence/readme-examples-prompts-and-models-2026-11-04.md#brief-1-robot-from-github-gemini-38-flash-thinking-level-high) is longer and adds sandbox rules), chose Unitree's G1, cloned `unitreerobotics/unitree_ros`, and found the repo too
 big to import in one go (1,597 files). It built a pack with `assets__pack_build` (the one URDF and its 36 meshes, 19 MB),
 loaded it by name, posed the arms and waist, built the table and objects, added a camera and a LiDAR (118,000 points), and
 dropped a 2 kg ball on it. It then did the same for Google's Barkour quadruped from MuJoCo Menagerie. The G1 was loaded with
@@ -74,14 +77,24 @@ a fixed base, so it holds a pose; it does not balance or walk.
 
 > Train the Unitree G1 to walk on flat ground, tell me how it did, and show it to me in a window.
 
-![Six Unitree G1 humanoids walking on a grid floor in the Isaac Sim window; the arrows show the speed each one is told to follow](docs/media/g1-walk.gif)
+There was no agent prompt for this one: Claude Sonnet 5.5 called the tools directly (the [exact calls](docs/evidence/readme-examples-prompts-and-models-2026-11-04.md#the-humanoid-walking-run-the-exact-tool-calls) are recorded), so the prompt above is an example. It used Isaac Lab's built-in G1 task, `Isaac-Velocity-Flat-G1-v0`, with NVIDIA's own G1 model (not the GitHub one above), trained twice with `isaaclab__train` (1,024 environments, rsl_rl), scored with `isaaclab__eval`, and watched in a window with `isaaclab__play`. The arrows over the robots are the speed commands each one follows.
 
-That used Isaac Lab's built-in G1 task, `Isaac-Velocity-Flat-G1-v0`, with NVIDIA's own G1 model (not the GitHub one
-above): `isaaclab__train` with 1,024 environments and 300 iterations took **152 seconds**, then `isaaclab__eval` ran 16
-episodes of 1,000 steps and **all 16 stayed up** (mean return 13.3), and `isaaclab__play` opened the window above. The
-arrows are the speed commands each robot follows. This is a short run, so expect a rough gait, and running it for 1,500
-iterations (about 13 minutes) would be the next step. Training a robot of your own through these tools is not supported yet;
-it is on the [checklist](docs/plans/CHECKLIST.md#3-new-tools-for-robotics-and-rl-from-the-live-tests-2026-11-04).
+| Short run: 300 iterations | Longer run: 1,500 iterations |
+|---|---|
+| ![Six G1 humanoids walking on a grid floor after 300 training iterations](docs/media/g1-walk-300it.gif) | ![Six G1 humanoids walking on a grid floor after 1,500 training iterations](docs/media/g1-walk-1500it.gif) |
+
+| | 300 iterations | 1,500 iterations |
+|---|---|---|
+| Training time | 152 s | 727 s |
+| Speed-tracking reward at the end (higher is better) | 0.37 | 0.91 |
+| Training episodes ended by a fall | 39% | 1.4% |
+| Evaluation: 16 episodes, all lasted the full 1,000 steps | mean return 13.3 (spread 4.5) | mean return 34.4 (spread 0.9) |
+
+So 12 more minutes of training took it from "stays up and mostly follows the command" to a much steadier and more accurate
+walk. These are one run each (different seeds: 1 and 2), not a measured average, and the pictures are a flat grid, not a
+rough-terrain test. Training a robot of your own through these tools is not supported yet; it is on the
+[checklist](docs/plans/CHECKLIST.md#3-new-tools-for-robotics-and-rl-from-the-live-tests-2026-11-04). The full
+40-second window recordings are kept with the project's draft evidence release, not in git.
 
 ### More prompts
 
