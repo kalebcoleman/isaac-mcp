@@ -657,7 +657,7 @@ Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map ge
 
 ### `sim__material__apply`
 
-Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. Requires session_id and stage_id from sim__stage__info.
+Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. With paths (up to 128 prims) every prim is checked first, so a bad one binds nothing. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -771,12 +771,12 @@ Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in 
 
 ### `sim__prim__create_many`
 
-Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out (kind, size, mass, material). Ancestors must exist and the timeline be stopped. A failing item removes the earlier ones and the error names its index and path. Returns the paths. Requires session_id and stage_id from sim__stage__info.
+Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out, except keys that do not apply to its kind (an Xform skips rigid, mass and material; listed in defaults_skipped). Ancestors must exist, timeline stopped. A failing item removes the earlier ones; the error keeps its code and names index and path. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `items` (array, required): 1 to 200 objects, each like sim__prim__create's arguments: {path, kind, size, scale, position, orientation, frame, rigid, collision, mass, density, material}. path is required; kind may come from defaults.
-- `defaults` (object, optional): Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins.
+- `defaults` (object, optional): Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins; keys that do not apply to an item's kind (rigid, mass or material on an Xform) are skipped for it.
 
 ### `sim__prim__delete`
 

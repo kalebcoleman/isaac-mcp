@@ -124,7 +124,8 @@ def test_a_failed_item_keeps_the_original_error_details(advanced):
     with pytest.raises(AssetError) as error:
         advanced.execute("sim.prim.create_many", stage, dict(items=[dict(path="/World/A", kind="Cube", rigid=True, mass=1, density=1)]))
     assert error.value.code == "CONFLICT"
-    assert error.value.details["retry_with"] and error.value.details["failed_index"] == 0
+    assert error.value.details["item_retry_with"] and "retry_with" not in error.value.details
+    assert error.value.details["failed_index"] == 0
 
 
 def test_a_shared_material_skips_xforms_in_the_list(advanced):
@@ -138,3 +139,34 @@ def test_a_shared_material_skips_xforms_in_the_list(advanced):
     # An item that asks for a material on an Xform itself is still refused.
     with pytest.raises(AssetError):
         advanced.execute("sim.prim.create_many", stage, dict(items=[dict(path="/World/G2", kind="Xform", material=wood)]))
+
+
+def test_defaults_skipped_for_an_xform_are_reported_and_the_block_keeps_them(advanced):
+    stage = advanced.s.stage()
+    wood = _wood(advanced, stage)
+    result = advanced.execute("sim.prim.create_many", stage, dict(
+        items=[dict(path="/World/Group", kind="Xform"), dict(path="/World/Group/Block")],
+        defaults=dict(kind="Cube", rigid=True, mass=0.015, material=wood)))
+    assert set(result["defaults_skipped"]["/World/Group"]) == {"rigid", "mass", "material"}
+    group, block = stage.GetPrimAtPath("/World/Group"), stage.GetPrimAtPath("/World/Group/Block")
+    assert not group.HasAPI(UsdPhysics.RigidBodyAPI) and not UsdShade.MaterialBindingAPI(group).GetDirectBinding().GetMaterial()
+    assert block.HasAPI(UsdPhysics.RigidBodyAPI) and UsdPhysics.MassAPI(block).GetMassAttr().Get() == pytest.approx(0.015)
+    assert UsdShade.MaterialBindingAPI(block).ComputeBoundMaterial()[0].GetPath() == wood
+    # An item that sets mass or rigid on an Xform itself is still refused, and a Plane keeps collision and material.
+    with pytest.raises(AssetError):
+        advanced.execute("sim.prim.create_many", stage, dict(items=[dict(path="/World/G2", kind="Xform", rigid=True)]))
+    plane = advanced.execute("sim.prim.create_many", stage, dict(
+        items=[dict(path="/World/Floor", kind="Plane")], defaults=dict(rigid=True, collision=True, material=wood)))
+    assert plane["defaults_skipped"]["/World/Floor"] == ["rigid"]
+    assert stage.GetPrimAtPath("/World/Floor").HasAPI(UsdPhysics.CollisionAPI)
+
+
+def test_material_apply_paths_refuses_a_non_geometry_and_a_non_string_entry(advanced):
+    stage = advanced.s.stage()
+    wood = _wood(advanced, stage)
+    advanced.s.create(stage, "/World/Group", "Xform")
+    advanced.s.create(stage, "/World/A", "Cube")
+    for bad in (["/World/A", "/World/Group"], ["/World/A", 5]):
+        with pytest.raises(AssetError):
+            advanced.execute("sim.material.apply", stage, dict(paths=bad, material_path=wood))
+        assert not UsdShade.MaterialBindingAPI(stage.GetPrimAtPath("/World/A")).GetDirectBinding().GetMaterial()

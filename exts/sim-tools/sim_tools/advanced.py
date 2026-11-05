@@ -307,13 +307,14 @@ def create_many(s, stage, a):
         unknown = sorted(set(spec) - set(CREATE_KEYS))
         if unknown:
             refuse("INVALID_VALUE", f"{label} has unknown keys {unknown}; allowed: {list(CREATE_KEYS)}. Nothing was created.")
-    made, warnings = [], []
+    made, warnings, skipped = [], [], {}
     for index, item in enumerate(items):
         spec = {**defaults, **item}
         kind = spec.get("kind")
         for key in SHARED_ONLY_FOR.get(kind, ()):
             if key in defaults and key not in item:
                 spec.pop(key, None)  # a shared rigid, mass or material is for shapes, so an Xform in the list skips it
+                skipped.setdefault(spec.get("path"), []).append(key)
         try:
             if "path" not in spec or "kind" not in spec:
                 refuse("INVALID_VALUE", "each item needs path and kind (defaults may supply kind).")
@@ -325,7 +326,8 @@ def create_many(s, stage, a):
                 getattr(exc, "code", None) or "BATCH_FAILED",
                 f"items[{index}] ({spec.get('path')!r}) failed, so all {len(made)} earlier prims were removed and "
                 f"nothing was created: {detail}",
-                **{**getattr(exc, "details", {}), "failed_index": index, "failed_path": spec.get("path")},
+                **{**{("item_retry_with" if k == "retry_with" else k): v for k, v in getattr(exc, "details", {}).items()},
+                   "failed_index": index, "failed_path": spec.get("path")},
             )
         made.append(spec["path"])
         if warning:
@@ -334,6 +336,7 @@ def create_many(s, stage, a):
         count=len(made),
         paths=made,
         **({"warnings": warnings} if warnings else {}),
+        **({"defaults_skipped": skipped} if skipped else {}),
         note="All items were created in one call; undo them with sim__prim__delete on each path.",
     )
 

@@ -451,7 +451,7 @@ add(
 )
 add(
     "sim.material.apply",
-    "Bind a pack-created material to an existing geometry prim in the session layer, preserving source files.",
+    "Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. With paths (up to 128 prims) every prim is checked first, so a bad one binds nothing.",
     dict(
         **TARGET,
         path=field("string", "Geometry prim. Give this or paths.", False),
@@ -933,7 +933,7 @@ REGISTRY["sim.prim.create"]["parameters"]["material"] = field(
 )
 add(
     "sim.prim.create_many",
-    "Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out (kind, size, mass, material). Ancestors must exist and the timeline be stopped. A failing item removes the earlier ones and the error names its index and path. Returns the paths.",
+    "Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out, except keys that do not apply to its kind (an Xform skips rigid, mass and material; listed in defaults_skipped). Ancestors must exist, timeline stopped. A failing item removes the earlier ones; the error keeps its code and names index and path.",
     dict(
         **TARGET,
         items=field(
@@ -942,7 +942,7 @@ add(
         ),
         defaults=field(
             "object",
-            "Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins.",
+            "Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins; keys that do not apply to an item's kind (rigid, mass or material on an Xform) are skipped for it.",
             False,
         ),
     ),

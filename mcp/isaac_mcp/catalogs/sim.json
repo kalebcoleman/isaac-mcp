@@ -2152,7 +2152,7 @@
       "owner_id": "generic-sim"
     },
     "sim.material.apply": {
-      "description": "Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. With paths (up to 128 prims) every prim is checked first, so a bad one binds nothing. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -5287,7 +5287,7 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.create_many": {
-      "description": "Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out (kind, size, mass, material). Ancestors must exist and the timeline be stopped. A failing item removes the earlier ones and the error names its index and path. Returns the paths. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out, except keys that do not apply to its kind (an Xform skips rigid, mass and material; listed in defaults_skipped). Ancestors must exist, timeline stopped. A failing item removes the earlier ones; the error keeps its code and names index and path. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -5306,7 +5306,7 @@
         },
         "defaults": {
           "type": "object",
-          "description": "Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins.",
+          "description": "Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins; keys that do not apply to an item's kind (rigid, mass or material on an Xform) are skipped for it.",
           "required": false
         }
       },
@@ -5345,7 +5345,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins."
+          "description": "Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins; keys that do not apply to an item's kind (rigid, mass or material on an Xform) are skipped for it."
         }
       ],
       "namespace": "sim",
