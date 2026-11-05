@@ -215,9 +215,10 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
             note(_problem("unresolved", "LIMIT", rel, "too many nested or included files"))
             return
         try:
-            tree = budget["parsed"].get(rel)  # a file included again is parsed once
+            as_include = rel != entry  # an entry must be <mujoco>; an include may have any root, so they are cached apart
+            tree = budget["parsed"].get((rel, as_include))  # a file included again is parsed once
             if tree is None:
-                tree = budget["parsed"][rel] = parse(read(rel), rel, included=rel != entry)
+                tree = budget["parsed"][(rel, as_include)] = parse(read(rel), rel, included=as_include)
         except (AssetError, OSError) as exc:
             note(_problem("unresolved", getattr(exc, "code", "FILESYSTEM"), rel, str(exc)[:200]))
             return

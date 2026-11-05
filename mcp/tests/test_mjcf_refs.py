@@ -274,3 +274,8 @@ def test_a_big_file_included_many_times_is_bounded_in_work():
     start = time.monotonic()
     found = m.resolve("m.xml", project(files))
     assert "LIMIT" in codes(found) and time.monotonic() - start < 10
+
+
+def test_a_file_parsed_as_an_include_is_still_refused_as_a_sub_model_entry():
+    files = {"m.xml": '<mujoco><include file="i.xml"/><model name="a" file="i.xml"/></mujoco>', "i.xml": "<mujocoinclude/>"}
+    assert "MJCF_XML" in codes(m.resolve("m.xml", project(files)))
