@@ -455,3 +455,88 @@ def test_solve_applies_the_wrap_around_to_what_it_returns(arm, monkeypatch):
     monkeypatch.setattr(ik, "wrap_toward", lambda c, q, q_now: (called.append(1), q)[1])
     ik.solve(chain, np.zeros(4), chain.fk(np.array([0.2, 0.1, 0.1, 0.0])), use_orientation=False)
     assert called
+
+
+# ---- review round 2 ---------------------------------------------------------------------------------------------
+
+def _fake_descents(monkeypatch, outcomes):
+    """Replace the descent with scripted results (q, ok), and make the clock jump past the deadline after the last one."""
+    clock = {"t": 0.0}
+    calls = {"n": 0}
+
+    def fake(chain, q0, target, use_orientation, pos_tol, rot_tol, iterations, deadline):
+        q, ok = outcomes[min(calls["n"], len(outcomes) - 1)]
+        calls["n"] += 1
+        if calls["n"] >= len(outcomes):
+            clock["t"] = 1e9
+        return np.array(q, dtype=float), 1, ok
+
+    monkeypatch.setattr(ik, "_descend", fake)
+    monkeypatch.setattr(ik.time, "monotonic", lambda: clock["t"])
+
+
+def test_a_success_followed_by_a_timeout_is_not_reported_as_timed_out(arm, monkeypatch):
+    stage, joints = arm
+    chain = ik.build_chain(stage, joints, "/Arm/base", "/Arm/hand")
+    _fake_descents(monkeypatch, [([0.0] * 4, False), ([0.1] * 4, True), ([0.0] * 4, False)])
+    out = ik.solve(chain, np.zeros(4), np.eye(4), use_orientation=False)
+    assert out["reached"] is True and out["timed_out"] is False
+    _fake_descents(monkeypatch, [([0.0] * 4, False), ([0.0] * 4, False)])
+    assert ik.solve(chain, np.zeros(4), np.eye(4), use_orientation=False)["timed_out"] is True  # nothing succeeded before the clock ran out
+
+
+def test_candidates_are_ranked_after_whole_turns_are_removed(monkeypatch):
+    """Two good answers on a continuous joint: one a whole turn out (6.58 rad, really 0.30), one at -0.40. From 0 the first is nearer."""
+    chain = _continuous_chain()
+    _fake_descents(monkeypatch, [([1.0], False), ([0.3 + 2 * math.pi], True), ([-0.4], True), ([2.0], False)])
+    out = ik.solve(chain, np.zeros(1), np.eye(4), use_orientation=False)
+    assert out["reached"] and out["q"][0] == pytest.approx(0.3, abs=1e-9)
+
+
+def _scaled(chain, factor):
+    """The same arm in stage units of 1/factor metres (factor 100: centimetres)."""
+    steps = []
+    for name, kind, axis, t0, t1_inv, reverse, lo, hi in chain.steps:
+        a, b = t0.copy(), t1_inv.copy()
+        a[:3, 3] *= factor
+        b[:3, 3] *= factor
+        steps.append((name, kind, axis, a, b, reverse, lo * (factor if kind == "prismatic" else 1), hi * (factor if kind == "prismatic" else 1)))
+    out = ik.Chain(steps, np.array(chain.base_pose))
+    out.base_pose[:3, 3] *= factor
+    out.length_scale = float(factor)
+    return out
+
+
+def test_a_centimetre_stage_solves_to_the_same_poses(arm):
+    """The riskiest change of round 1: on a centimetre stage positions are 100x larger than radians. The same arm, built in
+    centimetres, must reach the same poses within a millimetre (0.1 cm) and a hundredth of a radian."""
+    stage, joints = arm
+    metres = ik.build_chain(stage, joints, "/Arm/base", "/Arm/hand")
+    cm = _scaled(metres, 100)
+    rng = np.random.default_rng(5)
+    for _ in range(10):
+        truth = rng.uniform(np.maximum(metres.lower, -2.0), np.minimum(metres.upper, 2.0))
+        target = cm.fk(np.array([truth[0], truth[1], truth[2], truth[3] * 100]))
+        out = ik.solve(cm, np.zeros(4), target, use_orientation=True, pos_tol=0.1, rot_tol=1e-2)
+        assert out["reached"], out
+        assert out["position_error"] <= 0.1 and out["orientation_error"] <= 1e-2  # centimetres and radians
+
+
+def test_a_long_prismatic_joint_can_be_crossed_in_stage_units():
+    """A rail 160 cm long: the step cap must scale with the unit, or 200 iterations cannot cover it."""
+    step = ("rail", "prismatic", (1.0, 0.0, 0.0), np.eye(4), np.eye(4), False, -200.0, 200.0)
+    chain = ik.Chain([step], np.eye(4))
+    chain.length_scale = 100.0
+    out = ik.solve(chain, np.zeros(1), pose_of(160.0, 0, 0), use_orientation=False, pos_tol=0.1)
+    assert out["reached"] and out["q"][0] == pytest.approx(160.0, abs=0.2) and out["attempts"] == 1
+
+
+def test_a_link_beyond_a_truncated_scan_is_named_as_such(arm_in_scene, monkeypatch):
+    advanced, stage = arm_in_scene
+    from sim_tools import advanced as module
+
+    first = [stage.GetPrimAtPath("/Arm/j1")]
+    monkeypatch.setattr(module, "articulation_joints", lambda stage_, root, limit: (first, True))
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.arm.fk", stage, dict(path="/Arm", link="/Arm/hand"))
+    assert error.value.code == "NOT_FOUND" and "stopped at its limit" in str(error.value)

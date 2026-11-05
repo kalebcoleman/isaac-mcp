@@ -210,9 +210,7 @@ def _descend(chain, q0, target, use_orientation, pos_tol, rot_tol, iterations, d
         else:
             damping = min(damping * 4.0, 10.0)
     pos, rot = _errors(chain, err, use_orientation)  # the last accepted step is judged too
-    if pos <= pos_tol and rot <= rot_tol:
-        return q, used, True
-    return best_q, used, False
+    return q, used, bool(pos <= pos_tol and rot <= rot_tol)
 
 
 def wrap_toward(chain, q, q_now):
@@ -242,7 +240,6 @@ def solve(chain, q_now, target, use_orientation=True, pos_tol=1e-3, rot_tol=1e-2
     rng = np.random.default_rng(seed)
     results = []
     total = 0
-    timed_out = False
     span = np.array([math.pi if kind == "revolute" else chain.length_scale for kind in chain.kinds])
     for attempt in range(restarts + 1):
         if attempt == 0:
@@ -253,11 +250,11 @@ def solve(chain, q_now, target, use_orientation=True, pos_tol=1e-3, rot_tol=1e-2
             start = rng.uniform(lo, hi)
         q, used, ok = _descend(chain, start, target, use_orientation, pos_tol, rot_tol, iterations, deadline)
         total += used
+        q = wrap_toward(chain, q, q_now)  # a candidate is ranked by how far it really is from here, whole turns removed
         err, _ = _task_error(chain, q, target, use_orientation)
         pos, rot = _errors(chain, err, use_orientation)
         results.append((q, ok, pos, rot, attempt))
         if time.monotonic() > deadline:
-            timed_out = not ok
             break
         if ok and attempt == 0:
             break
@@ -265,7 +262,8 @@ def solve(chain, q_now, target, use_orientation=True, pos_tol=1e-3, rot_tol=1e-2
             break
     good = [r for r in results if r[1]]
     pick = min(good, key=lambda r: float(np.linalg.norm(r[0] - q_now))) if good else min(results, key=lambda r: r[2] + r[3] * chain.length_scale)
-    q_out = wrap_toward(chain, pick[0], q_now)
+    timed_out = (not good) and time.monotonic() > deadline
+    q_out = pick[0]
     return dict(q=q_out, reached=bool(pick[1]), position_error=pick[2], orientation_error=pick[3],
                 iterations=total, attempts=len(results), timed_out=bool(timed_out))
 

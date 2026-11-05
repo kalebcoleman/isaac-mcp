@@ -107,6 +107,24 @@ the same results.
 
 Not changed: mimic joints are still treated as independent (the contract now says so).
 
+## Code review, round 2 (delta only)
+
+A second review of the fixes found three real defects and some test gaps, all fixed:
+
+- `timed_out` could be reported when an earlier attempt had succeeded; it is now set only when nothing succeeded before the clock ran out.
+- Candidates were ranked by raw joint distance before whole turns were removed, so "nearest the current pose" could pick the wrong
+  branch on a continuous joint; each candidate is now wrapped before it is ranked.
+- A link beyond a truncated articulation scan was reported as "not a body of this articulation"; the refusal now says the scan
+  stopped at its limit.
+- Smaller: the solver returns the last accepted step instead of the best-so-far from one step earlier.
+
+Five more tests (37 in all): a success followed by a timeout, ranking after wrapping, a centimetre stage built from the same
+arm (ten random reachable poses to a millimetre and a hundredth of a radian), a 160 cm rail crossed within the iteration
+budget, and the truncated-scan message. Four of the five bugs were put back and each made a test fail. **Not caught:** removing the
+unit scaling of the rotation rows on a non-metre stage. A reachable target converges either way, and only a contrived
+over-constrained case would show the weighting, so this is a known test gap, not a fixed one. The live trials above were run again
+on this code with the same results.
+
 ## What this does not show
 
 - One session on six robots, one run each. The unit tests cover a synthetic arm with revolute and prismatic joints, reversed

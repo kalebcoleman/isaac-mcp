@@ -706,17 +706,20 @@ class Advanced:
         joint_prims, truncated = articulation_joints(stage, root_prim, 400)
         bodies = sorted({b for j in joint_prims for b in ik._bodies(j) if b})
 
+        cut = (" The scan of this articulation's joints stopped at its limit, so the link may lie beyond it: "
+               "give base_link nearer the end effector.") if truncated else ""
+
         def body(value, label):
             if not isinstance(value, str) or not value:
                 refuse("INVALID_VALUE", f"{label} must be a link name or absolute path.")
             if value.startswith("/"):
                 if value not in bodies:
-                    refuse("NOT_FOUND", f"{value} is not a body of this articulation.", bodies=bodies[:20])
+                    refuse("NOT_FOUND", f"{value} is not a body of this articulation.{cut}", bodies=bodies[:20])
                 return value
             found = [b for b in bodies if b.rsplit("/", 1)[-1] == value]
             if len(found) != 1:
                 refuse("NOT_FOUND" if not found else "AMBIGUOUS",
-                       f"{label} {value!r} matches {len(found)} bodies of this articulation; give the absolute path.",
+                       f"{label} {value!r} matches {len(found)} bodies of this articulation; give the absolute path.{cut}",
                        candidates=(found or bodies)[:20])
             return found[0]
 
