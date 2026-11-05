@@ -55,7 +55,42 @@ current use. In short:
 - [ ] Fold the twin tools into the review above: decide which `quick_start*` variants stay
 - [ ] Then build what is left, in the plan's order: descriptions and recipes first, honest outcomes next, setup and confirmations after
 
-## 3. Poke a running scene
+## 3. New tools for robotics and RL (from the live tests, 2026-11-04)
+
+Found by two weaker-model testers given plain requests (a robot from GitHub into a scene; an Isaac Lab research
+workflow) and by a G1 walking run. Each item is something an agent worked around or could not do. Verify each against
+the code before building. Ranked by how much real work it blocked and how general it is.
+
+What the tests showed working: the Unitree G1 and Google Barkour loaded from real repos through `assets__pack_build`
+and `sim__quick_start`; joints, camera, LiDAR and a hit by a dropped mass all worked; Lab trained and scored the
+built-in Franka reach task with two libraries, resumed one, recorded a video, and ran a custom task package. A built-in
+G1 flat-ground task trained in 152 s (1,024 envs, 300 iterations), scored 13.3 over 16 full-length episodes with no falls,
+and played in a window.
+
+Bring a robot in
+- [ ] **MJCF import** (`assets__import_mjcf`, the M6 item): most MuJoCo Menagerie robots (Franka, UR5e, Go2) are XML only; the tester could only use the few that shipped a URDF. Raises M6 to the top of the second PR
+- [ ] **Safe xacro to URDF**: many ROS repos (UR, xArm) ship only `.xacro`, and we refuse it. Convert on the host without running the downloaded repo's scripts
+- [ ] **Import a robot from a big repo without hand-packing**: one robot in a monorepo hit the 1,000-file / 256 MiB limit and needed `assets__dependencies` plus `assets__pack_build` by hand. An `auto_pack` option on `sim__quick_start` and `assets__import_urdf` (copy the closure, then import)
+- [ ] **A robot from your own URDF into an Isaac Lab task**: the tester registered a custom task package (works through `ISAACLAB_TASK_MODULES`) but only around the built-in Franka. A tool or recipe to scaffold a Lab task and robot config from a pack URDF is the biggest gap for real RL. Check what Lab needs (articulation config, actuators) before designing it
+
+Act on the robot
+- [ ] **Force, impulse and velocity on a running scene** (section 4): the tester dropped a 2 kg ball as a stand-in for a push
+- [ ] **Smooth joint trajectories during play**: `sim__joints__move` only works paused and `sim__joints__command` steps to the target. A trajectory tool (a spline or trapezoid over a duration)
+- [ ] **Command a trained policy's velocity** in a windowed `isaaclab__play` (the G1 task tracks a velocity command; today it is whatever the task samples)
+
+RL workflow
+- [ ] **`isaaclab__runs_compare`**: several `job_id`s in, side-by-side scalars, FPS and final return out. The tester compared seeds, library and env counts by hand
+- [ ] **A sweep tool**: seeds and hyperparameters as one queued request, run one at a time on a small GPU, with a summary table
+- [ ] **Resume that behaves the same on every library**: `rsl_rl` rejected an absolute checkpoint path (it matches a filename inside the run folder and needs a resume flag) while `rl_games` took it. Normalise `checkpoint` in `isaaclab__train`
+- [ ] **`video_paths` in `isaaclab__runs_status`** when a play or eval records video (the tester had to `find` the file); and make `--video_length 100` and `--video_length=100` both work
+- [ ] **`rl_games` pre-launch check**: `minibatch_size` must divide `num_envs * horizon`, and short runs save no checkpoint. Compute a valid value or say how before starting Kit
+- [ ] **`isaaclab__metrics_summary` takes `job_id`** (it wants `run_dir`, which no other Lab tool uses)
+- [ ] **Eval beyond mean return**: survival rate, episode length and per-term reward in `eval_result` (the G1 run needed mean length to show no falls)
+
+Method
+- [ ] Add this section's list to the `mcp-wishlist-testing` skill as a worked example, and re-run both tester briefs after each item lands to confirm the friction is gone
+
+## 4. Poke a running scene
 
 Authoring needs a stopped timeline, and Stop rewinds physics, so an agent could not nudge a block while playing.
 Jenga, LEGO and manipulation need it.
@@ -65,14 +100,14 @@ Jenga, LEGO and manipulation need it.
 - [ ] Test: nudge the top block of the tower and watch it move; pull a block out of a layer and see what falls
 - [ ] Docs and the example prompts in the README
 
-## 4. Second PR: M6 and M7 (branched from `main`)
+## 5. Second PR: M6 and M7 (branched from `main`)
 
 - [ ] M6: `assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources
 - [ ] M7: `sim__viewport__screenshot`, `sim__viewport__record_start`, `sim__viewport__record_stop`, and the final demo
 - [ ] For LEGO and Jenga: an arm with a gripper in `sim__quick_start`, and a route from a saved scene to a Lab task
 - [ ] Update `docs/TOOLS-*.md`, the counts, and regenerate the catalog and tool reference (`check_docs.py` enforces this)
 
-## 5. Small fixes
+## 6. Small fixes
 
 Host layer and refusals
 - [ ] A queued call that times out should say what the bridge is running (do it in the host layer's error formatting; the client attempt broke 11 tests)
@@ -120,7 +155,7 @@ Map and Nav2
 Optional
 - [ ] Start a recording before a window exists, or stop on a log marker
 
-## 6. Testing still owed
+## 7. Testing still owed
 
 - [ ] **Lab PC, when Kaleb says it is back** (it was down, shared workstation): 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1 with the smoke test, M1 to M5 and the plain-request tests; Lab 3.0.0 with the eval fix and the refusal hints
 - [ ] 6.0.1 `sim__stop` fix, live (stop must leave nothing running)
@@ -132,7 +167,7 @@ Optional
 - [ ] Re-run the README example prompts, including the LiDAR one, and fix any that fail
 - [ ] Merged M1 to M5 with the timeline playing: `sim__joints__move` was only checked after Stop
 
-## 7. Known limitations to state in the docs
+## 8. Known limitations to state in the docs
 
 - [ ] `--video` needs MoviePy and imageio-ffmpeg in the Lab environment
 - [ ] A screen recording belongs to the server process that started it, so a client that restarts between calls can't stop it
@@ -142,12 +177,12 @@ Optional
 - [ ] `[spin] error in rcl_take: error not set` lines in the Kit log on 6.0.0.0: appears harmless, not explained
 - [ ] One `sim__camera__capture` had the selection outline in it after a prim was selected by hand; not reproduced in 4 tries
 
-## 8. For Kaleb to decide
+## 9. For Kaleb to decide
 
 - [ ] Approve, change or reject the keep/combine/remove list when it arrives (section 2)
 - [ ] Aldrin licence: Kaleb handles it. Update VENDORING, README and LICENSE only when he reports; do not ask again
 
-## 9. Last of all
+## 10. Last of all
 
 Run only after the tool work, all builds, Lab setup and merges, and only with Kaleb's go-ahead.
 
