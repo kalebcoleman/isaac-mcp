@@ -41,6 +41,23 @@ def refuse(code, message, **details):
     raise AssetError(code, message, **details)
 
 
+_FILE_SUFFIXES = {".urdf", ".xacro", ".usd", ".usda", ".usdc", ".usdz", ".dae", ".stl", ".obj", ".mtl", ".mdl", ".mjcf", ".xml",
+                  ".png", ".jpg", ".jpeg", ".json", ".yaml", ".yml", ".txt"}
+
+
+def _names_a_file(path) -> bool:
+    """True for a file. An existing folder is never a file, whatever its name (``robots v1.2``, ``repo.git``)."""
+    candidate = Path(str(path))
+    try:
+        if candidate.is_file():
+            return True
+        if candidate.is_dir():
+            return False
+    except OSError:
+        pass
+    return candidate.suffix.lower() in _FILE_SUFFIXES
+
+
 def _shell_word(value: str) -> str:
     """A path as one word for a shell. A placeholder (<...>) and a ~/ path without special characters stay readable."""
     if value.startswith("<"):
@@ -57,22 +74,23 @@ def approval_help(folder=None) -> str:
     is needed, so a refusal ends in one instruction instead of a pointer to a document.
     """
     config = os.environ.get("ISAAC_MCP_ASSET_CONFIG", "").strip() or "<a private approval.json, such as ~/.config/isaac-mcp/approval.json>"
-    if folder and Path(str(folder)).suffix:  # a file was named: the folder to approve is the one holding it
+    if folder and _names_a_file(folder):  # a file was named: the folder to approve is the one holding it
         folder = Path(str(folder)).parent
     target = str(folder) if folder else "<the folder>"
     parts = [x for x in str(folder).rstrip("/").split("/") if x] if folder else []
     name = parts[-1] if parts else "project"
     if name.lower() in {"assets", "downloads", "data", "models", "robots"} and len(parts) > 1:
         name = f"{parts[-2]}-{name}"  # "assets" alone names nothing: say whose
-    root_id = re.sub(r"[^A-Za-z0-9_.-]+", "-", name).strip("-.") or "project"
+    # The approval file accepts only [A-Za-z0-9_-], 1 to 48 characters.
+    root_id = re.sub(r"[^A-Za-z0-9_-]+", "-", name).strip("-")[:48].strip("-") or "project"
     # The helper refuses to run without --trust-project, and needs --staging while it creates the config file.
     new_file = "<" in config or not Path(config).expanduser().exists()
     staging = os.environ.get("ISAAC_MCP_STAGING", "").strip() or "~/.cache/isaac-mcp/staging"
     extra = f" --staging {_shell_word(staging)}" if new_file else ""
-    return (f" To approve {_shell_word(target) if folder else target}, ask the user to run this in their own shell (an agent cannot): "
-            f"\"$(uv tool dir)/isaac-mcp/bin/python\" -m isaac_mcp.project_assets --config {_shell_word(config)} "
-            f"--root-id {root_id} --root {_shell_word(target)}{extra} --trust-project"
-            " , then to reconnect the MCP server and restart Kit, because both read the approval file at startup. "
+    return (f" To approve {_shell_word(target) if folder else target}, ask the user to run this in their own shell (an agent cannot):\n"
+            f"    \"$(uv tool dir)/isaac-mcp/bin/python\" -m isaac_mcp.project_assets --config {_shell_word(config)} "
+            f"--root-id {root_id} --root {_shell_word(target)}{extra} --trust-project\n"
+            "Then reconnect the MCP server and restart Kit, because both read the approval file at startup. "
             "Approve the smallest folder that holds the files: every import copies the whole approved folder "
             "(at most 1000 files or 256 MiB), so a large parent folder such as a workspace's projects folder fails with LIMIT.")
 

@@ -11,13 +11,21 @@ from isaac_mcp import project_assets as a
 from isaac_mcp import sim_sessions as sim
 
 
+def _printed_argv(text):
+    """The arguments of the command on its own line in the message, as a shell would split them."""
+    import shlex
+
+    line = next(x for x in text.splitlines() if "isaac_mcp.project_assets" in x)
+    return shlex.split(line.strip())[3:]  # after: "<python>" -m isaac_mcp.project_assets
+
+
 def test_the_approval_command_is_filled_in(monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_ASSET_CONFIG", "/srv/isaac/approval.json")
     text = a.approval_help("/work/projects/arm demo/assets")
     assert "--config /srv/isaac/approval.json" in text
     assert "--root '/work/projects/arm demo/assets'" in text and "--root-id arm-demo-assets" in text  # one shell word
     assert "ask the user to run" in text and "an agent cannot" in text
-    assert "reconnect the MCP server and restart Kit" in text  # both read the file at startup
+    assert "reconnect the MCP server and restart Kit" in text.replace("Then reconnect", "reconnect")  # both read the file at startup
     assert "smallest folder" in text and "1000 files" in text  # a large parent fails with LIMIT: do not advise it
     assert "covers every project" not in text
     assert "--trust-project" in text  # the helper exits with an error without it
@@ -41,7 +49,7 @@ def test_the_printed_command_is_accepted_by_the_helper(tmp_path, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_STAGING", str(tmp_path / "private" / "staging"))
     (tmp_path / "projects" / "demo").mkdir(parents=True)
     text = a.approval_help(str(tmp_path / "projects" / "demo" / "robot.urdf"))
-    argv = shlex.split(text[text.index("project_assets") + len("project_assets"):].split(" , then")[0])
+    argv = _printed_argv(text)
     config.parent.mkdir(mode=0o700)
     assert a.main(argv) in (0, None)  # parser.error would raise SystemExit
     assert config.exists()
@@ -138,7 +146,7 @@ def test_a_path_with_a_space_is_printed_as_one_shell_word_and_the_helper_accepts
     folder = tmp_path / "arm demo" / "assets"
     folder.mkdir(parents=True)
     text = a.approval_help(str(folder / "robot.urdf"))
-    argv = shlex.split(text[text.index("project_assets") + len("project_assets"):].split(" , then")[0])
+    argv = _printed_argv(text)
     assert str(config) in argv and str(folder) in argv  # each path survived as a single argument
     config.parent.mkdir(mode=0o700)
     assert a.main(argv) in (0, None) and config.exists()
@@ -148,3 +156,39 @@ def test_no_folder_gives_a_placeholder_and_a_sensible_root_id(monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
     text = a.approval_help(None)
     assert "--root-id project " in text and "--root-id None" not in text and "--root <the folder>" in text
+
+
+def test_a_folder_named_with_a_dot_is_a_folder_not_a_file(tmp_path, monkeypatch):
+    """`robots v1.2` and `repo.git` have a suffix but are folders: approve them, not their parent."""
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    folder = tmp_path / "my project" / "robots v1.2"
+    folder.mkdir(parents=True)
+    argv = _printed_argv(a.approval_help(str(folder)))
+    assert argv[argv.index("--root") + 1] == str(folder)
+    argv = _printed_argv(a.approval_help(str(tmp_path / "repo.git")))  # not on disk: not a known file suffix either
+    assert argv[argv.index("--root") + 1] == str(tmp_path / "repo.git")
+    (folder / "robot.urdf").write_text("<robot/>")
+    argv = _printed_argv(a.approval_help(str(folder / "robot.urdf")))  # a file still names its folder
+    assert argv[argv.index("--root") + 1] == str(folder)
+
+
+@pytest.mark.parametrize("name", ["repo.git", "isaac_assets_v1.0", "x" * 80, "my robots (v2)"])
+def test_the_root_id_is_one_the_approval_helper_accepts(tmp_path, monkeypatch, name):
+    """Every printed command must run as printed: the helper takes only [A-Za-z0-9_-], 1 to 48 characters."""
+    import re
+
+    monkeypatch.setenv("ISAAC_MCP_ASSET_CONFIG", str(tmp_path / "private" / "approval.json"))
+    monkeypatch.setenv("ISAAC_MCP_STAGING", str(tmp_path / "private" / "staging"))
+    folder = tmp_path / name
+    folder.mkdir()
+    argv = _printed_argv(a.approval_help(str(folder)))
+    assert re.fullmatch(r"[A-Za-z0-9_-]{1,48}", argv[argv.index("--root-id") + 1])
+    (tmp_path / "private").mkdir(mode=0o700)
+    assert a.main(argv) in (0, None)
+
+
+def test_the_command_has_no_stray_arguments_after_it(monkeypatch):
+    """A comma after --trust-project made a copied command fail: the command ends its own line."""
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    line = next(x for x in a.approval_help("/work/p/assets").splitlines() if "isaac_mcp.project_assets" in x)
+    assert line.rstrip().endswith("--trust-project")

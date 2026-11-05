@@ -687,3 +687,17 @@ def test_every_kind_of_first_transform_op_is_lifted_in_the_parent_frame(first_op
     assert lowest_point(stage, "/World/R") == pytest.approx(0.005, abs=1e-4)
     world = xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
     assert world[2] == pytest.approx(0.505, abs=1e-4)  # straight up, whatever the robot's own rotation
+
+
+def test_an_absurd_lowest_point_is_reported_and_the_robot_is_not_moved():
+    """Carter's USD reads 1,464 m below the ground (stray geometry): an automatic lift must not send the robot there."""
+    stage = ground_stage()
+    UsdGeom.Xformable(stage.GetPrimAtPath("/World/R")).ClearXformOpOrder()
+    cube = UsdGeom.Cube(stage.GetPrimAtPath("/World/R/Body"))
+    cube.GetSizeAttr().Set(2000.0)
+    cube.GetExtentAttr().Set([(-1000, -1000, -1000), (1000, 1000, 1000)])
+    report = place_above_ground(stage, "/World/R", False, max_lift=3.0)
+    assert report["lifted_by"] == 0.0 and "not moved" in report["warning"]
+    assert not UsdGeom.Xformable(stage.GetPrimAtPath("/World/R")).GetOrderedXformOps()  # nothing was authored
+    stage2 = ground_stage()
+    assert place_above_ground(stage2, "/World/R", False, max_lift=3.0)["lifted_by"] == pytest.approx(0.505)  # a real sink still lifts
