@@ -53,7 +53,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     source = args.source or find_default(os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep))
     if not source or not Path(source).is_file():
-        print("nav2_params: nav2_bringup not found. Source ROS 2 with Nav2 (scripts/ros_env.sh), or pass --source.", file=sys.stderr)
+        print("nav2_params: nav2_bringup not found. Source ROS 2 with Nav2 (scripts/ros_env.sh), or pass --source. If you did source it, "
+              "check that it ran in this shell and not in a pipeline (`source ... | tail`) or a subshell: those silently lose the environment.", file=sys.stderr)
         return 2
     args.out.expanduser().write_text(rewrite(Path(source).read_text(), args.base_frame, args.radius, args.x, args.y, args.yaw, args.yaw_tolerance))
     print(f"{args.out} from {source}: base frame {args.base_frame}, radius {args.radius}, start ({args.x}, {args.y}, {args.yaw})")

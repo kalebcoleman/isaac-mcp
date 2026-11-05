@@ -262,22 +262,23 @@ def place_above_ground(stage, path, position_given, max_lift=None):
     return report
 
 
-def prepare_generated_physics(filename, output_root, movable_joints=0, gains=None, fixed_base=None):
+def prepare_generated_physics(filename, output_root, movable_joints=0, gains=None, fixed_base=None, kind="URDF"):
+    tag = kind.upper()
     filename, output_root = Path(filename), Path(output_root)
     try:
         resolved = filename.resolve(strict=True)
         resolved.relative_to(output_root.resolve(strict=True))
     except (OSError, ValueError):
         refuse(
-            "URDF_OUTPUT", "Native converter output is outside its private directory."
+            f"{tag}_OUTPUT", "Native converter output is outside its private directory."
         )
     if filename.is_symlink() or not resolved.is_file():
         refuse(
-            "URDF_OUTPUT", "Native converter must return a regular generated USD file."
+            f"{tag}_OUTPUT", "Native converter must return a regular generated USD file."
         )
     asset = Usd.Stage.Open(str(resolved), load=Usd.Stage.LoadAll)
     if not asset or not asset.GetDefaultPrim():
-        refuse("URDF_PHYSICS", "Converted URDF has no valid default prim.")
+        refuse(f"{tag}_PHYSICS", f"Converted {kind} has no valid default prim.")
     prim = asset.GetDefaultPrim()
     variants = prim.GetVariantSets()
     variant = (
@@ -290,19 +291,19 @@ def prepare_generated_physics(filename, output_root, movable_joints=0, gains=Non
         chosen = next((name for name in SHARED_PHYSICS_VARIANTS if name in names), None)
         if len(names) > 64 or chosen is None:
             refuse(
-                "URDF_PHYSICS",
-                "Converted URDF has no shared 'physics' variant; no backend-specific or geometry-only fallback.",
+                f"{tag}_PHYSICS",
+                f"Converted {kind} has no shared 'physics' variant; no backend-specific or geometry-only fallback.",
                 available_physics_variants=names[:64],
             )
         # Validate in this isolated stage's session first, without changing files.
         with Usd.EditContext(asset, asset.GetSessionLayer()):
             if not variant.SetVariantSelection(chosen):
-                refuse("URDF_PHYSICS", "Cannot compose the converted physics variant.")
+                refuse(f"{tag}_PHYSICS", "Cannot compose the converted physics variant.")
     dangling = _remove_dangling_references(asset, output_root.resolve())
     errors = composition_errors(asset)
     if errors:
         refuse(
-            "URDF_PHYSICS",
+            f"{tag}_PHYSICS",
             "Converted physics has composition errors: " + str(errors)[:1200],
         )
     counts = dict(
@@ -315,7 +316,7 @@ def prepare_generated_physics(filename, output_root, movable_joints=0, gains=Non
     )
     for count, node in enumerate(Usd.PrimRange(prim, Usd.TraverseInstanceProxies()), 1):
         if count > 10000:
-            refuse("LIMIT", "Converted URDF exceeds 10000 composed prims.")
+            refuse("LIMIT", f"Converted {kind} exceeds 10000 composed prims.")
         counts["rigid_bodies"] += int(node.HasAPI(UsdPhysics.RigidBodyAPI))
         counts["collisions"] += int(node.HasAPI(UsdPhysics.CollisionAPI))
         counts["joints"] += int(node.IsA(UsdPhysics.Joint))
@@ -327,8 +328,8 @@ def prepare_generated_physics(filename, output_root, movable_joints=0, gains=Non
         counts["authored_masses"] += int(bool(mass and mass.HasAuthoredValueOpinion()))
     if not counts["rigid_bodies"] or counts["movable_joints"] < movable_joints:
         refuse(
-            "URDF_PHYSICS",
-            "Converted URDF lacks expected rigid bodies or revolute/prismatic joints; active stage was not imported.",
+            f"{tag}_PHYSICS",
+            f"Converted {kind} lacks expected rigid bodies or revolute/prismatic joints; active stage was not imported.",
             authored_physics=counts,
             expected_movable_joints=movable_joints,
         )
@@ -340,7 +341,7 @@ def prepare_generated_physics(filename, output_root, movable_joints=0, gains=Non
         # dependencies, native physics layers and the selected Kit stage stay intact.
         with Usd.EditContext(asset, asset.GetRootLayer()):
             if variant and not variant.SetVariantSelection(chosen):
-                refuse("URDF_PHYSICS", "Cannot persist the private generated physics selection.")
+                refuse(f"{tag}_PHYSICS", "Cannot persist the private generated physics selection.")
             if fixed_base is False:
                 # An importer without a base option keeps its world joint; a mobile robot must not.
                 for node in anchors:
@@ -349,7 +350,7 @@ def prepare_generated_physics(filename, output_root, movable_joints=0, gains=Non
             if gains:
                 authored, kept, zero_force = _author_drives(prim, gains, uses_legacy_importer())
             if not asset.GetRootLayer().Save():
-                refuse("URDF_PHYSICS", "Cannot persist the private generated physics selection.")
+                refuse(f"{tag}_PHYSICS", "Cannot persist the private generated physics selection.")
     report = dict(
         variant_set="Physics" if variant else None,
         selected_before=selected_before,

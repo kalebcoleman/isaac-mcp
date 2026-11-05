@@ -14,6 +14,7 @@ import json
 import os
 import socket
 import subprocess
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -79,8 +80,13 @@ def attach_twin(live, registry=None):
     attach(live.bridge, registry or twin_registry(), Twin(), ToolDefinition, requested_port=live.port)
 
 
+# These tests start fake bridges. A real managed simulator on the machine (its session record under the user's data folder)
+# made refresh_tools add "a managed simulator is also running" and fail them, so every server looks in an empty folder.
+_NO_REAL_SESSIONS = {"ISAAC_MCP_SIM_SESSIONS_DIR": tempfile.mkdtemp(prefix="isaac-mcp-no-sessions-")}
+
+
 def build(env=None):
-    return gw.build_server({} if env is None else env)
+    return gw.build_server({**_NO_REAL_SESSIONS, **({} if env is None else env)})
 
 
 def session(server, notes=None):

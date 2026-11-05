@@ -72,6 +72,63 @@ def _shell_word(value: str) -> str:
     return shlex.quote(value)
 
 
+_MESH_FOLDERS = ("meshes", "mesh", "dae", "stl", "assets")
+
+
+def _approval_folder(path: Path) -> Path:
+    """The folder to approve for a file: the one holding it, or for a URDF the ROS package that holds it.
+
+    A URDF names its meshes as package://<package>/... or beside the package, and the importer finds them only inside
+    the approved folder, so approving ``<package>/urdf`` would fail on the first mesh. The package is the nearest folder
+    above the URDF that has a package.xml (never the home folder or above). Without one, a ``urdf`` folder that sits
+    beside a meshes folder is widened to its parent.
+    """
+    folder = path.parent
+    if path.suffix.lower() not in (".urdf", ".xacro"):
+        return folder
+    home, probe = Path.home(), folder
+    for _ in range(8):
+        if probe == probe.parent or probe == home:  # never the home folder, the filesystem root, or above
+            break
+        try:
+            if (probe / "package.xml").is_file():
+                return probe
+        except OSError:
+            break
+        probe = probe.parent
+    try:
+        if folder.name.lower() == "urdf" and any((folder.parent / name).is_dir() for name in _MESH_FOLDERS):
+            return folder.parent
+    except OSError:
+        pass
+    return folder
+
+
+_SYSTEM_FOLDERS = {"/", "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/var", "/boot", "/sys", "/proc", "/dev", "/root", "/run",
+                   "/opt", "/srv", "/mnt", "/media", "/home", "/tmp", "/snap"}
+_PRIVATE_HOME_FOLDERS = {".ssh", ".gnupg", ".aws", ".kube", ".config", ".docker", ".password-store", ".mozilla"}
+
+
+def _unsafe_to_approve(folder: Path) -> bool:
+    """A system folder, the home folder itself, or a folder that holds keys and settings: never one to offer for approval.
+
+    Approval hands a whole folder to the importer, and the folder in a refusal can come from an agent. Offering a command
+    for ``/etc`` or a folder of SSH keys would make it easy to approve files that were never meant for a robot.
+    """
+    try:
+        resolved = Path(os.path.realpath(folder))
+    except OSError:
+        return False
+    home = Path.home()
+    if str(resolved) in _SYSTEM_FOLDERS or resolved == home or resolved == home.parent:
+        return True
+    try:
+        first = resolved.relative_to(home).parts[:1]
+    except ValueError:
+        return any(str(resolved).startswith(prefix + "/") for prefix in ("/etc", "/usr", "/bin", "/sbin", "/boot", "/sys", "/proc", "/dev", "/root", "/var/lib"))
+    return bool(first) and first[0] in _PRIVATE_HOME_FOLDERS
+
+
 def approval_help(folder=None) -> str:
     """What the *user* does to approve a folder, as a filled-in command an agent can pass on.
 
@@ -80,7 +137,10 @@ def approval_help(folder=None) -> str:
     """
     config = os.environ.get("ISAAC_MCP_ASSET_CONFIG", "").strip() or _PLACEHOLDER_CONFIG
     if folder and _names_a_file(folder):  # a file was named: the folder to approve is the one holding it
-        folder = Path(str(folder)).parent
+        folder = _approval_folder(Path(str(folder)))
+    if folder and _unsafe_to_approve(Path(str(folder))):
+        return (f" {folder} is a system or private folder (or the home folder itself), so no approval command is offered for it: "
+                "a robot's files do not live there. Copy the model into a project folder of its own, and approve that folder.")
     target = str(folder) if folder else _PLACEHOLDER_FOLDER
     parts = [x for x in str(folder).rstrip("/").split("/") if x] if folder else []
     name = parts[-1] if parts else "project"
@@ -410,8 +470,14 @@ class Broker:
             from . import urdf_refs
 
             urdf_refs.check_urdf_path(rel)
+        elif kind == "mjcf":
+            from . import mjcf_refs
+
+            mjcf_refs.check_mjcf_path(rel)
         elif Path(rel).suffix.lower() in (".urdf", ".xacro"):
             refuse("UNSUPPORTED_FORMAT", f"{rel} is a URDF, not a USD: use assets__import_urdf with source_path.")
+        elif Path(rel).suffix.lower() == ".xml":
+            refuse("UNSUPPORTED_FORMAT", f"{rel} is not a USD. If it is a MuJoCo model, use assets__import_mjcf with source_path.")
         else:
             usd_path(rel)
 
@@ -563,6 +629,11 @@ class Broker:
 
             relative(path)
             urdf_refs.check_urdf_path(path)
+        elif kind == "mjcf":
+            from . import mjcf_refs
+
+            relative(path)
+            mjcf_refs.check_mjcf_path(path)
         else:
             usd_path(path)
         fd = self.root_fd(root_id)

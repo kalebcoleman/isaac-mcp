@@ -40,7 +40,7 @@ Pause before saving and check the exported scene after reopening in a fresh proc
 1. **Build a new scene:** `sim__quick_start`. It needs no IDs and works for anyone; add `robot` for one.
 2. **An existing scene:** `sim__stage__info` first. Other `sim__*` and `assets__*` tools need its
    `session_id` and `stage_id`.
-3. **Import your own USD or URDF:** `assets__roots`, then `assets__import_path` or `assets__import_urdf`.
+3. **Import your own USD, URDF or MuJoCo XML:** `assets__roots`, then `assets__import_path`, `assets__import_urdf` or `assets__import_mjcf`.
 4. **Copy a USD or URDF and its files into your asset folder:** `assets__pack_build`, then `sim__quick_start robot="<pack>/<file>"`.
 5. **Train, evaluate or play a policy:** `isaaclab__install_info`, then `isaaclab__train`. No bridge is needed.
 6. **One lab's UR5e digital twin (RISE lab):** `ur5e_dt__quick_start`, only when that twin is what was asked for.
@@ -118,7 +118,7 @@ The bridge CLI is `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client` fr
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__quick_start` for a new scene, or
    `sim__stage__info` on an existing one, and `assets__roots` for your own files. The
-   71-tool pack (57 `sim`, 14 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   72-tool pack (57 `sim`, 15 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan`, `assets__search` and `assets__packs` / `assets__pack_*` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -366,5 +366,5 @@ worked while locked on GNOME.
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 71 generic tools: 57 `sim` and 14 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 72 generic tools: 57 `sim` and 15 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.

@@ -1015,6 +1015,104 @@ class Advanced:
         )
         return result
 
+    def import_mjcf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=None, **pose):
+        """Import a MuJoCo MJCF model from a verified snapshot, the way ``import_urdf`` imports a URDF.
+
+        The host checked that every file the model names is inside the approved folder before it made the snapshot, and
+        this method checks again against the snapshot's own file list, so the importer reads nothing else.
+        """
+        from isaac_mcp import mjcf_refs, urdf_refs
+        from isaac_mcp.project_assets import Broker, open_dir, signature
+
+        from .mjcf import convert, importer_identity, movable_joint_count
+        from .urdf import MAX_AUTO_LIFT_M, place_above_ground, prepare_generated_physics
+
+        s = self.s
+        if fixed_base is not None and type(fixed_base) is not bool:
+            refuse("INVALID_VALUE", "fixed_base must be true, false, or left out to keep what the model says.")
+        s.new_path(stage, prim_path)
+        filename, manifest = s.broker.verify(snapshot_id, manifest_sha256, kind="mjcf")
+        mjcf_refs.check_mjcf_path(filename.name)
+        entry = manifest["entry"]
+        project_dir = filename.parents[len(Path(entry).parts) - 1]
+        project = urdf_refs.project_from_manifest(project_dir, manifest["files"], manifest.get("root_name", ""))
+        found = mjcf_refs.resolve(entry, project)
+        if found["problems"]:
+            mjcf_refs.refusal_for(found["problems"], entry)
+        movable = movable_joint_count(found["trees"].values())
+        workspace = s.broker.staging / snapshot_id
+        key = hashlib.sha256(json.dumps([importer_identity(), fixed_base, manifest_sha256]).encode()).hexdigest()[:24]
+        output = workspace / f"mjcf-converted-{key}"
+        root_before = stage.GetRootLayer().ExportToString()
+        session_before = stage.GetSessionLayer().ExportToString()
+        done = output / "generated.txt"
+        if done.is_file():
+            generated = output / done.read_text()
+        else:
+            pending = workspace / f".pending-{uuid.uuid4().hex}"
+            try:
+                try:
+                    generated = convert(filename, pending, fixed_base)
+                except AssetError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - the native importer raises anything
+                    refuse("IMPORT_FAILED", f"The MJCF importer failed on {entry}: {str(exc)[:800]}")
+                if (
+                    s.get_stage() != stage
+                    or stage.GetRootLayer().ExportToString() != root_before
+                    or stage.GetSessionLayer().ExportToString() != session_before
+                ):
+                    refuse(
+                        "IMPORTER_STAGE_CHANGED",
+                        "Native importer changed the active stage. Partial effects possible; inspect before retrying.",
+                    )
+                converted_physics = prepare_generated_physics(
+                    generated, pending, movable_joints=movable, gains=None, fixed_base=fixed_base, kind="MJCF",
+                )
+                relative_generated = str(generated.relative_to(pending))
+                (pending / "generated.txt").write_text(relative_generated)
+                (pending / "report.json").write_text(json.dumps(converted_physics))
+                pending.rename(output)
+                generated = output / relative_generated
+            except BaseException:
+                shutil.rmtree(pending, ignore_errors=True)
+                raise
+        converted_physics = json.loads((output / "report.json").read_text())
+        derived = Broker("")
+        derived.staging = s.broker.staging
+        fd = open_dir(output)
+        try:
+            ident = signature(os.fstat(fd))[:2]
+        finally:
+            os.close(fd)
+        derived.roots = {"converted": (output, ident)}
+        snap = derived.snapshot("converted", str(generated.relative_to(output)))
+        position_given = "position" in pose
+        result = s.import_asset(stage, snap["snapshot_id"], snap["manifest_sha256"], prim_path, **pose)
+        from .ros2 import _articulation_roots
+
+        roots = _articulation_roots(stage.GetPrimAtPath(prim_path))
+        warnings = []
+        placement = place_above_ground(stage, prim_path, position_given, max_lift=MAX_AUTO_LIFT_M)
+        if "warning" in placement:
+            warnings.append(placement.pop("warning"))
+        if fixed_base is not None and converted_physics["base"] != ("fixed" if fixed_base else "floating"):
+            warnings.append(f"The converted robot's base is {converted_physics['base']}, not what fixed_base asked for.")
+        if not roots:
+            warnings.append("No articulation root was found, so the joint tools will not work on this model.")
+        result.update(
+            mjcf_snapshot_id=snapshot_id,
+            converted_physics=converted_physics,
+            articulation_root=roots[0] if roots else None,
+            articulation_roots=roots,
+            base=converted_physics["base"],
+            mapped_files=len(found["mapped"]),
+            includes=found["includes"],
+            placement=placement,
+            warnings=warnings,
+        )
+        return result
+
     def set_attribute(self, stage, a):
         s = self.s
         prim = s.prim(stage, a["path"])

@@ -148,11 +148,11 @@ Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
 
 ## The tools
 
-A client lists **125 tools** by default, or **134** with both optional groups. Most scene work uses the first row.
+A client lists **126 tools** by default, or **135** with both optional groups. Most scene work uses the first row.
 
 | Group | Tools | What they do |
 |---|--:|---|
-| Generic scene and assets | 71 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Import USD and URDF, and manage named asset packs. |
+| Generic scene and assets | 72 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Import USD and URDF, and manage named asset packs. |
 | Isaac Lab | 12 | Find an install, list tasks, train, evaluate and play, read metrics and checkpoints, cancel jobs. No simulator needed. |
 | Host gateway and desktop | 12 | `refresh_tools`, `use_bridge`, and screenshots, recordings and window tools. |
 | Bridge built-ins | 7 | `status`, `run_python`, and file transfer into and out of the running simulator. |
@@ -170,7 +170,7 @@ The ones you will meet first:
 | `sim__simulation__step`, `sim__timeline__control` | Play, pause and step the physics. |
 | `sim__camera__capture`, `sim__lidar__read` | See through a camera or LiDAR. |
 | `sim__ros2__tf_setup`, `sim__map__occupancy` | Publish `/clock`, `/joint_states`, TF, and export a Nav2 map. |
-| `assets__import_urdf`, `assets__pack_build` | Bring in your own robots and props. |
+| `assets__import_urdf`, `assets__import_mjcf`, `assets__pack_build` | Bring in your own robots and props: URDF, MuJoCo XML (MJCF) or USD. |
 | `screenshot`, `start_screen_recording` | Look at the real Isaac Sim window. |
 | `isaaclab__train`, `isaaclab__eval`, `isaaclab__metrics_summary` | Train a policy, score it, read the curves. |
 

@@ -1008,13 +1008,28 @@ Point the active viewport camera, e.g. before a screenshot. path alone frames a 
 
 ## Assets (`assets__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 14 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 15 tools.
 
 ### `assets__dependencies`
 
 Compute dependency closures for files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.
 
 - `paths` (array, required): Absolute USD or URDF file paths, 1 to 64.
+
+### `assets__import_mjcf`
+
+Convert a MuJoCo MJCF model (.xml) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows <include> files, meshes, textures and height fields inside that folder only, and refuses absolute paths, URLs and anything that leaves it. A model with a free joint floats and falls; fixed_base left out keeps what the file says. Source files never change. Z up, metres. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `root_id` (string, optional): Approved root ID, with relative_path. Or use source_path.
+- `relative_path` (string, optional): Path of the MJCF .xml file within that root.
+- `source_path` (string, optional): Absolute path of the MJCF .xml file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.
+- `prim_path` (string, required): New wrapper prim path.
+- `fixed_base` (boolean, optional): true: fix the robot's base to the world. false: make it floating, so it falls under gravity. Leave out to keep what the model says.
+- `position` (array, optional): Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane (at most 3 m). A given position is used as is, with a warning if it starts under the ground.
+- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
+- `frame` (string, default `"local"`): Pose frame: local or world.
 
 ### `assets__import_path`
 
@@ -1030,7 +1045,7 @@ Import a trusted local USD by absolute path, under an approved project root or i
 
 ### `assets__import_urdf`
 
-Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.
+Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Check a URDF first with assets__dependencies. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
