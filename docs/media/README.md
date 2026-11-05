@@ -70,3 +70,15 @@ those facts do not change the workstation's separate terms.
 
 The small SVG badges in `badges/` are repository-authored navigation labels, not external
 certification marks or live test results. They load without a third-party badge service.
+
+## README example captures
+
+`franka-public-robot.png`, `block-tower.png`, `nova-carter-room.png` and `so100-own-pack.png` are headless
+camera captures made with `sim__camera__capture`, then reduced to 128 colors for size. They show Isaac Sim **6.2.0.0**
+with **PhysX**, from the repository state at the time the README was written, on an RTX 5080.
+
+- The Franka Panda and Nova Carter are NVIDIA's public Isaac Sim assets, loaded by name from NVIDIA's asset server.
+- The block tower and the room are boxes made by the tools; the tower image is after six seconds of play.
+- The SO-ARM100 is the Apache-2.0 [TheRobotStudio/SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) URDF, loaded
+  from a pack in a throwaway asset folder.
+- These are single runs shown to illustrate the tools, not a test result.
