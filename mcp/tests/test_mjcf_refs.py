@@ -255,3 +255,22 @@ def test_a_non_utf8_file_cannot_hide_a_dtd(encoding):
     assert caught.value.code == "MJCF_XML"
     found = m.resolve("m.xml", project({"m.xml": '<mujoco><include file="i.xml"/></mujoco>', "i.xml": text.encode(encoding)}))
     assert "MJCF_XML" in codes(found)
+
+
+def test_many_distinct_problems_are_added_in_linear_time():
+    import time
+
+    meshes = "".join(f'<mesh name="n{i}" file="x{i}.stl"/>' for i in range(20000))
+    start = time.monotonic()
+    found = m.resolve("m.xml", project({"m.xml": f"<mujoco><asset>{meshes}</asset></mujoco>"}))
+    assert len(found["problems"]) == 20000 and time.monotonic() - start < 3
+
+
+def test_a_big_file_included_many_times_is_bounded_in_work():
+    import time
+
+    meshes = "".join(f'<mesh name="n{i}" file="x{i}.stl"/>' for i in range(2000))
+    files = {"m.xml": "<mujoco>" + '<include file="i.xml"/>' * 600 + "</mujoco>", "i.xml": f"<mujocoinclude><asset>{meshes}</asset></mujocoinclude>"}
+    start = time.monotonic()
+    found = m.resolve("m.xml", project(files))
+    assert "LIMIT" in codes(found) and time.monotonic() - start < 10

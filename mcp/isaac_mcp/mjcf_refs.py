@@ -17,6 +17,7 @@ from .urdf_refs import MAX_XML, SCHEME, Project, _parent, _problem, normal_path,
 
 MAX_INCLUDE_DEPTH = 16
 MAX_FILES = 256
+MAX_ELEMENTS = 1_000_000  # XML elements walked in one resolve() call, repeats included
 MAX_EXPANSIONS = 512  # every file read, counting repeats and sub-models, for one resolve() call
 # Elements whose file attribute is relative to the model folder as it is.
 _PLAIN = {"include": ("file",), "model": ("file",), "flexcomp": ("file",)}
@@ -103,15 +104,18 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
     Refuses nothing about the references, so a caller can report all of them.
     """
     base = _parent(entry)
-    budget = _budget if _budget is not None else {"n": 0}  # shared with every sub-model, so repeats cannot multiply
+    budget = _budget if _budget is not None else {"n": 0, "elements": 0, "parsed": {}}  # shared with every sub-model, so repeats cannot multiply
     read = read or project.read
     problems, files, includes, trees = [], {entry}, [], {}
+    seen = set()  # (reference, code) of each problem, so adding one is constant time
     state = {"assetdir": "", "meshdir": None, "texturedir": None}
     wanted = []  # (kind, element, value) in document order, resolved after the walk
     stack = []
 
     def note(problem):
-        if not any(p["reference"] == problem["reference"] and p["code"] == problem["code"] for p in problems):
+        key = (problem["reference"], problem["code"])
+        if key not in seen:
+            seen.add(key)
             problems.append(problem)
 
     def check_folder(value, key):
@@ -152,6 +156,10 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
             if element is None:
                 pending.pop()
                 continue
+            budget["elements"] += 1
+            if budget["elements"] > MAX_ELEMENTS:
+                note(_problem("unresolved", "LIMIT", current, "the model names too many elements"))
+                return
             name = _local(element.tag)
             if name == "compiler":
                 for key in ("assetdir", "meshdir", "texturedir"):
@@ -193,7 +201,8 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
             files.update(sub["files"])
             includes.extend(sub["includes"])
             trees.update(sub["trees"])
-            problems.extend(p for p in sub["problems"] if p not in problems)
+            for problem in sub["problems"]:
+                note(problem)
         elif name == "include":
             includes.append(chosen)
             expand(chosen, depth + 1)
@@ -206,7 +215,9 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
             note(_problem("unresolved", "LIMIT", rel, "too many nested or included files"))
             return
         try:
-            tree = parse(read(rel), rel, included=rel != entry)
+            tree = budget["parsed"].get(rel)  # a file included again is parsed once
+            if tree is None:
+                tree = budget["parsed"][rel] = parse(read(rel), rel, included=rel != entry)
         except (AssetError, OSError) as exc:
             note(_problem("unresolved", getattr(exc, "code", "FILESYSTEM"), rel, str(exc)[:200]))
             return
