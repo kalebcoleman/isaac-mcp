@@ -222,3 +222,36 @@ def test_the_resolver_returns_every_parsed_tree_for_the_kit_side():
              "i.xml": '<mujocoinclude><worldbody><body><joint/><joint/></body></worldbody></mujocoinclude>'}
     found = m.resolve("m.xml", project(files))
     assert set(found["trees"]) == {"m.xml", "i.xml"} and found["includes"] == ["i.xml"]
+
+
+def test_repeated_sub_models_and_includes_are_bounded_not_exponential():
+    import time
+
+    start = time.monotonic()
+    selves = m.resolve("a.xml", project({"a.xml": '<mujoco><asset>' + '<model name="m" file="a.xml"/>' * 3 + '</asset></mujoco>'}))
+    assert "LIMIT" in codes(selves)
+    chain = {f"f{i}.xml": f'<mujoco><include file="f{i + 1}.xml"/><include file="f{i + 1}.xml"/><include file="f{i + 1}.xml"/></mujoco>' for i in range(15)}
+    chain["f15.xml"] = "<mujoco/>"
+    diamond = m.resolve("f0.xml", project(chain))
+    assert "LIMIT" in codes(diamond)
+    pair = {"a.xml": '<mujoco><asset><model name="m" file="b.xml"/><model name="n" file="b.xml"/></asset></mujoco>',
+            "b.xml": '<mujoco><asset><model name="m" file="a.xml"/><model name="n" file="a.xml"/></asset></mujoco>'}
+    assert "LIMIT" in codes(m.resolve("a.xml", project(pair)))
+    assert time.monotonic() - start < 5
+
+
+def test_a_deeply_nested_file_is_walked_without_a_recursion_error():
+    depth = 3000
+    body = "<body>" * depth + '<geom type="mesh" mesh="m"/>' + "</body>" * depth
+    found = m.resolve("m.xml", project({"m.xml": f'<mujoco><asset><mesh name="m" file="x.stl"/></asset><worldbody>{body}</worldbody></mujoco>'}))
+    assert "MESH_MISSING" in codes(found)
+
+
+@pytest.mark.parametrize("encoding", ["utf-16", "utf-32", "utf-16-le"])
+def test_a_non_utf8_file_cannot_hide_a_dtd(encoding):
+    text = '<?xml version="1.0"?><!DOCTYPE mujoco [<!ENTITY a "b">]><mujoco/>'
+    with pytest.raises(AssetError) as caught:
+        m.parse(text.encode(encoding))
+    assert caught.value.code == "MJCF_XML"
+    found = m.resolve("m.xml", project({"m.xml": '<mujoco><include file="i.xml"/></mujoco>', "i.xml": text.encode(encoding)}))
+    assert "MJCF_XML" in codes(found)

@@ -17,6 +17,7 @@ from .urdf_refs import MAX_XML, SCHEME, Project, _parent, _problem, normal_path,
 
 MAX_INCLUDE_DEPTH = 16
 MAX_FILES = 256
+MAX_EXPANSIONS = 512  # every file read, counting repeats and sub-models, for one resolve() call
 # Elements whose file attribute is relative to the model folder as it is.
 _PLAIN = {"include": ("file",), "model": ("file",), "flexcomp": ("file",)}
 # Elements whose files are found through <compiler meshdir> or <compiler texturedir>.
@@ -47,6 +48,8 @@ def parse(data: bytes, name: str = "MJCF", included: bool = False) -> ET.Element
     """
     if len(data) > MAX_XML:
         refuse("LIMIT", f"{name} exceeds 64 MiB.")
+    if b"\x00" in data:  # UTF-16 or UTF-32 would hide a DTD from the byte check below
+        refuse("MJCF_XML", f"{name}: only UTF-8 text is supported.")
     upper = data.upper()
     if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
         refuse("MJCF_XML", f"{name}: DTDs and entities are not supported.")
@@ -87,7 +90,7 @@ def _bad_value(value: str):
     return None
 
 
-def resolve(entry: str, project: Project, read=None, _depth: int = 0) -> dict:
+def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=None, _models=()) -> dict:
     """Map every file *entry* names, through its includes and sub-models, to a file in *project*.
 
     MuJoCo expands an ``<include>`` where it stands, and a later ``<compiler>`` setting overrides an earlier one for the
@@ -100,6 +103,7 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0) -> dict:
     Refuses nothing about the references, so a caller can report all of them.
     """
     base = _parent(entry)
+    budget = _budget if _budget is not None else {"n": 0}  # shared with every sub-model, so repeats cannot multiply
     read = read or project.read
     problems, files, includes, trees = [], {entry}, [], {}
     state = {"assetdir": "", "meshdir": None, "texturedir": None}
@@ -140,24 +144,30 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0) -> dict:
         else:
             note(_problem("unresolved", "MESH_MISSING", value, f"{value} is not in this folder (looked relative to {folders[0] or 'the root'})"))
 
-    def visit(element, current, depth):
-        name = _local(element.tag)
-        if name == "compiler":
-            for key in ("assetdir", "meshdir", "texturedir"):
-                if key in element.attrib:
-                    check_folder(element.attrib[key], key)
-                    state[key] = element.attrib[key]
-        for attribute in _PLAIN.get(name, ()):
-            if attribute in element.attrib:
-                follow(name, element.attrib[attribute], current, depth)
-        for attribute in _MESH_DIR.get(name, ()):
-            if attribute in element.attrib:
-                wanted.append(("mesh", name, element.attrib[attribute]))
-        for attribute in _TEXTURE_DIR.get(name, ()):
-            if attribute in element.attrib:
-                wanted.append(("texture", name, element.attrib[attribute]))
-        for child in list(element):
-            visit(child, current, depth)
+    def visit(root, current, depth):
+        """Walk a tree in document order without recursion, so a deeply nested file cannot exhaust the stack."""
+        pending = [iter([root])]
+        while pending:
+            element = next(pending[-1], None)
+            if element is None:
+                pending.pop()
+                continue
+            name = _local(element.tag)
+            if name == "compiler":
+                for key in ("assetdir", "meshdir", "texturedir"):
+                    if key in element.attrib:
+                        check_folder(element.attrib[key], key)
+                        state[key] = element.attrib[key]
+            for attribute in _PLAIN.get(name, ()):
+                if attribute in element.attrib:
+                    follow(name, element.attrib[attribute], current, depth)
+            for attribute in _MESH_DIR.get(name, ()):
+                if attribute in element.attrib:
+                    wanted.append(("mesh", name, element.attrib[attribute]))
+            for attribute in _TEXTURE_DIR.get(name, ()):
+                if attribute in element.attrib:
+                    wanted.append(("texture", name, element.attrib[attribute]))
+            pending.append(iter(list(element)))
 
     def follow(name, value, current, depth):
         bad = _bad_value(value)
@@ -174,7 +184,10 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0) -> dict:
         mapped[value] = chosen
         files.add(chosen)
         if name == "model":
-            sub = resolve(chosen, project, read, _depth + 1)  # a sub-model has its own folders and includes
+            if chosen in _models or chosen == entry:  # a model that contains itself
+                note(_problem("unresolved", "LIMIT", chosen, "a model includes itself"))
+                return
+            sub = resolve(chosen, project, read, _depth + 1, budget, (*_models, entry))  # own folders and includes
             for key, rel in sub["mapped"].items():
                 mapped[f"{chosen}:{key}"] = rel
             files.update(sub["files"])
@@ -188,7 +201,8 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0) -> dict:
     def expand(rel, depth):
         if rel in stack:  # an include cycle ends here
             return
-        if depth > MAX_INCLUDE_DEPTH or len(trees) > MAX_FILES:
+        budget["n"] += 1
+        if depth > MAX_INCLUDE_DEPTH or len(trees) > MAX_FILES or budget["n"] > MAX_EXPANSIONS:
             note(_problem("unresolved", "LIMIT", rel, "too many nested or included files"))
             return
         try:
