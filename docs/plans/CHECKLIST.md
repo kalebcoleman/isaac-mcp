@@ -23,7 +23,40 @@ building anything with many parts is slow and costly. **Goal: that tower in 5 ca
 - [ ] Look for other N-call patterns (joints, physics apply, lights) in the earlier test transcripts and fix the worst
 - [ ] Have a plain-request tester build something with many parts and confirm it picks `sim__prim__create_many`
 
-## 2. Tool surface review: combine or remove
+## 2. Foundation: assets, projects and the workspace (in progress)
+
+Goal: one clean layout the user controls, with the same tools working for three kinds of people. Acceptance cases to keep green:
+a fresh clone (Franka pick-and-place; a public UR5e with a public gripper pick-and-place), a user with their own robots and
+assets in a project folder, and the lab user with the full UR5e twin and Vention workcell on both of their PCs.
+
+```text
+<workspace>/
+  isaac-mcp/          the checkout: code only (this repository)
+  isaac-mcp-assets/   local assets: packs, the lab twin files; never pushed
+  projects/<name>/    each project, some with their own git remote, each may hold an isaac-mcp.json
+  runs/  envs/        outputs, and Isaac Sim / Isaac Lab Python environments
+```
+
+Found on 2026-11-05 by scripted scenarios (17 resolver checks in throwaway worlds, all passed) and live runs on Isaac Sim 6.2:
+- [x] Resolver basics hold: a fresh clone's default store is next to the checkout; `ISAAC_MCP_ASSET_PATH` replaces the defaults; a project file is found by walking up, relative `asset_path` is relative to the file, `ISAAC_MCP_PROJECT` wins; strict precedence (env 0 beats project true); bad project files are errors that name the file; a changed pinned file fails `doctor`; reading never creates the asset folder
+- [x] A pinned pack in the user's asset folder loads with no approval (default staging); a trusted root, once approved, loads by path and adopts into a pack with no restart
+- [x] The lab asset folder is complete: `doctor` checked 170 files, the only lab-supplied file the manifest names (`workstation/vention.usd`) is present; `sensors/rsd455.usd` lives under `Isaac/Sensors/Intel/RealSense/` as the manifest says (an earlier report that it was missing was a wrong check)
+- [ ] **F1. A robot an agent puts in the project's own `./assets` cannot be loaded**: "A pack named only by a project file's asset_path is not an approval". By design (a cloned repo could name any folder), but it blocks the flow of an agent creating an assets or downloads folder in the project. Fixed by workspace trust below
+- [ ] **F2. Refusals do not tell the agent the exact fix.** `ROOT_NOT_APPROVED` and the asset-path message should name the folder and give the filled-in command the user runs (`python -m isaac_mcp.project_assets --root-id ... --root <folder>`), and say that no restart is needed if that is true
+- [ ] **F3. Kit launched the usual way never reads the project's `isaac-mcp.json`; the host does.** The same `sim__quick_start robot="ur5e"` is refused when Kit knows the project (override not approved) and quietly loads NVIDIA's public UR5e when it does not. Fix: the host passes the project to Kit when it launches one; `status` reports the project file Kit sees; `assets__packs` warns when host and Kit disagree
+- [ ] **F4. `assets__pack_adopt` and `pack_build` always write to the one primary asset folder**, so an agent in project A can add packs to the shared folder, and a project cannot choose its own write location. Decide: a project-level write folder, or document it
+- [ ] **F5. Global strict mode blocks public robots and grippers for every tool.** Scope it to the twin (lab profile PR)
+
+Plan, one pull request each, in this order:
+- [ ] PR 1: approval messages and Kit sees the project (F2, F3)
+- [ ] PR 2: lab profile: strict scoped to the twin and the `ur5e-dt` pack, `ISAAC_MCP_PUBLIC_ASSETS` for public robots (default on), a `require` list in a project's `isaac-mcp.json` so the twin refuses to build a lab scene with missing lab files, `lab_fidelity` in twin results, descriptions that steer plain UR5e work to `sim__quick_start`
+- [ ] PR 3: workspace mode: with `ISAAC_MCP_WORKSPACE` set, an opt-in step (`isaac_env.py init --trust-projects`) approves `<workspace>/projects` and the asset folder as roots, so projects under it need no per-project approval; per-project `isaac-mcp.json` honoured by host and Kit; one setup command; a safety note (cloned repos inside `projects/` are trusted for import once enabled; off by default; the fresh-clone path is unchanged)
+- [ ] PR 4: public grippers: `sim__quick_start gripper=` (default: a public gripper for any arm that has none, `none` to turn it off), a gripper command tool, and an optional fetch of NVIDIA's public robots and grippers into a pack for offline or strict use. Prototype: NVIDIA's UR5e asset has a `Gripper` variant (`Robotiq_2f_85`) that joins the arm's articulation with a `finger_joint`; a pick with IK and that joint did not yet lift the cube (open, to debug: tool offset, finger command, friction)
+- [ ] PR 5: suction: NVIDIA's `isaacsim.robot.surface_gripper` is available on 6.2; wrap it as on/off, plus the attach/detach tool
+- [ ] Scenario checks into the repo as tests (the throwaway-world resolver scenarios), and a live scenario write-up
+- [ ] Agent tests in new project threads: fresh clone, project with its own assets, lab user with the full folder. Prove the real asset folder is untouched (file list and timestamps before and after; baseline taken 2026-11-05: 171 files)
+
+## 3. Tool surface review: combine or remove
 
 131 tools is a lot for an agent to choose from, and some do nearly the same job. Review all of them, and merge or
 drop the ones that earn no place. **Nothing is removed or combined until Kaleb has approved the list**; Kaleb said the
@@ -55,7 +88,7 @@ current use. In short:
 - [ ] Fold the twin tools into the review above: decide which `quick_start*` variants stay
 - [ ] Then build what is left, in the plan's order: descriptions and recipes first, honest outcomes next, setup and confirmations after
 
-## 3. New tools for robotics and RL (from the live tests, 2026-11-04)
+## 4. New tools for robotics and RL (from the live tests, 2026-11-04)
 
 Found by two weaker-model testers given plain requests (a robot from GitHub into a scene; an Isaac Lab research
 workflow) and by a G1 walking run. Each item is something an agent worked around or could not do. Verify each against
@@ -84,7 +117,7 @@ Act on the robot
 - [ ] IK follow-ups: one-call `move_to` (solve then move), a Cartesian straight-line path, a check that the arm will not hit the ground or itself, and an orientation-weighting test on a non-metre stage (a known test gap)
 - [ ] A tabletop preset for `sim__quick_start` (a table and a few pickable objects in one call). Low priority
 - [ ] Decide: may read-only scene tools omit `session_id` and `stage_id`? (Today a plain read fails until `sim__stage__info` is called; the IDs stop edits landing on the wrong stage.)
-- [ ] **Force, impulse and velocity on a running scene** (section 4): the tester dropped a 2 kg ball as a stand-in for a push
+- [ ] **Force, impulse and velocity on a running scene** (section 5): the tester dropped a 2 kg ball as a stand-in for a push
 - [ ] **Smooth joint trajectories during play**: `sim__joints__move` only works paused and `sim__joints__command` steps to the target. A trajectory tool (a spline or trapezoid over a duration)
 - [ ] **Command a trained policy's velocity** in a windowed `isaaclab__play` (the G1 task tracks a velocity command; today it is whatever the task samples)
 
@@ -100,7 +133,7 @@ RL workflow
 Method
 - [ ] Add this section's list to the `mcp-wishlist-testing` skill as a worked example, and re-run both tester briefs after each item lands to confirm the friction is gone
 
-## 4. Poke a running scene
+## 5. Poke a running scene
 
 Authoring needs a stopped timeline, and Stop rewinds physics, so an agent could not nudge a block while playing.
 Jenga, LEGO and manipulation need it.
@@ -110,14 +143,14 @@ Jenga, LEGO and manipulation need it.
 - [ ] Test: nudge the top block of the tower and watch it move; pull a block out of a layer and see what falls
 - [ ] Docs and the example prompts in the README
 
-## 5. Second PR: M6 and M7 (branched from `main`)
+## 6. Second PR: M6 and M7 (branched from `main`)
 
 - [ ] M6: `assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources
 - [ ] M7: `sim__viewport__screenshot`, `sim__viewport__record_start`, `sim__viewport__record_stop`, and the final demo
 - [ ] For LEGO and Jenga: an arm with a gripper in `sim__quick_start`, and a route from a saved scene to a Lab task
 - [ ] Update `docs/TOOLS-*.md`, the counts, and regenerate the catalog and tool reference (`check_docs.py` enforces this)
 
-## 6. Small fixes
+## 7. Small fixes
 
 Host layer and refusals
 - [ ] A queued call that times out should say what the bridge is running (do it in the host layer's error formatting; the client attempt broke 11 tests)
@@ -165,7 +198,7 @@ Map and Nav2
 Optional
 - [ ] Start a recording before a window exists, or stop on a log marker
 
-## 7. Testing still owed
+## 8. Testing still owed
 
 - [ ] **Lab PC, when Kaleb says it is back** (it was down, shared workstation): 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1 with the smoke test, M1 to M5 and the plain-request tests; Lab 3.0.0 with the eval fix and the refusal hints
 - [ ] 6.0.1 `sim__stop` fix, live (stop must leave nothing running)
@@ -177,7 +210,7 @@ Optional
 - [ ] Re-run the README example prompts, including the LiDAR one, and fix any that fail
 - [ ] Merged M1 to M5 with the timeline playing: `sim__joints__move` was only checked after Stop
 
-## 8. Known limitations to state in the docs
+## 9. Known limitations to state in the docs
 
 - [ ] `--video` needs MoviePy and imageio-ffmpeg in the Lab environment
 - [ ] A screen recording belongs to the server process that started it, so a client that restarts between calls can't stop it
@@ -187,12 +220,12 @@ Optional
 - [ ] `[spin] error in rcl_take: error not set` lines in the Kit log on 6.0.0.0: appears harmless, not explained
 - [ ] One `sim__camera__capture` had the selection outline in it after a prim was selected by hand; not reproduced in 4 tries
 
-## 9. For Kaleb to decide
+## 10. For Kaleb to decide
 
-- [ ] Approve, change or reject the keep/combine/remove list when it arrives (section 2)
+- [ ] Approve, change or reject the keep/combine/remove list when it arrives (section 3)
 - [ ] Aldrin licence: Kaleb handles it. Update VENDORING, README and LICENSE only when he reports; do not ask again
 
-## 10. Last of all
+## 11. Last of all
 
 Run only after the tool work, all builds, Lab setup and merges, and only with Kaleb's go-ahead.
 
