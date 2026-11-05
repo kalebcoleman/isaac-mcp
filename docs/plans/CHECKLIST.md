@@ -146,7 +146,7 @@ Lab
 - [ ] `runs_status.window` was missing on the lab PC, present on the desktop
 - [ ] Two windowed jobs have the same title, so only id and pid tell them apart
 - [ ] A window still loading is black for up to 4 minutes when two Kits share a GPU, with no signal
-- [ ] `timeout_s` with no host running waits until the next status call
+- [ ] `timeout_s` with no host running waits until the next status call: a 25-minute play window stayed open 30 minutes. Enforce it from the job's own shell, and write an exit-code file when the timeout kills a job (today a script waiting for the file waits forever)
 
 Map and Nav2
 - [ ] Map rasterising: a collider marks every cell it touches, so a thin wall can show a cell wider

@@ -77,14 +77,24 @@ a fixed base, so it holds a pose; it does not balance or walk.
 
 > Train the Unitree G1 to walk on flat ground, tell me how it did, and show it to me in a window.
 
-![Six Unitree G1 humanoids walking on a grid floor in the Isaac Sim window; the arrows show the speed each one is told to follow](docs/media/g1-walk.gif)
+There was no agent prompt for this one: Claude Sonnet 5.5 called the tools directly (the [exact calls](docs/evidence/readme-examples-prompts-and-models-2026-11-04.md#the-humanoid-walking-run-the-exact-tool-calls) are recorded), so the prompt above is an example. It used Isaac Lab's built-in G1 task, `Isaac-Velocity-Flat-G1-v0`, with NVIDIA's own G1 model (not the GitHub one above), trained twice with `isaaclab__train` (1,024 environments, rsl_rl), scored with `isaaclab__eval`, and watched in a window with `isaaclab__play`. The arrows over the robots are the speed commands each one follows.
 
-There was no agent prompt for this one: the tools were called directly (the [exact calls](docs/evidence/readme-examples-prompts-and-models-2026-11-04.md#the-humanoid-walking-run-the-exact-tool-calls) are recorded), so the prompt above is an example. It used Isaac Lab's built-in G1 task, `Isaac-Velocity-Flat-G1-v0`, with NVIDIA's own G1 model (not the GitHub one
-above): `isaaclab__train` with 1,024 environments and 300 iterations took **152 seconds**, then `isaaclab__eval` ran 16
-episodes of 1,000 steps and **all 16 stayed up** (mean return 13.3), and `isaaclab__play` opened the window above. The
-arrows are the speed commands each robot follows. This is a short run, so expect a rough gait, and running it for 1,500
-iterations (about 13 minutes) would be the next step. Training a robot of your own through these tools is not supported yet;
-it is on the [checklist](docs/plans/CHECKLIST.md#3-new-tools-for-robotics-and-rl-from-the-live-tests-2026-11-04).
+| Short run: 300 iterations | Longer run: 1,500 iterations |
+|---|---|
+| ![Six G1 humanoids walking on a grid floor after 300 training iterations](docs/media/g1-walk-300it.gif) | ![Six G1 humanoids walking on a grid floor after 1,500 training iterations](docs/media/g1-walk-1500it.gif) |
+
+| | 300 iterations | 1,500 iterations |
+|---|---|---|
+| Training time | 152 s | 727 s |
+| Speed-tracking reward at the end (higher is better) | 0.37 | 0.91 |
+| Training episodes ended by a fall | 39% | 1.4% |
+| Evaluation: 16 episodes, all lasted the full 1,000 steps | mean return 13.3 (spread 4.5) | mean return 34.4 (spread 0.9) |
+
+So 12 more minutes of training took it from "stays up and mostly follows the command" to a much steadier and more accurate
+walk. These are one run each (different seeds: 1 and 2), not a measured average, and the pictures are a flat grid, not a
+rough-terrain test. Training a robot of your own through these tools is not supported yet; it is on the
+[checklist](docs/plans/CHECKLIST.md#3-new-tools-for-robotics-and-rl-from-the-live-tests-2026-11-04). The full
+40-second window recordings are kept with the project's draft evidence release, not in git.
 
 ### More prompts
 

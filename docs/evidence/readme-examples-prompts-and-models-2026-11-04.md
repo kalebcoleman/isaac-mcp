@@ -11,7 +11,7 @@ prompt was edited. Where a README prompt is only an example of what you could sa
 | Put a wheeled robot in a room (Nova Carter) | Scripted tool calls | Claude Sonnet 5.5 | None. The README prompt is an example. No LiDAR was created in that picture |
 | Load your own robot (SO-ARM100) | Scripted tool calls through a throwaway host | Claude Sonnet 5.5 | None. The README prompt is an example |
 | Pull a real humanoid from GitHub (G1, Barkour) | A tester agent in a sandbox | **Gemini 3.8 Flash**, thinking level high (Antigravity) | The brief below, word for word |
-| Train a humanoid to walk (G1) | Direct tool calls | Claude Sonnet 5.5 | None. It followed the request "do the walk training as a test for the mcp"; the README prompt is an example. Calls are listed below |
+| Train a humanoid to walk (G1), two runs | Direct tool calls | Claude Sonnet 5.5 | None. It followed the request "do the walk training as a test for the mcp"; the README prompt is an example. Calls are listed below |
 | Isaac Lab research workflow (not shown as a picture; its findings are in the checklist) | A tester agent in a sandbox | Gemini 3.8 Flash, thinking level high | The second brief below, word for word |
 
 "Scripted tool calls" means a person-style request was not typed to an agent: the calls were written out in Python and
@@ -57,6 +57,37 @@ Isaac Sim 5.1.0, an RTX 5080 with 16 GB:
 | Watch | `isaaclab__play` with `task="Isaac-Velocity-Flat-G1-Play-v0"`, the same checkpoint, `num_envs=6`, `headless=false`, `timeout_s=1500`, then a 40-second window recording cut to the 7-second GIF |
 
 Results: training 152 s; evaluation 16 episodes, all 1,000 steps, mean return 13.3 (range 7.4 to 21.6).
+
+### The longer run (same method, 1,500 iterations)
+
+| Step | Tool and arguments |
+|---|---|
+| Train | `isaaclab__train` with `task="Isaac-Velocity-Flat-G1-v0"`, `rl_library="rsl_rl"`, `num_envs=1024`, `max_iterations=1500`, `seed=2`, `headless=true`, `timeout_s=2400` |
+| Evaluate | `isaaclab__eval` with the same task, `checkpoint=<run>/model_1499.pt`, `num_envs=16`, `num_episodes=16`, `max_steps=3000`, `headless=true`, `timeout_s=600` |
+| Watch | `isaaclab__play` with `task="Isaac-Velocity-Flat-G1-Play-v0"`, the same checkpoint, `num_envs=6`, `headless=false`, `timeout_s=420`, and a 40-second recording of the window |
+
+Results: training 727 s (about 0.48 s per iteration); final speed-tracking reward 0.913 (0.373 after 300 iterations); mean
+episode reward 21.4; episodes ended by a fall (base contact) 1.4% (39.5% after 300 iterations); evaluation of 16 episodes,
+all 1,000 steps, mean return 34.4, range 32.5 to 35.6 (13.3, range 7.4 to 21.6, after 300). Different seeds (1 and 2), so
+this is one run each, not an average.
+
+### Recordings
+
+The two 40-second window recordings (1440x900, 20 fps, no audio) are in the project's draft evidence release, not in git:
+
+| File | Size | SHA-256 |
+|---|---:|---|
+| `g1-walk-300it-window.mp4` | 892326 | `af2dd00e6801f3b7cb11dd77140f91c888eb751ca725b13e6dd28d81b4e6657e` |
+| `g1-walk-1500it-window.mp4` | 1008784 | `fd6780a3e37924e63de3a7dc0322123a7d1304db1c69585f1906d0a60db49d91` |
+
+The GIFs in the README are 6 to 7 seconds cut from those clips and cropped to the viewport. A first attempt to record the
+longer run was stopped by hand after 9 seconds and discarded.
+
+### Things that went wrong on the way
+
+- The first play window stayed open for 30 minutes instead of its 25-minute timeout: with no host running, the timeout is
+  only enforced when someone next checks the job. Checking it marked it `timeout` and the process was gone. A job stopped
+  that way never writes its exit-code file, so a script waiting for that file waits forever.
 
 ## What this does not show
 
