@@ -256,6 +256,7 @@ def bind_material(s, stage, prim_path, material_path):
 CREATE_KEYS = ("path", "kind", "size", "rigid", "position", "orientation", "frame", "collision", "scale", "mass",
                "density", "material")
 MAX_CREATE_MANY = 200
+GEOMETRY_KINDS = ("Cube", "Sphere", "Cylinder", "Capsule", "Cone", "Plane")
 
 
 def create_one(s, stage, spec):
@@ -304,6 +305,8 @@ def create_many(s, stage, a):
     made, warnings = [], []
     for index, item in enumerate(items):
         spec = {**defaults, **item}
+        if "material" in defaults and "material" not in item and spec.get("kind") not in GEOMETRY_KINDS:
+            spec.pop("material")  # a shared material is for shapes; an Xform or PhysicsScene in the list has none
         try:
             if "path" not in spec or "kind" not in spec:
                 refuse("INVALID_VALUE", "each item needs path and kind (defaults may supply kind).")
@@ -315,8 +318,7 @@ def create_many(s, stage, a):
                 getattr(exc, "code", None) or "BATCH_FAILED",
                 f"items[{index}] ({spec.get('path')!r}) failed, so all {len(made)} earlier prims were removed and "
                 f"nothing was created: {detail}",
-                failed_index=index,
-                failed_path=spec.get("path"),
+                **{**getattr(exc, "details", {}), "failed_index": index, "failed_path": spec.get("path")},
             )
         made.append(spec["path"])
         if warning:
@@ -1174,12 +1176,18 @@ class Advanced:
                 metallic=metal,
             )
         if name == "sim.material.apply":
-            paths = a.get("paths")
-            if paths is not None:
-                if a.get("path") not in (None, "") or not isinstance(paths, list) or not 1 <= len(paths) <= 128:
-                    refuse("INVALID_VALUE", "Give path (one prim) or paths (1 to 128 prims), not both.")
-                return dict(applied=[bind_material(s, stage, p, a["material_path"]) for p in paths])
-            return bind_material(s, stage, a["path"], a["material_path"])
+            paths, single = a.get("paths"), a.get("path")
+            if (paths is None) == (single in (None, "")):
+                refuse("INVALID_VALUE", "Give path (one prim) or paths (a list of 1 to 128 prims), one of the two.")
+            if paths is None:
+                return bind_material(s, stage, single, a["material_path"])
+            if not isinstance(paths, list) or not 1 <= len(paths) <= 128:
+                refuse("INVALID_VALUE", "paths must be a list of 1 to 128 prim paths.")
+            owned(s, stage, a["material_path"])
+            for p in paths:  # check every prim before binding any, so a bad one leaves nothing half done
+                if not isinstance(p, str) or not UsdGeom.Gprim(s.prim(stage, p)):
+                    refuse("WRONG_TYPE", f"{p!r} is not geometry, so nothing was bound.", failed_path=p)
+            return dict(applied=[bind_material(s, stage, p, a["material_path"]) for p in paths])
         if name == "sim.prim.create_many":
             return create_many(s, stage, a)
         if name == "sim.physics.configure":

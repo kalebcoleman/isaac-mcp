@@ -105,3 +105,36 @@ def test_material_apply_takes_many_paths(advanced):
         advanced.execute("sim.material.apply", stage, dict(path="/World/A", paths=["/World/B"], material_path=wood))
     single = advanced.execute("sim.material.apply", stage, dict(path="/World/A", material_path=wood))
     assert single["material"] == wood
+
+
+def test_material_apply_paths_is_all_or_none_and_needs_a_target(advanced):
+    stage = advanced.s.stage()
+    wood = _wood(advanced, stage)
+    advanced.s.create(stage, "/World/A", "Cube")
+    advanced.s.create(stage, "/World/B", "Cube")
+    with pytest.raises(AssetError):
+        advanced.execute("sim.material.apply", stage, dict(paths=["/World/A", "/World/Missing", "/World/B"], material_path=wood))
+    assert not UsdShade.MaterialBindingAPI(stage.GetPrimAtPath("/World/A")).GetDirectBinding().GetMaterial()
+    with pytest.raises(AssetError, match="one of the two"):
+        advanced.execute("sim.material.apply", stage, dict(material_path=wood))
+
+
+def test_a_failed_item_keeps_the_original_error_details(advanced):
+    stage = advanced.s.stage()
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.prim.create_many", stage, dict(items=[dict(path="/World/A", kind="Cube", rigid=True, mass=1, density=1)]))
+    assert error.value.code == "CONFLICT"
+    assert error.value.details["retry_with"] and error.value.details["failed_index"] == 0
+
+
+def test_a_shared_material_skips_xforms_in_the_list(advanced):
+    stage = advanced.s.stage()
+    wood = _wood(advanced, stage)
+    result = advanced.execute("sim.prim.create_many", stage, dict(
+        items=[dict(path="/World/Group", kind="Xform"), dict(path="/World/Group/Block")],
+        defaults=dict(kind="Cube", material=wood)))
+    assert result["count"] == 2
+    assert stage.GetPrimAtPath("/World/Group").GetTypeName() == "Xform"
+    # An item that asks for a material on an Xform itself is still refused.
+    with pytest.raises(AssetError):
+        advanced.execute("sim.prim.create_many", stage, dict(items=[dict(path="/World/G2", kind="Xform", material=wood)]))
