@@ -12,7 +12,7 @@ prompt was edited. Where a README prompt is only an example of what you could sa
 | Load your own robot (SO-ARM100) | Scripted tool calls through a throwaway host | Claude Sonnet 5.5 | None. The README prompt is an example |
 | Pull a real humanoid from GitHub (G1, Barkour) | A tester agent in a sandbox | **Gemini 3.8 Flash**, thinking level high (Antigravity) | The brief below, word for word |
 | Train a humanoid to walk (G1) | Direct tool calls | Claude Sonnet 5.5 | None. It followed the request "do the walk training as a test for the mcp"; the README prompt is an example. Calls are listed below |
-| Isaac Lab research workflow (not shown as a picture; its findings are in the checklist) | A tester agent in a sandbox | Gemini 3.8 Flash, thinking level high | The second brief below, word for word. A first attempt with `opencode/beam-free` stopped at a usage limit before doing anything |
+| Isaac Lab research workflow (not shown as a picture; its findings are in the checklist) | A tester agent in a sandbox | Gemini 3.8 Flash, thinking level high | The second brief below, word for word |
 
 "Scripted tool calls" means a person-style request was not typed to an agent: the calls were written out in Python and
 run against a throwaway headless Isaac Sim (6.2.0, PhysX), so those pictures show what the tools can build, not what an
