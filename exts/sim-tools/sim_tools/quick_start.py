@@ -47,9 +47,12 @@ def _resolved(relpath, pack, label, name):
         refuse("ASSET_MISSING", f"{label} has no local copy" + (" and strict mode forbids the download."
                if resolver.remote_uri(relpath) else ", and it has no public source. See docs/ASSETS.md."), asset=relpath)
     if report["source"] == "project":
+        from isaac_mcp.project_assets import approval_help
+
+        store = next((str(x) for x in assets.project_stores() if str(report["location"]).startswith(str(x))), None)
         refuse("ROOT_NOT_APPROVED", f"{label} would come from a project file's asset_path ({report['location']}), which "
                "is not an approval, because a cloned repository could name any folder. Approve that folder as a "
-               "trusted root, or put the file in your asset folder. See docs/ASSETS.md.", asset=relpath)
+               "trusted root, or put the file in your asset folder." + approval_help(store or report["location"]), asset=relpath)
     try:
         # A plain path for a local file: USD resolves it the same with or without Kit's URI resolver.
         uri = resolver.resolve_uri(relpath) if report["source"] == "remote" else str(resolver.resolve_path(relpath))
@@ -76,12 +79,17 @@ def resolve_robot(robot, snapshot_id=None):
     if snapshot_id and is_urdf:
         return dict(name=_prim_name(robot), snapshot=True, urdf=True, assets=[dict(asset=robot, source="snapshot", location=robot)])
     if is_urdf:
+        from isaac_mcp.project_assets import approval_help
+
         refuse("ROOT_NOT_APPROVED", "A URDF goes through the MCP host, which checks it against your approved roots and "
-               "asset folder. Nothing was changed.")
+               "asset folder, and this call did not come through it. Name it as <pack>/<file.urdf> from your asset folder, or "
+               "as an absolute path under an approved root. Nothing was changed." + approval_help(None))
     if os.path.isabs(os.path.expanduser(robot)):
         if not snapshot_id:
+            from isaac_mcp.project_assets import approval_help
+
             refuse("ROOT_NOT_APPROVED", "An absolute robot path goes through the MCP host, which checks it against your "
-                   "approved roots (the same rule as assets__import_path). Nothing was changed.")
+                   "approved roots (the same rule as assets__import_path). Nothing was changed." + approval_help(os.path.dirname(os.path.expanduser(robot))))
         return dict(name=_prim_name(robot), snapshot=True, assets=[dict(asset=robot, source="approved_root", location=robot)])
     pack, _, relpath = robot.partition("/")
     if not relpath:

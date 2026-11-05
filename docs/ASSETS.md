@@ -360,6 +360,15 @@ up from the working directory of the process.
 An invalid file (not JSON, not an object, `asset_path` not a list of strings, an invalid `pack`) is an error,
 not a silent skip.
 
+### The host and Kit must see the same project
+
+The host finds the project file from its working directory; Kit starts in another folder. Kit started with
+`sim__launch` from a host that resolves a project file gets `ISAAC_MCP_PROJECT` for it (an explicit setting is kept).
+A Kit you start yourself does not: set `ISAAC_MCP_PROJECT` in its environment too. Otherwise the same call resolves
+differently, because Kit resolves public robot names, the twin and `sim__quick_start` names itself. With a Kit connected,
+`assets__packs` lists `kit_environment` (the project file, stores and strict mode Kit uses) and `warnings` when they
+differ from the host's.
+
 ## User pins: `SHA256SUMS`
 
 A robot modified by your lab is not NVIDIA's file, so the manifest hash would refuse it.

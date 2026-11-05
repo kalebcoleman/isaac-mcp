@@ -134,6 +134,16 @@ def _domain_start(env: Mapping[str, str]) -> int:
 # about to take. These claims are exclusive across host processes on this machine.
 
 
+def _host_project_file():
+    """The isaac-mcp.json this host resolves, or None (an unreadable or invalid one is not passed on)."""
+    try:
+        from . import assets
+
+        return assets.project_file()
+    except Exception:  # noqa: BLE001 - a launch must not fail because of a project file problem
+        return None
+
+
 def _claim_owner() -> dict:
     identity = _process_identity(os.getpid())
     if identity is None:
@@ -778,6 +788,11 @@ def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | N
         for key in ("UR5E_DT_PYTHON", "ISAAC_MCP_PYTHON", "ISAAC_MCP_WORKSPACE"):
             if env.get(key):
                 child_env[key] = env[key]
+        # The project file this host sees is the one Kit must see: Kit starts in another folder, so without this it would
+        # never read the project's pack or asset_path, and the same call would resolve differently in host and Kit.
+        project = _host_project_file()
+        if project is not None:
+            child_env.setdefault("ISAAC_MCP_PROJECT", str(project))
         user_config = directory / "user.config.json"
         args = ([str(launcher), "--port", str(port)] + (["--headless"] if headless else [])
                 + (["--ur5e-panel"] if show_ur5e_panel else [])

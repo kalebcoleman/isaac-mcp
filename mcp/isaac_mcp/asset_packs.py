@@ -21,6 +21,13 @@ from pathlib import Path, PurePosixPath
 
 from . import assets, material_refs, urdf_refs
 
+
+def approval_help(folder=None):
+    """The filled-in approval command (imported late: project_assets is the heavier module)."""
+    from .project_assets import approval_help as _help
+
+    return _help(folder)
+
 PINS_FILE = assets.PINS_FILE
 PACK_FILE = assets.PACK_FILE
 USD_SUFFIXES = {".usd", ".usda", ".usdc", ".usdz"}
@@ -579,7 +586,7 @@ class ClosureBackend:
                 if not self.trusted(Path(path)):
                     raise PackError(
                         f"Will not parse USD outside approved roots and user stores: {path}. "
-                        "A project store needs approving as a root first.",
+                        "A project store needs approving as a root first." + approval_help(path),
                         "ROOT_NOT_APPROVED",
                     )
         if self.python:
@@ -1156,8 +1163,7 @@ def _approved_root(path: Path, broker) -> Path:
             os.close(broker.root_fd(root_id))
             return root
     raise PackError(
-        "The path is outside all user-approved roots. Call assets__roots for setup; no tool can "
-        "approve folders.",
+        "The path is outside all user-approved roots." + approval_help(None),
         "ROOT_NOT_APPROVED",
     )
 
@@ -1188,6 +1194,39 @@ def _kit_closure(kit_call):
     return call
 
 
+def _host_environment(resolver) -> dict:
+    project = assets.project_file()
+    return dict(project_file=str(project) if project else None, stores=[str(p) for p in resolver.stores()],
+                packs=list(resolver.packs()), strict=bool(resolver.offline()))
+
+
+def _kit_environment(kit_call):
+    """What the connected Kit's resolver uses, or None when there is no Kit or it predates the report."""
+    if kit_call is None:
+        return None
+    try:
+        info = kit_call("sim.stage.info", {})
+    except Exception:  # noqa: BLE001 - no bridge is the normal case for a host-side listing
+        return None
+    env = info.get("asset_environment") if isinstance(info, dict) else None
+    return env if isinstance(env, dict) and "error" not in env else None
+
+
+def environment_warnings(host: dict, kit: dict) -> list[str]:
+    """Differences between the host's and Kit's asset settings that make the same call resolve differently."""
+    out = []
+    if host.get("project_file") != kit.get("project_file"):
+        out.append(f"This host uses the project file {host.get('project_file')!r} but the connected Kit uses {kit.get('project_file')!r}. "
+                   "Calls Kit resolves itself (public robot names, the UR5e twin, sim__quick_start names) ignore the project's pack "
+                   "and asset_path. Start Kit with sim__launch from this host, or set ISAAC_MCP_PROJECT to the project for Kit.")
+    if list(host.get("stores") or []) != list(kit.get("stores") or []):
+        out.append(f"The host searches the stores {host.get('stores')} but Kit searches {kit.get('stores')}. Give both the same "
+                   "ISAAC_MCP_ASSET_PATH, or Kit will not see the packs the host lists.")
+    if bool(host.get("strict")) != bool(kit.get("strict")):
+        out.append(f"Strict mode is {'on' if host.get('strict') else 'off'} for the host and {'on' if kit.get('strict') else 'off'} for Kit.")
+    return out
+
+
 def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
     """Run one host-side pack tool. Raises :class:`PackError` for refusals."""
     resolver = assets.Resolver(assets.DEFAULT_PACK)
@@ -1206,7 +1245,14 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
     closure = ClosureBackend(kit_call=_kit_closure(kit_call), trusted=trusted)
 
     if canonical == "assets.packs":
-        return dict(status="ok", **context, listing=list_packs(resolver.stores()))
+        report = dict(status="ok", **context, listing=list_packs(resolver.stores()))
+        kit = _kit_environment(kit_call)
+        if kit is not None:
+            report["kit_environment"] = kit
+            warnings = environment_warnings(_host_environment(resolver), kit)
+            if warnings:
+                report["warnings"] = warnings
+        return report
 
     if canonical == "assets.pack_doctor":
         pack = named_pack()

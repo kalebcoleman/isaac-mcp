@@ -40,6 +40,28 @@ def refuse(code, message, **details):
     raise AssetError(code, message, **details)
 
 
+def approval_help(folder=None) -> str:
+    """What the *user* does to approve a folder, as a filled-in command an agent can pass on.
+
+    The agent cannot approve anything. This names the folder, the config file when one is already set, and the restart that
+    is needed, so a refusal ends in one instruction instead of a pointer to a document.
+    """
+    config = os.environ.get("ISAAC_MCP_ASSET_CONFIG", "").strip() or "<a private approval.json, such as ~/.config/isaac-mcp/approval.json>"
+    if folder and Path(str(folder)).suffix:  # a file was named: the folder to approve is the one holding it
+        folder = Path(str(folder)).parent
+    target = str(folder) if folder else "<the folder>"
+    parts = [x for x in str(folder).rstrip("/").split("/") if x]
+    name = parts[-1] if parts else "project"
+    if name.lower() in {"assets", "downloads", "data", "models", "robots"} and len(parts) > 1:
+        name = f"{parts[-2]}-{name}"  # "assets" alone names nothing: say whose
+    root_id = re.sub(r"[^A-Za-z0-9_.-]+", "-", name).strip("-.") or "project"
+    return (f" To approve {target}, ask the user to run this in their own shell (an agent cannot): "
+            f"\"$(uv tool dir)/isaac-mcp/bin/python\" -m isaac_mcp.project_assets --config {config} "
+            f"--root-id {root_id} --root {target}"
+            " , then to reconnect the MCP server and restart Kit, because both read the approval file at startup. "
+            "Approving a parent folder such as the workspace's projects folder covers every project under it.")
+
+
 def relative(value):
     if (
         not isinstance(value, str)
@@ -341,7 +363,7 @@ class Broker:
             return found
         refuse(
             "ROOT_NOT_APPROVED",
-            "The path is outside all user-approved project roots and user asset stores. Call assets__roots for setup.",
+            "The path is outside all user-approved project roots and user asset stores." + approval_help(source if isinstance(source, (str, os.PathLike)) else None),
         )
 
     @staticmethod
@@ -403,7 +425,7 @@ class Broker:
         if known is None:
             refuse(
                 "ROOT_NOT_APPROVED",
-                "Root is not approved in this server configuration. Call assets__roots for setup.",
+                "Root is not approved in this server configuration. Call assets__roots to see the approved folders." + approval_help(),
             )
         path, identity = known
         fd = open_dir(path)
