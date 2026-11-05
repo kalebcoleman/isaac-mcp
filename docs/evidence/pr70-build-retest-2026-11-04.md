@@ -29,7 +29,7 @@ On 6.2.0.0 and 5.1.0.0 (desktop, `bc3e24d`): the same clock and `/scan` graphs b
 
 - UR5e at `c90e0ab`, 6.2 windowed, empty asset store: all six goals in about 9.5 minutes with no `run_python`. Two calls gave a connected TF tree. A saved scene reopened in a new process.
 - Lab 3 at `e658289`, 6.2 windowed, Parts A to J including Nav2, with no `run_python`. Two Nav2 goals failed on a table inside the LiDAR's 1 m blind zone, and a third in a clear corridor succeeded.
-- Asset packs at an uncommitted tree: the chess set passed with the tools alone, apart from needing a Y-up stage. A URDF robot did not pass: see the open list in the [checklist](../plans/PR-70-CHECKLIST.md).
+- Asset packs at an uncommitted tree: the chess set passed with the tools alone, apart from needing a Y-up stage. A URDF robot did not pass: see the open list in the [checklist](../plans/CHECKLIST.md).
 
 ## Root causes found
 
