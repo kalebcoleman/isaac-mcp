@@ -82,3 +82,15 @@ with **PhysX**, from the repository state at the time the README was written, on
 - The SO-ARM100 is the Apache-2.0 [TheRobotStudio/SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) URDF, loaded
   from a pack in a throwaway asset folder.
 - These are single runs shown to illustrate the tools, not a test result.
+
+## Humanoid captures in the README
+
+`g1-github-scene.png` and `g1-walk.gif` come from two live runs on 2026-11-04 (RTX 5080, PhysX).
+
+- `g1-github-scene.png`: a headless camera capture on Isaac Sim 6.2.0 of the Unitree G1 from `unitreerobotics/unitree_ros`
+  (BSD-3-Clause), built into a pack and imported as a fixed-base URDF. Reduced to 128 colors.
+- `g1-walk.gif`: seven seconds cut from a 40-second window recording of `isaaclab__play` on Isaac Lab 2.3.2 with Isaac Sim
+  5.1.0, task `Isaac-Velocity-Flat-G1-v0`, checkpoint after 300 iterations, 6 environments. Cropped to the viewport, 8 fps,
+  48 colors. The full recording is not kept in git.
+- Training: 1,024 environments, seed 1, 152 s. Evaluation: 16 episodes, all 1,000 steps, mean return 13.3 (range 7.4 to 21.6).
+  One run each, not a measurement of variation.
