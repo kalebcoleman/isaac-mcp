@@ -42,7 +42,11 @@ def refuse(code, message, **details):
 
 
 _FILE_SUFFIXES = {".urdf", ".xacro", ".usd", ".usda", ".usdc", ".usdz", ".dae", ".stl", ".obj", ".mtl", ".mdl", ".mjcf", ".xml",
-                  ".png", ".jpg", ".jpeg", ".json", ".yaml", ".yml", ".txt"}
+                  ".sdf", ".glb", ".gltf", ".fbx", ".ply", ".png", ".jpg", ".jpeg", ".tga", ".bmp", ".tif", ".tiff", ".exr", ".hdr",
+                  ".json", ".yaml", ".yml", ".toml", ".ini", ".txt", ".md", ".csv"}
+# The only words printed in the command that are not real values to quote: what the user must fill in or create.
+_PLACEHOLDER_FOLDER = "<the folder>"
+_PLACEHOLDER_CONFIG = "<a private approval.json, such as ~/.config/isaac-mcp/approval.json>"
 
 
 def _names_a_file(path) -> bool:
@@ -59,8 +63,9 @@ def _names_a_file(path) -> bool:
 
 
 def _shell_word(value: str) -> str:
-    """A path as one word for a shell. A placeholder (<...>) and a ~/ path without special characters stay readable."""
-    if value.startswith("<"):
+    """A path as one word for a shell. Only the two exact placeholders and a ~/ path without special characters stay readable;
+    anything else, including a value that merely starts with ``<``, is quoted."""
+    if value in (_PLACEHOLDER_FOLDER, _PLACEHOLDER_CONFIG):
         return value
     if value.startswith("~/") and shlex.quote(value[2:]) == value[2:]:
         return value
@@ -73,10 +78,10 @@ def approval_help(folder=None) -> str:
     The agent cannot approve anything. This names the folder, the config file when one is already set, and the restart that
     is needed, so a refusal ends in one instruction instead of a pointer to a document.
     """
-    config = os.environ.get("ISAAC_MCP_ASSET_CONFIG", "").strip() or "<a private approval.json, such as ~/.config/isaac-mcp/approval.json>"
+    config = os.environ.get("ISAAC_MCP_ASSET_CONFIG", "").strip() or _PLACEHOLDER_CONFIG
     if folder and _names_a_file(folder):  # a file was named: the folder to approve is the one holding it
         folder = Path(str(folder)).parent
-    target = str(folder) if folder else "<the folder>"
+    target = str(folder) if folder else _PLACEHOLDER_FOLDER
     parts = [x for x in str(folder).rstrip("/").split("/") if x] if folder else []
     name = parts[-1] if parts else "project"
     if name.lower() in {"assets", "downloads", "data", "models", "robots"} and len(parts) > 1:
@@ -84,7 +89,7 @@ def approval_help(folder=None) -> str:
     # The approval file accepts only [A-Za-z0-9_-], 1 to 48 characters.
     root_id = re.sub(r"[^A-Za-z0-9_-]+", "-", name).strip("-")[:48].strip("-") or "project"
     # The helper refuses to run without --trust-project, and needs --staging while it creates the config file.
-    new_file = "<" in config or not Path(config).expanduser().exists()
+    new_file = config == _PLACEHOLDER_CONFIG or not Path(config).expanduser().exists()
     staging = os.environ.get("ISAAC_MCP_STAGING", "").strip() or "~/.cache/isaac-mcp/staging"
     extra = f" --staging {_shell_word(staging)}" if new_file else ""
     return (f" To approve {_shell_word(target) if folder else target}, ask the user to run this in their own shell (an agent cannot):\n"

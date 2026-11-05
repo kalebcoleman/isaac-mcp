@@ -248,7 +248,7 @@ def place_above_ground(stage, path, position_given, max_lift=None):
         return report
     lift = ground - lowest + GROUND_CLEARANCE_M
     if max_lift is not None and lift > max_lift:
-        report["warning"] = (f"The robot's lowest point reads {ground - lowest:.1f} below the ground plane, more than the {max_lift:g} "
+        report["warning"] = (f"The robot's lowest point reads {ground - lowest:.1f} m below the ground plane, more than the {max_lift:g} m "
                              "an automatic lift allows (stray geometry in the file is the usual cause), so it was not moved.")
         return report
     with Usd.EditContext(stage, stage.GetSessionLayer()):

@@ -192,3 +192,33 @@ def test_the_command_has_no_stray_arguments_after_it(monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
     line = next(x for x in a.approval_help("/work/p/assets").splitlines() if "isaac_mcp.project_assets" in x)
     assert line.rstrip().endswith("--trust-project")
+
+
+@pytest.mark.parametrize("evil", ["<x; touch /tmp/PWNED #", "<a;touch /tmp/PWNED", "<the folder> ; rm -rf ~", "$(touch /tmp/PWNED)", "`id`", "it's", "a\nb"])
+def test_a_value_that_only_looks_like_a_placeholder_is_quoted(evil):
+    """Only the two exact placeholders are left bare: a folder name or config path from anywhere else is quoted, so the
+    pasted command runs the helper and nothing else."""
+    import shlex
+
+    assert a._shell_word("<the folder>") == "<the folder>" and a._shell_word(a._PLACEHOLDER_CONFIG) == a._PLACEHOLDER_CONFIG
+    word = a._shell_word(evil)
+    assert shlex.split(word) == [evil]  # one shell word that is exactly the value, nothing executed
+
+
+def test_a_hostile_config_or_folder_cannot_add_commands_to_the_printed_line(monkeypatch):
+    import shlex
+
+    monkeypatch.setenv("ISAAC_MCP_ASSET_CONFIG", "<x;touch /tmp/PWNED2")
+    text = a.approval_help("<y; touch /tmp/PWNED #/assets")
+    argv = _printed_argv(text)
+    assert argv[argv.index("--config") + 1] == "<x;touch /tmp/PWNED2"
+    assert argv[argv.index("--root") + 1] == "<y; touch /tmp/PWNED #/assets"
+    line = next(x for x in text.splitlines() if "isaac_mcp.project_assets" in x)
+    assert shlex.split(line.strip())[0].endswith("python")  # the line is one command: no extra tokens ran or split off
+
+
+@pytest.mark.parametrize("name", ["model.glb", "scene.gltf", "mesh.fbx", "robot.sdf", "points.ply", "sky.hdr", "tex.exr", "table.csv"])
+def test_more_file_suffixes_name_a_file_when_it_is_not_on_disk(monkeypatch, name):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    argv = _printed_argv(a.approval_help(f"/work/p/assets/{name}"))
+    assert argv[argv.index("--root") + 1] == "/work/p/assets"
