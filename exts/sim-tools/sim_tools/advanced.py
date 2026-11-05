@@ -256,7 +256,12 @@ def bind_material(s, stage, prim_path, material_path):
 CREATE_KEYS = ("path", "kind", "size", "rigid", "position", "orientation", "frame", "collision", "scale", "mass",
                "density", "material")
 MAX_CREATE_MANY = 200
-GEOMETRY_KINDS = ("Cube", "Sphere", "Cylinder", "Capsule", "Cone", "Plane")
+# Shared `defaults` that do not apply to a kind are left off it, so one list can hold a group Xform and its blocks.
+SHARED_ONLY_FOR = {
+    "Xform": ("rigid", "mass", "density", "collision", "material"),
+    "PhysicsScene": ("rigid", "mass", "density", "collision", "material"),
+    "Plane": ("rigid", "mass", "density"),
+}
 
 
 def create_one(s, stage, spec):
@@ -305,8 +310,10 @@ def create_many(s, stage, a):
     made, warnings = [], []
     for index, item in enumerate(items):
         spec = {**defaults, **item}
-        if "material" in defaults and "material" not in item and spec.get("kind") not in GEOMETRY_KINDS:
-            spec.pop("material")  # a shared material is for shapes; an Xform or PhysicsScene in the list has none
+        kind = spec.get("kind")
+        for key in SHARED_ONLY_FOR.get(kind, ()):
+            if key in defaults and key not in item:
+                spec.pop(key, None)  # a shared rigid, mass or material is for shapes, so an Xform in the list skips it
         try:
             if "path" not in spec or "kind" not in spec:
                 refuse("INVALID_VALUE", "each item needs path and kind (defaults may supply kind).")

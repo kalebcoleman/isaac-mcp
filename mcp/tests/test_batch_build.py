@@ -132,7 +132,7 @@ def test_a_shared_material_skips_xforms_in_the_list(advanced):
     wood = _wood(advanced, stage)
     result = advanced.execute("sim.prim.create_many", stage, dict(
         items=[dict(path="/World/Group", kind="Xform"), dict(path="/World/Group/Block")],
-        defaults=dict(kind="Cube", material=wood)))
+        defaults=dict(kind="Cube", rigid=True, mass=0.015, material=wood)))
     assert result["count"] == 2
     assert stage.GetPrimAtPath("/World/Group").GetTypeName() == "Xform"
     # An item that asks for a material on an Xform itself is still refused.

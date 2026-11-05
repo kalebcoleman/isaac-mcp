@@ -12,14 +12,16 @@ A 36-block tower took **43 creates and 72 material calls**, over 110 in all. Eac
 building anything with many parts is slow and costly. **Goal: that tower in 5 calls or fewer**, with the same result
 (mass on every block, stands 10 s, same height).
 
-- [ ] Measure first: calls and wall time per call for the tower, and the other repeated patterns in earlier runs
-- [ ] `material` (and `color`) option on `sim__prim__create`, so a shape and its look are one call
-- [ ] A batch create: one call takes a list of shapes (kind, pose, size, scale, mass, material) and returns the list
-- [ ] `sim__prim__clone` with a count and an offset, a grid or a stack, so repeats cost one call (check what clone does today)
-- [ ] Batch material apply (a list of paths) and batch transforms
-- [ ] One undo and one render settle per batch, not per item; a failed item names itself and says what was kept
-- [ ] Test: the tower in 5 calls or fewer, in a unit test and live on 6.2; record the before and after call counts here
+- [x] Measured: the tower was 43 creates, 72 material binds and about 4 setup calls
+- [x] `material` option on `sim__prim__create`: a shape and its look in one call; if the material can't be bound nothing is created (a bare `color` option was left out: make a material once with `sim__material__create` and share it)
+- [x] `sim__prim__create_many`: up to 200 shapes in one call, all or none, with `defaults` for shared keys (skipped for an Xform or Plane where they don't apply) and the error naming the failed item
+- [x] `sim__material__apply` takes `paths` (up to 128), checked before any is bound
+- [x] A failed batch removes everything it made and keeps the original error's code and details; tested offline and live
+- [x] Test: the tower, including its Xform parent, in one call (5 calls with setup, from over 110); live on 6.2 it stands after 10 s with the top block 1 mm below its authored height
+- [ ] `sim__prim__clone` with a count and an offset, a grid or a stack (check what clone does today)
+- [ ] Batch transforms (move many prims in one call)
 - [ ] Look for other N-call patterns (joints, physics apply, lights) in the earlier test transcripts and fix the worst
+- [ ] Have a plain-request tester build something with many parts and confirm it picks `sim__prim__create_many`
 
 ## 2. Tool surface review: combine or remove
 
