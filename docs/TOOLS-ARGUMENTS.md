@@ -376,7 +376,7 @@ No arguments.
 
 ## Generic scene (`sim__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 54 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 55 tools.
 
 ### `sim__body__state`
 
@@ -657,12 +657,13 @@ Generate a 2D occupancy map from the stage's colliders (Isaac's occupancy-map ge
 
 ### `sim__material__apply`
 
-Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. Requires session_id and stage_id from sim__stage__info.
+Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. With paths (up to 128 prims) every prim is checked first, so a bad one binds nothing. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Geometry prim.
+- `path` (string, optional): Geometry prim. Give this or paths.
 - `material_path` (string, required): Pack-created Material path.
+- `paths` (array, optional): Up to 128 geometry prims to bind the same material to in one call, instead of path.
 
 ### `sim__material__create`
 
@@ -766,6 +767,16 @@ Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in 
 - `scale` (array, default `[1, 1, 1]`): Positive local XYZ scale, 1e-6..1e4.
 - `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.
 - `density` (number, optional): Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.
+- `material` (string, optional): Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created.
+
+### `sim__prim__create_many`
+
+Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out, except keys that do not apply to its kind (an Xform skips rigid, mass and material; listed in defaults_skipped). Ancestors must exist, timeline stopped. A failing item removes the earlier ones; the error keeps its code and names index and path. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `items` (array, required): 1 to 200 objects, each like sim__prim__create's arguments: {path, kind, size, scale, position, orientation, frame, rigid, collision, mass, density, material}. path is required; kind may come from defaults.
+- `defaults` (object, optional): Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins; keys that do not apply to an item's kind (rigid, mass or material on an Xform) are skipped for it.
 
 ### `sim__prim__delete`
 
