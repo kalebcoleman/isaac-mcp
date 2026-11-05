@@ -682,6 +682,7 @@ class Extension(omni.ext.IExt):
             "sim.joints.gains",
             "sim.joints.move",
             "sim.joints.teleport",
+            "sim.arm.ik",
             "sim.simulation.step",
             "sim.physics.raycast",
             "sim.physics.contacts",

@@ -376,7 +376,35 @@ No arguments.
 
 ## Generic scene (`sim__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 55 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 57 tools.
+
+### `sim__arm__fk`
+
+Forward kinematics: where a link (the hand) would be for given joint values, from the robot's own USD joints, in the world and base frames. Joints you leave out use their current values when the simulation runs, else zero. Commands nothing; pair it with sim__arm__ik. Works stopped or running; when running it first checks its model against physics. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Articulation root, as for sim__joints__state.
+- `link` (string, required): The link: its name (such as panda_hand) or absolute path.
+- `joints` (object, optional): Optional {joint name: value}: radians for revolute, stage units for prismatic, e.g. sim__arm__ik's joint_targets.
+- `offset` (array, optional): Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.
+- `base_link` (string, optional): Chain start: a link name or path. Default: the articulation root's body.
+
+### `sim__arm__ik`
+
+Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Articulation root, as for sim__joints__state.
+- `link` (string, required): The link to place: its name (such as panda_hand) or absolute path.
+- `position` (array, required): Target [x, y, z] in stage units, in the world frame unless frame=base.
+- `orientation` (array, optional): Optional target orientation [w, x, y, z]. Omit to place the link by position only.
+- `base_link` (string, optional): Chain start: a link name or path. Default: the articulation root's body.
+- `offset` (array, optional): Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.
+- `frame` (string, default `"world"`): world (default) or base: the frame position and orientation are given in.
+- `position_tolerance` (number, default `0.001`): Metres of position error that counts as reached.
+- `orientation_tolerance` (number, default `0.01`): Radians of orientation error that counts as reached.
 
 ### `sim__body__state`
 

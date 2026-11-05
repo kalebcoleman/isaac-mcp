@@ -4585,6 +4585,279 @@
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
+    "sim.arm.ik": {
+      "description": "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Articulation root, as for sim__joints__state.",
+          "required": true
+        },
+        "link": {
+          "type": "string",
+          "description": "The link to place: its name (such as panda_hand) or absolute path.",
+          "required": true
+        },
+        "position": {
+          "type": "array",
+          "description": "Target [x, y, z] in stage units, in the world frame unless frame=base.",
+          "required": true
+        },
+        "orientation": {
+          "type": "array",
+          "description": "Optional target orientation [w, x, y, z]. Omit to place the link by position only.",
+          "required": false
+        },
+        "base_link": {
+          "type": "string",
+          "description": "Chain start: a link name or path. Default: the articulation root's body.",
+          "required": false
+        },
+        "offset": {
+          "type": "array",
+          "description": "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.",
+          "required": false
+        },
+        "frame": {
+          "type": "string",
+          "description": "world (default) or base: the frame position and orientation are given in.",
+          "required": false,
+          "default": "world"
+        },
+        "position_tolerance": {
+          "type": "number",
+          "description": "Metres of position error that counts as reached.",
+          "required": false,
+          "default": 0.001
+        },
+        "orientation_tolerance": {
+          "type": "number",
+          "description": "Radians of orientation error that counts as reached.",
+          "required": false,
+          "default": 0.01
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Articulation root, as for sim__joints__state."
+        },
+        {
+          "name": "link",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "The link to place: its name (such as panda_hand) or absolute path."
+        },
+        {
+          "name": "position",
+          "kind": "array",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Target [x, y, z] in stage units, in the world frame unless frame=base."
+        },
+        {
+          "name": "orientation",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional target orientation [w, x, y, z]. Omit to place the link by position only."
+        },
+        {
+          "name": "base_link",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Chain start: a link name or path. Default: the articulation root's body."
+        },
+        {
+          "name": "offset",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin."
+        },
+        {
+          "name": "frame",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "world",
+          "has_default": true,
+          "description": "world (default) or base: the frame position and orientation are given in."
+        },
+        {
+          "name": "position_tolerance",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 0.001,
+          "has_default": true,
+          "description": "Metres of position error that counts as reached."
+        },
+        {
+          "name": "orientation_tolerance",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 0.01,
+          "has_default": true,
+          "description": "Radians of orientation error that counts as reached."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.arm.fk": {
+      "description": "Forward kinematics: where a link (the hand) would be for given joint values, from the robot's own USD joints, in the world and base frames. Joints you leave out use their current values when the simulation runs, else zero. Commands nothing; pair it with sim__arm__ik. Works stopped or running; when running it first checks its model against physics. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Articulation root, as for sim__joints__state.",
+          "required": true
+        },
+        "link": {
+          "type": "string",
+          "description": "The link: its name (such as panda_hand) or absolute path.",
+          "required": true
+        },
+        "joints": {
+          "type": "object",
+          "description": "Optional {joint name: value}: radians for revolute, stage units for prismatic, e.g. sim__arm__ik's joint_targets.",
+          "required": false
+        },
+        "offset": {
+          "type": "array",
+          "description": "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.",
+          "required": false
+        },
+        "base_link": {
+          "type": "string",
+          "description": "Chain start: a link name or path. Default: the articulation root's body.",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Articulation root, as for sim__joints__state."
+        },
+        {
+          "name": "link",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "The link: its name (such as panda_hand) or absolute path."
+        },
+        {
+          "name": "joints",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional {joint name: value}: radians for revolute, stage units for prismatic, e.g. sim__arm__ik's joint_targets."
+        },
+        {
+          "name": "offset",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin."
+        },
+        {
+          "name": "base_link",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Chain start: a link name or path. Default: the articulation root's body."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
     "sim.joints.command": {
       "description": "Command initialized articulation position targets by name (targets) or in DOF order (positions), and/or velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless clamp=true, which reports what it clamped; unknown names list the valid ones. Returns applied targets and previous values, not achieved poses: compare sim__joints__state. Runtime only and lost on Stop; sim__joints__drive authors USD targets. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
