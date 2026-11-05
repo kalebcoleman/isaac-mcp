@@ -20,6 +20,7 @@ MUTATIONS = {
     "sim.graph.build",
     "sim.prim.delete",
     "sim.prim.clone",
+    "sim.prim.create_many",
     "sim.stage.clear_owned",
     "sim.light.create",
     "sim.light.modify",
@@ -233,6 +234,99 @@ def owned(s, stage, p):
             "Prims from an opened file do not count, even ones you made before saving.",
         )
     return prim
+
+
+def bind_material(s, stage, prim_path, material_path):
+    """Bind a pack-made material to a geometry prim in the session layer. Shared by sim.material.apply,
+    sim.prim.create's material option and sim.prim.create_many."""
+    prim = s.prim(stage, prim_path)
+    material = UsdShade.Material(owned(s, stage, material_path))
+    if not material or not UsdGeom.Gprim(prim):
+        refuse("WRONG_TYPE", "Need geometry and a pack-owned material.")
+    purpose = "physics" if material.GetPrim().HasAPI(UsdPhysics.MaterialAPI) else ""
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        UsdShade.MaterialBindingAPI.Apply(prim).Bind(material, materialPurpose=purpose)
+    return dict(
+        path=prim_path,
+        material=str(UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial(materialPurpose=purpose)[0].GetPath()),
+        purpose=purpose,
+    )
+
+
+CREATE_KEYS = ("path", "kind", "size", "rigid", "position", "orientation", "frame", "collision", "scale", "mass",
+               "density", "material")
+MAX_CREATE_MANY = 200
+
+
+def create_one(s, stage, spec):
+    """One prim from sim.prim.create's arguments plus an optional pack-made material. A material that cannot
+    be bound removes the prim again, so a call either makes the whole prim or nothing."""
+    from .placement import flat_box_warning
+
+    spec = dict(spec)
+    material = spec.pop("material", None)
+    if material is not None and (not isinstance(material, str) or not material.startswith("/")):
+        refuse("INVALID_VALUE", "material must be the absolute path of a material made with sim__material__create.")
+    created = s.create(stage, **spec)
+    warning = flat_box_warning(spec.get("kind"), spec.get("scale") or (1, 1, 1), spec.get("collision") or spec.get("rigid"))
+    if material is not None:
+        try:
+            bind_material(s, stage, spec["path"], material)
+        except Exception:
+            remove_created(s, stage, [spec["path"]])
+            raise
+        created = {**created, "material": material}
+    return created, warning
+
+
+def remove_created(s, stage, paths):
+    """Take back prims this call made, newest first."""
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        for p in reversed(paths):
+            stage.RemovePrim(p)
+            s.owned.discard(p)
+            getattr(s, "edits", {}).pop(p, None)
+
+
+def create_many(s, stage, a):
+    """Make up to MAX_CREATE_MANY prims in one call, all or none. `defaults` fills any key an item leaves out."""
+    items, defaults = a.get("items"), a.get("defaults") or {}
+    if not isinstance(items, list) or not 1 <= len(items) <= MAX_CREATE_MANY:
+        refuse("INVALID_VALUE", f"items must be a list of 1 to {MAX_CREATE_MANY} prim specs.")
+    if not isinstance(defaults, dict):
+        refuse("INVALID_VALUE", "defaults must be an object of prim arguments shared by every item.")
+    for label, spec in [("defaults", defaults), *[(f"items[{i}]", item) for i, item in enumerate(items)]]:
+        if not isinstance(spec, dict):
+            refuse("INVALID_VALUE", f"{label} must be an object.")
+        unknown = sorted(set(spec) - set(CREATE_KEYS))
+        if unknown:
+            refuse("INVALID_VALUE", f"{label} has unknown keys {unknown}; allowed: {list(CREATE_KEYS)}. Nothing was created.")
+    made, warnings = [], []
+    for index, item in enumerate(items):
+        spec = {**defaults, **item}
+        try:
+            if "path" not in spec or "kind" not in spec:
+                refuse("INVALID_VALUE", "each item needs path and kind (defaults may supply kind).")
+            created, warning = create_one(s, stage, spec)
+        except Exception as exc:
+            remove_created(s, stage, made)
+            detail = str(exc)
+            refuse(
+                getattr(exc, "code", None) or "BATCH_FAILED",
+                f"items[{index}] ({spec.get('path')!r}) failed, so all {len(made)} earlier prims were removed and "
+                f"nothing was created: {detail}",
+                failed_index=index,
+                failed_path=spec.get("path"),
+            )
+        made.append(spec["path"])
+        if warning:
+            warnings.append(dict(index=index, path=spec["path"], warning=warning))
+    return dict(
+        count=len(made),
+        paths=made,
+        **({"warnings": warnings} if warnings else {}),
+        note="All items were created in one call; undo them with sim__prim__delete on each path.",
+    )
 
 
 # Attributes the engine or a schema derives from other data (design 4.3). Writing them corrupts a
@@ -1080,26 +1174,14 @@ class Advanced:
                 metallic=metal,
             )
         if name == "sim.material.apply":
-            prim = s.prim(stage, a["path"])
-            material = UsdShade.Material(owned(s, stage, a["material_path"]))
-            if not material or not UsdGeom.Gprim(prim):
-                refuse("WRONG_TYPE", "Need geometry and a pack-owned material.")
-            purpose = (
-                "physics" if material.GetPrim().HasAPI(UsdPhysics.MaterialAPI) else ""
-            )
-            with Usd.EditContext(stage, stage.GetSessionLayer()):
-                UsdShade.MaterialBindingAPI.Apply(prim).Bind(
-                    material, materialPurpose=purpose
-                )
-            return dict(
-                path=a["path"],
-                material=str(
-                    UsdShade.MaterialBindingAPI(prim)
-                    .ComputeBoundMaterial(materialPurpose=purpose)[0]
-                    .GetPath()
-                ),
-                purpose=purpose,
-            )
+            paths = a.get("paths")
+            if paths is not None:
+                if a.get("path") not in (None, "") or not isinstance(paths, list) or not 1 <= len(paths) <= 128:
+                    refuse("INVALID_VALUE", "Give path (one prim) or paths (1 to 128 prims), not both.")
+                return dict(applied=[bind_material(s, stage, p, a["material_path"]) for p in paths])
+            return bind_material(s, stage, a["path"], a["material_path"])
+        if name == "sim.prim.create_many":
+            return create_many(s, stage, a)
         if name == "sim.physics.configure":
             sm = physics_manager()
             prim = s.prim(stage, a["path"])

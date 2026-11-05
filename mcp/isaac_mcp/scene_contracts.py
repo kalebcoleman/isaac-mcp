@@ -454,8 +454,9 @@ add(
     "Bind a pack-created material to an existing geometry prim in the session layer, preserving source files.",
     dict(
         **TARGET,
-        path=field("string", "Geometry prim."),
+        path=field("string", "Geometry prim. Give this or paths.", False),
         material_path=field("string", "Pack-created Material path."),
+        paths=field("array", "Up to 128 geometry prims to bind the same material to in one call, instead of path.", False),
     ),
 )
 add(
@@ -925,6 +926,27 @@ REGISTRY["sim.material.create"]["parameters"].update(
 REGISTRY["sim.prim.create"][
     "description"
 ] += " Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale."
+REGISTRY["sim.prim.create"]["parameters"]["material"] = field(
+    "string",
+    "Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created.",
+    False,
+)
+add(
+    "sim.prim.create_many",
+    "Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out (kind, size, mass, material). Ancestors must exist and the timeline be stopped. A failing item removes the earlier ones and the error names its index and path. Returns the paths.",
+    dict(
+        **TARGET,
+        items=field(
+            "array",
+            "1 to 200 objects, each like sim__prim__create's arguments: {path, kind, size, scale, position, orientation, frame, rigid, collision, mass, density, material}. path is required; kind may come from defaults.",
+        ),
+        defaults=field(
+            "object",
+            "Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins.",
+            False,
+        ),
+    ),
+)
 
 REGISTRY["sim.camera.capture"]["parameters"]["wait_for_render"] = field(
     "boolean",

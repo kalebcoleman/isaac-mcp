@@ -774,10 +774,9 @@ class Extension(omni.ext.IExt):
                     found.append(str(p.GetPath()))
             return dict(paths=found, truncated=truncated, visited=min(count, 10000))
         if name == "sim.prim.create":
-            from .placement import flat_box_warning
+            from .advanced import create_one
 
-            created = s.create(stage, **a)
-            warning = flat_box_warning(a.get("kind"), a.get("scale") or (1, 1, 1), a.get("collision") or a.get("rigid"))
+            created, warning = create_one(s, stage, a)
             return {**created, "warnings": [warning]} if warning else created
         if name == "sim.prim.set_transform":
             return s.transform(stage, **a)

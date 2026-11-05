@@ -680,6 +680,8 @@ def _build_tool_function(name: str, canonical: str, description: str,
                            or (canonical == "sim.ui.act" and f["name"] == "keys")
                            or canonical in _PACK_TOOLS)  # every array in these tools holds paths or names
                 annotation = list[str] if strings else list[float]
+                if canonical == "sim.prim.create_many" and f["name"] == "items":
+                    annotation = list[dict[str, Any]]  # prim specs: objects, not numbers
                 if canonical == "sim.map.occupancy" and f["name"] == "clear":
                     # A list of [x, y, radius] circles; list[float] rejected every valid value.
                     annotation = list[Annotated[list[float], Field(min_length=3, max_length=3)]]
@@ -689,7 +691,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 if f["name"] in lengths:
                     bounds = {"min_length": lengths[f["name"]], "max_length": lengths[f["name"]]}
                 else:
-                    bounds = {"max_length": {"extra_frames": 16, "observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256}.get(f["name"], 128)}
+                    bounds = {"max_length": {"extra_frames": 16, "observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256, "items": 200}.get(f["name"], 128)}
             if bounds and not graph_container:
                 annotation = Annotated[annotation, Field(**bounds)]
         graph_field = canonical == "sim.graph.build" and f["name"] in (

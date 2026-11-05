@@ -720,6 +720,11 @@
           "type": "number",
           "description": "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.",
           "required": false
+        },
+        "material": {
+          "type": "string",
+          "description": "Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created.",
+          "required": false
         }
       },
       "fields": [
@@ -852,6 +857,15 @@
           "default": null,
           "has_default": false,
           "description": "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect."
+        },
+        {
+          "name": "material",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created."
         }
       ],
       "namespace": "sim",
@@ -2152,13 +2166,18 @@
         },
         "path": {
           "type": "string",
-          "description": "Geometry prim.",
-          "required": true
+          "description": "Geometry prim. Give this or paths.",
+          "required": false
         },
         "material_path": {
           "type": "string",
           "description": "Pack-created Material path.",
           "required": true
+        },
+        "paths": {
+          "type": "array",
+          "description": "Up to 128 geometry prims to bind the same material to in one call, instead of path.",
+          "required": false
         }
       },
       "fields": [
@@ -2184,10 +2203,10 @@
           "name": "path",
           "kind": "string",
           "enum": null,
-          "required": true,
+          "required": false,
           "default": null,
           "has_default": false,
-          "description": "Geometry prim."
+          "description": "Geometry prim. Give this or paths."
         },
         {
           "name": "material_path",
@@ -2197,6 +2216,15 @@
           "default": null,
           "has_default": false,
           "description": "Pack-created Material path."
+        },
+        {
+          "name": "paths",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Up to 128 geometry prims to bind the same material to in one call, instead of path."
         }
       ],
       "namespace": "sim",
@@ -5253,6 +5281,71 @@
           "default": true,
           "has_default": true,
           "description": "Also revert recorded edits on descendants."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.prim.create_many": {
+      "description": "Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out (kind, size, mass, material). Ancestors must exist and the timeline be stopped. A failing item removes the earlier ones and the error names its index and path. Returns the paths. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "items": {
+          "type": "array",
+          "description": "1 to 200 objects, each like sim__prim__create's arguments: {path, kind, size, scale, position, orientation, frame, rigid, collision, mass, density, material}. path is required; kind may come from defaults.",
+          "required": true
+        },
+        "defaults": {
+          "type": "object",
+          "description": "Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins.",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "items",
+          "kind": "array",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "1 to 200 objects, each like sim__prim__create's arguments: {path, kind, size, scale, position, orientation, frame, rigid, collision, mass, density, material}. path is required; kind may come from defaults."
+        },
+        {
+          "name": "defaults",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional arguments shared by every item, for example {kind: Cube, rigid: true, mass: 0.015, material: /World/Looks/Wood}. An item's own value wins."
         }
       ],
       "namespace": "sim",
