@@ -343,7 +343,7 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.find": {
-      "description": "Bounded search of prim paths: `contains` is a literal substring (not a regex), `type_name` an exact type. Includes inactive prims. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Bounded search of prim paths: `contains` is a literal substring (not a regex), `type_name` an exact type, `root` limits it to one subtree. Includes inactive prims. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -372,6 +372,12 @@
           "description": "Maximum matches 1..200.",
           "required": false,
           "default": 100
+        },
+        "root": {
+          "type": "string",
+          "description": "Only search under this prim, such as a robot's path. Default: the whole stage.",
+          "required": false,
+          "default": "/"
         }
       },
       "fields": [
@@ -419,6 +425,15 @@
           "default": 100,
           "has_default": true,
           "description": "Maximum matches 1..200."
+        },
+        {
+          "name": "root",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "/",
+          "has_default": true,
+          "description": "Only search under this prim, such as a robot's path. Default: the whole stage."
         }
       ],
       "namespace": "sim",

@@ -818,13 +818,14 @@ Delete one pack-owned subtree from the session layer only. Requires stopped phys
 
 ### `sim__prim__find`
 
-Bounded search of prim paths: `contains` is a literal substring (not a regex), `type_name` an exact type. Includes inactive prims. Requires session_id and stage_id from sim__stage__info.
+Bounded search of prim paths: `contains` is a literal substring (not a regex), `type_name` an exact type, `root` limits it to one subtree. Includes inactive prims. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `contains` (string, default `""`): Literal path substring <=128 characters.
 - `type_name` (string, default `""`): Exact USD type or empty.
 - `limit` (integer, default `100`): Maximum matches 1..200.
+- `root` (string, default `"/"`): Only search under this prim, such as a robot's path. Default: the whole stage.
 
 ### `sim__prim__get`
 
