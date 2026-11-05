@@ -1287,16 +1287,20 @@ class Advanced:
                         )
                         if prim.HasAttribute(key)
                     }
-                    joints.append(
-                        dict(
-                            path=str(prim.GetPath()),
-                            type=prim.GetTypeName(),
-                            authored=attrs,
-                        )
-                    )
+                    entry = dict(path=str(prim.GetPath()), type=prim.GetTypeName(), authored=attrs)
+                    drive_keys = [k for k in attrs if ":physics:stiffness" in k or ":physics:damping" in k or ":physics:maxForce" in k]
+                    if prim.IsA(UsdPhysics.RevoluteJoint) or prim.IsA(UsdPhysics.PrismaticJoint):
+                        if not drive_keys:
+                            entry["no_drive"] = True  # nothing authored that could move it under a position target
+                    joints.append(entry)
+            undriven = [j["path"] for j in joints if j.get("no_drive")]
             return dict(
                 joints=joints,
                 truncated=truncated,
+                **({"joints_without_drive": undriven,
+                    "drive_note": "These joints have no authored drive, so a position target does nothing unless the joint is "
+                                  "mimicked or driven another way (a gripper's second finger is a common case). Give one gains "
+                                  "with sim__joints__gains or a drive with sim__joints__drive, on a stopped timeline."} if undriven else {}),
                 **scope,
                 units="USD angular degrees; prismatic stage units",
                 source="authored USD, not DOF positions",

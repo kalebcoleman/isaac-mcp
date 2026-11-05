@@ -74,6 +74,11 @@ Bring a robot in
 - [ ] **A robot from your own URDF into an Isaac Lab task**: the tester registered a custom task package (works through `ISAACLAB_TASK_MODULES`) but only around the built-in Franka. A tool or recipe to scaffold a Lab task and robot config from a pack URDF is the biggest gap for real RL. Check what Lab needs (articulation config, actuators) before designing it
 
 Act on the robot
+- [ ] **End-effector move / inverse kinematics**: pick-and-place needed about 12 calls of joint-angle trial and error per reach (pick-and-place wishlist run, 2026-11-04). Isaac Sim ships a kinematics solver; check which robots it covers first. Ranked first
+- [ ] **Gripper command**: open, close and grip by width and force, sync the fingers, report contact. The Franka's second finger has no authored drive; now flagged by `sim__joints__inspect` (done)
+- [x] `sim__prim__find` takes a `root` to search one subtree; `sim__joints__inspect` flags joints with no drive (`no_drive`, `joints_without_drive`)
+- [ ] A tabletop preset for `sim__quick_start` (a table and a few pickable objects in one call). Low priority
+- [ ] Decide: may read-only scene tools omit `session_id` and `stage_id`? (Today a plain read fails until `sim__stage__info` is called; the IDs stop edits landing on the wrong stage.)
 - [ ] **Force, impulse and velocity on a running scene** (section 4): the tester dropped a 2 kg ball as a stand-in for a push
 - [ ] **Smooth joint trajectories during play**: `sim__joints__move` only works paused and `sim__joints__command` steps to the target. A trajectory tool (a spline or trapezoid over a duration)
 - [ ] **Command a trained policy's velocity** in a windowed `isaaclab__play` (the G1 task tracks a velocity command; today it is whatever the task samples)

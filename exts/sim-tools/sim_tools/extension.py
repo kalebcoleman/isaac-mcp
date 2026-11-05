@@ -757,10 +757,20 @@ class Extension(omni.ext.IExt):
                 refuse("LIMIT", "Search strings <=128 characters required.")
             if type(limit) is not int or not 1 <= limit <= 200:
                 refuse("LIMIT", "limit must be 1..200.")
+            root = a.get("root", "/")
+            if not isinstance(root, str) or not root.startswith("/"):
+                refuse("INVALID_PATH", "root must be an absolute prim path such as /World/Franka.")
+            start = stage.GetPseudoRoot() if root == "/" else stage.GetPrimAtPath(root)
+            if not start:
+                refuse("NOT_FOUND", f"No prim at {root!r} to search under. Find it with sim__stage__tree.")
             found = []
             count = 0
             truncated = False
-            for p in stage.TraverseAll():
+            from pxr import Usd
+
+            for p in Usd.PrimRange(start, Usd.PrimAllPrimsPredicate):
+                if p.IsPseudoRoot():
+                    continue
                 count += 1
                 if count > 10000:
                     truncated = True
