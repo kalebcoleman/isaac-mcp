@@ -403,7 +403,10 @@ def _alive(session: dict) -> bool:
 
 def _public(session: dict) -> dict:
     """Keep boot and kernel identity tokens internal to session management."""
-    return {key: value for key, value in session.items() if key not in {"boot_id", "start_ticks"}}
+    public = {key: value for key, value in session.items() if key not in {"boot_id", "start_ticks"}}
+    if "id" in public:
+        public["session_id"] = public["id"]  # the argument name sim__status and sim__stop take
+    return public
 
 
 def _group_members(leader: int) -> list[int]:

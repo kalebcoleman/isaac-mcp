@@ -1092,3 +1092,11 @@ def test_an_explicit_project_setting_is_kept_and_no_project_adds_nothing(setup, 
     monkeypatch.delenv("ISAAC_MCP_PROJECT")
     monkeypatch.setattr(sim, "_host_project_file", lambda: None)
     assert "ISAAC_MCP_PROJECT" not in _launch_env(setup, monkeypatch)
+
+
+def test_session_records_carry_the_argument_name_the_other_tools_take():
+    """sim__launch and sim__list say `id`, while sim__status and sim__stop ask for `session_id`: give both."""
+    record = sim._public({"id": "abc123", "pid": 5, "boot_id": "x", "start_ticks": 1})
+    assert record["session_id"] == "abc123" and record["id"] == "abc123"
+    assert "boot_id" not in record and "start_ticks" not in record
+    assert "session_id" not in sim._public({"pid": 5})
