@@ -377,12 +377,12 @@ add(
 )
 add(
     "assets.pack_build",
-    "Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, so the result says importable=false with import_blockers. Files that differ need force=true. Checks the new pack afterwards.",
+    "Copy USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on into a pack in the primary asset folder, keeping layout, and pin them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.",
     dict(
         pack=field("string", "Destination pack name: one folder name."),
         sources=field(
             "array",
-            "USD or URDF files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.",
+            "USD, URDF, MJCF (.xml), SDF, mesh or map (.yaml) files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.",
         ),
         from_pack=field(
             "string",

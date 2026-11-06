@@ -1109,10 +1109,10 @@ Create a pack in the primary asset folder, or copy a folder's asset files into i
 
 ### `assets__pack_build`
 
-Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, so the result says importable=false with import_blockers. Files that differ need force=true. Checks the new pack afterwards.
+Copy USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on into a pack in the primary asset folder, keeping layout, and pin them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.
 
 - `pack` (string, required): Destination pack name: one folder name.
-- `sources` (array, required): USD or URDF files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.
+- `sources` (array, required): USD, URDF, MJCF (.xml), SDF, mesh or map (.yaml) files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.
 - `from_pack` (string, optional): Pack that source names and logical references such as robot/ur5e.usd come from.
 - `layout_root` (string, optional): Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for.
 - `origin` (string, optional): Where these files came from, one line (for example a repository URL and commit). Recorded in the pack's isaac-mcp-pack.json and listed by assets__packs, so you can see later what a pack used.

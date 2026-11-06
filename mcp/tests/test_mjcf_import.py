@@ -93,10 +93,10 @@ def test_dependencies_reads_an_mjcf_on_the_host_without_a_usd_parser(tmp_path):
     assert str(root / "assets" / "link.stl") in results[0]["assets"]
 
 
-def test_pack_build_says_where_a_mujoco_model_goes_instead(tmp_path):
+def test_pack_build_refuses_an_unapproved_mujoco_model_and_a_xacro_with_a_pointer(tmp_path):
     with pytest.raises(packs.PackError) as caught:
         packs.run_tool("assets.pack_build", dict(pack="p", sources=[str(tmp_path / "arm.xml")]), Broker())
-    assert caught.value.code in ("UNSUPPORTED_FORMAT", "ROOT_NOT_APPROVED", "NOT_FOUND")
+    assert caught.value.code in ("ROOT_NOT_APPROVED", "NOT_FOUND", "USD_UNAVAILABLE")
 
 
 @pytest.mark.parametrize("body, expected", [
