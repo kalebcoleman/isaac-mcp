@@ -62,7 +62,7 @@ async def validate(port, output):
             asset = dict(**target, root_id="fixture", relative_path="robot.usda")
             await invoke("assets__info", asset)
             await invoke(
-                "assets__import_usd",
+                "assets__import_path",
                 dict(
                     **asset,
                     prim_path="/World/Parent/Robot",
@@ -71,7 +71,7 @@ async def validate(port, output):
                 ),
             )
             await invoke(
-                "assets__import_usd",
+                "assets__import_path",
                 dict(**asset, prim_path="/World/Parent/Robot"),
                 True,
             )

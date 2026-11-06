@@ -139,7 +139,7 @@ Moving and adding physics to any prim (imports and the user's own USD) is planne
 
 ## Assets, robots and environments
 
-**Software:** Isaac Sim / USD. **Priority:** High. **isaac-mcp today (Partial):** `assets__roots`, `scan`, `search`, `info`, `import_usd`, `import_urdf` for trusted project folders; twin loaders; UR5e assets fetched on demand. **Planned:** NVIDIA cloud library, bundled samples, MJCF (M6).
+**Software:** Isaac Sim / USD. **Priority:** High. **isaac-mcp today (Partial):** `assets__roots`, `scan`, `search`, `info`, `import_path` (USD, URDF, xacro, SDF, MJCF, meshes, maps) for trusted project folders; twin loaders; UR5e assets fetched on demand. **Planned:** NVIDIA cloud library, bundled samples, MJCF (M6).
 
 A browsable robot library and MJCF import are what remain. whats2000's curated library and serionist's `create_robot` are good references.
 

@@ -444,7 +444,6 @@ Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path
 - `focal_length` (number, optional): Focal length in mm (0.1..1000); default USD 50.
 - `horizontal_aperture` (number, optional): Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height.
 - `clipping_range` (array, default `[0.01, 1000.0]`): [near, far] clipping distances in metres.
-- `target` (array, optional): Optional world look-at point; requires frame=world and explicit position. Overrides orientation.
 
 ### `sim__camera__list`
 
@@ -703,10 +702,6 @@ Create a UsdPreviewSurface or physics material with finite numeric parameters. N
 - `color` (array, default `[0.5, 0.5, 0.5]`): RGB 0..1.
 - `roughness` (number, default `0.5`): 0..1.
 - `metallic` (number, default `0`): 0..1.
-- `kind` (string, default `"pbr"`): pbr or physics.
-- `static_friction` (number, default `0.5`): Physics material static friction 0..10.
-- `dynamic_friction` (number, default `0.5`): Physics material dynamic friction 0..10.
-- `restitution` (number, default `0`): Physics material restitution 0..1.
 
 ### `sim__physics__apply`
 
@@ -780,7 +775,7 @@ Clone a pack-created simple leaf primitive into a new path, preserving session-l
 
 ### `sim__prim__create`
 
-Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.
+Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -791,11 +786,6 @@ Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in 
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
-- `collision` (boolean, default `false`): Author static collision without rigid-body dynamics.
-- `scale` (array, default `[1, 1, 1]`): Positive local XYZ scale, 1e-6..1e4.
-- `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.
-- `density` (number, optional): Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.
-- `material` (string, optional): Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created.
 
 ### `sim__prim__create_many`
 
@@ -874,7 +864,6 @@ Set a static local or world pose on any Xformable prim in the session layer, and
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
-- `scale` (array, optional): Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.
 
 ### `sim__quick_start`
 
@@ -1010,7 +999,7 @@ Point the active viewport camera, e.g. before a screenshot. path alone frames a 
 
 ## Assets (`assets__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 15 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 12 tools.
 
 ### `assets__dependencies`
 
@@ -1018,29 +1007,15 @@ Compute dependency closures for files under an approved root or a user asset sto
 
 - `paths` (array, required): Absolute USD or URDF file paths, 1 to 64.
 
-### `assets__import_mjcf`
-
-Convert a MuJoCo MJCF model (.xml) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows <include> files, meshes, textures and height fields inside that folder only, and refuses absolute paths, URLs and anything that leaves it. A model with a free joint floats and falls; fixed_base left out keeps what the file says. Source files never change. Z up, metres. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `root_id` (string, optional): Approved root ID, with relative_path. Or use source_path.
-- `relative_path` (string, optional): Path of the MJCF .xml file within that root.
-- `source_path` (string, optional): Absolute path of the MJCF .xml file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.
-- `prim_path` (string, required): New wrapper prim path.
-- `fixed_base` (boolean, optional): true: fix the robot's base to the world. false: make it floating, so it falls under gravity. Leave out to keep what the model says.
-- `default_drives` (boolean, optional): Give joints that have no drive (the model uses torque motors) a generic holding drive; wheels stay free. Default false: the model's own drives, and a warning that lists joints with none.
-- `position` (array, optional): Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane (at most 3 m). A given position is used as is, with a warning if it starts under the ground.
-- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
-- `frame` (string, default `"local"`): Pose frame: local or world.
-
 ### `assets__import_path`
 
 The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. Requires session_id and stage_id. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `source_path` (string, required): Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder.
+- `source_path` (string, optional): Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder. Or use root_id with relative_path.
+- `root_id` (string, optional): Approved root ID from assets__roots, with relative_path, instead of source_path.
+- `relative_path` (string, optional): Path of the file or folder inside that root.
 - `prim_path` (string, required): New absolute wrapper prim path; parent must exist.
 - `format` (string, default `"auto"`): auto (default): from the file name, or from what the folder holds. Or usd, urdf, xacro, sdf, mjcf, mesh, map to say it.
 - `xacro_args` (object, optional): For xacro: values for its $(arg name), e.g. {"ur_type": "ur10e"}. Names the file declares are in the result.
@@ -1054,35 +1029,6 @@ The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJo
 - `mass` (number, optional): Mesh files: kilograms; makes it a dynamic rigid body (with a convex hull collider unless you pick one).
 - `default_drives` (boolean, optional): Author drives that hold a pose. URDF, xacro, SDF: default true (they have none). MJCF: default false; true gives joints with no drive (torque motors) a generic holding drive. Wheels and casters stay free.
 - `position` (array, optional): Three finite coordinates in stage units. Omit it for a robot format: the robot is then raised out of any ground plane (up to 3 m); a given position is used as is, with a warning if it starts inside the ground. USD files go to the origin.
-- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
-- `frame` (string, default `"local"`): Pose frame: local or world.
-
-### `assets__import_urdf`
-
-Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Check a URDF first with assets__dependencies. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `root_id` (string, optional): Approved root ID, with relative_path. Or use source_path.
-- `relative_path` (string, optional): Path of the .urdf file within that root.
-- `source_path` (string, optional): Absolute path of the .urdf file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.
-- `prim_path` (string, required): New wrapper prim path.
-- `fixed_base` (boolean, default `true`): Fix the robot's base to the world. Pass false for a robot that drives or walks; it then falls under gravity.
-- `default_drives` (boolean, default `true`): Author position drives that hold a pose; the URDF format has none. A stiffness in a 6.x conversion is kept, and the 5.x importer's own is replaced. With false you get the importer's own: on 6.x stiffness 0, so targets do nothing until sim__joints__drive sets gains.
-- `position` (array, optional): Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane. A given position is used as is, with a warning if it starts under the ground.
-- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
-- `frame` (string, default `"local"`): Pose frame: local or world.
-
-### `assets__import_usd`
-
-Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `root_id` (string, required): Approved trusted project root ID.
-- `relative_path` (string, required): Relative path of the USD file within that root.
-- `prim_path` (string, required): New absolute wrapper path; parent must exist.
-- `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
 

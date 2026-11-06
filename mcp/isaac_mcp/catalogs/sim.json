@@ -649,7 +649,7 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.create": {
-      "description": "Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -709,37 +709,6 @@
           "description": "Pose frame: local or world.",
           "required": false,
           "default": "local"
-        },
-        "collision": {
-          "type": "boolean",
-          "description": "Author static collision without rigid-body dynamics.",
-          "required": false,
-          "default": false
-        },
-        "scale": {
-          "type": "array",
-          "description": "Positive local XYZ scale, 1e-6..1e4.",
-          "required": false,
-          "default": [
-            1,
-            1,
-            1
-          ]
-        },
-        "mass": {
-          "type": "number",
-          "description": "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.",
-          "required": false
-        },
-        "density": {
-          "type": "number",
-          "description": "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.",
-          "required": false
-        },
-        "material": {
-          "type": "string",
-          "description": "Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created.",
-          "required": false
         }
       },
       "fields": [
@@ -832,55 +801,6 @@
           "default": "local",
           "has_default": true,
           "description": "Pose frame: local or world."
-        },
-        {
-          "name": "collision",
-          "kind": "boolean",
-          "enum": null,
-          "required": false,
-          "default": false,
-          "has_default": true,
-          "description": "Author static collision without rigid-body dynamics."
-        },
-        {
-          "name": "scale",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": [
-            1,
-            1,
-            1
-          ],
-          "has_default": true,
-          "description": "Positive local XYZ scale, 1e-6..1e4."
-        },
-        {
-          "name": "mass",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect."
-        },
-        {
-          "name": "density",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect."
-        },
-        {
-          "name": "material",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created."
         }
       ],
       "namespace": "sim",
@@ -930,11 +850,6 @@
           "description": "Pose frame: local or world.",
           "required": false,
           "default": "local"
-        },
-        "scale": {
-          "type": "array",
-          "description": "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.",
-          "required": false
         }
       },
       "fields": [
@@ -1000,15 +915,6 @@
           "default": "local",
           "has_default": true,
           "description": "Pose frame: local or world."
-        },
-        {
-          "name": "scale",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it."
         }
       ],
       "namespace": "sim",
@@ -2070,30 +1976,6 @@
           "description": "0..1.",
           "required": false,
           "default": 0
-        },
-        "kind": {
-          "type": "string",
-          "description": "pbr or physics.",
-          "required": false,
-          "default": "pbr"
-        },
-        "static_friction": {
-          "type": "number",
-          "description": "Physics material static friction 0..10.",
-          "required": false,
-          "default": 0.5
-        },
-        "dynamic_friction": {
-          "type": "number",
-          "description": "Physics material dynamic friction 0..10.",
-          "required": false,
-          "default": 0.5
-        },
-        "restitution": {
-          "type": "number",
-          "description": "Physics material restitution 0..1.",
-          "required": false,
-          "default": 0
         }
       },
       "fields": [
@@ -2154,42 +2036,6 @@
           "default": 0,
           "has_default": true,
           "description": "0..1."
-        },
-        {
-          "name": "kind",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": "pbr",
-          "has_default": true,
-          "description": "pbr or physics."
-        },
-        {
-          "name": "static_friction",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": 0.5,
-          "has_default": true,
-          "description": "Physics material static friction 0..10."
-        },
-        {
-          "name": "dynamic_friction",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": 0.5,
-          "has_default": true,
-          "description": "Physics material dynamic friction 0..10."
-        },
-        {
-          "name": "restitution",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": 0,
-          "has_default": true,
-          "description": "Physics material restitution 0..1."
         }
       ],
       "namespace": "sim",
@@ -2749,11 +2595,6 @@
             0.01,
             1000.0
           ]
-        },
-        "target": {
-          "type": "array",
-          "description": "Optional world look-at point; requires frame=world and explicit position. Overrides orientation.",
-          "required": false
         }
       },
       "fields": [
@@ -2876,15 +2717,6 @@
           ],
           "has_default": true,
           "description": "[near, far] clipping distances in metres."
-        },
-        {
-          "name": "target",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Optional world look-at point; requires frame=world and explicit position. Overrides orientation."
         }
       ],
       "namespace": "sim",

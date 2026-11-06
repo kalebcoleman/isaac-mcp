@@ -60,16 +60,6 @@ add(
     dict(**TARGET, **ASSET),
 )
 add(
-    "assets.import_usd",
-    "Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes.",
-    dict(
-        **TARGET,
-        **ASSET,
-        prim_path=field("string", "New absolute wrapper path; parent must exist."),
-        **POSE,
-    ),
-)
-add(
     "assets.prepare_workstation",
     "Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox.",
     dict(
@@ -85,8 +75,10 @@ add(
     dict(
         **TARGET,
         source_path=field(
-            "string", "Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder."
+            "string", "Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder. Or use root_id with relative_path.", False
         ),
+        root_id=field("string", "Approved root ID from assets__roots, with relative_path, instead of source_path.", False),
+        relative_path=field("string", "Path of the file or folder inside that root.", False),
         prim_path=field("string", "New absolute wrapper prim path; parent must exist."),
         format=field("string", "auto (default): from the file name, or from what the folder holds. Or usd, urdf, xacro, sdf, mjcf, mesh, map to say it.", False, default="auto"),
         xacro_args=field("object", "For xacro: values for its $(arg name), e.g. {\"ur_type\": \"ur10e\"}. Names the file declares are in the result.", False),
@@ -914,87 +906,6 @@ add(
             "boolean", "Also revert recorded edits on descendants.", False, default=True
         ),
     ),
-)
-add(
-    "assets.import_urdf",
-    "Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Check a URDF first with assets__dependencies. Returns authored values, not runtime readiness.",
-    dict(
-        **TARGET,
-        root_id=field("string", "Approved root ID, with relative_path. Or use source_path.", False),
-        relative_path=field("string", "Path of the .urdf file within that root.", False),
-        source_path=field("string", "Absolute path of the .urdf file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.", False),
-        prim_path=field("string", "New wrapper prim path."),
-        fixed_base=field("boolean", "Fix the robot's base to the world. Pass false for a robot that drives or walks; it then falls under gravity.", False, default=True),
-        default_drives=field("boolean", "Author position drives that hold a pose; the URDF format has none. A stiffness in a 6.x conversion is kept, and the 5.x importer's own is replaced. With false you get the importer's own: on 6.x stiffness 0, so targets do nothing until sim__joints__drive sets gains.", False, default=True),
-        position=field("array", "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane. A given position is used as is, with a warning if it starts under the ground.", False),
-        orientation=POSE["orientation"],
-        frame=POSE["frame"],
-    ),
-)
-add(
-    "assets.import_mjcf",
-    "Convert a MuJoCo MJCF model (.xml) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows <include> files, meshes, textures and height fields inside that folder only, and refuses absolute paths, URLs and anything that leaves it. A model with a free joint floats and falls; fixed_base left out keeps what the file says. Source files never change. Z up, metres. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.",
-    dict(
-        **TARGET,
-        root_id=field("string", "Approved root ID, with relative_path. Or use source_path.", False),
-        relative_path=field("string", "Path of the MJCF .xml file within that root.", False),
-        source_path=field("string", "Absolute path of the MJCF .xml file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.", False),
-        prim_path=field("string", "New wrapper prim path."),
-        fixed_base=field("boolean", "true: fix the robot's base to the world. false: make it floating, so it falls under gravity. Leave out to keep what the model says.", False),
-        default_drives=field("boolean", "Give joints that have no drive (the model uses torque motors) a generic holding drive; wheels stay free. Default false: the model's own drives, and a warning that lists joints with none.", False),
-        position=field("array", "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane (at most 3 m). A given position is used as is, with a warning if it starts under the ground.", False),
-        orientation=POSE["orientation"],
-        frame=POSE["frame"],
-    ),
-)
-
-# Extend existing operations rather than proliferating overlapping names.
-REGISTRY["sim.prim.create"]["parameters"]["collision"] = field(
-    "boolean",
-    "Author static collision without rigid-body dynamics.",
-    False,
-    default=False,
-)
-REGISTRY["sim.prim.create"]["parameters"]["scale"] = field(
-    "array", "Positive local XYZ scale, 1e-6..1e4.", False, default=[1, 1, 1]
-)
-REGISTRY["sim.prim.create"]["parameters"]["mass"] = field(
-    "number",
-    "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.",
-    False,
-)
-REGISTRY["sim.prim.create"]["parameters"]["density"] = field(
-    "number",
-    "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.",
-    False,
-)
-REGISTRY["sim.prim.set_transform"]["parameters"]["scale"] = field(
-    "array",
-    "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.",
-    False,
-)
-REGISTRY["sim.camera.create"]["parameters"]["target"] = field(
-    "array",
-    "Optional world look-at point; requires frame=world and explicit position. Overrides orientation.",
-    False,
-)
-REGISTRY["sim.material.create"]["parameters"].update(
-    kind=field("string", "pbr or physics.", False, default="pbr"),
-    static_friction=field(
-        "number", "Physics material static friction 0..10.", False, default=0.5
-    ),
-    dynamic_friction=field(
-        "number", "Physics material dynamic friction 0..10.", False, default=0.5
-    ),
-    restitution=field("number", "Physics material restitution 0..1.", False, default=0),
-)
-REGISTRY["sim.prim.create"][
-    "description"
-] += " Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale."
-REGISTRY["sim.prim.create"]["parameters"]["material"] = field(
-    "string",
-    "Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created.",
-    False,
 )
 add(
     "sim.prim.create_many",

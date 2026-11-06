@@ -737,9 +737,6 @@ class Extension(omni.ext.IExt):
             result["viewport_follow"] = self.follower.status()
             return result
         mutations = {
-            "assets.import_urdf",
-            "assets.import_mjcf",
-            "assets.import_usd",
             "assets.import_path",
             "sim.prim.create",
             "sim.prim.set_transform",
@@ -839,16 +836,22 @@ class Extension(omni.ext.IExt):
         if name.startswith("assets."):
             a.pop("root_id", None)
             a.pop("relative_path", None)
-            if name == "assets.import_urdf":
-                return self.advanced.import_urdf(stage, **a)
-            if name == "assets.import_mjcf":
-                return self.advanced.import_mjcf(stage, **a)
+            if name == "assets.import_path":
+                # The host chose the format and checked or converted the file; the importer for it runs here.
+                fmt = a.pop("format", None) or "usd"
+                if fmt == "urdf":
+                    return self.advanced.import_urdf(stage, **a)
+                if fmt == "mjcf":
+                    return self.advanced.import_mjcf(stage, **a)
+                if fmt != "usd":
+                    raise AssetError("INVALID_VALUE", f"The importer for {fmt} did not run: the format was not recognised here.")
+                for key in ("fixed_base", "default_drives", "joint_targets"):
+                    a.pop(key, None)
+                return s.import_path(stage, **a)
             if name == "assets.info":
                 return s.inspect_asset(**a)[2]
             if name == "assets.prepare_workstation":
                 return s.prepare_workstation(**a)
-            if name in ("assets.import_path", "assets.import_usd"):
-                return s.import_path(stage, **a)
             raise RuntimeError("Unknown asset operation: " + name)
         if name == "sim.body.state":
             from .advanced import physics_manager

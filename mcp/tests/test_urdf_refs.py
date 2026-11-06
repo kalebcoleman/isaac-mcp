@@ -356,7 +356,7 @@ def test_kinds_are_told_apart_with_the_tool_to_use(env, broker):
         broker.locate(str(usd), kind="urdf")
     assert caught.value.code == "UNSUPPORTED_FORMAT"
     path = put(env / "bot", "r.urdf", urdf())
-    with pytest.raises(AssetError, match="assets__import_urdf"):
+    with pytest.raises(AssetError, match="assets__import_path"):
         broker.locate(str(path))
     xacro = put(env / "bot", "r.urdf.xacro", "<robot/>")
     with pytest.raises(AssetError) as caught:

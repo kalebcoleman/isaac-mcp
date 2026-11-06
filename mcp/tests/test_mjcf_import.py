@@ -1,4 +1,4 @@
-"""assets__import_mjcf: its contract, the broker's mjcf kind, the closure the pack tools read, and the Kit-side helpers."""
+"""MuJoCo models through assets__import_path: the contract, the broker's mjcf kind, the closure the pack tools read, and the Kit-side helpers."""
 
 import json
 import sys
@@ -38,10 +38,10 @@ def broker(tmp_path):
 
 
 def test_the_contract_is_one_tool_with_the_right_arguments_inside_the_listing_limits():
-    tool = REGISTRY["assets.import_mjcf"]
+    tool = REGISTRY["assets.import_path"]
     params = tool["parameters"]
     assert len(tool["description"]) <= 600
-    assert {"session_id", "stage_id", "prim_path", "source_path", "root_id", "relative_path", "fixed_base", "position"} <= set(params)
+    assert {"session_id", "stage_id", "prim_path", "source_path", "root_id", "relative_path", "fixed_base", "default_drives", "joint_targets", "position"} <= set(params)
     required = {name for name, spec in params.items() if spec.get("required", True)}
     assert required == {"session_id", "stage_id", "prim_path"}
     assert "default" not in params["fixed_base"]  # left out means "keep what the model says", never a silent true
@@ -62,10 +62,10 @@ def test_locate_accepts_an_xml_only_as_mjcf_and_says_where_an_xml_belongs(broker
     assert broker.locate(path, kind="mjcf") == ("m", "arm.xml")
     with pytest.raises(AssetError) as caught:
         broker.locate(path)  # as a USD
-    assert caught.value.code == "UNSUPPORTED_FORMAT" and "assets__import_mjcf" in str(caught.value)
+    assert caught.value.code == "UNSUPPORTED_FORMAT" and "assets__import_path" in str(caught.value)
     with pytest.raises(AssetError) as urdf:
         broker.locate(str(tmp_path / "model" / "robot.urdf"), kind="mjcf")
-    assert "assets__import_urdf" in str(urdf.value)
+    assert "assets__import_path" in str(urdf.value)
 
 
 def test_the_snapshot_of_an_mjcf_verifies_and_resolves_inside_itself(broker):

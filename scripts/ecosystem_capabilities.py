@@ -64,7 +64,7 @@ AREAS = {
         "layout helpers (grid, scatter, align) are optional."),
     "assets": (
         "Assets, robots and environments", "Isaac Sim / USD",
-        "`assets__roots`, `scan`, `search`, `info`, `import_usd`, `import_urdf` for trusted "
+        "`assets__roots`, `scan`, `search`, `info`, `import_path` (USD, URDF, xacro, SDF, MJCF, meshes, maps) for trusted "
         "project folders; twin loaders; UR5e assets fetched on demand.",
         "Partial", "NVIDIA cloud library, bundled samples, MJCF (M6)", "High",
         "A browsable robot library and MJCF import are what remain. whats2000's curated library "

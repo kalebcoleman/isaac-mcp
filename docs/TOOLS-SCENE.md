@@ -130,7 +130,6 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `assets__pack_pin` | Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true. |
 | `assets__pack_build` | Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, and the result says `importable: false` with `import_blockers`. Files that differ need force=true. Checks the new pack afterwards. |
 | `assets__info` | Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. |
-| `assets__import_usd` | Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes. |
 | `assets__prepare_workstation` | Take an absolute USD path under an already approved trusted root, validate its bounded snapshot in the selected Kit, and prepare a private workstation cache without overwriting. Returns `loaded:false`; call `ur5e_dt__load_workstation` and inspect `/World/Vention` to verify. |
 | `assets__import_path` | The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF, or a folder that holds one. `format=auto` picks it from the name; xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. See [ASSET-IMPORT.md](ASSET-IMPORT.md). |
 | `sim__stage__info` | Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations. Also returns `ros`: the simulator's ROS_DISTRO, ROS_DOMAIN_ID, RMW, localhost and Cyclone settings, plus the shell line that matches them. |
@@ -191,8 +190,6 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__joints__gains` | Read or set an initialized articulation's runtime drive gains: `stiffness`, `damping` and `max_effort` for named `dofs` or every DOF, with values before and after. These are PhysX/Newton runtime values: not USD, lost on Stop and never saved; `sim__joints__drive` authors USD gains. Omit every value to only read. Needs a playing or paused timeline and a valid tensor view. |
 | `sim__joints__move` | Step a **paused**, initialized simulation until named joint targets are within `tolerance` or `max_steps` is used, then report `settled` and every joint's error. A joint held by a contact or a weak drive reports `settled=false` with the blocked joint and its remaining error: clear the path, raise gains with `sim__joints__gains`, or retry with more steps. Runtime only; never pumps the app loop. |
 | `sim__joints__teleport` | Set joint positions directly as a state reset, not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are `{dof name: value}`; needs an initialized (playing or paused) articulation, refuses out-of-limit values, and reports each joint's value before and after. |
-| `assets__import_urdf` | Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves `package://` inside that folder only. Authors drives that hold a pose, lifts the robot out of a ground plane and warns about unusable mass or inertia. Source files never change. See [URDF robots](#urdf-robots). |
-| `assets__import_mjcf` | Convert a MuJoCo MJCF model (`.xml`) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows `<include>` files, meshes, textures and height fields inside that folder only. Source files never change. See [MuJoCo (MJCF) models](#mujoco-mjcf-models). |
 
 Graph build accepts pairs or objects, JSON-encoded individual node/connection entries, and a
 JSON string for each whole `nodes`, `connections`, `values` or `targets` container. A target
@@ -256,7 +253,7 @@ records two current-runtime non-reproductions and the still-unexplained original
 
 For an ordinary object or robot, call `assets__roots`, then `sim__stage__info`, and pass the
 absolute USD path to `assets__import_path` (or use the approved root ID and relative path with
-`assets__import_usd`). The broker copies the bounded
+`assets__import_path` with a root ID). The broker copies the bounded
 approved project with relative layout intact. Kit checks the snapshot's USD layers, material
 and texture dependencies and returns the created prim path, units and dependency counts. Inspect
 the resulting prim or viewport before assuming physics is ready.
@@ -656,7 +653,7 @@ See [fork comparison](FORK-COMPARISON.md) for each narrower capability.
 From a public URDF to a moving joint, with these tools alone:
 
 1. `assets__pack_build` copies the URDF and what it names into a pack. See [Assets](ASSETS.md#build-a-pack-from-a-urdf).
-2. `sim__quick_start robot="<pack>/<file>.urdf"`, or `assets__import_urdf source_path=<file>` in a scene you have.
+2. `sim__quick_start robot="<pack>/<file>.urdf"`, or `assets__import_path source_path=<file>.urdf` in a scene you have.
    Pass `fixed_base=false` for a robot that drives or walks.
 3. Play, then `sim__joints__state` and `sim__joints__command` on the reported `articulation_root`; `sim__joints__inspect` takes that same path (a link carrying the articulation API also works) to show authored limits and drives.
 
@@ -703,11 +700,11 @@ A successful import does not prove fidelity: check it with `sim__camera__capture
 ## MuJoCo (MJCF) models
 
 Most robots in [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) (the Franka, UR5e, quadrupeds and humanoids)
-ship only as MuJoCo XML. `assets__import_mjcf` brings one in with the importer Isaac Sim 6.x ships (`isaacsim.asset.importer.mjcf`):
+ship only as MuJoCo XML. `assets__import_path` brings one in with the importer Isaac Sim 6.x ships (`isaacsim.asset.importer.mjcf`):
 
 1. Download the model folder (a named source: see [Where assets come from](ASSETS.md#where-assets-come-from)), and have the user approve
    **that folder**: the whole folder is copied for each import, so approve the one robot's folder, not the whole repository.
-2. `assets__import_mjcf source_path=<folder>/<model>.xml prim_path=/World/<name>` in a scene you have. Leave `fixed_base` out to keep what the
+2. `assets__import_path source_path=<folder>/<model>.xml prim_path=/World/<name>` in a scene you have. Leave `fixed_base` out to keep what the
    model says: an arm without a free joint is fixed, a quadruped or humanoid with one floats and falls. Pass `fixed_base=true` to pin a
    floating robot, or `false` to free an arm.
 3. Play, then `sim__joints__state`, `sim__joints__command` and `sim__joints__move` on the reported `articulation_root`.

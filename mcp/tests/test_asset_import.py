@@ -42,13 +42,13 @@ def go(broker, root, rel, **params):
     return asset_import.route(broker, dict(source_path=str(root / rel), prim_path="/World/x", **params))
 
 
-@pytest.mark.parametrize("rel, tool, fmt", [("usd/a.usda", "assets.import_path", "usd"), ("urdf/r.urdf", "assets.import_urdf", "urdf"), ("mjcf/m.xml", "assets.import_mjcf", "mjcf"),
-                                            ("xacro/r.urdf.xacro", "assets.import_urdf", "xacro"), ("sdf/car.sdf", "assets.import_urdf", "sdf")])
-def test_every_format_is_picked_from_its_name_and_goes_to_the_right_importer(setup, rel, tool, fmt):
+@pytest.mark.parametrize("rel, kit_format, fmt", [("usd/a.usda", "usd", "usd"), ("urdf/r.urdf", "urdf", "urdf"), ("mjcf/m.xml", "mjcf", "mjcf"),
+                                                  ("xacro/r.urdf.xacro", "urdf", "xacro"), ("sdf/car.sdf", "urdf", "sdf")])
+def test_every_format_is_picked_from_its_name_and_goes_to_the_one_tool_with_a_format(setup, rel, kit_format, fmt):
     broker, root = setup
     kit_tool, params, info = go(broker, root, rel)
-    assert (kit_tool, info["format"]) == (tool, fmt)
-    assert params["snapshot_id"] and params["manifest_sha256"] and "source_path" not in params and "format" not in params
+    assert (kit_tool, params["format"], info["format"]) == ("assets.import_path", kit_format, fmt)
+    assert params["snapshot_id"] and params["manifest_sha256"] and "source_path" not in params
 
 
 def test_a_converted_file_is_in_the_verified_snapshot_and_is_its_entry(setup):

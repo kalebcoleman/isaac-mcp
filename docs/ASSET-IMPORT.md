@@ -1,8 +1,9 @@
 # Importing any robot or asset file
 
 One tool brings a robot or object into a scene: **`assets__import_path`**. Give it a file (or a folder that holds one) and it
-works out the format, checks it, converts it when it has to, and imports it. `assets__import_urdf` and `assets__import_mjcf`
-still work and do the same thing for their own format. For how approval and the asset stores work, see [ASSETS.md](ASSETS.md);
+works out the format, checks it, converts it when it has to, and imports it. It replaced three tools, `assets__import_usd`,
+`assets__import_urdf` and `assets__import_mjcf`, so an agent has one place to look; an approved root is still addressable with
+`root_id` and `relative_path`. For how approval and the asset stores work, see [ASSETS.md](ASSETS.md);
 for every tool's arguments, [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md); for what is planned next, [plans/ASSET-FORMATS.md](plans/ASSET-FORMATS.md).
 
 ```text

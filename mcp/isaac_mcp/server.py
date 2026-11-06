@@ -822,7 +822,7 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                         return json.dumps(dict(status="error", code=e.code, message=str(e), **e.details))
                     except ValueError as e:  # an invalid pack name or project file
                         return json.dumps(dict(status="error", code=getattr(e, "code", "INVALID_CONFIG"), message=str(e)))
-                if canonical in ("assets.info", "assets.import_usd", "assets.import_urdf", "assets.import_mjcf", "assets.prepare_workstation", "assets.import_path"):
+                if canonical in ("assets.info", "assets.prepare_workstation", "assets.import_path"):
                     # Verify destination identity BEFORE reading/copying project files.
                     info = active.get_client().call("sim.stage.info")
                     if info.get("session_id") != params.get("session_id") or info.get("stage_id") != params.get("stage_id"):
@@ -830,14 +830,7 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                                          current_target={k: info.get(k) for k in ("session_id", "stage_id", "pid", "source", "default_prim", "meters_per_unit", "up_axis")})
                     if not broker.staging or str(broker.staging) != info.get("staging"):
                         raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. Remote upload is disabled. The user can create it with the approval helper in docs/TOOLS-SCENE.md, then restart both.")
-                    if canonical in ("assets.import_urdf", "assets.import_mjcf"):
-                        params = dict(params)
-                        source = params.pop("source_path", None)
-                        file_kind = "mjcf" if canonical == "assets.import_mjcf" else "urdf"
-                        if (source is None) == (params.get("root_id") is None or params.get("relative_path") is None):
-                            raise AssetError("INVALID_VALUE", "Give source_path, or root_id with relative_path; not both and not neither.")
-                        root_id, relative_path = (params["root_id"], params["relative_path"]) if source is None else broker.locate(source, kind=file_kind)
-                    elif canonical == "assets.import_path":
+                    if canonical == "assets.import_path":
                         from . import asset_import  # one entry for every format: the host picks and converts
                         kit_canonical, params, routed_info = asset_import.route(broker, params)
                         root_id = None
@@ -847,7 +840,7 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                     else:
                         root_id, relative_path = params["root_id"], params["relative_path"]
                     if root_id is not None:  # import_path was snapshotted by the router
-                        snapshot = broker.snapshot(root_id, relative_path, kind={"assets.import_urdf": "urdf", "assets.import_mjcf": "mjcf"}.get(canonical, "usd"))
+                        snapshot = broker.snapshot(root_id, relative_path, kind="usd")
                         params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e,"code","FILESYSTEM"), message=str(e), **getattr(e, "details", {})))

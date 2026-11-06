@@ -534,9 +534,9 @@ class Broker:
 
             mesh_refs.check_mesh_path(rel)
         elif Path(rel).suffix.lower() in (".urdf", ".xacro"):
-            refuse("UNSUPPORTED_FORMAT", f"{rel} is a URDF, not a USD: use assets__import_urdf with source_path.")
+            refuse("UNSUPPORTED_FORMAT", f"{rel} is a URDF, not a USD: assets__import_path reads it with source_path (format auto).")
         elif Path(rel).suffix.lower() == ".xml":
-            refuse("UNSUPPORTED_FORMAT", f"{rel} is not a USD. If it is a MuJoCo model, use assets__import_mjcf with source_path.")
+            refuse("UNSUPPORTED_FORMAT", f"{rel} is not a USD. If it is a MuJoCo model, assets__import_path reads it with source_path (format auto).")
         else:
             usd_path(rel)
 

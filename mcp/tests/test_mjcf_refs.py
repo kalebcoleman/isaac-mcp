@@ -108,7 +108,7 @@ def test_a_dtd_or_entity_is_refused():
 def test_the_wrong_kind_of_xml_is_named():
     with pytest.raises(AssetError) as urdf:
         m.parse(b"<robot name='x'/>", "r.xml")
-    assert "assets__import_urdf" in str(urdf.value)
+    assert "assets__import_path" in str(urdf.value)
     with pytest.raises(AssetError):
         m.parse(b"<not-closed>", "r.xml")
     with pytest.raises(AssetError):

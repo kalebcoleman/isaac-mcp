@@ -12,8 +12,7 @@ from pathlib import Path, PurePosixPath
 from . import asset_formats
 from .project_assets import AssetError, refuse
 
-_KIT_TOOL = {"usd": "assets.import_path", "mesh": "assets.import_path", "map": "assets.import_path", "urdf": "assets.import_urdf", "xacro": "assets.import_urdf", "sdf": "assets.import_urdf",
-             "mjcf": "assets.import_mjcf"}
+_FORMATS_HERE = ("usd", "urdf", "xacro", "sdf", "mjcf", "mesh", "map")  # what this module routes; Kit always gets assets.import_path
 _ROBOT_OPTIONS = ("fixed_base", "default_drives", "joint_targets")
 _HELP = ("Supported: USD (.usd .usda .usdc .usdz), URDF (.urdf), xacro (.xacro), SDF (.sdf .world), MuJoCo MJCF (.xml), a mesh (.gltf .glb .obj .stl .fbx .dae .ply), a ROS map (.yaml), "
          "and a folder that holds one of them (a Gazebo model, a ROS package, a MuJoCo or LeRobot robot folder).")
@@ -27,7 +26,16 @@ def route(broker, params: dict) -> tuple[str, dict, dict]:
     sdf_model = params.pop("sdf_model", None)
     mesh_options = {k: params.pop(k) for k in ("scale", "up_axis", "as_collider", "mass") if k in params}
     wall_height = params.pop("wall_height", None)
-    source = params.pop("source_path")
+    source, root_id, relative_path = params.pop("source_path", None), params.pop("root_id", None), params.pop("relative_path", None)
+    if (source is None) == (root_id is None or relative_path is None):
+        refuse("INVALID_VALUE", "Give source_path, or root_id with relative_path; not both and not neither.")
+    if source is None:  # an approved root named by its ID (assets__roots), and a path inside it
+        from .project_assets import relative
+
+        known = broker.roots.get(root_id)
+        if known is None:
+            refuse("ROOT_NOT_APPROVED", f"{root_id!r} is not an approved root ID. assets__roots lists them.")
+        source = str(Path(known[0]) / relative(relative_path))
     if fmt not in asset_formats.FORMATS:
         refuse("INVALID_VALUE", f"format must be one of {', '.join(asset_formats.FORMATS)}.")
     if xacro_args is not None and (not isinstance(xacro_args, dict) or len(xacro_args) > 64
@@ -55,7 +63,7 @@ def route(broker, params: dict) -> tuple[str, dict, dict]:
     info["format"] = fmt
     if chosen_from:
         info["bundle"] = chosen_from
-    if fmt not in _KIT_TOOL:
+    if fmt not in _FORMATS_HERE:
         refuse("UNSUPPORTED_FORMAT", f"format {fmt} is not available. {_HELP}")
     kind = {"usd": "usd", "urdf": "urdf", "xacro": "xacro", "sdf": "sdf", "mjcf": "mjcf", "mesh": "mesh", "map": "map"}[fmt]
     root_id, relative_path = broker.locate(source, kind=kind)
@@ -95,4 +103,6 @@ def route(broker, params: dict) -> tuple[str, dict, dict]:
             params["fixed_base"] = bool(result.get("static"))
     if fmt in ("xacro", "sdf"):
         info["converted_from"] = relative_path
-    return _KIT_TOOL[fmt], params, info
+    # Kit gets one tool and the format to run: xacro and SDF have become a URDF in the snapshot by now.
+    params["format"] = {"xacro": "urdf", "sdf": "urdf"}.get(fmt, fmt)
+    return "assets.import_path", params, info

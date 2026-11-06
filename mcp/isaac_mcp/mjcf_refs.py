@@ -34,7 +34,7 @@ def check_mjcf_path(path) -> None:
     """Refuse anything but an ``.xml`` file name, and say what to do with a URDF or xacro one."""
     suffix = PurePosixPath(str(path)).suffix.lower()
     if suffix in (".urdf", ".xacro"):
-        refuse("UNSUPPORTED_FORMAT", f"{path} is a URDF, not an MJCF: use assets__import_urdf.")
+        refuse("UNSUPPORTED_FORMAT", f"{path} is a URDF, not an MJCF: assets__import_path with format=auto reads it.")
     if not is_mjcf(path):
         refuse("UNSUPPORTED_FORMAT", f"Expected a MuJoCo .xml file, not {path}.")
     if PurePosixPath(str(path)).name.lower() == "package.xml":
@@ -59,7 +59,7 @@ def parse(data: bytes, name: str = "MJCF", included: bool = False) -> ET.Element
     except ET.ParseError as exc:
         refuse("MJCF_XML", f"{name} is not valid XML: {exc}")
     if tree.tag != "mujoco" and not included:
-        hint = " It looks like a URDF: use assets__import_urdf." if tree.tag == "robot" else ""
+        hint = " It looks like a URDF: assets__import_path with format=auto reads it." if tree.tag == "robot" else ""
         refuse("MJCF_XML", f"{name}: the root element must be mujoco, not {str(tree.tag)[:64]}.{hint}")
     return tree
 
