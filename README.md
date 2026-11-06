@@ -61,6 +61,16 @@ Add ROS 2 and the same scene runs Nav2: `Set up ROS 2 TF, build an occupancy map
 `sim__quick_start environment=warehouse` builds the room, the racks and the robot in one call, with nothing to download.
 For a real floor plan, a ROS Nav2 map becomes walls: see [importing any asset](docs/ASSET-IMPORT.md#ros-maps).
 
+### Import almost any robot or object file
+
+> Load the UR10e from the Universal Robots repo I downloaded and bend two joints. Then drop the glTF duck next to it so it falls.
+
+One tool, `assets__import_path`, reads **USD, URDF, xacro, SDF (Gazebo), MuJoCo XML, meshes (glTF, GLB, OBJ, STL, FBX, PLY), ROS maps and robot folders**.
+The file is read and converted by the host without running any code from it (xacro and SDF included), and the result lists the
+joints, limits, warnings and a validation check. Real robots from GitHub (UR10e, Franka FR3, TurtleBot3, Pioneer 2DX, SO-101,
+four Menagerie robots) and props (Duck, DamagedHelmet) were imported this way in tests. Setup, formats, error codes and limits:
+[docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md).
+
 ### Load your own robot from an open-source repo
 
 > I put the SO-ARM100 robot folder in my asset folder. Load it into a new scene.

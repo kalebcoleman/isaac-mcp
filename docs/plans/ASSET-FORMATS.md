@@ -16,6 +16,10 @@ ships (the extension list in its install) and NVIDIA's own pages; items marked *
 | Occupancy map (YAML + image) | no | yes | `sim__map__occupancy` | tested |
 | Video, pictures | no | yes | screen and camera tools | tested |
 
+**Status (2026-11-05):** everything in the table below marked *no* for import is now built except CAD and Gaussian splats (closed, not built:
+nothing needed them), and the three import tools are one (`assets__import_path`). See [ASSET-IMPORT.md](../ASSET-IMPORT.md) for what exists
+and [CHECKLIST.md](CHECKLIST.md) (F28 to F50) for how each part was tested. The tables below are the research the build started from.
+
 ## What Isaac Sim 6.2 ships that we do not use yet
 
 Read from the install's extension list (`isaacsim/exts` and `extscache`):

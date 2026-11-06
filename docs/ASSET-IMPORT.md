@@ -17,6 +17,25 @@ assets__import_path  source_path=<file or folder>  prim_path=/World/robot
 
 Or in one call that also builds the scene: `sim__quick_start robot=<absolute path to a file or folder>` (any format below).
 
+## Set up, once
+
+1. **Isaac Sim 6.x** with this repository's MCP server (`./install.sh`, see [LINUX-SETUP.md](LINUX-SETUP.md)). The URDF and MJCF importers and the mesh converter are Isaac Sim's own: Isaac Sim 5.1 has no MJCF importer. Nothing else is needed for USD, URDF, xacro, SDF, meshes or maps: **no ROS, no `xacro` program, no Gazebo, no internet.**
+2. **Put the file where the tools may read it.** Either in your asset folder (`isaac-mcp-assets/<project>/`, loads with no approval) or in any folder you approve once, as a trusted root. Approve the **smallest folder that holds the files** (one robot's folder, not your whole downloads or projects folder): every import copies the approved folder, up to 1000 files and 256 MiB. An agent cannot approve anything. When it needs approval, the refusal prints the exact command; you run it, then restart the MCP server and Isaac Sim, because both read the approval file at startup.
+3. **Ask.** For example: *"Load the UR10e from <folder> and bend two joints"*, *"Put the Duck from <folder> in the scene as a prop that falls"*, *"Make a warehouse with a robot in it"*. The agent finds `assets__import_path` and picks the format.
+
+## What it can do, in short
+
+| You say | It does |
+|---|---|
+| Load this robot file (any of USD, URDF, xacro, SDF, MJCF) | Converts it on the host without running its code, imports it, and reports joints, limits, drives, placement and warnings |
+| Load this folder | Finds the entry file (Gazebo model, ROS package, MuJoCo or SO-100 style folder) or lists the candidates |
+| Load this mesh as a prop that falls / is solid | Converts glTF, GLB, OBJ, STL, FBX or PLY, with scale, up axis, a collision shape and mass |
+| Turn this Nav2 map into walls | Wall boxes with colliders at the map's own coordinates |
+| Save this robot as a URDF | `sim__stage__save format=urdf`, with the list of what a URDF cannot hold |
+| Check this first | `assets__dependencies` lists the files a file needs, for every format, with no import |
+| Start in a pose | `joint_targets` on the import |
+| One call, scene and all | `sim__quick_start robot=<path>`; `sim__quick_start environment=warehouse` for a warehouse with a robot |
+
 ## Formats
 
 | You have | `format` | What happens | Notes |
@@ -110,6 +129,21 @@ Every robot import returns what an agent needs to act without another call: `art
 
 A tool can be called once from a shell, with no MCP client, against a bridge: `python3 mcp/isaac_mcp/client.py assets.import_path '{"session_id": "...", "stage_id": "...", "source_path": "...", "prim_path": "/World/r"}' --port <port>`. The test helper in the agent-testing skill accepts `./call.py --port <port> <tool> '<json>'` the same way; no `use_bridge` is needed with an explicit port.
 
+## When it refuses: what each code means
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `ROOT_NOT_APPROVED` | The file or folder is outside every approved root and asset folder | Run the printed command (smallest folder), restart the MCP server and Isaac Sim |
+| `AMBIGUOUS_BUNDLE` | A folder holds several possible robots | Pass `source_path` with the file you want (the reply lists them) |
+| `XACRO_ARG` | A xacro file needs `$(arg ...)` values | Give them in `xacro_args`; the reply names every missing one |
+| `SDF_MODEL` | A Gazebo world has several models | Pass `sdf_model` with the model's name |
+| `MESH_REFERENCE` | A mesh names a file outside the folder (absolute, URL, `..`) | Put the files beside the mesh; this is refused on purpose |
+| `UNITS_MISMATCH` | The stage's up axis or units differ from the asset's | Start a scene that matches (`sim__quick_start up_axis=... meters_per_unit=...`) |
+| `UNSUPPORTED_FORMAT` | Not a format here (CAD, splats, `.dae` as a prop, a bare `package.xml`) | Convert it to glTF, OBJ or URDF first |
+| `LIMIT` | The approved folder has over 1000 files or 256 MiB, or a file is too big | Approve a smaller folder |
+| `QUOTA` | 16 private snapshots exist in staging (each import uses two) | Stop the simulator, then clear the staging folder the refusal names |
+| `PACKAGE_MISSING` | A `$(find pkg)` or `package://` needs a package that is not in the approved folder | Approve the folder that holds it |
+
 ## Physics after the import
 
 An import authors a valid robot; it does not make it stand or walk. What to expect:
@@ -119,6 +153,15 @@ An import authors a valid robot; it does not make it stand or walk. What to expe
 - **MuJoCo torque motors.** A Menagerie robot whose actuators are `<motor>` torque motors (Go2, H1) imports with zero stiffness and damping: it collapses under gravity until you set gains or drive it with a controller. A model with position actuators (Panda, UR5e) imports with drives. This is faithful to the model, so the result **lists the undriven joints and warns**; `default_drives=true` gives them a generic holding drive (stiffness 100, damping 10 per revolute joint) as a starting point.
 - **No balance.** A humanoid or quadruped with a free base and gains still falls over unless a controller or a trained policy keeps it up. Walking is an Isaac Lab job (`isaaclab__train`, `isaaclab__play`): the stock `Isaac-Velocity-Flat-G1` task uses a free base (`fix_root_link=False`) and learns to balance, with the base-contact termination counting falls; it ran on the Newton backend, not PhysX.
 - **Ground.** Leave `position` out to have a robot raised out of a ground plane (up to 3 m); a `position` you give is used as is, with a warning if it starts inside the ground.
+
+## Limits to know
+
+- **Approval is always on.** There is no switch to turn it off.
+- **Snapshot quota.** Staging holds 16 snapshots and each import uses two, so about eight imports per simulator session before a cleanup is needed.
+- **Collada (`.dae`)** works as a URDF robot's meshes but not as a prop of its own; CAD and Gaussian splats are not supported.
+- **FBX** comes in without materials (its texture paths cannot be checked). OBJ and glTF come in without materials if a named file is absent, with a warning.
+- **The SDF reader** converts one model at a time and drops plugins, sensors, lights and physics settings (listed in the result). A ball joint becomes three continuous joints.
+- **Not a physics guarantee.** An import authors a valid robot; whether it stands, drives or walks depends on its drives, its base and a controller (see above).
 
 ## Tested
 
