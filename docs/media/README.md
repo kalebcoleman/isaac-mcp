@@ -52,7 +52,7 @@ gh release download untagged-8a38d708b61458020a38 --repo kalebcoleman/isaac-mcp 
 sha256sum agent62w-2fdf-evidence-v2.tar.gz
 ```
 
-Draft access requires repository permissions. See the [evidence release index](../evidence/project-scene/RELEASE-ASSETS.md).
+Draft access requires repository permissions. See the [draft evidence release](https://github.com/kalebcoleman/isaac-mcp/releases/tag/untagged-8a38d708b61458020a38).
 Before public video publication, the maintainer must confirm permissions and the final
 privacy review, upload the approved original recording as a release asset, verify its bytes
 and SHA-256, then replace the README thumbnail destination with the actual public asset URL.

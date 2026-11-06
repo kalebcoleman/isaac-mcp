@@ -1,6 +1,8 @@
 # Build plan: finishing the generic Isaac Sim tools after PR #11
 
-**Status: plan, not built.** Decisions D1–D4 were made by the owner on 2026-10-31 and 2026-11-01
+**Historical planning snapshot:** some milestones shipped and the catalog generator and detailed test ledgers were removed. Use the [working checklist](CHECKLIST.md) and current tool references for status; keep the proposals below as research, not current instructions.
+
+Decisions D1–D4 were made by the owner on 2026-10-31 and 2026-11-01
 (see §2). Implementation starts after the current PRs are validated and merged and the owner starts the
 next phase. This document does not authorize new tools, consolidation or removals during the
 current first-slice validation.
@@ -98,11 +100,7 @@ client) and the `scripts/validate_scene_*.py` suites. Add one suite per mileston
 assertions, and extend the client if it lacks screenshot or recording helpers (use the host
 `screenshot(window_id=…)` and `start_screen_recording(window_id=…, full_screen=false)` tools).
 
-**Per milestone, commit** `docs/evidence/scene-followup/M<N>/` in the same layout as
-`docs/evidence/project-scene/`: `README.md` (environment block, results table, what was not
-verified), JSON run records, and PNG screenshots (each ≤ 400 KB, ≤ 15 per milestone). The environment
-block lists OS, display, GPU and driver, every Isaac Sim build tested, backend, Kit PID and port,
-isaac-mcp git SHA, enabled tool groups, and the assets used.
+**Per milestone**, record the test commands, source, build, backend, observed effects, failures and limits in the PR. Keep detailed run outputs outside the repository unless they are needed for ongoing work.
 
 **Videos** (MP4, 1280 px, 10–40 s) are not committed: upload them with `gh release upload` to a
 **draft** release `scene-followup-evidence` (create once with
@@ -132,7 +130,7 @@ Tool names below are proposals in PR #11's naming style; parameters are in addit
 ### M0: Baseline on PR #11's final head
 
 No new tools. After PR #11 merges, rebase PR #12 (`docs/agent-skill-ecosystem`) onto `main`; it
-brings the agent skill, ECOSYSTEM.md, `scripts/ecosystem_capabilities.py` and this plan, none of
+originally brought the agent skill, ecosystem research and this plan, none of
 which PR #11 has. Earlier test merges conflicted in status lines in `docs/GENERIC-SIM-TOOLS.md` and
 `docs/plans/README.md`; later combined candidates resolved them. Preserve both plan index entries
 and check the actual final merge rather than assuming those historical conflicts still exist. `AGENTS.md`, `README.md`, `scripts/check_docs.py`
@@ -285,9 +283,7 @@ recorder. Test windowed and headless sessions and record what happens without a 
 three seconds of play for the ant to settle; `record_stop`; `sim.joints.state` within tolerance;
 `sim.logs.summary`; `sim.stage.save` and a reopen compared with `sim.stage.tree`;
 `sim.viewport.screenshot`. Deliver the pack's recording **and** a host screen recording of the
-same run. Then update `scripts/ecosystem_capabilities.py` ("isaac-mcp today" column) and regenerate
-ECOSYSTEM.md, and update the agent skill, `docs/GENERIC-SIM-TOOLS.md` status and
-`docs/VERIFICATION.md`.
+same run. Then update the agent skill and current tool references for the shipped behavior.
 
 ### Future tool selection and consolidation (owner direction, 2026-11-01)
 

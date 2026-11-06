@@ -1,7 +1,10 @@
 # Project status and roadmap
 
-Last updated: 2026-11-03. The tool references describe the current interfaces, and [Verification](VERIFICATION.md) holds the
-latest results. A checked item means work exists, not that every machine or version has been tested.
+Last updated: 2026-11-03. This is a historical snapshot, including open items that may
+have changed. Use the [working checklist](plans/CHECKLIST.md) for current priorities,
+[tool references](README.md#current-reference) for current interfaces, and
+[verification](VERIFICATION.md) for test guidance. A checked item does not mean every
+machine or version has been tested.
 
 ## Goal
 
@@ -13,7 +16,7 @@ robot; the generic tools work with other robots and scenes. Preserve the UR5e to
 
 - [x] Host MCP server, local Kit socket bridge, tool discovery, multi-bridge selection and the in-Kit panel.
 - [x] Shared bridge ownership: packs share a Kit endpoint and unload independently.
-- [x] Generic scene and asset pack: 48 tools for stages, prims, physics, joints, cameras, LiDAR, OmniGraph, occupancy maps,
+- [x] Generic scene and asset pack for stages, prims, physics, joints, cameras, LiDAR, OmniGraph, occupancy maps,
   ROS 2 TF, Kit UI and trusted USD, URDF and USDZ projects. See [TOOLS-SCENE.md](TOOLS-SCENE.md).
 - [x] UR5e pack: 23 tools for the workstation, objects, scene state, ROS graphs and viewport recording.
 - [x] Desktop capture: screenshots, single and multi-window recording, window placement and clip joining, including on a locked desktop.
@@ -27,7 +30,7 @@ robot; the generic tools work with other robots and scenes. Preserve the UR5e to
 
 ## Verification and limits
 
-See the [latest live check](VERIFICATION.md#documentation-check-2026-11-03) for exact scope. On 2026-11-03 the host suite
+See the [2026-11-03 live check](VERIFICATION.md#documentation-check-2026-11-03) for its exact scope. On 2026-11-03 the host suite
 passed (1968 passed, 7 skipped), and on 6.2.0.0 headless PhysX, `./verify.sh` from a clean clone with existing assets, `smoke_tools.py` and `validate_scene_tools.py`
 passed. A successful run is not proof of every physics invariant or of real-robot fidelity.
 
@@ -51,8 +54,8 @@ in the [compatibility matrix](COMPATIBILITY.md).
   and infeasible scenes.
 - [ ] Investigate the `NoneType.GetCamera` viewport exception during stage reset without suppressing it. See
   [the reproduction](VERIFICATION.md#windowed-viewport-reset-comparison).
-- [ ] Complete the final PhysX evidence review and the [unresolved fresh-Kit camera-reuse gap](evidence/project-usd-workstation/README.md).
-- [ ] Re-run the windowed workflows listed as not exercised in the latest live check.
+- [ ] Complete the final PhysX evidence review and investigate the fresh-Kit camera-reuse gap.
+- [ ] Re-run the windowed workflows listed as not exercised in that live check.
 
 ### 2. General Isaac Sim tools
 

@@ -3,7 +3,7 @@
 **Implementation preview; end-to-end acceptance incomplete.** These catalogued tools implement
 trusted local/shared-mount projects and explicit scene operations. Untrusted isolation, authenticated
 remote upload and named presets are **unavailable**, not silently substituted. Bounded USDZ support is available only in the trusted-project profile.
-See [evidence](evidence/project-scene/README.md) for actual tests and missing gates.
+See [compatibility](COMPATIBILITY.md) for tested builds and known limits.
 The earlier [design](GENERIC-SIM-TOOLS.md) is broader than this implementation.
 This page describes behavior and limits. For each tool's arguments and defaults, see [Tool arguments](TOOLS-ARGUMENTS.md).
 
@@ -278,9 +278,11 @@ logs, and use bounded read-only health checks. For an owned managed session, the
 opt-in `sim__status` / `sim__stop` tools verify its identity; forced stop can lose
 unsaved state and does not recover unknown in-flight effects. Restart from a known
 saved input in a new verified session instead of replaying the pending mutation.
-The [bounded PhysX stall assessment](evidence/project-scene/PHYSX-STALL-DISPOSITION.md)
-records two current-runtime non-reproductions and the still-unexplained original
-6.0.1 windowed stall. Passing later steps are not a fix for that historical failure.
+For an owned managed session, check `sim__status`, then use `sim__stop` with the recorded
+managed ID, `expected_pid` and `confirm_discard=true`; use `force=true` only if it will not
+exit normally. Verify the process has exited and resources are free before starting a new one.
+Recheck endpoint, stage, backend and finite state on the new session. Never stop unrelated
+processes, and do not mistake a fresh session for recovery of the original solver state.
 
 ### Project USD and the UR5e workstation
 
@@ -320,7 +322,7 @@ not an untrusted-USD sandbox. Keep the cache and snapshots while scenes still re
 The import and workstation workflows were exercised in both windowed and headless sessions
 on installed Isaac Sim `6.0.0.0`, `6.0.0.1`, `6.0.1.0`, `6.1.0.0` and `6.2.0.0` on one
 Linux/NVIDIA machine. These tests cover the documented sample projects, not every USD or future
-release. See the [live test matrix and known camera issue](evidence/project-usd-workstation/README.md).
+release. In those tests, new cameras sometimes needed a retry after the first capture failed.
 
 Pose coordinates use **stage units**, `orientation=[w,x,y,z]` must be a finite unit quaternion,
 and `frame` is `local` or `world`. World transforms use the parent's inverse matrix; singular

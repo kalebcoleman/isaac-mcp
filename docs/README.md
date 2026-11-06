@@ -36,8 +36,8 @@ over both.
 |---|---|
 | [ROS 2 and RViz 2](ROS2-RVIZ.md) | TF setup, RViz config, the TF doctor, Nav2 maps |
 | [Isaac Sim 6.2 notes](ISAAC-6.2-NOTES.md) | Adapting labs written for Isaac Sim 6.0 |
-| [Verification](VERIFICATION.md) | Host and live checks, expected values, latest results |
-| [Reproducibility](REPRODUCIBILITY.md) | Locked setup, what has been verified, recording your own run |
+| [Verification](VERIFICATION.md) | Host and live checks, expected values and limits |
+| [Reproducibility](REPRODUCIBILITY.md) | Record an environment and reproduce a result |
 
 **Understand and extend**
 
@@ -53,7 +53,7 @@ over both.
 
 | Page | Use it for |
 |---|---|
-| [Roadmap](ROADMAP.md) | Status and next work |
+| [Working checklist](plans/CHECKLIST.md) | Current priorities and open work |
 | [Publishing](PUBLISHING.md) | PyPI and npm release steps |
 | [Vendoring](VENDORING.md) · [Asset provenance](provenance/ASSETS.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md) | Licenses and origins |
 | [Media](media/README.md) | Provenance of the images in the README |
@@ -67,14 +67,16 @@ so do not use them as an API reference.
 |---|---|
 | [Generic Sim tools design](GENERIC-SIM-TOOLS.md) | The original `sim.*` proposal; broader than what shipped |
 | [Isaac Lab design notes](ISAACLAB-TOOLS.md) | Design and job-guard history |
-| [Ecosystem by capability](ECOSYSTEM.md) · [by repository](ECOSYSTEM-BY-REPO.md) | Generated survey of other Isaac MCP servers |
+| [Isaac ecosystem resources](ECOSYSTEM.md) | NVIDIA tools and skills; historical research |
 | [Fork comparison](FORK-COMPARISON.md) | Comparison with one pinned fork |
 | [Plans](plans/README.md) | Implementation plans and follow-ups |
+| [Roadmap](ROADMAP.md) | Historical 2026-11-03 status snapshot |
 
 ## Evidence
 
-[`docs/evidence/`](evidence/project-scene/README.md) holds dated test records, including the [Lab 3 run 8 record](evidence/lab3-run8-2026-11-03.md). They describe what was observed at that
-time and are not rewritten later, so paths, counts and versions in them can be out of date on purpose.
+Use [compatibility](COMPATIBILITY.md) for tested builds and known limits, and
+[verification](VERIFICATION.md) for checks. Selected task records remain under
+`docs/evidence/`; lengthy historical test ledgers are in Git history.
 
 ## Scripts
 
@@ -92,6 +94,5 @@ away. Scripts that import `mcp` need `uv run --isolated --project mcp --extra sc
 | ROS 2 | `ros_env.sh` (source it), `ros2_rviz_config.py`, `ros2_tf_doctor.py`, `tf_capture.py`, `verify_tf.sh`, `cmd_vel_sequence.py` |
 | UR driver | `launch_ur_fake.sh`, `sim_bringup.sh`, `ursim_watchdog.sh`, `ur_dashboard.py`. These can affect the surrounding robot environment, so use them only for the intended setup |
 | Diagnostics | `probe_62.sh`, `catch_hang.sh` (both boot Kit on the GPU), `checkpoint_export.py` |
-| Docs generators | `ecosystem_catalog.py`, `ecosystem_capabilities.py` |
 
 `tools/` holds one-off asset conversion utilities for the RG2 gripper. `mcp/templates/` holds bridge integration templates.

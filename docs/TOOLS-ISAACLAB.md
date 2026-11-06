@@ -587,13 +587,10 @@ the launch proceeds as before.
 
 See the [compatibility matrix](COMPATIBILITY.md) for simulator and Isaac Lab version pairings and the scope of each test.
 
-The later [self-contained Lab reproduction](REPRODUCIBILITY.md#self-contained-lab-3-reproduction)
-at exact MCP `c2ceb7f` / official Lab `e3f7d9f` exercised all 12 tools with 114 retained
-calls (111 workflow plus three cleanup) and 16 assertions. Separate mode/video and cleanup
-records preserve their own counts. It used Lab 3.0 / Sim 6.2 / Newton MJWarp without an
-inherited `.pth`, but retains two `fsspec`/`urllib3` metadata conflicts. The guide links exact
-profile/lock/script inputs and distinguishes measured sync from an unexecuted locked replay.
-It is not generic Sim Newton qualification or a clean-machine/full-installer claim.
+A self-contained Lab 3.0 / Sim 6.2 Newton MJWarp test used no inherited `.pth`, but
+retained `fsspec` and `urllib3` package-metadata conflicts. It does not qualify generic
+Sim Newton behavior or a clean-machine/full-installer setup. See
+[reproducibility](REPRODUCIBILITY.md) for recording an environment.
 
 Historical verification includes:
 
