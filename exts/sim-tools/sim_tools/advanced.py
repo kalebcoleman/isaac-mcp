@@ -1231,6 +1231,9 @@ class Advanced:
         from pxr import UsdPhysics
 
         if a.get("impulse") is not None:
+            others = sorted(k for k, v in a.items() if v is not None and k not in ("path", "impulse", "at", "session_id", "stage_id"))
+            if others:
+                refuse("CONFLICT", f"impulse pushes a running body and edits nothing: it does not combine with {', '.join(others)}.")
             return self.physics_push(stage, a)
         s = self.s
         path = a["path"]

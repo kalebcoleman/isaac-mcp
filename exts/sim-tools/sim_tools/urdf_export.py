@@ -48,7 +48,7 @@ def _has_joints(stage, robot_path) -> bool:
     from pxr import Usd, UsdPhysics
 
     root = stage.GetPrimAtPath(robot_path) if robot_path else stage.GetDefaultPrim()
-    return bool(root) and any(p.IsA(UsdPhysics.Joint) for p in Usd.PrimRange(root, Usd.TraverseInstanceProxies()))
+    return bool(root) and any(p.IsA(UsdPhysics.Joint) and not p.IsA(UsdPhysics.FixedJoint) for p in Usd.PrimRange(root, Usd.TraverseInstanceProxies()))  # a prop fixed to the world has none to lose
 
 
 def export(scene, stage, filename: str, directory, robot_path) -> dict:

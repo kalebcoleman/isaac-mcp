@@ -28,6 +28,7 @@ Jobs are launched with ``shell=False`` and an explicit argv list, with
 
 from __future__ import annotations
 
+import itertools
 import errno
 import json
 import math
@@ -508,6 +509,10 @@ def _settle_orphan(job_dir: Path, data: dict) -> None:
     try:
         code = int((job_dir / EXIT_FILE).read_text())
     except (OSError, ValueError):
+        if (job_dir / TIMEOUT_FILE).exists():  # the limit fired, and the job ignored TERM until the guard killed it
+            data.update(status="timeout", finished_at=data.get("finished_at") or _now())
+            _write_job(job_dir, data)
+            return
         data.update(status="failed", finished_at=data.get("finished_at") or _now(), note=data.get("note") or "host restarted")
         _write_job(job_dir, data)
         return
@@ -1259,21 +1264,31 @@ def runs_status(job_id: str) -> dict[str, Any]:
     return out
 
 
+_VIDEO_LOG_TAIL = 4 * 1024**2
+_VIDEO_LOG_LINE = re.compile(r"(?:video_folder|output_dir): (\S+)|\[VideoRecorder\] Wrote \d+ frames to (\S+\.mp4)")
+
+
 def _video_paths(run_dir: Any, log_path: Path | None = None, limit: int = 8) -> list[str]:
     """Videos Lab wrote for this run, newest first: under <run_dir>/videos, or the folder its log names (a play job's own
     folder is not where Lab's run lives). Lab 2.3 logs video_folder; Lab 3 logs output_dir and "[VideoRecorder] Wrote N frames to <file>"."""
     folders = [Path(run_dir, "videos")] if run_dir else []
     try:
         if log_path is not None:
-            for match in re.finditer(r"(?:video_folder|output_dir): (\S+)|\[VideoRecorder\] Wrote \d+ frames to (\S+\.mp4)", log_path.read_text(errors="replace")):
-                folders.append(Path(match.group(1)) if match.group(1) else Path(match.group(2)).parent)
+            with log_path.open("rb") as log:  # a training log can be huge, and this runs on every runs_status
+                log.seek(max(0, log_path.stat().st_size - _VIDEO_LOG_TAIL))
+                tail = log.read().decode(errors="replace")
+            for match in itertools.islice(_VIDEO_LOG_LINE.finditer(tail), 8):
+                folder = Path(match.group(1)) if match.group(1) else Path(match.group(2)).parent
+                if "videos" in folder.parts:  # never search a folder a log line merely names
+                    folders.append(folder)
     except OSError:
         pass
     found: dict[str, float] = {}
     for folder in folders:
         try:
             if folder.is_dir():
-                found.update({str(path): path.stat().st_mtime for path in folder.rglob("*.mp4")})
+                for path in itertools.islice(folder.rglob("*.mp4"), 64):
+                    found[str(path)] = path.stat().st_mtime
         except OSError:
             continue
     return sorted(found, key=found.get, reverse=True)[:limit]

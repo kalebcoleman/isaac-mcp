@@ -41,8 +41,11 @@ def read_pgm(data: bytes):
 def read_png(data: bytes):
     try:
         from PIL import Image
-        import io
+    except ImportError:
+        refuse("IMPORTER_UNAVAILABLE", "This Kit cannot read a PNG map (no PIL). Use a PGM image.")
+    import io
 
+    try:
         image = Image.open(io.BytesIO(data))  # reads the header only: the size is checked before any pixel is decoded
         width, height = image.size
         if width * height > MAX_PIXELS:
@@ -50,8 +53,8 @@ def read_png(data: bytes):
         if image.mode in ("I;16", "I;16B", "I;16L", "I"):  # 16-bit grey: converting to 8 bits would saturate it
             return width, height, 65535, list(image.getdata())
         return width, height, 255, list(image.convert("L").getdata())
-    except ImportError:
-        refuse("IMPORTER_UNAVAILABLE", "This Kit cannot read a PNG map (no PIL). Use a PGM image.")
+    except Image.DecompressionBombError as exc:
+        refuse("LIMIT", f"The map image is too large: {str(exc)[:200]}")
 
 
 def rectangles(occupied, width, height):

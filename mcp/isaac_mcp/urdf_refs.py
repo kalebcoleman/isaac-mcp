@@ -325,17 +325,27 @@ def _candidates(package, project):
     return [*project.named_packages().get(package, []), *project.folders_named(package), *([""] if project.name == package else [])]
 
 
+_URI_MESHES = {".gltf", ".glb", ".dae"}
+
+
 def mesh_reference(referrer: str, name: str) -> str | None:
     """The folder-relative file a mesh's reference means, or None if it leaves the folder.
 
-    glTF names are URIs and a loader percent-decodes them, so the decoded form is what gets checked: ``%2e%2e/x.bin`` is ``../x.bin``.
-    A ``%`` left after decoding could be decoded again by something further along, so it is refused too.
+    glTF and DAE names are URIs and a loader percent-decodes them, so the decoded form is what gets checked: ``%2e%2e/x.bin`` is ``../x.bin``.
+    A ``%`` left after decoding could be decoded again by something further along, so it is refused too. OBJ and MTL names are plain
+    paths, where ``100%.png`` is an ordinary file; one whose decoded form would leave the folder is still refused, in case a loader decodes it.
     """
     value = name[7:] if name.startswith("file://") else name
     decoded = unquote(value)
-    if "%" in decoded or SCHEME.match(value) or SCHEME.match(decoded) or decoded.startswith("/") or "\\" in decoded or any(ord(c) < 32 for c in decoded):
+
+    def leaves(text):
+        return SCHEME.match(text) or text.startswith("/") or "\\" in text or any(ord(c) < 32 for c in text) or normal_path(_parent(referrer), text) is None
+
+    if leaves(value) or leaves(decoded):
         return None
-    return normal_path(_parent(referrer), decoded)
+    if PurePosixPath(referrer).suffix.lower() in _URI_MESHES:
+        return None if "%" in decoded else normal_path(_parent(referrer), decoded)
+    return normal_path(_parent(referrer), value)
 
 
 def gltf_uris(suffix: str, data: bytes):

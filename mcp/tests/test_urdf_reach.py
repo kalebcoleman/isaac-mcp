@@ -1,4 +1,4 @@
-"""The own-URDF reach task refuses a wrong path or link before Kit starts, and starts each joint inside its limits."""
+"""The own-URDF reach task refuses a wrong path or link before the scene is built, and starts each joint inside its limits."""
 
 import importlib.util
 from pathlib import Path

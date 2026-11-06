@@ -660,3 +660,18 @@ def test_video_paths_reads_lab_3s_log_lines(tmp_path):
     assert jobs._video_paths(None, log) == [str(folder / "clip_model_1499_0000.mp4")]
     log.write_text(f"        output_dir: {folder}\n")
     assert jobs._video_paths(None, log) == [str(folder / "clip_model_1499_0000.mp4")]
+
+
+def test_video_paths_will_not_search_a_folder_a_log_line_merely_names(tmp_path):
+    (tmp_path / "secret.mp4").write_bytes(b"x")
+    log = tmp_path / "stdout.log"
+    log.write_text(f"        output_dir: {tmp_path}\n")
+    assert jobs._video_paths(None, log) == []
+
+
+def test_a_timed_out_job_that_ignored_term_reports_a_timeout(tmp_path):
+    (tmp_path / jobs.TIMEOUT_FILE).write_text("")
+    data = dict(job_id="j")
+    jobs._write_job(tmp_path, data)
+    jobs._settle_orphan(tmp_path, data)
+    assert data["status"] == "timeout" and data.get("note") != "host restarted"

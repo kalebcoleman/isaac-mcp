@@ -83,11 +83,12 @@ def _pose(text, degrees=False, rotation_format=None) -> list:
             norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
             if norm < 1e-9:
                 _fail("A pose's quaternion is all zeros.")
-            qx, qy, qz, qw = qx / norm, qy / norm, qz / norm, qw / norm
-            values[3:] = [math.atan2(2 * (qw * qx + qy * qz), 1 - 2 * (qx * qx + qy * qy)),
-                          math.asin(max(-1.0, min(1.0, 2 * (qw * qy - qz * qx)))),
-                          math.atan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz))]
-        elif degrees:
+            qx, qy, qz, qw = qx / norm, qy / norm, qz / norm, qw / norm  # directly to a matrix: going through angles loses a 90-degree pitch
+            return [[1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw), values[0]],
+                    [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw), values[1]],
+                    [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy), values[2]],
+                    [0, 0, 0, 1.0]]
+        if degrees:
             values[3:] = [math.radians(v) for v in values[3:]]
     x, y, z, roll, pitch, yaw = values
     cr, sr, cp, sp, cy, sy = math.cos(roll), math.sin(roll), math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw)

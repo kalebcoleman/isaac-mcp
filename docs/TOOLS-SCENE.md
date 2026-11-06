@@ -31,7 +31,7 @@ UR5e twin, `ur5e_dt__quick_start`.
 - a Franka on the floor beside the table, in a ready pose with its hand level at layer 9, holding a thin red push rod between open fingers. The rod is a collider on the hand's own body, so it adds no joint, and both fingers get a drive.
 - PhysX at 120 Hz with 32 solver iterations per block.
 
-The result's `environment.poke_example` has everything for one push: the `block`, the `approach`, `touch` and `through` points, and `ik` (the `link`, `offset` and `orientation` for `sim__arm__ik`). Layer 9 is the example; `layer` can be any odd layer the wrist can reach, and only layers near 9 and above keep the hand level.
+The result's `environment.poke_example` has everything for one push: the `block`, the `approach`, `touch` and `through` points, and `ik` (the `link`, `offset` and `orientation` for `sim__arm__ik`). It is for layer 9. For another layer, change the `z` of each point by 3 cm a layer: the odd layers run along x, and only layers near 9 and above let the hand stay level.
 
 To push a block out: `sim__timeline__control action=play`, then call `sim__arm__ik` with `move=true`, `link`, `offset` and `orientation` from `ik`, and `position` stepping about 1 cm along x from `approach` to `through`, waiting half a second between calls. `move=true` commands the solved joints in one call and commands nothing when the target was not reached. `sim__body__state` on the block and on `top_block` shows what moved.
 

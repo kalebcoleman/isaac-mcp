@@ -896,6 +896,8 @@ class Extension(omni.ext.IExt):
                 refuse("INVALID_VALUE", "resume must be true or false.")
             if resume and (a["action"] != "play" or s.timeline.is_stopped()):
                 refuse("INVALID_VALUE", "resume=true continues a paused timeline with action=play; this timeline is stopped, or the action is not play.")
+            if resume and s._runtime_edit_target is not None:
+                s.check_runtime_edit(stage)  # a run these tools started: the layer it writes to must not have changed while paused
             if a["action"] == "play" and not resume:
                 from .physics import prepare
 

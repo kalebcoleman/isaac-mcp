@@ -128,7 +128,7 @@ class JengaPushEnv(DirectRLEnv):
             env_ids = self._robot._ALL_INDICES
         env_ids = torch.as_tensor(env_ids, device=self.device, dtype=torch.long)
         log = self.extras.setdefault("log", {})
-        log["Metrics/success_rate"] = self._succeeded[env_ids].float().mean()
+        log["Metrics/success_rate"] = (self._succeeded[env_ids] & ~self._fell[env_ids]).float().mean()  # pushed it out and the tower stood to the end
         log["Metrics/block_pushed_m"] = self._best_push[env_ids].mean()
         log["Metrics/worst_other_block_m"] = self._worst_other[env_ids].mean()
         log["Episode_Termination/fell"] = self._fell[env_ids].float().mean()

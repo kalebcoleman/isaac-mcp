@@ -46,7 +46,7 @@ _COMPARE = {ast.Eq: lambda a, b: a == b, ast.NotEq: lambda a, b: a != b, ast.Lt:
             ast.Gt: lambda a, b: a > b, ast.GtE: lambda a, b: a >= b, ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b,
             ast.Is: lambda a, b: a is b, ast.IsNot: lambda a, b: a is not b}
 _FILE_ROOT = "package://"
-_WIDE_FORMAT = re.compile(r"%[-+ #0]*(\*|\d{4,})|%[^%a-zA-Z]*\.(\*|\d{4,})")
+_WIDE_FORMAT = re.compile(r"%(\([^)]*\))?[-+ #0]*(\*|\d{4,})|%(\([^)]*\))?[^%a-zA-Z]*\.(\*|\d{4,})")
 
 
 class XacroError(AssetError):
@@ -813,6 +813,8 @@ def expand(entry: str, project: Project, args=None) -> dict:
         raise
     except RecursionError:
         _fail(f"{entry} nests too deeply.", "LIMIT")
+    except MemoryError:
+        _fail(f"{entry} needs too much memory to expand.", "LIMIT")
     except (TypeError, ValueError, OverflowError, AttributeError, KeyError, IndexError) as exc:
         _fail(f"{entry} cannot be expanded ({type(exc).__name__}: {str(exc)[:200]}).", "XACRO_EVAL")
 

@@ -214,3 +214,37 @@ def test_a_mesh_in_an_included_model_is_found_beside_that_model():
     files = {"world.sdf": '<sdf version="1.9"><world name="w"><include><uri>model://inner</uri></include></world></sdf>', "inner/model.sdf": included, "inner/meshes/m.stl": "x"}
     out = sdf_urdf.convert("world.sdf", _project(files), None)
     assert 'filename="inner/meshes/m.stl"' in out["urdf"]
+
+
+@pytest.mark.parametrize("expression", ["'%(a)999999999s' % {'a':1}", "'%(a).999999999f' % {'a':1.0}"])
+def test_a_wide_format_with_a_mapping_key_is_refused_before_it_is_built(expression):
+    started = time.monotonic()
+    with pytest.raises(AssetError) as error:
+        _expand(_xacro('<link name="${%s}"/>' % expression))
+    assert error.value.code == "LIMIT" and time.monotonic() - started < 0.1
+
+
+@pytest.mark.parametrize("rpy", [(0, math.pi / 2, 0.5), (0.3, math.pi / 2, 0.5), (0, -math.pi / 2, 1.0), (0.4, -0.2, 2.0)])
+def test_a_quaternion_pose_is_right_at_a_90_degree_pitch(rpy):
+    roll, pitch, yaw = rpy
+    cr, sr, cp, sp, cy, sy = math.cos(roll / 2), math.sin(roll / 2), math.cos(pitch / 2), math.sin(pitch / 2), math.cos(yaw / 2), math.sin(yaw / 2)
+    quat = (sr * cp * cy - cr * sp * sy, cr * sp * cy + sr * cp * sy, cr * cp * sy - sr * sp * cy, cr * cp * cy + sr * sp * sy)
+    matrix = sdf_urdf._pose("0 0 0 " + " ".join(repr(v) for v in quat), rotation_format="quat_xyzw")
+    expected = sdf_urdf._pose("0 0 0 " + " ".join(repr(float(v)) for v in rpy))
+    for row, want in zip(matrix[:3], expected[:3]):
+        assert row[:3] == pytest.approx(want[:3], abs=1e-9)
+
+
+@pytest.mark.parametrize(("name", "target"), [("100%.png", "100%.png"), ("ok%25.png", "ok%25.png"), ("tex%20a.png", "tex%20a.png"), ("sub/a.png", "sub/a.png")])
+def test_a_percent_in_a_plain_material_path_is_an_ordinary_character(name, target):
+    assert urdf_refs.mesh_reference("m.mtl", name) == target
+
+
+@pytest.mark.parametrize("name", ["%2e%2e/x.png", "..%2fx.png", "%2Fetc%2Fpasswd", "../x.png", "/etc/passwd", "a\\b.png"])
+def test_a_plain_material_path_that_would_leave_the_folder_is_still_refused(name):
+    assert urdf_refs.mesh_reference("m.mtl", name) is None
+
+
+def test_a_dae_reference_is_a_uri():
+    assert urdf_refs.mesh_reference("m.dae", "my%20tex.png") == "my tex.png"
+    assert urdf_refs.mesh_reference("m.dae", "%2e%2e/x.png") is None

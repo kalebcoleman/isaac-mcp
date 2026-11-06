@@ -49,7 +49,8 @@ def _convert_with_commands(mjcf, output, fixed_base, project_dir):
                 os.chmod(os.path.join(folder, name), 0o600)
         mjcf = copy / Path(mjcf).relative_to(project_dir)
     config = _mjcf.ImportConfig()
-    config.set_fix_base(bool(fixed_base))
+    if fixed_base is not None:  # otherwise keep what the importer does with the model: a free joint floats, a world-attached body stays
+        config.set_fix_base(bool(fixed_base))
     config.set_make_default_prim(True)
     config.set_create_physics_scene(False)
     config.set_import_inertia_tensor(True)
