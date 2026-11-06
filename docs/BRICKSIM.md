@@ -39,7 +39,7 @@ Bricks are under `/World/managed/Parts/Part_N`, and the arm is `/World/Robot`.
 | `sim__viewport__frame path=/World/LegoWorkspace` | Refused: that mesh is not a framing target. Give `eye` and `target` |
 | `sim__arm__ik move=true`, `sim__joints__command` | Do not use while a demo runs: its own controller is commanding the arm |
 
-These tools see rigid bodies and contacts. What BrickSim adds, such as which studs are connected and its breakage model, lives in its own Python API (`bricksim.core`), which there is no tool for: reach it with `run_python`, which runs code inside Kit.
+These tools see rigid bodies and physics contacts. `sim__physics__contacts` does not report which bricks are connected by studs, because that is BrickSim's own model and not a physics contact. Read it from its Python API with `run_python`, which runs code inside Kit: `bricksim.core.get_assembled_connections()` and `are_parts_connected()`. A tester with no other help got each brick's position and the connection graph this way.
 
 ## Its reinforcement learning task
 
