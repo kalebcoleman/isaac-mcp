@@ -330,6 +330,24 @@ def test_quick_start_with_a_file_in_an_environment_replaces_its_robot_and_goes_t
     assert result["robot"]["articulation_root"] == "/World/go2/Asset/base" and result["robot"]["base"] == "floating"
 
 
+def test_quick_start_preserves_an_explicit_position_in_an_environment(monkeypatch):
+    calls = Calls(scene=dict(environment=dict(robot_start=[-10.5, -2.5, 0.0])))
+    quick_start(monkeypatch, calls, environment="warehouse", position=[1, 2, 3])
+    assert calls.named("assets.import_path")[0]["position"] == [1, 2, 3]
+    assert not calls.named("sim.prim.set_transform")
+
+
+def test_quick_start_reports_play_failure_after_import(monkeypatch):
+    class PlayFails(Calls):
+        def __call__(self, name, params, state=None):
+            if name == "sim.timeline.control":
+                return json.dumps(dict(status="error", code="NOT_READY", message="not initialized"))
+            return super().__call__(name, params, state)
+
+    result = quick_start(monkeypatch, PlayFails(), play=True)
+    assert result["playing"] is False and result["play_error"]["code"] == "NOT_READY"
+
+
 def test_quick_start_with_a_file_runs_ros_after_the_import(monkeypatch):
     """ros=true was refused with "needs a robot" though one was given."""
     calls = Calls()

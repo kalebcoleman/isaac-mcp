@@ -957,7 +957,7 @@ def _quick_start_with_import(params: Dict[str, Any], state) -> str:
     if root or "dynamic" in imported:  # a robot or a prop, not a floor plan
         result["robot"] = dict(prim=prim, articulation_root=root, articulation_roots=imported.get("articulation_roots", []), base=imported.get("base"))
     start = (scene.get("environment") or {}).get("robot_start") or (scene.get("environment") or {}).get("robot_base")
-    if start and "robot" in result:
+    if start and "robot" in result and params.get("position") is None:
         lifted = (imported.get("placement") or {}).get("lifted_by") or 0.0
         moved = _dispatch("sim.prim.set_transform", dict(ids, path=prim, position=[start[0], start[1], start[2] + lifted]), state)
         if '"status": "ok"' not in str(moved) and '"status":"ok"' not in str(moved):
@@ -973,8 +973,11 @@ def _quick_start_with_import(params: Dict[str, Any], state) -> str:
     if params.get("play"):
         played = _dispatch("sim.timeline.control", dict(ids, action="play"), state)
         try:
-            result["playing"] = json.loads(played).get("status") == "ok"
+            play_result = json.loads(played)
+            result["playing"] = play_result.get("status") == "ok"
             result["stopped"] = not result["playing"]
+            if not result["playing"]:
+                result["play_error"] = play_result
         except (ValueError, AttributeError):
             result["play_error"] = str(played)[:300]
     return json.dumps(result, indent=2, default=repr)
