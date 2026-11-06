@@ -310,3 +310,15 @@ def test_eval_stop_passes_through_a_play_scripts_except_exception():
             raise AssertionError("EvalStop was swallowed")
     except eval_runner.EvalStop:
         pass
+
+
+def test_the_score_reports_how_episodes_ended_and_each_term():
+    from isaac_mcp.isaaclab.eval_runner import Scorer
+
+    scorer = Scorer(num_episodes=2)
+    log = {"log": {"Episode_Reward/alive": 2.0, "Episode_Reward/pole": -1.0, "Episode_Termination/time_out": 0.5, "Episode_Termination/base_contact": 0.5, "Other": 9}}
+    scorer.observe([1.0, 1.0], [True, False], [False, True], log)
+    result = scorer.result()
+    assert result["episodes"] == 2 and result["ended_early"] == 1 and result["survived_to_time_limit"] == 0.5
+    assert result["reward_terms"] == {"alive": 2.0, "pole": -1.0}
+    assert result["termination_terms"] == {"base_contact": 0.5, "time_out": 0.5}

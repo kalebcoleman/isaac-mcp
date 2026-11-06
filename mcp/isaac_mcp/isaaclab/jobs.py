@@ -30,8 +30,10 @@ from __future__ import annotations
 
 import errno
 import json
+import math
 import os
 import re
+import shlex
 import signal
 import subprocess
 import threading
@@ -47,6 +49,7 @@ _EVAL_RUNNER = Path(__file__).with_name("eval_runner.py")
 _TASK_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
 _JOB_ID_RE = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]+$")
 _LIB_RE = re.compile(r"^[a-z0-9_]+$")
+_SPLIT_VALUE_RE = re.compile(r"^(-?[0-9]|[A-Za-z0-9_.:/+])[A-Za-z0-9_.:/+-]*$")  # a bare value after a --flag; no "=" so it is not a Hydra override
 _EXTRA_ARG_RE = re.compile(r"^--[A-Za-z0-9_.-]+(=[^\s;|&$`]*)?$")
 # Isaac Lab 3 takes Hydra overrides (key.sub=value, +key=value, ~key) alongside --flags.
 _HYDRA_ARG_RE = re.compile(r"^(~[A-Za-z0-9_.@/-]+|[+]{0,2}[A-Za-z0-9_.@/-]+=[^\s;|&$`'\"=]*)$")
@@ -109,6 +112,9 @@ def _validate_extra_args(extra_args) -> list[str]:
         raise ValueError("extra_args must be a list of strings")
     out = []
     for a in extra_args:
+        if isinstance(a, str) and out and _SPLIT_VALUE_RE.match(a) and "=" not in out[-1] and _EXTRA_ARG_RE.match(out[-1]):
+            out[-1] = f"{out[-1]}={a}"  # --video_length 100 passed as two items means --video_length=100
+            continue
         if not isinstance(a, str) or not (_EXTRA_ARG_RE.match(a) or (not a.startswith("-") and _HYDRA_ARG_RE.match(a))):
             raise ValueError(f"invalid extra_arg: {a!r}: use --flag, --flag=value, or a Hydra override such as key=value, +key=value or ~key")
         out.append(a)
@@ -475,11 +481,25 @@ def _orphaned(job_id: str, data: dict) -> bool:
 EXIT_FILE = "exit_code"
 
 
-def _exit_recording(command: list[str], job_dir: Path) -> list[str]:
+TIMEOUT_FILE = "timed_out"
+
+
+def _exit_recording(command: list[str], job_dir: Path, timeout_s: float | None = None) -> list[str]:
     """Run *command* so its exit code reaches the job folder even if this host is gone by then. The shell stays the group
     leader and outlasts a signal, so while the recorded pid lives the job does: a signalled shell would look like a stopped
-    job while Kit, which takes a while over SIGTERM, was still running. The trap doesn't pass to the command."""
-    script = 'trap : TERM INT HUP; "$@"; code=$?; printf %s "$code" > "$0"; exit "$code"'
+    job while Kit, which takes a while over SIGTERM, was still running. The trap doesn't pass to the command.
+
+    With *timeout_s* the shell also enforces the limit, so a job outlives no limit when the host has gone away: TERM to its
+    group at the limit, KILL 30 s later, and a marker file saying why it ended."""
+    if not timeout_s:
+        script = 'trap : TERM INT HUP; "$@"; code=$?; printf %s "$code" > "$0"; exit "$code"'
+        return ["/bin/sh", "-c", script, str(job_dir / EXIT_FILE), *command]
+    marker = shlex.quote(str(job_dir / TIMEOUT_FILE))
+    limit = max(1, math.ceil(float(timeout_s)))
+    wait = 'n=0; while [ "$n" -lt {} ]; do sleep 1; n=$((n+1)); done'  # one-second sleeps, so killing the guard leaves nothing long behind
+    script = ('trap : TERM INT HUP; '
+              f"( trap '' TERM INT HUP; {wait.format(limit)}; : > {marker}; kill -TERM 0; {wait.format(30)}; kill -KILL 0 ) </dev/null >/dev/null 2>&1 & guard=$!; "
+              '"$@"; code=$?; kill -KILL "$guard" 2>/dev/null; printf %s "$code" > "$0"; exit "$code"')
     return ["/bin/sh", "-c", script, str(job_dir / EXIT_FILE), *command]
 
 
@@ -492,6 +512,10 @@ def _settle_orphan(job_dir: Path, data: dict) -> None:
         _write_job(job_dir, data)
         return
     crash = _crashed_with_exit_zero(job_dir) if code == 0 else None
+    if (job_dir / TIMEOUT_FILE).exists():
+        data.update(status="timeout", exit_code=code, finished_at=data.get("finished_at") or _now())
+        _write_job(job_dir, data)
+        return
     data.update(status="succeeded" if code == 0 and not crash else "failed", exit_code=code,
                 finished_at=data.get("finished_at") or _now(), **({"note": crash} if crash else {}))
     _write_job(job_dir, data)
@@ -956,7 +980,7 @@ def _start_job_locked(
         env["ISAACLAB_TASK_MODULES"] = ",".join(task_modules)
         env["PYTHONPATH"] = os.pathsep.join(task_paths + [env["PYTHONPATH"]])
     proc = subprocess.Popen(
-        _exit_recording(full_cmd, jd),
+        _exit_recording(full_cmd, jd, timeout_s),
         stdout=stdout_f,
         stderr=stderr_f,
         stdin=subprocess.DEVNULL,
@@ -1032,7 +1056,11 @@ def train(
     if seed is not None:
         argv += ["--seed", str(seed)]
     if ckpt is not None:
-        argv += ["--checkpoint", ckpt]
+        if libraries is not None and (lib or _library_from_checkpoint(ckpt, extras)) == "rsl_rl":
+            # Lab 2.x rsl_rl: --checkpoint is a file name matched inside --load_run, and nothing loads without --resume.
+            argv += ["--resume", "--load_run", Path(ckpt).parent.name, "--checkpoint", Path(ckpt).name]
+        else:
+            argv += ["--checkpoint", ckpt]
     if device is not None:
         argv += ["--device", str(device)]
     argv += _visualizer_args(headless, extras) if libraries is None else _per_library_display_args(root, lib, "train", headless, extras)
@@ -1217,11 +1245,27 @@ def runs_status(job_id: str) -> dict[str, Any]:
     if data.get("timeout_s") is not None:
         out["timeout_s"] = data["timeout_s"]
     out.update(_log_facts(Path(data.get("log_dir", jd)) / "stdout.log"))
+    videos = _video_paths(run_dir)
+    if videos:
+        out["video_paths"] = videos
     if data.get("kind") == "eval":
         result = _eval_result(jd)
         if result is not None:
             out["eval_result"] = result
+            if result.get("error") and not result.get("episodes") and out["state"] == "succeeded":
+                out["state"] = "failed"  # the process exited cleanly, but the run scored nothing
     return out
+
+
+def _video_paths(run_dir: Any, limit: int = 8) -> list[str]:
+    """Videos Lab wrote for this run (--video writes under <run_dir>/videos), newest first."""
+    if not run_dir or not Path(run_dir).is_dir():
+        return []
+    try:
+        found = sorted(Path(run_dir, "videos").rglob("*.mp4"), key=lambda path: path.stat().st_mtime, reverse=True)
+    except OSError:
+        return []
+    return [str(path) for path in found[:limit]]
 
 
 def runs_tail(job_id: str, stream: str = "stdout", lines: int = 100) -> dict[str, Any]:

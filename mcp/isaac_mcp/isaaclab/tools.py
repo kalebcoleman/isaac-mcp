@@ -232,9 +232,22 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _guard(lambda: _metrics.checkpoints_list(run_dir=run_dir, task=task))
 
     @mcp.tool(name="isaaclab__metrics_summary", annotations=READ_ONLY)
-    def isaaclab_metrics_summary(run_dir: _RunDir, tags: Annotated[list[str] | None, Field(description="Scalar tags to include. Default: all.")] = None) -> str:
-        """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag)."""
-        return _guard(lambda: _metrics.metrics_summary(run_dir, tags=tags))
+    def isaaclab_metrics_summary(
+        run_dir: Annotated[str | None, Field(description="Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status. Or give job_id.")] = None,
+        tags: Annotated[list[str] | None, Field(description="Scalar tags to include. Default: all.")] = None,
+        job_id: Annotated[str | None, Field(description="A job from isaaclab__train, instead of run_dir.")] = None,
+        compare_jobs: Annotated[list[str] | None, Field(description="Several job_ids: returns their final scalars side by side, to compare seeds or settings.")] = None,
+    ) -> str:
+        """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare several jobs' final values side by side."""
+        def summarise() -> dict:
+            if compare_jobs:
+                return _metrics.compare_runs({job: _jobs.runs_status(job).get("run_dir") for job in compare_jobs}, tags=tags)
+            folder = run_dir or (_jobs.runs_status(job_id).get("run_dir") if job_id else None)
+            if not folder:
+                raise ValueError("Give run_dir, job_id or compare_jobs. A job that has not written a run folder yet has no metrics.")
+            return _metrics.metrics_summary(folder, tags=tags)
+
+        return _guard(summarise)
 
     @mcp.tool(name="isaaclab__tensorboard_tail", annotations=READ_ONLY)
     def isaaclab_tensorboard_tail(run_dir: _RunDir, tag: Annotated[str, Field(description="Scalar tag, from isaaclab__metrics_summary.")], last_n: _LastN = 50) -> str:

@@ -253,6 +253,23 @@ def metrics_summary(run_dir, tags=None) -> Dict[str, Any]:
     return {"scalars": scalars}
 
 
+def compare_runs(run_dirs: Dict[str, Optional[str]], tags=None) -> Dict[str, Any]:
+    """Each run's final scalar values side by side: ``{"tags": {tag: {name: last}}, "runs": {name: run_dir}, "errors": {...}}``."""
+    table: Dict[str, Dict[str, Any]] = {}
+    errors: Dict[str, Any] = {}
+    for name, run_dir in run_dirs.items():
+        if not run_dir:
+            errors[name] = "This job has no run folder yet."
+            continue
+        summary = metrics_summary(run_dir, tags=tags)
+        if "scalars" not in summary:
+            errors[name] = summary.get("error", "No scalars.")
+            continue
+        for tag, values in summary["scalars"].items():
+            table.setdefault(tag, {})[name] = values.get("last")
+    return dict(tags=table, runs=dict(run_dirs), **({"errors": errors} if errors else {}))
+
+
 def tensorboard_tail(run_dir, tag, last_n=50) -> Dict[str, Any]:
     if last_n is not None and (isinstance(last_n, bool) or not isinstance(last_n, int)):
         return {"error": "last_n must be an integer or null"}

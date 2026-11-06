@@ -614,3 +614,38 @@ def test_a_physx_banner_is_reported_as_physx_and_a_step_size_line_is_not_an_engi
     assert jobs.runs_status("20261105-120002-Cartpole")["physics"] == "physx"
     _job_with_log("20261105-120003-Cartpole", "\tPhysics step-size     : 0.005\n")
     assert "physics" not in jobs.runs_status("20261105-120003-Cartpole")
+
+
+def test_the_job_shell_enforces_timeout_s_without_a_host(tmp_path):
+    import subprocess
+    import time
+
+    command = jobs._exit_recording(["sleep", "30"], tmp_path, timeout_s=1)
+    started = time.monotonic()
+    proc = subprocess.Popen(command, start_new_session=True)
+    assert proc.wait(timeout=15) != 0 and time.monotonic() - started < 10
+    assert (tmp_path / jobs.TIMEOUT_FILE).exists() and (tmp_path / jobs.EXIT_FILE).exists()
+    data = dict(status="running", started_at=time.time(), pid=proc.pid)
+    jobs._write_job(tmp_path, data)
+    jobs._settle_orphan(tmp_path, data)
+    assert jobs._read_job(tmp_path)["status"] == "timeout"
+
+
+def test_a_job_that_finishes_in_time_leaves_no_guard_and_no_marker(tmp_path):
+    import subprocess
+    import time
+
+    proc = subprocess.Popen(jobs._exit_recording(["sh", "-c", "exit 3"], tmp_path, timeout_s=60), start_new_session=True)
+    assert proc.wait(timeout=10) == 3
+    assert not (tmp_path / jobs.TIMEOUT_FILE).exists() and (tmp_path / jobs.EXIT_FILE).read_text() == "3"
+    time.sleep(1.5)  # the guard's last one-second sleep
+    assert subprocess.run(["pgrep", "-g", str(proc.pid)], capture_output=True).stdout == b""
+
+
+def test_a_flag_and_its_value_as_two_items_become_one():
+    assert jobs._validate_extra_args(["--video", "--video_length", "100"]) == ["--video", "--video_length=100"]
+    assert jobs._validate_extra_args(["--video_length=100", "env.scene.x=1"]) == ["--video_length=100", "env.scene.x=1"]
+    with pytest.raises(ValueError):
+        jobs._validate_extra_args(["--flag", "a;b"])
+    with pytest.raises(ValueError):
+        jobs._validate_extra_args(["bare"])
