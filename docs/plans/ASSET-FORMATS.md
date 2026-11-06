@@ -89,3 +89,24 @@ read every supported format. Every result has one shape: articulation root, mova
 | 11 | Validation of every converted asset | F39 | Reported in the import result |
 
 Each item is ticked only after a plain-request tester (F40) loads one real asset of that format from a named repository.
+
+## Test matrix
+
+One real asset per row, downloaded by the tester from the named place, loaded through the single entry (`assets__import_path`, `format=auto` unless the row says otherwise), moved if it can move, photographed. "Named place" is the repository to try first; if it has moved, the tester says so and takes the closest official one. Nothing is ticked without the run's evidence in `~/isaac-workspace/runs/`.
+
+| # | Row | Named place | What must hold |
+|---|---|---|---|
+| 1 | USD | usd-wg/assets (Teapot) | loads; textures resolve (tester C saw a lime-green teapot: check it is the asset and not a lost texture) |
+| 2 | MJCF | MuJoCo Menagerie (Panda, UR5e, Go2, H1) | done in PR 82; tester D's notes still to verify |
+| 3 | URDF with `.dae` meshes | Universal_Robots_ROS2_Description, TurtleBot3 | meshes visible, not empty links; units correct |
+| 4 | xacro with arguments | Universal_Robots_ROS2_Description (`ur_type`) | expanded by the host reader; same result as the system `xacro`; hostile xacro (`python:`, `eval`, a path out of the folder) refused |
+| 5 | glTF / GLB, OBJ, STL, FBX | Khronos glTF-Sample-Assets (Duck), a Menagerie or ROS mesh | right scale and up axis stated; collider option works; a prop falls and rests on the ground |
+| 6 | SDF model | gz-sim `diff_drive.sdf` | links, joints and wheels move; drives from a joint command; `model://` includes resolve inside the folder only |
+| 7 | Bundle: Gazebo model folder | a Gazebo Fuel model (with `model.config`) | the entry file is chosen without asking; several candidates are listed |
+| 8 | Bundle: ROS package | a robot's ROS description package | `package://` resolved; one approval for the package folder |
+| 9 | Bundle: Menagerie folder | `unitree_go2/` (has `scene.xml` and `go2.xml`) | the right entry for a robot and for a scene |
+| 10 | Bundle: LeRobot / Hugging Face robot repo | an SO-100/SO-101 style arm repo | URDF or MJCF found under its own layout; loads and moves a joint |
+| 11 | Nav2 map | `turtlebot3_world` map from the Nav2 bringup package | floor plan matches the picture; a robot drives in it |
+| 12 | Export | any imported robot | `sim__stage__save format=urdf` loads again in a fresh scene; what was lost is listed |
+| 13 | Hostile inputs per format | made by us | every one refused with a clear code and no file read outside the folder |
+| 14 | Fewer calls | the tester prompts above | calls per task counted before and after; target 3 or fewer for "load, pose, photograph" |
