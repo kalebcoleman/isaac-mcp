@@ -54,17 +54,38 @@ These hold for URDF and MJCF today and are the rule for the next ones:
 5. The approval command printed on a refusal approves the smallest folder that holds the files, and never a system or private folder.
 6. Provenance: a pack built from a download records `origin`.
 
+## The design rule: formats are options, not tools
+
+Kaleb's rule (2026-11-05): no new tools. An agent finds one import entry, `assets__import_path`, and the format is an option on it: `auto` by default (from the
+extension and the first bytes), settable to override. `assets__import_usd`, `assets__import_urdf` and `assets__import_mjcf` stay as thin aliases until the
+tool-surface review (CHECKLIST section 3) decides, with Kaleb's approval, whether to fold them away. The same holds for the other tools: export is a `format` on
+`sim__stage__save`, a downloaded robot is a `robot_file` on `sim__quick_start`, and `assets__dependencies`, `assets__scan`, `assets__search` and the pack tools
+read every supported format. Every result has one shape: articulation root, movable joints with limits, bounds, and what the converter dropped.
+
+## What testers found (wishlist-3, tester C, main before PR 82)
+
+| Source | Format | Result | Gap |
+|---|---|---|---|
+| UniversalRobots ROS2 description (UR10e) | xacro | Only after six calls expanding it with the system `xacro`; one near-miss resolved the system's own `ur_description` | F29 safe xacro expansion |
+| usd-wg/assets (Teapot) | USD | Worked | none |
+| Khronos glTF-Sample-Assets (Duck) | glTF | No route at all (the import is USD only) | F30 mesh import |
+| gz-sim `diff_drive.sdf` (blue vehicle) | SDF | Rebuilt by hand from primitives, no joints | F31 SDF reader |
+| Menagerie (Panda, UR5e, Go2, H1), tester D | MJCF | All four in one scene (this PR's tool) | verification of D's notes pending |
+
 ## Build order
 
-| # | Item | Why | Notes |
+| # | Item | Checklist | Notes |
 |---|---|---|---|
-| 1 | MJCF import | Most public robots (Menagerie) are MuJoCo XML only; one tester had to write its own converter | done in this PR |
-| 2 | Safe xacro expansion | The UR, TurtleBot3, Franka and many ROS descriptions are xacro only; we refuse it, and agent testers keep hitting that | A restricted expander (properties, macros, includes, arithmetic through a whitelist), never the `xacro` program: xacro can run arbitrary Python |
-| 3 | Mesh and prop import (glTF, GLB, OBJ, STL, FBX) | Objects to grasp, furniture, scanned props | `omni.kit.asset_converter`; same folder rules; units and up-axis refusals like the URDF path |
-| 4 | URDF export | Round trip to ROS and other tools | `isaacsim.asset.exporter.urdf`; says what cannot be exported |
-| 5 | `sim__quick_start` and packs for MJCF | One call for a Menagerie robot; a pack that records it | `assets__pack_build` refuses `.xml` for now |
-| 6 | SDF (Gazebo) | The largest remaining format | No native importer and no reliable SDF to URDF tool; needs its own converter, so wait for evidence from agent tests |
-| 7 | CAD (STEP), heightmaps, Gaussian splats, USDZ export | Niche, each a thin wrapper over a shipped extension | Add when a user asks |
+| 1 | MJCF import | done in PR 82 | |
+| 2 | One import entry with `format=auto`, one result shape | F28 | Foundation for everything below; aliases stay |
+| 3 | Fewer calls: sticky bridge or `port`, a result that is enough to act on, `pose` / `joint_targets` / `ground` on the import | F41 | Measured with the same plain-request prompts before and after |
+| 4 | Safe xacro expansion with `xacro_args` | F29 | A restricted expander, never the `xacro` program: xacro can run arbitrary Python |
+| 5 | Mesh and prop import (glTF, GLB, OBJ, STL, FBX, DAE, PLY) and `.dae` in URDF | F30, F32 | `omni.kit.asset_converter`; units and up axis stated |
+| 6 | SDF (Gazebo) reader | F31 | No native importer exists; restricted host-side reader into the same checked path |
+| 7 | `assets__dependencies` for every format; model folders and bundles | F35, F36 | |
+| 8 | MJCF and others in packs and `sim__quick_start` | F34 | `robot_file` beside `robot=` |
+| 9 | Export (`sim__stage__save format=urdf/usdz`) | F33 | `isaacsim.asset.exporter.urdf`, `omni.kit.usdz_export` |
+| 10 | Maps, heightmaps, CAD, Gaussian splats | F37, F38 | Thin wrappers over shipped extensions; the `format` list names them |
+| 11 | Validation of every converted asset | F39 | Reported in the import result |
 
-Each item becomes a checklist entry in [CHECKLIST.md](CHECKLIST.md) before it is built, and a plain-request agent test decides whether the tool is easy to find
-and use. Driving is covered separately: ROS 2 `/cmd_vel`, TF and Nav2 work today; a joint-trajectory tool and a gripper tool are on the checklist.
+Each item is ticked only after a plain-request tester (F40) loads one real asset of that format from a named repository.
