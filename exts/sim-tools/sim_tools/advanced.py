@@ -1062,7 +1062,7 @@ class Advanced:
             pending = workspace / f".pending-{uuid.uuid4().hex}"
             try:
                 try:
-                    generated = convert(filename, pending, fixed_base)
+                    generated = convert(filename, pending, fixed_base, project_dir)
                 except AssetError:
                     raise
                 except Exception as exc:  # noqa: BLE001 - the native importer raises anything

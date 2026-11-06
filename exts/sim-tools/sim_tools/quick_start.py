@@ -240,6 +240,20 @@ def reference_robot(stage, name, uri):
     return path
 
 
+def _set_translation(stage, path, xyz):
+    """Set a prim's translation in the session layer, using its own translate op if it has one (a referenced robot may)."""
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        xform = UsdGeom.Xformable(stage.GetPrimAtPath(path))
+        ops = xform.GetOrderedXformOps()
+        for op in ops:
+            if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
+                op.Set(type(op.Get())(*xyz) if op.Get() is not None else Gf.Vec3d(*xyz))
+                return
+        op = xform.AddTranslateOp()
+        op.Set(Gf.Vec3d(*xyz))
+        xform.SetXformOpOrder([op, *ops])  # outermost, so a rotation stays about the robot's own origin
+
+
 def expand_visuals(stage, root_path):
     """Instanced robot visuals stayed at their first pose in the renderer on some Kit builds after physics
     moved the links. Expanding them is a session-layer override, never an edit to the asset. Returns the count."""
@@ -386,8 +400,7 @@ async def run(ext, args):
         else:
             robot_path = reference_robot(stage, wanted["name"], wanted["uri"])
             if wanted.get("spawn_height"):  # a robot whose origin is at its axles would start with its wheels under the floor
-                with Usd.EditContext(stage, stage.GetSessionLayer()):
-                    UsdGeom.Xformable(stage.GetPrimAtPath(robot_path)).AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, wanted["spawn_height"]))
+                _set_translation(stage, robot_path, (0.0, 0.0, wanted["spawn_height"]))
         await app.next_update_async()
         placement = None
         if wanted.get("lift_to_ground") and not is_urdf and not wanted.get("snapshot"):

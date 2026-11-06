@@ -96,7 +96,7 @@ def move_to(stage, path, xyz):
         for op in ops:
             if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
                 z = float(op.Get()[2]) if op.Get() is not None else 0.0
-                op.Set(Gf.Vec3d(xyz[0], xyz[1], z))
+                op.Set(type(op.Get())(xyz[0], xyz[1], z) if op.Get() is not None else Gf.Vec3d(xyz[0], xyz[1], z))
                 return
         op = xform.AddTranslateOp(opSuffix="warehouse")
         op.Set(Gf.Vec3d(xyz[0], xyz[1], xyz[2]))
