@@ -7,7 +7,7 @@ functions as MCP tools later. It is pure stdlib Python (>=3.10).
 Scripts, libraries and accepted flags come from install.lab_profile, read from the checkout. Isaac Lab 2.3's
 per-library layout uses scripts/reinforcement_learning/<library>/{train,play}.py, a required library chosen by path, and
 --headless when headless without --video. Its scripts declare neither --viz nor --rl_library; left unrefused they would
-reach Hydra after Kit starts. Tiny real jobs passed on 2.3.2 with all four libraries; `tested` stays false for that pair.
+reach Hydra after Kit starts. Real jobs passed on 2.3.2 with all four libraries, and train, resume, eval and play were measured through the tools.
 
 Isaac Lab 3 entry scripts and flags (relative to the resolved ``isaaclab_root``):
   * train:  scripts/reinforcement_learning/train.py

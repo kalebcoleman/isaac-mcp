@@ -19,7 +19,7 @@ Or in one call that also builds the scene: `sim__quick_start robot=<absolute pat
 
 ## Set up, once
 
-1. **Isaac Sim** with this repository's MCP server (`./install.sh`, see [LINUX-SETUP.md](LINUX-SETUP.md)). The URDF and MJCF importers and the mesh converter are Isaac Sim's own. Everything on this page was run live on Isaac Sim 6.2; see [Tested](#tested). Nothing else is needed for USD, URDF, xacro, SDF, meshes or maps: **no ROS, no `xacro` program, no Gazebo, no internet.**
+1. **Isaac Sim** with this repository's MCP server (`./install.sh`, see [LINUX-SETUP.md](LINUX-SETUP.md)). The URDF and MJCF importers and the mesh converter are Isaac Sim's own. Everything on this page was run live on Isaac Sim 6.2, and each format again on 5.1; see [Tested](#tested). Nothing else is needed for USD, URDF, xacro, SDF, meshes or maps: **no ROS, no `xacro` program, no Gazebo, no internet.**
 2. **Put the file where the tools may read it.** Either in your asset folder (`isaac-mcp-assets/<project>/`, loads with no approval) or in any folder you approve once, as a trusted root. Approve the **smallest folder that holds the files** (one robot's folder, not your whole downloads or projects folder): every import copies the approved folder, up to 1000 files and 256 MiB. An agent cannot approve anything. When it needs approval, the refusal prints the exact command; you run it, then restart the MCP server and Isaac Sim, because both read the approval file at startup.
 3. **Ask.** For example: *"Load the UR10e from <folder> and bend two joints"*, *"Put the Duck from <folder> in the scene as a prop that falls"*, *"Make a warehouse with a robot in it"*. The agent finds `assets__import_path` and picks the format.
 
@@ -164,6 +164,8 @@ An import authors a valid robot; it does not make it stand or walk. What to expe
 - **Not a physics guarantee.** An import authors a valid robot; whether it stands, drives or walks depends on its drives, its base and a controller (see above).
 
 ## Tested
+
+On Isaac Sim 5.1 (headless) USD, URDF, xacro, SDF, MuJoCo XML, glTF, maps and the warehouse also imported through its older importers; only URDF export is refused there, because its exporter writes an empty robot. The rest of this section is the 6.2 run.
 
 Run with a visible simulator window on Isaac Sim 6.2, from real downloads, not made-up files. Pictures and logs: `runs/universal-import-demo/` of the test workspace, summarised in [plans/CHECKLIST.md](plans/CHECKLIST.md).
 

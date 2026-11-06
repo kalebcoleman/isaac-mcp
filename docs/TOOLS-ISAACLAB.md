@@ -50,8 +50,8 @@ runs it. An invalid setting is an error, not a fallback. That check catches mist
 faked environment, so name only a project you trust. A model with `put_file` can write any file there. Hide `put_file`
 (`ISAAC_MCP_BUILTINS=0`) if that matters. Explicit `ISAACLAB_PYTHON` or `ISAACLAB_ROOT` win, and then
 `isaaclab__install_info` reports `project_setting_ignored`; remove them from that server's configuration to use the
-project's. It reports `source`, and `tested: false` for a Lab version not in the tested list below, such as 2.3.2 on
-Sim 5.1: the version read works, but jobs on it are untested. A pip-only Lab has no `scripts/reinforcement_learning`, so
+project's. It reports `source`, and `tested: false` for a pair other than the two this project claims (Lab 3.0.0 with Sim 6.2, Lab 2.3.2 with Sim 5.1):
+the version read works, but jobs on it are untested. A pip-only Lab has no `scripts/reinforcement_learning`, so
 `isaaclab__train`, `eval` and `play` refuse with "Isaac Lab checkout not found" until `isaaclab_root` points at a checkout.
 
 The resolver does not scan the home directory or assume a project-specific path. If no standard
@@ -168,14 +168,13 @@ was verified with real jobs, which so far is only Isaac Lab 3.0.0 on Isaac Sim 6
 before anything starts, naming the flag and the alternative; otherwise a per-library script would pass it to Hydra after Kit started. With unknown flags nothing is refused.
 `HEADLESS` is always set in the child.
 
-**Isaac Lab 2.3.2 with Sim 5.1 is experimental, and `tested` stays false.** Tiny Cartpole jobs ran through these tools on one desktop with `rsl_rl`, `skrl`, `sb3` and
-`rl_games`, including checkpoints, metrics, eval and play; the profile's flags matched each script's real `--help`. That shows the launcher works, not long training or other tasks.
+**Isaac Lab 2.3.2 with Sim 5.1 is one of the two claimed pairs, and `tested` is true.** `Isaac-Cartpole-v0` went through train, resume, compare, eval and play with `rsl_rl` through these tools; tiny jobs ran with `skrl`, `sb3` and `rl_games` too, including checkpoints, metrics, eval and play, and the profile's flags matched each script's real `--help`. That shows the tools work on this pair, not long training or other tasks. Pass `rl_library`: its scripts are per library.
 `rl_games` needs `minibatch_size` to divide `num_envs` times the task's `horizon_length` from its rl_games config, which varies by task (24 for `Isaac-Reach-UR10`; not the log's `seq_length`). A failure is a bare `AssertionError` on `batch_size % minibatch_size`. Measured on `Isaac-Reach-UR10`: `minibatch_size=64` or `192` at 16 environments, and `1536` at 64. `sb3` saves `model.zip`, which counts as a checkpoint only under an `sb3` path. The task's default can be larger than a small run's whole batch (24576 for `Isaac-Reach-Franka-v0`, against 64 environments times 24 steps), so pass the override. `rl_games` also saves a checkpoint only every `save_frequency` epochs (100 by default) and `save_best_after` (200), so a short run leaves nothing to evaluate unless you pass `agent.params.config.save_frequency=20` and `agent.params.config.save_best_after=10`; `rsl_rl` always saves at the end.
 
 `isaaclab__envs_list` can't list tasks on this pair: importing `isaaclab_tasks` needs `pxr`, which exists only once Kit has started. It
 reports `isaac_tasks_unavailable` and lists the ids it can read from the checkout's source, marked `source: "scanned"`. `train` and `play` work with those.
 
-A job records its own exit code in its folder, so one that finishes after the host that started it has gone still reports `succeeded` or `failed` correctly. `failed` with `note: "host restarted"` now means it left no code: it was killed, or predates this. `timeout_s` is enforced by the host that started the job and, if that has gone, by the next `runs_status` or `runs_list`; `runs_status` echoes it as `timeout_s` when one was set.
+A job records its own exit code in its folder, so one that finishes after the host that started it has gone still reports `succeeded` or `failed` correctly. `failed` with `note: "host restarted"` now means it left no code: it was killed, or predates this. `timeout_s` is enforced by the job itself, in the shell that starts it, so it holds with no host running; `runs_status` echoes it as `timeout_s` when one was set, and a job stopped by it says so.
 
 **A crash can exit 0.** Kit's shutdown can hide an uncaught exception: seen on Lab 2.3.2 with an unknown task. A job that exits 0 with a traceback at the end of stderr reports `failed` with a note.
 One exception: a `train` job whose run folder already has a checkpoint still reports `succeeded`, so check its log and iteration count if it stopped early.

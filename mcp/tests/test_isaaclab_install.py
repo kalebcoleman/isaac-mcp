@@ -339,10 +339,15 @@ def test_a_version_not_in_the_tested_list_is_scoped_as_untested(tmp_path):
     py, root, _ = _lab_venv(tmp_path)
     root.rmdir()  # pip-only, like BrickSim: no checkout beside the environment
     env = _project(tmp_path, {"isaaclab_python": str(py)})
-    with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps({"isaaclab": "2.3.2.post1", "isaacsim": "5.1.0.0"}), stderr="")):
+    with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps({"isaaclab": "2.2.0", "isaacsim": "5.0.0"}), stderr="")):
         info = install.install_info(env)
     assert info["tested"] is False and "not in the tested list" in info["note"]
     assert "scripts/reinforcement_learning" in info["jobs"]
+
+
+def test_both_claimed_pairs_are_in_the_tested_list():
+    assert install._tested_pair("3.0.0", "6.2.0.0") and install._tested_pair("2.3.2.post1", "5.1.0.0")
+    assert not install._tested_pair("2.3.2", "6.2.0.0") and not install._tested_pair("3.0.0", "5.1.0.0")
 
 
 # ---- a project file found only by walking up is not a choice anyone made ----
