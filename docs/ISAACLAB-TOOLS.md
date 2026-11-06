@@ -5,7 +5,7 @@
 
 Design for an `isaaclab.*` tool pack for the `isaac-mcp` host server. Grounded in
 `mcp/isaac_mcp/server.py`, `exts/isaac.mcp.bridge/isaac_mcp_bridge/bridge.py`,
-`mcp/docs/isaac-lab.md`, `mcp/examples/isaaclab_bridge_launch.py`, and `docs/ARCHITECTURE.md`.
+`mcp/docs/isaac-lab.md`, `mcp/templates/isaaclab_bridge_launch.py`, and `docs/ARCHITECTURE.md`.
 The reference environment used Isaac Lab 3.0.0, Isaac Sim 6.2.0.0 and Python 3.12.
 
 ## 1. Execution model decision

@@ -63,7 +63,7 @@ For a real floor plan, a ROS Nav2 map becomes walls: see [importing any asset](d
 
 **A Jenga tower you can really knock over.** `sim__quick_start environment=jenga` builds 54 dynamic blocks and a Franka with a push rod; `sim__arm__ik move=true` moves the arm in one call. In live runs on Sim 6.2 and 5.1 it pushed a block 12 cm out and the top of the tower moved 0.3 mm. See [A Jenga tower in one call](docs/TOOLS-SCENE.md#a-jenga-tower-in-one-call).
 
-**Train a policy.** `isaaclab__train`, `eval` and `play` run on Isaac Lab, including your own robot from a URDF and a Jenga task with contacts: [your own task](docs/TOOLS-ISAACLAB.md#6-your-own-task). **BrickSim's LEGO simulator** runs next to these tools with no change to it: [BrickSim](docs/BRICKSIM.md).
+**Train a policy.** `isaaclab__train`, `eval` and `play` run on Isaac Lab, including tasks provided by a separate project: [your own task](docs/TOOLS-ISAACLAB.md#6-your-own-task). **BrickSim's LEGO simulator** runs next to these tools with no change to it: [BrickSim](docs/BRICKSIM.md).
 
 ### Import almost any robot or object file
 
@@ -82,7 +82,7 @@ four Menagerie robots) and props (Duck, DamagedHelmet) were imported this way in
 ![The open-source SO-ARM100 arm, loaded from a user asset folder](docs/media/so100-own-pack.png)
 
 This is the open-source [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) arm (Apache-2.0) as a URDF file. See
-[your own assets](#your-own-assets-or-online-ones) for how that works.
+[your own assets](#your-assets-or-online-ones) for how that works.
 
 ### Pull a real humanoid from GitHub
 
@@ -115,8 +115,8 @@ There was no agent prompt for this one: Claude Sonnet 5.5 called the tools direc
 
 So 12 more minutes of training took it from "stays up and mostly follows the command" to a much steadier and more accurate
 walk. These are one run each (different seeds: 1 and 2), not a measured average, and the pictures are a flat grid, not a
-rough-terrain test. Training a robot of your own through these tools is not supported yet; it is on the
-[checklist](docs/plans/CHECKLIST.md#3-new-tools-for-robotics-and-rl-from-the-live-tests-2026-11-04). The full
+rough-terrain test. Training your own robot requires a task supplied by your project; the
+[checklist](docs/plans/CHECKLIST.md#4-new-tools-for-robotics-and-rl-from-the-live-tests-2026-11-04) tracks further robotics work. The full
 40-second window recordings are kept with the project's draft evidence release, not in git.
 
 ### More prompts

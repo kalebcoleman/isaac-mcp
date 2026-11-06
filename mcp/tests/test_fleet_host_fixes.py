@@ -372,7 +372,7 @@ def test_runs_list_refuses_an_unknown_state(monkeypatch, tmp_path):
 
 
 def test_the_bridge_template_updates_kit_itself_without_advancing_physics():
-    tree = ast.parse((ROOT / "mcp/examples/isaaclab_bridge_launch.py").read_text())
+    tree = ast.parse((ROOT / "mcp/templates/isaaclab_bridge_launch.py").read_text())
     loop = next(n for n in tree.body if isinstance(n, ast.While))
     calls = [ast.unparse(c.value) for c in loop.body if isinstance(c, ast.Expr) and isinstance(c.value, ast.Call)]
     assert calls == ["sim.step()", "_settings.set('/app/player/playSimulations', False)", "simulation_app.update()",

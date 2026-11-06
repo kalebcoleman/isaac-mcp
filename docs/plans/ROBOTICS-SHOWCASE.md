@@ -9,12 +9,12 @@ The [working checklist](CHECKLIST.md) remains the tracker for platform changes.
 
 Keep the MCP focused on reusable simulator, robotics, asset, ROS and training capabilities. A demo should
 exercise those capabilities without requiring its task-specific rewards, policies, mission logic, saved
-runs or media to become core MCP behavior. Keep small, maintained examples only when they demonstrate a
-general feature and can be tested without making the project depend on an experiment.
+runs or media to become core MCP behavior. Keep generic integration templates when they document a reusable
+contract; substantial demonstrations belong in separate projects.
 
-The current quick-start extension includes Jenga and warehouse scene builders, and the repository includes
-Jenga, BrickSim and reach examples. Treat these as existing behavior to evaluate, not a model for adding
-more experiment-specific features. Before moving or removing a builder or example, inventory its imports,
+The current quick-start extension includes Jenga and warehouse scene builders. The Jenga, BrickSim and reach
+learning tasks live in separate projects. Treat the existing quick starts as compatibility-sensitive behavior,
+not a model for adding more experiment-specific features. Before moving or removing a builder, inventory its imports,
 public tool contract, documentation, tests, asset paths and checkpoints; propose and test a compatible
 migration. Do not silently break existing users or unilaterally drop a supported option.
 

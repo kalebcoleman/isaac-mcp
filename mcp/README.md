@@ -113,7 +113,7 @@ which reaches everything in the sim. Tools discovered from the bridge appear as 
 ## Adding a project (the contract)
 
 A project is a **plain Python package** — not a Kit extension. It declares a
-namespace and either exposes one entrypoint (copy `mcp/examples/demo_tools/`) or
+namespace and either exposes one entrypoint (copy `mcp/templates/demo_tools/`) or
 none at all ([declared toolsets](docs/tool-authoring.md#declared-toolsets)):
 
 ```python
@@ -190,7 +190,7 @@ gateway needs it.
 
 ```
 mcp/isaac_mcp/               the MCP front-end (FastMCP server, TCP client to the bridge)
-mcp/examples/demo_tools/     the template tool package; copy it to onboard a project
+mcp/templates/demo_tools/     the template tool package; copy it to onboard a project
 mcp/tests/                   host, protocol, registry and live-socket tests (no Kit needed)
 mcp/docs/                    protocol, configuration, tool authoring, Isaac Lab
 exts/isaac.mcp.bridge/       the bridge extension (protocol, bridge, builtins, autoload)

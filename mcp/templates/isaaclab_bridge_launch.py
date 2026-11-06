@@ -27,7 +27,7 @@ os.environ.setdefault("ISAAC_MCP_PORT", "8767")
 # os.environ.setdefault("ISAAC_MCP_TOOL_PATHS", "<project>/isaac")
 # os.environ.setdefault("ISAAC_MCP_TOOL_MODULES", "myproj_tools")
 
-# The repository's exts folder: this file lives in <repo>/mcp/examples/. Override with
+# The repository's exts folder: this file lives in <repo>/mcp/templates/. Override with
 # ISAAC_MCP_EXTS if you keep the extensions elsewhere.
 _ISAAC_MCP_EXTS = os.environ.get(
     "ISAAC_MCP_EXTS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "exts")

@@ -29,7 +29,7 @@ portfile. From a REMOTE machine there is no local portfile — pass host/port
 localhost unless installed with ``--bind-host`` (see the repo README's
 "Remote access").
 
-The tool package you push follows the standard contract (examples/demo_tools):
+The tool package you push follows the standard contract (templates/demo_tools):
 ``MCP_NAMESPACE`` + ``register(registrar)``; async run()s are awaited on
 Kit's loop by the bridge itself — a long motion is one blocking call with a
 fitted timeout, never a schedule/poll loop.
@@ -43,7 +43,7 @@ import sys
 from isaac_mcp.client import BridgeClient, call
 
 # ---- point these at your project -------------------------------------------
-HOST = "100.97.45.92"                      # the box's tailnet IP (or None on-box)
+HOST = None                                # auto-discover locally; set a host for a remote bridge
 PORT = 8766                                # the installed bridge port
 LOCAL_ROOT = pathlib.Path(__file__).parent # holding <package>/ and assets/
 REMOTE_ROOT = "/srv/myproject"       # where the box keeps them

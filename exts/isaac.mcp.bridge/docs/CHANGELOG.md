@@ -15,7 +15,7 @@ All notable changes to this extension are documented here. Format follows
   `source_hash` of the served module tree for staleness detection. The
   runtime portfile advertises the same identity.
 - `stat_file` builtin (exists/bytes/sha256) completing the
-  `put_file`/`get_file` file data plane; `examples/remote_driver.py`
+  `put_file`/`get_file` file data plane; `templates/remote_driver.py`
   ensure->reload->dispatch driver template.
 - Error envelopes carry `error_type` (the exception class name) alongside
   message and traceback.

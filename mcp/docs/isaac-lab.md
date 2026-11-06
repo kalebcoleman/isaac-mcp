@@ -15,4 +15,4 @@ so that Kit does not also advance physics. The template shows this. Headless wit
 but `status` never answers (seen with `sim.step()`; `env.step()` was read from source, not run). Note the port: "one bridge, one port, *per Kit process*" —
 a Lab standalone run is its own Kit process, so when it runs alongside the
 installed app (which holds 8766) it needs its own port (8767 by convention).
-See `mcp/examples/isaaclab_bridge_launch.py` for the template.
+See `mcp/templates/isaaclab_bridge_launch.py` for the template.

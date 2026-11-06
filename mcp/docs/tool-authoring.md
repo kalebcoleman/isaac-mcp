@@ -46,7 +46,7 @@ prototyped; registered tools are what agents rely on.
 
 Agents otherwise reach a project's state through `run_python`, which means guessing its internals and writing Python on
 each call. Give them tools instead: typed arguments, one place for the rules, and they keep working with
-`ISAAC_MCP_BUILTINS=0`. `mcp/examples/demo_tools` is a working example: `demo.project_state` reads a connection state and
+`ISAAC_MCP_BUILTINS=0`. `mcp/templates/demo_tools` is a working example: `demo.project_state` reads a connection state and
 thresholds, and `demo.set_threshold` validates and sets one, refusing with `ToolError` outside its range.
 
 ```python
@@ -131,7 +131,7 @@ arrived over any bulk channel. Content rides one NDJSON frame in memory —
 right for tool code and tool-sized assets; ship multi-GB scenes over a mount
 or rsync and still verify them with `stat_file`. After pushing a tool
 package's files, `reload_tools` picks them up without a restart.
-`examples/remote_driver.py` is the copyable template for the whole pattern
+`templates/remote_driver.py` is the copyable template for the whole pattern
 (ensure → reload → dispatch → pull results).
 
 ## Control panel

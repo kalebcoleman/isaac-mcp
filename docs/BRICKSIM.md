@@ -41,19 +41,9 @@ Bricks are under `/World/managed/Parts/Part_N`, and the arm is `/World/Robot`.
 
 These tools see rigid bodies and physics contacts. `sim__physics__contacts` does not report which bricks are connected by studs, because that is BrickSim's own model and not a physics contact. Read it from its Python API with `run_python`, which runs code inside Kit: `bricksim.core.get_assembled_connections()` and `are_parts_connected()`. A tester with no other help got each brick's position and the connection graph this way.
 
-## Its reinforcement learning task
+## Training a project task
 
-BrickSim's `Lego-AssembleBrick-v0` has an FR3 arm reach, grasp, lift, align and insert a brick, and it ships no training settings. `examples/bricksim_rl` adds PPO settings and registers `Lego-AssembleBrick-PPO-v0`; nothing in BrickSim changes. Use the Isaac Lab 2.3.2 environment, which has the libraries (same Python 3.11 and Sim 5.1). In the MCP server's environment:
-
-```
-ISAACLAB_PYTHON=<lab-2.3.2 env>/bin/python
-ISAACLAB_ROOT=<lab-2.3.2 checkout>
-ISAACLAB_TASK_PATH=<isaac-mcp>/examples:<BrickSim>/python
-ISAACLAB_TASK_MODULES=bricksim_rl
-```
-
-Then `isaaclab__train task=Lego-AssembleBrick-PPO-v0 rl_library=rsl_rl num_envs=32`.
-
-The task forces CPU physics, so it is far slower than the GPU examples. Measured with 32 environments, at about 270 steps/s: 300 iterations took 29 minutes, then a resumed run took it to about 1,600 iterations in 2 hours more. That run ended early, with exit code 134, when the process that launched it was killed; its checkpoint was kept. Mean reward rose from 1.3 to about 39. In eval over 32 episodes: **no success**, a mean return of 37, 6.6% dropped the brick, and nearly all of the return is from reaching (3.02 of the reward per second, grasping 0.08, lifting 0, inserting 0).
-
-So the route works, and PPO with these settings has learned to reach and to grasp a little, not to lift or insert. This is a first guess at settings. The task's chain of stages has its large reward only at the end, so expect to need a shaped curriculum, a demonstration, or far more samples than CPU physics gives overnight; `bricksim/envs/assemble_brick/expert.py` is a scripted expert that could supply demonstrations. Playback was not run on it.
+BrickSim projects can register their own Isaac Lab task packages through `ISAACLAB_TASK_PATH` and
+`ISAACLAB_TASK_MODULES`; see [Your own task](TOOLS-ISAACLAB.md#6-your-own-task). Keep task-specific
+training adapters, checkpoints and results in the project. Confirm the physics device in each run's logs
+rather than inferring it from the task configuration.

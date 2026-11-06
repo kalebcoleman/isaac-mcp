@@ -94,4 +94,4 @@ away. Scripts that import `mcp` need `uv run --isolated --project mcp --extra sc
 | Diagnostics | `probe_62.sh`, `catch_hang.sh` (both boot Kit on the GPU), `checkpoint_export.py` |
 | Docs generators | `ecosystem_catalog.py`, `ecosystem_capabilities.py` |
 
-`tools/` holds one-off asset conversion utilities for the RG2 gripper. `mcp/examples/` holds bridge integration templates.
+`tools/` holds one-off asset conversion utilities for the RG2 gripper. `mcp/templates/` holds bridge integration templates.

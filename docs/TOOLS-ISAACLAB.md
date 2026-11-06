@@ -230,7 +230,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `headless` | boolean | no | `true` | No window. Normally `--viz none`; `--video` selects Kit with child-only `HEADLESS=1`. `false` selects Kit with `HEADLESS=0`. |
   | `checkpoint` | string | no | `null` | Path to resume from (must be under allowed roots). |
   | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. Before launching, the tool runs `isaaclab__install_info`'s `rl_libraries` check in the same interpreter and refuses a library that is not importable there, naming the installed ones. If that check cannot run, the launch is not blocked. |
-  | `physics` | string | no | `null` | `physx` or `newton`. Default: the task's own, often Newton on Lab 3. On Lab 3 it selects `physics=isaacsim_physx` or `physics=newton_mjwarp`; Lab 3's own `physics=physx` picks the optional OvPhysX runtime, which fails if it is not installed. Lab 2.x is PhysX only. A task with no engine presets (both examples are PhysX by design) fails with `did not match a selectable preset`: leave it out. |
+  | `physics` | string | no | `null` | `physx` or `newton`. Default: the task's own, often Newton on Lab 3. On Lab 3 it selects `physics=isaacsim_physx` or `physics=newton_mjwarp`; Lab 3's own `physics=physx` picks the optional OvPhysX runtime, which fails if it is not installed. Lab 2.x is PhysX only. A task with no engine presets fails with `did not match a selectable preset`: leave it out. |
   | `extra_args` | array[string] | no | `null` | Validated flags/Hydra overrides. |
   | `timeout_s` | number | no | `null` | The host that started the job kills its process group after this many seconds. If that host has gone, the job runs on until the next `runs_status` or `runs_list`, and `runs_status` echoes it. |
   | `allow_concurrent` | boolean | no | `false` | Override the job-vs-job guard. |
@@ -480,20 +480,12 @@ Example play call shape (illustrative):
 
 ### 6. Your own task
 
-A task is a Python package the tools import before Lab looks up its id. In the MCP server's environment, set `ISAACLAB_TASK_PATH` to the folder that holds the package and `ISAACLAB_TASK_MODULES` to its name; keep the package's `__init__.py` free of Isaac Lab imports, because it is imported before Kit starts. Two examples are in `examples/`, both for Lab 3.0.0 with PhysX and registered in a few lines; copy them as a start.
-
-**Your own robot, from its URDF** (`examples/urdf_reach`, `ISAACLAB_TASK_MODULES=urdf_reach`). Any fixed-base arm learns to bring one link to random points. Give the file and the link:
-
-```
-isaaclab__train task=Isaac-Urdf-Reach rl_library=rsl_rl num_envs=512 max_iterations=200
-  extra_args=["env.urdf_path=/abs/so101.urdf", "env.end_link=gripper_frame_link", "env.stiffness=20.0", "env.damping=2.0"]
-```
-
-Pass the same `extra_args` to `eval` and `play`, and judge by `eval`: a task's `Metrics/` in training come from whichever environments reset last, often only a few, so a final 100% there can be one lucky arm. A wrong path or link is refused with the robot's real link names. Meshes must be findable from the URDF by relative path: expand a xacro file first. A light arm wants lower `stiffness` and `damping`. Targets are points the arm has really been at: at startup it is put in random poses within `action_scale` of its start, and where the link ends up is read from physics, so no workspace has to be guessed. Measured with the SO-101 from its public URDF: 512 environments, 200 iterations in about 30 s of training; eval over 64 episodes reached 100% of targets (within 3 cm) with a mean final distance of 2.6 mm. With no gains given and 64 environments, 100% and 7.4 mm. One seed; there is no self-collision, no obstacle and no orientation target. The importer's own fixed base joint breaks in cloned environments (their observations reach 1e12, then `normal expects all elements of std >= 0.0`), so write `fix_base=False` with `fix_root_link=True` in a task of your own.
-
-**A manipulation task with contacts** (`examples/jenga_lab`, `ISAACLAB_TASK_MODULES=jenga_lab`, `task=Isaac-Jenga-Push-Franka`). A Franka with a push rod pushes the middle block out of a 6-layer tower, with the blocks, rod and arm pose of [`sim__quick_start environment=jenga`](TOOLS-SCENE.md#a-jenga-tower-in-one-call), except that all its blocks are one height, so the target is not loose. The policy moves the rod's tip; damped inverse kinematics turns that into joint targets and keeps the hand level. Reward: reach the block, line up with it, push it up to 10 cm, keep the other blocks still; moving another block 4 cm ends the episode. Measured: 1024 environments, 300 iterations in 431 s at about 36,000 steps/s; eval over 64 episodes had a success rate of 100%, the block out 13.0 cm, the worst other block moved 4.4 mm, and no falls. One seed, one fixed block, a start that varies by a few millimetres: this shows the training route works with contacts, not a policy for a real tower.
-
-Check a new task with a scripted action before training it. The first version of this one trained to 0% because a table under the wrist held the hand 3.5 cm too high; a fixed "push forward" through `scripts/environments/zero_agent.py` showed it in a minute, where 300 iterations had not.
+A task is a Python package the tools import before Lab looks up its id. In the MCP server's environment,
+set `ISAACLAB_TASK_PATH` to the folder containing the task package and `ISAACLAB_TASK_MODULES` to its module
+name. Keep the package's `__init__.py` free of Isaac Lab imports because it is imported before Kit starts.
+Task-specific environments, rewards and training code belong in the project using the MCP, not in this
+repository. Check a new task with a scripted action before training; evaluate completed episodes separately
+from training metrics and record the task configuration and seed.
 
 ### 7. Choose what a walking policy does
 
@@ -508,7 +500,7 @@ Measured on `Isaac-Velocity-Flat-G1`, PhysX, 64 episodes: 98.4% reached the time
 
 ### 8. A video of a play run, and its camera
 
-`isaaclab__play` with `headless=true` and `extra_args=["--video", "--video_length", "400"]` writes an MP4; `runs_status` lists them newest first in `video_paths`. It needs `moviepy<2`, `decorator<5` and `imageio-ffmpeg` in the Lab interpreter, and a job refuses if they are missing. Aim the camera at world coordinates with `env.sim.default_visualizer_cfg.eye=[x,y,z]` and `env.sim.default_visualizer_cfg.lookat=[x,y,z]`, on a task that sets `default_visualizer_cfg` (both examples do; on one that does not, the job fails with `'NoneType' object has no attribute 'eye'`). With `num_envs=1` the environment sits at the origin.
+`isaaclab__play` with `headless=true` and `extra_args=["--video", "--video_length", "400"]` writes an MP4; `runs_status` lists them newest first in `video_paths`. It needs `moviepy<2`, `decorator<5` and `imageio-ffmpeg` in the Lab interpreter, and a job refuses if they are missing. Aim the camera at world coordinates with `env.sim.default_visualizer_cfg.eye=[x,y,z]` and `env.sim.default_visualizer_cfg.lookat=[x,y,z]`, on a task that sets `default_visualizer_cfg` (on one that does not, the job fails with `'NoneType' object has no attribute 'eye'`). With `num_envs=1` the environment sits at the origin.
 
 ### 9. Walking on PhysX and on Newton
 
