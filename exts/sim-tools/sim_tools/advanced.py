@@ -1423,6 +1423,7 @@ class Advanced:
                 if not stage.RemovePrim(p):
                     refuse("DELETE_FAILED", "Session-layer removal failed.")
             s.owned = {q for q in s.owned if q != p and not q.startswith(p + "/")}
+            s.bulk_owned = {q for q in getattr(s, "bulk_owned", ()) if q != p and not q.startswith(p + "/")}
             return dict(deleted=p, still_composed=bool(stage.GetPrimAtPath(p)))
         if name == "sim.stage.clear_owned":
             if a["confirm"] is not True:

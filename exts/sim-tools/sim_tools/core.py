@@ -195,6 +195,7 @@ class Scene:
         self._stage = None
         self.stage_id = None
         self.owned = set()
+        self.bulk_owned = set()  # large tool-owned subtrees, scoped to this stage
         # Session-layer opinions these tools authored, per prim: what sim.prim.revert undoes.
         self.edits = {}
         self.runtime_assets = {}
@@ -331,6 +332,7 @@ class Scene:
             self._stage = st
             self.stage_id = uuid.uuid4().hex
             self.owned.clear()
+            self.bulk_owned.clear()
             self.edits.clear()
         return st
 
@@ -385,6 +387,7 @@ class Scene:
         self._stage = None
         self.stage_id = None
         self.owned.clear()
+        self.bulk_owned.clear()
         self.edits.clear()
 
     def stage_info(self):

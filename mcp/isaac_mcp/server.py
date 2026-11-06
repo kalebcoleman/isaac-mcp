@@ -797,7 +797,7 @@ def _dispatch(canonical: str, params: Dict[str, Any],
             return blocked
 
     try:
-        if canonical == "sim.quick_start" and _quick_start_wants_import(params.get("robot")):
+        if canonical == "sim.quick_start" and _quick_start_wants_import(params.get("robot"), state):
             return _quick_start_with_import(params, state)
         active = state or _DEFAULT_STATE
         kit_canonical, routed_info = canonical, None
@@ -887,7 +887,7 @@ def _dispatch(canonical: str, params: Dict[str, Any],
         return f"Error: {e}{host}"
 
 
-def _quick_start_wants_import(robot) -> bool:
+def _quick_start_wants_import(robot, state=None) -> bool:
     """A robot given as an absolute path to a format only assets__import_path reads (MJCF, xacro, SDF, a mesh) or as a folder.
     Some packages (TurtleBot3) keep xacro in a file named .urdf, which the import reads and Kit's plain URDF path refuses."""
     text = os.path.expanduser(str(robot or ""))
@@ -899,11 +899,17 @@ def _quick_start_wants_import(robot) -> bool:
     if os.path.isdir(text) or kind in ("mjcf", "xacro", "sdf", "mesh", "map"):
         return True
     if kind == "urdf":
+        # Do not inspect arbitrary host paths here. Resolve through the same approved-root
+        # broker as import_path; its read refuses symlinks and non-regular files.
+        from .project_assets import AssetError, Broker
+        active = state or _DEFAULT_STATE
+        if not hasattr(active, "asset_broker"):
+            active.asset_broker = Broker()
         try:
-            with open(text, "rb") as file:
-                head = file.read(200_000)
-        except OSError:
-            return False
+            root_id, relative_path = active.asset_broker.locate(text, kind="urdf")
+            head = active.asset_broker.read_file(root_id, relative_path)[:200_000]
+        except (AssetError, OSError):
+            return False  # The ordinary route returns the approval/filesystem error.
         return b"xacro:" in head or b"xmlns:xacro" in head
     return False
 

@@ -334,8 +334,23 @@ def test_a_urdf_that_holds_xacro_goes_through_the_import_from_quick_start(tmp_pa
     real.write_text('<robot name="r"/>')
     xacro = tmp_path / "burger.urdf"
     xacro.write_text('<robot name="r" xmlns:xacro="http://ros.org/wiki/xacro"/>')
-    assert server._quick_start_wants_import(str(real)) is False and server._quick_start_wants_import(str(xacro)) is True
-    assert server._quick_start_wants_import(str(tmp_path / "missing.urdf")) is False
+    project = tmp_path / "project"
+    project.mkdir()
+    real.rename(project / real.name)
+    xacro.rename(project / xacro.name)
+    state = SimpleNamespace(asset_broker=broker_on(tmp_path, project))
+    assert server._quick_start_wants_import(str(project / real.name), state) is False
+    assert server._quick_start_wants_import(str(project / xacro.name), state) is True
+    assert server._quick_start_wants_import(str(project / "missing.urdf"), state) is False
+    # Outside roots, symlinks and non-regular files are never read by the probe.
+    outside = tmp_path / "outside.urdf"
+    outside.write_text('<robot xmlns:xacro="http://ros.org/wiki/xacro"/>')
+    (project / "link.urdf").symlink_to(outside)
+    import os
+    os.mkfifo(project / "pipe.urdf")
+    assert server._quick_start_wants_import(str(outside), state) is False
+    assert server._quick_start_wants_import(str(project / "link.urdf"), state) is False
+    assert server._quick_start_wants_import(str(project / "pipe.urdf"), state) is False
 
 
 def test_a_large_map_can_be_deleted_as_a_whole(scene, tmp_path):  # noqa: F811
@@ -351,3 +366,14 @@ def test_a_large_map_can_be_deleted_as_a_whole(scene, tmp_path):  # noqa: F811
     snap.pop("bytes")
     assert map_import.run(SimpleNamespace(scene=scene), dict(**snap, prim_path="/World/map"))["walls"] == 251
     assert deletable(scene, stage, "/World/map")
+
+
+def test_bulk_ownership_is_cleared_on_stage_change_and_close(scene):
+    scene.stage()
+    scene.bulk_owned.add("/World/map")
+    scene.get_stage = lambda: Usd.Stage.CreateInMemory()
+    scene.stage()
+    assert not scene.bulk_owned
+    scene.bulk_owned.add("/World/map")
+    scene.close_stage()
+    assert not scene.bulk_owned
