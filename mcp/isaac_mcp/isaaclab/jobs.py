@@ -1245,9 +1245,11 @@ def runs_status(job_id: str) -> dict[str, Any]:
     if data.get("timeout_s") is not None:
         out["timeout_s"] = data["timeout_s"]
     out.update(_log_facts(Path(data.get("log_dir", jd)) / "stdout.log"))
-    videos = _video_paths(run_dir)
+    videos = _video_paths(run_dir, Path(data.get("log_dir", jd)) / "stdout.log")
     if videos:
         out["video_paths"] = videos
+    if out.get("physics") is None and data.get("library"):
+        out["physics"] = "physx"  # a Lab with one script folder per library (2.x) announces no engine: it only has PhysX
     if data.get("kind") == "eval":
         result = _eval_result(jd)
         if result is not None:
@@ -1257,15 +1259,24 @@ def runs_status(job_id: str) -> dict[str, Any]:
     return out
 
 
-def _video_paths(run_dir: Any, limit: int = 8) -> list[str]:
-    """Videos Lab wrote for this run (--video writes under <run_dir>/videos), newest first."""
-    if not run_dir or not Path(run_dir).is_dir():
-        return []
+def _video_paths(run_dir: Any, log_path: Path | None = None, limit: int = 8) -> list[str]:
+    """Videos Lab wrote for this run, newest first: under <run_dir>/videos, or the video_folder its log names (a play job's
+    own folder is not where Lab's run lives)."""
+    folders = [Path(run_dir, "videos")] if run_dir else []
     try:
-        found = sorted(Path(run_dir, "videos").rglob("*.mp4"), key=lambda path: path.stat().st_mtime, reverse=True)
+        if log_path is not None:
+            for match in re.finditer(r"video_folder: (\S+)", log_path.read_text(errors="replace")):
+                folders.append(Path(match.group(1)))
     except OSError:
-        return []
-    return [str(path) for path in found[:limit]]
+        pass
+    found: dict[str, float] = {}
+    for folder in folders:
+        try:
+            if folder.is_dir():
+                found.update({str(path): path.stat().st_mtime for path in folder.rglob("*.mp4")})
+        except OSError:
+            continue
+    return sorted(found, key=found.get, reverse=True)[:limit]
 
 
 def runs_tail(job_id: str, stream: str = "stdout", lines: int = 100) -> dict[str, Any]:
