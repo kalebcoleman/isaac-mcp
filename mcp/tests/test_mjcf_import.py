@@ -120,6 +120,78 @@ def test_an_included_file_adds_its_joints():
     assert movable_joint_count([a, b]) == 3
 
 
+def test_tendon_fidelity_warning_names_real_tendons_not_default_templates():
+    from sim_tools.mjcf import tendon_warning
+
+    defaults = ET.fromstring('<mujoco><default><tendon stiffness="2"/></default></mujoco>')
+    model = ET.fromstring('<mujoco><tendon><fixed name="split"/><spatial/></tendon></mujoco>')
+    assert tendon_warning([defaults]) is None
+    warning = tendon_warning([defaults, model])
+    assert "split" in warning and "(unnamed)" in warning and "actuation" in warning
+
+
+def _prismatic_pair(tmp_path, disconnected=False, second_name='b'):
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    path = tmp_path / 'converted.usda'
+    stage = Usd.Stage.CreateNew(str(path))
+    root = UsdGeom.Xform.Define(stage, '/Robot').GetPrim()
+    stage.SetDefaultPrim(root)
+    for name in ('hand', 'left', 'right', 'other'):
+        prim = UsdGeom.Xform.Define(stage, f'/Robot/{name}').GetPrim()
+        UsdPhysics.RigidBodyAPI.Apply(prim)
+    for name, parent, child in (('a', 'hand', 'left'), (second_name, 'other' if disconnected else 'hand', 'right')):
+        joint = UsdPhysics.PrismaticJoint.Define(stage, f'/Robot/{name}')
+        joint.CreateBody0Rel().SetTargets([f'/Robot/{parent}'])
+        joint.CreateBody1Rel().SetTargets([f'/Robot/{child}'])
+    stage.GetRootLayer().Save()
+    return path
+
+
+def test_legacy_simple_prismatic_equality_is_written_as_mimic(tmp_path):
+    from pxr import Usd
+    from sim_tools.mjcf import restore_legacy_equalities
+
+    path = _prismatic_pair(tmp_path)
+    model = ET.fromstring('<mujoco><worldbody><body><joint name="a"/><joint name="b"/></body></worldbody><equality><joint joint1="a" joint2="b"/></equality></mujoco>')
+    assert restore_legacy_equalities(path, [model]) == [{'joint1': 'a', 'joint2': 'b'}]
+    stage = Usd.Stage.Open(str(path))
+    follower = stage.GetPrimAtPath('/Robot/b')
+    assert 'PhysxMimicJointAPI:rotX' in follower.GetMetadata('apiSchemas').GetAppliedItems()
+    assert [str(p) for p in follower.GetRelationship('physxMimicJoint:rotX:referenceJoint').GetTargets()] == ['/Robot/a']
+    assert follower.GetAttribute('physxMimicJoint:rotX:gearing').Get() == -1.0
+
+
+@pytest.mark.parametrize('equality,ref', [
+    ('<joint joint1="a" joint2="b" polycoef="0 1 1 0 0"/>', ''),
+    ('<joint joint1="a" joint2="b" active="false"/>', ''),
+    ('<joint joint1="a" joint2="b"/>', ' ref="1"'),
+    ('<joint joint1="a" joint2="b"/><joint joint1="b" joint2="c" polycoef="0 1 1 0 0"/>', ''),
+])
+def test_legacy_equality_does_not_guess_nonlinear_disabled_or_shifted_cases(tmp_path, equality, ref):
+    from sim_tools.mjcf import restore_legacy_equalities
+
+    path = _prismatic_pair(tmp_path)
+    model = ET.fromstring(f'<mujoco><worldbody><body><joint name="a"{ref}/><joint name="b"/></body></worldbody><equality>{equality}</equality></mujoco>')
+    assert restore_legacy_equalities(path, [model]) == []
+
+
+def test_legacy_equality_does_not_link_disconnected_bodies(tmp_path):
+    from sim_tools.mjcf import restore_legacy_equalities
+
+    path = _prismatic_pair(tmp_path, disconnected=True)
+    model = ET.fromstring('<mujoco><worldbody><body><joint name="a"/><joint name="b"/></body></worldbody><equality><joint joint1="a" joint2="b"/></equality></mujoco>')
+    assert restore_legacy_equalities(path, [model]) == []
+
+
+def test_legacy_equality_does_not_guess_when_joint_names_normalize_to_the_same_usd_name(tmp_path):
+    from sim_tools.mjcf import restore_legacy_equalities
+
+    path = _prismatic_pair(tmp_path, second_name='b_')
+    model = ET.fromstring('<mujoco><worldbody><body><joint name="a"/><joint name="b"/><joint name="b!"/><joint name="b_"/></body></worldbody><equality><joint joint1="a" joint2="b!"/></equality></mujoco>')
+    assert restore_legacy_equalities(path, [model]) == []
+
+
 def test_legacy_normalization_merges_named_defaults_and_avoids_mesh_stem_collision(tmp_path):
     import shutil
     from isaac_mcp.urdf_refs import project_from_folder

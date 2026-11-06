@@ -10,7 +10,7 @@ from pathlib import Path
 
 from isaac_mcp.project_assets import refuse
 
-CONVERSION_VERSION = 3  # bump when what is written into a conversion changes
+CONVERSION_VERSION = 4  # bump when what is written into a conversion changes
 EXTENSION = "isaacsim.asset.importer.mjcf"
 
 
@@ -205,6 +205,141 @@ def movable_joint_count(trees) -> int:
                 if joint.attrib.get("type", "hinge") in ("hinge", "slide"):
                     count += 1
     return count
+
+
+def tendon_warning(trees):
+    """Name an import fidelity risk without guessing a replacement physics model."""
+    names = []
+    for tree in trees:
+        for section in tree.iter("tendon"):
+            for tendon in section:
+                if tendon.tag in ("fixed", "spatial"):
+                    names.append((tendon.get("name") or "(unnamed)")[:80])
+                    if len(names) == 5:
+                        break
+            if len(names) == 5:
+                break
+        if len(names) == 5:
+            break
+    if not names:
+        return None
+    return (f"MJCF declares tendons {names}; Isaac Sim's importer can alter or omit tendon stiffness, "
+            "coupling or actuation. Inspect the converted physics and test gripper/tendon behavior.")
+
+
+def uses_legacy_importer():
+    """The old MJCF command importer has no Python MJCFImporter class."""
+    try:
+        from isaacsim.asset.importer.mjcf import MJCFImporter  # noqa: F401
+    except ImportError:
+        return True
+    return False
+
+
+def restore_legacy_equalities(filename, trees):
+    """Restore simple identity equalities between prismatic joints in a private 5.1 USD.
+
+    The native 5.1 MJCF importer drops Panda's finger equality. A PhysX mimic
+    approximates that equality as a hard constraint; nonlinear equations, offsets,
+    joint reference positions, ambiguous names and disconnected bodies are left
+    untouched. This does not reconstruct tendon actuators or MuJoCo solver tuning.
+    """
+    from collections import Counter
+    from isaac_mcp.urdf_physics import usd_name
+    from pxr import Sdf, Usd, UsdPhysics
+
+    trees = list(trees)
+    # A joint ref, including one inherited from a default class, shifts the
+    # equality's coordinate system. Only handle the unshifted case.
+    for tree in trees:
+        for joint in tree.iter("joint"):
+            value = joint.get("ref")
+            if value is not None:
+                try:
+                    if float(value) != 0.0:
+                        return []
+                except ValueError:
+                    return []
+
+    source = [j.get("name") for tree in trees for body in tree.iter("body")
+              for j in body.findall("joint") if j.get("name")]
+    counts = Counter(source)
+    usd_counts = Counter(usd_name(name) for name in source if len(name) <= 128)
+    pairs, uses = [], Counter()
+    for tree in trees:
+        for joint in tree.findall("./equality/joint"):
+            a, b = joint.get("joint1"), joint.get("joint2")
+            if joint.get("active", "true").lower() not in ("true", "1"):
+                continue
+            uses.update(name for name in (a, b) if name and len(name) <= 128)
+            if not a or not b or len(a) > 128 or len(b) > 128 or a == b or joint.get("class"):
+                continue
+            try:
+                coeff = [float(x) for x in joint.get("polycoef", "0 1 0 0 0").split()]
+            except ValueError:
+                continue
+            if (coeff != [0.0, 1.0, 0.0, 0.0, 0.0] or counts[a] != 1 or counts[b] != 1
+                or usd_counts[usd_name(a)] != 1 or usd_counts[usd_name(b)] != 1):
+                continue
+            if len(pairs) < 64:  # bound the edits and the report returned to the client
+                pairs.append((a, b))
+    pairs = [(a, b) for a, b in pairs if uses[a] == uses[b] == 1]
+    if not pairs:
+        return []
+
+    asset = Usd.Stage.Open(str(filename), load=Usd.Stage.LoadAll)
+    if not asset or not asset.GetDefaultPrim():
+        return []  # prepare_generated_physics has already validated this output
+    joints, parent = {}, {}
+
+    def find(body):
+        parent.setdefault(body, body)
+        while parent[body] != body:
+            parent[body] = parent[parent[body]]
+            body = parent[body]
+        return body
+
+    for node in Usd.PrimRange(asset.GetDefaultPrim(), Usd.TraverseInstanceProxies()):
+        if not node.IsA(UsdPhysics.Joint):
+            continue
+        joint = UsdPhysics.Joint(node)
+        if not joint.GetJointEnabledAttr().Get() or joint.GetExcludeFromArticulationAttr().Get():
+            continue
+        ends = [rel.GetTargets() for rel in (joint.GetBody0Rel(), joint.GetBody1Rel())]
+        if any(len(items) != 1 for items in ends):
+            continue
+        bodies = [str(items[0]) for items in ends]
+        if not all(asset.GetPrimAtPath(body).HasAPI(UsdPhysics.RigidBodyAPI) for body in bodies):
+            continue
+        parent[find(bodies[0])] = find(bodies[1])
+        joints.setdefault(node.GetName(), []).append((node, bodies[1]))
+
+    restored = []
+    with Usd.EditContext(asset, asset.GetRootLayer()):
+        for first, second in pairs:
+            if usd_name(first) == usd_name(second):
+                continue
+            left, right = joints.get(usd_name(first), []), joints.get(usd_name(second), [])
+            if len(left) != 1 or len(right) != 1:
+                continue
+            leader, follower = left[0][0], right[0][0]
+            if (not leader.IsA(UsdPhysics.PrismaticJoint) or not follower.IsA(UsdPhysics.PrismaticJoint)
+                or leader.IsInstanceProxy() or follower.IsInstanceProxy() or find(left[0][1]) != find(right[0][1])):
+                continue
+            if any("MimicJointAPI:" in schema for node in (leader, follower) for schema in node.GetAppliedSchemas()):
+                continue
+            # For single-axis joints 5.1 uses the rotX instance token even for
+            # a prismatic joint; gearing=-1 encodes follower=leader.
+            applied = follower.AddAppliedSchema("PhysxMimicJointAPI:rotX")
+            ref = follower.CreateRelationship("physxMimicJoint:rotX:referenceJoint", custom=False).SetTargets([leader.GetPath()])
+            gear = follower.CreateAttribute("physxMimicJoint:rotX:gearing", Sdf.ValueTypeNames.Float, custom=False).Set(-1.0)
+            offset = follower.CreateAttribute("physxMimicJoint:rotX:offset", Sdf.ValueTypeNames.Float, custom=False).Set(0.0)
+            if not all((applied, ref, gear, offset)):
+                refuse("MJCF_PHYSICS", "Could not author the private 5.1 joint equality repair.")
+            restored.append(dict(joint1=first, joint2=second))
+        if restored and not asset.GetRootLayer().Save():
+            refuse("MJCF_PHYSICS", "Could not save the private 5.1 joint equality repair.")
+    return restored
 
 
 REVOLUTE_STIFFNESS, REVOLUTE_DAMPING = 100.0, 10.0  # N*m per rad, N*m*s per rad

@@ -1037,7 +1037,8 @@ class Advanced:
         from isaac_mcp.project_assets import Broker, open_dir, signature
 
         from .validate import apply_joint_targets, joint_summary, validate
-        from .mjcf import convert, importer_identity, mjcf_default_gains, movable_joint_count
+        from .mjcf import (convert, importer_identity, mjcf_default_gains, movable_joint_count,
+                           restore_legacy_equalities, tendon_warning, uses_legacy_importer)
         from .urdf import MAX_AUTO_LIFT_M, place_above_ground, prepare_generated_physics, undriven_joints
 
         s = self.s
@@ -1085,6 +1086,14 @@ class Advanced:
                     generated, pending, movable_joints=movable, gains=mjcf_default_gains(found["trees"].values()) if default_drives else None,
                     fixed_base=fixed_base, kind="MJCF",
                 )
+                if uses_legacy_importer():
+                    restored = restore_legacy_equalities(generated, found["trees"].values())
+                    declared = sum(1 for tree in found["trees"].values() for joint in tree.findall("./equality/joint")
+                                   if joint.get("active", "true").lower() not in ("false", "0"))
+                    if restored:
+                        converted_physics["restored_joint_equalities"] = restored
+                    if declared > len(restored):
+                        converted_physics["unrestored_joint_equalities"] = declared - len(restored)
                 relative_generated = str(generated.relative_to(pending))
                 (pending / "generated.txt").write_text(relative_generated)
                 (pending / "report.json").write_text(json.dumps(converted_physics))
@@ -1109,6 +1118,13 @@ class Advanced:
 
         roots = _articulation_roots(stage.GetPrimAtPath(prim_path))
         warnings = []
+        tendon_note = tendon_warning(found["trees"].values())
+        if tendon_note:
+            warnings.append(tendon_note)
+        if converted_physics.get("restored_joint_equalities"):
+            warnings.append("Sim 5.1 approximated simple MJCF prismatic joint equalities as PhysX mimic constraints; MuJoCo solver tuning may differ.")
+        if converted_physics.get("unrestored_joint_equalities"):
+            warnings.append(f"Sim 5.1's adapter did not restore {converted_physics['unrestored_joint_equalities']} MJCF joint equalities; inspect the converted constraints before relying on them.")
         placement = place_above_ground(stage, prim_path, position_given, max_lift=MAX_AUTO_LIFT_M)
         if "warning" in placement:
             warnings.append(placement.pop("warning"))

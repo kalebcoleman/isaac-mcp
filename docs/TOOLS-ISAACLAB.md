@@ -238,7 +238,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. Before launching, the tool runs `isaaclab__install_info`'s `rl_libraries` check in the same interpreter and refuses a library that is not importable there, naming the installed ones. If that check cannot run, the launch is not blocked. |
   | `physics` | string | no | `null` | `physx` or `newton`. Default: the task's own, often Newton on Lab 3. On Lab 3 it selects `physics=isaacsim_physx` or `physics=newton_mjwarp`; Lab 3's own `physics=physx` picks the optional OvPhysX runtime, which fails if it is not installed. Lab 2.x is PhysX only. A task with no engine presets fails with `did not match a selectable preset`: leave it out. |
   | `extra_args` | array[string] | no | `null` | Validated flags/Hydra overrides. |
-  | `timeout_s` | number | no | `null` | The host that started the job kills its process group after this many seconds. If that host has gone, the job runs on until the next `runs_status` or `runs_list`, and `runs_status` echoes it. |
+  | `timeout_s` | number | no | `null` | The job's own watchdog enforces this limit, even after the host exits; `runs_status` echoes it. |
   | `allow_concurrent` | boolean | no | `false` | Override the job-vs-job guard. |
   | `allow_concurrent_gpu` | boolean | no | `false` | Override the Kit-bridge (GPU) guard. |
 - Returns on success: `{job_id, log_dir, command}`. A guard refusal includes `error` and `hint`, along with `running_job_id`/`running_pid` (job guard) or `kit_bridges` (Kit guard). On no install: `{"error": "no Isaac Lab install found", "hint": ...}`.

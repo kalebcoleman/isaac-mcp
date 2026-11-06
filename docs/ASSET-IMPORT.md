@@ -16,6 +16,9 @@ assets__import_path  source_path=<file or folder>  prim_path=/World/robot
 ```
 
 Or in one call that also builds the scene: `sim__quick_start robot=<absolute path to a file or folder>` (any format below).
+For example, `sim__quick_start {"robot":"/approved/arm/model.xml"}` returns the imported robot's
+articulation and joints in `imported`. Use `assets__roots` to find approved paths. To set initial
+joint targets or address a file with `root_id` and `relative_path`, use `assets__import_path` instead.
 
 ## Set up, once
 
@@ -152,6 +155,7 @@ An import authors a valid robot; it does not make it stand or walk. What to expe
 - **Base.** `fixed_base=true` (the default for URDF and xacro) bolts the root to the world, so a humanoid or quadruped then hangs in the air. For a robot that drives or walks pass `fixed_base=false`; it then falls under gravity.
 - **Drives.** URDF, xacro and SDF have no gains, so the import authors position drives that hold a pose (`default_drives`). **Continuous joints (wheels, casters) get no holding stiffness**, only damping, so a velocity command turns them: `sim__joints__command velocities={"left_wheel_joint": 6}`. A wheel that is held by a position drive does not roll.
 - **MuJoCo torque motors.** A Menagerie robot whose actuators are `<motor>` torque motors (Go2, H1) imports with zero stiffness and damping: it collapses under gravity until you set gains or drive it with a controller. A model with position actuators (Panda, UR5e) imports with drives. This is faithful to the model, so the result **lists the undriven joints and warns**; `default_drives=true` gives them a generic holding drive (stiffness 100, damping 10 per revolute joint) as a starting point.
+- **MuJoCo tendons and equalities.** Imports warn when the model declares fixed or spatial tendons: Isaac Sim may change or omit tendon stiffness, coupling or actuation. Sim 5.1 restores simple identity equalities between connected prismatic joints as PhysX mimic constraints; nonlinear, shifted, ambiguous or other cases are left to the importer and reported. On the Panda MJCF, 5.1 authored stiffness 1 for a zero-default tendon and 6.2's converted USD exposed no corresponding PhysX tendon attributes. With the equality repair, commanding one finger moved the other on both builds. This does not establish contact, actuator or MuJoCo solver fidelity.
 - **No balance.** A humanoid or quadruped with a free base and gains still falls over unless a controller or a trained policy keeps it up. Walking is an Isaac Lab job (`isaaclab__train`, `isaaclab__play`): the stock `Isaac-Velocity-Flat-G1` task uses a free base (`fix_root_link=False`) and learns to balance, with the base-contact termination counting falls; it ran on the Newton backend, not PhysX.
 - **Ground.** Leave `position` out to have a robot raised out of a ground plane (up to 3 m); a `position` you give is used as is, with a warning if it starts inside the ground.
 
@@ -166,7 +170,7 @@ An import authors a valid robot; it does not make it stand or walk. What to expe
 
 ## Tested
 
-On Isaac Sim 5.1 (headless), representative USD, URDF, xacro, SDF, MuJoCo XML, glTF, maps and the warehouse were exercised through its older importers. After fixes, the previously failing SO-101 and Panda models each imported and moved one joint; Go2 imported with a floating base and fell under gravity. The same three models were also checked in a concurrent headless 6.2 session. The 5.1 adapter merges only unambiguous named defaults and gives colliding mesh stems unique names in a private copy; the source stays unchanged. It refuses ambiguous cases with a reason. URDF export is refused because that exporter wrote an empty robot. The remaining results below are the earlier 6.2 run.
+On simultaneous headless Sim 5.1 and 6.2 processes, small USD, URDF, xacro, SDF, glTF, ROS map and Go2 MJCF imports passed. SO-101 and Panda also imported and moved; the Panda finger-coupling check is described above. These samples do not establish every asset variant or controller. The 5.1 adapter merges only unambiguous named defaults and gives colliding mesh stems unique names in a private copy; the source stays unchanged. It refuses ambiguous cases with a reason. URDF export is refused on 5.1 because that exporter wrote an empty robot. The remaining results below are the earlier 6.2 run.
 
 Run with a visible simulator window on Isaac Sim 6.2, from real downloads, not made-up files. Pictures and logs: `runs/universal-import-demo/` of the test workspace, summarised in the earlier project history.
 

@@ -12,8 +12,8 @@ unrelated jobs; record the source, versions, backend, observed effects and limit
 ## Release and compatibility
 
 - [x] Fix the Sim 5.1 MJCF SO-101 and Panda failures; retest both arms and the floating-base Go2.
-- [ ] Recheck the other import formats, guards and Jenga on both supported builds after the
-  latest changes. Report failures separately; a passing host suite is not a live Sim test.
+- [ ] Recheck guards and Jenga on both supported builds after the latest changes. Report failures
+  separately; a passing host suite is not a live Sim test.
 - [ ] Investigate the original 6.0.1 windowed PhysX step stall and fresh-Kit camera reuse;
   later non-reproduction is not a fix. Newton remains experimental.
 - [ ] Validate clean-machine setup, the full installer, external Lab discovery, and the supported
@@ -68,6 +68,8 @@ unrelated jobs; record the source, versions, backend, observed effects and limit
   authenticated bounded transfers, and fail-closed behavior before exposing either.
 - [ ] Review asset import/export gaps and the need for CAD, splats or heightmaps against real
   workflows. Do not treat unsupported formats or partial conversions as complete.
+- [ ] Investigate faithful MJCF tendon and tendon-actuator conversion on 5.1 and 6.2, including
+  Panda gripper contact and coupling. Imports warn until the behavior is verified or preserved.
 
 ## Tool surface and reliability
 

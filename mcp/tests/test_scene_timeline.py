@@ -341,6 +341,45 @@ async def test_actual_handler_waits_before_one_play(handler, native):
 
 
 @pytest.mark.anyio
+async def test_initialize_plays_then_pauses_and_reports_effects(handler):
+    call, state = handler
+    result = await call(session_id="session", stage_id="stage", action="initialize")
+    assert result["status"] == "ok" and result["paused"] and not result["stopped"]
+    assert result["action"] == "initialize" and not result["already_paused"]
+    assert [action for action, _, _ in state.calls] == ["play", "pause"]
+    assert "physics may have advanced" in result["effects"]
+
+
+@pytest.mark.anyio
+async def test_initialize_never_interrupts_a_running_timeline(handler):
+    call, state = handler
+    state.mode = "play"
+    result = await call(session_id="session", stage_id="stage", action="initialize")
+    assert result["code"] == "TIMELINE_ACTIVE" and not state.calls
+    assert state.mode == "play"
+
+
+@pytest.mark.anyio
+async def test_initialize_leaves_a_paused_timeline_alone_and_rejects_resume(handler):
+    call, state = handler
+    state.mode = "pause"
+    result = await call(session_id="session", stage_id="stage", action="initialize")
+    assert result["status"] == "ok" and result["already_paused"] and not state.calls
+    result = await call(session_id="session", stage_id="stage", action="initialize", resume=True)
+    assert result["code"] == "INVALID_VALUE" and not state.calls
+
+
+@pytest.mark.anyio
+async def test_initialize_reports_interrupted_play_without_retrying(handler, native):
+    call, state = handler
+    native.name = "STOPPED"
+    state.interrupt = True
+    result = await call(session_id="session", stage_id="stage", action="initialize")
+    assert result["code"] == "TIMELINE_INTERRUPTED" and len(state.calls) == 1
+    assert "may have advanced" in result["effects"]
+
+
+@pytest.mark.anyio
 async def test_actual_stop_returns_after_native_drain(handler, native):
     call, state = handler
     state.mode = "play"

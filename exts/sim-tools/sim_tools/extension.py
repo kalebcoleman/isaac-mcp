@@ -251,6 +251,31 @@ class Extension(omni.ext.IExt):
         from .timeline import complete_requested_stop, settle_stop
 
         timeline_target = (args["session_id"], args["stage_id"])
+        if args.get("action") == "initialize":
+            # Make the play/pause sequence explicit: it can advance the scene and
+            # must not interrupt an already-running simulation.
+            self.scene.target(*timeline_target)
+            if args.get("resume") is not None and args.get("resume") is not False:
+                refuse("INVALID_VALUE", "resume is only for action=play.")
+            if self.scene.timeline.is_playing():
+                refuse("TIMELINE_ACTIVE", "The timeline is already playing; pause it explicitly before initializing.")
+            if not self.scene.timeline.is_stopped():
+                return dict(action="initialize", playing=False, paused=True, stopped=False,
+                            time_s=self.scene.timeline.get_current_time(), already_paused=True,
+                            effects="No timeline change; physics readiness still requires a runtime read.")
+            try:
+                await self._timeline_control({**args, "action": "play"})
+                self.scene.target(*timeline_target)
+                if not self.scene.timeline.is_playing():
+                    refuse("TIMELINE_INTERRUPTED", "Timeline changed during initialization; inspect its state.")
+                result = await self._timeline_control({**args, "action": "pause"})
+            except AssetError as exc:
+                # A successful Play is not undone if Pause fails: no hidden retry.
+                raise AssetError(exc.code, str(exc), **{**exc.details,
+                    "effects": "Initialization may have advanced physics or left the timeline playing; inspect state before retrying."}) from exc
+            result.update(action="initialize", already_paused=False,
+                          effects="Timeline played briefly and is now paused; physics may have advanced. Runtime reads establish readiness.")
+            return result
         timeline_was_stopped = self.scene.timeline.is_stopped()
         stop_target_guard = None
         if args.get("action") == "stop":
