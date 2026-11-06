@@ -28,14 +28,15 @@ UR5e twin, `ur5e_dt__quick_start`.
 `sim__quick_start environment=warehouse` (add `robot=nova_carter`, `ros=true` or `play=true` as you like; with no robot it uses `carter_v1`) builds:
 
 - a 24 by 16 m room with 3.5 m walls;
-- six shelving racks (three shelves each) with 90 boxes on them, in three rows with two long aisles (y = -2.5 and 2.5) and a cross aisle at x = 0;
+- six shelving racks (three shelves each) with 90 loads, each box on its own pallet, in three rows with two long aisles (y = -2.5 and 2.5) and a cross aisle at x = 0;
+- three loading docks in the east wall, each with a painted staging bay and two stacks of pallets and cartons, pilasters along the long walls, and a charging station where the robot starts;
 - painted yellow lane lines along the aisles;
 - the robot at the west end of the first aisle, facing east, ready to drive down it.
 
 It is plain USD boxes with static colliders under `/World/Warehouse`, authored in the session layer: nothing is downloaded, so it works offline and
 looks the same every time. The editor's viewport is aimed at the whole room. The result has `environment` (size, racks, aisles, the robot's start).
 Live on Sim 6.2: the Carter started at (-10.5, -2.5) and drove down the aisle to x = -0.1 in six seconds with both wheels commanded at 6 rad/s.
-For a real floor plan, import a Nav2 map instead (`assets__import_path` on a map `.yaml`, see [ASSET-IMPORT.md](ASSET-IMPORT.md#ros-maps)): the Nav2
+To use it with Nav2, make the map of it with `sim__map__occupancy` (`min=[-12.5,-8.5] max=[12.5,8.5] z=[0.08,0.3] clear=[[-10.5,-2.5,0.6]] start=[-9,-2.5]`): a 500 by 339 cell map with the walls, pilasters, racks, dock stacks and charging station occupied (checked live). For a real floor plan, import a Nav2 map instead (`assets__import_path` on a map `.yaml`, see [ASSET-IMPORT.md](ASSET-IMPORT.md#ros-maps)): the Nav2
 `warehouse` map is 30 by 50 m of walls. `ros=true` sets up the robot's ROS 2 topics as for any quick-start robot; that was not run against this room, so check the map and frames before sending Nav2 goals.
 
 The result has the new `session_id` and `stage_id`, the paths, `robot.articulation_root` (joint tools need this prim, not the
