@@ -25,7 +25,7 @@ def setup(tmp_path):
         "ros/pkg/package.xml": "<package><name>pkg</name></package>", "ros/pkg/urdf/robot.urdf.xacro": XACRO, "ros/pkg/urdf/robot_macro.xacro": f'<robot {NS}/>',
         "menagerie/go2/go2.xml": MJCF, "menagerie/go2/go2_mjx.xml": MJCF, "menagerie/go2/assets/base_0.obj": "o", "menagerie/go2/scene.xml": '<mujoco model="s"><include file="go2.xml"/></mujoco>', "menagerie/go2/scene_mjx.xml": '<mujoco model="s"><include file="go2_mjx.xml"/></mujoco>',
         "lerobot/arm/urdf/arm.urdf": URDF, "lerobot/arm/assets/link.stl": "solid",
-        "two/a.urdf": URDF, "two/b.urdf": URDF, "empty/readme.txt": "x", "meshes/duck.glb": "glTF",
+        "xacro_in_urdf/bot.urdf": XACRO, "two/a.urdf": URDF, "two/b.urdf": URDF, "empty/readme.txt": "x", "meshes/duck.glb": "glTF",
     }.items():
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         (root / rel).write_text(text)
@@ -142,3 +142,13 @@ def test_an_unapproved_folder_gets_the_approval_command_not_a_format_complaint(s
     with pytest.raises(AssetError) as caught:
         asset_import.route(broker, dict(source_path=str(outside), prim_path="/World/x"))
     assert caught.value.code == "ROOT_NOT_APPROVED" and "project_assets" in str(caught.value)
+
+
+def test_xacro_kept_in_a_file_named_urdf_is_expanded_not_refused(setup):
+    broker, root = setup
+    kit_tool, params, info = go(broker, root, "xacro_in_urdf/bot.urdf", xacro_args={"n": 3})
+    assert info["format"] == "xacro" and params["format"] == "urdf"
+    filename, manifest = broker.verify(params["snapshot_id"], params["manifest_sha256"], kind="urdf")
+    assert manifest["entry"] == "xacro_in_urdf/bot.generated.urdf" and ET.fromstring(filename.read_text()).find("link[@name='b3']") is not None
+    _, _, plain = go(broker, root, "urdf/r.urdf")
+    assert plain["format"] == "urdf"  # a real URDF stays a URDF

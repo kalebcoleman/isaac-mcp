@@ -23,6 +23,7 @@ def route(broker, params: dict) -> tuple[str, dict, dict]:
     """``(kit_tool, kit_params, info)`` for an ``assets.import_path`` call. *info* says what the host chose."""
     params = dict(params)
     fmt = params.pop("format", None) or "auto"
+    format_was_auto = fmt == "auto"
     xacro_args = params.pop("xacro_args", None)
     sdf_model = params.pop("sdf_model", None)
     mesh_options = {k: params.pop(k) for k in ("scale", "up_axis", "as_collider", "mass") if k in params}
@@ -58,7 +59,7 @@ def route(broker, params: dict) -> tuple[str, dict, dict]:
         if fmt == "auto":
             fmt = picked["format"]
     if fmt == "auto":
-        fmt = asset_formats.format_of(source)
+        fmt = asset_formats.format_of(source)  # (format_was_auto stays true)
         if fmt is None and isinstance(source, str) and os.path.isdir(source):
             # A folder outside every approved root: say how to approve it, instead of that its name is not a format.
             from .project_assets import approval_help
@@ -71,6 +72,16 @@ def route(broker, params: dict) -> tuple[str, dict, dict]:
         info["bundle"] = chosen_from
     if fmt not in _FORMATS_HERE:
         refuse("UNSUPPORTED_FORMAT", f"format {fmt} is not available. {_HELP}")
+    if fmt == "urdf" and format_was_auto:
+        # Some packages (TurtleBot3) keep xacro in a file named .urdf: look at the file, not only its name.
+        try:
+            probe_root, probe_rel = broker.locate(source, kind="urdf")
+            head = broker.read_file(probe_root, probe_rel)[:200_000]
+        except (AssetError, OSError):
+            head = b""
+        if b"xacro:" in head or b"xmlns:xacro" in head:
+            fmt = "xacro"
+            info["format"] = "xacro"
     kind = {"usd": "usd", "urdf": "urdf", "xacro": "xacro", "sdf": "sdf", "mjcf": "mjcf", "mesh": "mesh", "map": "map"}[fmt]
     root_id, relative_path = broker.locate(source, kind=kind)
     known = broker.roots.get(root_id) or broker._pack_roots.get(root_id)

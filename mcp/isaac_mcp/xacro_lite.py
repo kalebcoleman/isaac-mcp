@@ -490,6 +490,8 @@ class Expander:
                     f"{node.attr!r} is not available on {type(owner).__name__[1:-2].lower()} here.", "UNSUPPORTED_XACRO")
             if isinstance(owner, str) and node.attr in _STRING_METHODS:
                 return getattr(owner, node.attr)
+            if isinstance(owner, dict) and node.attr in owner:  # a YAML mapping reads as an object, like xacro's own wrapper
+                return owner[node.attr]
             if isinstance(owner, dict) and node.attr in ("get", "keys", "values", "items"):
                 return getattr(owner, node.attr)
             _fail(f"The attribute {node.attr!r} is not supported in ${{{source[:80]}}}.", "UNSUPPORTED_XACRO")
@@ -598,13 +600,16 @@ class Expander:
         if not name:
             _fail(f"A xacro:macro needs a name (in {current}).")
         params = []
-        for word in (element.get("params") or "").split():
+        # A parameter may hold spaces inside quotes (xyz:='0 0 0'), which a plain split would cut in two.
+        for word in re.findall(r"""(?:[^\s'"]|'[^']*'|"[^"]*")+""", element.get("params") or ""):
             if word.startswith("**"):
-                _fail(f"xacro:macro {name}: ** parameters are not supported.", "UNSUPPORTED_XACRO")
-            if word.startswith("*"):
+                params.append((word[2:], "rest", None))  # takes all the remaining child elements as one block
+            elif word.startswith("*"):
                 params.append((word[1:], "block", None))
             elif ":=" in word:
                 key, _, default = word.partition(":=")
+                if len(default) >= 2 and default[0] == default[-1] and default[0] in "'\"":
+                    default = default[1:-1]
                 params.append((key, "default", default))
             else:
                 params.append((word, "required", None))
@@ -669,6 +674,12 @@ class Expander:
         blocks = [child for child in list(element) if isinstance(child.tag, str)]
         used = set()
         for key, kind, default in params:
+            if kind == "rest":
+                holder = ET.Element("property")  # inserted by xacro:insert_block as its children
+                holder.extend(blocks)
+                blocks = []
+                local.names[key] = ("block", holder)
+                continue
             if kind == "block":
                 if not blocks:
                     _fail(f"xacro:{name} needs a child element for its block parameter *{key} (in {current}).")

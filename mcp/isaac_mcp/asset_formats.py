@@ -38,7 +38,7 @@ def format_of(path) -> str | None:
 def check_path(path, kind) -> None:
     suffix = PurePosixPath(str(path)).suffix.lower()
     if kind == "xacro":
-        if suffix != ".xacro":
+        if suffix not in (".xacro", ".urdf"):  # some packages keep xacro in a file named .urdf
             refuse("UNSUPPORTED_FORMAT", f"Expected a .xacro file, not {path}.")
     elif kind == "sdf":
         if suffix not in (".sdf", ".world"):
@@ -52,7 +52,7 @@ def check_path(path, kind) -> None:
 
 def generated_name(path: str, extra: str = "") -> str:
     folder, _, name = path.rpartition("/")
-    stem = re.sub(r"(\.urdf)?\.(xacro|sdf|world)$", "", name, flags=re.I)
+    stem = re.sub(r"(\.urdf)?\.(xacro|sdf|world)$|\.urdf$", "", name, flags=re.I)
     made = f"{stem}{extra}{GENERATED}"
     return f"{folder}/{made}" if folder else made
 

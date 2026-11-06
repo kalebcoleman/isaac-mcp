@@ -136,7 +136,6 @@ def test_runaway_macros_and_includes_end_with_a_limit_not_a_hang():
 def test_unsupported_features_are_named_not_skipped():
     refused('<xacro:element name="x"/>', "UNSUPPORTED_XACRO")
     refused('<xacro:nosuch/>', "UNSUPPORTED_XACRO")
-    refused('<xacro:macro name="m" params="**rest"/>', "UNSUPPORTED_XACRO")
     refused('<link name="$(arg missing)"/>', "XACRO_ARG")
 
 
@@ -160,3 +159,27 @@ def test_every_missing_argument_is_named_at_once_with_an_example():
     assert caught.value.code == "XACRO_ARG" and caught.value.details["needs_args"] == ["x", "y"]
     assert 'xacro_args={"x": "...", "y": "..."}' in str(caught.value)
     assert ET.fromstring(x.expand("r.urdf.xacro", project({"r.urdf.xacro": robot(body)}), {"x": 1, "y": 2})["urdf"]).find("link").get("name") == "1_2_1"
+
+
+def test_macro_parameters_with_quoted_defaults_that_hold_spaces():
+    body = ('<xacro:macro name="m" params="name xyz:=\'0 0 0\' prefix:=\'\' label:=&quot;a b&quot; *origin">'
+            '<link name="${prefix}${name}" xyz="${xyz}" label="${label}"/></xacro:macro>'
+            '<xacro:m name="x"><origin/></xacro:m><xacro:m name="y" xyz="1 2 3" prefix="p_"><origin/></xacro:m>')
+    links = [(l.get("name"), l.get("xyz"), l.get("label")) for l in one(body).findall("link")]
+    assert links == [("x", "0 0 0", "a b"), ("p_y", "1 2 3", "a b")]
+
+
+def test_a_double_star_parameter_takes_all_the_remaining_elements():
+    body = ('<xacro:macro name="m" params="name **content"><link name="${name}"><xacro:insert_block name="content"/></link></xacro:macro>'
+            '<xacro:m name="x"><visual/><collision/></xacro:m>')
+    link = one(body).find("link")
+    assert [c.tag for c in link] == ["visual", "collision"]
+
+
+def test_yaml_mappings_can_be_read_with_dots_as_xacro_does():
+    files = {"r.urdf.xacro": robot('<xacro:property name="c" value="${xacro.load_yaml(\'c.yaml\')}"/><link name="l" v="${c.origin.rpy[1]}" w="${c[\'origin\'][\'xyz\']}"/>'),
+             "c.yaml": "origin:\n  rpy: [1, 2, 3]\n  xyz: x\n"}
+    link = expand(files).find("link")
+    assert (link.get("v"), link.get("w")) == ("2", "x")
+    with pytest.raises(AssetError):
+        expand({"r.urdf.xacro": robot('<xacro:property name="c" value="${xacro.load_yaml(\'c.yaml\')}"/><link name="l" v="${c.__class__}"/>'), "c.yaml": "a: 1\n"})

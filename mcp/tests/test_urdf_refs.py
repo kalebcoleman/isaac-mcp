@@ -211,7 +211,7 @@ def test_a_bad_package_xml_declares_nothing(tmp_path):
 def test_a_xacro_file_gets_the_exact_guidance(name):
     with pytest.raises(AssetError) as caught:
         urdf_refs.check_urdf_path(name)
-    assert caught.value.code == "XACRO" and "xacro robot.urdf.xacro > robot.urdf" in str(caught.value)
+    assert caught.value.code == "XACRO" and "assets__import_path expands xacro files itself" in str(caught.value)
 
 
 @pytest.mark.parametrize("text", [

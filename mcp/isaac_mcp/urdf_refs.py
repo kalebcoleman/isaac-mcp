@@ -24,8 +24,8 @@ SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache_
 PACKAGE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
 XACRO_HELP = (
-    "Expand it first, once, in your ROS environment: xacro robot.urdf.xacro > robot.urdf, then use robot.urdf. "
-    "This tool never runs xacro, because a xacro file can run code."
+    "assets__import_path expands xacro files itself (format auto; pass xacro_args for its $(arg ...) values) and never runs the "
+    "xacro program, because a xacro file can run code."
 )
 # What a mesh file can name. Other formats are copied, and their own files are not followed.
 TEXT_MESHES = {".dae", ".obj", ".mtl", ".gltf", ".glb"}
