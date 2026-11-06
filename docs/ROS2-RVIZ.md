@@ -194,7 +194,7 @@ Tool `sim__camera__capture`:
 {"path": "/World/TopCamera", "filename": "goal.png"}
 ```
 
-**9. Clean up and save.** `pkill -INT -f '[p]arams_file:=/tmp/isaac_nav2.yaml'` (use the path you gave `nav2_params.py`) stops this Nav2 and not anyone else's; the brackets stop it matching your own shell. A launch backgrounded by a script can ignore SIGINT, and SIGTERM on the launch alone can leave its nodes running, so confirm with `ros2 node list` and stop any left by PID. Then stop the timeline and save a copy. The flag removes this session's render handles from the copy; without it, the save refuses and says so. In the saved file, the drive and LiDAR graphs make their own render products at Play, so `/scan` comes back when you open it with `sim__stage__open`.
+**9. Clean up and save.** `pkill -INT -f '[p]arams_file:=/tmp/isaac_nav2.yaml'` (use the path you gave `nav2_params.py`) stops this Nav2 and not anyone else's; the brackets stop it matching your own shell. If it keeps running (a launch started with `setsid nohup` from a script ignored SIGINT in one run), `kill -TERM` the launch's PID, then its direct children (`pgrep -P <pid>`). A launch backgrounded by a script can ignore SIGINT, and SIGTERM on the launch alone can leave its nodes running, so confirm with `ros2 node list` and stop any left by PID. Then stop the timeline and save a copy. The flag removes this session's render handles from the copy; without it, the save refuses and says so. In the saved file, the drive and LiDAR graphs make their own render products at Play, so `/scan` comes back when you open it with `sim__stage__open`.
 
 Tool `sim__timeline__control`:
 
@@ -216,7 +216,7 @@ Use the robot's `wheels` values from the Quick Start result. The base link and t
 |---|---|---|---|
 | `create3` | `base_link`, 0.12 m up | `base_link` | none |
 | `turtlebot3_burger` | `base_scan`, at its origin | `base_link` | `--yaw-tolerance 3.2` (see below) |
-| `carter_v1`, `nova_carter` | `chassis_link`, **0.6 m up** | `chassis_link` | `--base-frame chassis_link --radius 0.45`, and a `clear` radius of 0.7 in step 4. Both reached the goal on 6.2 (0.2 to 0.26 m away) |
+| `carter_v1`, `nova_carter` | `chassis_link`, **0.6 m up** | `chassis_link` | `--base-frame chassis_link --radius 0.5` (Carter's farthest body corner measured 0.48 m, so 0.45 leaves its rear corners outside), and a `clear` radius of 0.7 in step 4. Both reached the goal on 6.2 (0.2 to 0.26 m away) |
 | `jetbot` | `chassis`, 0.12 m up | `chassis` | `--base-frame chassis --radius 0.12`, `clear` 0.15. Reached the goal on 6.2 (0.23 m) |
 
 Mount the LiDAR clear of the robot's own body: 0.12 m is Create 3's height. Inside Carter's body `/scan` has a publisher and never a message; at 0.3 m it sees the chassis as a ring at 0.45 m; at 0.6 m it's clean. If `/scan` is silent, raise the sensor first. Send the first goal only after `/amcl_pose` is publishing: a goal sent as soon as the action server exists can abort short.
@@ -236,6 +236,7 @@ Each run used `--realtime`, the room above and a goal at (2.2, 0), with ROS 2 Ja
 | 6.2.0 | `turtlebot3_burger`, `--yaw-tolerance 3.2` | 0.2 m/s, 0.196 m/s | `SUCCEEDED` (0.235 m) |
 | 5.1.0 | `turtlebot3_burger`, `--yaw-tolerance 3.2` | 0.2 m/s, 0.19 m/s | `SUCCEEDED` (0.224 m) |
 | 6.2.0 | `carter_v1`, radius 0.45 | 0.5 m/s, 0.5 m/s | not reached. With `clear` 0.3 the map held its own body and planning failed. With 0.7 it planned around the box, then stopped 1.2 m short with `Failed to make progress`, on Nav2's default controller settings. Not tuned further |
+| 6.2.0 | `carter_v1`, radius 0.5, in `sim__quick_start environment=warehouse`, Nav2 Jazzy 1.3.13 (MPPI, default tuning) | not measured | 9 of 9 goals reached between two stations 20 m apart through the cross aisle, one session, 0.07 to 0.23 m from the goal (Nav2's default tolerance is 0.25 m), one recovery. It reverses when the goal is behind it, so return legs took twice as long |
 | 6.2.0, 5.1.0 | `carter_v1`, `nova_carter`, `jetbot` | 0.5, 0.5, 0.2 m/s; measured 0.5, 0.5, 0.21 m/s | not run, except Carter above |
 
 Without `--realtime`, TurtleBot3 reached `SUCCEEDED` on 6.2 and `ABORTED` on 5.1 at the goal position. `franka` loads on both builds; it was not driven. Isaac Sim 6.0 and 6.1 weren't available on the machine used: NVIDIA's files for these names exist on both, and TurtleBot3's 6.1 files are identical to 6.2's, but the runs are still to do. RViz was not opened in these runs.
@@ -485,6 +486,10 @@ WARNING: several nodes publish TF: /_Graph_isaac_mcp_ros2_TFRobotLinks, ..., /ro
 ```
 
 ## Troubleshooting
+
+- **A `ROS_LOCALHOST_ONLY is deprecated` line at every node start on Jazzy** is harmless: `config/ros_dds.env` keeps that setting so Humble and Jazzy clients agree.
+- **`ros2 topic echo --once` on a costmap can return an old sample:** Nav2's costmap publisher is quiet with no subscriber, so keep a subscriber running while you look.
+- **`sim__map__occupancy` writes to a temporary folder** that goes away with the simulator: copy the `.pgm` and `.yaml` out if you want to keep them.
 
 | Symptom | Cause | Fix |
 |---|---|---|

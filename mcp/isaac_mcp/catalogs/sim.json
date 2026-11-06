@@ -80,14 +80,28 @@
       "parameters": {
         "robot": {
           "type": "string",
-          "description": "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from your asset folder, or an absolute path under an approved root. Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, unitree_h1, unitree_g1 (humanoids), turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (this simulator's own assets root). A file found only through a project file's asset_path is refused.",
+          "description": "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.",
           "required": false
         },
         "fixed_base": {
           "type": "boolean",
-          "description": "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.",
-          "required": false,
-          "default": true
+          "description": "Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.",
+          "required": false
+        },
+        "xacro_args": {
+          "type": "object",
+          "description": "With a xacro robot: values for its $(arg name), e.g. {\"ur_type\": \"ur10e\"}.",
+          "required": false
+        },
+        "sdf_model": {
+          "type": "string",
+          "description": "With an SDF that holds several models (a Gazebo world): the model to import.",
+          "required": false
+        },
+        "environment": {
+          "type": "string",
+          "description": "Optional. \"warehouse\": a 24 by 16 m warehouse (racks, aisles, docks) with the robot at the start of an aisle; default robot carter_v1. \"jenga\": a table, a 54-block giant Jenga tower and a Franka in a ready pose; the result names the blocks and a poke target. Plain USD boxes with colliders: nothing downloaded.",
+          "required": false
         },
         "ros": {
           "type": "boolean",
@@ -132,16 +146,43 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from your asset folder, or an absolute path under an approved root. Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, unitree_h1, unitree_g1 (humanoids), turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (this simulator's own assets root). A file found only through a project file's asset_path is refused."
+          "description": "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path."
         },
         {
           "name": "fixed_base",
           "kind": "boolean",
           "enum": null,
           "required": false,
-          "default": true,
-          "has_default": true,
-          "description": "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says."
+          "default": null,
+          "has_default": false,
+          "description": "Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says."
+        },
+        {
+          "name": "xacro_args",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With a xacro robot: values for its $(arg name), e.g. {\"ur_type\": \"ur10e\"}."
+        },
+        {
+          "name": "sdf_model",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With an SDF that holds several models (a Gazebo world): the model to import."
+        },
+        {
+          "name": "environment",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional. \"warehouse\": a 24 by 16 m warehouse (racks, aisles, docks) with the robot at the start of an aisle; default robot carter_v1. \"jenga\": a table, a 54-block giant Jenga tower and a Franka in a ready pose; the result names the blocks and a poke target. Plain USD boxes with colliders: nothing downloaded."
         },
         {
           "name": "ros",
@@ -649,7 +690,7 @@
       "owner_id": "generic-sim"
     },
     "sim.prim.create": {
-      "description": "Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -683,6 +724,31 @@
           "required": false,
           "default": false
         },
+        "collision": {
+          "type": "boolean",
+          "description": "Author a static collider without a rigid body (walls, floors, shelves).",
+          "required": false
+        },
+        "scale": {
+          "type": "array",
+          "description": "Three positive scale factors [x, y, z]: a 1 m Cube with scale [0.2, 6, 1] is a wall. Very flat floors can stop wheels; the result warns.",
+          "required": false
+        },
+        "mass": {
+          "type": "number",
+          "description": "Mass in kilograms (needs rigid=true).",
+          "required": false
+        },
+        "density": {
+          "type": "number",
+          "description": "Density in kg per cubic metre, instead of mass (needs rigid=true).",
+          "required": false
+        },
+        "material": {
+          "type": "string",
+          "description": "Path of a material from sim__material__create, bound as the prim is made; nothing is created if it cannot be bound.",
+          "required": false
+        },
         "position": {
           "type": "array",
           "description": "Three finite coordinates in stage units.",
@@ -709,37 +775,6 @@
           "description": "Pose frame: local or world.",
           "required": false,
           "default": "local"
-        },
-        "collision": {
-          "type": "boolean",
-          "description": "Author static collision without rigid-body dynamics.",
-          "required": false,
-          "default": false
-        },
-        "scale": {
-          "type": "array",
-          "description": "Positive local XYZ scale, 1e-6..1e4.",
-          "required": false,
-          "default": [
-            1,
-            1,
-            1
-          ]
-        },
-        "mass": {
-          "type": "number",
-          "description": "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.",
-          "required": false
-        },
-        "density": {
-          "type": "number",
-          "description": "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.",
-          "required": false
-        },
-        "material": {
-          "type": "string",
-          "description": "Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created.",
-          "required": false
         }
       },
       "fields": [
@@ -798,6 +833,51 @@
           "description": "Author rigid body AND collider on geometry."
         },
         {
+          "name": "collision",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Author a static collider without a rigid body (walls, floors, shelves)."
+        },
+        {
+          "name": "scale",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Three positive scale factors [x, y, z]: a 1 m Cube with scale [0.2, 6, 1] is a wall. Very flat floors can stop wheels; the result warns."
+        },
+        {
+          "name": "mass",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Mass in kilograms (needs rigid=true)."
+        },
+        {
+          "name": "density",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Density in kg per cubic metre, instead of mass (needs rigid=true)."
+        },
+        {
+          "name": "material",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Path of a material from sim__material__create, bound as the prim is made; nothing is created if it cannot be bound."
+        },
+        {
           "name": "position",
           "kind": "array",
           "enum": null,
@@ -832,55 +912,6 @@
           "default": "local",
           "has_default": true,
           "description": "Pose frame: local or world."
-        },
-        {
-          "name": "collision",
-          "kind": "boolean",
-          "enum": null,
-          "required": false,
-          "default": false,
-          "has_default": true,
-          "description": "Author static collision without rigid-body dynamics."
-        },
-        {
-          "name": "scale",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": [
-            1,
-            1,
-            1
-          ],
-          "has_default": true,
-          "description": "Positive local XYZ scale, 1e-6..1e4."
-        },
-        {
-          "name": "mass",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect."
-        },
-        {
-          "name": "density",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect."
-        },
-        {
-          "name": "material",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created."
         }
       ],
       "namespace": "sim",
@@ -930,11 +961,6 @@
           "description": "Pose frame: local or world.",
           "required": false,
           "default": "local"
-        },
-        "scale": {
-          "type": "array",
-          "description": "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.",
-          "required": false
         }
       },
       "fields": [
@@ -1000,15 +1026,6 @@
           "default": "local",
           "has_default": true,
           "description": "Pose frame: local or world."
-        },
-        {
-          "name": "scale",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it."
         }
       ],
       "namespace": "sim",
@@ -1245,6 +1262,11 @@
           "description": "Absolute rigid body path; prim and prim_path are aliases. Supply one.",
           "required": false
         },
+        "paths": {
+          "type": "array",
+          "description": "Instead of path: up to 64 bodies read at one instant, returned as bodies.",
+          "required": false
+        },
         "prim": {
           "type": "string",
           "description": "Alias for path.",
@@ -1291,6 +1313,15 @@
           "description": "Absolute rigid body path; prim and prim_path are aliases. Supply one."
         },
         {
+          "name": "paths",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Instead of path: up to 64 bodies read at one instant, returned as bodies."
+        },
+        {
           "name": "prim",
           "kind": "string",
           "enum": null,
@@ -1322,7 +1353,7 @@
       "owner_id": "generic-sim"
     },
     "sim.timeline.control": {
-      "description": "Explicit play, pause or stop. Play keeps running between your calls, not always at real time; use sim__simulation__step for an exact duration. Stop rewinds physics and awaits pending render/writer and capture-settings completion; its five-second timeout is cooperative. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback until Stop. Never pumps the Kit update loop. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Play, pause, stop or initialize. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline and leaves a paused one alone. Runtime reads establish readiness. Play keeps running between calls; sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -1336,8 +1367,13 @@
         },
         "action": {
           "type": "string",
-          "description": "play, pause, or stop.",
+          "description": "play, pause, stop, or initialize (briefly play then pause; physics may advance).",
           "required": true
+        },
+        "resume": {
+          "type": "boolean",
+          "description": "With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it.",
+          "required": false
         }
       },
       "fields": [
@@ -1366,14 +1402,23 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "play, pause, or stop."
+          "description": "play, pause, stop, or initialize (briefly play then pause; physics may advance)."
+        },
+        {
+          "name": "resume",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it."
         }
       ],
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
     "sim.stage.save": {
-      "description": "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home; or with format=urdf one robot as URDF plus meshes. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -1393,6 +1438,21 @@
         "directory": {
           "type": "string",
           "description": "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.",
+          "required": false
+        },
+        "format": {
+          "type": "string",
+          "description": "usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors).",
+          "required": false,
+          "default": "usd",
+          "enum": [
+            "usd",
+            "urdf"
+          ]
+        },
+        "robot_path": {
+          "type": "string",
+          "description": "With format=urdf: the robot's articulation root or top prim. Default: the stage's default prim.",
           "required": false
         },
         "reset_camera_render_handles": {
@@ -1438,6 +1498,27 @@
           "default": null,
           "has_default": false,
           "description": "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites."
+        },
+        {
+          "name": "format",
+          "kind": "enum",
+          "enum": [
+            "usd",
+            "urdf"
+          ],
+          "required": false,
+          "default": "usd",
+          "has_default": true,
+          "description": "usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors)."
+        },
+        {
+          "name": "robot_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With format=urdf: the robot's articulation root or top prim. Default: the stage's default prim."
         },
         {
           "name": "reset_camera_render_handles",
@@ -2041,30 +2122,6 @@
           "description": "0..1.",
           "required": false,
           "default": 0
-        },
-        "kind": {
-          "type": "string",
-          "description": "pbr or physics.",
-          "required": false,
-          "default": "pbr"
-        },
-        "static_friction": {
-          "type": "number",
-          "description": "Physics material static friction 0..10.",
-          "required": false,
-          "default": 0.5
-        },
-        "dynamic_friction": {
-          "type": "number",
-          "description": "Physics material dynamic friction 0..10.",
-          "required": false,
-          "default": 0.5
-        },
-        "restitution": {
-          "type": "number",
-          "description": "Physics material restitution 0..1.",
-          "required": false,
-          "default": 0
         }
       },
       "fields": [
@@ -2125,42 +2182,6 @@
           "default": 0,
           "has_default": true,
           "description": "0..1."
-        },
-        {
-          "name": "kind",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": "pbr",
-          "has_default": true,
-          "description": "pbr or physics."
-        },
-        {
-          "name": "static_friction",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": 0.5,
-          "has_default": true,
-          "description": "Physics material static friction 0..10."
-        },
-        {
-          "name": "dynamic_friction",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": 0.5,
-          "has_default": true,
-          "description": "Physics material dynamic friction 0..10."
-        },
-        {
-          "name": "restitution",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": 0,
-          "has_default": true,
-          "description": "Physics material restitution 0..1."
         }
       ],
       "namespace": "sim",
@@ -2509,7 +2530,7 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.state": {
-      "description": "While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.",
+      "description": "While playing or paused, read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Stopped gives PHYSICS_NOT_READY: sim__timeline__control action=initialize briefly plays then pauses. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2560,7 +2581,7 @@
       "owner_id": "generic-sim"
     },
     "sim.simulation.step": {
-      "description": "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2720,11 +2741,6 @@
             0.01,
             1000.0
           ]
-        },
-        "target": {
-          "type": "array",
-          "description": "Optional world look-at point; requires frame=world and explicit position. Overrides orientation.",
-          "required": false
         }
       },
       "fields": [
@@ -2847,15 +2863,6 @@
           ],
           "has_default": true,
           "description": "[near, far] clipping distances in metres."
-        },
-        {
-          "name": "target",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Optional world look-at point; requires frame=world and explicit position. Overrides orientation."
         }
       ],
       "namespace": "sim",
@@ -4601,7 +4608,7 @@
       "owner_id": "generic-sim"
     },
     "sim.arm.ik": {
-      "description": "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -4648,6 +4655,16 @@
           "description": "world (default) or base: the frame position and orientation are given in.",
           "required": false,
           "default": "world"
+        },
+        "move": {
+          "type": "boolean",
+          "description": "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.",
+          "required": false
+        },
+        "speed": {
+          "type": "number",
+          "description": "With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended.",
+          "required": false
         },
         "position_tolerance": {
           "type": "number",
@@ -4743,6 +4760,24 @@
           "default": "world",
           "has_default": true,
           "description": "world (default) or base: the frame position and orientation are given in."
+        },
+        {
+          "name": "move",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only."
+        },
+        {
+          "name": "speed",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended."
         },
         {
           "name": "position_tolerance",
@@ -5090,7 +5125,7 @@
       "owner_id": "generic-sim"
     },
     "sim.joints.move": {
-      "description": "Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and every joint's error. A joint held by a contact or a weak drive reports settled=false with its remaining error: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only, like sim__joints__command; never pumps the app loop. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and each joint's error. From stopped, sim__timeline__control action=initialize briefly plays then pauses. A joint held by contact or a weak drive reports settled=false: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only; never pumps the app loop. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -5413,6 +5448,16 @@
           "type": "number",
           "description": "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.",
           "required": false
+        },
+        "impulse": {
+          "type": "array",
+          "description": "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing.",
+          "required": false
+        },
+        "at": {
+          "type": "array",
+          "description": "With impulse: the world point [x, y, z] to push at. Default: the body's centre.",
+          "required": false
         }
       },
       "fields": [
@@ -5503,6 +5548,24 @@
           "default": null,
           "has_default": false,
           "description": "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass."
+        },
+        {
+          "name": "impulse",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing."
+        },
+        {
+          "name": "at",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With impulse: the world point [x, y, z] to push at. Default: the body's centre."
         }
       ],
       "namespace": "sim",

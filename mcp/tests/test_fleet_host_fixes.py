@@ -372,7 +372,7 @@ def test_runs_list_refuses_an_unknown_state(monkeypatch, tmp_path):
 
 
 def test_the_bridge_template_updates_kit_itself_without_advancing_physics():
-    tree = ast.parse((ROOT / "mcp/examples/isaaclab_bridge_launch.py").read_text())
+    tree = ast.parse((ROOT / "mcp/templates/isaaclab_bridge_launch.py").read_text())
     loop = next(n for n in tree.body if isinstance(n, ast.While))
     calls = [ast.unparse(c.value) for c in loop.body if isinstance(c, ast.Expr) and isinstance(c.value, ast.Call)]
     assert calls == ["sim.step()", "_settings.set('/app/player/playSimulations', False)", "simulation_app.update()",
@@ -756,11 +756,11 @@ def _install_probe(monkeypatch, tmp_path, root, output):
 
 
 def test_install_info_reports_what_it_checked(monkeypatch, tmp_path):
-    install = _install_probe(monkeypatch, tmp_path, _lab_2_3(tmp_path), dict(isaaclab="2.3.2", isaacsim="5.1.0"))
+    install = _install_probe(monkeypatch, tmp_path, _lab_2_3(tmp_path), dict(isaaclab="2.2.0", isaacsim="5.0.0"))
     info = install.install_info()
     profile = info["profile"]
     assert profile["layout"] == "per_library" and profile["libraries"] == ["rl_games", "rsl_rl", "sb3", "skrl"]
-    assert profile["isaacsim_version"] == "5.1.0" and "no job was started" in profile["checked"]
+    assert profile["isaacsim_version"] == "5.0.0" and "no job was started" in profile["checked"]
     assert info["tested"] is False, "the checkout looking usable does not make the pair verified"
     install = _install_probe(monkeypatch, tmp_path, tmp_path / "missing", dict(isaaclab="3.0.0", isaacsim="6.2.0.0"))
     info = install.install_info()

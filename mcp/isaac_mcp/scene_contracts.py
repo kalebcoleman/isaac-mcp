@@ -60,16 +60,6 @@ add(
     dict(**TARGET, **ASSET),
 )
 add(
-    "assets.import_usd",
-    "Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes.",
-    dict(
-        **TARGET,
-        **ASSET,
-        prim_path=field("string", "New absolute wrapper path; parent must exist."),
-        **POSE,
-    ),
-)
-add(
     "assets.prepare_workstation",
     "Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox.",
     dict(
@@ -81,14 +71,29 @@ add(
 )
 add(
     "assets.import_path",
-    "Import a trusted local USD by absolute path, under an approved project root or in a pack of the user's asset store. Copies and validates its project dependencies before authoring a reference; source files remain unchanged.",
+    "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. Requires session_id and stage_id.",
     dict(
         **TARGET,
         source_path=field(
-            "string", "Absolute local USD path inside an already approved trusted root."
+            "string", "Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder. Or use root_id with relative_path.", False
         ),
+        root_id=field("string", "Approved root ID from assets__roots, with relative_path, instead of source_path.", False),
+        relative_path=field("string", "Path of the file or folder inside that root.", False),
         prim_path=field("string", "New absolute wrapper prim path; parent must exist."),
-        **POSE,
+        format=field("string", "auto (default): from the file name, or from what the folder holds. Or usd, urdf, xacro, sdf, mjcf, mesh, map to say it.", False, default="auto"),
+        xacro_args=field("object", "For xacro: values for its $(arg name), e.g. {\"ur_type\": \"ur10e\"}. Names the file declares are in the result.", False),
+        sdf_model=field("string", "For an SDF with several models (a Gazebo world): the model to import. Left out, a refusal lists them.", False),
+        fixed_base=field("boolean", "Robot formats: fix the base to the world. Default: true for URDF and xacro; the model's own setting for SDF (a static model); the file's own for MJCF. Pass false for a robot that drives or walks.", False),
+        joint_targets=field("object", "Robot formats: start in a pose. {joint name: radians, or stage units for a sliding joint}, set as drive targets; unknown names are listed in the warnings.", False),
+        scale=field("number", "Mesh files: multiply the size (the file's unit to metres, e.g. 0.001 for millimetres). Default 1: metres.", False),
+        up_axis=field("string", "Mesh files: the file's own up axis, y or z. Default auto: glTF, GLB, FBX and OBJ are Y-up, STL and PLY Z-up; the result is Z-up.", False),
+        as_collider=field("string", "Mesh files: none (default, looks only), convex_hull or convex_decomposition collision shapes.", False),
+        wall_height=field("number", "ROS map (.yaml): wall height in metres. Default 1.", False),
+        mass=field("number", "Mesh files: kilograms; makes it a dynamic rigid body (with a convex hull collider unless you pick one).", False),
+        default_drives=field("boolean", "Author drives that hold a pose. URDF, xacro, SDF: default true (they have none). MJCF: default false; true gives joints with no drive (torque motors) a generic holding drive. Wheels and casters stay free.", False),
+        position=field("array", "Three finite coordinates in stage units. Omit it for a robot format: the robot is then raised out of any ground plane (up to 3 m); a given position is used as is, with a warning if it starts inside the ground. USD files go to the origin.", False),
+        orientation=field("array", "Unit quaternion [w,x,y,z].", False, default=[1, 0, 0, 0]),
+        frame=field("string", "Pose frame: local or world.", False, default="local"),
     ),
 )
 add(
@@ -108,8 +113,11 @@ add(
     "sim.quick_start",
     "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
     dict(
-        robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from your asset folder, or an absolute path under an approved root. Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, unitree_h1, unitree_g1 (humanoids), turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (this simulator's own assets root). A file found only through a project file's asset_path is refused.", False),
-        fixed_base=field("boolean", "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False, default=True),
+        robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.", False),
+        fixed_base=field("boolean", "Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False),
+        xacro_args=field("object", "With a xacro robot: values for its $(arg name), e.g. {\"ur_type\": \"ur10e\"}.", False),
+        sdf_model=field("string", "With an SDF that holds several models (a Gazebo world): the model to import.", False),
+        environment=field("string", "Optional. \"warehouse\": a 24 by 16 m warehouse (racks, aisles, docks) with the robot at the start of an aisle; default robot carter_v1. \"jenga\": a table, a 54-block giant Jenga tower and a Franka in a ready pose; the result names the blocks and a poke target. Plain USD boxes with colliders: nothing downloaded.", False),
         ros=field("boolean", "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.", False, default=False),
         up_axis=field("string", "The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.", False, default="Z", enum=["Z", "Y"]),
         meters_per_unit=field("number", "The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match.", False, default=1.0),
@@ -200,6 +208,11 @@ add(
             False,
             default=False,
         ),
+        collision=field("boolean", "Author a static collider without a rigid body (walls, floors, shelves).", False),
+        scale=field("array", "Three positive scale factors [x, y, z]: a 1 m Cube with scale [0.2, 6, 1] is a wall. Very flat floors can stop wheels; the result warns.", False),
+        mass=field("number", "Mass in kilograms (needs rigid=true).", False),
+        density=field("number", "Density in kg per cubic metre, instead of mass (needs rigid=true).", False),
+        material=field("string", "Path of a material from sim__material__create, bound as the prim is made; nothing is created if it cannot be bound.", False),
         **POSE,
     ),
 )
@@ -242,6 +255,7 @@ add(
     dict(
         **TARGET,
         path=field("string", "Absolute rigid body path; prim and prim_path are aliases. Supply one.", False),
+        paths=field("array", "Instead of path: up to 64 bodies read at one instant, returned as bodies.", False),
         prim=field("string", "Alias for path.", False),
         prim_path=field("string", "Alias for path.", False),
         include_dynamics=field(
@@ -254,16 +268,19 @@ add(
 )
 add(
     "sim.timeline.control",
-    "Explicit play, pause or stop. Play keeps running between your calls, not always at real time; use sim__simulation__step for an exact duration. Stop rewinds physics and awaits pending render/writer and capture-settings completion; its five-second timeout is cooperative. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback until Stop. Never pumps the Kit update loop.",
-    dict(**TARGET, action=field("string", "play, pause, or stop.")),
+    "Play, pause, stop or initialize. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline and leaves a paused one alone. Runtime reads establish readiness. Play keeps running between calls; sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop.",
+    dict(**TARGET, action=field("string", "play, pause, stop, or initialize (briefly play then pause; physics may advance)."),
+         resume=field("boolean", "With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it.", False)),
 )
 add(
     "sim.stage.save",
-    "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses.",
+    "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home; or with format=urdf one robot as URDF plus meshes. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses.",
     dict(
         **TARGET,
         filename=field("string", "New basename, e.g. scene or scene.usda; no other extension, no folders."),
         directory=field("string", "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.", False),
+        format=field("string", "usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors).", False, default="usd", enum=["usd", "urdf"]),
+        robot_path=field("string", "With format=urdf: the robot's articulation root or top prim. Default: the stage's default prim.", False),
         reset_camera_render_handles=field(
             "boolean",
             "Explicitly remove validated session-only ROS camera and LiDAR viewportHandle fields from the copy so native textures can rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
@@ -362,12 +379,12 @@ add(
 )
 add(
     "assets.pack_build",
-    "Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, so the result says importable=false with import_blockers. Files that differ need force=true. Checks the new pack afterwards.",
+    "Copy USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on into a pack in the primary asset folder, keeping layout, and pin them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.",
     dict(
         pack=field("string", "Destination pack name: one folder name."),
         sources=field(
             "array",
-            "USD or URDF files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.",
+            "USD, URDF, MJCF (.xml), SDF, mesh or map (.yaml) files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.",
         ),
         from_pack=field(
             "string",
@@ -505,12 +522,12 @@ add(
 )
 add(
     "sim.joints.state",
-    "While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data.",
+    "While playing or paused, read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Stopped gives PHYSICS_NOT_READY: sim__timeline__control action=initialize briefly plays then pauses. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data.",
     dict(**TARGET, path=field("string", "Exact articulation root path, e.g. /World/UR5e/root_joint: robot.articulation_root from sim__quick_start, or sim__physics__inspect.")),
 )
 add(
     "sim.simulation.step",
-    "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.",
+    "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.",
     dict(
         **TARGET,
         steps=field("integer", "Number of physics steps 1..120."),
@@ -733,7 +750,7 @@ add(
 
 add(
     "sim.arm.ik",
-    "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits.",
+    "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits.",
     dict(
         **TARGET,
         path=field("string", "Articulation root, as for sim__joints__state."),
@@ -743,6 +760,8 @@ add(
         base_link=field("string", "Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).", False),
         offset=field("array", "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.", False),
         frame=field("string", "world (default) or base: the frame position and orientation are given in.", False, default="world"),
+        move=field("boolean", "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.", False),
+        speed=field("number", "With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended.", False),
         position_tolerance=field("number", "Metres of position error that counts as reached.", False, default=0.001),
         orientation_tolerance=field("number", "Radians of orientation error that counts as reached.", False, default=0.01),
     ),
@@ -810,7 +829,7 @@ add(
 )
 add(
     "sim.joints.move",
-    "Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and every joint's error. A joint held by a contact or a weak drive reports settled=false with its remaining error: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only, like sim__joints__command; never pumps the app loop.",
+    "Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and each joint's error. From stopped, sim__timeline__control action=initialize briefly plays then pauses. A joint held by contact or a weak drive reports settled=false: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only; never pumps the app loop.",
     dict(
         **TARGET,
         path=field("string", "Exact initialized articulation root path."),
@@ -887,6 +906,8 @@ add(
         density=field(
             "number", "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.", False
         ),
+        impulse=field("array", "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing.", False),
+        at=field("array", "With impulse: the world point [x, y, z] to push at. Default: the body's centre.", False),
     ),
 )
 add(
@@ -899,86 +920,6 @@ add(
             "boolean", "Also revert recorded edits on descendants.", False, default=True
         ),
     ),
-)
-add(
-    "assets.import_urdf",
-    "Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Check a URDF first with assets__dependencies. Returns authored values, not runtime readiness.",
-    dict(
-        **TARGET,
-        root_id=field("string", "Approved root ID, with relative_path. Or use source_path.", False),
-        relative_path=field("string", "Path of the .urdf file within that root.", False),
-        source_path=field("string", "Absolute path of the .urdf file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.", False),
-        prim_path=field("string", "New wrapper prim path."),
-        fixed_base=field("boolean", "Fix the robot's base to the world. Pass false for a robot that drives or walks; it then falls under gravity.", False, default=True),
-        default_drives=field("boolean", "Author position drives that hold a pose; the URDF format has none. A stiffness in a 6.x conversion is kept, and the 5.x importer's own is replaced. With false you get the importer's own: on 6.x stiffness 0, so targets do nothing until sim__joints__drive sets gains.", False, default=True),
-        position=field("array", "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane. A given position is used as is, with a warning if it starts under the ground.", False),
-        orientation=POSE["orientation"],
-        frame=POSE["frame"],
-    ),
-)
-add(
-    "assets.import_mjcf",
-    "Convert a MuJoCo MJCF model (.xml) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows <include> files, meshes, textures and height fields inside that folder only, and refuses absolute paths, URLs and anything that leaves it. A model with a free joint floats and falls; fixed_base left out keeps what the file says. Source files never change. Z up, metres. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.",
-    dict(
-        **TARGET,
-        root_id=field("string", "Approved root ID, with relative_path. Or use source_path.", False),
-        relative_path=field("string", "Path of the MJCF .xml file within that root.", False),
-        source_path=field("string", "Absolute path of the MJCF .xml file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.", False),
-        prim_path=field("string", "New wrapper prim path."),
-        fixed_base=field("boolean", "true: fix the robot's base to the world. false: make it floating, so it falls under gravity. Leave out to keep what the model says.", False),
-        position=field("array", "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane (at most 3 m). A given position is used as is, with a warning if it starts under the ground.", False),
-        orientation=POSE["orientation"],
-        frame=POSE["frame"],
-    ),
-)
-
-# Extend existing operations rather than proliferating overlapping names.
-REGISTRY["sim.prim.create"]["parameters"]["collision"] = field(
-    "boolean",
-    "Author static collision without rigid-body dynamics.",
-    False,
-    default=False,
-)
-REGISTRY["sim.prim.create"]["parameters"]["scale"] = field(
-    "array", "Positive local XYZ scale, 1e-6..1e4.", False, default=[1, 1, 1]
-)
-REGISTRY["sim.prim.create"]["parameters"]["mass"] = field(
-    "number",
-    "Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.",
-    False,
-)
-REGISTRY["sim.prim.create"]["parameters"]["density"] = field(
-    "number",
-    "Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.",
-    False,
-)
-REGISTRY["sim.prim.set_transform"]["parameters"]["scale"] = field(
-    "array",
-    "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.",
-    False,
-)
-REGISTRY["sim.camera.create"]["parameters"]["target"] = field(
-    "array",
-    "Optional world look-at point; requires frame=world and explicit position. Overrides orientation.",
-    False,
-)
-REGISTRY["sim.material.create"]["parameters"].update(
-    kind=field("string", "pbr or physics.", False, default="pbr"),
-    static_friction=field(
-        "number", "Physics material static friction 0..10.", False, default=0.5
-    ),
-    dynamic_friction=field(
-        "number", "Physics material dynamic friction 0..10.", False, default=0.5
-    ),
-    restitution=field("number", "Physics material restitution 0..1.", False, default=0),
-)
-REGISTRY["sim.prim.create"][
-    "description"
-] += " Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale."
-REGISTRY["sim.prim.create"]["parameters"]["material"] = field(
-    "string",
-    "Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created.",
-    False,
 )
 add(
     "sim.prim.create_many",

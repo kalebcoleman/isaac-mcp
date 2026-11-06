@@ -180,6 +180,9 @@ class Scorer:
         self.finished = False
         self.stopped_by: str | None = None
         self.waited_for_all_envs = True
+        self.ended_early = 0  # episodes ended by a termination, not by running out of time
+        self.term_sums: dict[str, float] = {}
+        self.term_counts: dict[str, int] = {}
 
     def reset_envs(self) -> None:
         """Forget partial episodes: an explicit reset starts new, uncounted ones."""
@@ -207,15 +210,33 @@ class Scorer:
         truncs = _bools(truncated, n)
         success = _success_flags(env, info, n) if any(terms) or any(truncs) else None
         self.steps += 1
+        ended = sum(1 for index in range(n) if terms[index] or truncs[index])
+        if ended:  # Lab refreshes info["log"] only when environments reset; on other steps it still holds the last values
+            self._observe_terms(info, ended)
         for index in range(n):
             self.returns[index] += rewards[index]
             self.lengths[index] += 1
             if terms[index] or truncs[index]:
+                self.ended_early += 1 if terms[index] and not truncs[index] else 0
                 ok = success[index] if success is not None and index < len(success) else None
                 self.completed.append((self.returns[index], self.lengths[index], ok))
                 self.finished_per_env[index] += 1
                 self.returns[index] = 0.0
                 self.lengths[index] = 0
+
+    def _observe_terms(self, info, ended: int = 1) -> None:
+        """Isaac Lab reports each reward and termination term, per episode, in info["log"] as environments reset; a task's own Metrics/ too.
+        Each value is a mean over the *ended* environments, so it counts that many times."""
+        log = info.get("log") if isinstance(info, dict) else None
+        if not isinstance(log, dict):
+            return
+        for key, value in log.items():
+            if not str(key).startswith(("Episode_Reward/", "Episode_Termination/", "Metrics/")):
+                continue
+            numbers = _floats(value, 1)
+            if numbers and math.isfinite(numbers[0]):
+                self.term_sums[key] = self.term_sums.get(key, 0.0) + numbers[0] * ended
+                self.term_counts[key] = self.term_counts.get(key, 0) + ended
 
     def decide(self) -> str | None:
         """The reason the run should stop, or None."""
@@ -255,6 +276,19 @@ class Scorer:
         data["steps"] = self.steps
         if successes:
             data["success_rate"] = sum(1 for value in successes if value) / len(successes)
+        if returns:
+            data["ended_early"] = self.ended_early
+            data["survived_to_time_limit"] = 1.0 - self.ended_early / len(returns)
+        terms = {key: self.term_sums[key] / self.term_counts[key] for key in sorted(self.term_sums)}
+        rewards = {key.split("/", 1)[1]: value for key, value in terms.items() if key.startswith("Episode_Reward/")}
+        endings = {key.split("/", 1)[1]: value for key, value in terms.items() if key.startswith("Episode_Termination/")}
+        metrics = {key.split("/", 1)[1]: value for key, value in terms.items() if key.startswith("Metrics/")}
+        if metrics:
+            data["task_metrics"] = metrics  # the task's own measures of how it went (a success rate, a distance), averaged like the terms
+        if rewards:
+            data["reward_terms"] = rewards
+        if endings:
+            data["termination_terms"] = endings
         data["stopped_by"] = self.stopped_by or "play_exited"
         data["num_envs"] = self.num_envs
         data["num_episodes_requested"] = self.target
@@ -457,12 +491,19 @@ def _patch_app_launcher(hooks: _Hooks) -> None:
 
 def _prepare() -> None:
     """The same pre-imports launcher.py does, so a project's tasks are registered before lookup."""
-    try:
-        import warp as wp
+    from importlib.metadata import PackageNotFoundError, version
 
-        wp.config.enable_backward = False
-    except ImportError:
-        pass
+    try:
+        early = int(version("isaacsim").split(".")[0]) >= 6
+    except (PackageNotFoundError, ValueError):
+        early = True
+    if early:  # on Sim 5.1 the environment's newer pip Warp, imported first, breaks Kit's extensions
+        try:
+            import warp as wp
+
+            wp.config.enable_backward = False
+        except ImportError:
+            pass
     for name in (entry.strip() for entry in os.environ.get("ISAACLAB_TASK_MODULES", "").split(",")):
         if name:
             __import__(name)

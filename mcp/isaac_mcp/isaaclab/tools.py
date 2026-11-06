@@ -2,7 +2,7 @@
 
 These are host-side tools (like the screen tools): they never need a Kit process. Each returns a JSON
 string; failures come back as ``{"error": ...}`` rather than exceptions so a client can read and retry.
-Design: docs/ISAACLAB-TOOLS.md.
+Reference: docs/TOOLS-ISAACLAB.md.
 """
 
 from __future__ import annotations
@@ -37,7 +37,8 @@ _JobId = Annotated[str, Field(description="job_id from isaaclab__train, eval or 
 _RunDir = Annotated[str, Field(description="Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status.")]
 _Headless = Annotated[bool, Field(description="false opens a window. true with extra_args=['--video'] keeps a renderer with no window.")]
 _RlLibrary = Annotated[str | None, Field(description="RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.")]
-_ExtraArgs = Annotated[list[str] | None, Field(description="More command-line arguments for the Isaac Lab script, e.g. ['--video'].")]
+_ExtraArgs = Annotated[list[str] | None, Field(description="More command-line arguments and Hydra overrides for the Isaac Lab script, e.g. ['--video', '--video_length', '400'] or ['env.commands.base_velocity.ranges.lin_vel_x=[0.5,0.5]'].")]
+_Physics = Annotated[str | None, Field(description="physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets fails with it: leave it out.")]
 _Timeout = Annotated[float | None, Field(description="Stop the job after this many seconds. Default: no limit.")]
 _AllowConcurrent = Annotated[bool, Field(description="Start even if another job is running; a 16 GB GPU normally fits one.")]
 _AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
@@ -117,6 +118,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         headless: _Headless = True,
         checkpoint: Annotated[str | None, Field(description="Checkpoint file to resume from, from isaaclab__checkpoints_list.")] = None,
         rl_library: _RlLibrary = None,
+        physics: _Physics = None,
         extra_args: _ExtraArgs = None,
         timeout_s: _Timeout = None,
         allow_concurrent: _AllowConcurrent = False,
@@ -130,7 +132,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _launch(
             _jobs.train,
             task=task, num_envs=num_envs, max_iterations=max_iterations, seed=seed, device=device,
-            headless=headless, checkpoint=checkpoint, rl_library=rl_library, extra_args=extra_args,
+            headless=headless, checkpoint=checkpoint, rl_library=rl_library, physics=physics, extra_args=extra_args,
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
@@ -141,6 +143,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         num_envs: Annotated[int | None, Field(description="Parallel environments. Default: the task's own.")] = None,
         headless: _Headless = True,
         rl_library: _RlLibrary = None,
+        physics: _Physics = None,
         extra_args: _ExtraArgs = None,
         num_episodes: Annotated[int, Field(description="Finished episodes to collect before the run stops itself.")] = 20,
         max_steps: Annotated[int | None, Field(description="Environment-step bound that also ends the run; null removes it.")] = 20000,
@@ -160,7 +163,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _launch(
             _jobs.eval_,
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
-            rl_library=rl_library, extra_args=extra_args, num_episodes=num_episodes, max_steps=max_steps,
+            rl_library=rl_library, physics=physics, extra_args=extra_args, num_episodes=num_episodes, max_steps=max_steps,
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
@@ -171,12 +174,13 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         num_envs: Annotated[int, Field(description="Parallel environments.")] = 1,
         headless: _Headless = False,
         rl_library: _RlLibrary = None,
+        physics: _Physics = None,
         extra_args: _ExtraArgs = None,
         timeout_s: _Timeout = None,
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
     ) -> str:
-        """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel.
+        """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
 
         Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true. Video needs optional
         MoviePy/imageio-ffmpeg in the Lab interpreter.
@@ -184,7 +188,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _launch(
             _jobs.play,
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
-            rl_library=rl_library, extra_args=extra_args, timeout_s=timeout_s,
+            rl_library=rl_library, physics=physics, extra_args=extra_args, timeout_s=timeout_s,
             allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
@@ -232,9 +236,22 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _guard(lambda: _metrics.checkpoints_list(run_dir=run_dir, task=task))
 
     @mcp.tool(name="isaaclab__metrics_summary", annotations=READ_ONLY)
-    def isaaclab_metrics_summary(run_dir: _RunDir, tags: Annotated[list[str] | None, Field(description="Scalar tags to include. Default: all.")] = None) -> str:
-        """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag)."""
-        return _guard(lambda: _metrics.metrics_summary(run_dir, tags=tags))
+    def isaaclab_metrics_summary(
+        run_dir: Annotated[str | None, Field(description="Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status. Or give job_id.")] = None,
+        tags: Annotated[list[str] | None, Field(description="Scalar tags to include. Default: all.")] = None,
+        job_id: Annotated[str | None, Field(description="A job from isaaclab__train, instead of run_dir.")] = None,
+        compare_jobs: Annotated[list[str] | None, Field(description="Several job_ids: returns their final scalars side by side, to compare seeds or settings.")] = None,
+    ) -> str:
+        """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare several jobs' final values side by side."""
+        def summarise() -> dict:
+            if compare_jobs:
+                return _metrics.compare_runs({job: _jobs.runs_status(job).get("run_dir") for job in compare_jobs}, tags=tags)
+            folder = run_dir or (_jobs.runs_status(job_id).get("run_dir") if job_id else None)
+            if not folder:
+                raise ValueError("Give run_dir, job_id or compare_jobs. A job that has not written a run folder yet has no metrics.")
+            return _metrics.metrics_summary(folder, tags=tags)
+
+        return _guard(summarise)
 
     @mcp.tool(name="isaaclab__tensorboard_tail", annotations=READ_ONLY)
     def isaaclab_tensorboard_tail(run_dir: _RunDir, tag: Annotated[str, Field(description="Scalar tag, from isaaclab__metrics_summary.")], last_n: _LastN = 50) -> str:

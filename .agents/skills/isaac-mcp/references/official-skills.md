@@ -44,7 +44,7 @@ repository. If they are not installed, read the `SKILL.md` on GitHub instead.
 | Plan a demo or deliverable | `isaac-sim-workflow`, then `isaac-sim-orchestrator` | `status`, `screenshot` to report progress |
 | Drive a running Sim live | `isaac-sim-remote` (uses Kit's code-editor server on 8226) | Same job through `sim__*` scene tools or `run_python` on the isaac-mcp bridge; use one, not both |
 | Physics bodies, joints, materials | `physics-simulation` | `sim__physics__inspect`, `sim__body__state`, `sim__joints__inspect/state`, `sim__material__*`; `run_python` only for gaps |
-| Robot import and articulations | `urdf-mjcf-to-usd-conversion`, `usd-articulation`, `physx-to-newton-conversion` | `assets__import_urdf` or `assets__import_usd`, then `sim__joints__*` and `sim__body__state` |
+| Robot import and articulations | `urdf-mjcf-to-usd-conversion`, `usd-articulation`, `physx-to-newton-conversion` | `assets__import_path` (URDF, xacro, SDF, MJCF, USD, meshes), then `sim__joints__*` and `sim__body__state` |
 | Scene assembly and transforms | `usd-pipeline`, `usd-composition-architecture`, `spatial-reasoning` | `sim__stage__tree`, `sim__prim__get/find/create/set_transform`; `run_python` only for unsupported edits |
 | Assets will not load | `isaac-sim-assets` | `assets__roots`/`assets__info` for approved projects, `sim__logs__tail`, `run_python` for the asset root setting |
 | Cameras and sensors | `isaac-camera`, `isaac-sim-sensor`, `place-camera-aim-at`, `place-camera-max-coverage` | `sim__camera__create/capture`, `sim__lidar__*`, `screenshot`, `ur5e_dt__start_recording` |

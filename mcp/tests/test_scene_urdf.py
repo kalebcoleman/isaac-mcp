@@ -701,3 +701,23 @@ def test_an_absurd_lowest_point_is_reported_and_the_robot_is_not_moved():
     assert not UsdGeom.Xformable(stage.GetPrimAtPath("/World/R")).GetOrderedXformOps()  # nothing was authored
     stage2 = ground_stage()
     assert place_above_ground(stage2, "/World/R", False, max_lift=3.0)["lifted_by"] == pytest.approx(0.505)  # a real sink still lifts
+
+
+def test_a_continuous_joint_gets_no_holding_stiffness_only_when_its_limits_are_authored_infinite():
+    """A wheel must turn under a velocity command; a joint with no authored limits is not known to be a wheel."""
+    from pxr import Usd, UsdPhysics
+    from sim_tools.urdf import _author_drives, _unlimited
+
+    stage = Usd.Stage.CreateInMemory()
+    wheel = UsdPhysics.RevoluteJoint.Define(stage, "/Robot/wheel")
+    wheel.CreateLowerLimitAttr(float("-inf"))
+    wheel.CreateUpperLimitAttr(float("inf"))
+    hinge = UsdPhysics.RevoluteJoint.Define(stage, "/Robot/hinge")
+    limited = UsdPhysics.RevoluteJoint.Define(stage, "/Robot/limited")
+    limited.CreateLowerLimitAttr(-90.0)
+    limited.CreateUpperLimitAttr(90.0)
+    assert [_unlimited(j.GetPrim()) for j in (wheel, hinge, limited)] == [True, False, False]
+    gains = {n: dict(stiffness=100.0, damping=10.0, linear=False) for n in ("wheel", "hinge", "limited")}
+    authored, _, _ = _author_drives(stage.GetPrimAtPath("/Robot"), gains, False)
+    assert authored["wheel"]["stiffness"] == 0.0 and authored["wheel"]["continuous"] is True and authored["wheel"]["damping"] > 0
+    assert authored["hinge"]["stiffness"] > 0 and authored["limited"]["stiffness"] > 0

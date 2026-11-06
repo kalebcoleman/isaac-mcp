@@ -26,7 +26,8 @@ MAX_BYTES = 256 * 1024**2
 MAX_FILES = 1000
 MAX_ENTRIES = 10000
 MAX_DEPTH = 8
-MAX_SNAPSHOTS = 16
+MAX_SNAPSHOTS = 256  # an import uses two, the folder and its converted copy; an identical folder is reused
+MIN_FREE_BYTES = 2 * 1024**3  # room a new snapshot must leave on the disk that holds staging
 USD = {".usd", ".usda", ".usdc", ".usdz"}
 
 
@@ -464,6 +465,57 @@ class Broker:
             "The path is outside all user-approved project roots and user asset stores." + approval_help(source if isinstance(source, (str, os.PathLike)) else None),
         )
 
+    def locate_folder(self, source_path):
+        """``(root_id, relative folder)`` for an absolute folder inside an approved root, or None when it is not a folder there."""
+        self.require_profile()
+        if not isinstance(source_path, str) or not source_path.startswith("/") or "\\" in source_path or ":" in source_path \
+                or any(ord(c) < 32 for c in source_path) or any(part in ("", ".", "..") for part in source_path.split("/")[1:]):
+            return None
+        source = Path(source_path)
+        for root_id, (root, _) in self.roots.items():
+            try:
+                rel = source.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            rel = "" if rel == "." else rel
+            if rel and not os.path.isdir(source):
+                return None
+            return root_id, rel
+        return None
+
+    def folder_files(self, root_id, folder=""):
+        """Every regular file below *folder* of an approved root, as paths relative to the root (bounded, no symlinks followed)."""
+        fd = self.root_fd(root_id)
+        try:
+            for part in [p for p in folder.split("/") if p]:
+                nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = nxt
+            prefix = folder + "/" if folder else ""
+            skipped: list[str] = []
+            names = []
+            for _, _, name, _ in walk(fd, skipped=skipped):
+                if len(names) >= MAX_ENTRIES:
+                    refuse("LIMIT", "Too many files in that folder; approve and name a smaller one.")
+                names.append(prefix + name)
+            return names
+        finally:
+            os.close(fd)
+
+    def read_file(self, root_id, path):
+        """One file of an approved root, read safely (never following a symlink)."""
+        fd = self.root_fd(root_id)
+        try:
+            parts = [p for p in path.split("/") if p]
+            for part in parts[:-1]:
+                nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = nxt
+            st = os.stat(parts[-1], dir_fd=fd, follow_symlinks=False)
+            return read_regular(fd, parts[-1], st)
+        finally:
+            os.close(fd)
+
     @staticmethod
     def _check_kind(rel, kind):
         if kind == "urdf":
@@ -474,10 +526,18 @@ class Broker:
             from . import mjcf_refs
 
             mjcf_refs.check_mjcf_path(rel)
+        elif kind in ("xacro", "sdf", "map"):
+            from . import asset_formats
+
+            asset_formats.check_path(rel, kind)
+        elif kind == "mesh":
+            from . import mesh_refs
+
+            mesh_refs.check_mesh_path(rel)
         elif Path(rel).suffix.lower() in (".urdf", ".xacro"):
-            refuse("UNSUPPORTED_FORMAT", f"{rel} is a URDF, not a USD: use assets__import_urdf with source_path.")
+            refuse("UNSUPPORTED_FORMAT", f"{rel} is a URDF, not a USD: assets__import_path reads it with source_path (format auto).")
         elif Path(rel).suffix.lower() == ".xml":
-            refuse("UNSUPPORTED_FORMAT", f"{rel} is not a USD. If it is a MuJoCo model, use assets__import_mjcf with source_path.")
+            refuse("UNSUPPORTED_FORMAT", f"{rel} is not a USD. If it is a MuJoCo model, assets__import_path reads it with source_path (format auto).")
         else:
             usd_path(rel)
 
@@ -623,8 +683,21 @@ class Broker:
             refresh="Fresh scan on every call; no fixed robot count or kind claim.",
         )
 
-    def snapshot(self, root_id, path, kind="usd"):
-        if kind == "urdf":
+    def _quota_message(self):
+        return (f"The staging folder {self.staging} holds its limit of {MAX_SNAPSHOTS} private copies of imported folders, so this one "
+                "was not imported. Importing a folder that has not changed still works. To free them, ask the user to stop every "
+                "simulator using them (a scene open on one breaks if its copy goes), then delete what is inside that folder.")
+
+    def snapshot(self, root_id, path, kind="usd", generate=None):
+        """Copy an approved folder to staging. *generate* (xacro and SDF) makes the entry URDF from the copied files:
+        ``generate(path, files, read) -> {"entry": rel, "data": bytes, "info": {...}}``; the generated file is hashed into
+        the manifest like any other, and it becomes the entry."""
+        if kind in ("xacro", "sdf", "map"):
+            from . import asset_formats
+
+            relative(path)
+            asset_formats.check_path(path, kind)
+        elif kind == "urdf":
             from . import urdf_refs
 
             relative(path)
@@ -634,6 +707,11 @@ class Broker:
 
             relative(path)
             mjcf_refs.check_mjcf_path(path)
+        elif kind == "mesh":
+            from . import mesh_refs
+
+            relative(path)
+            mesh_refs.check_mesh_path(path)
         else:
             usd_path(path)
         fd = self.root_fd(root_id)
@@ -650,9 +728,13 @@ class Broker:
                     entry.name for entry in itertools.islice(entries, MAX_SNAPSHOTS + 1)
                 ]
             if len(existing) > MAX_SNAPSHOTS:
+                refuse("QUOTA", self._quota_message())
+            free = shutil.disk_usage(self.staging).free
+            if free < MIN_FREE_BYTES + MAX_BYTES:
                 refuse(
                     "QUOTA",
-                    "Snapshot quota exceeded. Stop consumers before user cleanup of staging.",
+                    f"The disk holding {self.staging} has {free // 1024**2} MiB free, too little for another snapshot. "
+                    "Stop the simulators using them, then clear that folder.",
                 )
             work = Path(tempfile.mkdtemp(prefix=".pending-", dir=self.staging))
             files, total, packages = {}, 0, {}
@@ -676,9 +758,23 @@ class Broker:
                 target.chmod(0o400)
                 files[rel] = hashlib.sha256(data).hexdigest()
             if path not in files:
-                refuse(
-                    "NOT_FOUND", "Selected file is absent from the project snapshot. Check the name with assets__scan."
-                )
+                refuse("NOT_FOUND", f"{path} is not in the approved folder. Check the name with assets__scan.")
+            generated = None
+            if generate is not None:
+                made = generate(path, files, lambda rel: (work / "project" / rel).read_bytes())
+                if len(files) >= MAX_FILES:
+                    refuse("LIMIT", f"The folder holds {len(files)} files, and the converted file would make it more than the limit of {MAX_FILES}. Approve a smaller folder.")
+                if made["entry"] in files:
+                    refuse("INVALID_PATH", f"{made['entry']} is already in the folder; the converted file needs a name of its own.")
+                data = made["data"]
+                target = work / "project" / made["entry"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+                target.chmod(0o400)
+                files[made["entry"]] = hashlib.sha256(data).hexdigest()
+                total += len(data)
+                generated = dict(made["info"], source=path)
+                path = made["entry"]
             manifest = dict(
                 version=1,
                 root_id=root_id,
@@ -687,7 +783,9 @@ class Broker:
                 bytes=total,
                 packages=packages,
             )
-            if kind == "urdf":
+            if generated is not None:
+                manifest["generated"] = generated
+            if kind in ("urdf", "xacro", "sdf"):
                 # A package may be found by the name of this folder, which a snapshot does not keep.
                 known = self.roots.get(root_id) or self._pack_roots.get(root_id)
                 manifest["root_name"] = Path(known[0]).name
@@ -713,10 +811,7 @@ class Broker:
                     self.verify(token, digest, kind=kind)
                     return dict(snapshot_id=token, manifest_sha256=digest, bytes=total)
             if len(existing) >= MAX_SNAPSHOTS:
-                refuse(
-                    "QUOTA",
-                    f"{MAX_SNAPSHOTS} distinct snapshot quota reached. Stop consumers before user cleanup of staging.",
-                )
+                refuse("QUOTA", self._quota_message())
             (work / "manifest.json").write_bytes(raw)
             (work / "manifest.json").chmod(0o400)
             token = uuid.uuid4().hex

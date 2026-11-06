@@ -7,7 +7,7 @@ functions as MCP tools later. It is pure stdlib Python (>=3.10).
 Scripts, libraries and accepted flags come from install.lab_profile, read from the checkout. Isaac Lab 2.3's
 per-library layout uses scripts/reinforcement_learning/<library>/{train,play}.py, a required library chosen by path, and
 --headless when headless without --video. Its scripts declare neither --viz nor --rl_library; left unrefused they would
-reach Hydra after Kit starts. Tiny real jobs passed on 2.3.2 with all four libraries; `tested` stays false for that pair.
+reach Hydra after Kit starts. Real jobs passed on 2.3.2 with all four libraries, and train, resume, eval and play were measured through the tools.
 
 Isaac Lab 3 entry scripts and flags (relative to the resolved ``isaaclab_root``):
   * train:  scripts/reinforcement_learning/train.py
@@ -28,10 +28,13 @@ Jobs are launched with ``shell=False`` and an explicit argv list, with
 
 from __future__ import annotations
 
+import itertools
 import errno
 import json
+import math
 import os
 import re
+import shlex
 import signal
 import subprocess
 import threading
@@ -47,6 +50,7 @@ _EVAL_RUNNER = Path(__file__).with_name("eval_runner.py")
 _TASK_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
 _JOB_ID_RE = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]+$")
 _LIB_RE = re.compile(r"^[a-z0-9_]+$")
+_SPLIT_VALUE_RE = re.compile(r"^(-?[0-9]|[A-Za-z0-9_.:/+])[A-Za-z0-9_.:/+-]*$")  # a bare value after a --flag; no "=" so it is not a Hydra override
 _EXTRA_ARG_RE = re.compile(r"^--[A-Za-z0-9_.-]+(=[^\s;|&$`]*)?$")
 # Isaac Lab 3 takes Hydra overrides (key.sub=value, +key=value, ~key) alongside --flags.
 _HYDRA_ARG_RE = re.compile(r"^(~[A-Za-z0-9_.@/-]+|[+]{0,2}[A-Za-z0-9_.@/-]+=[^\s;|&$`'\"=]*)$")
@@ -102,6 +106,24 @@ def _validate_task(task: str) -> None:
         raise ValueError(f"invalid task id: {task!r}")
 
 
+PHYSICS_PRESETS = {"physx": "physics=isaacsim_physx", "newton": "physics=newton_mjwarp"}  # Lab 3's own "physx" preset picks the optional OvPhysX runtime
+
+
+def _with_physics(physics, root, extras: list[str]) -> list[str]:
+    """The engine a job should use, as Isaac Lab 3's Hydra override. Lab 2.x has PhysX only, so there it needs no argument."""
+    if physics is None:
+        return extras
+    if physics not in PHYSICS_PRESETS:
+        raise ValueError(f"physics must be one of {', '.join(PHYSICS_PRESETS)}.")
+    if any(arg.lstrip("+~").split("=", 1)[0] == "physics" for arg in extras):
+        raise ValueError("Give physics as this option or in extra_args, not both.")
+    if _per_library(root) is not None:
+        if physics == "newton":
+            raise ValueError("This Isaac Lab has PhysX only: its scripts have no Newton engine.")
+        return extras
+    return [*extras, PHYSICS_PRESETS[physics]]
+
+
 def _validate_extra_args(extra_args) -> list[str]:
     if extra_args is None:
         return []
@@ -109,6 +131,9 @@ def _validate_extra_args(extra_args) -> list[str]:
         raise ValueError("extra_args must be a list of strings")
     out = []
     for a in extra_args:
+        if isinstance(a, str) and out and _SPLIT_VALUE_RE.match(a) and "=" not in out[-1] and _EXTRA_ARG_RE.match(out[-1]):
+            out[-1] = f"{out[-1]}={a}"  # --video_length 100 passed as two items means --video_length=100
+            continue
         if not isinstance(a, str) or not (_EXTRA_ARG_RE.match(a) or (not a.startswith("-") and _HYDRA_ARG_RE.match(a))):
             raise ValueError(f"invalid extra_arg: {a!r}: use --flag, --flag=value, or a Hydra override such as key=value, +key=value or ~key")
         out.append(a)
@@ -475,11 +500,25 @@ def _orphaned(job_id: str, data: dict) -> bool:
 EXIT_FILE = "exit_code"
 
 
-def _exit_recording(command: list[str], job_dir: Path) -> list[str]:
+TIMEOUT_FILE = "timed_out"
+
+
+def _exit_recording(command: list[str], job_dir: Path, timeout_s: float | None = None) -> list[str]:
     """Run *command* so its exit code reaches the job folder even if this host is gone by then. The shell stays the group
     leader and outlasts a signal, so while the recorded pid lives the job does: a signalled shell would look like a stopped
-    job while Kit, which takes a while over SIGTERM, was still running. The trap doesn't pass to the command."""
-    script = 'trap : TERM INT HUP; "$@"; code=$?; printf %s "$code" > "$0"; exit "$code"'
+    job while Kit, which takes a while over SIGTERM, was still running. The trap doesn't pass to the command.
+
+    With *timeout_s* the shell also enforces the limit, so a job outlives no limit when the host has gone away: TERM to its
+    group at the limit, KILL 30 s later, and a marker file saying why it ended."""
+    if not timeout_s:
+        script = 'trap : TERM INT HUP; "$@"; code=$?; printf %s "$code" > "$0"; exit "$code"'
+        return ["/bin/sh", "-c", script, str(job_dir / EXIT_FILE), *command]
+    marker = shlex.quote(str(job_dir / TIMEOUT_FILE))
+    limit = max(1, math.ceil(float(timeout_s)))
+    wait = 'n=0; while [ "$n" -lt {} ]; do sleep 1; n=$((n+1)); done'  # one-second sleeps, so killing the guard leaves nothing long behind
+    script = ('trap : TERM INT HUP; '
+              f"( trap '' TERM INT HUP; {wait.format(limit)}; : > {marker}; kill -TERM 0; {wait.format(30)}; kill -KILL 0 ) </dev/null >/dev/null 2>&1 & guard=$!; "
+              '"$@"; code=$?; kill -KILL "$guard" 2>/dev/null; printf %s "$code" > "$0"; exit "$code"')
     return ["/bin/sh", "-c", script, str(job_dir / EXIT_FILE), *command]
 
 
@@ -488,10 +527,18 @@ def _settle_orphan(job_dir: Path, data: dict) -> None:
     try:
         code = int((job_dir / EXIT_FILE).read_text())
     except (OSError, ValueError):
+        if (job_dir / TIMEOUT_FILE).exists():  # the limit fired, and the job ignored TERM until the guard killed it
+            data.update(status="timeout", finished_at=data.get("finished_at") or _now())
+            _write_job(job_dir, data)
+            return
         data.update(status="failed", finished_at=data.get("finished_at") or _now(), note=data.get("note") or "host restarted")
         _write_job(job_dir, data)
         return
     crash = _crashed_with_exit_zero(job_dir) if code == 0 else None
+    if (job_dir / TIMEOUT_FILE).exists():
+        data.update(status="timeout", exit_code=code, finished_at=data.get("finished_at") or _now())
+        _write_job(job_dir, data)
+        return
     data.update(status="succeeded" if code == 0 and not crash else "failed", exit_code=code,
                 finished_at=data.get("finished_at") or _now(), **({"note": crash} if crash else {}))
     _write_job(job_dir, data)
@@ -843,6 +890,8 @@ def _watcher(job_dir: Path, job_id: str, proc: subprocess.Popen, timeout_s: floa
             proc.wait()
         exit_code = proc.returncode
         status = "succeeded" if exit_code == 0 else "failed"
+        if (job_dir / TIMEOUT_FILE).exists():  # the shell guard enforced the limit first
+            status = "timeout"
     except subprocess.TimeoutExpired:
         # kill process group
         try:
@@ -956,7 +1005,7 @@ def _start_job_locked(
         env["ISAACLAB_TASK_MODULES"] = ",".join(task_modules)
         env["PYTHONPATH"] = os.pathsep.join(task_paths + [env["PYTHONPATH"]])
     proc = subprocess.Popen(
-        _exit_recording(full_cmd, jd),
+        _exit_recording(full_cmd, jd, timeout_s),
         stdout=stdout_f,
         stderr=stderr_f,
         stdin=subprocess.DEVNULL,
@@ -1011,6 +1060,7 @@ def train(
     device: str | None = None,
     headless: bool = True,
     checkpoint: Any = None,
+    physics: str | None = None,
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
@@ -1020,7 +1070,7 @@ def train(
     _validate_task(task)
     lib = _validate_library(rl_library)
     ckpt = _validate_checkpoint(checkpoint, root)
-    extras = _validate_extra_args(extra_args)
+    extras = _with_physics(physics, root, _validate_extra_args(extra_args))
     libraries = _per_library(root)
     if libraries is not None:
         lib = _per_library_choice(root, libraries, lib)
@@ -1032,7 +1082,11 @@ def train(
     if seed is not None:
         argv += ["--seed", str(seed)]
     if ckpt is not None:
-        argv += ["--checkpoint", ckpt]
+        if libraries is not None and (lib or _library_from_checkpoint(ckpt, extras)) == "rsl_rl":
+            # Lab 2.x rsl_rl: --checkpoint is a file name matched inside --load_run, and nothing loads without --resume.
+            argv += ["--resume", "--load_run", Path(ckpt).parent.name, "--checkpoint", Path(ckpt).name]
+        else:
+            argv += ["--checkpoint", ckpt]
     if device is not None:
         argv += ["--device", str(device)]
     argv += _visualizer_args(headless, extras) if libraries is None else _per_library_display_args(root, lib, "train", headless, extras)
@@ -1054,6 +1108,7 @@ def eval_(
     checkpoint: Any,
     num_envs: int | None = None,
     headless: bool = True,
+    physics: str | None = None,
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
@@ -1070,7 +1125,7 @@ def eval_(
     num_episodes = _positive_int(num_episodes, "num_episodes")
     if max_steps is not None:
         max_steps = _positive_int(max_steps, "max_steps")
-    extras = _validate_extra_args(extra_args)
+    extras = _with_physics(physics, root, _validate_extra_args(extra_args))
     libraries = _per_library(root)
     inferred = None if lib else _library_from_checkpoint(ckpt, extras, libraries or _RL_LIBRARIES)
     lib = lib or inferred
@@ -1100,6 +1155,7 @@ def play(
     checkpoint: Any,
     num_envs: int = 1,
     headless: bool = False,
+    physics: str | None = None,
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
@@ -1111,7 +1167,7 @@ def play(
     ckpt = _validate_checkpoint(checkpoint, root)
     if ckpt is None:
         raise ValueError("checkpoint is required for play")
-    extras = _validate_extra_args(extra_args)
+    extras = _with_physics(physics, root, _validate_extra_args(extra_args))
     libraries = _per_library(root)
     inferred = None if lib else _library_from_checkpoint(ckpt, extras, libraries or _RL_LIBRARIES)
     lib = lib or inferred
@@ -1200,6 +1256,8 @@ def runs_status(job_id: str) -> dict[str, Any]:
     failure = {}
     if data.get("status") == "failed":
         failure = {"last_stderr_lines": _tail_file(Path(data.get("log_dir", jd)) / "stderr.log", 20)}
+        if any("ovphysx" in str(line).lower() for line in failure["last_stderr_lines"]):
+            failure["hint"] = "Isaac Lab's physx preset picks the optional OvPhysX runtime, which this environment lacks. Use the option physics=physx on this tool, which selects isaacsim_physx."
     if data.get("status") == "failed" and data.get("note"):
         failure["note"] = data["note"]
     out = {
@@ -1217,11 +1275,47 @@ def runs_status(job_id: str) -> dict[str, Any]:
     if data.get("timeout_s") is not None:
         out["timeout_s"] = data["timeout_s"]
     out.update(_log_facts(Path(data.get("log_dir", jd)) / "stdout.log"))
+    videos = _video_paths(run_dir, Path(data.get("log_dir", jd)) / "stdout.log")
+    if videos:
+        out["video_paths"] = videos
+    if out.get("physics") is None and data.get("library"):
+        out["physics"] = "physx"  # a Lab with one script folder per library (2.x) announces no engine: it only has PhysX
     if data.get("kind") == "eval":
         result = _eval_result(jd)
         if result is not None:
             out["eval_result"] = result
+            if result.get("error") and not result.get("episodes") and out["state"] == "succeeded":
+                out["state"] = "failed"  # the process exited cleanly, but the run scored nothing
     return out
+
+
+_VIDEO_LOG_TAIL = 4 * 1024**2
+_VIDEO_FILES = 5000
+_VIDEO_LOG_LINE = re.compile(r"(?:video_folder|output_dir): (\S+)|\[VideoRecorder\] Wrote \d+ frames to (\S+\.mp4)")
+
+
+def _video_paths(run_dir: Any, log_path: Path | None = None, limit: int = 8) -> list[str]:
+    """Videos Lab wrote for this run, newest first: under <run_dir>/videos, or the folder its log names (a play job's own
+    folder is not where Lab's run lives). Lab 2.3 logs video_folder; Lab 3 logs output_dir and "[VideoRecorder] Wrote N frames to <file>"."""
+    folders = [Path(run_dir, "videos")] if run_dir else []
+    try:
+        if log_path is not None:
+            with log_path.open("rb") as log:  # a training log can be huge, and this runs on every runs_status
+                log.seek(max(0, log_path.stat().st_size - _VIDEO_LOG_TAIL))
+                tail = log.read().decode(errors="replace")
+            named = [Path(m.group(1)) if m.group(1) else Path(m.group(2)).parent for m in _VIDEO_LOG_LINE.finditer(tail)]
+            folders += [folder for folder in dict.fromkeys(reversed(named)) if "videos" in folder.parts][:8]  # latest first; never search a folder a log line merely names
+    except OSError:
+        pass
+    found: dict[str, float] = {}
+    for folder in folders:
+        try:
+            if folder.is_dir():
+                for path in itertools.islice(folder.rglob("*.mp4"), _VIDEO_FILES):  # enough for every clip a run writes, so the newest is among them
+                    found[str(path)] = path.stat().st_mtime
+        except OSError:
+            continue
+    return sorted(found, key=found.get, reverse=True)[:limit]
 
 
 def runs_tail(job_id: str, stream: str = "stdout", lines: int = 100) -> dict[str, Any]:

@@ -98,7 +98,7 @@ conservative destructive and open-world annotations. To enable the separate simu
   starting Kit.
 - `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only bridge tools (discovered live or listed from the catalog).
   `ISAAC_MCP_LOCAL_TOOLS` filters only the host's local tools. These compose with
-  `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 72 generic `sim`/`assets`
+  `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 69 generic `sim`/`assets`
   tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
   and optional managed-session tools are unaffected. With standard local groups, opting out
   gives 54 tools, offline or with a bridge. These are visibility controls, not isolation.
@@ -194,7 +194,7 @@ even if a later target check rejects a click. Do not share the desktop concurren
 dedicated session for stronger isolation.
 Enabling the tools grants the client the ability to trigger any action available in the targeted app, including file
 deletion or network operations. Tool annotations are advisory, and X11 window IDs/PIDs are not authentication.
-See the [desktop control plan](plans/DESKTOP-CONTROL.md) for remaining work and validation.
+See the [working checklist](CHECKLIST.md#tool-surface-and-reliability) for remaining work and validation.
 
 ### Optional simulator sessions
 

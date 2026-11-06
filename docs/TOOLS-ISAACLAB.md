@@ -3,7 +3,6 @@
 This document covers the 12 host-side tools registered by `mcp/isaac_mcp/isaaclab/tools.py`
 (`install.py`, `jobs.py`, `metrics.py`). It is the implementation reference; every argument is
 listed in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#isaac-lab).
-For design history and the original job-guard write-up, see [ISAACLAB-TOOLS.md](ISAACLAB-TOOLS.md).
 
 ## Naming: host-side tools
 
@@ -50,8 +49,8 @@ runs it. An invalid setting is an error, not a fallback. That check catches mist
 faked environment, so name only a project you trust. A model with `put_file` can write any file there. Hide `put_file`
 (`ISAAC_MCP_BUILTINS=0`) if that matters. Explicit `ISAACLAB_PYTHON` or `ISAACLAB_ROOT` win, and then
 `isaaclab__install_info` reports `project_setting_ignored`; remove them from that server's configuration to use the
-project's. It reports `source`, and `tested: false` for a Lab version not in the tested list below, such as 2.3.2 on
-Sim 5.1: the version read works, but jobs on it are untested. A pip-only Lab has no `scripts/reinforcement_learning`, so
+project's. It reports `source`, and `tested: false` for a pair other than the two this project claims (Lab 3.0.0 with Sim 6.2, Lab 2.3.2 with Sim 5.1):
+the version read works, but jobs on it are untested. A pip-only Lab has no `scripts/reinforcement_learning`, so
 `isaaclab__train`, `eval` and `play` refuse with "Isaac Lab checkout not found" until `isaaclab_root` points at a checkout.
 
 The resolver does not scan the home directory or assume a project-specific path. If no standard
@@ -119,6 +118,13 @@ renderer for ordinary jobs; adding `--video` requires rendering even headlessly.
 `play` defaults to `headless=false` and opens a window. No actual training run is
 required or performed by this documentation.
 
+On a 16 GB RTX 5080, one short headless Cartpole training job for Lab 2.3.2 / Sim 5.1 and one for
+Lab 3.0 / Sim 6.2 ran concurrently with PhysX, 16 environments and one iteration each; both exited
+successfully and wrote checkpoints. Their Lab roots and output directories were separate. The second
+job used `allow_concurrent=true` against the shared job-state directory. This is a small smoke test,
+not a memory reservation or a guarantee for longer training, larger environments, rendering or a
+simultaneously running Kit bridge. Keep the default guards unless you have checked the actual workload.
+
 ### Environment variables (summary)
 
 | Variable | Used by | Effect |
@@ -156,7 +162,7 @@ required or performed by this documentation.
 or starting Kit: `lab_version`, `isaaclab_version`, `isaacsim_version`, `layout`, `libraries` and, per script, its declared
 `flags` (including a helper beside it and AppLauncher's when that source is present). `flags: null` means unknown, not none.
 Isaac Lab 3's scripts hand over to a CLI elsewhere, so theirs are unknown. `tested` is a separate statement: whether that Lab and Sim pair
-was verified with real jobs, which so far is only Isaac Lab 3.0.0 on Isaac Sim 6.2.
+was verified with real jobs; the tested pairs are Lab 3.0.0 on Sim 6.2 and Lab 2.3.2 on Sim 5.1.
 
 | `layout` | Scripts | Library | Display |
 |---|---|---|---|
@@ -168,14 +174,13 @@ was verified with real jobs, which so far is only Isaac Lab 3.0.0 on Isaac Sim 6
 before anything starts, naming the flag and the alternative; otherwise a per-library script would pass it to Hydra after Kit started. With unknown flags nothing is refused.
 `HEADLESS` is always set in the child.
 
-**Isaac Lab 2.3.2 with Sim 5.1 is experimental, and `tested` stays false.** Tiny Cartpole jobs ran through these tools on one desktop with `rsl_rl`, `skrl`, `sb3` and
-`rl_games`, including checkpoints, metrics, eval and play; the profile's flags matched each script's real `--help`. That shows the launcher works, not long training or other tasks.
+**Isaac Lab 2.3.2 with Sim 5.1 is one of the two claimed pairs, and `tested` is true.** `Isaac-Cartpole-v0` went through train, resume, compare, eval and play with `rsl_rl` through these tools; tiny jobs ran with `skrl`, `sb3` and `rl_games` too, including checkpoints, metrics, eval and play, and the profile's flags matched each script's real `--help`. That shows the tools work on this pair, not long training or other tasks. Pass `rl_library`: its scripts are per library.
 `rl_games` needs `minibatch_size` to divide `num_envs` times the task's `horizon_length` from its rl_games config, which varies by task (24 for `Isaac-Reach-UR10`; not the log's `seq_length`). A failure is a bare `AssertionError` on `batch_size % minibatch_size`. Measured on `Isaac-Reach-UR10`: `minibatch_size=64` or `192` at 16 environments, and `1536` at 64. `sb3` saves `model.zip`, which counts as a checkpoint only under an `sb3` path. The task's default can be larger than a small run's whole batch (24576 for `Isaac-Reach-Franka-v0`, against 64 environments times 24 steps), so pass the override. `rl_games` also saves a checkpoint only every `save_frequency` epochs (100 by default) and `save_best_after` (200), so a short run leaves nothing to evaluate unless you pass `agent.params.config.save_frequency=20` and `agent.params.config.save_best_after=10`; `rsl_rl` always saves at the end.
 
 `isaaclab__envs_list` can't list tasks on this pair: importing `isaaclab_tasks` needs `pxr`, which exists only once Kit has started. It
 reports `isaac_tasks_unavailable` and lists the ids it can read from the checkout's source, marked `source: "scanned"`. `train` and `play` work with those.
 
-A job records its own exit code in its folder, so one that finishes after the host that started it has gone still reports `succeeded` or `failed` correctly. `failed` with `note: "host restarted"` now means it left no code: it was killed, or predates this. `timeout_s` is enforced by the host that started the job and, if that has gone, by the next `runs_status` or `runs_list`; `runs_status` echoes it as `timeout_s` when one was set.
+A job records its own exit code in its folder, so one that finishes after the host that started it has gone still reports `succeeded` or `failed` correctly. `failed` with `note: "host restarted"` now means it left no code: it was killed, or predates this. `timeout_s` is enforced by the job itself, in the shell that starts it, so it holds with no host running; `runs_status` echoes it as `timeout_s` when one was set, and a job stopped by it says so.
 
 **A crash can exit 0.** Kit's shutdown can hide an uncaught exception: seen on Lab 2.3.2 with an unknown task. A job that exits 0 with a traceback at the end of stderr reports `failed` with a note.
 One exception: a `train` job whose run folder already has a checkpoint still reports `succeeded`, so check its log and iteration count if it stopped early.
@@ -231,8 +236,9 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `headless` | boolean | no | `true` | No window. Normally `--viz none`; `--video` selects Kit with child-only `HEADLESS=1`. `false` selects Kit with `HEADLESS=0`. |
   | `checkpoint` | string | no | `null` | Path to resume from (must be under allowed roots). |
   | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. Before launching, the tool runs `isaaclab__install_info`'s `rl_libraries` check in the same interpreter and refuses a library that is not importable there, naming the installed ones. If that check cannot run, the launch is not blocked. |
+  | `physics` | string | no | `null` | `physx` or `newton`. Default: the task's own, often Newton on Lab 3. On Lab 3 it selects `physics=isaacsim_physx` or `physics=newton_mjwarp`; Lab 3's own `physics=physx` picks the optional OvPhysX runtime, which fails if it is not installed. Lab 2.x is PhysX only. A task with no engine presets fails with `did not match a selectable preset`: leave it out. |
   | `extra_args` | array[string] | no | `null` | Validated flags/Hydra overrides. |
-  | `timeout_s` | number | no | `null` | The host that started the job kills its process group after this many seconds. If that host has gone, the job runs on until the next `runs_status` or `runs_list`, and `runs_status` echoes it. |
+  | `timeout_s` | number | no | `null` | The job's own watchdog enforces this limit, even after the host exits; `runs_status` echoes it. |
   | `allow_concurrent` | boolean | no | `false` | Override the job-vs-job guard. |
   | `allow_concurrent_gpu` | boolean | no | `false` | Override the Kit-bridge (GPU) guard. |
 - Returns on success: `{job_id, log_dir, command}`. A guard refusal includes `error` and `hint`, along with `running_job_id`/`running_pid` (job guard) or `kit_bridges` (Kit guard). On no install: `{"error": "no Isaac Lab install found", "hint": ...}`.
@@ -249,6 +255,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `num_envs` | integer | no | `null` | |
   | `headless` | boolean | no | `true` | |
   | `rl_library` | string | no | `null` | |
+  | `physics` | string | no | `null` | As for `isaaclab__train`. |
   | `extra_args` | array[string] | no | `null` | |
   | `num_episodes` | integer | no | `20` | Finished episodes to collect. Must be at least 1. |
   | `max_steps` | integer | no | `20000` | Environment-step bound that also ends the run; `null` removes it. |
@@ -313,6 +320,7 @@ verified; an unscoreable script shows up as `episodes: 0` / no score, not a numb
   | `num_envs` | integer | no | `1` | |
   | `headless` | boolean | no | `false` | Defaults to a window (`--viz kit`). |
   | `rl_library` | string | no | `null` | |
+  | `physics` | string | no | `null` | As for `isaaclab__train`. |
   | `extra_args` | array[string] | no | `null` | |
   | `timeout_s` | number | no | `null` | |
   | `allow_concurrent` | boolean | no | `false` | |
@@ -476,6 +484,39 @@ Example play call shape (illustrative):
 - Re-check with `isaaclab__runs_list` / `isaaclab__runs_status`. Cancelled jobs release the
   job-vs-job guard.
 
+### 6. Your own task
+
+A task is a Python package the tools import before Lab looks up its id. In the MCP server's environment,
+set `ISAACLAB_TASK_PATH` to the folder containing the task package and `ISAACLAB_TASK_MODULES` to its module
+name. Keep the package's `__init__.py` free of Isaac Lab imports because it is imported before Kit starts.
+Task-specific environments, rewards and training code belong in the project using the MCP, not in this
+repository. Check a new task with a scripted action before training; evaluate completed episodes separately
+from training metrics and record the task configuration and seed.
+
+### 7. Choose what a walking policy does
+
+A trained velocity policy takes its command from the task, set through Hydra in `extra_args` for `eval` and `play`. On Lab 3.0.0 `ang_vel_z` is ignored while `heading_command` is on, so set the heading, or the robot turns to a random one:
+
+```
+physics=physx extra_args=["env.commands.base_velocity.rel_standing_envs=0.0",
+  "env.commands.base_velocity.ranges.lin_vel_x=[0.7,0.7]", "env.commands.base_velocity.ranges.lin_vel_y=[0.0,0.0]", "env.commands.base_velocity.ranges.heading=[0.0,0.0]"]
+```
+
+Measured on `Isaac-Velocity-Flat-G1`, PhysX, 64 episodes: 98.4% reached the time limit with `track_lin_vel_xy_exp` 0.91, against 95.3% and 0.89 for the training commands.
+
+### 8. A video of a play run, and its camera
+
+`isaaclab__play` with `headless=true` and `extra_args=["--video", "--video_length", "400"]` writes an MP4; `runs_status` lists them newest first in `video_paths`. It needs `moviepy<2`, `decorator<5` and `imageio-ffmpeg` in the Lab interpreter, and a job refuses if they are missing. Aim the camera at world coordinates with `env.sim.default_visualizer_cfg.eye=[x,y,z]` and `env.sim.default_visualizer_cfg.lookat=[x,y,z]`, on a task that sets `default_visualizer_cfg` (on one that does not, the job fails with `'NoneType' object has no attribute 'eye'`). With `num_envs=1` the environment sits at the origin.
+
+### 9. Walking on PhysX and on Newton
+
+Measured on `Isaac-Velocity-Flat-G1`, Lab 3.0.0, one run each, so this is not a statistical comparison.
+
+| Engine | 1500 iterations | Final episode length | Eval return | Falls in eval |
+|---|---|---|---|---|
+| PhysX (`physics=physx`, 1024 environments) | 762 s | 990 of 1000 | 33.8 over 64 episodes | 3 of 64 |
+| Newton MJWarp (the default) | 8.6 min | 948 of 1000 | 27.25 over 16 episodes | about 7% |
+
 ## Concurrency guards
 
 `isaaclab__train`, `isaaclab__eval` and `isaaclab__play` apply two independent guards
@@ -552,13 +593,10 @@ the launch proceeds as before.
 
 See the [compatibility matrix](COMPATIBILITY.md) for simulator and Isaac Lab version pairings and the scope of each test.
 
-The later [self-contained Lab reproduction](REPRODUCIBILITY.md#self-contained-lab-3-reproduction)
-at exact MCP `c2ceb7f` / official Lab `e3f7d9f` exercised all 12 tools with 114 retained
-calls (111 workflow plus three cleanup) and 16 assertions. Separate mode/video and cleanup
-records preserve their own counts. It used Lab 3.0 / Sim 6.2 / Newton MJWarp without an
-inherited `.pth`, but retains two `fsspec`/`urllib3` metadata conflicts. The guide links exact
-profile/lock/script inputs and distinguishes measured sync from an unexecuted locked replay.
-It is not generic Sim Newton qualification or a clean-machine/full-installer claim.
+A self-contained Lab 3.0 / Sim 6.2 Newton MJWarp test used no inherited `.pth`, but
+retained `fsspec` and `urllib3` package-metadata conflicts. It does not qualify generic
+Sim Newton behavior or a clean-machine/full-installer setup. See
+[reproducibility](REPRODUCIBILITY.md) for recording an environment.
 
 Historical verification includes:
 

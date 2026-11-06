@@ -797,7 +797,10 @@ def _dispatch(canonical: str, params: Dict[str, Any],
             return blocked
 
     try:
+        if canonical == "sim.quick_start" and _quick_start_wants_import(params.get("robot"), state):
+            return _quick_start_with_import(params, state)
         active = state or _DEFAULT_STATE
+        kit_canonical, routed_info = canonical, None
         if canonical.startswith("assets."):
             from .project_assets import Broker, AssetError
             if not hasattr(active, "asset_broker"):
@@ -819,7 +822,7 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                         return json.dumps(dict(status="error", code=e.code, message=str(e), **e.details))
                     except ValueError as e:  # an invalid pack name or project file
                         return json.dumps(dict(status="error", code=getattr(e, "code", "INVALID_CONFIG"), message=str(e)))
-                if canonical in ("assets.info", "assets.import_usd", "assets.import_urdf", "assets.import_mjcf", "assets.prepare_workstation", "assets.import_path"):
+                if canonical in ("assets.info", "assets.prepare_workstation", "assets.import_path"):
                     # Verify destination identity BEFORE reading/copying project files.
                     info = active.get_client().call("sim.stage.info")
                     if info.get("session_id") != params.get("session_id") or info.get("stage_id") != params.get("stage_id"):
@@ -827,20 +830,18 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                                          current_target={k: info.get(k) for k in ("session_id", "stage_id", "pid", "source", "default_prim", "meters_per_unit", "up_axis")})
                     if not broker.staging or str(broker.staging) != info.get("staging"):
                         raise AssetError("NO_SHARED_STAGING", "Host and Kit need the same user-approved staging mount/config. Remote upload is disabled. The user can create it with the approval helper in docs/TOOLS-SCENE.md, then restart both.")
-                    if canonical in ("assets.import_urdf", "assets.import_mjcf"):
-                        params = dict(params)
-                        source = params.pop("source_path", None)
-                        file_kind = "mjcf" if canonical == "assets.import_mjcf" else "urdf"
-                        if (source is None) == (params.get("root_id") is None or params.get("relative_path") is None):
-                            raise AssetError("INVALID_VALUE", "Give source_path, or root_id with relative_path; not both and not neither.")
-                        root_id, relative_path = (params["root_id"], params["relative_path"]) if source is None else broker.locate(source, kind=file_kind)
-                    elif canonical in ("assets.prepare_workstation", "assets.import_path"):
+                    if canonical == "assets.import_path":
+                        from . import asset_import  # one entry for every format: the host picks and converts
+                        kit_canonical, params, routed_info = asset_import.route(broker, params)
+                        root_id = None
+                    elif canonical == "assets.prepare_workstation":
                         params = dict(params)
                         root_id, relative_path = broker.locate(params.pop("source_path"))
                     else:
                         root_id, relative_path = params["root_id"], params["relative_path"]
-                    snapshot = broker.snapshot(root_id, relative_path, kind={"assets.import_urdf": "urdf", "assets.import_mjcf": "mjcf"}.get(canonical, "usd"))
-                    params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
+                    if root_id is not None:  # import_path was snapshotted by the router
+                        snapshot = broker.snapshot(root_id, relative_path, kind="usd")
+                        params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e,"code","FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
         if canonical == "sim.quick_start" and _quick_start_needs_host(params.get("robot")):
@@ -862,7 +863,9 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                 params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e, "code", "FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
-        result = active.get_client().call(canonical, params)
+        result = active.get_client().call(kit_canonical, params)
+        if routed_info and isinstance(result, dict):
+            result = {**result, "import": routed_info}
         if canonical == "status" and isinstance(result, dict):
             result = {**result, "host": _host_identity(result.get("extension", {}))}
         return json.dumps(result, indent=2, default=repr)
@@ -882,6 +885,102 @@ def _dispatch(canonical: str, params: Dict[str, Any],
         if _needs_bridge_guidance(e) and host_catalog.is_catalog_tool(canonical):
             return _catalog_error(canonical, e, state) + host
         return f"Error: {e}{host}"
+
+
+def _quick_start_wants_import(robot, state=None) -> bool:
+    """A robot given as an absolute path to a format only assets__import_path reads (MJCF, xacro, SDF, a mesh) or as a folder.
+    Some packages (TurtleBot3) keep xacro in a file named .urdf, which the import reads and Kit's plain URDF path refuses."""
+    text = os.path.expanduser(str(robot or ""))
+    if not os.path.isabs(text):
+        return False
+    from . import asset_formats
+
+    kind = asset_formats.format_of(text)
+    if os.path.isdir(text) or kind in ("mjcf", "xacro", "sdf", "mesh", "map"):
+        return True
+    if kind == "urdf":
+        # Do not inspect arbitrary host paths here. Resolve through the same approved-root
+        # broker as import_path; its read refuses symlinks and non-regular files.
+        from .project_assets import AssetError, Broker
+        active = state or _DEFAULT_STATE
+        if not hasattr(active, "asset_broker"):
+            active.asset_broker = Broker()
+        try:
+            root_id, relative_path = active.asset_broker.locate(text, kind="urdf")
+            head = active.asset_broker.read_file(root_id, relative_path)[:200_000]
+        except (AssetError, OSError):
+            return False  # The ordinary route returns the approval/filesystem error.
+        return b"xacro:" in head or b"xmlns:xacro" in head
+    return False
+
+
+_IMPORT_OPTIONS = ("fixed_base", "position", "orientation", "xacro_args", "sdf_model", "default_drives", "scale", "as_collider", "mass", "wall_height")
+
+
+def _quick_start_with_import(params: Dict[str, Any], state) -> str:
+    """One call: a scene, then the robot or prop imported into it by assets__import_path (so every format works the same way).
+    Play and ROS come after the import, which refuses a running timeline; an environment gets this robot, not its default one."""
+    import re
+
+    robot = os.path.expanduser(str(params["robot"]))
+    environment = params.get("environment")
+    base = {k: v for k, v in params.items() if k not in ("robot", "play", "ros", *_IMPORT_OPTIONS)}
+    if environment:
+        base["no_default_robot"] = True
+    built = _dispatch("sim.quick_start", base, state)
+    try:
+        scene = json.loads(built)
+    except ValueError:
+        return built
+    if not isinstance(scene, dict) or "session_id" not in scene:
+        return json.dumps(scene) if not isinstance(scene, str) else scene
+    ids = dict(session_id=scene["session_id"], stage_id=scene["stage_id"])
+    stem = os.path.basename(robot.rstrip("/")).split(".")[0] or "robot"
+    name = re.sub(r"[^A-Za-z0-9_]", "_", stem)
+    name = name if re.match(r"[A-Za-z_]", name) else f"r_{name}"
+    prim = f"/World/{name}"
+    carry = {k: v for k, v in params.items() if k in _IMPORT_OPTIONS and v is not None}
+    imported = _dispatch("assets.import_path", dict(ids, source_path=robot, prim_path=prim, **carry), state)
+    try:
+        imported = json.loads(imported)
+    except ValueError:
+        return imported
+    if not isinstance(imported, dict) or imported.get("status") != "ok":
+        if not isinstance(imported, dict):
+            return json.dumps(imported)
+        # Not a success with a note: the file is not in the scene.
+        return json.dumps({**imported, **ids, "scene_built": True, "message": f"The scene was built, but this file was not imported into it: {imported.get('message')}"},
+                          indent=2, default=repr)
+    root = imported.get("articulation_root")
+    result = {**scene, "imported": imported,
+              "note": "The scene was built, then the file was imported with assets__import_path. `imported` is that call's whole result."}
+    if root or "dynamic" in imported:  # a robot or a prop, not a floor plan
+        result["robot"] = dict(prim=prim, articulation_root=root, articulation_roots=imported.get("articulation_roots", []), base=imported.get("base"))
+    start = (scene.get("environment") or {}).get("robot_start") or (scene.get("environment") or {}).get("robot_base")
+    if start and "robot" in result and params.get("position") is None:
+        lifted = (imported.get("placement") or {}).get("lifted_by") or 0.0
+        moved = _dispatch("sim.prim.set_transform", dict(ids, path=prim, position=[start[0], start[1], start[2] + lifted]), state)
+        if '"status": "ok"' not in str(moved) and '"status":"ok"' not in str(moved):
+            result["robot"]["placement_note"] = f"It could not be moved to the environment's start: {str(moved)[:300]}"
+    if params.get("ros") and "robot" in result:
+        wired = _dispatch("sim.ros2.tf_setup", dict(ids, robot=prim, **({"base": "mobile", "world_frame": ""} if imported.get("base") == "floating" else {})), state)
+        try:
+            result["ros"] = json.loads(wired)
+        except ValueError:
+            result["ros"] = dict(status="error", message=str(wired)[:600])
+    elif params.get("ros"):
+        result["ros"] = dict(status="error", message="This file is not a robot, so there is nothing to publish.")
+    if params.get("play"):
+        played = _dispatch("sim.timeline.control", dict(ids, action="play"), state)
+        try:
+            play_result = json.loads(played)
+            result["playing"] = play_result.get("status") == "ok"
+            result["stopped"] = not result["playing"]
+            if not result["playing"]:
+                result["play_error"] = play_result
+        except (ValueError, AttributeError):
+            result["play_error"] = str(played)[:300]
+    return json.dumps(result, indent=2, default=repr)
 
 
 def _quick_start_needs_host(robot) -> bool:

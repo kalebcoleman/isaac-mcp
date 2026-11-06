@@ -238,7 +238,8 @@ Run a checkpoint as a job and score it. Returns its job_id; when the job ends, i
 - `num_envs` (int | None, default `None`): Parallel environments. Default: the task's own.
 - `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.
-- `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `physics` (str | None, default `None`): physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets fails with it: leave it out.
+- `extra_args` (list[str] | None, default `None`): More command-line arguments and Hydra overrides for the Isaac Lab script, e.g. ['--video', '--video_length', '400'] or ['env.commands.base_velocity.ranges.lin_vel_x=[0.5,0.5]'].
 - `num_episodes` (int, default `20`): Finished episodes to collect before the run stops itself.
 - `max_steps` (int | None, default `20000`): Environment-step bound that also ends the run; null removes it.
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
@@ -253,21 +254,24 @@ No arguments.
 
 ### `isaaclab__metrics_summary`
 
-Summarise TensorBoard scalars of a run (last, min, max, step, count per tag).
+Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare several jobs' final values side by side.
 
-- `run_dir` (str, required): Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status.
+- `run_dir` (str | None, default `None`): Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status. Or give job_id.
 - `tags` (list[str] | None, default `None`): Scalar tags to include. Default: all.
+- `job_id` (str | None, default `None`): A job from isaaclab__train, instead of run_dir.
+- `compare_jobs` (list[str] | None, default `None`): Several job_ids: returns their final scalars side by side, to compare seeds or settings.
 
 ### `isaaclab__play`
 
-Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel.
+Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
 
 - `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
 - `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
 - `num_envs` (int, default `1`): Parallel environments.
 - `headless` (bool, default `False`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.
-- `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `physics` (str | None, default `None`): physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets fails with it: leave it out.
+- `extra_args` (list[str] | None, default `None`): More command-line arguments and Hydra overrides for the Isaac Lab script, e.g. ['--video', '--video_length', '400'] or ['env.commands.base_velocity.ranges.lin_vel_x=[0.5,0.5]'].
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
@@ -319,7 +323,8 @@ Start a training job and return its job_id immediately; follow it with isaaclab_
 - `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `checkpoint` (str | None, default `None`): Checkpoint file to resume from, from isaaclab__checkpoints_list.
 - `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.
-- `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `physics` (str | None, default `None`): physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets fails with it: leave it out.
+- `extra_args` (list[str] | None, default `None`): More command-line arguments and Hydra overrides for the Isaac Lab script, e.g. ['--video', '--video_length', '400'] or ['env.commands.base_velocity.ranges.lin_vel_x=[0.5,0.5]'].
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
@@ -392,7 +397,7 @@ Forward kinematics: where a link (the hand) would be for given joint values, fro
 
 ### `sim__arm__ik`
 
-Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.
+Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -403,6 +408,8 @@ Inverse kinematics for any robot with revolute or prismatic joints, read from it
 - `base_link` (string, optional): Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).
 - `offset` (array, optional): Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.
 - `frame` (string, default `"world"`): world (default) or base: the frame position and orientation are given in.
+- `move` (boolean, optional): Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.
+- `speed` (number, optional): With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended.
 - `position_tolerance` (number, default `0.001`): Metres of position error that counts as reached.
 - `orientation_tolerance` (number, default `0.01`): Radians of orientation error that counts as reached.
 
@@ -413,6 +420,7 @@ Read initialized rigid-body world pose on selected PhysX or qualified Newton bac
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, optional): Absolute rigid body path; prim and prim_path are aliases. Supply one.
+- `paths` (array, optional): Instead of path: up to 64 bodies read at one instant, returned as bodies.
 - `prim` (string, optional): Alias for path.
 - `prim_path` (string, optional): Alias for path.
 - `include_dynamics` (boolean, default `false`): Include measured world COM linear/angular velocity and runtime mass, including kg conversion.
@@ -444,7 +452,6 @@ Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path
 - `focal_length` (number, optional): Focal length in mm (0.1..1000); default USD 50.
 - `horizontal_aperture` (number, optional): Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height.
 - `clipping_range` (array, default `[0.01, 1000.0]`): [near, far] clipping distances in metres.
-- `target` (array, optional): Optional world look-at point; requires frame=world and explicit position. Overrides orientation.
 
 ### `sim__camera__list`
 
@@ -565,7 +572,7 @@ Inspect bounded authored joint limits/drives of an articulation, reporting USD d
 
 ### `sim__joints__move`
 
-Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and every joint's error. A joint held by a contact or a weak drive reports settled=false with its remaining error: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only, like sim__joints__command; never pumps the app loop. Requires session_id and stage_id from sim__stage__info.
+Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and each joint's error. From stopped, sim__timeline__control action=initialize briefly plays then pauses. A joint held by contact or a weak drive reports settled=false: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only; never pumps the app loop. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -577,7 +584,7 @@ Step a PAUSED, initialized simulation until named joint targets are within toler
 
 ### `sim__joints__state`
 
-While playing or paused (stopped gives PHYSICS_NOT_READY), read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.
+While playing or paused, read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Stopped gives PHYSICS_NOT_READY: sim__timeline__control action=initialize briefly plays then pauses. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -703,10 +710,6 @@ Create a UsdPreviewSurface or physics material with finite numeric parameters. N
 - `color` (array, default `[0.5, 0.5, 0.5]`): RGB 0..1.
 - `roughness` (number, default `0.5`): 0..1.
 - `metallic` (number, default `0`): 0..1.
-- `kind` (string, default `"pbr"`): pbr or physics.
-- `static_friction` (number, default `0.5`): Physics material static friction 0..10.
-- `dynamic_friction` (number, default `0.5`): Physics material dynamic friction 0..10.
-- `restitution` (number, default `0`): Physics material restitution 0..1.
 
 ### `sim__physics__apply`
 
@@ -721,6 +724,8 @@ Add or remove a collider, rigid body and kinematic state, or set mass / density,
 - `kinematic` (boolean, optional): Kinematic flag (physics:kinematicEnabled); needs a rigid body on this prim.
 - `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density.
 - `density` (number, optional): Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.
+- `impulse` (array, optional): A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing.
+- `at` (array, optional): With impulse: the world point [x, y, z] to push at. Default: the body's centre.
 
 ### `sim__physics__configure`
 
@@ -780,7 +785,7 @@ Clone a pack-created simple leaf primitive into a new path, preserving session-l
 
 ### `sim__prim__create`
 
-Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Also supports Cylinder, Capsule and Cone; size is diameter/height before optional scale. Requires session_id and stage_id from sim__stage__info.
+Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -788,14 +793,14 @@ Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in 
 - `kind` (string, required): Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene.
 - `size` (number, default `1`): Positive cube edge, sphere/cylinder/capsule/cone diameter or height, or Plane width and length.
 - `rigid` (boolean, default `false`): Author rigid body AND collider on geometry.
+- `collision` (boolean, optional): Author a static collider without a rigid body (walls, floors, shelves).
+- `scale` (array, optional): Three positive scale factors [x, y, z]: a 1 m Cube with scale [0.2, 6, 1] is a wall. Very flat floors can stop wheels; the result warns.
+- `mass` (number, optional): Mass in kilograms (needs rigid=true).
+- `density` (number, optional): Density in kg per cubic metre, instead of mass (needs rigid=true).
+- `material` (string, optional): Path of a material from sim__material__create, bound as the prim is made; nothing is created if it cannot be bound.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
-- `collision` (boolean, default `false`): Author static collision without rigid-body dynamics.
-- `scale` (array, default `[1, 1, 1]`): Positive local XYZ scale, 1e-6..1e4.
-- `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density. Give rigid=true for a runtime effect.
-- `density` (number, optional): Rigid-body density in kg/m^3; the geometry's volume sets the mass. Refused together with mass. Give rigid=true for a runtime effect.
-- `material` (string, optional): Optional path of a material made with sim__material__create, bound in the same call; if it cannot be bound, nothing is created.
 
 ### `sim__prim__create_many`
 
@@ -874,14 +879,16 @@ Set a static local or world pose on any Xformable prim in the session layer, and
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
-- `scale` (array, optional): Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.
 
 ### `sim__quick_start`
 
 One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.
 
-- `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from your asset folder, or an absolute path under an approved root. Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, unitree_h1, unitree_g1 (humanoids), turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (this simulator's own assets root). A file found only through a project file's asset_path is refused.
-- `fixed_base` (boolean, default `true`): With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
+- `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.
+- `fixed_base` (boolean, optional): Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
+- `xacro_args` (object, optional): With a xacro robot: values for its $(arg name), e.g. {"ur_type": "ur10e"}.
+- `sdf_model` (string, optional): With an SDF that holds several models (a Gazebo world): the model to import.
+- `environment` (string, optional): Optional. "warehouse": a 24 by 16 m warehouse (racks, aisles, docks) with the robot at the start of an aisle; default robot carter_v1. "jenga": a table, a 54-block giant Jenga tower and a Franka in a ready pose; the result names the blocks and a poke target. Plain USD boxes with colliders: nothing downloaded.
 - `ros` (boolean, default `false`): With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.
 - `up_axis` (Z|Y, default `"Z"`): The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.
 - `meters_per_unit` (number, default `1.0`): The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match.
@@ -908,7 +915,7 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 
 ### `sim__simulation__step`
 
-Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, sim__timeline__control action=play and then action=pause. No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.
+Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -941,12 +948,14 @@ Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's out
 
 ### `sim__stage__save`
 
-Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info.
+Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home; or with format=urdf one robot as URDF plus meshes. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `filename` (string, required): New basename, e.g. scene or scene.usda; no other extension, no folders.
 - `directory` (string, optional): Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.
+- `format` (usd|urdf, default `"usd"`): usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors).
+- `robot_path` (string, optional): With format=urdf: the robot's articulation root or top prim. Default: the stage's default prim.
 - `reset_camera_render_handles` (boolean, default `false`): Explicitly remove validated session-only ROS camera and LiDAR viewportHandle fields from the copy so native textures can rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.
 
 ### `sim__stage__tree`
@@ -962,11 +971,12 @@ Bounded stage hierarchy including inactive prims. Text is untrusted data. Requir
 
 ### `sim__timeline__control`
 
-Explicit play, pause or stop. Play keeps running between your calls, not always at real time; use sim__simulation__step for an exact duration. Stop rewinds physics and awaits pending render/writer and capture-settings completion; its five-second timeout is cooperative. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback until Stop. Never pumps the Kit update loop. Requires session_id and stage_id from sim__stage__info.
+Play, pause, stop or initialize. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline and leaves a paused one alone. Runtime reads establish readiness. Play keeps running between calls; sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `action` (string, required): play, pause, or stop.
+- `action` (string, required): play, pause, stop, or initialize (briefly play then pause; physics may advance).
+- `resume` (boolean, optional): With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it.
 
 ### `sim__ui__act`
 
@@ -1008,7 +1018,7 @@ Point the active viewport camera, e.g. before a screenshot. path alone frames a 
 
 ## Assets (`assets__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 15 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 12 tools.
 
 ### `assets__dependencies`
 
@@ -1016,59 +1026,28 @@ Compute dependency closures for files under an approved root or a user asset sto
 
 - `paths` (array, required): Absolute USD or URDF file paths, 1 to 64.
 
-### `assets__import_mjcf`
-
-Convert a MuJoCo MJCF model (.xml) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows <include> files, meshes, textures and height fields inside that folder only, and refuses absolute paths, URLs and anything that leaves it. A model with a free joint floats and falls; fixed_base left out keeps what the file says. Source files never change. Z up, metres. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `root_id` (string, optional): Approved root ID, with relative_path. Or use source_path.
-- `relative_path` (string, optional): Path of the MJCF .xml file within that root.
-- `source_path` (string, optional): Absolute path of the MJCF .xml file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.
-- `prim_path` (string, required): New wrapper prim path.
-- `fixed_base` (boolean, optional): true: fix the robot's base to the world. false: make it floating, so it falls under gravity. Leave out to keep what the model says.
-- `position` (array, optional): Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane (at most 3 m). A given position is used as is, with a warning if it starts under the ground.
-- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
-- `frame` (string, default `"local"`): Pose frame: local or world.
-
 ### `assets__import_path`
 
-Import a trusted local USD by absolute path, under an approved project root or in a pack of the user's asset store. Copies and validates its project dependencies before authoring a reference; source files remain unchanged. Requires session_id and stage_id from sim__stage__info.
+The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. Requires session_id and stage_id. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `source_path` (string, required): Absolute local USD path inside an already approved trusted root.
+- `source_path` (string, optional): Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder. Or use root_id with relative_path.
+- `root_id` (string, optional): Approved root ID from assets__roots, with relative_path, instead of source_path.
+- `relative_path` (string, optional): Path of the file or folder inside that root.
 - `prim_path` (string, required): New absolute wrapper prim path; parent must exist.
-- `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
-- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
-- `frame` (string, default `"local"`): Pose frame: local or world.
-
-### `assets__import_urdf`
-
-Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves package:// meshes inside that folder only and reports what it mapped. Gives joints with no gains drives that hold a pose, lifts a robot out of a ground plane, and warns about unusable mass or inertia. Source files never change. Z up, metres. Refuses xacro, DTDs, URLs, paths leaving the folder and missing meshes. Check a URDF first with assets__dependencies. Returns authored values, not runtime readiness. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `root_id` (string, optional): Approved root ID, with relative_path. Or use source_path.
-- `relative_path` (string, optional): Path of the .urdf file within that root.
-- `source_path` (string, optional): Absolute path of the .urdf file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.
-- `prim_path` (string, required): New wrapper prim path.
-- `fixed_base` (boolean, default `true`): Fix the robot's base to the world. Pass false for a robot that drives or walks; it then falls under gravity.
-- `default_drives` (boolean, default `true`): Author position drives that hold a pose; the URDF format has none. A stiffness in a 6.x conversion is kept, and the 5.x importer's own is replaced. With false you get the importer's own: on 6.x stiffness 0, so targets do nothing until sim__joints__drive sets gains.
-- `position` (array, optional): Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane. A given position is used as is, with a warning if it starts under the ground.
-- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
-- `frame` (string, default `"local"`): Pose frame: local or world.
-
-### `assets__import_usd`
-
-Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `root_id` (string, required): Approved trusted project root ID.
-- `relative_path` (string, required): Relative path of the USD file within that root.
-- `prim_path` (string, required): New absolute wrapper path; parent must exist.
-- `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
+- `format` (string, default `"auto"`): auto (default): from the file name, or from what the folder holds. Or usd, urdf, xacro, sdf, mjcf, mesh, map to say it.
+- `xacro_args` (object, optional): For xacro: values for its $(arg name), e.g. {"ur_type": "ur10e"}. Names the file declares are in the result.
+- `sdf_model` (string, optional): For an SDF with several models (a Gazebo world): the model to import. Left out, a refusal lists them.
+- `fixed_base` (boolean, optional): Robot formats: fix the base to the world. Default: true for URDF and xacro; the model's own setting for SDF (a static model); the file's own for MJCF. Pass false for a robot that drives or walks.
+- `joint_targets` (object, optional): Robot formats: start in a pose. {joint name: radians, or stage units for a sliding joint}, set as drive targets; unknown names are listed in the warnings.
+- `scale` (number, optional): Mesh files: multiply the size (the file's unit to metres, e.g. 0.001 for millimetres). Default 1: metres.
+- `up_axis` (string, optional): Mesh files: the file's own up axis, y or z. Default auto: glTF, GLB, FBX and OBJ are Y-up, STL and PLY Z-up; the result is Z-up.
+- `as_collider` (string, optional): Mesh files: none (default, looks only), convex_hull or convex_decomposition collision shapes.
+- `wall_height` (number, optional): ROS map (.yaml): wall height in metres. Default 1.
+- `mass` (number, optional): Mesh files: kilograms; makes it a dynamic rigid body (with a convex hull collider unless you pick one).
+- `default_drives` (boolean, optional): Author drives that hold a pose. URDF, xacro, SDF: default true (they have none). MJCF: default false; true gives joints with no drive (torque motors) a generic holding drive. Wheels and casters stay free.
+- `position` (array, optional): Three finite coordinates in stage units. Omit it for a robot format: the robot is then raised out of any ground plane (up to 3 m); a given position is used as is, with a warning if it starts inside the ground. USD files go to the origin.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
 
@@ -1095,10 +1074,10 @@ Create a pack in the primary asset folder, or copy a folder's asset files into i
 
 ### `assets__pack_build`
 
-Copy USD or URDF files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. A URDF brings its meshes, their textures and any package.xml it needs. Sources must be under an approved root or a user asset store; nothing outside is copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, so the result says importable=false with import_blockers. Files that differ need force=true. Checks the new pack afterwards.
+Copy USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on into a pack in the primary asset folder, keeping layout, and pin them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.
 
 - `pack` (string, required): Destination pack name: one folder name.
-- `sources` (array, required): USD or URDF files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.
+- `sources` (array, required): USD, URDF, MJCF (.xml), SDF, mesh or map (.yaml) files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.
 - `from_pack` (string, optional): Pack that source names and logical references such as robot/ur5e.usd come from.
 - `layout_root` (string, optional): Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for.
 - `origin` (string, optional): Where these files came from, one line (for example a repository URL and commit). Recorded in the pack's isaac-mcp-pack.json and listed by assets__packs, so you can see later what a pack used.

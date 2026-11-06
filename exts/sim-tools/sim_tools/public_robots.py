@@ -26,7 +26,7 @@ NVIDIA_ROBOTS = {
     "franka": dict(prim="Franka", paths=[ROBOTS + "FrankaRobotics/FrankaPanda/franka.usd"]),
     "turtlebot3_burger": dict(prim="TurtleBot3", paths=[_TB3 + "tb3_burger_processed.usda", _TB3 + "turtlebot3_burger.usd"],
                               wheels=_wheels("wheel_left_joint", "wheel_right_joint", 0.033, 0.16, "base_link")),
-    "carter_v1": dict(prim="Carter", paths=[ROBOTS + "NVIDIA/Carter/carter_v1.usd"],
+    "carter_v1": dict(prim="Carter", paths=[ROBOTS + "NVIDIA/Carter/carter_v1.usd"], spawn_height=0.25,  # its origin is at axle height
                       wheels=_wheels("left_wheel", "right_wheel", 0.24, 0.54, "chassis_link")),
     "nova_carter": dict(prim="NovaCarter", paths=[ROBOTS + "NVIDIA/NovaCarter/nova_carter.usd"],
                         wheels=_wheels("joint_wheel_left", "joint_wheel_right", 0.14, 0.413, "chassis_link")),
@@ -90,7 +90,7 @@ async def locate(name, root, stat, offline=False):
             if await stat(url):
                 report = dict(asset=path, source="nvidia_assets_root", location=url)
                 return dict(name=entry["prim"], uri=url, assets=[report], wheels=entry.get("wheels"),
-                            lift_to_ground=bool(entry.get("lift_to_ground")))
+                            lift_to_ground=bool(entry.get("lift_to_ground")), spawn_height=entry.get("spawn_height"))
         except (OSError, asyncio.TimeoutError) as exc:  # unreachable is not the same as absent
             failed = f"{type(exc).__name__}: {str(exc)[:120]}"
     if failed:

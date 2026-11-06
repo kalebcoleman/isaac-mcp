@@ -202,6 +202,18 @@ def frame_eye(center, radius, forward, focal_length, horizontal_aperture, aspect
     return [c - f / n * d for c, f in zip(center, forward)], d
 
 
+def view_up(eye, target, up):
+    """The up vector to look with: the stage's, or a sideways one when the view runs along it (a straight-down map view)."""
+    d = [t - e for e, t in zip(eye, target)]
+    length = math.sqrt(sum(c * c for c in d))
+    if length < 1e-6:
+        return list(up)
+    cross = (d[1] * up[2] - d[2] * up[1], d[2] * up[0] - d[0] * up[2], d[0] * up[1] - d[1] * up[0])
+    if math.sqrt(sum(c * c for c in cross)) >= 1e-6 * length:
+        return list(up)
+    return [0.0, 1.0, 0.0] if abs(up[2]) > 0.5 else [0.0, 0.0, -1.0]  # Z-up: image up is +Y; Y-up: image up is -Z
+
+
 def look_at_valid(eye, target, up):
     if not (_finite(eye, 3) and _finite(target, 3)):
         raise PlacementError("INVALID_POSE", "eye and target must be three finite world coordinates.")

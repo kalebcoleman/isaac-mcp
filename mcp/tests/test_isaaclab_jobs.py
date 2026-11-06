@@ -614,3 +614,89 @@ def test_a_physx_banner_is_reported_as_physx_and_a_step_size_line_is_not_an_engi
     assert jobs.runs_status("20261105-120002-Cartpole")["physics"] == "physx"
     _job_with_log("20261105-120003-Cartpole", "\tPhysics step-size     : 0.005\n")
     assert "physics" not in jobs.runs_status("20261105-120003-Cartpole")
+
+
+def test_the_job_shell_enforces_timeout_s_without_a_host(tmp_path):
+    import subprocess
+    import time
+
+    command = jobs._exit_recording(["sleep", "30"], tmp_path, timeout_s=1)
+    started = time.monotonic()
+    proc = subprocess.Popen(command, start_new_session=True)
+    assert proc.wait(timeout=15) != 0 and time.monotonic() - started < 10
+    assert (tmp_path / jobs.TIMEOUT_FILE).exists() and (tmp_path / jobs.EXIT_FILE).exists()
+    data = dict(status="running", started_at=time.time(), pid=proc.pid)
+    jobs._write_job(tmp_path, data)
+    jobs._settle_orphan(tmp_path, data)
+    assert jobs._read_job(tmp_path)["status"] == "timeout"
+
+
+def test_a_job_that_finishes_in_time_leaves_no_guard_and_no_marker(tmp_path):
+    import subprocess
+    import time
+
+    proc = subprocess.Popen(jobs._exit_recording(["sh", "-c", "exit 3"], tmp_path, timeout_s=60), start_new_session=True)
+    assert proc.wait(timeout=10) == 3
+    assert not (tmp_path / jobs.TIMEOUT_FILE).exists() and (tmp_path / jobs.EXIT_FILE).read_text() == "3"
+    time.sleep(1.5)  # the guard's last one-second sleep
+    assert subprocess.run(["pgrep", "-g", str(proc.pid)], capture_output=True).stdout == b""
+
+
+def test_a_flag_and_its_value_as_two_items_become_one():
+    assert jobs._validate_extra_args(["--video", "--video_length", "100"]) == ["--video", "--video_length=100"]
+    assert jobs._validate_extra_args(["--video_length=100", "env.scene.x=1"]) == ["--video_length=100", "env.scene.x=1"]
+    with pytest.raises(ValueError):
+        jobs._validate_extra_args(["--flag", "a;b"])
+    with pytest.raises(ValueError):
+        jobs._validate_extra_args(["bare"])
+
+
+def test_video_paths_reads_lab_3s_log_lines(tmp_path):
+    folder = tmp_path / "logs" / "videos" / "play"
+    folder.mkdir(parents=True)
+    (folder / "clip_model_1499_0000.mp4").write_bytes(b"x")
+    log = tmp_path / "stdout.log"
+    log.write_text(f"[INFO]: [VideoRecorder] Wrote 400 frames to {folder}/clip_model_1499_0000.mp4\n")
+    assert jobs._video_paths(None, log) == [str(folder / "clip_model_1499_0000.mp4")]
+    log.write_text(f"        output_dir: {folder}\n")
+    assert jobs._video_paths(None, log) == [str(folder / "clip_model_1499_0000.mp4")]
+
+
+def test_video_paths_will_not_search_a_folder_a_log_line_merely_names(tmp_path):
+    (tmp_path / "secret.mp4").write_bytes(b"x")
+    log = tmp_path / "stdout.log"
+    log.write_text(f"        output_dir: {tmp_path}\n")
+    assert jobs._video_paths(None, log) == []
+
+
+def test_a_timed_out_job_that_ignored_term_reports_a_timeout(tmp_path):
+    (tmp_path / jobs.TIMEOUT_FILE).write_text("")
+    data = dict(job_id="j")
+    jobs._write_job(tmp_path, data)
+    jobs._settle_orphan(tmp_path, data)
+    assert data["status"] == "timeout" and data.get("note") != "host restarted"
+
+
+def test_physics_is_the_hydra_override_on_lab_3_and_needs_nothing_on_lab_2(tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_per_library", lambda root: None)
+    assert jobs._with_physics("physx", tmp_path, ["--video"]) == ["--video", "physics=isaacsim_physx"]
+    assert jobs._with_physics("newton", tmp_path, []) == ["physics=newton_mjwarp"]
+    assert jobs._with_physics(None, tmp_path, ["a"]) == ["a"]
+    with pytest.raises(ValueError, match="not both"):
+        jobs._with_physics("physx", tmp_path, ["physics=newton_mjwarp"])
+    with pytest.raises(ValueError, match="must be one of"):
+        jobs._with_physics("ovphysx", tmp_path, [])
+    monkeypatch.setattr(jobs, "_per_library", lambda root: ["rsl_rl"])
+    assert jobs._with_physics("physx", tmp_path, ["--video"]) == ["--video"]
+    with pytest.raises(ValueError, match="PhysX only"):
+        jobs._with_physics("newton", tmp_path, [])
+
+
+def test_video_paths_finds_the_newest_of_many(tmp_path):
+    folder = tmp_path / "videos" / "train"
+    folder.mkdir(parents=True)
+    for step in range(150):
+        clip = folder / f"rl-video-step-{step}.mp4"
+        clip.write_bytes(b"x")
+        os.utime(clip, (1000 + step, 1000 + step))
+    assert jobs._video_paths(tmp_path, None)[:2] == [str(folder / "rl-video-step-149.mp4"), str(folder / "rl-video-step-148.mp4")]

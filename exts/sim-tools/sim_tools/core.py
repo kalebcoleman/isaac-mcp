@@ -195,6 +195,7 @@ class Scene:
         self._stage = None
         self.stage_id = None
         self.owned = set()
+        self.bulk_owned = set()  # large tool-owned subtrees, scoped to this stage
         # Session-layer opinions these tools authored, per prim: what sim.prim.revert undoes.
         self.edits = {}
         self.runtime_assets = {}
@@ -331,6 +332,7 @@ class Scene:
             self._stage = st
             self.stage_id = uuid.uuid4().hex
             self.owned.clear()
+            self.bulk_owned.clear()
             self.edits.clear()
         return st
 
@@ -385,6 +387,7 @@ class Scene:
         self._stage = None
         self.stage_id = None
         self.owned.clear()
+        self.bulk_owned.clear()
         self.edits.clear()
 
     def stage_info(self):
@@ -476,7 +479,8 @@ class Scene:
                 "path, or save a copy with sim__stage__save (it omits the prim) and open that.",
             )
         if existing:
-            refuse("CONFLICT", "Destination already exists; no overwrite. Choose a free path, or delete it with sim__prim__delete.")
+            refuse("CONFLICT", "Destination already exists; no overwrite. Choose a free path, or delete it with sim__prim__delete (a robot cannot be deleted: "
+                   "use another path, or start a new scene).")
         parent = stage.GetPrimAtPath(p.GetParentPath())
         if (
             not parent
@@ -963,6 +967,7 @@ class Scene:
                     info["up_axis"], info["meters_per_unit"],
                     str(UsdGeom.GetStageUpAxis(stage)), UsdGeom.GetStageMetersPerUnit(stage),
                 ),
+                retry_with=dict(up_axis=info["up_axis"], meters_per_unit=info["meters_per_unit"]),
             )
         try:
             with Usd.EditContext(stage, stage.GetSessionLayer()):

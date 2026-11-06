@@ -519,13 +519,15 @@ def deletable(s, stage, p, direct_sensor=False, sensor_paths=(), foreign=False):
     ):
         refuse("PROTECTED_PRIM", "World/default prim or its ancestor is protected.")
     # A sensor the pack registered can bring a large config subtree; its slot must stay releasable.
-    if direct_sensor:
+    # A map is one import of up to 4,000 walls, and it must stay removable as a whole.
+    large = direct_sensor or p in getattr(s, "bulk_owned", ())
+    if large:
         nodes = list(itertools.islice(Usd.PrimRange(prim, Usd.PrimAllPrimsPredicate), MAX_SENSOR_SUBTREE + 1))
         truncated = len(nodes) > MAX_SENSOR_SUBTREE
     else:
         nodes, truncated = bounded(stage, p, 200)
     if truncated:
-        refuse("LIMIT", f"Subtree deletion exceeds {MAX_SENSOR_SUBTREE if direct_sensor else 200} prims.")
+        refuse("LIMIT", f"Subtree deletion exceeds {MAX_SENSOR_SUBTREE if large else 200} prims.")
     # Direct deletion releases only this sensor, never sensors below it.
     if any(
         n.HasAPI(UsdPhysics.ArticulationRootAPI)
@@ -538,7 +540,8 @@ def deletable(s, stage, p, direct_sensor=False, sensor_paths=(), foreign=False):
     ):
         refuse(
             "PROTECTED_PRIM",
-            "Subtree contains articulation/sensor/protected prim; use a new disposable session.",
+            "Subtree contains an articulation, sensor or protected prim, which cannot be removed from a scene. Leave it, use another "
+            "path, or start a new scene with sim__quick_start discard_changes=true (that drops every edit; sim__stage__save keeps them first).",
         )
     return prim
 
@@ -892,10 +895,11 @@ class Advanced:
             result["notes"] = m["notes"]
         return result
 
-    def import_urdf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=True, default_drives=True, **pose):
+    def import_urdf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=True, default_drives=True, joint_targets=None, **pose):
         from isaac_mcp import urdf_physics, urdf_refs
         from isaac_mcp.project_assets import Broker, open_dir, signature
 
+        from .validate import apply_joint_targets, joint_summary, validate
         from .urdf import (
             convert, importer_identity, place_above_ground, prepare_generated_physics,
             repair_meshes_for_legacy_importer, uses_legacy_importer,
@@ -1001,7 +1005,14 @@ class Advanced:
         if fixed_base and any(joint["type"] == "continuous" for joint in model["joints"]):
             warnings.append("This robot has continuous joints, which may be wheels, and its base is fixed to the world. "
                             "For a robot that drives, pass fixed_base=false.")
+        targets_report = apply_joint_targets(stage, prim_path, joint_targets) if joint_targets else None
+        if targets_report and targets_report["unknown"]:
+            warnings.append(f"joint_targets names joints that do not exist: {targets_report['unknown'][:6]}. Valid names: {targets_report['valid'][:12]}.")
+        if targets_report and targets_report["beyond_limits"]:
+            warnings.append(f"joint_targets beyond a joint's limits were set to the limit: {targets_report['beyond_limits']}.")
         result.update(
+            joints=joint_summary(stage, prim_path),
+            **({"joint_targets_applied": targets_report["applied"]} if targets_report else {}),
             urdf_snapshot_id=snapshot_id,
             converted_physics=converted_physics,
             articulation_root=roots[0] if roots else None,
@@ -1012,10 +1023,11 @@ class Advanced:
             **({"repaired_meshes": repaired} if repaired else {}),
             placement=placement,
             warnings=warnings,
+            validation=validate(stage, prim_path, expect_robot=True),
         )
         return result
 
-    def import_mjcf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=None, **pose):
+    def import_mjcf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=None, default_drives=False, joint_targets=None, **pose):
         """Import a MuJoCo MJCF model from a verified snapshot, the way ``import_urdf`` imports a URDF.
 
         The host checked that every file the model names is inside the approved folder before it made the snapshot, and
@@ -1024,12 +1036,16 @@ class Advanced:
         from isaac_mcp import mjcf_refs, urdf_refs
         from isaac_mcp.project_assets import Broker, open_dir, signature
 
-        from .mjcf import convert, importer_identity, movable_joint_count
-        from .urdf import MAX_AUTO_LIFT_M, place_above_ground, prepare_generated_physics
+        from .validate import apply_joint_targets, joint_summary, validate
+        from .mjcf import (convert, importer_identity, mjcf_default_gains, movable_joint_count,
+                           restore_legacy_equalities, tendon_warning, uses_legacy_importer)
+        from .urdf import MAX_AUTO_LIFT_M, place_above_ground, prepare_generated_physics, undriven_joints
 
         s = self.s
         if fixed_base is not None and type(fixed_base) is not bool:
             refuse("INVALID_VALUE", "fixed_base must be true, false, or left out to keep what the model says.")
+        if type(default_drives) is not bool:
+            refuse("INVALID_VALUE", "default_drives must be a boolean.")
         s.new_path(stage, prim_path)
         filename, manifest = s.broker.verify(snapshot_id, manifest_sha256, kind="mjcf")
         mjcf_refs.check_mjcf_path(filename.name)
@@ -1041,7 +1057,7 @@ class Advanced:
             mjcf_refs.refusal_for(found["problems"], entry)
         movable = movable_joint_count(found["trees"].values())
         workspace = s.broker.staging / snapshot_id
-        key = hashlib.sha256(json.dumps([importer_identity(), fixed_base, manifest_sha256]).encode()).hexdigest()[:24]
+        key = hashlib.sha256(json.dumps([importer_identity(), fixed_base, default_drives, manifest_sha256]).encode()).hexdigest()[:24]
         output = workspace / f"mjcf-converted-{key}"
         root_before = stage.GetRootLayer().ExportToString()
         session_before = stage.GetSessionLayer().ExportToString()
@@ -1052,7 +1068,7 @@ class Advanced:
             pending = workspace / f".pending-{uuid.uuid4().hex}"
             try:
                 try:
-                    generated = convert(filename, pending, fixed_base)
+                    generated = convert(filename, pending, fixed_base, project_dir, found)
                 except AssetError:
                     raise
                 except Exception as exc:  # noqa: BLE001 - the native importer raises anything
@@ -1067,8 +1083,17 @@ class Advanced:
                         "Native importer changed the active stage. Partial effects possible; inspect before retrying.",
                     )
                 converted_physics = prepare_generated_physics(
-                    generated, pending, movable_joints=movable, gains=None, fixed_base=fixed_base, kind="MJCF",
+                    generated, pending, movable_joints=movable, gains=mjcf_default_gains(found["trees"].values()) if default_drives else None,
+                    fixed_base=fixed_base, kind="MJCF",
                 )
+                if uses_legacy_importer():
+                    restored = restore_legacy_equalities(generated, found["trees"].values())
+                    declared = sum(1 for tree in found["trees"].values() for joint in tree.findall("./equality/joint")
+                                   if joint.get("active", "true").lower() not in ("false", "0"))
+                    if restored:
+                        converted_physics["restored_joint_equalities"] = restored
+                    if declared > len(restored):
+                        converted_physics["unrestored_joint_equalities"] = declared - len(restored)
                 relative_generated = str(generated.relative_to(pending))
                 (pending / "generated.txt").write_text(relative_generated)
                 (pending / "report.json").write_text(json.dumps(converted_physics))
@@ -1093,6 +1118,13 @@ class Advanced:
 
         roots = _articulation_roots(stage.GetPrimAtPath(prim_path))
         warnings = []
+        tendon_note = tendon_warning(found["trees"].values())
+        if tendon_note:
+            warnings.append(tendon_note)
+        if converted_physics.get("restored_joint_equalities"):
+            warnings.append("Sim 5.1 approximated simple MJCF prismatic joint equalities as PhysX mimic constraints; MuJoCo solver tuning may differ.")
+        if converted_physics.get("unrestored_joint_equalities"):
+            warnings.append(f"Sim 5.1's adapter did not restore {converted_physics['unrestored_joint_equalities']} MJCF joint equalities; inspect the converted constraints before relying on them.")
         placement = place_above_ground(stage, prim_path, position_given, max_lift=MAX_AUTO_LIFT_M)
         if "warning" in placement:
             warnings.append(placement.pop("warning"))
@@ -1100,7 +1132,20 @@ class Advanced:
             warnings.append(f"The converted robot's base is {converted_physics['base']}, not what fixed_base asked for.")
         if not roots:
             warnings.append("No articulation root was found, so the joint tools will not work on this model.")
+        undriven = undriven_joints(stage, prim_path)
+        if undriven and not default_drives:
+            warnings.append(f"{len(undriven)} movable joints have no drive (the model's actuators are torque motors, so it will "
+                            "collapse under gravity): hold it with a controller, set gains with sim__joints__gains, "
+                            "or import again with default_drives=true for a generic holding drive.")
+        targets_report = apply_joint_targets(stage, prim_path, joint_targets) if joint_targets else None
+        if targets_report and targets_report["unknown"]:
+            warnings.append(f"joint_targets names joints that do not exist: {targets_report['unknown'][:6]}. Valid names: {targets_report['valid'][:12]}.")
+        if targets_report and targets_report["beyond_limits"]:
+            warnings.append(f"joint_targets beyond a joint's limits were set to the limit: {targets_report['beyond_limits']}.")
         result.update(
+            joints=joint_summary(stage, prim_path),
+            **({"joint_targets_applied": targets_report["applied"]} if targets_report else {}),
+            undriven_joints=undriven,
             mjcf_snapshot_id=snapshot_id,
             converted_physics=converted_physics,
             articulation_root=roots[0] if roots else None,
@@ -1110,6 +1155,7 @@ class Advanced:
             includes=found["includes"],
             placement=placement,
             warnings=warnings,
+            validation=validate(stage, prim_path, expect_robot=True),
         )
         return result
 
@@ -1176,9 +1222,42 @@ class Advanced:
             revert="sim__prim__revert",
         )
 
+    def physics_push(self, stage, a):
+        """A one-off impulse on a body in the running simulation: edits nothing and needs no stopped timeline."""
+        import carb
+        import omni.physx
+        import omni.usd
+        from pxr import PhysicsSchemaTools, UsdGeom, UsdPhysics
+
+        s = self.s
+        path = a["path"]
+        prim = s.prim(stage, path)
+        if s.timeline.is_stopped():
+            refuse("PHYSICS_NOT_READY", "An impulse acts on a running simulation: play or pause first.")
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            refuse("INVALID_PHYSICS", f"{path} is not a rigid body. Push a body, for example a block or a robot link.")
+        impulse, at = a["impulse"], a.get("at")
+        for label, value in (("impulse", impulse), ("at", at)):
+            if value is not None and (not isinstance(value, (list, tuple)) or len(value) != 3
+                                      or not all(type(v) in (int, float) and math.isfinite(v) for v in value)):
+                refuse("INVALID_VALUE", f"{label} must be three finite numbers.")
+        if at is None:
+            box = UsdGeom.BBoxCache(s.timeline.get_current_time() * stage.GetTimeCodesPerSecond(), [UsdGeom.Tokens.default_]).ComputeWorldBound(prim)
+            at = list(box.ComputeAlignedRange().GetMidpoint())
+        stage_id = omni.usd.get_context().get_stage_id()
+        omni.physx.get_physx_simulation_interface().apply_force_at_pos(
+            stage_id, PhysicsSchemaTools.sdfPathToInt(prim.GetPath()), carb.Float3(*[float(v) for v in impulse]), carb.Float3(*[float(v) for v in at]), "Impulse")
+        return dict(path=path, impulse=list(impulse), at=[float(v) for v in at], unit="N s (kg m/s)",
+                    note="One push; it takes effect on the next physics step. PhysX only: on Newton this may do nothing.")
+
     def physics_apply(self, stage, a):
         from pxr import UsdPhysics
 
+        if a.get("impulse") is not None:
+            others = sorted(k for k, v in a.items() if v not in (None, "") and k not in ("path", "impulse", "at", "session_id", "stage_id"))  # "": a contract default
+            if others:
+                refuse("CONFLICT", f"impulse pushes a running body and edits nothing: it does not combine with {', '.join(others)}.")
+            return self.physics_push(stage, a)
         s = self.s
         path = a["path"]
         prim = s.prim(stage, path)
@@ -1360,6 +1439,7 @@ class Advanced:
                 if not stage.RemovePrim(p):
                     refuse("DELETE_FAILED", "Session-layer removal failed.")
             s.owned = {q for q in s.owned if q != p and not q.startswith(p + "/")}
+            s.bulk_owned = {q for q in getattr(s, "bulk_owned", ()) if q != p and not q.startswith(p + "/")}
             return dict(deleted=p, still_composed=bool(stage.GetPrimAtPath(p)))
         if name == "sim.stage.clear_owned":
             if a["confirm"] is not True:
@@ -1917,7 +1997,18 @@ class Advanced:
                         "or move them if the new pose must hold.",
             )
         if name == "sim.arm.ik":
-            return self.arm_ik(stage, a)
+            if a.pop("speed", None) is not None:  # arm_path removes it for each point: a speed reaching here would be ignored
+                refuse("INVALID_VALUE", "speed is not available on this route: call the tool itself.")
+            move = a.pop("move", False)
+            if type(move) is not bool:
+                refuse("INVALID_VALUE", "move must be true or false.")
+            solved = self.arm_ik(stage, a)
+            if move and not solved["reached"]:  # a failed solve can be a very different pose: swinging there is never what was asked
+                solved["commanded"] = None
+                solved["next"] = "Nothing was commanded, because the target was not reached. " + solved["next"]
+            elif move:  # solve, then command what was solved: one call for an arm to go somewhere
+                solved["commanded"] = self.execute("sim.joints.command", stage, dict(path=a["path"], targets=solved["joint_targets"], clamp=True))
+            return solved
         if name == "sim.arm.fk":
             return self.arm_fk(stage, a)
         if name == "sim.joints.state":

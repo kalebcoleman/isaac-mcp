@@ -310,3 +310,38 @@ def test_eval_stop_passes_through_a_play_scripts_except_exception():
             raise AssertionError("EvalStop was swallowed")
     except eval_runner.EvalStop:
         pass
+
+
+def test_the_score_reports_how_episodes_ended_and_each_term():
+    from isaac_mcp.isaaclab.eval_runner import Scorer
+
+    scorer = Scorer(num_episodes=2)
+    log = {"log": {"Episode_Reward/alive": 2.0, "Episode_Reward/pole": -1.0, "Episode_Termination/time_out": 0.5, "Episode_Termination/base_contact": 0.5, "Other": 9}}
+    scorer.observe([1.0, 1.0], [True, False], [False, True], log)
+    result = scorer.result()
+    assert result["episodes"] == 2 and result["ended_early"] == 1 and result["survived_to_time_limit"] == 0.5
+    assert result["reward_terms"] == {"alive": 2.0, "pole": -1.0}
+    assert result["termination_terms"] == {"base_contact": 0.5, "time_out": 0.5}
+
+
+def test_a_tasks_own_metrics_are_reported():
+    from isaac_mcp.isaaclab.eval_runner import Scorer
+
+    scorer = Scorer(num_episodes=1)
+    scorer.observe([1.0], [True], [False], {"log": {"Metrics/success_rate": 1.0, "Metrics/block_pushed_m": 0.13, "Other/thing": 5.0}})
+    assert scorer.result()["task_metrics"] == pytest.approx({"success_rate": 1.0, "block_pushed_m": 0.13})
+
+
+def test_terms_count_only_at_resets_weighted_by_how_many_ended():
+    from isaac_mcp.isaaclab.eval_runner import Scorer
+
+    scorer = Scorer(num_episodes=3)
+    stale = {"log": {"Metrics/closest": 9.0, "Episode_Reward/alive": 0.0}}  # what Lab's log holds from the reset before the first step
+    for _ in range(50):
+        scorer.observe([1.0, 1.0, 1.0], [False] * 3, [False] * 3, stale)
+    scorer.observe([1.0, 1.0, 1.0], [False, False, False], [True, True, False], {"log": {"Metrics/closest": 0.2, "Episode_Reward/alive": 1.0}})
+    scorer.observe([1.0, 1.0, 1.0], [False] * 3, [False] * 3, {"log": {"Metrics/closest": 0.2, "Episode_Reward/alive": 1.0}})
+    scorer.observe([1.0, 1.0, 1.0], [False, False, True], [False, False, False], {"log": {"Metrics/closest": 0.5, "Episode_Reward/alive": 4.0}})
+    result = scorer.result()
+    assert result["task_metrics"]["closest"] == pytest.approx((0.2 * 2 + 0.5) / 3)
+    assert result["reward_terms"]["alive"] == pytest.approx((1.0 * 2 + 4.0) / 3)

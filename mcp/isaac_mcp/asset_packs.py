@@ -19,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from . import assets, material_refs, mjcf_refs, urdf_refs
+from . import asset_formats, assets, material_refs, mjcf_refs, urdf_refs
 
 
 def approval_help(folder=None):
@@ -583,6 +583,12 @@ def run_closure(closure, paths: list[str], folder_of, projects: dict | None = No
             project = projects.setdefault(str(folder), urdf_refs.project_from_folder(folder))
             results.append(mjcf_refs.closure_result(path, project, folder))
             continue
+        fmt = asset_formats.format_of(path)
+        if fmt in ("xacro", "sdf", "mesh", "map") and not (fmt == "map" and Path(path).suffix.lower() not in (".yaml", ".yml")):
+            folder = Path(folder_of(path))
+            project = projects.setdefault(str(folder), urdf_refs.project_from_folder(folder))
+            results.append(asset_formats.closure_result(path, project, folder, fmt))
+            continue
         if not urdf_refs.is_urdf(path):
             usd.append(path)
             continue
@@ -744,13 +750,14 @@ def build_pack(
         if not path.is_file():
             raise PackError(f"source not found: {path}", "NOT_FOUND")
         if urdf_refs.is_xacro(path):
-            raise PackError(f"{path.name} is a xacro file, not a URDF. {urdf_refs.XACRO_HELP}", "XACRO")
-        is_urdf = urdf_refs.is_urdf(path)
-        if path.suffix.lower() == ".xml":
-            raise PackError(f"{path.name} looks like a MuJoCo model. Packs hold USD and URDF only for now: import it from its approved "
-                            "folder with assets__import_mjcf.", "UNSUPPORTED_FORMAT")
+            raise PackError(f"{path.name} is a xacro file. A pack holds what a file names, and a xacro file needs its arguments to say what "
+                            "that is: import it with assets__import_path and xacro_args instead.", "XACRO")
+        fmt = asset_formats.format_of(path)
+        if path.suffix.lower() == ".xml" and path.name.lower() != "package.xml" and fmt != "mjcf":
+            raise PackError(f"{path.name} is not a MuJoCo model.", "UNSUPPORTED_FORMAT")
+        is_urdf = urdf_refs.is_urdf(path) or fmt in ("mjcf", "sdf", "mesh", "map")  # read on the host: the file and what it names are copied
         if path.suffix.lower() not in USD_SUFFIXES and not is_urdf:
-            raise PackError(f"source is not a USD or URDF file: {path}", "UNSUPPORTED_FORMAT")
+            raise PackError(f"source is not a file a pack can hold (USD, URDF, MuJoCo XML, SDF, mesh or ROS map): {path}", "UNSUPPORTED_FORMAT")
         base = layout_for(path)
         if is_urdf:
             base = base or (urdf_root(path) if urdf_root else path.parent)
@@ -851,7 +858,7 @@ def build_pack(
         files=len(files), bytes=sum(p.stat().st_size for p in files.values()), entries=sorted(entries),
         # What to pass as sim__quick_start's robot: a pack keeps the source's folder layout, so it isn't just <pack>/<file>.
         load_as=[f"{pack_folder.name}/{entry}" for entry in sorted(entries)
-                 if entry.lower().endswith((".urdf", ".usd", ".usda", ".usdc", ".usdz"))],
+                 if entry.lower().endswith((".urdf", ".xml", ".sdf", ".world", ".gltf", ".glb", ".obj", ".stl", ".fbx", ".ply", ".yaml", ".yml", ".usd", ".usda", ".usdc", ".usdz"))],
         unresolved=blocked["unresolved"][:MAX_REPORTED], remote=blocked["remote"][:MAX_REPORTED],
         outside=blocked["outside"][:MAX_REPORTED], unreadable=blocked["unreadable"][:MAX_REPORTED],
         runtime_materials=sorted(runtime), material_references=len(followed["references"]),
@@ -1077,7 +1084,8 @@ def doctor_folder(folder: Path, *, closure=None, entries: list | None = None, ma
         chosen, entry_source = twin_entries(folder, manifest), "twin_manifest"
     else:
         chosen = sorted(rel for rel in report["current"]
-                        if PurePosixPath(rel).suffix.lower() in USD_SUFFIXES or urdf_refs.is_urdf(rel))
+                        if PurePosixPath(rel).suffix.lower() in USD_SUFFIXES or urdf_refs.is_urdf(rel)
+                        or asset_formats.format_of(rel) in ("mjcf", "sdf", "mesh", "map"))
         entry_source = "all_usd"
     for rel in chosen:
         clean_relpath(rel, "entry")
@@ -1313,7 +1321,7 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
                 return resolved.parent
 
         results = run_closure(closure, [str(p.resolve()) for p in checked], urdf_folder)
-        backend = closure.name or ("urdf" if all(urdf_refs.is_urdf(p) for p in checked) else None)
+        backend = closure.name or ("host" if all(asset_formats.format_of(p) not in (None, "usd") for p in checked) else None)
         return dict(status="ok", backend=backend, results=results)
 
     if canonical == "assets.pack_adopt":
@@ -1397,7 +1405,7 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
         if any(_under(folder.resolve(), d) is not None or _under(d, folder.resolve()) is not None for d in from_dirs):
             raise PackError("source pack and destination pack overlap", "OVERLAP")
         # A URDF is read here, so a URDF-only build needs no USD parser.
-        if not closure.available() and not all(urdf_refs.is_urdf(s) or urdf_refs.is_xacro(s) for s in sources):
+        if not closure.available() and not all(urdf_refs.is_urdf(s) or urdf_refs.is_xacro(s) or asset_formats.format_of(s) in ("mjcf", "sdf", "mesh", "map") for s in sources):
             raise PackError(unavailable_message(), "USD_UNAVAILABLE")
 
         def urdf_root(path: Path) -> Path:

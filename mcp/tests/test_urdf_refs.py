@@ -211,7 +211,7 @@ def test_a_bad_package_xml_declares_nothing(tmp_path):
 def test_a_xacro_file_gets_the_exact_guidance(name):
     with pytest.raises(AssetError) as caught:
         urdf_refs.check_urdf_path(name)
-    assert caught.value.code == "XACRO" and "xacro robot.urdf.xacro > robot.urdf" in str(caught.value)
+    assert caught.value.code == "XACRO" and "assets__import_path expands xacro files itself" in str(caught.value)
 
 
 @pytest.mark.parametrize("text", [
@@ -278,12 +278,12 @@ def test_textures_of_dae_and_obj_are_followed_and_absent_ones_reported(tmp_path)
     put(tmp_path, "m/b.obj", "mtllib b.mtl\nv 0 0 0\n")
     put(tmp_path, "m/b.mtl", "newmtl x\nmap_Kd ../t/c.png\nmap_Ks gone.png\n")
     put(tmp_path, "t/c.png")
-    put(tmp_path, "m/d.glb")
+    put(tmp_path, "m/d.fbx")
     project = urdf_refs.project_from_folder(tmp_path)
-    followed = urdf_refs.follow_mesh_files(project, ["m/a.dae", "m/b.obj", "m/d.glb"])
+    followed = urdf_refs.follow_mesh_files(project, ["m/a.dae", "m/b.obj", "m/d.fbx"])
     assert followed["found"] == ["m/b.mtl", "m/tex.png", "t/c.png"]
     assert followed["missing"] == [dict(reference="gone.png", referenced_by="m/b.mtl")]
-    assert followed["unfollowable"][0]["file"] == "m/d.glb"
+    assert followed["unfollowable"][0]["file"] == "m/d.fbx"
 
 
 def test_a_texture_outside_is_reported_and_not_followed(tmp_path):
@@ -356,7 +356,7 @@ def test_kinds_are_told_apart_with_the_tool_to_use(env, broker):
         broker.locate(str(usd), kind="urdf")
     assert caught.value.code == "UNSUPPORTED_FORMAT"
     path = put(env / "bot", "r.urdf", urdf())
-    with pytest.raises(AssetError, match="assets__import_urdf"):
+    with pytest.raises(AssetError, match="assets__import_path"):
         broker.locate(str(path))
     xacro = put(env / "bot", "r.urdf.xacro", "<robot/>")
     with pytest.raises(AssetError) as caught:
@@ -464,7 +464,7 @@ def test_a_xacro_source_gets_the_guidance_and_nothing_runs(env, broker):
     path = put(broker.roots["p"][0], "r.urdf.xacro", "<robot/>")
     with pytest.raises(packs.PackError) as caught:
         build(broker, str(path))
-    assert caught.value.code == "XACRO" and "never runs xacro" in str(caught.value)
+    assert caught.value.code == "XACRO" and "xacro_args" in str(caught.value)
 
 
 def test_a_source_outside_approved_roots_is_refused(env, broker, tmp_path):
@@ -654,3 +654,42 @@ def test_dependency_tool_explains_an_unresolved_package_instead_of_a_parser_erro
     assert "error" not in result
     problem = result["problems"][0]
     assert problem["code"] == "PACKAGE_UNRESOLVED" and "nothing outside" in problem["reason"]
+
+
+def test_gltf_and_glb_references_are_followed_and_unreadable_ones_are_visible():
+    import json
+    import struct
+
+    doc = json.dumps({"buffers": [{"uri": "a.bin"}, {"uri": "data:application/octet-stream;base64,AAAA"}], "images": [{"uri": "t.png"}, {"uri": "../out.png"}]}).encode()
+    assert urdf_refs.gltf_uris(".gltf", doc) == ["a.bin", "t.png", "../out.png"]
+    glb = b"glTF" + struct.pack("<II", 2, 20 + len(doc)) + struct.pack("<I", len(doc)) + b"JSON" + doc
+    assert urdf_refs.gltf_uris(".glb", glb) == ["a.bin", "t.png", "../out.png"]
+    for bad in (b"not json", b"[1]", b"{" * 5000):
+        assert urdf_refs.gltf_uris(".gltf", bad) is None
+    assert urdf_refs.gltf_uris(".glb", b"nope") is None
+
+
+def test_packs_hold_mjcf_sdf_meshes_and_maps_with_exactly_what_they_name(env, broker, monkeypatch):
+    monkeypatch.setattr(packs, "usd_python", lambda: None)
+    root = broker.roots["p"][0]
+    put(root, "m/arm.xml", '<mujoco><compiler meshdir="assets"/><asset><mesh file="a.stl"/></asset><worldbody><body><geom type="mesh" mesh="a"/></body></worldbody></mujoco>')
+    put(root, "m/assets/a.stl")
+    put(root, "m/assets/unused.stl")
+    report = build(broker, str(root / "m/arm.xml"))
+    assert report["status"] == "ok" and report["entries"] == ["arm.xml"] or "m/arm.xml" in report["entries"]
+    folder = env / "bot"
+    assert any(p.name == "a.stl" for p in folder.rglob("*")) and not any(p.name == "unused.stl" for p in folder.rglob("*"))
+    put(root, "gl/duck.gltf", json.dumps({"buffers": [{"uri": "d.bin"}], "images": [{"uri": "t.png"}]}))
+    put(root, "gl/d.bin")
+    put(root, "gl/t.png")
+    put(root, "gl/other.png")
+    second = packs.run_tool("assets.pack_build", dict(pack="duck", sources=[str(root / "gl/duck.gltf")]), broker)
+    names = {p.name for p in (env / "duck").rglob("*") if p.is_file()}
+    assert {"duck.gltf", "d.bin", "t.png"} <= names and "other.png" not in names and second["status"] == "ok"
+    put(root, "map/m.yaml", "image: m.pgm\nresolution: 0.05\norigin: [0, 0, 0]\n")
+    put(root, "map/m.pgm")
+    third = packs.run_tool("assets.pack_build", dict(pack="maps", sources=[str(root / "map/m.yaml")]), broker)
+    assert third["status"] == "ok" and {p.name for p in (env / "maps").rglob("*") if p.is_file()} >= {"m.yaml", "m.pgm"}
+    with pytest.raises(packs.PackError) as caught:
+        packs.run_tool("assets.pack_build", dict(pack="x", sources=[str(put(root, "r.urdf.xacro", "<robot/>"))]), broker)
+    assert caught.value.code == "XACRO" and "assets__import_path" in str(caught.value)

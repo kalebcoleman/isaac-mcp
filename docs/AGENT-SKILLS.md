@@ -76,6 +76,10 @@ the isaac-mcp skill does not repeat them. `references/official-skills.md` maps e
 isaac-mcp tools that carry it out and says which wins when they disagree (NVIDIA for Isaac APIs,
 isaac-mcp for tool use and safety gates).
 
+NVIDIA's [Isaac Sim documentation MCP server](https://docs.isaacsim.omniverse.nvidia.com/latest/development_tools/isaac_sim_mcp.html)
+and its [Kit/USD agent tools](https://github.com/NVIDIA-Omniverse/kit-usd-agents) search documentation,
+APIs and examples. They complement this server, which controls a running simulator.
+
 NVIDIA's skills link to files elsewhere in their repositories, so do not copy them flat. Either run
 the agent inside an Isaac Lab or Isaac Sim checkout (both expose `.agents/skills` and
 `.claude/skills`), or symlink the individual skill directories you want from a checkout into your
@@ -91,7 +95,6 @@ user skills directory.
   Apache-2.0, listed on claudskills.com): only its outline (when to use, quick reference,
   troubleshooting) was borrowed. Its code uses APIs that Isaac Lab 3 does not have, so none of it
   was used.
-- Other community MCP servers and their tools are catalogued in [ECOSYSTEM.md](ECOSYSTEM.md).
 
 ## Keeping it current
 

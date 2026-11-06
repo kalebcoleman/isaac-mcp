@@ -34,7 +34,7 @@ def check_mjcf_path(path) -> None:
     """Refuse anything but an ``.xml`` file name, and say what to do with a URDF or xacro one."""
     suffix = PurePosixPath(str(path)).suffix.lower()
     if suffix in (".urdf", ".xacro"):
-        refuse("UNSUPPORTED_FORMAT", f"{path} is a URDF, not an MJCF: use assets__import_urdf.")
+        refuse("UNSUPPORTED_FORMAT", f"{path} is a URDF, not an MJCF: assets__import_path with format=auto reads it.")
     if not is_mjcf(path):
         refuse("UNSUPPORTED_FORMAT", f"Expected a MuJoCo .xml file, not {path}.")
     if PurePosixPath(str(path)).name.lower() == "package.xml":
@@ -59,7 +59,7 @@ def parse(data: bytes, name: str = "MJCF", included: bool = False) -> ET.Element
     except ET.ParseError as exc:
         refuse("MJCF_XML", f"{name} is not valid XML: {exc}")
     if tree.tag != "mujoco" and not included:
-        hint = " It looks like a URDF: use assets__import_urdf." if tree.tag == "robot" else ""
+        hint = " It looks like a URDF: assets__import_path with format=auto reads it." if tree.tag == "robot" else ""
         refuse("MJCF_XML", f"{name}: the root element must be mujoco, not {str(tree.tag)[:64]}.{hint}")
     return tree
 
@@ -99,8 +99,9 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
     resolved against the final folders. Every ``<compiler>`` folder anywhere is checked, even one that is overridden, and
     every included file is scanned whatever its name.
 
-    Returns ``mapped`` (reference -> relative file), ``files`` (every file used), ``includes``, ``trees`` (each parsed
-    file, by name), ``compiler`` (the final folder settings) and ``problems`` (each with kind, code, reference, reason).
+    Returns ``mapped`` (reference -> relative file), ``mesh_sources`` (XML file and mesh reference -> resolved files),
+    ``files`` (every file used), ``includes``, ``trees`` (each parsed file, by name), ``compiler`` (the final folder
+    settings) and ``problems`` (each with kind, code, reference, reason).
     Refuses nothing about the references, so a caller can report all of them.
     """
     base = _parent(entry)
@@ -109,7 +110,8 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
     problems, files, includes, trees = [], {entry}, [], {}
     seen = set()  # (reference, code) of each problem, so adding one is constant time
     state = {"assetdir": "", "meshdir": None, "texturedir": None}
-    wanted = []  # (kind, element, value) in document order, resolved after the walk
+    wanted = []  # (kind, element, value, XML file) in document order, resolved after the walk
+    mesh_sources = {}  # XML file -> reference -> set of resolved files across model scopes
     stack = []
 
     def note(problem):
@@ -171,10 +173,10 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
                     follow(name, element.attrib[attribute], current, depth)
             for attribute in _MESH_DIR.get(name, ()):
                 if attribute in element.attrib:
-                    wanted.append(("mesh", name, element.attrib[attribute]))
+                    wanted.append(("mesh", name, element.attrib[attribute], current))
             for attribute in _TEXTURE_DIR.get(name, ()):
                 if attribute in element.attrib:
-                    wanted.append(("texture", name, element.attrib[attribute]))
+                    wanted.append(("texture", name, element.attrib[attribute], current))
             pending.append(iter(list(element)))
 
     def follow(name, value, current, depth):
@@ -198,6 +200,9 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
             sub = resolve(chosen, project, read, _depth + 1, budget, (*_models, entry))  # own folders and includes
             for key, rel in sub["mapped"].items():
                 mapped[f"{chosen}:{key}"] = rel
+            for xml, refs in sub["mesh_sources"].items():
+                for ref, paths in refs.items():
+                    mesh_sources.setdefault(xml, {}).setdefault(ref, set()).update(paths)
             files.update(sub["files"])
             includes.extend(sub["includes"])
             trees.update(sub["trees"])
@@ -231,14 +236,14 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
 
     mapped = {}
     if _depth > MAX_INCLUDE_DEPTH:
-        return dict(mapped={}, files=[entry], includes=[], trees={}, compiler={}, problems=[
+        return dict(mapped={}, mesh_sources={}, files=[entry], includes=[], trees={}, compiler={}, problems=[
             _problem("unresolved", "LIMIT", entry, "sub-models are nested too deeply")])
     expand(entry, 0)
     final = {
         "meshdir": state["meshdir"] if state["meshdir"] is not None else state["assetdir"],
         "texturedir": state["texturedir"] if state["texturedir"] is not None else state["assetdir"],
     }
-    for kind, element, value in wanted:
+    for kind, element, value, current in wanted:
         bad = _bad_value(value)
         if bad:
             note(bad)
@@ -254,8 +259,11 @@ def resolve(entry: str, project: Project, read=None, _depth: int = 0, _budget=No
             missing(value, [folder])
             continue
         mapped[f"{element}:{value}"] = chosen
+        if element == "mesh":
+            mesh_sources.setdefault(current, {}).setdefault(value, set()).add(chosen)
         files.add(chosen)
-    return dict(mapped=mapped, files=sorted(files), includes=includes, trees=trees, compiler=final, problems=problems)
+    sources = {xml: {ref: sorted(paths) for ref, paths in refs.items()} for xml, refs in mesh_sources.items()}
+    return dict(mapped=mapped, mesh_sources=sources, files=sorted(files), includes=includes, trees=trees, compiler=final, problems=problems)
 
 
 def closure_result(path, project: Project, folder) -> dict:

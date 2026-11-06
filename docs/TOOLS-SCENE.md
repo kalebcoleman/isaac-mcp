@@ -3,8 +3,7 @@
 **Implementation preview; end-to-end acceptance incomplete.** These catalogued tools implement
 trusted local/shared-mount projects and explicit scene operations. Untrusted isolation, authenticated
 remote upload and named presets are **unavailable**, not silently substituted. Bounded USDZ support is available only in the trusted-project profile.
-See [evidence](evidence/project-scene/README.md) for actual tests and missing gates.
-The earlier [design](GENERIC-SIM-TOOLS.md) is broader than this implementation.
+See [compatibility](COMPATIBILITY.md) for tested builds and known limits.
 This page describes behavior and limits. For each tool's arguments and defaults, see [Tool arguments](TOOLS-ARGUMENTS.md).
 
 ## Start a scene
@@ -17,10 +16,43 @@ UR5e twin, `ur5e_dt__quick_start`.
 | Argument | Meaning |
 |---|---|
 | `robot` | Optional. A public name, `<pack>/<file.usd>`, or an absolute path under an approved root. Names: `ur5e` (your local copy first), and `franka`, `unitree_h1`, `unitree_g1` (humanoids), `turtlebot3_burger`, `carter_v1`, `nova_carter`, `jetbot` and `create3` from this simulator's own assets root, which are checked first and refused with the names if this build lacks one. A wheeled robot's result adds `robot.wheels` and `robot.cmd_vel_graph`, ready for `sim__graph__build`. See the [worked example](ROS2-RVIZ.md#worked-example-a-public-robot-cmd_vel-and-a-nav2-goal). |
+| `environment` | Optional: `warehouse` builds a 24 by 16 m warehouse (see [A warehouse in one call](#a-warehouse-in-one-call)) and puts the robot in it; `jenga` builds a block tower with a Franka beside it (see [A Jenga tower in one call](#a-jenga-tower-in-one-call)). |
 | `ros` | With a robot: run what `sim__ros2__tf_setup` runs and report the matching shell line. |
 | `play` | Start the timeline. Default: stopped. |
 | `up_axis`, `meters_per_unit` | The stage's up axis (`Z` or `Y`, default `Z`) and units (default `1.0`; `0.01` for centimetres). The ground, gravity, camera and framing follow them. |
 | `discard_changes` | Replace a stage with unsaved edits, which are lost. Without it, the call refuses with `UNSAVED_CHANGES` and changes nothing. |
+
+### A Jenga tower in one call
+
+`sim__quick_start environment=jenga` (default robot `franka`) builds a tower you can really knock over:
+
+- 18 layers of 3 dynamic blocks (54), twice real size: 15 x 5 x 3 cm, 120 g, friction 0.5/0.4, on a 34 cm table, tower centre at (0.7, 0). Odd layers run along x, towards the arm, and their middle block is 0.4 mm thinner, so it is loose, as the block a player looks for is.
+- a Franka on the floor beside the table, in a ready pose with its hand level at layer 9, holding a thin red push rod between open fingers. The rod is a collider on the hand's own body, so it adds no joint, and both fingers get a drive.
+- PhysX at 120 Hz with 32 solver iterations per block.
+
+The result's `environment.poke_example` has everything for one push: the `block`, the `approach`, `touch` and `through` points, and `ik` (the `link`, `offset` and `orientation` for `sim__arm__ik`). It is for layer 9. For another layer, change the `z` of each point by 3 cm a layer: the odd layers run along x, and only layers near 9 and above let the hand stay level.
+
+To push a block out, in three calls: `sim__timeline__control action=play`; `sim__arm__ik` with `move=true`, `speed=0.1`, `link`, `offset` and `orientation` from `ik`, and `position` the `approach` point; then the same with `speed=0.02` and `position` the `through` point. `speed` runs the whole straight line in one call, and `path` in the result says where the tip really ended. `move=true` without `speed` goes straight to the solved joints, and nothing is commanded when the target was not reached. `sim__body__state paths=[block, top_block]` then shows what moved, at one instant. Measured in those three calls: the block out 11.9 cm and the top block moved 0.1 mm.
+
+To knock something without the arm: `sim__physics__apply path=<block> impulse=[0.1,0,0]` gives a body one push (optionally `at` a world point). It needs a running simulation and edits nothing.
+
+Measured live with PhysX. On Sim 6.2 and on 5.1 the tower stood still for 10 s, and the arm pushed the middle block of layer 9 out by 12.0 cm while the top block moved 0.3 mm; on 6.2 it was within 0.9 mm after the arm pulled back. With blocks all of one height, Sim 5.1's solver put the load on the middle block and pushing it carried the upper tower along until it fell, which is why that block is loose. The impulse is strong for a loose block: 0.35 N s threw it off the table with the top block unmoved, and by friction alone about 0.1 N s should stop it some 9 cm out (calculated, not run). The hand's palm is 20 cm wide, which is why the rod is there: without it the palm hits the tower and shoves everything above the layer. The arm stands on the floor because the Franka's wrist limit only lets the hand stay level about 60 cm or more above its base. There is no collision check or path planning: the arm goes straight to each solved pose, so keep the steps small near the tower. Blocks start exactly stacked, not with a real tower's small gaps and tilts.
+
+### A warehouse in one call
+
+`sim__quick_start environment=warehouse` (add `robot=nova_carter`, `ros=true` or `play=true` as you like; with no robot it uses `carter_v1`) builds:
+
+- a 24 by 16 m room with 3.5 m walls;
+- six shelving racks (three shelves each) with 90 loads, each box on its own pallet, in three rows with two long aisles (y = -2.5 and 2.5) and a cross aisle at x = 0;
+- three loading docks in the east wall, each with a painted staging bay and two stacks of pallets and cartons, pilasters along the long walls, and a charging station where the robot starts;
+- painted yellow lane lines along the aisles;
+- the robot at the west end of the first aisle, facing east, ready to drive down it.
+
+It is plain USD boxes with static colliders under `/World/Warehouse`, authored in the session layer: nothing is downloaded, so it works offline and
+looks the same every time. The editor's viewport is aimed at the whole room. The result has `environment` (size, racks, aisles, the robot's start).
+Live on Sim 6.2: the Carter started at (-10.5, -2.5) and drove down the aisle to x = -0.1 in six seconds with both wheels commanded at 6 rad/s.
+To use it with Nav2, make the map of it with `sim__map__occupancy` (`min=[-12.5,-8.5] max=[12.5,8.5] z=[0.08,0.3] clear=[[-10.5,-2.5,0.6]] start=[-9,-2.5]`): a 500 by 339 cell map with the walls, pilasters, racks, dock stacks and charging station occupied (checked live). For a real floor plan, import a Nav2 map instead (`assets__import_path` on a map `.yaml`, see [ASSET-IMPORT.md](ASSET-IMPORT.md#ros-maps)): the Nav2
+`warehouse` map is 30 by 50 m of walls. `ros=true` sets up the robot's ROS 2 topics as for any quick-start robot; that was not run against this room, so check the map and frames before sending Nav2 goals.
 
 The result has the new `session_id` and `stage_id`, the paths, `robot.articulation_root` (joint tools need this prim, not the
 robot prim), `assets` with each file's `source` and `location`, and `next_steps` with exact calls.
@@ -50,7 +82,8 @@ anything that replaces the stage. The calls below ran against a live 6.2.0.0 hea
    `sim__prim__create` with `path="/World"` and `kind="Xform"`, then `kind="PhysicsScene"`, `"Cube"`, and so on.
 3. **Look:** `sim__camera__create`, then `sim__camera__capture`. Output goes to `ISAAC_MCP_SCENE_OUTPUT`, which
    defaults to a per-process temp directory; set it at Kit launch to keep results.
-4. **Run:** `sim__timeline__control` with `action="play"`, let frames pass, then `action="pause"`.
+4. **Initialize:** `sim__timeline__control` with `action="initialize"` briefly plays a stopped
+   timeline and pauses it in one call; physics may advance. A runtime read confirms readiness.
    `sim__simulation__step` advances exact steps only while paused.
 5. **Read joints:** pass the **articulation root**, not the robot's parent Xform. On the twin that is
    `/World/UR5e/root_joint`; `/World/UR5e` returns `PHYSICS_NOT_READY`. `sim__ros2__tf_setup` reports the root as
@@ -60,7 +93,7 @@ anything that replaces the stage. The calls below ran against a live 6.2.0.0 hea
    opens files under your home only.
 
 Two things to expect with the UR5e twin: `ur5e_dt__quick_start*` leaves the timeline **playing**, so call stop before generic
-edits. A first generic Play on a timeline something else started refuses with `TIMELINE_ALREADY_ACTIVE`, for the same fix.
+edits. A first generic Play on a timeline something else started refuses with `TIMELINE_ALREADY_ACTIVE`, for the same fix. When stopping would end a project's own script that paused it (a BrickSim demo waits for Play), `action=play resume=true` continues it instead.
 Helper scripts that speak MCP run as `uv run --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>`
 (`scene-test` adds the `pxr` and `numpy` the validators import).
 
@@ -130,9 +163,8 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `assets__pack_pin` | Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true. |
 | `assets__pack_build` | Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, and the result says `importable: false` with `import_blockers`. Files that differ need force=true. Checks the new pack afterwards. |
 | `assets__info` | Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. |
-| `assets__import_usd` | Import a USER-TRUSTED project snapshot below a new wrapper prim, preserving the source and current stage. Requires stopped timeline, matching units/up-axis, explicit target and no conflict. No URLs or arbitrary asset attributes. |
 | `assets__prepare_workstation` | Take an absolute USD path under an already approved trusted root, validate its bounded snapshot in the selected Kit, and prepare a private workstation cache without overwriting. Returns `loaded:false`; call `ur5e_dt__load_workstation` and inspect `/World/Vention` to verify. |
-| `assets__import_path` | Import an approved trusted project's USD by absolute path, preserving the source and relative project layout. Requires the selected session/stage, a free prim path and matching stage units/up-axis. |
+| `assets__import_path` | The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF, or a folder that holds one. `format=auto` picks it from the name; xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. See [ASSET-IMPORT.md](ASSET-IMPORT.md). |
 | `sim__stage__info` | Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations. Also returns `ros`: the simulator's ROS_DISTRO, ROS_DOMAIN_ID, RMW, localhost and Cyclone settings, plus the shell line that matches them. |
 | `sim__quick_start` | Build a ground plane, physics scene, lights and an aimed camera with no IDs, optionally with a robot and ROS 2. See [Start a scene](#start-a-scene). |
 | `sim__stage__open` | Open a .usd/.usda/.usdc/.usdz file under your home, or in this simulator's own output folder (where `sim__stage__save` writes by default), as the current stage (File > Open), timeline stopped; refuses to drop unsaved edits unless `discard_changes=true` (a fresh Kit's empty stage counts as nothing to lose). Returns the new `session_id`/`stage_id`, prim count and composition-error count; run_python sessions reset. |
@@ -151,7 +183,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__physics__raycast` | Cast one ray into the PhysX scene: hits with position, normal, distance, collider and rigid-body paths. `all=false` returns the closest; `all=true` returns up to 32 sorted by distance. `max_distance` is 0..100 stage units and `direction` is normalised. `scene_ready=false` before physics initialises. Newton refuses with `RAYCAST_UNSUPPORTED`. |
 | `sim__physics__contacts` | Read current PhysX contact pairs and impulses for up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with `PhysxContactReportAPI` report; paths without it are listed, and a call where none report refuses `CONTACT_REPORT_DISABLED` with the fix. Needs a playing or paused initialized timeline. Newton refuses with `CONTACT_QUERY_UNSUPPORTED`. |
 | `sim__body__state` | Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Supply `path` (or its aliases `prim` or `prim_path`). Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. |
-| `sim__timeline__control` | Explicit play, pause or stop. Stop rewinds physics and awaits pending native render/writer completion, including writer finalization and capture-settings restoration. The five-second timeout is cooperative, not a hard deadline for native calls. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback and restores it on Stop. Never pumps the Kit update loop; exact stepping uses sim.simulation.step. |
+| `sim__timeline__control` | Explicit play, pause, stop, or initialize. Initialize briefly plays a stopped timeline and pauses it, reporting that physics may advance; an already-paused timeline is left alone and an already-playing timeline is refused. A runtime read confirms readiness. Stop rewinds physics and awaits pending native render/writer completion. The timeout is cooperative. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. Exact stepping uses sim.simulation.step. |
 | `sim__stage__save` | Export a flattened copy, including session edits, to a new basename ending .usda in configured output root. Never overwrite or switch the current stage. A result over 100 MB has a `size_note` saying why: flattening copies every referenced USD file's data into this one file. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. ROS camera render handles require the explicit export option described below. `directory` writes into an existing folder under your home instead of the output root (never overwrites). Dangling internal references (a reference to a prim path that does not exist) no longer block camera render-handle saves. |
 | `sim__viewport__frame` | Point the active viewport camera. `path` alone: Kit's native select-and-frame; `framed_path` is the prim this call framed, and the Stage selection is restored afterwards (`selection`: framed for this call; Stage selection unchanged), so the Stage and Property panels keep their own selection. `path` + `margin` (metres): frame the prim's current bounding sphere plus the margin, keeping the view direction. `eye` + `target` (world, stage units): place the camera exactly (with `path`, `target` defaults to the prim's centre); the orbit pivot is set on the target. `follow=true` (with `path`): one Kit update subscription moves the camera with the prim at a fixed offset while the timeline runs (PhysX writes link poses to USD, so a robot whose links move under a fixed root is followed); `follow=false`, any new call, stage close, a viewport camera switch or an error stops it, and `sim__stage__info.viewport_follow` reports it and the last stop reason. All variants edit the active camera in session-layer edits; source layers and the previous edit target are preserved. No Kit undo entry. Refuses mismatched viewport contexts, look-through targets, unsafe session-sublayer camera opinions, empty bounds and subtrees above 10,000 composed prims. Reports the camera transform and `render_complete=false`: allow ordinary rendering, then capture the verified application window. Framing a smaller subtree can avoid surrounding occluders. Native failures can leave selection/session-camera changes; inspect before retrying. |
 | `assets__search` | Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. A folder deeper than eight levels is skipped and named in `skipped_deep`, with `depth_limit`, instead of failing the whole search. |
@@ -176,7 +208,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__graph__build` | Create a whole OmniGraph in one call from `nodes` ([name, type] pairs), `values`, `connections` ([from, to]) and prim `targets`; timeline stopped. Checks every port against the created nodes (a typo lists the real ports), creates Make Array-style `inputs:inputN`, stores a token's value when given its key (`toStage` -> `Convert to stage units`), authors everything in USD so saves keep it, and rolls the graph back on any error. `replace=true` rebuilds an existing graph. Returns the graph as `sim__graph__inspect` does. Also accepts nodes as `{"name", "type"}` objects or with the type first (it says so), and connections as `[srcNode, srcPort, dstNode, dstPort]` or `{"from", "to"}`. For ROS graphs the result includes the shell line that matches the simulator's DDS settings. |
 | `sim__graph__inspect` | Read a graph: each node's type, input values or upstream connections, and output connections, to check a hand-built Action Graph. Read-only. Lists allowed token values and each node's compute errors/warnings from its last run (`nodes_with_errors`). |
 | `sim__graph__show` | Open a graph in the Action Graph editor of a windowed Isaac Sim (optionally undocked and sized), expand and auto-arrange its nodes, and zoom to fit them on every call, for screenshots and demo videos. `layout=true` arranges only graphs with unpositioned or collapsed nodes and stores the positions in the stage (`ui:nodegraph:node:pos`); stop the timeline first, or use `layout=false` while playing. A `TIMELINE_ACTIVE` refusal includes `retry_with`. It waits only the frames the editor needs (reported as `frames_waited`/`seconds`). `close=true` hides the editor. The undocked editor floats inside the Isaac Sim window. Uses the editor's internal API and refuses cleanly if it changed. |
-| `sim__map__occupancy` | Generate a 2D occupancy map from the stage's colliders and write a Nav2 `map_server` PGM + YAML (origin = lower-left corner, +x right, +y up) to the output root. Starts from a stopped timeline and plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as `/clock` run meanwhile), then stops. Free space is flood-filled from `start` (default: the bounds' centre; cells it cannot reach are unknown). A collider anywhere in the `z` range marks its cells occupied (measured on 6.0.1 and 6.2); `clear` circles mark the robot's footprint free. Z-up stages only. If a floor within one cell of `z_min` fills the slice, it uses a higher `z_min` and reports `z_used`. `z_note` is truthful about that: omap releases before 2.3.3 can still map colliders below `z_used` within about a cell, while later releases start at `z_used`. With no collider in the slice the map is written and its `warning` says no occupied cells were reached from `start`. It builds the grid itself, because NVIDIA's `getBuffer()` can [overrun the heap and crash Kit](evidence/pr70-build-retest-2026-11-04.md#root-causes-found). |
+| `sim__map__occupancy` | Generate a 2D occupancy map from the stage's colliders and write a Nav2 `map_server` PGM + YAML (origin = lower-left corner, +x right, +y up) to the output root. Starts from a stopped timeline and plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as `/clock` run meanwhile), then stops. Free space is flood-filled from `start` (default: the bounds' centre; cells it cannot reach are unknown). A collider anywhere in the `z` range marks its cells occupied (measured on 6.0.1 and 6.2); `clear` circles mark the robot's footprint free. Z-up stages only. If a floor within one cell of `z_min` fills the slice, it uses a higher `z_min` and reports `z_used`. `z_note` is truthful about that: omap releases before 2.3.3 can still map colliders below `z_used` within about a cell, while later releases start at `z_used`. With no collider in the slice the map is written and its `warning` says no occupied cells were reached from `start`. It builds the grid itself, because NVIDIA's `getBuffer()` can overrun the heap and crash Kit. |
 | `sim__ui__find` | List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views; labels when a query is given) with text, tooltip, current value, a `ref`, and their centre in Isaac Sim window pixels (the same pixels as `screenshot(window_id=...)`), plus the visible Kit windows. Hidden dock tabs and closed menus are left out. Read-only; works while the desktop is locked. Also returns `menu_bar` (top-level menu names; menus open with `sim__ui__act action=menu`). |
 | `sim__ui__act` | Drive Isaac Sim's UI through Kit's own input (`carb.input`, as `omni.kit.ui_test` does), not X11: `click`, `double_click`, `right_click`, `move`, `drag`, `scroll`, `type`, `keypress` (OpenAI-style key lists such as `["ctrl", "s"]`), `menu` (a path such as `Create/Mesh/Cube`; a wrong path lists the items that exist), `tab` (bring a docked window such as Console to the front, like clicking its tab; `sim__ui__find` lists `hidden_tabs`), `close` (hide a Kit window or docked panel such as Console through `ui.Workspace.show_window(title, False)`, reporting `hidden`; reopen it with `tab`) and `wait`. A top-level menu such as `Layouts` is opened to list its items and closed again; run an item with `Layouts/<item>`. Unknown window titles and malformed menu paths are refused before any input. Targets a `ref` from `sim__ui__find` or window pixels. Works on a locked or remote desktop, where `window_*` input is refused. UI actions can change or delete data like a person's clicks. |
 | `sim__ros2__tf_setup` | Build one ROS 2 graph for a robot: `/clock`, `/joint_states`, static `world -> base_link` (or `world -> odom` + odometry for a mobile base) and the link TF, rebuilt on every call so no frame is published twice. Resolves the articulation root, refuses colliding frame names; timeline stopped. See [ROS2-RVIZ.md](ROS2-RVIZ.md). After a save and reopen, calling it again deactivates the saved graph in the session layer and builds a new one, at `<graph>_r1` if the saved path is taken; `deactivated_saved_graphs` lists what it replaced. |
@@ -191,8 +223,6 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__joints__gains` | Read or set an initialized articulation's runtime drive gains: `stiffness`, `damping` and `max_effort` for named `dofs` or every DOF, with values before and after. These are PhysX/Newton runtime values: not USD, lost on Stop and never saved; `sim__joints__drive` authors USD gains. Omit every value to only read. Needs a playing or paused timeline and a valid tensor view. |
 | `sim__joints__move` | Step a **paused**, initialized simulation until named joint targets are within `tolerance` or `max_steps` is used, then report `settled` and every joint's error. A joint held by a contact or a weak drive reports `settled=false` with the blocked joint and its remaining error: clear the path, raise gains with `sim__joints__gains`, or retry with more steps. Runtime only; never pumps the app loop. |
 | `sim__joints__teleport` | Set joint positions directly as a state reset, not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are `{dof name: value}`; needs an initialized (playing or paused) articulation, refuses out-of-limit values, and reports each joint's value before and after. |
-| `assets__import_urdf` | Convert a URDF with the installed importer and import it, from an approved root or a pack in your asset folder. Resolves `package://` inside that folder only. Authors drives that hold a pose, lifts the robot out of a ground plane and warns about unusable mass or inertia. Source files never change. See [URDF robots](#urdf-robots). |
-| `assets__import_mjcf` | Convert a MuJoCo MJCF model (`.xml`) with the installed importer and import it, from an approved root or a pack in your asset folder. Follows `<include>` files, meshes, textures and height fields inside that folder only. Source files never change. See [MuJoCo (MJCF) models](#mujoco-mjcf-models). |
 
 Graph build accepts pairs or objects, JSON-encoded individual node/connection entries, and a
 JSON string for each whole `nodes`, `connections`, `values` or `targets` container. A target
@@ -248,15 +278,17 @@ logs, and use bounded read-only health checks. For an owned managed session, the
 opt-in `sim__status` / `sim__stop` tools verify its identity; forced stop can lose
 unsaved state and does not recover unknown in-flight effects. Restart from a known
 saved input in a new verified session instead of replaying the pending mutation.
-The [bounded PhysX stall assessment](evidence/project-scene/PHYSX-STALL-DISPOSITION.md)
-records two current-runtime non-reproductions and the still-unexplained original
-6.0.1 windowed stall. Passing later steps are not a fix for that historical failure.
+For an owned managed session, check `sim__status`, then use `sim__stop` with the recorded
+managed ID, `expected_pid` and `confirm_discard=true`; use `force=true` only if it will not
+exit normally. Verify the process has exited and resources are free before starting a new one.
+Recheck endpoint, stage, backend and finite state on the new session. Never stop unrelated
+processes, and do not mistake a fresh session for recovery of the original solver state.
 
 ### Project USD and the UR5e workstation
 
 For an ordinary object or robot, call `assets__roots`, then `sim__stage__info`, and pass the
 absolute USD path to `assets__import_path` (or use the approved root ID and relative path with
-`assets__import_usd`). The broker copies the bounded
+`assets__import_path` with a root ID). The broker copies the bounded
 approved project with relative layout intact. Kit checks the snapshot's USD layers, material
 and texture dependencies and returns the created prim path, units and dependency counts. Inspect
 the resulting prim or viewport before assuming physics is ready.
@@ -290,7 +322,7 @@ not an untrusted-USD sandbox. Keep the cache and snapshots while scenes still re
 The import and workstation workflows were exercised in both windowed and headless sessions
 on installed Isaac Sim `6.0.0.0`, `6.0.0.1`, `6.0.1.0`, `6.1.0.0` and `6.2.0.0` on one
 Linux/NVIDIA machine. These tests cover the documented sample projects, not every USD or future
-release. See the [live test matrix and known camera issue](evidence/project-usd-workstation/README.md).
+release. In those tests, new cameras sometimes needed a retry after the first capture failed.
 
 Pose coordinates use **stage units**, `orientation=[w,x,y,z]` must be a finite unit quaternion,
 and `frame` is `local` or `world`. World transforms use the parent's inverse matrix; singular
@@ -334,7 +366,7 @@ What the tools do:
 - **Diagnosing:** `sim__graph__inspect` adds `ros_render_status`, with `status` and `writer_computes` per helper, and `ros_publisher_note`, plus `ros_helpers_with_problems` when any helper has one, including a `texture_bound` helper whose `writer_computes` is 0 while playing (it can be 0 briefly after Play). `texture_bound` alone does not prove a healthy sensor. It reports render facts, **not publisher count**, which could not be read reliably from inside Kit. Confirm with `ros2 topic info`. It also adds `ros_domain_note` when a `ROS2Context` publishes on an authored domain other than `ROS_DOMAIN_ID`.
 
 Stale **camera** handles have no open-time repair, because the camera contract is unchanged. A LiDAR with no geometry between its near and far range (1 m to 200 m for `Example_Rotary` and `Example_Rotary_2D`) advertises `/scan` but sent no
-message in testing, and `sim__lidar__read` returns `NOT_READY`. UR5e Quick Start hides the ground plane's visual and puts the tabletop at z=0, so a 2D LiDAR above the bench can see nothing: on 6.2.0.0 all three test sensors there read `NOT_READY` until a wall stood in range. See the [run 8 record](evidence/lab3-run8-2026-11-03.md).
+message in testing, and `sim__lidar__read` returns `NOT_READY`. UR5e Quick Start hides the ground plane's visual and puts the tabletop at z=0, so a 2D LiDAR above the bench can see nothing: on 6.2.0.0 all three test sensors there read `NOT_READY` until a wall stood in range.
 
 Saves now accept a bare basename and add `.usda`, and report `graphs` (at most 32), `graph_count` and `graphs_truncated`, so a mislabeled checkpoint shows up. A tool's own `IsaacMCP_*` capture
 product needs no flag and does not make a graph's product on the same camera ambiguous; it is removed whole from the copy. Two producers on one LiDAR (LaserScan and PointCloud) share one product, which saves normally. A camera or LiDAR graph that leaves `inputs:width` and `inputs:height` unauthored uses the live node's values when a product with that camera and resolution proves them; if not, the refusal names those inputs.
@@ -470,7 +502,7 @@ session layer would not remove the schema: edit the source file instead.
 `normals`, `faceVertexIndices`, `faceVertexCounts`, `extent`, `xformOpOrder`, `xformOp:*`, `physics:*`,
 `physx*:*`) with the tool that owns them. `value` is JSON; pass `type` to create a missing attribute.
 
-Measured on 6.2.0.0 and 5.1.0.0 (see [evidence](evidence/scene-followup/README.md)): a visual-only cube
+Measured on 6.2.0.0 and 5.1.0.0: a visual-only cube
 from a USD file took a collider and rigid body, fell onto a moved table and rested; two pack-created
 cubes with masses 2.5 and 5.0 reported exactly those runtime masses through `sim__body__state`
 `include_dynamics`; `revert` restored the table's and cube's authored poses, and the source file's
@@ -633,6 +665,8 @@ for measured outcomes and retained earlier failures; no indefinite lifetime guar
 Managed launches can select `physics_backend="newton"` (default `"physx"`); an unavailable
 requested engine fails instead of falling back. Newton uses its tensor adapter, explicit
 paused solver steps and Fabric publication; it does not report authored USD as runtime pose.
+On Sim 6.2 one GPU Newton exact-step probe returned `STEP_TIMING_MISMATCH`; inspect state and
+do not assume exact stepping succeeds on every Newton scene. See [compatibility](COMPATIBILITY.md#release-backend-scope).
 The older three releases need a scoped internal playing-flag adapter, restored even on error.
 Direct Newton steps invalidate captured CUDA graphs to avoid stale dt/state buffers.
 Newton requires meter stages and a qualified extension/library stack. Paused saves copy up to
@@ -649,24 +683,23 @@ Controller USD edits must respect layer strength (for pack-authored geometry, us
 layer). General graph topology and file/module hot-reload are not implemented. Existing trusted
 `run_python` is unchanged, and is never used as a substitute in the capability mapping.
 
-See [fork comparison](FORK-COMPARISON.md) for each narrower capability.
+
 
 ## URDF robots
 
 From a public URDF to a moving joint, with these tools alone:
 
 1. `assets__pack_build` copies the URDF and what it names into a pack. See [Assets](ASSETS.md#build-a-pack-from-a-urdf).
-2. `sim__quick_start robot="<pack>/<file>.urdf"`, or `assets__import_urdf source_path=<file>` in a scene you have.
+2. `sim__quick_start robot="<pack>/<file>.urdf"`, or `assets__import_path source_path=<file>.urdf` in a scene you have.
    Pass `fixed_base=false` for a robot that drives or walks.
 3. Play, then `sim__joints__state` and `sim__joints__command` on the reported `articulation_root`; `sim__joints__inspect` takes that same path (a link carrying the articulation API also works) to show authored limits and drives.
 
-Both importers are supported: the 6.x `URDFImporter` and the 5.x `URDFParseAndImportFile` command. Each is tested on the builds in
-[the record](evidence/urdf-robots-2026-11-04.md). Files are resolved against a verified snapshot, and a rewritten URDF
+Both importers are supported: the 6.x `URDFImporter` and the 5.x `URDFParseAndImportFile` command. They were exercised on the builds listed in [compatibility](COMPATIBILITY.md). Files are resolved against a verified snapshot, and a rewritten URDF
 with absolute paths into it goes to the importer. It stays in private staging. `mapped_files` and `packages` report the
 mapping. Conversion writes service-owned derived files, the active root and session layers are compared before and after,
 and a repeat import of the same file, options and importer reuses the conversion.
 
-Each robot and option set uses two of the 16 snapshot slots in staging, one for the URDF and one for its conversion. No tool cleans them:
+Each robot and option set uses two of the 256 snapshot slots in staging, one for the URDF and one for its conversion. No tool cleans them:
 at `QUOTA`, stop the simulators using them and clear the staging folder yourself.
 
 What the import does, and why:
@@ -703,11 +736,11 @@ A successful import does not prove fidelity: check it with `sim__camera__capture
 ## MuJoCo (MJCF) models
 
 Most robots in [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) (the Franka, UR5e, quadrupeds and humanoids)
-ship only as MuJoCo XML. `assets__import_mjcf` brings one in with the importer Isaac Sim 6.x ships (`isaacsim.asset.importer.mjcf`):
+ship only as MuJoCo XML. `assets__import_path` brings one in with the importer Isaac Sim 6.x ships (`isaacsim.asset.importer.mjcf`):
 
 1. Download the model folder (a named source: see [Where assets come from](ASSETS.md#where-assets-come-from)), and have the user approve
    **that folder**: the whole folder is copied for each import, so approve the one robot's folder, not the whole repository.
-2. `assets__import_mjcf source_path=<folder>/<model>.xml prim_path=/World/<name>` in a scene you have. Leave `fixed_base` out to keep what the
+2. `assets__import_path source_path=<folder>/<model>.xml prim_path=/World/<name>` in a scene you have. Leave `fixed_base` out to keep what the
    model says: an arm without a free joint is fixed, a quadruped or humanoid with one floats and falls. Pass `fixed_base=true` to pin a
    floating robot, or `false` to free an arm.
 3. Play, then `sim__joints__state`, `sim__joints__command` and `sim__joints__move` on the reported `articulation_root`.
@@ -725,8 +758,8 @@ refused. The import then reads only the verified snapshot.
 
 What it does: selects the shared `physics` variant of the converted copy, raises a floating robot whose lowest point is under a collision
 ground plane (reported in `placement`, at most 3 m), and reports `base`, `converted_physics`, `articulation_root` and the included files.
-MuJoCo-only features (tendons, equality constraints, sensors, plugins) are whatever the importer converts; check the result with
-`sim__joints__inspect` and `sim__camera__capture`.
+MuJoCo-only features depend on the native importer; 5.1 also repairs a narrow class of prismatic joint equalities and reports
+unrestored ones. Tendon imports carry a fidelity warning. See [asset import](ASSET-IMPORT.md#physics-after-the-import).
 
 ## Reproduce
 

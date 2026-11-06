@@ -251,6 +251,31 @@ class Extension(omni.ext.IExt):
         from .timeline import complete_requested_stop, settle_stop
 
         timeline_target = (args["session_id"], args["stage_id"])
+        if args.get("action") == "initialize":
+            # Make the play/pause sequence explicit: it can advance the scene and
+            # must not interrupt an already-running simulation.
+            self.scene.target(*timeline_target)
+            if args.get("resume") is not None and args.get("resume") is not False:
+                refuse("INVALID_VALUE", "resume is only for action=play.")
+            if self.scene.timeline.is_playing():
+                refuse("TIMELINE_ACTIVE", "The timeline is already playing; pause it explicitly before initializing.")
+            if not self.scene.timeline.is_stopped():
+                return dict(action="initialize", playing=False, paused=True, stopped=False,
+                            time_s=self.scene.timeline.get_current_time(), already_paused=True,
+                            effects="No timeline change; physics readiness still requires a runtime read.")
+            try:
+                await self._timeline_control({**args, "action": "play"})
+                self.scene.target(*timeline_target)
+                if not self.scene.timeline.is_playing():
+                    refuse("TIMELINE_INTERRUPTED", "Timeline changed during initialization; inspect its state.")
+                result = await self._timeline_control({**args, "action": "pause"})
+            except AssetError as exc:
+                # A successful Play is not undone if Pause fails: no hidden retry.
+                raise AssetError(exc.code, str(exc), **{**exc.details,
+                    "effects": "Initialization may have advanced physics or left the timeline playing; inspect state before retrying."}) from exc
+            result.update(action="initialize", already_paused=False,
+                          effects="Timeline played briefly and is now paused; physics may have advanced. Runtime reads establish readiness.")
+            return result
         timeline_was_stopped = self.scene.timeline.is_stopped()
         stop_target_guard = None
         if args.get("action") == "stop":
@@ -588,6 +613,29 @@ class Extension(omni.ext.IExt):
                                         effects="No input was sent." if name == "sim.ui.find" or exc.code in (
                                             "INVALID_VALUE", "LIMIT", "STALE_WIDGET", "NOT_VISIBLE",
                                             "OUT_OF_WINDOW", "NO_UI", "DISABLED", "NO_WINDOW") else "Inspect the UI before retrying.")
+                    elif name == "assets.import_path" and args.get("format") == "mesh":
+                        from .mesh_import import run as import_mesh
+
+                        self.scene.target(args.get("session_id"), args.get("stage_id"), mutation=True)
+                        args.pop("root_id", None)
+                        args.pop("relative_path", None)
+                        result = await import_mesh(self, args)
+                    elif name == "assets.import_path" and args.get("format") == "map":
+                        from .map_import import run as import_map
+
+                        self.scene.target(args.get("session_id"), args.get("stage_id"), mutation=True)
+                        args.pop("root_id", None)
+                        args.pop("relative_path", None)
+                        args.pop("format", None)
+                        for key in ("session_id", "stage_id"):
+                            args.pop(key, None)
+                        result = import_map(self, args)
+                    elif name == "sim.arm.ik" and args.get("speed") is not None:
+                        from .arm_path import straight
+                        import omni.kit.app as kit_app
+
+                        result = await straight(args, self.dispatch, self.scene.timeline.is_playing, self.scene.timeline.get_current_time,
+                                                kit_app.get_app().next_update_async)
                     elif name == "sim.timeline.control":
                         result = await self._timeline_control(args)
                     elif name == "sim.map.occupancy":
@@ -722,9 +770,6 @@ class Extension(omni.ext.IExt):
             result["viewport_follow"] = self.follower.status()
             return result
         mutations = {
-            "assets.import_urdf",
-            "assets.import_mjcf",
-            "assets.import_usd",
             "assets.import_path",
             "sim.prim.create",
             "sim.prim.set_transform",
@@ -732,6 +777,8 @@ class Extension(omni.ext.IExt):
         from .advanced import MUTATIONS
 
         mutations |= MUTATIONS
+        if name == "sim.physics.apply" and a.get("impulse") is not None:
+            mutations = mutations - {name}  # a push acts on the running simulation; it edits nothing
         if (
             name in mutations
             or name in ("sim.simulation.step", "sim.joints.move")
@@ -807,7 +854,13 @@ class Extension(omni.ext.IExt):
             return {**created, "warnings": [warning]} if warning else created
         if name == "sim.prim.set_transform":
             return s.transform(stage, **a)
+        if name == "sim.stage.save" and a.get("format") == "urdf":
+            from .urdf_export import export as export_urdf
+
+            return export_urdf(s, stage, a.get("filename"), a.get("directory"), a.get("robot_path"))
         if name == "sim.stage.save":
+            a.pop("format", None)
+            a.pop("robot_path", None)
             runtime_poses = None
             if not s.timeline.is_stopped() and not s.timeline.is_playing():
                 from .physics import snapshot_poses
@@ -818,16 +871,22 @@ class Extension(omni.ext.IExt):
         if name.startswith("assets."):
             a.pop("root_id", None)
             a.pop("relative_path", None)
-            if name == "assets.import_urdf":
-                return self.advanced.import_urdf(stage, **a)
-            if name == "assets.import_mjcf":
-                return self.advanced.import_mjcf(stage, **a)
+            if name == "assets.import_path":
+                # The host chose the format and checked or converted the file; the importer for it runs here.
+                fmt = a.pop("format", None) or "usd"
+                if fmt == "urdf":
+                    return self.advanced.import_urdf(stage, **a)
+                if fmt == "mjcf":
+                    return self.advanced.import_mjcf(stage, **a)
+                if fmt != "usd":
+                    raise AssetError("INVALID_VALUE", f"The importer for {fmt} did not run: the format was not recognised here.")
+                for key in ("fixed_base", "default_drives", "joint_targets"):
+                    a.pop(key, None)
+                return s.import_path(stage, **a)
             if name == "assets.info":
                 return s.inspect_asset(**a)[2]
             if name == "assets.prepare_workstation":
                 return s.prepare_workstation(**a)
-            if name in ("assets.import_path", "assets.import_usd"):
-                return s.import_path(stage, **a)
             raise RuntimeError("Unknown asset operation: " + name)
         if name == "sim.body.state":
             from .advanced import physics_manager
@@ -838,23 +897,31 @@ class Extension(omni.ext.IExt):
 
             from .physics import body_path
 
-            a["path"] = body_path(a)
-            prim = s.prim(stage, a["path"])
+            if a.get("paths") is not None:  # many bodies from one instant
+                paths = a.pop("paths")
+                if not isinstance(paths, list) or not 1 <= len(paths) <= 64 or not all(isinstance(p, str) for p in paths):
+                    refuse("INVALID_VALUE", "paths must be a list of 1 to 64 prim paths.")
+                if any(a.get(k) for k in ("path", "prim", "prim_path")):
+                    refuse("INVALID_VALUE", "Give path or paths, not both.")
+            else:
+                paths = None
+                a["path"] = body_path(a)
             if s.timeline.is_stopped():
                 refuse("PHYSICS_NOT_READY", "The timeline is stopped, so there is no runtime body state. Play "
                        "(sim__timeline__control action=play) and let a few frames run; on Stop, robots return "
                        "to their authored start pose.")
-            if not prim.IsActive() or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
-                refuse("PHYSICS_NOT_READY", f"{a['path']} is not an active rigid body (no RigidBodyAPI). Use a "
-                       "link with physics, e.g. the robot's base link, or sim__prim__get for any prim's pose.")
             from .physics import body_state
 
-            return body_state(
-                a["path"],
-                s.timeline.get_current_time(),
-                a.get("include_dynamics", False),
-                stage,
-            )
+            def read(path):
+                prim = s.prim(stage, path)
+                if not prim.IsActive() or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                    refuse("PHYSICS_NOT_READY", f"{path} is not an active rigid body (no RigidBodyAPI). Use a "
+                           "link with physics, e.g. the robot's base link, or sim__prim__get for any prim's pose.")
+                return body_state(path, s.timeline.get_current_time(), a.get("include_dynamics", False), stage)
+
+            if paths is not None:
+                return dict(bodies=[dict(read(p), path=p) for p in paths], time_s=s.timeline.get_current_time())
+            return read(a["path"])
         if name == "sim.timeline.control":
             from isaac_mcp.project_assets import refuse
 
@@ -863,19 +930,29 @@ class Extension(omni.ext.IExt):
                     "INVALID_ACTION",
                     "Use play, pause or stop; exact stepping uses sim__simulation__step.",
                 )
-            if a["action"] == "play":
+            resume = a.get("resume", False)
+            if type(resume) is not bool:
+                refuse("INVALID_VALUE", "resume must be true or false.")
+            if resume and (a["action"] != "play" or s.timeline.is_stopped()):
+                refuse("INVALID_VALUE", "resume=true continues a paused timeline with action=play; this timeline is stopped, or the action is not play.")
+            if resume and s._runtime_edit_target is not None:
+                s.check_runtime_edit(stage)  # a run these tools started: the layer it writes to must not have changed while paused
+            if a["action"] == "play" and not resume:
                 from .physics import prepare
 
                 prepare(stage)
                 s.begin_runtime_edit(stage)
             getattr(s.timeline, a["action"])()
-            return dict(
+            result = dict(
                 action=a["action"],
                 playing=s.timeline.is_playing(),
                 stopped=s.timeline.is_stopped(),
                 time_s=s.timeline.get_current_time(),
                 effects="Timeline request issued; physics readiness unknown.",
             )
+            if resume:
+                result["note"] = "Resumed without stopping. Physics writes where whoever started this timeline set it, not to the session layer, and scene edits stay refused until a stop."
+            return result
         if name == "sim.viewport.frame":
             from omni.kit.viewport.utility import (
                 get_active_viewport,

@@ -223,9 +223,9 @@ def set_camera(stage, viewport, camera_path, eye, target, undo_disabled):
     """Author a look-at pose on the viewport camera in the session layer (no undo entry)."""
     import omni.kit.commands
 
-    from .placement import look_at_valid
+    from .placement import look_at_valid, view_up
 
-    up = _up(stage)
+    up = Gf.Vec3d(*view_up(list(eye), list(target), list(_up(stage))))  # a straight-down view needs a sideways up
     distance = look_at_valid(list(eye), list(target), list(up))
     eye, target = Gf.Vec3d(*eye), Gf.Vec3d(*target)
     camera = UsdGeom.Xformable(stage.GetPrimAtPath(camera_path))

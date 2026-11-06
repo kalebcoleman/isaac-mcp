@@ -40,7 +40,7 @@ Pause before saving and check the exported scene after reopening in a fresh proc
 1. **Build a new scene:** `sim__quick_start`. It needs no IDs and works for anyone; add `robot` for one.
 2. **An existing scene:** `sim__stage__info` first. Other `sim__*` and `assets__*` tools need its
    `session_id` and `stage_id`.
-3. **Import your own USD, URDF or MuJoCo XML:** `assets__roots`, then `assets__import_path`, `assets__import_urdf` or `assets__import_mjcf`.
+3. **Import your own robot or asset (USD, URDF, xacro, SDF, MuJoCo XML, a mesh, a ROS map, or a folder that holds one):** `assets__roots`, then `assets__import_path` (format auto). See `docs/ASSET-IMPORT.md` and the import workflow under "Generic scene and project assets" below. For a warehouse with a robot: `sim__quick_start environment=warehouse`.
 4. **Copy a USD or URDF and its files into your asset folder:** `assets__pack_build`, then `sim__quick_start robot="<pack>/<file>"`.
 5. **Train, evaluate or play a policy:** `isaaclab__install_info`, then `isaaclab__train`. No bridge is needed.
 6. **One lab's UR5e digital twin (RISE lab):** `ur5e_dt__quick_start`, only when that twin is what was asked for.
@@ -118,7 +118,7 @@ The bridge CLI is `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client` fr
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__quick_start` for a new scene, or
    `sim__stage__info` on an existing one, and `assets__roots` for your own files. The
-   72-tool pack (57 `sim`, 15 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   69-tool pack (57 `sim`, 12 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan`, `assets__search` and `assets__packs` / `assets__pack_*` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -201,8 +201,23 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   `assets__pack_build` and set `origin` to the repository URL and commit, and never run code from a download.
   An agent with a shell can also copy files into the asset folder, which loads with no approval, so recording
   `origin` is what lets the user see what was used. See `docs/ASSETS.md`.
+- **Import any robot or asset file with `assets__import_path`** (the one import tool; full guide: `docs/ASSET-IMPORT.md`).
+  It reads USD, URDF, xacro, SDF, MuJoCo XML, meshes (glTF, GLB, OBJ, STL, FBX, PLY), ROS map YAML and a folder that holds
+  one. Workflow: (1) use the source the user named, never search for repositories; (2) download into the project's
+  `downloads/` folder and never run code from it; (3) `assets__dependencies` first if unsure what a file needs; (4)
+  `assets__import_path source_path=<absolute file or folder> prim_path=/World/<name>`; `format` defaults to `auto`. Pass
+  `xacro_args` for a xacro's `$(arg ...)`, `sdf_model` for a Gazebo world, `fixed_base=false` for a robot that drives or
+  walks, `joint_targets={name: radians}` to start in a pose, and for a mesh `scale` (0.001 for mm), `as_collider`
+  (`convex_hull`) and `mass` (makes it fall). (5) Read the result before acting: `joints` (names and limits for
+  `sim__joints__command`), `articulation_root`, `warnings` (for example `undriven_joints`: the model uses torque motors and
+  needs gains or `default_drives=true`), `validation.checks`. (6) Refusals tell you the fix: `ROOT_NOT_APPROVED` prints
+  the command **the user** runs (you cannot approve, and you should ask for the smallest folder, not its parent);
+  `AMBIGUOUS_BUNDLE` lists candidates; `XACRO_ARG` names the missing arguments. A tested example takes 4 to 9 calls.
+  `sim__quick_start robot=<path>` does scene plus import in one call, and `sim__quick_start environment=warehouse` builds a
+  24 by 16 m warehouse with a Carter in it (`robot=` to change it). `sim__stage__save format=urdf` exports a robot.
+  An import does not make a robot stand or walk: a free-base humanoid needs a controller.
 - **Project assets:** `assets__roots` → `assets__scan` / `assets__search` (filename-only, host
-  side) → `assets__info` → `assets__import_usd` or `assets__import_urdf`. Only launch-approved
+  side) → `assets__info` → `assets__import_path`. Only launch-approved
   trusted roots are accepted; there is no URL input and no untrusted/hostile-USD isolation.
   Import requires a stopped timeline, matching units/up-axis and a new wrapper path.
   For a user-supplied absolute USD path under an approved root, use `assets__import_path`
@@ -366,5 +381,5 @@ worked while locked on GNOME.
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 72 generic tools: 57 `sim` and 15 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 69 generic tools: 57 `sim` and 12 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.

@@ -110,7 +110,7 @@ Arguments are in `docs/TOOLS-ARGUMENTS.md`. `ur5e_dt__quick_start` works from pu
   `sim__light__*`, `sim__material__*`, `sim__physics__configure`, `sim__joints__drive`. They write
   to the session layer only; source USD files are not rewritten.
 - `assets__roots` → `assets__scan` / `assets__search` → `assets__info` →
-  `assets__import_usd` / `assets__import_urdf`. Only launch-approved roots are accepted; there is
+  `assets__import_path`. Only launch-approved roots are accepted; there is
   no URL input and no untrusted/hostile-USD isolation. Import needs matching units/up-axis, a
   stopped timeline and a free wrapper path.
   For an absolute USD path under an approved root, use `assets__import_path` with current

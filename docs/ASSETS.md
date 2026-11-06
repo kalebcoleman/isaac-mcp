@@ -1,5 +1,7 @@
 # Assets: the local asset database
 
+> Bringing a robot or asset **file** into a scene (USD, URDF, xacro, SDF, MJCF, or a folder that holds one)? See [ASSET-IMPORT.md](ASSET-IMPORT.md). This page is about where assets live and how they are approved.
+
 This page explains where the Isaac MCP finds every asset it uses (robot, sensor,
 workstation, gripper, objects, layouts) and how to build up and move your own assets.
 
@@ -259,7 +261,7 @@ the rules marked *both*.
   outside your folders), not your account: an agent that can run commands can write anywhere you can. So the
   real protection is knowing what was used and where it came from; see
   [Where assets come from](#where-assets-come-from).
-- **A pack in a user store can be imported without approving it as a root:** a USD with `assets__import_path`, a URDF with `assets__import_urdf source_path`. You put it there, and
+- **A pack in a user store can be imported without approving it as a root:** a USD with `assets__import_path`, a URDF (or any other format) with `assets__import_path source_path`. You put it there, and
   the pack tools already read it. Both still need shared staging, refuse a pack
   whose files differ from their pins with `PACK_CORRUPT`, and refuse symlinks inside it.
 - **No overwrite without `force=true`** (*both*). A different file in the pack is a refusal, with
@@ -377,8 +379,7 @@ Safety here is mostly provenance: you should be able to see what a project used 
   `https://github.com/unitreerobotics/unitree_ros @ <commit>`). The pack's `isaac-mcp-pack.json` keeps it, and
   `assets__packs` lists it, so a later reader sees what the pack used and where it came from.
 - **MuJoCo Menagerie** (`google-deepmind/mujoco_menagerie`) holds most public robots as MuJoCo XML: approve one robot's folder and use
-  `assets__import_mjcf` ([MuJoCo models](TOOLS-SCENE.md#mujoco-mjcf-models)). Robots written as xacro (UR, TurtleBot3, Franka descriptions) are refused until
-  expanded; see [Asset formats](plans/ASSET-FORMATS.md).
+  `assets__import_path` ([MuJoCo models](TOOLS-SCENE.md#mujoco-mjcf-models)). For xacro (UR, TurtleBot3, Franka descriptions), use `assets__import_path` with `xacro_args` as needed; see [asset import](ASSET-IMPORT.md).
 - **Prefer a name when one exists.** NVIDIA's own robots load by name from the simulator's assets root, with no
   download: `sim__quick_start robot="unitree_h1"` or `"unitree_g1"` for humanoids, and `franka`,
   `carter_v1` and the others listed in [TOOLS-SCENE.md](TOOLS-SCENE.md).

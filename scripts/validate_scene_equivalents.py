@@ -150,7 +150,7 @@ async def validate(port, output):
                 "assets__info", **t, root_id="agilebot", relative_path="gbt-c5a.usd"
             )
             await invoke(
-                "assets__import_usd",
+                "assets__import_path",
                 **t,
                 root_id="agilebot",
                 relative_path="gbt-c5a.usd",
@@ -165,7 +165,7 @@ async def validate(port, output):
             )
             before = await invoke("sim__stage__info")
             imported_urdf = await invoke(
-                "assets__import_urdf",
+                "assets__import_path",
                 **t,
                 root_id="fixture",
                 relative_path="minimal.urdf",

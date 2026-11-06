@@ -310,7 +310,7 @@ def test_demo_tools_example_serves_a_project_state_through_the_bridge(bridge, mo
 
     from isaac_mcp_bridge.protocol import ToolError
 
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "examples"))
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "templates"))
     for name in [m for m in sys.modules if m.startswith("demo_tools")]:
         monkeypatch.delitem(sys.modules, name)
     load_tool_modules(bridge, modules=["demo_tools"], paths=[])

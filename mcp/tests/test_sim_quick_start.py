@@ -474,7 +474,7 @@ def test_save_and_reopen_keeps_the_axis_and_units(kit):
 
 def test_contract_needs_no_ids_and_cannot_name_a_command():
     params = REGISTRY["sim.quick_start"]["parameters"]
-    assert set(params) == {"robot", "fixed_base", "ros", "up_axis", "meters_per_unit", "play", "discard_changes"}
+    assert set(params) == {"robot", "xacro_args", "sdf_model", "environment", "fixed_base", "ros", "up_axis", "meters_per_unit", "play", "discard_changes"}
     assert not any(field["required"] for field in params.values())
 
 

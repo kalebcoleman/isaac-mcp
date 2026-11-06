@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import time
+from urllib.parse import unquote
 import xml.etree.ElementTree as ET
 
 from .project_assets import AssetError, refuse, relative
@@ -24,12 +25,12 @@ SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache_
 PACKAGE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
 XACRO_HELP = (
-    "Expand it first, once, in your ROS environment: xacro robot.urdf.xacro > robot.urdf, then use robot.urdf. "
-    "This tool never runs xacro, because a xacro file can run code."
+    "assets__import_path expands xacro files itself (format auto; pass xacro_args for its $(arg ...) values) and never runs the "
+    "xacro program, because a xacro file can run code."
 )
 # What a mesh file can name. Other formats are copied, and their own files are not followed.
-TEXT_MESHES = {".dae", ".obj", ".mtl"}
-OPAQUE_MESHES = {".fbx", ".glb", ".gltf"}
+TEXT_MESHES = {".dae", ".obj", ".mtl", ".gltf", ".glb"}
+OPAQUE_MESHES = {".fbx"}
 MTL_KEYS = {"map_ka", "map_kd", "map_ks", "map_ke", "map_ns", "map_d", "map_bump", "bump", "disp", "decal", "norm"}
 
 
@@ -324,9 +325,60 @@ def _candidates(package, project):
     return [*project.named_packages().get(package, []), *project.folders_named(package), *([""] if project.name == package else [])]
 
 
+_URI_MESHES = {".gltf", ".glb", ".dae"}
+
+
+def mesh_reference(referrer: str, name: str) -> str | None:
+    """The folder-relative file a mesh's reference means, or None if it leaves the folder.
+
+    glTF and DAE names are URIs and a loader percent-decodes them, so the decoded form is what gets checked: ``%2e%2e/x.bin`` is ``../x.bin``.
+    A ``%`` left after decoding could be decoded again by something further along, so it is refused too. OBJ and MTL names are plain
+    paths, where ``100%.png`` is an ordinary file; one whose decoded form would leave the folder is still refused, in case a loader decodes it.
+    """
+    value = name[7:] if name.startswith("file://") else name
+    decoded = unquote(value)
+
+    def leaves(text):
+        return SCHEME.match(text) or text.startswith("/") or "\\" in text or any(ord(c) < 32 for c in text) or normal_path(_parent(referrer), text) is None
+
+    if leaves(value) or leaves(decoded) or leaves(unquote(decoded)):  # twice: a name encoded twice must not leave on a second decode
+        return None
+    if PurePosixPath(referrer).suffix.lower() in _URI_MESHES:
+        return None if "%" in decoded else normal_path(_parent(referrer), decoded)
+    return normal_path(_parent(referrer), value)
+
+
+def gltf_uris(suffix: str, data: bytes):
+    """The external files a glTF or GLB names (buffers and images that are not embedded), or None if its JSON cannot be read."""
+    import json
+    import struct
+
+    body = data
+    if suffix == ".glb":
+        if data[:4] != b"glTF" or len(data) < 20 or data[16:20] != b"JSON":
+            return None
+        length = struct.unpack_from("<I", data, 12)[0]
+        body = data[20:20 + length]
+    try:
+        document = json.loads(body.decode("utf-8"))
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(document, dict):
+        return None
+    names = []
+    for key in ("buffers", "images"):
+        for item in document.get(key, []) if isinstance(document.get(key), list) else []:
+            uri = item.get("uri") if isinstance(item, dict) else None
+            if isinstance(uri, str) and not uri.startswith("data:"):
+                names.append(uri)
+    return names
+
+
 def mesh_files(rel: str, data: bytes) -> list[str]:
     """Paths a mesh file names as written, for DAE, OBJ and MTL. Unreadable text names nothing."""
     suffix = PurePosixPath(rel).suffix.lower()
+    if suffix in (".gltf", ".glb"):
+        return gltf_uris(suffix, data) or []
     if suffix == ".dae":
         upper = data[:4096].upper()
         if b"<!DOCTYPE" in upper or b"<!ENTITY" in data.upper():
@@ -379,11 +431,7 @@ def follow_mesh_files(project: Project, meshes) -> dict:
             unfollowable.append(dict(file=rel, reason=str(exc)[:200]))
             continue
         for name in mesh_files(rel, data):
-            value = name[7:] if name.startswith("file://") else name
-            value = value.replace("%20", " ")
-            target = None
-            if not SCHEME.match(value) and not value.startswith("/") and "\\" not in value:
-                target = normal_path(_parent(rel), value)
+            target = mesh_reference(rel, name)
             if target and target in project.files and not project._unsafe(target):
                 found.add(target)
                 queue.append(target)

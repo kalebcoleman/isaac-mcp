@@ -51,7 +51,7 @@ _PROJECT_ENV = "ISAAC_MCP_PROJECT"
 _PROJECT_FILE = "isaac-mcp.json"
 # (Isaac Lab, Isaac Sim prefix) pairs verified with real jobs, as in docs/TOOLS-ISAACLAB.md. Another pair may work; say it
 # is untested. This is what we measured, separate from what lab_profile reads a checkout as offering.
-TESTED_PAIRS = (("3.0.0", "6.2."),)
+TESTED_PAIRS = (("3.0.0", "6.2."), ("2.3.2", "5.1."))
 
 
 def _tested_pair(lab: Any, sim: Any) -> bool:

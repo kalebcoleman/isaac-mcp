@@ -1,4 +1,4 @@
-"""assets__import_mjcf: its contract, the broker's mjcf kind, the closure the pack tools read, and the Kit-side helpers."""
+"""MuJoCo models through assets__import_path: the contract, the broker's mjcf kind, the closure the pack tools read, and the Kit-side helpers."""
 
 import json
 import sys
@@ -38,10 +38,10 @@ def broker(tmp_path):
 
 
 def test_the_contract_is_one_tool_with_the_right_arguments_inside_the_listing_limits():
-    tool = REGISTRY["assets.import_mjcf"]
+    tool = REGISTRY["assets.import_path"]
     params = tool["parameters"]
     assert len(tool["description"]) <= 600
-    assert {"session_id", "stage_id", "prim_path", "source_path", "root_id", "relative_path", "fixed_base", "position"} <= set(params)
+    assert {"session_id", "stage_id", "prim_path", "source_path", "root_id", "relative_path", "fixed_base", "default_drives", "joint_targets", "position"} <= set(params)
     required = {name for name, spec in params.items() if spec.get("required", True)}
     assert required == {"session_id", "stage_id", "prim_path"}
     assert "default" not in params["fixed_base"]  # left out means "keep what the model says", never a silent true
@@ -62,10 +62,10 @@ def test_locate_accepts_an_xml_only_as_mjcf_and_says_where_an_xml_belongs(broker
     assert broker.locate(path, kind="mjcf") == ("m", "arm.xml")
     with pytest.raises(AssetError) as caught:
         broker.locate(path)  # as a USD
-    assert caught.value.code == "UNSUPPORTED_FORMAT" and "assets__import_mjcf" in str(caught.value)
+    assert caught.value.code == "UNSUPPORTED_FORMAT" and "assets__import_path" in str(caught.value)
     with pytest.raises(AssetError) as urdf:
         broker.locate(str(tmp_path / "model" / "robot.urdf"), kind="mjcf")
-    assert "assets__import_urdf" in str(urdf.value)
+    assert "assets__import_path" in str(urdf.value)
 
 
 def test_the_snapshot_of_an_mjcf_verifies_and_resolves_inside_itself(broker):
@@ -93,10 +93,10 @@ def test_dependencies_reads_an_mjcf_on_the_host_without_a_usd_parser(tmp_path):
     assert str(root / "assets" / "link.stl") in results[0]["assets"]
 
 
-def test_pack_build_says_where_a_mujoco_model_goes_instead(tmp_path):
+def test_pack_build_refuses_an_unapproved_mujoco_model_and_a_xacro_with_a_pointer(tmp_path):
     with pytest.raises(packs.PackError) as caught:
         packs.run_tool("assets.pack_build", dict(pack="p", sources=[str(tmp_path / "arm.xml")]), Broker())
-    assert caught.value.code in ("UNSUPPORTED_FORMAT", "ROOT_NOT_APPROVED", "NOT_FOUND")
+    assert caught.value.code in ("ROOT_NOT_APPROVED", "NOT_FOUND", "USD_UNAVAILABLE")
 
 
 @pytest.mark.parametrize("body, expected", [
@@ -118,3 +118,169 @@ def test_an_included_file_adds_its_joints():
     a = ET.fromstring("<mujoco><worldbody><body><joint/></body></worldbody></mujoco>")
     b = ET.fromstring("<mujoco><worldbody><body><joint/><joint/></body></worldbody></mujoco>")
     assert movable_joint_count([a, b]) == 3
+
+
+def test_tendon_fidelity_warning_names_real_tendons_not_default_templates():
+    from sim_tools.mjcf import tendon_warning
+
+    defaults = ET.fromstring('<mujoco><default><tendon stiffness="2"/></default></mujoco>')
+    model = ET.fromstring('<mujoco><tendon><fixed name="split"/><spatial/></tendon></mujoco>')
+    assert tendon_warning([defaults]) is None
+    warning = tendon_warning([defaults, model])
+    assert "split" in warning and "(unnamed)" in warning and "actuation" in warning
+
+
+def _prismatic_pair(tmp_path, disconnected=False, second_name='b'):
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    path = tmp_path / 'converted.usda'
+    stage = Usd.Stage.CreateNew(str(path))
+    root = UsdGeom.Xform.Define(stage, '/Robot').GetPrim()
+    stage.SetDefaultPrim(root)
+    for name in ('hand', 'left', 'right', 'other'):
+        prim = UsdGeom.Xform.Define(stage, f'/Robot/{name}').GetPrim()
+        UsdPhysics.RigidBodyAPI.Apply(prim)
+    for name, parent, child in (('a', 'hand', 'left'), (second_name, 'other' if disconnected else 'hand', 'right')):
+        joint = UsdPhysics.PrismaticJoint.Define(stage, f'/Robot/{name}')
+        joint.CreateBody0Rel().SetTargets([f'/Robot/{parent}'])
+        joint.CreateBody1Rel().SetTargets([f'/Robot/{child}'])
+    stage.GetRootLayer().Save()
+    return path
+
+
+def test_legacy_simple_prismatic_equality_is_written_as_mimic(tmp_path):
+    pytest.importorskip('pxr')
+    from pxr import Usd
+    from sim_tools.mjcf import restore_legacy_equalities
+
+    path = _prismatic_pair(tmp_path)
+    model = ET.fromstring('<mujoco><worldbody><body><joint name="a"/><joint name="b"/></body></worldbody><equality><joint joint1="a" joint2="b"/></equality></mujoco>')
+    assert restore_legacy_equalities(path, [model]) == [{'joint1': 'a', 'joint2': 'b'}]
+    stage = Usd.Stage.Open(str(path))
+    follower = stage.GetPrimAtPath('/Robot/b')
+    assert 'PhysxMimicJointAPI:rotX' in follower.GetMetadata('apiSchemas').GetAppliedItems()
+    assert [str(p) for p in follower.GetRelationship('physxMimicJoint:rotX:referenceJoint').GetTargets()] == ['/Robot/a']
+    assert follower.GetAttribute('physxMimicJoint:rotX:gearing').Get() == -1.0
+
+
+@pytest.mark.parametrize('equality,ref', [
+    ('<joint joint1="a" joint2="b" polycoef="0 1 1 0 0"/>', ''),
+    ('<joint joint1="a" joint2="b" active="false"/>', ''),
+    ('<joint joint1="a" joint2="b"/>', ' ref="1"'),
+    ('<joint joint1="a" joint2="b"/><joint joint1="b" joint2="c" polycoef="0 1 1 0 0"/>', ''),
+])
+def test_legacy_equality_does_not_guess_nonlinear_disabled_or_shifted_cases(tmp_path, equality, ref):
+    from sim_tools.mjcf import restore_legacy_equalities
+
+    path = _prismatic_pair(tmp_path)
+    model = ET.fromstring(f'<mujoco><worldbody><body><joint name="a"{ref}/><joint name="b"/></body></worldbody><equality>{equality}</equality></mujoco>')
+    assert restore_legacy_equalities(path, [model]) == []
+
+
+def test_legacy_equality_does_not_link_disconnected_bodies(tmp_path):
+    from sim_tools.mjcf import restore_legacy_equalities
+
+    path = _prismatic_pair(tmp_path, disconnected=True)
+    model = ET.fromstring('<mujoco><worldbody><body><joint name="a"/><joint name="b"/></body></worldbody><equality><joint joint1="a" joint2="b"/></equality></mujoco>')
+    assert restore_legacy_equalities(path, [model]) == []
+
+
+def test_legacy_equality_does_not_guess_when_joint_names_normalize_to_the_same_usd_name(tmp_path):
+    from sim_tools.mjcf import restore_legacy_equalities
+
+    path = _prismatic_pair(tmp_path, second_name='b_')
+    model = ET.fromstring('<mujoco><worldbody><body><joint name="a"/><joint name="b"/><joint name="b!"/><joint name="b_"/></body></worldbody><equality><joint joint1="a" joint2="b!"/></equality></mujoco>')
+    assert restore_legacy_equalities(path, [model]) == []
+
+
+def test_legacy_normalization_merges_named_defaults_and_avoids_mesh_stem_collision(tmp_path):
+    import shutil
+    from isaac_mcp.urdf_refs import project_from_folder
+    from sim_tools.mjcf import _legacy_input
+
+    original = tmp_path / 'original'
+    (original / 'assets').mkdir(parents=True)
+    model = '''<mujoco><compiler meshdir="assets"/>
+      <default><default class="one"><joint damping="1"/></default></default>
+      <default><default class="two"><joint damping="2"/></default></default>
+      <asset><mesh name="collision" file="link.stl"/><mesh file="link.obj"/></asset>
+      <worldbody><body name="base"><freejoint/></body></worldbody></mujoco>'''
+    (original / 'robot.xml').write_text(model)
+    (original / 'assets/link.stl').write_bytes(b'stl')
+    (original / 'assets/link.obj').write_bytes(b'obj')
+    (original / 'assets/link__isaac_mcp_1.obj').write_bytes(b'do not overwrite')
+    (original / 'assets/link__isaac_mcp_2.stl').write_bytes(b'same stem, different extension')
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(original))
+    assert not found['problems']
+    private = tmp_path / 'private'
+    shutil.copytree(original, private)
+    assert _legacy_input(private, 'robot.xml', found) is True
+    result = ET.parse(private / 'robot.xml').getroot()
+    assert len(result.findall('default')) == 1
+    assert [e.get('class') for e in result.find('default').findall('default')] == ['one', 'two']
+    meshes = result.find('asset').findall('mesh')
+    assert meshes[0].get('file') == 'link.stl'
+    assert meshes[1].get('file') == 'link__isaac_mcp_3.obj' and meshes[1].get('name') == 'link'
+    assert (private / 'assets/link__isaac_mcp_3.obj').read_bytes() == b'obj'
+    assert (private / 'assets/link__isaac_mcp_1.obj').read_bytes() == b'do not overwrite'
+    assert (original / 'robot.xml').read_text() == model
+    assert not (original / 'assets/link__isaac_mcp_3.obj').exists()
+
+
+def test_legacy_normalization_refuses_ambiguous_defaults(tmp_path):
+    from isaac_mcp.urdf_refs import project_from_folder
+    from sim_tools.mjcf import _legacy_input
+
+    (tmp_path / 'robot.xml').write_text('<mujoco><default><joint damping="1"/></default><default><joint damping="2"/></default></mujoco>')
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(tmp_path))
+    with pytest.raises(AssetError) as caught:
+        _legacy_input(tmp_path, 'robot.xml', found)
+    assert caught.value.code == 'MJCF_51_DEFAULTS'
+
+
+def test_legacy_normalization_resolves_submodel_meshes_in_their_own_scope(tmp_path):
+    import shutil
+    from isaac_mcp.urdf_refs import project_from_folder
+    from sim_tools.mjcf import _legacy_input
+
+    source = tmp_path / 'source'
+    (source / 'sub').mkdir(parents=True)
+    (source / 'robot.xml').write_text('<mujoco><asset><mesh file="link.stl"/><model name="sub" file="sub/model.xml"/></asset></mujoco>')
+    (source / 'link.stl').write_bytes(b'parent')
+    (source / 'sub/model.xml').write_text('<mujoco><asset><mesh name="a" file="link.stl"/><mesh name="b" file="link.obj"/></asset></mujoco>')
+    (source / 'sub/link.stl').write_bytes(b'sub stl')
+    (source / 'sub/link.obj').write_bytes(b'sub obj')
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(source))
+    assert not found['problems']
+    assert found['mesh_sources']['robot.xml']['link.stl'] == ['link.stl']
+    assert found['mesh_sources']['sub/model.xml']['link.stl'] == ['sub/link.stl']
+    private = tmp_path / 'private'
+    shutil.copytree(source, private)
+    _legacy_input(private, 'robot.xml', found)
+    meshes = ET.parse(private / 'sub/model.xml').getroot().find('asset').findall('mesh')
+    assert [mesh.get('file') for mesh in meshes] == ['link.stl', 'link__isaac_mcp_1.obj']
+    assert (private / 'sub/link__isaac_mcp_1.obj').read_bytes() == b'sub obj'
+
+
+def test_legacy_shared_include_only_refuses_ambiguous_mesh_when_collision_needs_rewrite(tmp_path):
+    from isaac_mcp.urdf_refs import project_from_folder
+    from sim_tools.mjcf import _legacy_input
+
+    (tmp_path / 'a').mkdir()
+    (tmp_path / 'b').mkdir()
+    (tmp_path / 'robot.xml').write_text('<mujoco><asset><model name="a" file="a/model.xml"/><model name="b" file="b/model.xml"/></asset></mujoco>')
+    (tmp_path / 'shared.xml').write_text('<mujocoinclude><asset><mesh name="shared" file="link.stl"/></asset></mujocoinclude>')
+    for sub in ('a', 'b'):
+        (tmp_path / sub / 'model.xml').write_text('<mujoco><include file="../shared.xml"/></mujoco>')
+        (tmp_path / sub / 'link.stl').write_bytes(sub.encode())
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(tmp_path))
+    assert not found['problems']
+    assert found['mesh_sources']['shared.xml']['link.stl'] == ['a/link.stl', 'b/link.stl']
+    assert _legacy_input(tmp_path, 'robot.xml', found) is False
+
+    (tmp_path / 'a/model.xml').write_text('<mujoco><include file="../shared.xml"/><asset><mesh name="extra" file="link.obj"/></asset></mujoco>')
+    (tmp_path / 'a/link.obj').write_bytes(b'obj')
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(tmp_path))
+    with pytest.raises(AssetError) as caught:
+        _legacy_input(tmp_path, 'robot.xml', found)
+    assert caught.value.code == 'MJCF_51_MODEL'

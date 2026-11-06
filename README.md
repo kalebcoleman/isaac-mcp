@@ -52,6 +52,29 @@ The agent made 36 box shapes, gave them mass and a material, pressed play and ch
 
 Add ROS 2 and the same scene runs Nav2: `Set up ROS 2 TF, build an occupancy map, and send the robot to a goal.`
 
+### A warehouse with a robot in it
+
+> Set up a warehouse with a robot in it, and drive the robot down the aisle.
+
+![A warehouse seen from above: three rows of shelving racks with boxes, yellow aisle lines, and a Carter robot at the start of an aisle](docs/media/warehouse-quick-start.png)
+
+`sim__quick_start environment=warehouse` builds the room, the racks and the robot in one call, with nothing to download.
+For a real floor plan, a ROS Nav2 map becomes walls: see [importing any asset](docs/ASSET-IMPORT.md#ros-maps).
+
+**A Jenga tower you can really knock over.** `sim__quick_start environment=jenga` builds 54 dynamic blocks and a Franka with a push rod; `sim__arm__ik move=true` moves the arm in one call. In live runs on Sim 6.2 and 5.1 it pushed a block 12 cm out and the top of the tower moved 0.3 mm. See [A Jenga tower in one call](docs/TOOLS-SCENE.md#a-jenga-tower-in-one-call).
+
+**Train a policy.** `isaaclab__train`, `eval` and `play` run on Isaac Lab, including tasks provided by a separate project: [your own task](docs/TOOLS-ISAACLAB.md#6-your-own-task). **BrickSim's LEGO simulator** runs next to these tools with no change to it: [BrickSim](docs/BRICKSIM.md).
+
+### Import almost any robot or object file
+
+> Load the UR10e from the Universal Robots repo I downloaded and bend two joints. Then drop the glTF duck next to it so it falls.
+
+One tool, `assets__import_path`, reads **USD, URDF, xacro, SDF (Gazebo), MuJoCo XML, meshes (glTF, GLB, OBJ, STL, FBX, PLY), ROS maps and robot folders**.
+The file is read and converted by the host without running any code from it (xacro and SDF included), and the result lists the
+joints, limits, warnings and a validation check. Real robots from GitHub (UR10e, Franka FR3, TurtleBot3, Pioneer 2DX, SO-101,
+four Menagerie robots) and props (Duck, DamagedHelmet) were imported this way in tests. Setup, formats, error codes and limits:
+[docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md).
+
 ### Load your own robot from an open-source repo
 
 > I put the SO-ARM100 robot folder in my asset folder. Load it into a new scene.
@@ -59,7 +82,7 @@ Add ROS 2 and the same scene runs Nav2: `Set up ROS 2 TF, build an occupancy map
 ![The open-source SO-ARM100 arm, loaded from a user asset folder](docs/media/so100-own-pack.png)
 
 This is the open-source [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) arm (Apache-2.0) as a URDF file. See
-[your own assets](#your-own-assets-or-online-ones) for how that works.
+[your own assets](#your-assets-or-online-ones) for how that works.
 
 ### Pull a real humanoid from GitHub
 
@@ -92,8 +115,8 @@ There was no agent prompt for this one: Claude Sonnet 5.5 called the tools direc
 
 So 12 more minutes of training took it from "stays up and mostly follows the command" to a much steadier and more accurate
 walk. These are one run each (different seeds: 1 and 2), not a measured average, and the pictures are a flat grid, not a
-rough-terrain test. Training a robot of your own through these tools is not supported yet; it is on the
-[checklist](docs/plans/CHECKLIST.md#3-new-tools-for-robotics-and-rl-from-the-live-tests-2026-11-04). The full
+rough-terrain test. Training your own robot requires a task supplied by your project; the
+[checklist](docs/CHECKLIST.md#robotics-and-learning) tracks further robotics work. The full
 40-second window recordings are kept with the project's draft evidence release, not in git.
 
 ### More prompts
@@ -148,11 +171,11 @@ Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
 
 ## The tools
 
-A client lists **126 tools** by default, or **135** with both optional groups. Most scene work uses the first row.
+A client lists **123 tools** by default, or **132** with both optional groups. Most scene work uses the first row.
 
 | Group | Tools | What they do |
 |---|--:|---|
-| Generic scene and assets | 72 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Import USD and URDF, and manage named asset packs. |
+| Generic scene and assets | 69 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Import USD and URDF, and manage named asset packs. |
 | Isaac Lab | 12 | Find an install, list tasks, train, evaluate and play, read metrics and checkpoints, cancel jobs. No simulator needed. |
 | Host gateway and desktop | 12 | `refresh_tools`, `use_bridge`, and screenshots, recordings and window tools. |
 | Bridge built-ins | 7 | `status`, `run_python`, and file transfer into and out of the running simulator. |
@@ -170,7 +193,7 @@ The ones you will meet first:
 | `sim__simulation__step`, `sim__timeline__control` | Play, pause and step the physics. |
 | `sim__camera__capture`, `sim__lidar__read` | See through a camera or LiDAR. |
 | `sim__ros2__tf_setup`, `sim__map__occupancy` | Publish `/clock`, `/joint_states`, TF, and export a Nav2 map. |
-| `assets__import_urdf`, `assets__import_mjcf`, `assets__pack_build` | Bring in your own robots and props: URDF, MuJoCo XML (MJCF) or USD. |
+| `assets__import_path`, `assets__pack_build` | Bring in your own robots and props from one tool: USD, URDF, xacro, SDF, MuJoCo XML, meshes, ROS maps, or a folder that holds one. See [docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md). |
 | `screenshot`, `start_screen_recording` | Look at the real Isaac Sim window. |
 | `isaaclab__train`, `isaaclab__eval`, `isaaclab__metrics_summary` | Train a policy, score it, read the curves. |
 
@@ -225,10 +248,11 @@ That is it. From there, use any prompt above. Trouble connecting? See
 
 > [!NOTE]
 > **Pre-release, Linux x86_64 only.** PhysX is the release target; Newton is
-> [experimental](docs/COMPATIBILITY.md#release-backend-scope). The installer pins Isaac Sim **6.2.0.0**, and results exist for
-> 6.0.0.0, 6.0.0.1, 6.0.1.0, 6.1.0.0 and Sim 5.1 with Isaac Lab 2.3.2, recorded per build in the
+> [experimental](docs/COMPATIBILITY.md#release-backend-scope). The two claimed builds are Isaac Sim **6.2.0.0 with Isaac Lab 3.0.0** (the installer's pin)
+> and Isaac Sim **5.1.0.0 with Isaac Lab 2.3.2**. 6.0.0.0, 6.0.0.1, 6.0.1.0 and 6.1.0.0 are best effort; results per build are in the
 > [compatibility matrix](docs/COMPATIBILITY.md). This is not an all-version certification. Isaac Lab jobs and the simulator
-> share one GPU, so run one at a time on a 16 GB card.
+> share GPU memory. Two small headless sessions have run together on a 16 GB card; check workload and memory first. See
+> [parallel sessions](docs/MCP-SERVER.md#3-multi-session-configuration-ports) and the separate Lab job guards.
 
 > [!WARNING]
 > `run_python`, the file tools and trusted asset loading run with your account's permissions and are not sandboxed.

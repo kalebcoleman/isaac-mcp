@@ -69,7 +69,7 @@ async def validate(port, output):
             assert package["packages"][0]["member_count"] == 2, package
             assert not package["sandboxed"]
             await invoke(
-                "assets__import_usd",
+                "assets__import_path",
                 **t,
                 root_id="package",
                 relative_path="assembly.usdz",

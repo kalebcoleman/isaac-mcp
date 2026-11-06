@@ -150,3 +150,10 @@ def test_graph_fit_waits_for_real_node_bounds():
     assert not placement.bbox_settled(placeholder, real)
     assert placement.bbox_settled(real, real)
     assert not placement.bbox_settled(real, (*real[:4], 0.9, 657.9, 265.4))  # zoom still moving
+
+
+def test_a_straight_down_view_uses_a_sideways_up_and_other_views_keep_the_stage_up():
+    assert placement.view_up([0, 0, 10], [0, 0, 0], [0, 0, 1]) == [0.0, 1.0, 0.0]
+    assert placement.view_up([0, 10, 0], [0, 0, 0], [0, 1, 0]) == [0.0, 0.0, -1.0]
+    assert placement.view_up([5, 0, 3], [0, 0, 0], [0, 0, 1]) == [0, 0, 1]
+    placement.look_at_valid([0, 0, 10], [0, 0, 0], placement.view_up([0, 0, 10], [0, 0, 0], [0, 0, 1]))
