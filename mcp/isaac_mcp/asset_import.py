@@ -51,7 +51,7 @@ def route(broker, params: dict) -> tuple[str, dict, dict]:
     if folder is not None:
         root_id, rel_folder = folder
         files = broker.folder_files(root_id, rel_folder)
-        found = asset_formats.candidates(files, lambda rel: broker.read_file(root_id, rel), rel_folder)
+        found = asset_formats.candidates(files, lambda rel: broker.read_file(root_id, rel), rel_folder, Path(broker.roots[root_id][0]).name)
         picked = asset_formats.choose(found)
         chosen_from = dict(folder=source, entry=picked["entry"], format=picked["format"], why=picked["why"],
                            others=[dict(entry=c["entry"], format=c["format"]) for c in found if c["entry"] != picked["entry"]][:8])

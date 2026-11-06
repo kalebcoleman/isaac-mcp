@@ -476,7 +476,8 @@ class Scene:
                 "path, or save a copy with sim__stage__save (it omits the prim) and open that.",
             )
         if existing:
-            refuse("CONFLICT", "Destination already exists; no overwrite. Choose a free path, or delete it with sim__prim__delete.")
+            refuse("CONFLICT", "Destination already exists; no overwrite. Choose a free path, or delete it with sim__prim__delete (a robot cannot be deleted: "
+                   "use another path, or start a new scene).")
         parent = stage.GetPrimAtPath(p.GetParentPath())
         if (
             not parent
@@ -963,6 +964,7 @@ class Scene:
                     info["up_axis"], info["meters_per_unit"],
                     str(UsdGeom.GetStageUpAxis(stage)), UsdGeom.GetStageMetersPerUnit(stage),
                 ),
+                retry_with=dict(up_axis=info["up_axis"], meters_per_unit=info["meters_per_unit"]),
             )
         try:
             with Usd.EditContext(stage, stage.GetSessionLayer()):

@@ -44,16 +44,56 @@ def _writer(stage, robot_path):
     return write
 
 
+def _subtree(prim):
+    from pxr import Usd
+
+    return Usd.PrimRange(prim, Usd.TraverseInstanceProxies())
+
+
+def _moving_joints(prim):
+    from pxr import UsdPhysics
+
+    return [p for p in _subtree(prim) if p.IsA(UsdPhysics.Joint) and not p.IsA(UsdPhysics.FixedJoint)]
+
+
+def robot_root(stage, robot_path):
+    """The prim the exporter needs: the top of one robot. Its articulation root is usually a link with no joints under it, from which the
+    exporter writes one link and silently loses the robot; above several robots it writes the first it finds. Refused rather than guessed."""
+    from pxr import UsdPhysics
+
+    prim = stage.GetPrimAtPath(robot_path) if robot_path else stage.GetDefaultPrim()
+    if not prim or not prim.IsValid():
+        refuse("NOT_FOUND", "This stage has no default prim. Pass robot_path with the robot's articulation root or its top prim.")
+    roots = [p for p in _subtree(prim) if p.HasAPI(UsdPhysics.ArticulationRootAPI)]
+    if len(roots) > 1:
+        refuse("AMBIGUOUS_ROBOT", f"{prim.GetPath()} holds {len(roots)} robots: {', '.join(str(p.GetPath()) for p in roots[:8])}. Pass robot_path with the one to export.",
+               candidates=[str(p.GetPath()) for p in roots[:32]])
+    if _moving_joints(prim):
+        return str(prim.GetPath())
+    if not any(p.HasAPI(UsdPhysics.RigidBodyAPI) for p in _subtree(prim)):
+        refuse("NOT_A_ROBOT", f"{prim.GetPath()} has no rigid bodies, so it is not a robot. Pass robot_path with a robot's articulation root or its top prim.")
+    # Inside a robot, or a prop with no moving joint: go up only to the joints that join this body.
+    body = prim.GetPath()
+    parent = prim.GetParent()
+    while parent and parent.IsValid() and not parent.IsPseudoRoot():
+        for joint in _moving_joints(parent):
+            api = UsdPhysics.Joint(joint)
+            ends = list(api.GetBody0Rel().GetTargets()) + list(api.GetBody1Rel().GetTargets())
+            if any(end == body or end.HasPrefix(body) or body.HasPrefix(end) for end in ends):
+                return str(parent.GetPath())
+        parent = parent.GetParent()
+    return str(prim.GetPath())
+
+
 def _lost_its_structure(stage, robot_path, urdf) -> bool:
-    """Did the exporter write no joints for something that has them? A prop fixed to the world really has none: one body and no moving joint."""
-    from pxr import Usd, UsdPhysics
+    """Did the exporter lose joints that exist? A floating base is its own addition. A prop fixed to the world really has none: one body and no moving joint."""
+    from pxr import UsdPhysics
 
     root = stage.GetPrimAtPath(robot_path) if robot_path else stage.GetDefaultPrim()
-    if not root or urdf.findall("joint"):
+    written = [j for j in urdf.findall("joint") if j.get("type") != "floating"]
+    if not root or written:
         return False
-    prims = list(Usd.PrimRange(root, Usd.TraverseInstanceProxies()))
-    moving = any(p.IsA(UsdPhysics.Joint) and not p.IsA(UsdPhysics.FixedJoint) for p in prims)
-    return moving or sum(p.HasAPI(UsdPhysics.RigidBodyAPI) for p in prims) > len(urdf.findall("link"))
+    return bool(_moving_joints(root)) or sum(p.HasAPI(UsdPhysics.RigidBodyAPI) for p in _subtree(root)) > len(urdf.findall("link"))
 
 
 def export(scene, stage, filename: str, directory, robot_path) -> dict:
@@ -65,6 +105,7 @@ def export(scene, stage, filename: str, directory, robot_path) -> dict:
         prim = stage.GetPrimAtPath(robot_path) if isinstance(robot_path, str) else None
         if prim is None or not prim.IsValid():
             refuse("NOT_FOUND", f"robot_path {robot_path!r} is not a prim in this stage. Give the robot's articulation root or its top prim.")
+    robot_path = robot_root(stage, robot_path)
     write = _writer(stage, robot_path)
     folder = scene.save_directory(directory) / filename
     try:
@@ -85,7 +126,7 @@ def export(scene, stage, filename: str, directory, robot_path) -> dict:
                "sub-prim; URDF export is tested on 6.2.")
     files = sorted(str(p.relative_to(folder)) for p in folder.rglob("*") if p.is_file())
     return dict(
-        format="urdf", path=str(written), folder=str(folder), files=files[:200], file_count=len(files),
+        format="urdf", path=str(written), folder=str(folder), robot_path=robot_path, files=files[:200], file_count=len(files),
         links=len(root.findall("link")), joints=len(root.findall("joint")),
         joint_types=sorted({j.get("type") for j in root.findall("joint")}),
         lost=LOST,

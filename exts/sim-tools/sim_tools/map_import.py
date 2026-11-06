@@ -89,7 +89,7 @@ def rectangles(occupied, width, height):
 def run(ext, args: dict) -> dict:
     from isaac_mcp import urdf_refs, xacro_lite
     from isaac_mcp.urdf_refs import normal_path
-    from pxr import Gf, UsdGeom, UsdPhysics
+    from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
     s = ext.scene
     args = dict(args)
@@ -101,6 +101,12 @@ def run(ext, args: dict) -> dict:
     pose_keys = {k: args[k] for k in ("position", "orientation", "frame") if k in args}
     stage = s.get_stage()
     s.new_path(stage, prim_path)
+    up, units = str(UsdGeom.GetStageUpAxis(stage)), UsdGeom.GetStageMetersPerUnit(stage)
+    if up != "Z" or not math.isclose(units, 1.0, rel_tol=1e-9):
+        from isaac_mcp.project_assets import units_mismatch_message
+
+        # The walls are built Z up in metres: on any other stage they would lie on their side or be the wrong size.
+        refuse("UNITS_MISMATCH", units_mismatch_message("Z", 1.0, up, units), retry_with=dict(up_axis="Z", meters_per_unit=1.0))
     filename, manifest = s.broker.verify(snapshot_id, digest, kind="map")
     entry = manifest["entry"]
     project_dir = filename.parents[len(Path(entry).parts) - 1]
@@ -141,25 +147,29 @@ def run(ext, args: dict) -> dict:
     if len(boxes) > MAX_BOXES:
         refuse("LIMIT", f"The map needs {len(boxes)} wall boxes (the limit is {MAX_BOXES}). Use a coarser or cleaner image.")
     ox, oy = float(origin[0]), float(origin[1])
-    root = UsdGeom.Xform.Define(stage, prim_path)
     position, orientation = pose_keys.get("position"), pose_keys.get("orientation")
     for name, value, size in (("position", position, 3), ("orientation", orientation, 4)):
         if value is not None and (not isinstance(value, list) or len(value) != size or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in value)):
             refuse("INVALID_VALUE", f"{name} must be {size} finite numbers.")
-    if position is not None:
-        UsdGeom.Xformable(root).AddTranslateOp().Set(Gf.Vec3d(*[float(v) for v in position]))
-    if orientation is not None:
-        w, x, y, z = [float(v) for v in orientation]
-        UsdGeom.Xformable(root).AddOrientOp().Set(Gf.Quatf(w, x, y, z).GetNormalized())
-    for index, (x, top, w, h) in enumerate(boxes):
-        cube = UsdGeom.Cube.Define(stage, f"{prim_path}/wall_{index}")
-        cube.CreateSizeAttr(1.0)
-        centre_x = ox + (x + w / 2.0) * resolution
-        centre_y = oy + (height - top - h / 2.0) * resolution  # image row 0 is the top (largest y)
-        xform = UsdGeom.Xformable(cube)
-        xform.AddTranslateOp().Set(Gf.Vec3d(centre_x, centre_y, height_m / 2.0))
-        xform.AddScaleOp().Set(Gf.Vec3f(w * resolution, h * resolution, height_m))
-        UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+    # The session layer like every other tool edit, and owned, so sim__prim__delete and sim__stage__clear_owned work on it.
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        root = UsdGeom.Xform.Define(stage, prim_path)
+        if position is not None:
+            UsdGeom.Xformable(root).AddTranslateOp().Set(Gf.Vec3d(*[float(v) for v in position]))
+        if orientation is not None:
+            w, x, y, z = [float(v) for v in orientation]
+            UsdGeom.Xformable(root).AddOrientOp().Set(Gf.Quatf(w, x, y, z).GetNormalized())
+        for index, (x, top, w, h) in enumerate(boxes):
+            cube = UsdGeom.Cube.Define(stage, f"{prim_path}/wall_{index}")
+            cube.CreateSizeAttr(1.0)
+            centre_x = ox + (x + w / 2.0) * resolution
+            centre_y = oy + (height - top - h / 2.0) * resolution  # image row 0 is the top (largest y)
+            xform = UsdGeom.Xformable(cube)
+            xform.AddTranslateOp().Set(Gf.Vec3d(centre_x, centre_y, height_m / 2.0))
+            xform.AddScaleOp().Set(Gf.Vec3f(w * resolution, h * resolution, height_m))
+            UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+    s.owned.add(prim_path)
+    s.bulk_owned = {*getattr(s, "bulk_owned", ()), prim_path}
     return dict(
         prim_path=prim_path, image=image, size_px=[width, height], resolution=resolution, origin=[ox, oy],
         extent_m=[round(width * resolution, 4), round(height * resolution, 4)], occupied_cells=sum(occupied), walls=len(boxes),

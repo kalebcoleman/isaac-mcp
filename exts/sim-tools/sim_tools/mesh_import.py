@@ -102,6 +102,7 @@ async def run(ext, args: dict) -> dict:
     snapshot_id, digest, prim_path = args.pop("snapshot_id"), args.pop("manifest_sha256"), args.pop("prim_path")
     scale = _number(args.pop("scale", None), "scale", 0.0, 1e6) or 1.0
     up_axis = args.pop("up_axis", None) or "auto"
+    given = set(args)
     collider = args.pop("as_collider", None) or "none"
     mass = _number(args.pop("mass", None), "mass", 0.0, 1e6)
     for key in ("session_id", "stage_id", "xacro_args", "sdf_model", "fixed_base", "default_drives"):
@@ -110,6 +111,7 @@ async def run(ext, args: dict) -> dict:
         refuse("INVALID_VALUE", f"up_axis must be one of {', '.join(UP_AXES)}.")
     if collider not in COLLIDERS:
         refuse("INVALID_VALUE", f"as_collider must be one of {', '.join(COLLIDERS)}.")
+    no_collider_asked = mass is not None and collider == "none" and "as_collider" in given
     if mass is not None and collider == "none":
         collider = "convex_hull"  # a dynamic body needs a convex collider
     stage = s.get_stage()
@@ -145,22 +147,24 @@ async def run(ext, args: dict) -> dict:
     snap = derived.snapshot("converted", "mesh.usd")
     result = s.import_asset(stage, snap["snapshot_id"], snap["manifest_sha256"], prim_path, **args)
     wrapper = stage.GetPrimAtPath(prim_path)
-    warnings = []
-    if scale != 1.0:
-        UsdGeom.Xformable(wrapper).AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
+    warnings = ["as_collider=none with a mass would fall through the ground, so it got a convex hull."] if no_collider_asked else []
     meshes = [p for p in Usd.PrimRange(wrapper, Usd.TraverseInstanceProxies()) if p.IsA(UsdGeom.Mesh)]
     if not meshes:
         warnings.append("The converted file holds no mesh.")
-    if collider != "none":
-        approximation = {"convex_hull": "convexHull", "convex_decomposition": "convexDecomposition"}[collider]
-        for mesh in meshes:
-            if mesh.IsInstanceProxy():
-                continue
-            UsdPhysics.CollisionAPI.Apply(mesh)
-            UsdPhysics.MeshCollisionAPI.Apply(mesh).CreateApproximationAttr(approximation)
-    if mass is not None:
-        UsdPhysics.RigidBodyAPI.Apply(wrapper)
-        UsdPhysics.MassAPI.Apply(wrapper).CreateMassAttr(mass)
+    # The session layer, where the wrapper's own transform is: in a weaker layer its xformOpOrder wins and a scale is ignored.
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        if scale != 1.0:
+            UsdGeom.Xformable(wrapper).AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
+        if collider != "none":
+            approximation = {"convex_hull": "convexHull", "convex_decomposition": "convexDecomposition"}[collider]
+            for mesh in meshes:
+                if mesh.IsInstanceProxy():
+                    continue
+                UsdPhysics.CollisionAPI.Apply(mesh)
+                UsdPhysics.MeshCollisionAPI.Apply(mesh).CreateApproximationAttr(approximation)
+        if mass is not None:
+            UsdPhysics.RigidBodyAPI.Apply(wrapper)
+            UsdPhysics.MassAPI.Apply(wrapper).CreateMassAttr(mass)
     if checked["absent"]:
         warnings.append(f"Files the mesh names are not beside it ({', '.join(checked['absent'][:4])}), so it was imported without materials.")
     elif not checked["materials"]:

@@ -316,7 +316,7 @@ async def run(ext, args):
     environment = args.get("environment")
     if environment not in (None, "warehouse", "jenga"):
         refuse("INVALID_VALUE", "environment must be left out, or be \"warehouse\" or \"jenga\". Nothing was changed.")
-    if environment and not robot:
+    if environment and not robot and not args.get("no_default_robot"):  # the host imports the caller's own file afterwards
         robot = "carter_v1" if environment == "warehouse" else "franka"  # something that drives, or an arm that can push a block
     fixed_base = args.get("fixed_base", True)
     if type(fixed_base) is not bool:

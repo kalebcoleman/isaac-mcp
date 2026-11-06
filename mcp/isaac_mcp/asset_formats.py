@@ -102,9 +102,11 @@ def _is_mujoco(read, rel):
     return b"<mujoco" in head and b"<mujocoinclude" not in head
 
 
-def candidates(files, read, folder="") -> list[dict]:
-    """The importable entry files a folder holds, best first: ``{"entry", "format", "why", "score"}`` (entry relative to the root)."""
+def candidates(files, read, folder="", root_name="") -> list[dict]:
+    """The importable entry files a folder holds, best first: ``{"entry", "format", "why", "score"}`` (entry relative to the root).
+    *root_name* is the approved root's own folder name, the folder's name when the folder is the root itself."""
     prefix = folder + "/" if folder else ""
+    folder_name = (PurePosixPath(folder).name if folder else root_name).lower()
     inner_read, spent = read, [0]
 
     def read(rel):  # looking through a folder reads no more than one snapshot could hold; past that, files are not candidates
@@ -160,7 +162,7 @@ def candidates(files, read, folder="") -> list[dict]:
                 pass
         elif fmt == "usd":
             top = PurePosixPath(rel).stem.lower()
-            hinted = top in ("scene", "main", "stage") or top == PurePosixPath(folder or "x").name.lower()
+            hinted = top in ("scene", "main", "stage") or (bool(folder_name) and top == folder_name)
             add(rel, "usd", "a USD file", 35 if hinted else 25)
         elif fmt == "mesh":
             add(rel, "mesh", "a mesh file", 20)

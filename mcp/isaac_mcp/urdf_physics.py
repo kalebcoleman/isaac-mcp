@@ -204,7 +204,8 @@ def default_gains(model):
         droop = DROOP_M if linear else DROOP_RAD
         stiffness = max(inertia * BANDWIDTH_RAD_S**2, load / droop)
         damping = 2.0 * math.sqrt(stiffness * inertia)
-        gains[joint["name"]] = dict(stiffness=stiffness, damping=damping, load=load, inertia=inertia, linear=linear)
+        gains[joint["name"]] = dict(stiffness=stiffness, damping=damping, load=load, inertia=inertia, linear=linear,
+                                    continuous=joint["type"] == "continuous")
     return gains
 
 

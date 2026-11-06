@@ -114,7 +114,9 @@ add(
     "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
     dict(
         robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root: any file or folder assets__import_path reads (MJCF, xacro, SDF, mesh, robot folder). Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.", False),
-        fixed_base=field("boolean", "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False, default=True),
+        fixed_base=field("boolean", "Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False),
+        xacro_args=field("object", "With a xacro robot: values for its $(arg name), e.g. {\"ur_type\": \"ur10e\"}.", False),
+        sdf_model=field("string", "With an SDF that holds several models (a Gazebo world): the model to import.", False),
         environment=field("string", "Optional. \"warehouse\": a 24 by 16 m warehouse (racks, aisles, docks) with the robot at the start of an aisle; default robot carter_v1. \"jenga\": a table, a 54-block giant Jenga tower and a Franka in a ready pose; the result names the blocks and a poke target. Plain USD boxes with colliders: nothing downloaded.", False),
         ros=field("boolean", "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.", False, default=False),
         up_axis=field("string", "The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.", False, default="Z", enum=["Z", "Y"]),
@@ -277,7 +279,7 @@ add(
         **TARGET,
         filename=field("string", "New basename, e.g. scene or scene.usda; no other extension, no folders."),
         directory=field("string", "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.", False),
-        format=field("string", "usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors).", False, default="usd"),
+        format=field("string", "usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors).", False, default="usd", enum=["usd", "urdf"]),
         robot_path=field("string", "With format=urdf: the robot's articulation root or top prim. Default: the stage's default prim.", False),
         reset_camera_render_handles=field(
             "boolean",

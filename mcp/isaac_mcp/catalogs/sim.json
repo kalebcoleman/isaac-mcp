@@ -85,9 +85,18 @@
         },
         "fixed_base": {
           "type": "boolean",
-          "description": "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.",
-          "required": false,
-          "default": true
+          "description": "Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.",
+          "required": false
+        },
+        "xacro_args": {
+          "type": "object",
+          "description": "With a xacro robot: values for its $(arg name), e.g. {\"ur_type\": \"ur10e\"}.",
+          "required": false
+        },
+        "sdf_model": {
+          "type": "string",
+          "description": "With an SDF that holds several models (a Gazebo world): the model to import.",
+          "required": false
         },
         "environment": {
           "type": "string",
@@ -144,9 +153,27 @@
           "kind": "boolean",
           "enum": null,
           "required": false,
-          "default": true,
-          "has_default": true,
-          "description": "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says."
+          "default": null,
+          "has_default": false,
+          "description": "Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says."
+        },
+        {
+          "name": "xacro_args",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With a xacro robot: values for its $(arg name), e.g. {\"ur_type\": \"ur10e\"}."
+        },
+        {
+          "name": "sdf_model",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With an SDF that holds several models (a Gazebo world): the model to import."
         },
         {
           "name": "environment",
@@ -1417,7 +1444,11 @@
           "type": "string",
           "description": "usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors).",
           "required": false,
-          "default": "usd"
+          "default": "usd",
+          "enum": [
+            "usd",
+            "urdf"
+          ]
         },
         "robot_path": {
           "type": "string",
@@ -1470,8 +1501,11 @@
         },
         {
           "name": "format",
-          "kind": "string",
-          "enum": null,
+          "kind": "enum",
+          "enum": [
+            "usd",
+            "urdf"
+          ],
           "required": false,
           "default": "usd",
           "has_default": true,

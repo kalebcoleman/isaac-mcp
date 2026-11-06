@@ -78,17 +78,26 @@ def apply_joint_targets(stage, path, targets) -> dict:
         from isaac_mcp.project_assets import refuse
 
         refuse("INVALID_VALUE", "joint_targets is an object of joint names to finite numbers (radians, or stage units for a sliding joint).")
-    applied, nodes = {}, {}
+    applied, nodes, beyond = {}, {}, {}
     for node in Usd.PrimRange(stage.GetPrimAtPath(path), Usd.TraverseInstanceProxies()):
         if node.IsA(UsdPhysics.RevoluteJoint) or node.IsA(UsdPhysics.PrismaticJoint):
             nodes[node.GetName()] = node
-    for name, value in targets.items():
-        node = nodes.get(name)
-        if node is None:
-            continue
-        angular = node.IsA(UsdPhysics.RevoluteJoint)
-        drive = UsdPhysics.DriveAPI.Apply(node, "angular" if angular else "linear")
-        drive.CreateTargetPositionAttr(math.degrees(value) if angular else float(value))
-        applied[name] = value
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        for name, value in targets.items():
+            node = nodes.get(name)
+            if node is None:
+                continue
+            angular = node.IsA(UsdPhysics.RevoluteJoint)
+            joint = UsdPhysics.RevoluteJoint(node) if angular else UsdPhysics.PrismaticJoint(node)
+            lower, upper = joint.GetLowerLimitAttr().Get(), joint.GetUpperLimitAttr().Get()
+            lower = math.radians(lower) if angular and lower is not None and math.isfinite(lower) else (lower if lower is not None and math.isfinite(lower) else None)
+            upper = math.radians(upper) if angular and upper is not None and math.isfinite(upper) else (upper if upper is not None and math.isfinite(upper) else None)
+            used = max(value, lower) if lower is not None else value
+            used = min(used, upper) if upper is not None else used
+            if used != value:
+                beyond[name] = dict(asked=value, used=used)
+            drive = UsdPhysics.DriveAPI.Apply(node, "angular" if angular else "linear")
+            drive.CreateTargetPositionAttr(math.degrees(used) if angular else float(used))
+            applied[name] = used
     unknown = sorted(set(targets) - set(applied))
-    return dict(applied=applied, unknown=unknown, valid=sorted(nodes)[:60] if unknown else [])
+    return dict(applied=applied, unknown=unknown, valid=sorted(nodes)[:60] if unknown else [], beyond_limits=beyond)

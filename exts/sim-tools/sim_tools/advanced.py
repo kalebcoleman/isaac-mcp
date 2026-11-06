@@ -519,13 +519,15 @@ def deletable(s, stage, p, direct_sensor=False, sensor_paths=(), foreign=False):
     ):
         refuse("PROTECTED_PRIM", "World/default prim or its ancestor is protected.")
     # A sensor the pack registered can bring a large config subtree; its slot must stay releasable.
-    if direct_sensor:
+    # A map is one import of up to 4,000 walls, and it must stay removable as a whole.
+    large = direct_sensor or p in getattr(s, "bulk_owned", ())
+    if large:
         nodes = list(itertools.islice(Usd.PrimRange(prim, Usd.PrimAllPrimsPredicate), MAX_SENSOR_SUBTREE + 1))
         truncated = len(nodes) > MAX_SENSOR_SUBTREE
     else:
         nodes, truncated = bounded(stage, p, 200)
     if truncated:
-        refuse("LIMIT", f"Subtree deletion exceeds {MAX_SENSOR_SUBTREE if direct_sensor else 200} prims.")
+        refuse("LIMIT", f"Subtree deletion exceeds {MAX_SENSOR_SUBTREE if large else 200} prims.")
     # Direct deletion releases only this sensor, never sensors below it.
     if any(
         n.HasAPI(UsdPhysics.ArticulationRootAPI)
@@ -538,7 +540,8 @@ def deletable(s, stage, p, direct_sensor=False, sensor_paths=(), foreign=False):
     ):
         refuse(
             "PROTECTED_PRIM",
-            "Subtree contains articulation/sensor/protected prim; use a new disposable session.",
+            "Subtree contains an articulation, sensor or protected prim, which cannot be removed from a scene. Leave it, use another "
+            "path, or start a new scene with sim__quick_start discard_changes=true (that drops every edit; sim__stage__save keeps them first).",
         )
     return prim
 
@@ -1005,6 +1008,8 @@ class Advanced:
         targets_report = apply_joint_targets(stage, prim_path, joint_targets) if joint_targets else None
         if targets_report and targets_report["unknown"]:
             warnings.append(f"joint_targets names joints that do not exist: {targets_report['unknown'][:6]}. Valid names: {targets_report['valid'][:12]}.")
+        if targets_report and targets_report["beyond_limits"]:
+            warnings.append(f"joint_targets beyond a joint's limits were set to the limit: {targets_report['beyond_limits']}.")
         result.update(
             joints=joint_summary(stage, prim_path),
             **({"joint_targets_applied": targets_report["applied"]} if targets_report else {}),
@@ -1119,6 +1124,8 @@ class Advanced:
         targets_report = apply_joint_targets(stage, prim_path, joint_targets) if joint_targets else None
         if targets_report and targets_report["unknown"]:
             warnings.append(f"joint_targets names joints that do not exist: {targets_report['unknown'][:6]}. Valid names: {targets_report['valid'][:12]}.")
+        if targets_report and targets_report["beyond_limits"]:
+            warnings.append(f"joint_targets beyond a joint's limits were set to the limit: {targets_report['beyond_limits']}.")
         result.update(
             joints=joint_summary(stage, prim_path),
             **({"joint_targets_applied": targets_report["applied"]} if targets_report else {}),

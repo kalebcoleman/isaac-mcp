@@ -683,6 +683,11 @@ class Broker:
             refresh="Fresh scan on every call; no fixed robot count or kind claim.",
         )
 
+    def _quota_message(self):
+        return (f"The staging folder {self.staging} holds its limit of {MAX_SNAPSHOTS} private copies of imported folders, so this one "
+                "was not imported. Importing a folder that has not changed still works. To free them, ask the user to stop every "
+                "simulator using them (a scene open on one breaks if its copy goes), then delete what is inside that folder.")
+
     def snapshot(self, root_id, path, kind="usd", generate=None):
         """Copy an approved folder to staging. *generate* (xacro and SDF) makes the entry URDF from the copied files:
         ``generate(path, files, read) -> {"entry": rel, "data": bytes, "info": {...}}``; the generated file is hashed into
@@ -723,10 +728,7 @@ class Broker:
                     entry.name for entry in itertools.islice(entries, MAX_SNAPSHOTS + 1)
                 ]
             if len(existing) > MAX_SNAPSHOTS:
-                refuse(
-                    "QUOTA",
-                    "Snapshot quota exceeded. Stop consumers before user cleanup of staging.",
-                )
+                refuse("QUOTA", self._quota_message())
             free = shutil.disk_usage(self.staging).free
             if free < MIN_FREE_BYTES + MAX_BYTES:
                 refuse(
@@ -756,9 +758,7 @@ class Broker:
                 target.chmod(0o400)
                 files[rel] = hashlib.sha256(data).hexdigest()
             if path not in files:
-                refuse(
-                    "NOT_FOUND", "Selected file is absent from the project snapshot. Check the name with assets__scan."
-                )
+                refuse("NOT_FOUND", f"{path} is not in the approved folder. Check the name with assets__scan.")
             generated = None
             if generate is not None:
                 made = generate(path, files, lambda rel: (work / "project" / rel).read_bytes())
@@ -811,10 +811,7 @@ class Broker:
                     self.verify(token, digest, kind=kind)
                     return dict(snapshot_id=token, manifest_sha256=digest, bytes=total)
             if len(existing) >= MAX_SNAPSHOTS:
-                refuse(
-                    "QUOTA",
-                    f"{MAX_SNAPSHOTS} distinct snapshot quota reached. Stop consumers before user cleanup of staging.",
-                )
+                refuse("QUOTA", self._quota_message())
             (work / "manifest.json").write_bytes(raw)
             (work / "manifest.json").chmod(0o400)
             token = uuid.uuid4().hex

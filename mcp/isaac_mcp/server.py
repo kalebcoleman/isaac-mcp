@@ -888,38 +888,90 @@ def _dispatch(canonical: str, params: Dict[str, Any],
 
 
 def _quick_start_wants_import(robot) -> bool:
-    """A robot given as an absolute path to a format only assets__import_path reads (MJCF, xacro, SDF, a mesh) or as a folder."""
+    """A robot given as an absolute path to a format only assets__import_path reads (MJCF, xacro, SDF, a mesh) or as a folder.
+    Some packages (TurtleBot3) keep xacro in a file named .urdf, which the import reads and Kit's plain URDF path refuses."""
     text = os.path.expanduser(str(robot or ""))
     if not os.path.isabs(text):
         return False
     from . import asset_formats
 
-    return os.path.isdir(text) or asset_formats.format_of(text) in ("mjcf", "xacro", "sdf", "mesh", "map")
+    kind = asset_formats.format_of(text)
+    if os.path.isdir(text) or kind in ("mjcf", "xacro", "sdf", "mesh", "map"):
+        return True
+    if kind == "urdf":
+        try:
+            with open(text, "rb") as file:
+                head = file.read(200_000)
+        except OSError:
+            return False
+        return b"xacro:" in head or b"xmlns:xacro" in head
+    return False
+
+
+_IMPORT_OPTIONS = ("fixed_base", "position", "orientation", "xacro_args", "sdf_model", "default_drives", "scale", "as_collider", "mass", "wall_height")
 
 
 def _quick_start_with_import(params: Dict[str, Any], state) -> str:
-    """One call: a scene, then the robot or prop imported into it by assets__import_path (so every format works the same way)."""
+    """One call: a scene, then the robot or prop imported into it by assets__import_path (so every format works the same way).
+    Play and ROS come after the import, which refuses a running timeline; an environment gets this robot, not its default one."""
     import re
 
     robot = os.path.expanduser(str(params["robot"]))
-    base = {k: v for k, v in params.items() if k not in ("robot", "fixed_base", "position", "orientation", "xacro_args", "sdf_model",
-                                                       "default_drives", "scale", "as_collider", "mass", "wall_height")}
-    scene = json.loads(_dispatch("sim.quick_start", base, state))
+    environment = params.get("environment")
+    base = {k: v for k, v in params.items() if k not in ("robot", "play", "ros", *_IMPORT_OPTIONS)}
+    if environment:
+        base["no_default_robot"] = True
+    built = _dispatch("sim.quick_start", base, state)
+    try:
+        scene = json.loads(built)
+    except ValueError:
+        return built
     if not isinstance(scene, dict) or "session_id" not in scene:
         return json.dumps(scene) if not isinstance(scene, str) else scene
+    ids = dict(session_id=scene["session_id"], stage_id=scene["stage_id"])
     stem = os.path.basename(robot.rstrip("/")).split(".")[0] or "robot"
     name = re.sub(r"[^A-Za-z0-9_]", "_", stem)
     name = name if re.match(r"[A-Za-z_]", name) else f"r_{name}"
-    carry = {k: v for k, v in params.items() if k in ("fixed_base", "position", "orientation", "xacro_args", "sdf_model", "default_drives",
-                                                       "scale", "as_collider", "mass", "wall_height")}
-    imported = _dispatch("assets.import_path", dict(session_id=scene["session_id"], stage_id=scene["stage_id"], source_path=robot,
-                                                    prim_path=f"/World/{name}", **carry), state)
+    prim = f"/World/{name}"
+    carry = {k: v for k, v in params.items() if k in _IMPORT_OPTIONS and v is not None}
+    imported = _dispatch("assets.import_path", dict(ids, source_path=robot, prim_path=prim, **carry), state)
     try:
         imported = json.loads(imported)
     except ValueError:
-        pass
-    return json.dumps({**scene, "imported": imported,
-                       "note": "The scene was built, then the file was imported with assets__import_path; use its prim_path and articulation_root."}, indent=2, default=repr)
+        return imported
+    if not isinstance(imported, dict) or imported.get("status") != "ok":
+        if not isinstance(imported, dict):
+            return json.dumps(imported)
+        # Not a success with a note: the file is not in the scene.
+        return json.dumps({**imported, **ids, "scene_built": True, "message": f"The scene was built, but this file was not imported into it: {imported.get('message')}"},
+                          indent=2, default=repr)
+    root = imported.get("articulation_root")
+    result = {**scene, "imported": imported,
+              "note": "The scene was built, then the file was imported with assets__import_path. `imported` is that call's whole result."}
+    if root or "dynamic" in imported:  # a robot or a prop, not a floor plan
+        result["robot"] = dict(prim=prim, articulation_root=root, articulation_roots=imported.get("articulation_roots", []), base=imported.get("base"))
+    start = (scene.get("environment") or {}).get("robot_start") or (scene.get("environment") or {}).get("robot_base")
+    if start and "robot" in result:
+        lifted = (imported.get("placement") or {}).get("lifted_by") or 0.0
+        moved = _dispatch("sim.prim.set_transform", dict(ids, path=prim, position=[start[0], start[1], start[2] + lifted]), state)
+        if '"status": "ok"' not in str(moved) and '"status":"ok"' not in str(moved):
+            result["robot"]["placement_note"] = f"It could not be moved to the environment's start: {str(moved)[:300]}"
+    if params.get("ros") and "robot" in result:
+        wired = _dispatch("sim.ros2.tf_setup", dict(ids, robot=prim, **({"base": "mobile", "world_frame": ""} if imported.get("base") == "floating" else {})), state)
+        try:
+            result["ros"] = json.loads(wired)
+        except ValueError:
+            result["ros"] = dict(status="error", message=str(wired)[:600])
+    elif params.get("ros"):
+        result["ros"] = dict(status="error", message="This file is not a robot, so there is nothing to publish.")
+    if params.get("play"):
+        played = _dispatch("sim.timeline.control", dict(ids, action="play"), state)
+        try:
+            result["playing"] = json.loads(played).get("status") == "ok"
+            result["stopped"] = not result["playing"]
+        except (ValueError, AttributeError):
+            result["play_error"] = str(played)[:300]
+    return json.dumps(result, indent=2, default=repr)
 
 
 def _quick_start_needs_host(robot) -> bool:

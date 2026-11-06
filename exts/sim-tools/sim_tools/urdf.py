@@ -26,7 +26,7 @@ MAX_AUTO_LIFT_M = 3.0  # a bigger "lowest point" is stray geometry, not a robot 
 MAX_GROUND_SEARCH = 50000
 # 6.x offers a shared "physics" description; the 5.x importer's only one is called "PhysX".
 SHARED_PHYSICS_VARIANTS = ("physics", "PhysX")
-CONVERSION_VERSION = 2  # bump when what is written into a conversion changes, such as the gains (2: continuous joints are free)
+CONVERSION_VERSION = 3  # bump when what is written into a conversion changes, such as the gains (2, 3: continuous joints are free)
 
 
 def convert(urdf, output, fixed_base):
@@ -186,9 +186,10 @@ def _author_drives(prim, gains, replace):
         if gain is None:
             continue
         drive = UsdPhysics.DriveAPI.Apply(node, "angular" if angular else "linear")
-        if angular and _unlimited(node):
+        if angular and (gain.get("continuous") or _unlimited(node)):
             # A continuous joint (a wheel, a caster) has no pose to hold: a holding stiffness fights a velocity command and
             # stops the wheel. Keep it free and damped; command it by velocity (sim__joints__command velocities).
+            # The file's own word comes first: Sim 6.2's URDF importer authors no limits on a continuous joint, 5.x authors infinite ones.
             stiffness, damping = usd_gains(gain)
             drive.CreateTypeAttr("force")
             drive.CreateStiffnessAttr(0.0)
