@@ -165,6 +165,18 @@ def test_export_above_two_robots_refuses_and_lists_them(path):
     assert error.value.code == "AMBIGUOUS_ROBOT" and "/World/a/Asset/Geometry/base" in str(error.value)
 
 
+def test_export_root_does_not_climb_to_an_ancestor_with_another_robot():
+    stage = two_robots()
+    # Move the first robot's joint outside its subtree: its ancestor also owns robot b.
+    stage.RemovePrim("/World/a/Asset/Physics/j")
+    joint = UsdPhysics.RevoluteJoint.Define(stage, "/World/shared_joint")
+    joint.CreateBody0Rel().SetTargets(["/World/a/Asset/Geometry/base"])
+    joint.CreateBody1Rel().SetTargets(["/World/a/Asset/Geometry/base/tip"])
+    with pytest.raises(AssetError) as error:
+        robot_root(stage, "/World/a/Asset/Geometry/base")
+    assert error.value.code == "AMBIGUOUS_ROBOT"
+
+
 def test_export_of_something_with_no_bodies_refuses():
     """A ground plane was exported as another robot's geometry."""
     with pytest.raises(AssetError) as error:

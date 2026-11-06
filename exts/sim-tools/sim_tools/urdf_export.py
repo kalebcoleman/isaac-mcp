@@ -80,6 +80,12 @@ def robot_root(stage, robot_path):
             api = UsdPhysics.Joint(joint)
             ends = list(api.GetBody0Rel().GetTargets()) + list(api.GetBody1Rel().GetTargets())
             if any(end == body or end.HasPrefix(body) or body.HasPrefix(end) for end in ends):
+                # The joint can live above several robots. Do not hand that ambiguous
+                # ancestor to the exporter, which silently chooses its first robot.
+                candidates = [p for p in _subtree(parent) if p.HasAPI(UsdPhysics.ArticulationRootAPI)]
+                if len(candidates) > 1:
+                    refuse("AMBIGUOUS_ROBOT", f"The joints above {body} share {parent.GetPath()} with multiple robots; pass a top prim that contains only the intended robot.",
+                           candidates=[str(p.GetPath()) for p in candidates[:32]])
                 return str(parent.GetPath())
         parent = parent.GetParent()
     return str(prim.GetPath())
