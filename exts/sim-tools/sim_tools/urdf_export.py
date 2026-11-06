@@ -44,11 +44,16 @@ def _writer(stage, robot_path):
     return write
 
 
-def _has_joints(stage, robot_path) -> bool:
+def _lost_its_structure(stage, robot_path, urdf) -> bool:
+    """Did the exporter write no joints for something that has them? A prop fixed to the world really has none: one body and no moving joint."""
     from pxr import Usd, UsdPhysics
 
     root = stage.GetPrimAtPath(robot_path) if robot_path else stage.GetDefaultPrim()
-    return bool(root) and any(p.IsA(UsdPhysics.Joint) and not p.IsA(UsdPhysics.FixedJoint) for p in Usd.PrimRange(root, Usd.TraverseInstanceProxies()))  # a prop fixed to the world has none to lose
+    if not root or urdf.findall("joint"):
+        return False
+    prims = list(Usd.PrimRange(root, Usd.TraverseInstanceProxies()))
+    moving = any(p.IsA(UsdPhysics.Joint) and not p.IsA(UsdPhysics.FixedJoint) for p in prims)
+    return moving or sum(p.HasAPI(UsdPhysics.RigidBodyAPI) for p in prims) > len(urdf.findall("link"))
 
 
 def export(scene, stage, filename: str, directory, robot_path) -> dict:
@@ -73,7 +78,7 @@ def export(scene, stage, filename: str, directory, robot_path) -> dict:
         shutil.rmtree(folder, ignore_errors=True)
         refuse("EXPORT_FAILED", f"The URDF exporter refused this robot: {str(exc)[:700]}")
     root = ET.parse(written).getroot()
-    if not root.findall("joint") and _has_joints(stage, robot_path):
+    if _lost_its_structure(stage, robot_path, root):
         # The 5.x converter can finish without finding the articulation: an empty robot must not read as a success.
         shutil.rmtree(folder, ignore_errors=True)
         refuse("EXPORT_FAILED", "The URDF exporter wrote no joints for a robot that has them. On Isaac Sim 5.1 its converter does not find a robot under a "

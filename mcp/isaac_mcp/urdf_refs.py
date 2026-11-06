@@ -341,7 +341,7 @@ def mesh_reference(referrer: str, name: str) -> str | None:
     def leaves(text):
         return SCHEME.match(text) or text.startswith("/") or "\\" in text or any(ord(c) < 32 for c in text) or normal_path(_parent(referrer), text) is None
 
-    if leaves(value) or leaves(decoded):
+    if leaves(value) or leaves(decoded) or leaves(unquote(decoded)):  # twice: a name encoded twice must not leave on a second decode
         return None
     if PurePosixPath(referrer).suffix.lower() in _URI_MESHES:
         return None if "%" in decoded else normal_path(_parent(referrer), decoded)

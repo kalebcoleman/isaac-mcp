@@ -690,3 +690,13 @@ def test_physics_is_the_hydra_override_on_lab_3_and_needs_nothing_on_lab_2(tmp_p
     assert jobs._with_physics("physx", tmp_path, ["--video"]) == ["--video"]
     with pytest.raises(ValueError, match="PhysX only"):
         jobs._with_physics("newton", tmp_path, [])
+
+
+def test_video_paths_finds_the_newest_of_many(tmp_path):
+    folder = tmp_path / "videos" / "train"
+    folder.mkdir(parents=True)
+    for step in range(150):
+        clip = folder / f"rl-video-step-{step}.mp4"
+        clip.write_bytes(b"x")
+        os.utime(clip, (1000 + step, 1000 + step))
+    assert jobs._video_paths(tmp_path, None)[:2] == [str(folder / "rl-video-step-149.mp4"), str(folder / "rl-video-step-148.mp4")]

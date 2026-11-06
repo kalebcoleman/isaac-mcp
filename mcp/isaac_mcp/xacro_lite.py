@@ -46,7 +46,32 @@ _COMPARE = {ast.Eq: lambda a, b: a == b, ast.NotEq: lambda a, b: a != b, ast.Lt:
             ast.Gt: lambda a, b: a > b, ast.GtE: lambda a, b: a >= b, ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b,
             ast.Is: lambda a, b: a is b, ast.IsNot: lambda a, b: a is not b}
 _FILE_ROOT = "package://"
-_WIDE_FORMAT = re.compile(r"%(\([^)]*\))?[-+ #0]*(\*|\d{4,})|%(\([^)]*\))?[^%a-zA-Z]*\.(\*|\d{4,})")
+MAX_FORMAT_WIDTH = 999
+
+
+def _format_too_wide(text: str) -> bool:
+    """Does a % format ask for a width or precision that would build a huge string? Read the way Python reads it: a (key) may nest parentheses."""
+    index = text.find("%")
+    while index >= 0:
+        index += 1
+        if text[index:index + 1] == "(":
+            depth, index = 1, index + 1
+            while index < len(text) and depth:
+                depth += {"(": 1, ")": -1}.get(text[index], 0)
+                index += 1
+        while text[index:index + 1] in ("-", "+", " ", "#", "0") and index < len(text):
+            index += 1
+        for _ in range(2):  # the width, then the precision
+            start = index
+            while text[index:index + 1].isdigit():
+                index += 1
+            if text[index:index + 1] == "*" or (index > start and int(text[start:index]) > MAX_FORMAT_WIDTH):
+                return True
+            if text[index:index + 1] != ".":
+                break
+            index += 1
+        index = text.find("%", index + 1)
+    return False
 
 
 class XacroError(AssetError):
@@ -480,7 +505,7 @@ class Expander:
                 _fail("A repeated string or list would be too long.", "LIMIT")
             if isinstance(node.op, ast.Mult) and isinstance(right, (str, list)) and isinstance(left, int) and len(right) * max(left, 0) > MAX_STRING:
                 _fail("A repeated string or list would be too long.", "LIMIT")
-            if isinstance(node.op, ast.Mod) and isinstance(left, str) and _WIDE_FORMAT.search(left):
+            if isinstance(node.op, ast.Mod) and isinstance(left, str) and _format_too_wide(left):
                 _fail("A format width above 999 is not allowed.", "LIMIT")
             try:
                 result = op(left, right)

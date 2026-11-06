@@ -248,3 +248,24 @@ def test_a_plain_material_path_that_would_leave_the_folder_is_still_refused(name
 def test_a_dae_reference_is_a_uri():
     assert urdf_refs.mesh_reference("m.dae", "my%20tex.png") == "my tex.png"
     assert urdf_refs.mesh_reference("m.dae", "%2e%2e/x.png") is None
+
+
+@pytest.mark.parametrize("text", ["%(a(b))999999999s", "%(a)999999999s", "%999999999d", "%.999999999f", "%(a(b)).999999999f", "%*d", "%.*f", "%-0 +#99999d", "ok %d then %(k)5000s"])
+def test_a_format_too_wide_is_seen_however_it_is_written(text):
+    assert xacro_lite._format_too_wide(text)
+
+
+@pytest.mark.parametrize("text", ["%d", "%5.2f", "%(a)10s", "%(a(b))999s", "100%", "%%", "%%999999d is not a width", "no format", "%", "%(unclosed"])
+def test_an_ordinary_format_is_left_alone(text):
+    assert not xacro_lite._format_too_wide(text)
+
+
+def test_a_nested_key_cannot_build_a_huge_string():
+    started = time.monotonic()
+    with pytest.raises(AssetError) as error:
+        _expand(_xacro("""<link name="${'%(a(b))999999999s' % {'a(b)':1}}"/>"""))
+    assert error.value.code in ("LIMIT", "UNSUPPORTED_XACRO") and time.monotonic() - started < 0.1
+
+
+def test_a_twice_encoded_plain_path_is_refused():
+    assert urdf_refs.mesh_reference("m.mtl", "%252e%252e/x.png") is None

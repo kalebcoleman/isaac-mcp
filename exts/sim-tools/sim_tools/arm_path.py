@@ -9,21 +9,24 @@ from __future__ import annotations
 import math
 import time
 
-from isaac_mcp.project_assets import refuse
+from isaac_mcp.project_assets import AssetError, refuse
 
 RATE_HZ = 30.0
 MAX_STEPS = 3600
 MAX_SECONDS = 120.0
+MAX_WALL_S = 300.0  # other tools wait while a path runs, and a slow simulation stretches it
 STUCK_WALL_S = 5.0
 SETTLE_S = 0.25
 
 
 async def _wait_sim_time(seconds, now, next_frame) -> bool:
-    """Wait for *seconds* of simulation time. False if the simulation stopped advancing."""
+    """Wait for *seconds* of simulation time. False if the simulation stopped advancing, or went back (a looping timeline)."""
     end, last, last_change = now() + seconds, now(), time.monotonic()
     while now() < end:
         await next_frame()
         current = now()
+        if current < last:
+            return False
         if current != last:
             last, last_change = current, time.monotonic()
         elif time.monotonic() - last_change > STUCK_WALL_S:
@@ -58,22 +61,38 @@ async def straight(args: dict, dispatch, is_playing, now, next_frame) -> dict:
         refuse("LIMIT", f"That path takes {seconds:.0f} s at this speed (the limit is {MAX_SECONDS:.0f}): go faster, or in parts.")
     steps = max(1, min(MAX_STEPS, math.ceil(seconds * RATE_HZ - 1e-9)))
     pause = seconds / steps
-    result, done, stopped = None, 0, None
-    for index in range(1, steps + 1):
+    result, done, stopped, index = None, 0, None, 1
+    began, wall_began = now(), time.monotonic()
+    while index <= steps:
         point = [start[i] + (goal[i] - start[i]) * index / steps for i in range(3)]
-        result = dispatch("sim.arm.ik", dict(ik_args, position=point))
+        try:
+            result = dispatch("sim.arm.ik", dict(ik_args, position=point))
+        except AssetError as exc:
+            if result is None:
+                raise  # nothing has moved: the refusal stands as it is
+            stopped = f"{exc.code}: {str(exc)[:300]}"
+            break
         if not result["reached"]:
             stopped = f"The point {[round(v, 4) for v in point]} could not be reached, so the arm stopped short of it."
             break
         done = index
-        if not await _wait_sim_time(pause, now, next_frame):
-            stopped = "The simulation stopped advancing (paused or stopped)."
+        if index == steps:
             break
+        if time.monotonic() - wall_began > MAX_WALL_S:
+            stopped = f"The path was stopped after {MAX_WALL_S:.0f} s of real time: the simulation is running too slowly for it."
+            break
+        if not await _wait_sim_time(pause, now, next_frame):
+            stopped = "The simulation stopped advancing (paused, stopped or looped)."
+            break
+        index = max(index + 1, min(steps, int((now() - began) / pause) + 1))  # a slow frame rate skips points rather than slowing the arm down
     if stopped is None:
         await _wait_sim_time(SETTLE_S, now, next_frame)  # the joints follow their targets a moment later
-    final = tip()
+    try:
+        final = tip()
+    except AssetError:
+        final = None
     result["path"] = dict(
-        start=start, goal=list(goal), final=final, final_error=math.dist(final, goal), steps=steps, steps_done=done, speed=speed,
+        start=start, goal=list(goal), final=final, final_error=math.dist(final, goal) if final else None, steps=steps, steps_done=done, speed=speed,
         **({"stopped_early": stopped} if stopped else {}),
         note="final is where the point really is; the arm can lag its command, and contact can hold it back. There is no collision check.",
     )

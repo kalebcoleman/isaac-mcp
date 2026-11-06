@@ -85,3 +85,50 @@ def test_it_stops_when_the_simulation_stops_advancing(monkeypatch):
     fake = Fake(stalls=True)
     result = fake.run(position=[0.1, 0, 0.5], speed=0.1)
     assert len(fake.points) == 1 and "stopped advancing" in result["path"]["stopped_early"]
+
+
+def test_a_refusal_at_the_first_point_stands_and_a_later_one_keeps_the_path():
+    class Refusing(Fake):
+        def __init__(self, at):
+            super().__init__()
+            self.at = at
+
+        def dispatch(self, name, a):
+            if name == "sim.arm.ik" and len(self.points) == self.at:
+                raise AssetError("IK_MODEL_MISMATCH", "The model disagrees.")
+            return super().dispatch(name, a)
+
+    with pytest.raises(AssetError) as error:
+        Refusing(0).run(position=[0.1, 0, 0.5], speed=0.1)
+    assert error.value.code == "IK_MODEL_MISMATCH"
+    result = Refusing(5).run(position=[0.1, 0, 0.5], speed=0.1)
+    assert result["path"]["steps_done"] == 5 and "IK_MODEL_MISMATCH" in result["path"]["stopped_early"] and result["path"]["final"]
+
+
+def test_a_slow_frame_rate_skips_points_rather_than_slowing_the_arm():
+    class Slow(Fake):
+        async def frame(self):
+            self.time += 0.2
+
+    fake = Slow()
+    result = fake.run(position=[0.1, 0, 0.5], speed=0.1)
+    assert len(fake.points) < 10 and fake.points[-1] == pytest.approx([0.1, 0, 0.5]) and result["path"]["steps_done"] == 30
+    assert fake.time < 1.7
+
+
+def test_a_timeline_that_loops_ends_the_path():
+    class Looping(Fake):
+        async def frame(self):
+            self.time = self.time + 1 / 60 if len(self.points) < 4 else 0.0
+
+    fake = Looping()
+    result = fake.run(position=[0.1, 0, 0.5], speed=0.1)
+    assert "stopped advancing" in result["path"]["stopped_early"] and len(fake.points) == 4
+
+
+def test_a_very_slow_simulation_is_cut_off_by_real_time(monkeypatch):
+    from sim_tools import arm_path
+
+    monkeypatch.setattr(arm_path, "MAX_WALL_S", -1.0)
+    result = Fake().run(position=[0.1, 0, 0.5], speed=0.1)
+    assert "real time" in result["path"]["stopped_early"] and result["path"]["steps_done"] == 1

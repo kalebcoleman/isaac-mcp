@@ -1288,6 +1288,7 @@ def runs_status(job_id: str) -> dict[str, Any]:
 
 
 _VIDEO_LOG_TAIL = 4 * 1024**2
+_VIDEO_FILES = 5000
 _VIDEO_LOG_LINE = re.compile(r"(?:video_folder|output_dir): (\S+)|\[VideoRecorder\] Wrote \d+ frames to (\S+\.mp4)")
 
 
@@ -1300,17 +1301,15 @@ def _video_paths(run_dir: Any, log_path: Path | None = None, limit: int = 8) -> 
             with log_path.open("rb") as log:  # a training log can be huge, and this runs on every runs_status
                 log.seek(max(0, log_path.stat().st_size - _VIDEO_LOG_TAIL))
                 tail = log.read().decode(errors="replace")
-            for match in itertools.islice(_VIDEO_LOG_LINE.finditer(tail), 8):
-                folder = Path(match.group(1)) if match.group(1) else Path(match.group(2)).parent
-                if "videos" in folder.parts:  # never search a folder a log line merely names
-                    folders.append(folder)
+            named = [Path(m.group(1)) if m.group(1) else Path(m.group(2)).parent for m in _VIDEO_LOG_LINE.finditer(tail)]
+            folders += [folder for folder in dict.fromkeys(reversed(named)) if "videos" in folder.parts][:8]  # latest first; never search a folder a log line merely names
     except OSError:
         pass
     found: dict[str, float] = {}
     for folder in folders:
         try:
             if folder.is_dir():
-                for path in itertools.islice(folder.rglob("*.mp4"), 64):
+                for path in itertools.islice(folder.rglob("*.mp4"), _VIDEO_FILES):  # enough for every clip a run writes, so the newest is among them
                     found[str(path)] = path.stat().st_mtime
         except OSError:
             continue
