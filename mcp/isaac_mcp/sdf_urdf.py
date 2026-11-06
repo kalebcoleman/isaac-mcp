@@ -166,6 +166,7 @@ class _Converter:
         self.project = project
         self.entry = entry
         self.warnings = []
+        self.read: set[str] = set()
         self.dropped = {}
         self.includes = 0
         self.ids = 0
@@ -201,6 +202,7 @@ class _Converter:
             self.warn(f"<include> {uri[:60]!r} was not found in the approved folder and was left out.")
             return None
         sub = _parse(self.project, file)
+        self.read.add(file)
         inner = sub.findall("model")
         if not inner:
             self.warn(f"{file} has no model.")
@@ -226,6 +228,7 @@ class _Converter:
                 config = f"{folder}/model.config"
                 if config in self.project.files:
                     try:
+                        self.read.add(config)
                         for sdf in _parse(self.project, config).iter("sdf"):
                             if sdf.text and sdf.text.strip():
                                 path = normal_path(folder, sdf.text.strip())
@@ -581,4 +584,4 @@ def _convert(entry: str, project: Project, model: str | None = None) -> dict:
         for holder in [root] + root.findall("world"):
             for _ in holder.findall(tag):
                 converter.drop(tag)
-    return dict(urdf=text, model=name, models=names, static=static, warnings=converter.warnings, dropped=converter.dropped, joints=joints)
+    return dict(urdf=text, model=name, models=names, static=static, warnings=converter.warnings, dropped=converter.dropped, joints=joints, files=sorted({entry, *converter.read}))

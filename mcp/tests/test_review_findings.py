@@ -214,6 +214,7 @@ def test_a_mesh_in_an_included_model_is_found_beside_that_model():
     files = {"world.sdf": '<sdf version="1.9"><world name="w"><include><uri>model://inner</uri></include></world></sdf>', "inner/model.sdf": included, "inner/meshes/m.stl": "x"}
     out = sdf_urdf.convert("world.sdf", _project(files), None)
     assert 'filename="inner/meshes/m.stl"' in out["urdf"]
+    assert {"world.sdf", "inner/model.sdf"} <= set(out["files"])
 
 
 @pytest.mark.parametrize("expression", ["'%(a)999999999s' % {'a':1}", "'%(a).999999999f' % {'a':1.0}"])

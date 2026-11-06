@@ -115,7 +115,7 @@ def _with_physics(physics, root, extras: list[str]) -> list[str]:
         return extras
     if physics not in PHYSICS_PRESETS:
         raise ValueError(f"physics must be one of {', '.join(PHYSICS_PRESETS)}.")
-    if any(arg.split("=", 1)[0] == "physics" for arg in extras):
+    if any(arg.lstrip("+~").split("=", 1)[0] == "physics" for arg in extras):
         raise ValueError("Give physics as this option or in extra_args, not both.")
     if _per_library(root) is not None:
         if physics == "newton":
@@ -890,6 +890,8 @@ def _watcher(job_dir: Path, job_id: str, proc: subprocess.Popen, timeout_s: floa
             proc.wait()
         exit_code = proc.returncode
         status = "succeeded" if exit_code == 0 else "failed"
+        if (job_dir / TIMEOUT_FILE).exists():  # the shell guard enforced the limit first
+            status = "timeout"
     except subprocess.TimeoutExpired:
         # kill process group
         try:

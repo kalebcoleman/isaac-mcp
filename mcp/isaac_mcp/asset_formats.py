@@ -240,7 +240,7 @@ def closure_result(path, project, folder, fmt) -> dict:
                 from . import sdf_urdf
 
                 made = sdf_urdf.convert(entry, project, None)
-                text, used = made["urdf"], {entry}
+                text, used = made["urdf"], set(made["files"])
                 result.update(sdf_model=made["model"], sdf_models=made["models"], sdf_warnings=made["warnings"])
             tree = urdf_refs.parse(text.encode(), entry)
             done = urdf_refs.resolve(entry, tree, project)

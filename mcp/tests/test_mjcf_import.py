@@ -149,6 +149,7 @@ def _prismatic_pair(tmp_path, disconnected=False, second_name='b'):
 
 
 def test_legacy_simple_prismatic_equality_is_written_as_mimic(tmp_path):
+    pytest.importorskip('pxr')
     from pxr import Usd
     from sim_tools.mjcf import restore_legacy_equalities
 
