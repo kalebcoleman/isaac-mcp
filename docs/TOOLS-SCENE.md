@@ -17,11 +17,27 @@ UR5e twin, `ur5e_dt__quick_start`.
 | Argument | Meaning |
 |---|---|
 | `robot` | Optional. A public name, `<pack>/<file.usd>`, or an absolute path under an approved root. Names: `ur5e` (your local copy first), and `franka`, `unitree_h1`, `unitree_g1` (humanoids), `turtlebot3_burger`, `carter_v1`, `nova_carter`, `jetbot` and `create3` from this simulator's own assets root, which are checked first and refused with the names if this build lacks one. A wheeled robot's result adds `robot.wheels` and `robot.cmd_vel_graph`, ready for `sim__graph__build`. See the [worked example](ROS2-RVIZ.md#worked-example-a-public-robot-cmd_vel-and-a-nav2-goal). |
-| `environment` | Optional: `warehouse` builds a 24 by 16 m warehouse (see [A warehouse in one call](#a-warehouse-in-one-call)) and puts the robot in it. |
+| `environment` | Optional: `warehouse` builds a 24 by 16 m warehouse (see [A warehouse in one call](#a-warehouse-in-one-call)) and puts the robot in it; `jenga` builds a block tower with a Franka beside it (see [A Jenga tower in one call](#a-jenga-tower-in-one-call)). |
 | `ros` | With a robot: run what `sim__ros2__tf_setup` runs and report the matching shell line. |
 | `play` | Start the timeline. Default: stopped. |
 | `up_axis`, `meters_per_unit` | The stage's up axis (`Z` or `Y`, default `Z`) and units (default `1.0`; `0.01` for centimetres). The ground, gravity, camera and framing follow them. |
 | `discard_changes` | Replace a stage with unsaved edits, which are lost. Without it, the call refuses with `UNSAVED_CHANGES` and changes nothing. |
+
+### A Jenga tower in one call
+
+`sim__quick_start environment=jenga` (default robot `franka`) builds a tower you can really knock over:
+
+- 18 layers of 3 dynamic blocks (54), twice real size: 15 x 5 x 3 cm, 120 g, friction 0.5/0.4, on a 34 cm table, tower centre at (0.7, 0). Odd layers run along x, towards the arm.
+- a Franka on the floor beside the table, in a ready pose with its hand level at layer 9, holding a thin red push rod between open fingers. The rod is a collider on the hand's own body, so it adds no joint, and both fingers get a drive.
+- PhysX at 120 Hz with 32 solver iterations per block.
+
+The result's `environment.poke_example` has everything for one push: the `block`, the `approach`, `touch` and `through` points, and `ik` (the `link`, `offset` and `orientation` for `sim__arm__ik`). Layer 9 is the example; `layer` can be any odd layer the wrist can reach, and only layers near 9 and above keep the hand level.
+
+To push a block out: `sim__timeline__control action=play`, then call `sim__arm__ik` with `move=true`, `link`, `offset` and `orientation` from `ik`, and `position` stepping about 1 cm along x from `approach` to `through`, waiting half a second between calls. `move=true` commands the solved joints in one call and commands nothing when the target was not reached. `sim__body__state` on the block and on `top_block` shows what moved.
+
+To knock something without the arm: `sim__physics__apply path=<block> impulse=[0.35,0,0]` gives a body one push (optionally `at` a world point). It needs a running simulation and edits nothing.
+
+Measured live on Sim 6.2 (PhysX): the tower stood still for 10 s (top block unchanged to 0.1 mm); the arm pushed the middle block of layer 9 out by 12.0 cm while the top block moved 1.4 mm, and the tower stood after the arm pulled back; an impulse of 0.35 N s moved that block 3.8 cm and the top block 0.8 mm. The hand's palm is 20 cm wide, which is why the rod is there: without it the palm hits the tower and shoves everything above the layer. The arm stands on the floor because the Franka's wrist limit only lets the hand stay level about 60 cm or more above its base. There is no collision check or path planning: the arm goes straight to each solved pose, so keep the steps small near the tower. Blocks start exactly stacked, not with a real tower's small gaps and tilts.
 
 ### A warehouse in one call
 

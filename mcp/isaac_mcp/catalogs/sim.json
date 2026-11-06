@@ -91,7 +91,7 @@
         },
         "environment": {
           "type": "string",
-          "description": "Optional: \"warehouse\" builds a 24 by 16 m warehouse (walls, shelving racks with boxes, two aisles and a cross aisle, painted lanes) and puts the robot at the west end of an aisle, facing east. With no robot it uses carter_v1. All plain USD boxes with colliders: nothing downloaded.",
+          "description": "Optional. \"warehouse\": a 24 by 16 m warehouse (racks, aisles, docks) with the robot at the start of an aisle; default robot carter_v1. \"jenga\": a table, a 54-block giant Jenga tower and a Franka in a ready pose; the result names the blocks and a poke target. Plain USD boxes with colliders: nothing downloaded.",
           "required": false
         },
         "ros": {
@@ -155,7 +155,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Optional: \"warehouse\" builds a 24 by 16 m warehouse (walls, shelving racks with boxes, two aisles and a cross aisle, painted lanes) and puts the robot at the west end of an aisle, facing east. With no robot it uses carter_v1. All plain USD boxes with colliders: nothing downloaded."
+          "description": "Optional. \"warehouse\": a 24 by 16 m warehouse (racks, aisles, docks) with the robot at the start of an aisle; default robot carter_v1. \"jenga\": a table, a 54-block giant Jenga tower and a Franka in a ready pose; the result names the blocks and a poke target. Plain USD boxes with colliders: nothing downloaded."
         },
         {
           "name": "ros",
@@ -4546,7 +4546,7 @@
       "owner_id": "generic-sim"
     },
     "sim.arm.ik": {
-      "description": "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -4593,6 +4593,11 @@
           "description": "world (default) or base: the frame position and orientation are given in.",
           "required": false,
           "default": "world"
+        },
+        "move": {
+          "type": "boolean",
+          "description": "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.",
+          "required": false
         },
         "position_tolerance": {
           "type": "number",
@@ -4688,6 +4693,15 @@
           "default": "world",
           "has_default": true,
           "description": "world (default) or base: the frame position and orientation are given in."
+        },
+        {
+          "name": "move",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only."
         },
         {
           "name": "position_tolerance",
@@ -5358,6 +5372,16 @@
           "type": "number",
           "description": "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.",
           "required": false
+        },
+        "impulse": {
+          "type": "array",
+          "description": "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing.",
+          "required": false
+        },
+        "at": {
+          "type": "array",
+          "description": "With impulse: the world point [x, y, z] to push at. Default: the body's centre.",
+          "required": false
         }
       },
       "fields": [
@@ -5448,6 +5472,24 @@
           "default": null,
           "has_default": false,
           "description": "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass."
+        },
+        {
+          "name": "impulse",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing."
+        },
+        {
+          "name": "at",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With impulse: the world point [x, y, z] to push at. Default: the body's centre."
         }
       ],
       "namespace": "sim",

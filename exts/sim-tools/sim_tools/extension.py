@@ -744,6 +744,8 @@ class Extension(omni.ext.IExt):
         from .advanced import MUTATIONS
 
         mutations |= MUTATIONS
+        if name == "sim.physics.apply" and a.get("impulse") is not None:
+            mutations = mutations - {name}  # a push acts on the running simulation; it edits nothing
         if (
             name in mutations
             or name in ("sim.simulation.step", "sim.joints.move")

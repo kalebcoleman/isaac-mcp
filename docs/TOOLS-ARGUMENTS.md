@@ -253,10 +253,12 @@ No arguments.
 
 ### `isaaclab__metrics_summary`
 
-Summarise TensorBoard scalars of a run (last, min, max, step, count per tag).
+Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare several jobs' final values side by side.
 
-- `run_dir` (str, required): Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status.
+- `run_dir` (str | None, default `None`): Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status. Or give job_id.
 - `tags` (list[str] | None, default `None`): Scalar tags to include. Default: all.
+- `job_id` (str | None, default `None`): A job from isaaclab__train, instead of run_dir.
+- `compare_jobs` (list[str] | None, default `None`): Several job_ids: returns their final scalars side by side, to compare seeds or settings.
 
 ### `isaaclab__play`
 
@@ -392,7 +394,7 @@ Forward kinematics: where a link (the hand) would be for given joint values, fro
 
 ### `sim__arm__ik`
 
-Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.
+Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -403,6 +405,7 @@ Inverse kinematics for any robot with revolute or prismatic joints, read from it
 - `base_link` (string, optional): Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).
 - `offset` (array, optional): Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.
 - `frame` (string, default `"world"`): world (default) or base: the frame position and orientation are given in.
+- `move` (boolean, optional): Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.
 - `position_tolerance` (number, default `0.001`): Metres of position error that counts as reached.
 - `orientation_tolerance` (number, default `0.01`): Radians of orientation error that counts as reached.
 
@@ -716,6 +719,8 @@ Add or remove a collider, rigid body and kinematic state, or set mass / density,
 - `kinematic` (boolean, optional): Kinematic flag (physics:kinematicEnabled); needs a rigid body on this prim.
 - `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density.
 - `density` (number, optional): Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.
+- `impulse` (array, optional): A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing.
+- `at` (array, optional): With impulse: the world point [x, y, z] to push at. Default: the body's centre.
 
 ### `sim__physics__configure`
 
@@ -876,7 +881,7 @@ One call that builds a working scene for anyone, with nothing to supply and no I
 
 - `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root: any file or folder assets__import_path reads (MJCF, xacro, SDF, mesh, robot folder). Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.
 - `fixed_base` (boolean, default `true`): With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
-- `environment` (string, optional): Optional: "warehouse" builds a 24 by 16 m warehouse (walls, shelving racks with boxes, two aisles and a cross aisle, painted lanes) and puts the robot at the west end of an aisle, facing east. With no robot it uses carter_v1. All plain USD boxes with colliders: nothing downloaded.
+- `environment` (string, optional): Optional. "warehouse": a 24 by 16 m warehouse (racks, aisles, docks) with the robot at the start of an aisle; default robot carter_v1. "jenga": a table, a 54-block giant Jenga tower and a Franka in a ready pose; the result names the blocks and a poke target. Plain USD boxes with colliders: nothing downloaded.
 - `ros` (boolean, default `false`): With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.
 - `up_axis` (Z|Y, default `"Z"`): The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.
 - `meters_per_unit` (number, default `1.0`): The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match.

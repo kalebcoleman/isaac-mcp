@@ -1199,9 +1199,39 @@ class Advanced:
             revert="sim__prim__revert",
         )
 
+    def physics_push(self, stage, a):
+        """A one-off impulse on a body in the running simulation: edits nothing and needs no stopped timeline."""
+        import carb
+        import omni.physx
+        import omni.usd
+        from pxr import PhysicsSchemaTools, UsdGeom, UsdPhysics
+
+        s = self.s
+        path = a["path"]
+        prim = s.prim(stage, path)
+        if s.timeline.is_stopped():
+            refuse("PHYSICS_NOT_READY", "An impulse acts on a running simulation: play or pause first.")
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            refuse("INVALID_PHYSICS", f"{path} is not a rigid body. Push a body, for example a block or a robot link.")
+        impulse, at = a["impulse"], a.get("at")
+        for label, value in (("impulse", impulse), ("at", at)):
+            if value is not None and (not isinstance(value, (list, tuple)) or len(value) != 3
+                                      or not all(type(v) in (int, float) and math.isfinite(v) for v in value)):
+                refuse("INVALID_VALUE", f"{label} must be three finite numbers.")
+        if at is None:
+            box = UsdGeom.BBoxCache(s.timeline.get_current_time() * stage.GetTimeCodesPerSecond(), [UsdGeom.Tokens.default_]).ComputeWorldBound(prim)
+            at = list(box.ComputeAlignedRange().GetMidpoint())
+        stage_id = omni.usd.get_context().get_stage_id()
+        omni.physx.get_physx_simulation_interface().apply_force_at_pos(
+            stage_id, PhysicsSchemaTools.sdfPathToInt(prim.GetPath()), carb.Float3(*[float(v) for v in impulse]), carb.Float3(*[float(v) for v in at]), "Impulse")
+        return dict(path=path, impulse=list(impulse), at=[float(v) for v in at], unit="N s (kg m/s)",
+                    note="One push; it takes effect on the next physics step. PhysX only: on Newton this may do nothing.")
+
     def physics_apply(self, stage, a):
         from pxr import UsdPhysics
 
+        if a.get("impulse") is not None:
+            return self.physics_push(stage, a)
         s = self.s
         path = a["path"]
         prim = s.prim(stage, path)
@@ -1940,7 +1970,16 @@ class Advanced:
                         "or move them if the new pose must hold.",
             )
         if name == "sim.arm.ik":
-            return self.arm_ik(stage, a)
+            move = a.pop("move", False)
+            if type(move) is not bool:
+                refuse("INVALID_VALUE", "move must be true or false.")
+            solved = self.arm_ik(stage, a)
+            if move and not solved["reached"]:  # a failed solve can be a very different pose: swinging there is never what was asked
+                solved["commanded"] = None
+                solved["next"] = "Nothing was commanded, because the target was not reached. " + solved["next"]
+            elif move:  # solve, then command what was solved: one call for an arm to go somewhere
+                solved["commanded"] = self.execute("sim.joints.command", stage, dict(path=a["path"], targets=solved["joint_targets"], clamp=True))
+            return solved
         if name == "sim.arm.fk":
             return self.arm_fk(stage, a)
         if name == "sim.joints.state":

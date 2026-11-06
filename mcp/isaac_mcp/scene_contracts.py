@@ -115,7 +115,7 @@ add(
     dict(
         robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root: any file or folder assets__import_path reads (MJCF, xacro, SDF, mesh, robot folder). Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.", False),
         fixed_base=field("boolean", "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False, default=True),
-        environment=field("string", "Optional: \"warehouse\" builds a 24 by 16 m warehouse (walls, shelving racks with boxes, two aisles and a cross aisle, painted lanes) and puts the robot at the west end of an aisle, facing east. With no robot it uses carter_v1. All plain USD boxes with colliders: nothing downloaded.", False),
+        environment=field("string", "Optional. \"warehouse\": a 24 by 16 m warehouse (racks, aisles, docks) with the robot at the start of an aisle; default robot carter_v1. \"jenga\": a table, a 54-block giant Jenga tower and a Franka in a ready pose; the result names the blocks and a poke target. Plain USD boxes with colliders: nothing downloaded.", False),
         ros=field("boolean", "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.", False, default=False),
         up_axis=field("string", "The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.", False, default="Z", enum=["Z", "Y"]),
         meters_per_unit=field("number", "The stage's units, as a positive number (0.01 for centimetres). Ground size, gravity, camera distance and framing scale with it. A robot file must match.", False, default=1.0),
@@ -746,7 +746,7 @@ add(
 
 add(
     "sim.arm.ik",
-    "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solve only: nothing is commanded; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits.",
+    "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits.",
     dict(
         **TARGET,
         path=field("string", "Articulation root, as for sim__joints__state."),
@@ -756,6 +756,7 @@ add(
         base_link=field("string", "Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).", False),
         offset=field("array", "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.", False),
         frame=field("string", "world (default) or base: the frame position and orientation are given in.", False, default="world"),
+        move=field("boolean", "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.", False),
         position_tolerance=field("number", "Metres of position error that counts as reached.", False, default=0.001),
         orientation_tolerance=field("number", "Radians of orientation error that counts as reached.", False, default=0.01),
     ),
@@ -900,6 +901,8 @@ add(
         density=field(
             "number", "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.", False
         ),
+        impulse=field("array", "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing.", False),
+        at=field("array", "With impulse: the world point [x, y, z] to push at. Default: the body's centre.", False),
     ),
 )
 add(

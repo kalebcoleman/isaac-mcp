@@ -386,6 +386,43 @@ def test_ik_on_a_running_arm_solves_and_the_self_check_agrees(runtime):
     assert set(result["joint_targets"]) == {"j1", "j2", "j3"}
 
 
+def _recording_commands(advanced, monkeypatch):
+    sent, real = [], advanced.execute
+
+    def execute(name, stage, a, **kw):
+        if name == "sim.joints.command":
+            sent.append(a)
+            return dict(status="commanded")
+        return real(name, stage, a, **kw)
+
+    monkeypatch.setattr(advanced, "execute", execute)
+    return sent
+
+
+def test_move_commands_what_it_solved(runtime, monkeypatch):
+    advanced, stage, _state, _seen, model = runtime
+    sent = _recording_commands(advanced, monkeypatch)
+    target = model.fk(np.array([0.3, -0.4, 0.5]))
+    result = advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=target[:3, 3].tolist(), move=True))
+    assert result["reached"] and result["commanded"] == dict(status="commanded")
+    assert sent == [dict(path="/Arm", targets=result["joint_targets"], clamp=True)]
+
+
+def test_move_commands_nothing_when_the_target_was_not_reached(runtime, monkeypatch):
+    advanced, stage, _state, _seen, _model = runtime
+    sent = _recording_commands(advanced, monkeypatch)
+    result = advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=[50.0, 0.0, 0.0], move=True))
+    assert not result["reached"] and result["commanded"] is None and sent == []  # a failed solve can be a very different pose
+    assert result["next"].startswith("Nothing was commanded")
+
+
+def test_move_must_be_a_boolean(runtime):
+    advanced, stage, _state, _seen, _model = runtime
+    with pytest.raises(AssetError) as error:
+        advanced.execute("sim.arm.ik", stage, dict(path="/Arm", link="hand", position=[0.5, 0.0, 0.2], move="yes"))
+    assert error.value.code == "INVALID_VALUE"
+
+
 def test_a_link_physics_does_not_report_skips_the_self_check_instead_of_refusing(runtime):
     advanced, stage, _state, seen, model = runtime
     seen["fail"] = AssetError("PHYSICS_NOT_READY", "PhysX has no initialized body at this path.")
