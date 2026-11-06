@@ -27,7 +27,7 @@ UR5e twin, `ur5e_dt__quick_start`.
 
 `sim__quick_start environment=jenga` (default robot `franka`) builds a tower you can really knock over:
 
-- 18 layers of 3 dynamic blocks (54), twice real size: 15 x 5 x 3 cm, 120 g, friction 0.5/0.4, on a 34 cm table, tower centre at (0.7, 0). Odd layers run along x, towards the arm.
+- 18 layers of 3 dynamic blocks (54), twice real size: 15 x 5 x 3 cm, 120 g, friction 0.5/0.4, on a 34 cm table, tower centre at (0.7, 0). Odd layers run along x, towards the arm, and their middle block is 0.4 mm thinner, so it is loose, as the block a player looks for is.
 - a Franka on the floor beside the table, in a ready pose with its hand level at layer 9, holding a thin red push rod between open fingers. The rod is a collider on the hand's own body, so it adds no joint, and both fingers get a drive.
 - PhysX at 120 Hz with 32 solver iterations per block.
 
@@ -35,9 +35,9 @@ The result's `environment.poke_example` has everything for one push: the `block`
 
 To push a block out: `sim__timeline__control action=play`, then call `sim__arm__ik` with `move=true`, `link`, `offset` and `orientation` from `ik`, and `position` stepping about 1 cm along x from `approach` to `through`, waiting half a second between calls. `move=true` commands the solved joints in one call and commands nothing when the target was not reached. `sim__body__state` on the block and on `top_block` shows what moved.
 
-To knock something without the arm: `sim__physics__apply path=<block> impulse=[0.35,0,0]` gives a body one push (optionally `at` a world point). It needs a running simulation and edits nothing.
+To knock something without the arm: `sim__physics__apply path=<block> impulse=[0.1,0,0]` gives a body one push (optionally `at` a world point). It needs a running simulation and edits nothing.
 
-Measured live on Sim 6.2 (PhysX): the tower stood still for 10 s (top block unchanged to 0.1 mm); the arm pushed the middle block of layer 9 out by 12.0 cm while the top block moved 1.4 mm, and the tower stood after the arm pulled back; an impulse of 0.35 N s moved that block 3.8 cm and the top block 0.8 mm. The hand's palm is 20 cm wide, which is why the rod is there: without it the palm hits the tower and shoves everything above the layer. The arm stands on the floor because the Franka's wrist limit only lets the hand stay level about 60 cm or more above its base. There is no collision check or path planning: the arm goes straight to each solved pose, so keep the steps small near the tower. Blocks start exactly stacked, not with a real tower's small gaps and tilts.
+Measured live with PhysX. On Sim 6.2 and on 5.1 the tower stood still for 10 s, and the arm pushed the middle block of layer 9 out by 12.0 cm while the top block moved 0.3 mm; on 6.2 it was within 0.9 mm after the arm pulled back. With blocks all of one height, Sim 5.1's solver put the load on the middle block and pushing it carried the upper tower along until it fell, which is why that block is loose. The impulse is strong for a loose block: 0.35 N s threw it off the table with the top block unmoved, and by friction alone about 0.1 N s should stop it some 9 cm out (calculated, not run). The hand's palm is 20 cm wide, which is why the rod is there: without it the palm hits the tower and shoves everything above the layer. The arm stands on the floor because the Franka's wrist limit only lets the hand stay level about 60 cm or more above its base. There is no collision check or path planning: the arm goes straight to each solved pose, so keep the steps small near the tower. Blocks start exactly stacked, not with a real tower's small gaps and tilts.
 
 ### A warehouse in one call
 

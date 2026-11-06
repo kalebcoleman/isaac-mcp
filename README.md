@@ -61,7 +61,7 @@ Add ROS 2 and the same scene runs Nav2: `Set up ROS 2 TF, build an occupancy map
 `sim__quick_start environment=warehouse` builds the room, the racks and the robot in one call, with nothing to download.
 For a real floor plan, a ROS Nav2 map becomes walls: see [importing any asset](docs/ASSET-IMPORT.md#ros-maps).
 
-**A Jenga tower you can really knock over.** `sim__quick_start environment=jenga` builds 54 dynamic blocks and a Franka with a push rod; `sim__arm__ik move=true` moves the arm in one call. In a live run it pushed a block 12 cm out and the tower stood. See [A Jenga tower in one call](docs/TOOLS-SCENE.md#a-jenga-tower-in-one-call).
+**A Jenga tower you can really knock over.** `sim__quick_start environment=jenga` builds 54 dynamic blocks and a Franka with a push rod; `sim__arm__ik move=true` moves the arm in one call. In live runs on Sim 6.2 and 5.1 it pushed a block 12 cm out and the top of the tower moved 0.3 mm. See [A Jenga tower in one call](docs/TOOLS-SCENE.md#a-jenga-tower-in-one-call).
 
 **Train a policy.** `isaaclab__train`, `eval` and `play` run on Isaac Lab, including your own robot from a URDF and a Jenga task with contacts: [your own task](docs/TOOLS-ISAACLAB.md#6-your-own-task). **BrickSim's LEGO simulator** runs next to these tools with no change to it: [BrickSim](docs/BRICKSIM.md).
 

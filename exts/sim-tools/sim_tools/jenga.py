@@ -23,6 +23,8 @@ BLOCK = (0.15, 0.05, 0.03)  # length, width, height
 BLOCK_MASS = 0.12
 LAYERS = 18
 SIDE_GAP = 0.0005  # between the blocks of a layer: a real tower's blocks are not jammed together
+LOOSE = 0.0004  # the middle block of an odd layer is this much thinner, so the layer above rests on its sides. Blocks of one height leave the
+# split of the load to the solver: on Sim 5.1 it put it on the middle block, and pushing that carried the whole upper tower with it.
 FRICTION = (0.5, 0.4)  # static and dynamic, about wood on wood
 ROBOT_BASE = (0.0, 0.0, 0.0)
 READY_POSE = dict(panda_joint1=0.0, panda_joint2=-0.8758, panda_joint3=0.0, panda_joint4=-2.8161, panda_joint5=0.0, panda_joint6=3.511, panda_joint7=0.785,
@@ -35,6 +37,10 @@ COLORS = ((0.80, 0.65, 0.43), (0.76, 0.60, 0.38), (0.84, 0.70, 0.48))
 VIEW = (1.75, -1.35, 1.1), (0.45, 0.0, 0.55)
 
 
+def _is_loose(layer: int, index: int) -> bool:
+    return layer % 2 == 1 and index == 1
+
+
 def block_centers():
     """``(layer, index, along_x, x, y, z)`` for each block, bottom layer first."""
     length, width, height = BLOCK
@@ -45,7 +51,7 @@ def block_centers():
         for index in range(3):
             offset = (index - 1) * step
             x, y = (TOWER_XY[0], TOWER_XY[1] + offset) if along_x else (TOWER_XY[0] + offset, TOWER_XY[1])
-            yield layer, index, along_x, x, y, z
+            yield layer, index, along_x, x, y, z - (LOOSE / 2 if _is_loose(layer, index) else 0.0)
 
 
 def block_path(layer: int, index: int) -> str:
@@ -86,7 +92,8 @@ def build(stage) -> dict:
             cube.CreateSizeAttr(1.0)
             xform = UsdGeom.Xformable(cube)
             xform.AddTranslateOp().Set(Gf.Vec3d(x, y, z))
-            size = (BLOCK[0], BLOCK[1], BLOCK[2]) if along_x else (BLOCK[1], BLOCK[0], BLOCK[2])
+            height = BLOCK[2] - (LOOSE if _is_loose(layer, index) else 0.0)
+            size = (BLOCK[0], BLOCK[1], height) if along_x else (BLOCK[1], BLOCK[0], height)
             xform.AddScaleOp().Set(Gf.Vec3f(*size))
             cube.CreateDisplayColorAttr([Gf.Vec3f(*COLORS[(layer + index) % len(COLORS)])])
             prim = cube.GetPrim()

@@ -30,9 +30,23 @@ def test_layers_cross_and_touch():
     assert len(blocks) == jenga.LAYERS * 3
     for layer, _index, along_x, _x, _y, z in blocks:
         assert along_x == (layer % 2 == 1)
-        assert z == pytest.approx(jenga.TABLE_TOP + (layer + 0.5) * jenga.BLOCK[2])
+        assert z == pytest.approx(jenga.TABLE_TOP + (layer + 0.5) * jenga.BLOCK[2], abs=jenga.LOOSE)
     middle = [b for b in blocks if b[0] == 9]
     assert [round(b[4], 4) for b in middle] == [round((i - 1) * (jenga.BLOCK[1] + jenga.SIDE_GAP), 4) for i in range(3)]
+
+
+def test_an_odd_layers_middle_block_rests_on_the_layer_below_and_carries_no_load():
+    stage = _stage()
+    jenga.build(stage)
+    loose = stage.GetPrimAtPath(jenga.block_path(9, 1))
+    side = stage.GetPrimAtPath(jenga.block_path(9, 0))
+    def bottom_top(prim):
+        xform = UsdGeom.Xformable(prim)
+        ops = {op.GetOpName(): op.Get() for op in xform.GetOrderedXformOps()}
+        z, height = ops["xformOp:translate"][2], ops["xformOp:scale"][2]
+        return z - height / 2, z + height / 2
+    assert bottom_top(loose)[0] == pytest.approx(bottom_top(side)[0], abs=1e-6)  # both sit on layer 8
+    assert bottom_top(side)[1] - bottom_top(loose)[1] == pytest.approx(jenga.LOOSE, abs=1e-6)  # layer 10 rests on the side blocks
 
 
 def test_the_poke_runs_along_the_block_and_stops_before_the_fingers_reach_the_tower():

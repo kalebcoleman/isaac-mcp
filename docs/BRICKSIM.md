@@ -54,4 +54,4 @@ ISAACLAB_TASK_MODULES=bricksim_rl
 
 Then `isaaclab__train task=Lego-AssembleBrick-PPO-v0 rl_library=rsl_rl num_envs=32`.
 
-The task forces CPU physics, so it is far slower than the GPU examples. RESULT_PLACEHOLDER
+The task forces CPU physics, so it is far slower than the GPU examples. Measured: 32 environments, 300 iterations in 1725 s at about 270 steps/s. Mean reward rose from 1.3 to 35, and the grasp reward has started to appear, but **no episode succeeded**: this confirms the training route, not a trained policy. The settings are a first guess. It has a long chain of stages, and its large reward comes only at the end, so expect to need much longer runs, or to shape the task. Play and eval were not run on it.
