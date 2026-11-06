@@ -17,10 +17,26 @@ UR5e twin, `ur5e_dt__quick_start`.
 | Argument | Meaning |
 |---|---|
 | `robot` | Optional. A public name, `<pack>/<file.usd>`, or an absolute path under an approved root. Names: `ur5e` (your local copy first), and `franka`, `unitree_h1`, `unitree_g1` (humanoids), `turtlebot3_burger`, `carter_v1`, `nova_carter`, `jetbot` and `create3` from this simulator's own assets root, which are checked first and refused with the names if this build lacks one. A wheeled robot's result adds `robot.wheels` and `robot.cmd_vel_graph`, ready for `sim__graph__build`. See the [worked example](ROS2-RVIZ.md#worked-example-a-public-robot-cmd_vel-and-a-nav2-goal). |
+| `environment` | Optional: `warehouse` builds a 24 by 16 m warehouse (see [A warehouse in one call](#a-warehouse-in-one-call)) and puts the robot in it. |
 | `ros` | With a robot: run what `sim__ros2__tf_setup` runs and report the matching shell line. |
 | `play` | Start the timeline. Default: stopped. |
 | `up_axis`, `meters_per_unit` | The stage's up axis (`Z` or `Y`, default `Z`) and units (default `1.0`; `0.01` for centimetres). The ground, gravity, camera and framing follow them. |
 | `discard_changes` | Replace a stage with unsaved edits, which are lost. Without it, the call refuses with `UNSAVED_CHANGES` and changes nothing. |
+
+### A warehouse in one call
+
+`sim__quick_start environment=warehouse` (add `robot=nova_carter`, `ros=true` or `play=true` as you like; with no robot it uses `carter_v1`) builds:
+
+- a 24 by 16 m room with 3.5 m walls;
+- six shelving racks (three shelves each) with 90 boxes on them, in three rows with two long aisles (y = -2.5 and 2.5) and a cross aisle at x = 0;
+- painted yellow lane lines along the aisles;
+- the robot at the west end of the first aisle, facing east, ready to drive down it.
+
+It is plain USD boxes with static colliders under `/World/Warehouse`, authored in the session layer: nothing is downloaded, so it works offline and
+looks the same every time. The editor's viewport is aimed at the whole room. The result has `environment` (size, racks, aisles, the robot's start).
+Live on Sim 6.2: the Carter started at (-10.5, -2.5) and drove down the aisle to x = -0.1 in six seconds with both wheels commanded at 6 rad/s.
+For a real floor plan, import a Nav2 map instead (`assets__import_path` on a map `.yaml`, see [ASSET-IMPORT.md](ASSET-IMPORT.md#ros-maps)): the Nav2
+`warehouse` map is 30 by 50 m of walls. `ros=true` sets up the robot's ROS 2 topics as for any quick-start robot; that was not run against this room, so check the map and frames before sending Nav2 goals.
 
 The result has the new `session_id` and `stage_id`, the paths, `robot.articulation_root` (joint tools need this prim, not the
 robot prim), `assets` with each file's `source` and `location`, and `next_steps` with exact calls.

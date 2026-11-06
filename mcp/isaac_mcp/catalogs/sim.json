@@ -89,6 +89,11 @@
           "required": false,
           "default": true
         },
+        "environment": {
+          "type": "string",
+          "description": "Optional: \"warehouse\" builds a 24 by 16 m warehouse (walls, shelving racks with boxes, two aisles and a cross aisle, painted lanes) and puts the robot at the west end of an aisle, facing east. With no robot it uses carter_v1. All plain USD boxes with colliders: nothing downloaded.",
+          "required": false
+        },
         "ros": {
           "type": "boolean",
           "description": "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.",
@@ -142,6 +147,15 @@
           "default": true,
           "has_default": true,
           "description": "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says."
+        },
+        {
+          "name": "environment",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional: \"warehouse\" builds a 24 by 16 m warehouse (walls, shelving racks with boxes, two aisles and a cross aisle, painted lanes) and puts the robot at the west end of an aisle, facing east. With no robot it uses carter_v1. All plain USD boxes with colliders: nothing downloaded."
         },
         {
           "name": "ros",

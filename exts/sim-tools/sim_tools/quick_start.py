@@ -299,6 +299,11 @@ async def run(ext, args):
         refuse("APP_STARTING", "Kit startup is still running. Wait until sim__stage__info reports app_ready=true; "
                "nothing was changed.")
     robot, ros, play = args.get("robot"), args.get("ros", False), args.get("play", False)
+    environment = args.get("environment")
+    if environment not in (None, "warehouse"):
+        refuse("INVALID_VALUE", "environment must be left out or be \"warehouse\". Nothing was changed.")
+    if environment and not robot:
+        robot = "carter_v1"  # a wheeled robot that drives, so the warehouse has something in it
     fixed_base = args.get("fixed_base", True)
     if type(fixed_base) is not bool:
         refuse("INVALID_VALUE", "fixed_base must be a boolean.")
@@ -308,6 +313,8 @@ async def run(ext, args):
     if ros and not robot:
         refuse("INVALID_VALUE", "ros=true needs a robot to publish. Nothing was changed.")
     up_axis, meters_per_unit = check_units(args.get("up_axis", "Z"), args.get("meters_per_unit", 1.0))
+    if environment and (up_axis, meters_per_unit) != ("Z", 1.0):
+        refuse("INVALID_VALUE", "The warehouse is built Z up in metres: leave up_axis and meters_per_unit at their defaults. Nothing was changed.")
     if not scene.timeline.is_stopped():
         info = scene.stage_info()
         refuse("TIMELINE_ACTIVE", "Stop the timeline first: call sim__timeline__control action=stop, then resend this call.",
@@ -355,6 +362,11 @@ async def run(ext, args):
 
     paths = author_scene(stage)
     stage.GetRootLayer().defaultPrim = WORLD.lstrip("/")
+    warehouse_report = None
+    if environment:
+        from . import warehouse
+
+        warehouse_report = warehouse.build(stage)
     result = dict(
         **paths, up_axis=up_axis, meters_per_unit=meters_per_unit, stage_switched=not reuse, discarded_changes=discarded,
         layer="session; sim__stage__save flattens it into the saved file",
@@ -390,6 +402,11 @@ async def run(ext, args):
             refuse("IMPORT_FAILED", f"The robot file composed to nothing at {robot_path}: {str(errors)[:600]}. "
                    "The rest of the scene was built.", asset=wanted["assets"], **paths)
         expanded = expand_visuals(stage, robot_path)
+        if warehouse_report:
+            from . import warehouse
+
+            warehouse.move_to(stage, robot_path, warehouse.START)
+            await app.next_update_async()
         frame_camera_on(stage, robot_path)
         root = roots[0] if roots else None
         wheels = wanted.get("wheels")
@@ -406,9 +423,23 @@ async def run(ext, args):
             result["robot"].update(wheels=wheels, cmd_vel_graph=cmd_vel_graph_args(root, wheels))
         if not units_checked:
             result["robot"]["units_note"] = "The remote file's up axis and units could not be read beforehand; check the result."
+    if warehouse_report:
+        from . import warehouse
+
+        with Usd.EditContext(stage, stage.GetSessionLayer()):  # an overview of the whole room from a corner, the robot in it
+            UsdGeom.Xformable(stage.GetPrimAtPath(CAMERA)).GetOrderedXformOps()[0].Set(
+                _aim(Gf.Vec3d(-9.0, -13.0, 22.0), Gf.Vec3d(0.0, 0.0, 0.0), "Z"))
+        result["environment"] = dict(name=environment, **warehouse_report)
+        owned.append(warehouse.ROOT)
     # stage_info first: on a new stage it resets the owned set, and this registration must come after that.
     # Each prim by name, because tools that change a prim check its exact path.
     info = scene.stage_info()
+    if warehouse_report:
+        try:  # the editor's viewport too, so a person watching sees the whole room, not the robot's corner of it
+            ext.dispatch("sim.viewport.frame", dict(session_id=info["session_id"], stage_id=info["stage_id"],
+                                                     eye=[-9.0, -13.0, 22.0], target=[0.0, 0.0, 0.0]))
+        except Exception:  # noqa: BLE001 - no viewport (headless): the capture camera above is still aimed
+            pass
     scene.owned.update(owned + [GROUND, PHYSICS_SCENE, DOME, SUN, CAMERA] + ([robot_path] if robot_path else []))
     if ros:
         shell = (info.get("ros") or {}).get("shell")

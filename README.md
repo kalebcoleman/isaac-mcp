@@ -52,6 +52,15 @@ The agent made 36 box shapes, gave them mass and a material, pressed play and ch
 
 Add ROS 2 and the same scene runs Nav2: `Set up ROS 2 TF, build an occupancy map, and send the robot to a goal.`
 
+### A warehouse with a robot in it
+
+> Set up a warehouse with a robot in it, and drive the robot down the aisle.
+
+![A warehouse seen from above: three rows of shelving racks with boxes, yellow aisle lines, and a Carter robot at the start of an aisle](docs/media/warehouse-quick-start.png)
+
+`sim__quick_start environment=warehouse` builds the room, the racks and the robot in one call, with nothing to download.
+For a real floor plan, a ROS Nav2 map becomes walls: see [importing any asset](docs/ASSET-IMPORT.md#ros-maps).
+
 ### Load your own robot from an open-source repo
 
 > I put the SO-ARM100 robot folder in my asset folder. Load it into a new scene.
