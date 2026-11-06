@@ -133,3 +133,12 @@ def test_a_mesh_goes_to_the_converter_with_its_options_and_robot_options_are_dro
     with pytest.raises(AssetError) as caught:
         go(broker, root, "urdf/r.urdf", scale=2)  # mesh options are for meshes only
     assert caught.value.code == "INVALID_VALUE"
+
+
+def test_an_unapproved_folder_gets_the_approval_command_not_a_format_complaint(setup, tmp_path):
+    broker, root = setup
+    outside = tmp_path / "elsewhere" / "robot"
+    outside.mkdir(parents=True)
+    with pytest.raises(AssetError) as caught:
+        asset_import.route(broker, dict(source_path=str(outside), prim_path="/World/x"))
+    assert caught.value.code == "ROOT_NOT_APPROVED" and "project_assets" in str(caught.value)
