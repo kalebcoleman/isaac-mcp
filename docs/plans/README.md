@@ -4,6 +4,9 @@ These plans distinguish implemented slices from future work. Use the tool refere
 
 - [Working checklist](CHECKLIST.md) — what is still to do, by priority.
 
+- [Robotics experiments and showcase plan](ROBOTICS-SHOWCASE.md) — Jenga, learning, BrickSim and the supporting mobile-robot demonstration.
+- [Experiment and showcase evidence template](EXPERIMENT-EVIDENCE.md) — reproducibility, results, recordings and review.
+
 - [Asset formats: what we import and export, and what is missing](ASSET-FORMATS.md) — research on every format Isaac Sim 6.2 ships, and the build order.
 - [Asset presets and project-folder discovery](ASSET-PRESETS.md) — catalog, user USD discovery, isolation and safe loading.
 - [Asset naming, packs and stores](ASSET-NAMING-PLAN.md) — proposal for generic `ISAAC_MCP_*` names and optional packs.
