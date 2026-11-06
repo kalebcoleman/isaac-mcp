@@ -132,3 +132,10 @@ def test_the_lab_tower_starts_clear_of_the_rod_and_its_target_runs_along_x():
     assert lab.TIP_MIN[0] < lab.TIP_START[0] < near_face < lab.TIP_MAX[0]
     assert lab.TIP_MAX[0] - near_face < lab.ROD_TIP - 0.112  # the fingers stay out of the tower at the far limit
     assert min(p[2] - s[2] / 2 for p, s in blocks.values()) == pytest.approx(lab.TABLE_TOP)
+
+
+def test_the_lab_table_stays_clear_of_the_wrist():
+    lab = _lab_layout()  # at this height a table under the wrist held the hand 3.5 cm too high, and the rod hit the wrong layer
+    hand_x_at_the_far_limit = lab.TIP_MAX[0] - lab.ROD_TIP
+    assert lab.TABLE_CENTER_X - lab.TABLE_SIZE[0] / 2 > hand_x_at_the_far_limit
+    assert lab.TABLE_CENTER_X - lab.TABLE_SIZE[0] / 2 < lab.TOWER_XY[0] - lab.BLOCK[0] / 2  # and still holds the tower

@@ -1260,13 +1260,13 @@ def runs_status(job_id: str) -> dict[str, Any]:
 
 
 def _video_paths(run_dir: Any, log_path: Path | None = None, limit: int = 8) -> list[str]:
-    """Videos Lab wrote for this run, newest first: under <run_dir>/videos, or the video_folder its log names (a play job's
-    own folder is not where Lab's run lives)."""
+    """Videos Lab wrote for this run, newest first: under <run_dir>/videos, or the folder its log names (a play job's own
+    folder is not where Lab's run lives). Lab 2.3 logs video_folder; Lab 3 logs output_dir and "[VideoRecorder] Wrote N frames to <file>"."""
     folders = [Path(run_dir, "videos")] if run_dir else []
     try:
         if log_path is not None:
-            for match in re.finditer(r"video_folder: (\S+)", log_path.read_text(errors="replace")):
-                folders.append(Path(match.group(1)))
+            for match in re.finditer(r"(?:video_folder|output_dir): (\S+)|\[VideoRecorder\] Wrote \d+ frames to (\S+\.mp4)", log_path.read_text(errors="replace")):
+                folders.append(Path(match.group(1)) if match.group(1) else Path(match.group(2)).parent)
     except OSError:
         pass
     found: dict[str, float] = {}

@@ -649,3 +649,14 @@ def test_a_flag_and_its_value_as_two_items_become_one():
         jobs._validate_extra_args(["--flag", "a;b"])
     with pytest.raises(ValueError):
         jobs._validate_extra_args(["bare"])
+
+
+def test_video_paths_reads_lab_3s_log_lines(tmp_path):
+    folder = tmp_path / "logs" / "videos" / "play"
+    folder.mkdir(parents=True)
+    (folder / "clip_model_1499_0000.mp4").write_bytes(b"x")
+    log = tmp_path / "stdout.log"
+    log.write_text(f"[INFO]: [VideoRecorder] Wrote 400 frames to {folder}/clip_model_1499_0000.mp4\n")
+    assert jobs._video_paths(None, log) == [str(folder / "clip_model_1499_0000.mp4")]
+    log.write_text(f"        output_dir: {folder}\n")
+    assert jobs._video_paths(None, log) == [str(folder / "clip_model_1499_0000.mp4")]

@@ -223,12 +223,12 @@ class Scorer:
                 self.lengths[index] = 0
 
     def _observe_terms(self, info) -> None:
-        """Isaac Lab reports each reward and termination term, per episode, in info["log"] as environments reset."""
+        """Isaac Lab reports each reward and termination term, per episode, in info["log"] as environments reset; a task's own Metrics/ too."""
         log = info.get("log") if isinstance(info, dict) else None
         if not isinstance(log, dict):
             return
         for key, value in log.items():
-            if not str(key).startswith(("Episode_Reward/", "Episode_Termination/")):
+            if not str(key).startswith(("Episode_Reward/", "Episode_Termination/", "Metrics/")):
                 continue
             numbers = _floats(value, 1)
             if numbers and math.isfinite(numbers[0]):
@@ -279,6 +279,9 @@ class Scorer:
         terms = {key: self.term_sums[key] / self.term_counts[key] for key in sorted(self.term_sums)}
         rewards = {key.split("/", 1)[1]: value for key, value in terms.items() if key.startswith("Episode_Reward/")}
         endings = {key.split("/", 1)[1]: value for key, value in terms.items() if key.startswith("Episode_Termination/")}
+        metrics = {key.split("/", 1)[1]: value for key, value in terms.items() if key.startswith("Metrics/")}
+        if metrics:
+            data["task_metrics"] = metrics  # the task's own measures of how it went (a success rate, a distance), averaged like the terms
         if rewards:
             data["reward_terms"] = rewards
         if endings:

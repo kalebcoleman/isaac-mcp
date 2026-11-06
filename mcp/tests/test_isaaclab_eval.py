@@ -322,3 +322,11 @@ def test_the_score_reports_how_episodes_ended_and_each_term():
     assert result["episodes"] == 2 and result["ended_early"] == 1 and result["survived_to_time_limit"] == 0.5
     assert result["reward_terms"] == {"alive": 2.0, "pole": -1.0}
     assert result["termination_terms"] == {"base_contact": 0.5, "time_out": 0.5}
+
+
+def test_a_tasks_own_metrics_are_reported():
+    from isaac_mcp.isaaclab.eval_runner import Scorer
+
+    scorer = Scorer(num_episodes=1)
+    scorer.observe([1.0], [True], [False], {"log": {"Metrics/success_rate": 1.0, "Metrics/block_pushed_m": 0.13, "Other/thing": 5.0}})
+    assert scorer.result()["task_metrics"] == pytest.approx({"success_rate": 1.0, "block_pushed_m": 0.13})
