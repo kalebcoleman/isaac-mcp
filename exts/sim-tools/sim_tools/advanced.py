@@ -892,10 +892,11 @@ class Advanced:
             result["notes"] = m["notes"]
         return result
 
-    def import_urdf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=True, default_drives=True, **pose):
+    def import_urdf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=True, default_drives=True, joint_targets=None, **pose):
         from isaac_mcp import urdf_physics, urdf_refs
         from isaac_mcp.project_assets import Broker, open_dir, signature
 
+        from .validate import apply_joint_targets, joint_summary, validate
         from .urdf import (
             convert, importer_identity, place_above_ground, prepare_generated_physics,
             repair_meshes_for_legacy_importer, uses_legacy_importer,
@@ -1001,7 +1002,12 @@ class Advanced:
         if fixed_base and any(joint["type"] == "continuous" for joint in model["joints"]):
             warnings.append("This robot has continuous joints, which may be wheels, and its base is fixed to the world. "
                             "For a robot that drives, pass fixed_base=false.")
+        targets_report = apply_joint_targets(stage, prim_path, joint_targets) if joint_targets else None
+        if targets_report and targets_report["unknown"]:
+            warnings.append(f"joint_targets names joints that do not exist: {targets_report['unknown'][:6]}. Valid names: {targets_report['valid'][:12]}.")
         result.update(
+            joints=joint_summary(stage, prim_path),
+            **({"joint_targets_applied": targets_report["applied"]} if targets_report else {}),
             urdf_snapshot_id=snapshot_id,
             converted_physics=converted_physics,
             articulation_root=roots[0] if roots else None,
@@ -1012,10 +1018,11 @@ class Advanced:
             **({"repaired_meshes": repaired} if repaired else {}),
             placement=placement,
             warnings=warnings,
+            validation=validate(stage, prim_path, expect_robot=True),
         )
         return result
 
-    def import_mjcf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=None, **pose):
+    def import_mjcf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=None, default_drives=False, joint_targets=None, **pose):
         """Import a MuJoCo MJCF model from a verified snapshot, the way ``import_urdf`` imports a URDF.
 
         The host checked that every file the model names is inside the approved folder before it made the snapshot, and
@@ -1024,12 +1031,15 @@ class Advanced:
         from isaac_mcp import mjcf_refs, urdf_refs
         from isaac_mcp.project_assets import Broker, open_dir, signature
 
-        from .mjcf import convert, importer_identity, movable_joint_count
-        from .urdf import MAX_AUTO_LIFT_M, place_above_ground, prepare_generated_physics
+        from .validate import apply_joint_targets, joint_summary, validate
+        from .mjcf import convert, importer_identity, mjcf_default_gains, movable_joint_count
+        from .urdf import MAX_AUTO_LIFT_M, place_above_ground, prepare_generated_physics, undriven_joints
 
         s = self.s
         if fixed_base is not None and type(fixed_base) is not bool:
             refuse("INVALID_VALUE", "fixed_base must be true, false, or left out to keep what the model says.")
+        if type(default_drives) is not bool:
+            refuse("INVALID_VALUE", "default_drives must be a boolean.")
         s.new_path(stage, prim_path)
         filename, manifest = s.broker.verify(snapshot_id, manifest_sha256, kind="mjcf")
         mjcf_refs.check_mjcf_path(filename.name)
@@ -1041,7 +1051,7 @@ class Advanced:
             mjcf_refs.refusal_for(found["problems"], entry)
         movable = movable_joint_count(found["trees"].values())
         workspace = s.broker.staging / snapshot_id
-        key = hashlib.sha256(json.dumps([importer_identity(), fixed_base, manifest_sha256]).encode()).hexdigest()[:24]
+        key = hashlib.sha256(json.dumps([importer_identity(), fixed_base, default_drives, manifest_sha256]).encode()).hexdigest()[:24]
         output = workspace / f"mjcf-converted-{key}"
         root_before = stage.GetRootLayer().ExportToString()
         session_before = stage.GetSessionLayer().ExportToString()
@@ -1067,7 +1077,8 @@ class Advanced:
                         "Native importer changed the active stage. Partial effects possible; inspect before retrying.",
                     )
                 converted_physics = prepare_generated_physics(
-                    generated, pending, movable_joints=movable, gains=None, fixed_base=fixed_base, kind="MJCF",
+                    generated, pending, movable_joints=movable, gains=mjcf_default_gains(found["trees"].values()) if default_drives else None,
+                    fixed_base=fixed_base, kind="MJCF",
                 )
                 relative_generated = str(generated.relative_to(pending))
                 (pending / "generated.txt").write_text(relative_generated)
@@ -1100,7 +1111,18 @@ class Advanced:
             warnings.append(f"The converted robot's base is {converted_physics['base']}, not what fixed_base asked for.")
         if not roots:
             warnings.append("No articulation root was found, so the joint tools will not work on this model.")
+        undriven = undriven_joints(stage, prim_path)
+        if undriven and not default_drives:
+            warnings.append(f"{len(undriven)} movable joints have no drive (the model's actuators are torque motors, so it will "
+                            "collapse under gravity): hold it with a controller, set gains with sim__joints__gains, "
+                            "or import again with default_drives=true for a generic holding drive.")
+        targets_report = apply_joint_targets(stage, prim_path, joint_targets) if joint_targets else None
+        if targets_report and targets_report["unknown"]:
+            warnings.append(f"joint_targets names joints that do not exist: {targets_report['unknown'][:6]}. Valid names: {targets_report['valid'][:12]}.")
         result.update(
+            joints=joint_summary(stage, prim_path),
+            **({"joint_targets_applied": targets_report["applied"]} if targets_report else {}),
+            undriven_joints=undriven,
             mjcf_snapshot_id=snapshot_id,
             converted_physics=converted_physics,
             articulation_root=roots[0] if roots else None,
@@ -1110,6 +1132,7 @@ class Advanced:
             includes=found["includes"],
             placement=placement,
             warnings=warnings,
+            validation=validate(stage, prim_path, expect_robot=True),
         )
         return result
 

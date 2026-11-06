@@ -14,6 +14,7 @@ over both.
 | [MCP server](MCP-SERVER.md) | Client configuration (Claude Code and Desktop, Codex, OpenCode, Antigravity), limiting what a client can reach |
 | [Workspace](WORKSPACE.md) | One folder for the checkout, assets and environments; what is auto-detected |
 | [Assets](ASSETS.md) | Asset stores, project file, doctor, moving assets between machines |
+| [Importing any asset](ASSET-IMPORT.md) | One import for USD, URDF, xacro, SDF, MJCF and robot folders: formats, safety, physics after import |
 | [Environment variables](ENVIRONMENT.md) | Every setting, and which process reads it |
 | [Compatibility](COMPATIBILITY.md) | Tested simulator builds, modes and open issues |
 

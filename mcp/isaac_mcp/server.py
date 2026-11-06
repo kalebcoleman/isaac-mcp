@@ -797,7 +797,10 @@ def _dispatch(canonical: str, params: Dict[str, Any],
             return blocked
 
     try:
+        if canonical == "sim.quick_start" and _quick_start_wants_import(params.get("robot")):
+            return _quick_start_with_import(params, state)
         active = state or _DEFAULT_STATE
+        kit_canonical, routed_info = canonical, None
         if canonical.startswith("assets."):
             from .project_assets import Broker, AssetError
             if not hasattr(active, "asset_broker"):
@@ -834,13 +837,18 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                         if (source is None) == (params.get("root_id") is None or params.get("relative_path") is None):
                             raise AssetError("INVALID_VALUE", "Give source_path, or root_id with relative_path; not both and not neither.")
                         root_id, relative_path = (params["root_id"], params["relative_path"]) if source is None else broker.locate(source, kind=file_kind)
-                    elif canonical in ("assets.prepare_workstation", "assets.import_path"):
+                    elif canonical == "assets.import_path":
+                        from . import asset_import  # one entry for every format: the host picks and converts
+                        kit_canonical, params, routed_info = asset_import.route(broker, params)
+                        root_id = None
+                    elif canonical == "assets.prepare_workstation":
                         params = dict(params)
                         root_id, relative_path = broker.locate(params.pop("source_path"))
                     else:
                         root_id, relative_path = params["root_id"], params["relative_path"]
-                    snapshot = broker.snapshot(root_id, relative_path, kind={"assets.import_urdf": "urdf", "assets.import_mjcf": "mjcf"}.get(canonical, "usd"))
-                    params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
+                    if root_id is not None:  # import_path was snapshotted by the router
+                        snapshot = broker.snapshot(root_id, relative_path, kind={"assets.import_urdf": "urdf", "assets.import_mjcf": "mjcf"}.get(canonical, "usd"))
+                        params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e,"code","FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
         if canonical == "sim.quick_start" and _quick_start_needs_host(params.get("robot")):
@@ -862,7 +870,9 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                 params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e, "code", "FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
-        result = active.get_client().call(canonical, params)
+        result = active.get_client().call(kit_canonical, params)
+        if routed_info and isinstance(result, dict):
+            result = {**result, "import": routed_info}
         if canonical == "status" and isinstance(result, dict):
             result = {**result, "host": _host_identity(result.get("extension", {}))}
         return json.dumps(result, indent=2, default=repr)
@@ -882,6 +892,41 @@ def _dispatch(canonical: str, params: Dict[str, Any],
         if _needs_bridge_guidance(e) and host_catalog.is_catalog_tool(canonical):
             return _catalog_error(canonical, e, state) + host
         return f"Error: {e}{host}"
+
+
+def _quick_start_wants_import(robot) -> bool:
+    """A robot given as an absolute path to a format only assets__import_path reads (MJCF, xacro, SDF, a mesh) or as a folder."""
+    text = os.path.expanduser(str(robot or ""))
+    if not os.path.isabs(text):
+        return False
+    from . import asset_formats
+
+    return os.path.isdir(text) or asset_formats.format_of(text) in ("mjcf", "xacro", "sdf", "mesh", "map")
+
+
+def _quick_start_with_import(params: Dict[str, Any], state) -> str:
+    """One call: a scene, then the robot or prop imported into it by assets__import_path (so every format works the same way)."""
+    import re
+
+    robot = os.path.expanduser(str(params["robot"]))
+    base = {k: v for k, v in params.items() if k not in ("robot", "fixed_base", "position", "orientation", "xacro_args", "sdf_model",
+                                                       "default_drives", "scale", "as_collider", "mass", "wall_height")}
+    scene = json.loads(_dispatch("sim.quick_start", base, state))
+    if not isinstance(scene, dict) or "session_id" not in scene:
+        return json.dumps(scene) if not isinstance(scene, str) else scene
+    stem = os.path.basename(robot.rstrip("/")).split(".")[0] or "robot"
+    name = re.sub(r"[^A-Za-z0-9_]", "_", stem)
+    name = name if re.match(r"[A-Za-z_]", name) else f"r_{name}"
+    carry = {k: v for k, v in params.items() if k in ("fixed_base", "position", "orientation", "xacro_args", "sdf_model", "default_drives",
+                                                       "scale", "as_collider", "mass", "wall_height")}
+    imported = _dispatch("assets.import_path", dict(session_id=scene["session_id"], stage_id=scene["stage_id"], source_path=robot,
+                                                    prim_path=f"/World/{name}", **carry), state)
+    try:
+        imported = json.loads(imported)
+    except ValueError:
+        pass
+    return json.dumps({**scene, "imported": imported,
+                       "note": "The scene was built, then the file was imported with assets__import_path; use its prim_path and articulation_root."}, indent=2, default=repr)
 
 
 def _quick_start_needs_host(robot) -> bool:

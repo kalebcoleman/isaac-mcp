@@ -80,7 +80,7 @@
       "parameters": {
         "robot": {
           "type": "string",
-          "description": "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from your asset folder, or an absolute path under an approved root. Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, unitree_h1, unitree_g1 (humanoids), turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (this simulator's own assets root). A file found only through a project file's asset_path is refused.",
+          "description": "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root: any file or folder assets__import_path reads (MJCF, xacro, SDF, mesh, robot folder). Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.",
           "required": false
         },
         "fixed_base": {
@@ -132,7 +132,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from your asset folder, or an absolute path under an approved root. Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, unitree_h1, unitree_g1 (humanoids), turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (this simulator's own assets root). A file found only through a project file's asset_path is refused."
+          "description": "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root: any file or folder assets__import_path reads (MJCF, xacro, SDF, mesh, robot folder). Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path."
         },
         {
           "name": "fixed_base",
@@ -1373,7 +1373,7 @@
       "owner_id": "generic-sim"
     },
     "sim.stage.save": {
-      "description": "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home; or with format=urdf one robot as URDF plus meshes. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -1393,6 +1393,17 @@
         "directory": {
           "type": "string",
           "description": "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.",
+          "required": false
+        },
+        "format": {
+          "type": "string",
+          "description": "usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors).",
+          "required": false,
+          "default": "usd"
+        },
+        "robot_path": {
+          "type": "string",
+          "description": "With format=urdf: the robot's articulation root or top prim. Default: the stage's default prim.",
           "required": false
         },
         "reset_camera_render_handles": {
@@ -1438,6 +1449,24 @@
           "default": null,
           "has_default": false,
           "description": "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites."
+        },
+        {
+          "name": "format",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "usd",
+          "has_default": true,
+          "description": "usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors)."
+        },
+        {
+          "name": "robot_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With format=urdf: the robot's articulation root or top prim. Default: the stage's default prim."
         },
         {
           "name": "reset_camera_render_handles",

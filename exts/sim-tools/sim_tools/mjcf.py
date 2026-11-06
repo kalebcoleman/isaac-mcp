@@ -9,7 +9,7 @@ from pathlib import Path
 
 from isaac_mcp.project_assets import refuse
 
-CONVERSION_VERSION = 1  # bump when what is written into a conversion changes
+CONVERSION_VERSION = 2  # bump when what is written into a conversion changes
 EXTENSION = "isaacsim.asset.importer.mjcf"
 
 
@@ -69,3 +69,26 @@ def movable_joint_count(trees) -> int:
                 if joint.attrib.get("type", "hinge") in ("hinge", "slide"):
                     count += 1
     return count
+
+
+REVOLUTE_STIFFNESS, REVOLUTE_DAMPING = 100.0, 10.0  # N*m per rad, N*m*s per rad
+PRISMATIC_STIFFNESS, PRISMATIC_DAMPING = 1000.0, 100.0  # N per m, N*s per m
+
+
+def mjcf_default_gains(trees):
+    """A generic holding drive for each named hinge and slide joint, for ``default_drives=true``.
+
+    MuJoCo models drive their joints with actuators, often torque motors, which become no joint drive at all. These gains are
+    only a starting point to keep a pose; a joint that already has a stiffness keeps its own.
+    """
+    gains = {}
+    for tree in trees:
+        for body in tree.iter("body"):
+            for joint in body.findall("joint"):
+                name, kind = joint.get("name"), joint.get("type", "hinge")
+                if not name or kind not in ("hinge", "slide"):
+                    continue
+                linear = kind == "slide"
+                gains[name] = dict(stiffness=PRISMATIC_STIFFNESS if linear else REVOLUTE_STIFFNESS,
+                                   damping=PRISMATIC_DAMPING if linear else REVOLUTE_DAMPING, linear=linear)
+    return gains

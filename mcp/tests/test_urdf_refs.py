@@ -278,12 +278,12 @@ def test_textures_of_dae_and_obj_are_followed_and_absent_ones_reported(tmp_path)
     put(tmp_path, "m/b.obj", "mtllib b.mtl\nv 0 0 0\n")
     put(tmp_path, "m/b.mtl", "newmtl x\nmap_Kd ../t/c.png\nmap_Ks gone.png\n")
     put(tmp_path, "t/c.png")
-    put(tmp_path, "m/d.glb")
+    put(tmp_path, "m/d.fbx")
     project = urdf_refs.project_from_folder(tmp_path)
-    followed = urdf_refs.follow_mesh_files(project, ["m/a.dae", "m/b.obj", "m/d.glb"])
+    followed = urdf_refs.follow_mesh_files(project, ["m/a.dae", "m/b.obj", "m/d.fbx"])
     assert followed["found"] == ["m/b.mtl", "m/tex.png", "t/c.png"]
     assert followed["missing"] == [dict(reference="gone.png", referenced_by="m/b.mtl")]
-    assert followed["unfollowable"][0]["file"] == "m/d.glb"
+    assert followed["unfollowable"][0]["file"] == "m/d.fbx"
 
 
 def test_a_texture_outside_is_reported_and_not_followed(tmp_path):
@@ -654,3 +654,16 @@ def test_dependency_tool_explains_an_unresolved_package_instead_of_a_parser_erro
     assert "error" not in result
     problem = result["problems"][0]
     assert problem["code"] == "PACKAGE_UNRESOLVED" and "nothing outside" in problem["reason"]
+
+
+def test_gltf_and_glb_references_are_followed_and_unreadable_ones_are_visible():
+    import json
+    import struct
+
+    doc = json.dumps({"buffers": [{"uri": "a.bin"}, {"uri": "data:application/octet-stream;base64,AAAA"}], "images": [{"uri": "t.png"}, {"uri": "../out.png"}]}).encode()
+    assert urdf_refs.gltf_uris(".gltf", doc) == ["a.bin", "t.png", "../out.png"]
+    glb = b"glTF" + struct.pack("<II", 2, 20 + len(doc)) + struct.pack("<I", len(doc)) + b"JSON" + doc
+    assert urdf_refs.gltf_uris(".glb", glb) == ["a.bin", "t.png", "../out.png"]
+    for bad in (b"not json", b"[1]", b"{" * 5000):
+        assert urdf_refs.gltf_uris(".gltf", bad) is None
+    assert urdf_refs.gltf_uris(".glb", b"nope") is None

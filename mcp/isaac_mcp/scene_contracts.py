@@ -81,14 +81,27 @@ add(
 )
 add(
     "assets.import_path",
-    "Import a trusted local USD by absolute path, under an approved project root or in a pack of the user's asset store. Copies and validates its project dependencies before authoring a reference; source files remain unchanged.",
+    "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. Requires session_id and stage_id.",
     dict(
         **TARGET,
         source_path=field(
-            "string", "Absolute local USD path inside an already approved trusted root."
+            "string", "Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder."
         ),
         prim_path=field("string", "New absolute wrapper prim path; parent must exist."),
-        **POSE,
+        format=field("string", "auto (default): from the file name, or from what the folder holds. Or usd, urdf, xacro, sdf, mjcf, mesh, map to say it.", False, default="auto"),
+        xacro_args=field("object", "For xacro: values for its $(arg name), e.g. {\"ur_type\": \"ur10e\"}. Names the file declares are in the result.", False),
+        sdf_model=field("string", "For an SDF with several models (a Gazebo world): the model to import. Left out, a refusal lists them.", False),
+        fixed_base=field("boolean", "Robot formats: fix the base to the world. Default: true for URDF and xacro; the model's own setting for SDF (a static model); the file's own for MJCF. Pass false for a robot that drives or walks.", False),
+        joint_targets=field("object", "Robot formats: start in a pose. {joint name: radians, or stage units for a sliding joint}, set as drive targets; unknown names are listed in the warnings.", False),
+        scale=field("number", "Mesh files: multiply the size (the file's unit to metres, e.g. 0.001 for millimetres). Default 1: metres.", False),
+        up_axis=field("string", "Mesh files: the file's own up axis, y or z. Default auto: glTF, GLB, FBX and OBJ are Y-up, STL and PLY Z-up; the result is Z-up.", False),
+        as_collider=field("string", "Mesh files: none (default, looks only), convex_hull or convex_decomposition collision shapes.", False),
+        wall_height=field("number", "ROS map (.yaml): wall height in metres. Default 1.", False),
+        mass=field("number", "Mesh files: kilograms; makes it a dynamic rigid body (with a convex hull collider unless you pick one).", False),
+        default_drives=field("boolean", "Author drives that hold a pose. URDF, xacro, SDF: default true (they have none). MJCF: default false; true gives joints with no drive (torque motors) a generic holding drive. Wheels and casters stay free.", False),
+        position=field("array", "Three finite coordinates in stage units. Omit it for a robot format: the robot is then raised out of any ground plane (up to 3 m); a given position is used as is, with a warning if it starts inside the ground. USD files go to the origin.", False),
+        orientation=field("array", "Unit quaternion [w,x,y,z].", False, default=[1, 0, 0, 0]),
+        frame=field("string", "Pose frame: local or world.", False, default="local"),
     ),
 )
 add(
@@ -108,7 +121,7 @@ add(
     "sim.quick_start",
     "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
     dict(
-        robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf> from your asset folder, or an absolute path under an approved root. Names: ur5e (your local copy first, then NVIDIA, honoring strict mode); franka, unitree_h1, unitree_g1 (humanoids), turtlebot3_burger, carter_v1, nova_carter, jetbot, create3 (this simulator's own assets root). A file found only through a project file's asset_path is refused.", False),
+        robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root: any file or folder assets__import_path reads (MJCF, xacro, SDF, mesh, robot folder). Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.", False),
         fixed_base=field("boolean", "With a URDF robot: fix its base to the world. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False, default=True),
         ros=field("boolean", "With a robot: also run what sim__ros2__tf_setup runs, and report the shell line that matches this simulator.", False, default=False),
         up_axis=field("string", "The stage's up axis. The ground, gravity and camera follow it. A robot file must match, or the call refuses with the values to pass. A URDF is always Z up in metres.", False, default="Z", enum=["Z", "Y"]),
@@ -259,11 +272,13 @@ add(
 )
 add(
     "sim.stage.save",
-    "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses.",
+    "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home; or with format=urdf one robot as URDF plus meshes. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses.",
     dict(
         **TARGET,
         filename=field("string", "New basename, e.g. scene or scene.usda; no other extension, no folders."),
         directory=field("string", "Existing folder under your home to write into instead of the output root (absolute path). Never overwrites.", False),
+        format=field("string", "usd (default): a flattened .usda copy of the scene. urdf: one robot as a folder <filename>/ with <filename>.urdf and meshes/ (OBJ), which lists what a URDF cannot hold (drives, physics materials, sensors).", False, default="usd"),
+        robot_path=field("string", "With format=urdf: the robot's articulation root or top prim. Default: the stage's default prim.", False),
         reset_camera_render_handles=field(
             "boolean",
             "Explicitly remove validated session-only ROS camera and LiDAR viewportHandle fields from the copy so native textures can rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
@@ -926,6 +941,7 @@ add(
         source_path=field("string", "Absolute path of the MJCF .xml file, under an approved root or in a pack of your asset folder (pins are checked). Replaces root_id and relative_path.", False),
         prim_path=field("string", "New wrapper prim path."),
         fixed_base=field("boolean", "true: fix the robot's base to the world. false: make it floating, so it falls under gravity. Leave out to keep what the model says.", False),
+        default_drives=field("boolean", "Give joints that have no drive (the model uses torque motors) a generic holding drive; wheels stay free. Default false: the model's own drives, and a warning that lists joints with none.", False),
         position=field("array", "Three finite coordinates in stage units. Omit to place the robot at the origin, raised out of any collision ground plane (at most 3 m). A given position is used as is, with a warning if it starts under the ground.", False),
         orientation=POSE["orientation"],
         frame=POSE["frame"],

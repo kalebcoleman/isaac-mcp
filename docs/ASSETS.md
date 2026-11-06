@@ -1,5 +1,7 @@
 # Assets: the local asset database
 
+> Bringing a robot or asset **file** into a scene (USD, URDF, xacro, SDF, MJCF, or a folder that holds one)? See [ASSET-IMPORT.md](ASSET-IMPORT.md). This page is about where assets live and how they are approved.
+
 This page explains where the Isaac MCP finds every asset it uses (robot, sensor,
 workstation, gripper, objects, layouts) and how to build up and move your own assets.
 

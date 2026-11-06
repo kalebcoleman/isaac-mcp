@@ -26,7 +26,7 @@ MAX_AUTO_LIFT_M = 3.0  # a bigger "lowest point" is stray geometry, not a robot 
 MAX_GROUND_SEARCH = 50000
 # 6.x offers a shared "physics" description; the 5.x importer's only one is called "PhysX".
 SHARED_PHYSICS_VARIANTS = ("physics", "PhysX")
-CONVERSION_VERSION = 1  # bump when what is written into a conversion changes, such as the gains
+CONVERSION_VERSION = 2  # bump when what is written into a conversion changes, such as the gains (2: continuous joints are free)
 
 
 def convert(urdf, output, fixed_base):
@@ -165,6 +165,13 @@ def _world_anchors(prim):
     return anchors
 
 
+def _unlimited(node) -> bool:
+    """A revolute joint with no angle limits (a URDF ``continuous`` joint)."""
+    joint = UsdPhysics.RevoluteJoint(node)
+    lower, upper = joint.GetLowerLimitAttr().Get(), joint.GetUpperLimitAttr().Get()
+    return lower is not None and upper is not None and not (math.isfinite(lower) and math.isfinite(upper))
+
+
 def _author_drives(prim, gains, replace):
     """Give each joint the default gains, as an opinion in the edit target. A stiffness already there is
     kept unless *replace*: the 5.x importer invents its own, which can be too weak to lift a heavy link."""
@@ -178,6 +185,17 @@ def _author_drives(prim, gains, replace):
         if gain is None:
             continue
         drive = UsdPhysics.DriveAPI.Apply(node, "angular" if angular else "linear")
+        if angular and _unlimited(node):
+            # A continuous joint (a wheel, a caster) has no pose to hold: a holding stiffness fights a velocity command and
+            # stops the wheel. Keep it free and damped; command it by velocity (sim__joints__command velocities).
+            stiffness, damping = usd_gains(gain)
+            drive.CreateTypeAttr("force")
+            drive.CreateStiffnessAttr(0.0)
+            drive.CreateDampingAttr(max(damping, drive.GetDampingAttr().Get() or 0.0))
+            if (drive.GetMaxForceAttr().Get() or 0.0) <= 0:
+                drive.CreateMaxForceAttr(math.inf)
+            authored[name] = dict(stiffness=0.0, damping=round(max(damping, drive.GetDampingAttr().Get() or 0.0), 6), continuous=True)
+            continue
         if not replace and (drive.GetStiffnessAttr().Get() or 0.0) > 0:
             kept.append(name)
             continue
@@ -364,3 +382,18 @@ def prepare_generated_physics(filename, output_root, movable_joints=0, gains=Non
     if gains is not None:
         report["drives"] = dict(authored=authored, kept_from_importer=kept, zero_force_limit_removed=zero_force)
     return report
+
+
+def undriven_joints(stage, path):
+    """Names of the movable joints under *path* whose drive has no stiffness and no damping (nothing holds them or slows them)."""
+    names = []
+    for node in Usd.PrimRange(stage.GetPrimAtPath(path), Usd.TraverseInstanceProxies()):
+        angular = node.IsA(UsdPhysics.RevoluteJoint)
+        if not angular and not node.IsA(UsdPhysics.PrismaticJoint):
+            continue
+        drive = UsdPhysics.DriveAPI.Get(node, "angular" if angular else "linear")
+        stiffness = drive.GetStiffnessAttr().Get() if drive else None
+        damping = drive.GetDampingAttr().Get() if drive else None
+        if not stiffness and not damping:
+            names.append(node.GetName())
+    return names

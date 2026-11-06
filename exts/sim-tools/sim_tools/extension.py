@@ -588,6 +588,21 @@ class Extension(omni.ext.IExt):
                                         effects="No input was sent." if name == "sim.ui.find" or exc.code in (
                                             "INVALID_VALUE", "LIMIT", "STALE_WIDGET", "NOT_VISIBLE",
                                             "OUT_OF_WINDOW", "NO_UI", "DISABLED", "NO_WINDOW") else "Inspect the UI before retrying.")
+                    elif name == "assets.import_path" and args.get("format") == "mesh":
+                        from .mesh_import import run as import_mesh
+
+                        args.pop("root_id", None)
+                        args.pop("relative_path", None)
+                        result = await import_mesh(self, args)
+                    elif name == "assets.import_path" and args.get("format") == "map":
+                        from .map_import import run as import_map
+
+                        args.pop("root_id", None)
+                        args.pop("relative_path", None)
+                        args.pop("format", None)
+                        for key in ("session_id", "stage_id"):
+                            args.pop(key, None)
+                        result = import_map(self, args)
                     elif name == "sim.timeline.control":
                         result = await self._timeline_control(args)
                     elif name == "sim.map.occupancy":
@@ -807,7 +822,13 @@ class Extension(omni.ext.IExt):
             return {**created, "warnings": [warning]} if warning else created
         if name == "sim.prim.set_transform":
             return s.transform(stage, **a)
+        if name == "sim.stage.save" and a.get("format") == "urdf":
+            from .urdf_export import export as export_urdf
+
+            return export_urdf(s, stage, a.get("filename"), a.get("directory"), a.get("robot_path"))
         if name == "sim.stage.save":
+            a.pop("format", None)
+            a.pop("robot_path", None)
             runtime_poses = None
             if not s.timeline.is_stopped() and not s.timeline.is_playing():
                 from .physics import snapshot_poses

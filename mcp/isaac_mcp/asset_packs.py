@@ -19,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from . import assets, material_refs, mjcf_refs, urdf_refs
+from . import asset_formats, assets, material_refs, mjcf_refs, urdf_refs
 
 
 def approval_help(folder=None):
@@ -582,6 +582,12 @@ def run_closure(closure, paths: list[str], folder_of, projects: dict | None = No
             folder = Path(folder_of(path))
             project = projects.setdefault(str(folder), urdf_refs.project_from_folder(folder))
             results.append(mjcf_refs.closure_result(path, project, folder))
+            continue
+        fmt = asset_formats.format_of(path)
+        if fmt in ("xacro", "sdf", "mesh", "map") and not (fmt == "map" and Path(path).suffix.lower() not in (".yaml", ".yml")):
+            folder = Path(folder_of(path))
+            project = projects.setdefault(str(folder), urdf_refs.project_from_folder(folder))
+            results.append(asset_formats.closure_result(path, project, folder, fmt))
             continue
         if not urdf_refs.is_urdf(path):
             usd.append(path)
@@ -1313,7 +1319,7 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
                 return resolved.parent
 
         results = run_closure(closure, [str(p.resolve()) for p in checked], urdf_folder)
-        backend = closure.name or ("urdf" if all(urdf_refs.is_urdf(p) for p in checked) else None)
+        backend = closure.name or ("host" if all(asset_formats.format_of(p) not in (None, "usd") for p in checked) else None)
         return dict(status="ok", backend=backend, results=results)
 
     if canonical == "assets.pack_adopt":
