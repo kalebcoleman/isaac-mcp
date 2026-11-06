@@ -60,8 +60,8 @@ over both.
 
 ## NVIDIA resources
 
-[Isaac ecosystem resources](ECOSYSTEM.md) links NVIDIA's documentation MCP and official
-Isaac Sim and Isaac Lab skills. Use the [working checklist](CHECKLIST.md) for future work.
+The [agent skill guide](AGENT-SKILLS.md#nvidias-skills) links NVIDIA's documentation MCP
+and official Isaac Sim and Isaac Lab skills. Use the [working checklist](CHECKLIST.md) for future work.
 
 ## Evidence
 
