@@ -26,9 +26,8 @@ ownership and licensing before publishing or copying third-party code.
 Keep environments, project source, temporary run output and curated showcase evidence distinct. A project's
 README should point to reproducible, named runs and a small curated set of media; temporary jobs and caches
 should not accumulate as project source. Inventory run folders, active processes, checkpoints, uncommitted
-work and links before reorganizing. Keep a manifest and update references before any move; archive or remove
-only after the owner approves the specific cleanup. Do not change active jobs or assume old-looking data is
-safe to delete.
+work and links before reorganizing. Keep a manifest and update references before any move; preserve data still needed for experiments,
+reproduction or review. Do not change active jobs or assume old-looking data is safe to delete.
 
 ## Order and ownership
 
