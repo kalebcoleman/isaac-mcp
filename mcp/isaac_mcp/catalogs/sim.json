@@ -697,6 +697,31 @@
           "required": false,
           "default": false
         },
+        "collision": {
+          "type": "boolean",
+          "description": "Author a static collider without a rigid body (walls, floors, shelves).",
+          "required": false
+        },
+        "scale": {
+          "type": "array",
+          "description": "Three positive scale factors [x, y, z]: a 1 m Cube with scale [0.2, 6, 1] is a wall. Very flat floors can stop wheels; the result warns.",
+          "required": false
+        },
+        "mass": {
+          "type": "number",
+          "description": "Mass in kilograms (needs rigid=true).",
+          "required": false
+        },
+        "density": {
+          "type": "number",
+          "description": "Density in kg per cubic metre, instead of mass (needs rigid=true).",
+          "required": false
+        },
+        "material": {
+          "type": "string",
+          "description": "Path of a material from sim__material__create, bound as the prim is made; nothing is created if it cannot be bound.",
+          "required": false
+        },
         "position": {
           "type": "array",
           "description": "Three finite coordinates in stage units.",
@@ -779,6 +804,51 @@
           "default": false,
           "has_default": true,
           "description": "Author rigid body AND collider on geometry."
+        },
+        {
+          "name": "collision",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Author a static collider without a rigid body (walls, floors, shelves)."
+        },
+        {
+          "name": "scale",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Three positive scale factors [x, y, z]: a 1 m Cube with scale [0.2, 6, 1] is a wall. Very flat floors can stop wheels; the result warns."
+        },
+        {
+          "name": "mass",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Mass in kilograms (needs rigid=true)."
+        },
+        {
+          "name": "density",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Density in kg per cubic metre, instead of mass (needs rigid=true)."
+        },
+        {
+          "name": "material",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Path of a material from sim__material__create, bound as the prim is made; nothing is created if it cannot be bound."
         },
         {
           "name": "position",

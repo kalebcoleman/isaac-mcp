@@ -783,6 +783,11 @@ Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in 
 - `kind` (string, required): Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene.
 - `size` (number, default `1`): Positive cube edge, sphere/cylinder/capsule/cone diameter or height, or Plane width and length.
 - `rigid` (boolean, default `false`): Author rigid body AND collider on geometry.
+- `collision` (boolean, optional): Author a static collider without a rigid body (walls, floors, shelves).
+- `scale` (array, optional): Three positive scale factors [x, y, z]: a 1 m Cube with scale [0.2, 6, 1] is a wall. Very flat floors can stop wheels; the result warns.
+- `mass` (number, optional): Mass in kilograms (needs rigid=true).
+- `density` (number, optional): Density in kg per cubic metre, instead of mass (needs rigid=true).
+- `material` (string, optional): Path of a material from sim__material__create, bound as the prim is made; nothing is created if it cannot be bound.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.

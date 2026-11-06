@@ -206,6 +206,11 @@ add(
             False,
             default=False,
         ),
+        collision=field("boolean", "Author a static collider without a rigid body (walls, floors, shelves).", False),
+        scale=field("array", "Three positive scale factors [x, y, z]: a 1 m Cube with scale [0.2, 6, 1] is a wall. Very flat floors can stop wheels; the result warns.", False),
+        mass=field("number", "Mass in kilograms (needs rigid=true).", False),
+        density=field("number", "Density in kg per cubic metre, instead of mass (needs rigid=true).", False),
+        material=field("string", "Path of a material from sim__material__create, bound as the prim is made; nothing is created if it cannot be bound.", False),
         **POSE,
     ),
 )

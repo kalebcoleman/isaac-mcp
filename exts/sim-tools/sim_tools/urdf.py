@@ -168,8 +168,9 @@ def _world_anchors(prim):
 def _unlimited(node) -> bool:
     """A revolute joint with no angle limits (a URDF ``continuous`` joint)."""
     joint = UsdPhysics.RevoluteJoint(node)
-    lower, upper = joint.GetLowerLimitAttr().Get(), joint.GetUpperLimitAttr().Get()
-    return lower is not None and upper is not None and not (math.isfinite(lower) and math.isfinite(upper))
+    lower, upper = joint.GetLowerLimitAttr(), joint.GetUpperLimitAttr()
+    # Authored values only: the schema's fallback is infinite too, and a joint with nothing authored is not known to be a wheel.
+    return lower.HasAuthoredValue() and upper.HasAuthoredValue() and not (math.isfinite(lower.Get()) and math.isfinite(upper.Get()))
 
 
 def _author_drives(prim, gains, replace):

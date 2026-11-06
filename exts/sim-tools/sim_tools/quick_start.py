@@ -385,6 +385,9 @@ async def run(ext, args):
             scene.import_path(stage, *snapshot, robot_path)
         else:
             robot_path = reference_robot(stage, wanted["name"], wanted["uri"])
+            if wanted.get("spawn_height"):  # a robot whose origin is at its axles would start with its wheels under the floor
+                with Usd.EditContext(stage, stage.GetSessionLayer()):
+                    UsdGeom.Xformable(stage.GetPrimAtPath(robot_path)).AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, wanted["spawn_height"]))
         await app.next_update_async()
         placement = None
         if wanted.get("lift_to_ground") and not is_urdf and not wanted.get("snapshot"):

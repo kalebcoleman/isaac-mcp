@@ -6,6 +6,10 @@ so nothing is lost.
 
 Claude codes and reviews. Testers are weaker models given short plain requests; what they fumble is the finding.
 
+## Priorities (Kaleb, 2026-11-05)
+
+Most of what was on this list was triaged away: what is left serves these goals. **BrickSim, new Jenga work, and RL** come first. The claim is **Isaac Sim 6.2 with Lab 3.0.0, and Sim 5.1 with Lab 2.3.2**; other builds are best effort. The UR5e twin tools stay, and are not a focus. An option on an existing tool beats a new tool. Skip what is impossible or nobody uses (the list of what was dropped is at the end).
+
 ## 1. Speed: build many things in few calls (priority)
 
 A 36-block tower took **43 creates and 72 material calls**, over 110 in all. Each call is a round trip, so
@@ -18,9 +22,6 @@ building anything with many parts is slow and costly. **Goal: that tower in 5 ca
 - [x] `sim__material__apply` takes `paths` (up to 128), checked before any is bound
 - [x] A failed batch removes everything it made and keeps the original error's code and details; tested offline and live
 - [x] Test: the tower, including its Xform parent, in one call (5 calls with setup, from over 110); live on 6.2 it stands after 10 s with the top block 1 mm below its authored height
-- [ ] `sim__prim__clone` with a count and an offset, a grid or a stack (check what clone does today)
-- [ ] Batch transforms (move many prims in one call)
-- [ ] Look for other N-call patterns (joints, physics apply, lights) in the earlier test transcripts and fix the worst
 - [ ] Have a plain-request tester build something with many parts and confirm it picks `sim__prim__create_many`
 
 ## 2. Foundation: assets, projects and the workspace (in progress)
@@ -41,18 +42,13 @@ Found on 2026-11-05 by scripted scenarios (17 resolver checks in throwaway world
 - [x] Resolver basics hold: a fresh clone's default store is next to the checkout; `ISAAC_MCP_ASSET_PATH` replaces the defaults; a project file is found by walking up, relative `asset_path` is relative to the file, `ISAAC_MCP_PROJECT` wins; strict precedence (env 0 beats project true); bad project files are errors that name the file; a changed pinned file fails `doctor`; reading never creates the asset folder
 - [x] A pinned pack in the user's asset folder loads with no approval (default staging); a trusted root, once approved, loads by path and adopts into a pack with no restart
 - [x] The lab asset folder is complete: `doctor` checked 170 files, the only lab-supplied file the manifest names (`workstation/vention.usd`) is present; `sensors/rsd455.usd` lives under `Isaac/Sensors/Intel/RealSense/` as the manifest says (an earlier report that it was missing was a wrong check)
-- [ ] **F1. A robot an agent puts in the project's own `./assets` cannot be loaded**: "A pack named only by a project file's asset_path is not an approval". By design (a cloned repo could name any folder), but it blocks the flow of an agent creating an assets or downloads folder in the project. Fixed by workspace trust below
 - [x] **F2. Refusals do not tell the agent the exact fix.** `ROOT_NOT_APPROVED` and the asset-path message should name the folder and give the filled-in command the user runs (`python -m isaac_mcp.project_assets --root-id ... --root <folder>`), and say that no restart is needed if that is true
 - [x] **F3. Kit launched the usual way never reads the project's `isaac-mcp.json`; the host does.** The same `sim__quick_start robot="ur5e"` is refused when Kit knows the project (override not approved) and quietly loads NVIDIA's public UR5e when it does not. Fix: the host passes the project to Kit when it launches one; `status` reports the project file Kit sees; `assets__packs` warns when host and Kit disagree
-- [ ] **F4. `assets__pack_adopt` and `pack_build` always write to the one primary asset folder**, so an agent in project A can add packs to the shared folder, and a project cannot choose its own write location. Decide: a project-level write folder, or document it
 - [ ] **F5. Global strict mode blocks public robots and grippers for every tool.** Scope it to the twin (lab profile PR)
-- [ ] **F6. The printed approval command must run as shown.** Found by running it (2026-11-05): the helper exits without `--trust-project` and needs `--staging` while it creates the file, and the first F2 message had neither. Fixed in PR 1 with a test that runs the printed command through the helper. Re-check it whenever the helper's flags change
 - [x] **F7. Approving a large parent folder breaks every import.** An import copies the whole approved folder (at most 1000 files or 256 MiB), so with `<workspace>/projects` approved a few-hundred-byte URDF fails with `LIMIT` (live, 2026-11-05). Approving only the robot folder worked end to end. Decision (Kaleb): do not approve the whole projects folder. PR 1 now advises the smallest folder, and PR 3 approves only what each project needs (its assets folder), never `projects/` as a whole
-- [ ] **F8. The store list names the same folder twice** when a project's `asset_path` lists the workspace store that the defaults already add (`assets__packs` and `sim__stage__info` `stores`). Dedupe, keeping the first position
 - [x] **F9. Approval does not stop an agent that has a shell.** Tester 1 (OpenCode Pulse Alpha Free, 2026-11-05) `cp`'d a cloned repo into the asset folder and built a pack from it with no approval, as designed: the asset folder is trusted. Decision (Kaleb): keep approval for paths outside the folders, and add provenance. Done in PR 1: `assets__pack_build origin` is stored in the pack file and listed by `assets__packs`; docs and the skill say to use sources the user names, keep downloads in `downloads/`, and never run downloaded code. Still to decide: whether `pack_adopt` should record a source as well
 - [x] **F10. A named humanoid started half inside the floor.** Found by Kaleb on the first live load of `unitree_h1` (pelvis is the origin). `sim__quick_start` now lifts the named humanoids onto the ground (H1 1.049 m, G1 0.798 m; any first transform op), and only them. Added `unitree_h1` and `unitree_g1` as public names (tester wish W4). The first version lifted every named robot; a live check after review round 1 showed `carter_v1` raised 1,464 m and `nova_carter` 50 m (stray geometry in their USD), so the lift is opt-in per robot (`lift_to_ground`) and capped at 3 m, and every other named robot was re-checked live as unmoved
 - [x] **F11. `sim__launch` said `id`, `sim__status` and `sim__stop` want `session_id`** (tester 1 hit the validation error). Results now carry both. `start_screen_recording` now says a recording ends if the MCP server process exits (tester 1 lost one and wrote its own driver)
-- [ ] Wait for more evidence: a settle or `after_command` option for `sim__camera__capture` (tester 1 saw one capture look neutral after an arm command; not proven), and a `probe_video` tool (the bundled ffmpeg already works; the tester only lacked it on its PATH)
 - [x] Tester 2 (OpenCode Pulse Alpha Free, 2026-11-05, PR 81 head `012efc8`): trained `Isaac-Velocity-Flat-G1` in Isaac Lab 3.0.0 on Sim 6.2.0.0, 1500 iterations in 8.6 minutes; mean episode length 14 to 948 of 1000, eval mean return 27.25 over 16 episodes, about 7% falls, and a 45 s window video of it walking. One run, one seed. Exact prompts, numbers and the verification are in [evidence/pr81-agent-tests-2026-11-05.md](../evidence/pr81-agent-tests-2026-11-05.md)
 - [x] **F12. The walking task trained and played on Newton MJWarp, and nothing in the tools said so.** The task config picks its own engine (the log banner says `Physics newton_mjwarp`). `isaaclab__runs_status` now returns `physics` and `environment_ready` (the setup line was in the log but pushed out of `last_log_lines`)
 - [x] **F17. The printed approval command broke on a path with a space, and said `--root-id None` with no folder** (found while preparing review round 1). Paths are now printed as one shell word, tested by running the printed command through the helper with spaces in every path
@@ -64,7 +60,6 @@ Found on 2026-11-05 by scripted scenarios (17 resolver checks in throwaway world
 - [x] **F23. Documentation gaps from the testers, fixed:** running `call.py` or any `uv` program from a shell where `ros_env.sh` was sourced crashes on a RoboStack `libssl` import (reproduced; now in `ROS2-RVIZ.md` and the `ros_env.sh` header); `nav2_params.py`'s "not found" message now names the pipeline and subshell cause (the tester sourced the script inside a pipeline, which the docs already warned about); the URDF limits say how to drive a wheel by speed; `assets__import_urdf` points to `assets__dependencies` as the free pre-check
 - [x] **F24. `scripts/odom_logger.py`** (tester B wrote the same 40-line logger twice): logs `/odom` to a CSV and prints start, end, distance, path and yaw change
 - [x] **F27. PR 82 review round 1 (Claude Sonnet, medium) found two blockers in the MJCF resolver, both reproduced and fixed, plus two smaller ones.** (1) A `<compiler meshdir>` set in an included file was recorded and never checked (`../../../etc` or `/etc` passed), and the first folder won where MuJoCo's last one does; (2) an include not named `.xml` was never scanned, so `<mesh file="/etc/passwd"/>` in an `.txt` include passed. The resolver now walks the model in document order with includes expanded in place, checks every `<compiler>` folder wherever it appears (even one that is overridden), scans every included file whatever its name, follows `<model>` sub-models against their own folder, and returns the parsed trees to Kit. Also: an included file may have a `<mujocoinclude>` root; `~/.local` and `~/.cache` are ordinary project homes (only `.ssh`, `.config` and similar are refused); the `package.xml` check is exact and case-insensitive. Both attack files are refused on a real Kit, and the five real imports are unchanged
-- [ ] **F25. Expert-level asset coverage, with the tools we already have (Kaleb, 2026-11-05).** Plan and research are in [ASSET-FORMATS.md](ASSET-FORMATS.md); the items are F28 to F41 below. Rules for all of it: **no new tools**; every format is an option on a tool that exists, so an agent finds one entry point and switches format at will; every importer keeps the host-side checks (nothing downloaded is ever run, everything stays inside the approved folder, a verified snapshot is imported). PR 82 (MJCF, merged `ab7e233`) is the foundation
 - [x] **F28. One import entry for every format.** `assets__import_path` becomes the universal importer: `format` defaults to `auto` (read from the extension and the first bytes: USD/USDA/USDC/USDZ, URDF, MJCF, xacro, SDF, glTF/GLB/OBJ/STL/FBX/DAE, a model folder) and can be set to override. It returns the same ready summary for every format (articulation root, movable joints with limits, bounds, what the converter dropped). `assets__import_usd`, `assets__import_urdf` and `assets__import_mjcf` keep working as thin aliases; folding them away is part of the section 3 review and needs Kaleb's approval first **Done (branch `feat/universal-asset-import`): `assets__import_path` takes `format=auto|usd|urdf|xacro|sdf|mjcf|mesh|map` and a folder; the host picks, converts and snapshots; the result has an `import` block. `assets__import_usd`, `assets__import_urdf` and `assets__import_mjcf` were folded into it with Kaleb's approval (126 tools became 123); `root_id` with `relative_path` still works.**
 - [x] **F29. Safe xacro expansion** (tester C, wishlist-3: the UR10e is xacro only; six calls, and a near-miss with the system `ur_description`). Option on the same import: `xacro_args` such as `{"ur_type": "ur10e"}`. A restricted expander on the host (properties, args, macros, `$(find pkg)` limited to the approved folder, arithmetic through a whitelist), never the `xacro` program and never `python:` or `eval` of arbitrary code. A refusal names what it could not expand **Done (branch `feat/universal-asset-import`): `mcp/isaac_mcp/xacro_lite.py`, an expression parser with a whitelist, never `eval` or the `xacro` program; the real UR10e expands to the same links, joints, limits, meshes and inertias as the system xacro; 36 tests including hostile expressions, includes and runaway macros; all missing `$(arg)` are named at once.**
 - [x] **F30. Mesh and prop import** (tester C: the Khronos Duck had no route at all, because the import is USD only). glTF, GLB, OBJ, STL, FBX, DAE, PLY through `omni.kit.asset_converter` behind the same entry; options `scale`, `up_axis`, `as_collider` (none, convex hull, convex decomposition), `mass`. Units and up axis are stated in the result, never guessed silently **Done (branch `feat/universal-asset-import`): glTF, GLB, OBJ, STL, FBX, PLY through `omni.kit.asset_converter`, with `scale`, `up_axis`, `as_collider`, `mass`; references checked (hostile glTF refused live); live on Sim 6.2: Duck falls as a dynamic prop, STL Z-up, OBJ with absent .mtl warns. Collada (.dae) cannot be a prop (the converter does not read it): refused with a message; it works inside URDF.**
@@ -72,7 +67,6 @@ Found on 2026-11-05 by scripted scenarios (17 resolver checks in throwaway world
 - [x] **F43. Gemini 3.8 Flash testers (2026-11-05), windowed, verified by me.** Tester C (wishlist-3, frozen server from before PR 82): the UR10e (xacro expanded with the system `xacro`, 14 `.dae` meshes) imported through `assets__import_urdf` with its meshes visible and two joints moved (picture checked); the Teapot USD loaded; the Duck glTF and the SDF vehicle have no route, as predicted (F30, F31). Tester D (wishlist-4, PR 82 code): all four Menagerie robots (Panda, UR5e, Go2, H1) imported with `assets__import_mjcf`, each moved a joint, and all four stood in one scene (pictures checked); no processes left, the real asset store unchanged (171 files). What was a tester choice and not a bug: `fixed_base=true` holds Go2 and H1 in the air at their XML height (the tester asked for it); the 4 mm "below ground" warning on Go2 is the tool working as designed. Real findings: F44 and F45
 - [x] **F44. A MuJoCo robot driven by torque motors comes in with no joint drives and sags** (tester D, Go2 and H1: `stiffness 0`, `damping 0`, limbs collapse until `sim__joints__gains`; the Panda and UR5e use position actuators and import with drives). This is faithful to the model, but the agent finds out only by failing. Make the import result say it: count the movable joints with no drive, and say that the model is torque-actuated and how to hold it (`sim__joints__gains`, or an option on the import such as `drive_gains={"stiffness": ..., "damping": ...}` applied to every movable joint). No new tool **Done (branch `feat/universal-asset-import`): the MJCF result lists `undriven_joints` and warns; `default_drives=true` gives them a generic holding drive; live on Go2.**
 - [x] **F45. Tester C's per-call bridge wish (W3) is mostly a documentation gap:** `./call.py --port <port> <tool> '<json>'` already works for single calls. Say so at the top of `call.py --help`, in the skill and in `docs/MCP-SERVER.md`; and see F41 for a bridge choice that survives between calls in the MCP server itself **Done (branch `feat/universal-asset-import`): `call.py --port` and `client.py --port` documented in ASSET-IMPORT.md; a bridge choice that survives in the MCP server itself is not built.**
-- [ ] **F32. URDF with `.dae` (Collada) and other mesh files.** Many ROS robots (the UR descriptions among them) have Collada visuals. Evidence so far (F43): the UR10e with 14 `.dae` meshes imports and shows its meshes; still to check `.obj`, `.stl`, a `.dae` with its own texture images, and `package://` in each. Check first what the importer does with `.dae`, `.obj` and `.stl` meshes and with `package://` references in each, and with a `.dae` that names its own texture images; record the result here, then convert through F30 whatever the importer cannot read. Test: a real URDF whose meshes are `.dae` (the UR10e that tester C expanded, TurtleBot3), imported with meshes visible, not an empty shell
 - [x] **F33. Export with the tools we have.** `sim__stage__save` gains `format` (usd, usda, usdz, urdf); URDF through `isaacsim.asset.exporter.urdf`, and the result says what could not be exported. MJCF export only if a converter exists (none shipped: say so) **Done (branch `feat/universal-asset-import`): `sim__stage__save format=urdf robot_path=...` through `isaacsim.asset.exporter.urdf`; live: the imported UR10e exported (34 meshes) and imported again. The exported OBJ material files are reported absent on re-import (colours lost): a known gap.**
 - [x] **F34. MJCF and every format in packs and `sim__quick_start`.** `assets__pack_build` accepts `.xml` (MJCF) and the other formats and records `origin`; `sim__quick_start` takes `robot_file` (any supported file or pack) beside `robot=`, so a downloaded robot is one call from a scene **Done: `assets__pack_build` takes MJCF, SDF, meshes and maps (copies exactly what each names, pinned; a xacro file is refused with a pointer, because it needs its arguments); `sim__quick_start robot=<absolute path to any file or folder>` builds the scene and imports it in one call (live on the Menagerie Go2).**
 - [x] **F35. `assets__dependencies` reads every format** on the host (xacro, SDF, glTF buffers and images, OBJ `mtllib`, DAE images), the free pre-check for the import **Done (branch `feat/universal-asset-import`): `assets__dependencies` reads xacro, SDF, meshes and maps on the host (live on the real UR10e, Duck, a Nav2 map and the Gazebo world).**
@@ -82,28 +76,20 @@ Found on 2026-11-05 by scripted scenarios (17 resolver checks in throwaway world
 - [x] **F38. CAD (STEP, IGES, JT)** through `omni.kit.converter.cad`, and Gaussian splats (`.ply`, `.spz`) through `omni.kit.converter.gsplat`, behind the same entry; add when a user asks, but the `format` list names them so an agent is told what is missing **Closed without building (Kaleb, 2026-11-05: skip anything not possible or not used).** CAD (STEP/IGES/JT) and Gaussian splats were not tried: no test file, no user, and the Kit converters are untested here. A CAD or splat file is refused with `UNSUPPORTED_FORMAT`. Reopen when someone needs one.
 - [x] **F39. Validate every converted asset** before it is trusted: `omni.asset_validator` or our own checks (a physics variant, rigid bodies, joints, no NaN, sane scale), reported in the import result **Done (branch `feat/universal-asset-import`): every import result has `validation` (geometry, finite bounds, sane size, rigid bodies, articulation root, joints; mesh collision; map walls). It is our own checks, not `omni.asset_validator`.**
 - [x] **F40. Tester evidence per format.** For each of F29 to F38, a plain-request tester (Gemini 3.8 Flash or another named model) downloads one real asset from a named repo and gets it into a scene; the result and its verification go to `~/isaac-workspace/runs/`; a format is ticked only after that **Done for the formats built.** Gemini 3.8 Flash testers, windowed, from real GitHub downloads, each verified by me (pictures, no leftover processes, real asset store unchanged at 171 files): C (UR10e xacro, Teapot USD), D (four Menagerie robots), E (Duck glTF, UR10e xacro, Gazebo diff-drive SDF, Nav2 map, Go2 folder, URDF export and re-import: 6 of 6), F (DamagedHelmet glb, Pioneer 2DX SDF with meshes, SO-101 URDF, warehouse map: 4 of 6 on the first run; Franka FR3 xacro and TurtleBot3 failed on real bugs in the xacro expander, fixed and re-checked live). Evidence: `runs/wishlist-3-4-gemini/`, `runs/wishlist-5-6-gemini/`, `runs/universal-import-demo/`.
-- [ ] **F41. Fewer calls (section 1, in assets).** (a) A bridge choice that survives between calls, or a `port` argument on the sim tools (tester C, W3: `use_bridge` first in every server session, about eight script runs); (b) the import result is enough to act on (joints, limits, bounds, articulation root), so no `sim__joints__inspect` or `sim__prim__get` follow-up is needed; (c) `assets__import_path` options `pose`, `fixed_base`, `joint_targets` and `ground=true` so import, place and first move are one call; (d) `assets__scan` and `assets__search` list files in every supported format so the agent finds the entry itself; (e) measure calls per task before and after with the same plain-request tester prompts; goal: a downloaded robot loaded, posed and photographed in 3 calls or fewer **Partly done:** the import result now has `joints` (limits and gains), `validation`, `placement` and `warnings`, so no follow-up inspect call is needed; `joint_targets`, automatic lift out of the ground and `sim__quick_start robot=<any file or folder>` make load, pose and photograph 3 calls; `call.py --port` is documented. Not built: a bridge choice that survives between calls inside the MCP server.
-- [x] **F46. A warehouse with a robot in one call** (Kaleb liked the Nav2 warehouse; a manufacturing-logistics demo). `sim__quick_start environment=warehouse` builds a 24 by 16 m room with six racks, 90 pallet loads, two aisles, lane lines, three loading docks with staged pallets, pilasters and a charging station, and puts the robot (default `carter_v1`) at the start of an aisle; plain USD boxes with colliders, no download. Live on Sim 6.2: the Carter drove 10 m down the aisle in six seconds; the editor view frames the whole room. The Nav2-style occupancy map of it was exported with `sim__map__occupancy` (500 by 339 cells; racks, docks and walls occupied). Not done: Nav2 goals in this room (`ros=true` is set up but untested here), and picking the layout (size, number of racks) by arguments
+- [x] **F46. A warehouse with a robot in one call** (Kaleb liked the Nav2 warehouse). `sim__quick_start environment=warehouse` builds a 24 by 16 m room with six racks, 90 pallet loads, two aisles, lane lines, three loading docks with staged pallets, pilasters and a charging station, and puts the robot (default `carter_v1`) at the start of an aisle; plain USD boxes with colliders, no download. Live on Sim 6.2: the Carter drove 10 m down the aisle in six seconds; the editor view frames the whole room. The Nav2-style occupancy map of it was exported with `sim__map__occupancy` (500 by 339 cells; racks, docks and walls occupied). Not done: Nav2 goals in this room (`ros=true` is set up but untested here), and picking the layout (size, number of racks) by arguments
 - [x] **F47. Snapshot quota is 16 and every import uses two** (the approved folder, then the converted copy). Found by my own live runs: six robots in one scene used twelve, and a new import then failed with `QUOTA` until the staging folder was cleared by hand. Documented in ASSET-IMPORT.md. **Decision for Kaleb:** raise the limit, or delete the oldest snapshot that no live import uses. Left alone because it is a disk and safety trade-off
 - [x] **F48. An agent can ask for a broad approval by pointing at a parent folder.** Tester F passed `downloads/` and the tool, correctly, offered to approve `downloads/` (six repositories, 165 MiB). The operator approved the six smallest folders instead. No code change: the approval message already says to approve the smallest folder, and a human runs it. Worth keeping in mind when writing agent instructions: name the file, not its parent
 - [x] **F49. Findings from testers E and F, all fixed or decided:** an unapproved folder now gets the approval command (E, was "unsupported format"); a straight-down viewport view no longer refuses (E); xacro macro defaults with spaces (`xyz:='0 0 0'`), `**` block parameters, dotted access to YAML values, and xacro kept in a file named `.urdf` (F: Franka FR3 and TurtleBot3). Skipped on purpose: `xacro_args` on `sim__quick_start` (two calls are fine) and `path` against `prim_path` naming across `sim__prim__*` (not an asset issue)
 - [x] **F50. The three import tools were folded into `assets__import_path`** (Kaleb approved: one tool, formats as options). 126 tools became 123; the counts, docs, skill and scripts were updated; `root_id` with `relative_path` still works
-- [ ] **F51. Warehouse to a semiconductor-style material-transport demo (Kaleb, 2026-11-05).** Simulation only; not a validated model of any company's operations. Order: (1) prove Nav2 for the Carter between two stations in the generated warehouse, measured and reported (worker thread in the private `semiconductor-amr-demo` project; results in that repository's `docs/NAV2-RESULTS.md`); (2) after Kaleb has seen the results, a simple mission: request, pickup, simulated loading, delivery, simulated unloading, with loading and unloading labelled as state changes; (3) only then a scene closer to an assembly-and-test floor and any manipulation. Not started beyond (1)
-- [ ] **F26. Wait for more evidence (tester B and A wishes):** a choice of output folder for `sim__camera__capture` and `sim__map__occupancy` (the folder is fixed on purpose); a viewport-only screenshot; a screen recording that survives its server exiting (the description now warns); a brighter overhead capture (not reproduced: the picture was readable)
 - [ ] **F13. Aim the camera of a Lab play window** (tester 2 wish): the play window is its own Kit app with no MCP bridge, so `sim__viewport__frame` cannot reach it. Either a camera pose argument on `isaaclab__play`, or run it with the bridge enabled. Needed for a good demo video
 - [ ] **F14. A one-call video of a play run** (tester 2 wish). Lab's own `--video` needs `moviepy` (1.x) and `imageio-ffmpeg` in the Lab interpreter, which the workspace env does not have; the tool refuses with that message and points at window recording, which worked. Decide whether to install them into the Lab env, or add a `record` option on `isaaclab__play`
 - [ ] **F15. A PhysX run of the same walking task** for comparison with the Newton one (Newton is experimental here). Check which Hydra preset or override selects it, and report it in `physics`
-- [ ] **F16. A named-source GitHub test:** the prompt names the repository (for example `unitreerobotics/unitree_ros`), the agent pulls it, the approval refusal goes to the human, and the pack is built with `origin`. Run 1 skipped approval by copying into the trusted folder, so the approval command flow has not been exercised by an agent
 - [x] Tester 2 wishes checked and not changed: live training curves (the tester did not try `metrics_summary` during a run; I did, mid-run at step 480, and it worked); per-episode eval is already the open item "Eval beyond mean return"
 
 Plan, one pull request each, in this order:
-- [ ] PR 1: approval messages and Kit sees the project (F2, F3)
 - [ ] PR 2: lab profile: strict scoped to the twin and the `ur5e-dt` pack, `ISAAC_MCP_PUBLIC_ASSETS` for public robots (default on), a `require` list in a project's `isaac-mcp.json` so the twin refuses to build a lab scene with missing lab files, `lab_fidelity` in twin results, descriptions that steer plain UR5e work to `sim__quick_start`
-- [ ] PR 3: workspace mode: with `ISAAC_MCP_WORKSPACE` set, an opt-in step (`isaac_env.py init`) approves the asset folder and each project's own assets folder (the smallest folder that holds its files), never `<workspace>/projects` as a whole, so a project needs no per-folder approval command; per-project `isaac-mcp.json` honoured by host and Kit; one setup command; a safety note (cloned repos inside `projects/` are only trusted for the folders approved; off by default; the fresh-clone path is unchanged)
 - [ ] PR 4: public grippers: `sim__quick_start gripper=` (default: a public gripper for any arm that has none, `none` to turn it off), a gripper command tool, and an optional fetch of NVIDIA's public robots and grippers into a pack for offline or strict use. Prototype: NVIDIA's UR5e asset has a `Gripper` variant (`Robotiq_2f_85`) that joins the arm's articulation with a `finger_joint`; a pick with IK and that joint did not yet lift the cube (open, to debug: tool offset, finger command, friction)
 - [ ] PR 5: suction: NVIDIA's `isaacsim.robot.surface_gripper` is available on 6.2; wrap it as on/off, plus the attach/detach tool
-- [ ] Scenario checks into the repo as tests (the throwaway-world resolver scenarios), and a live scenario write-up
-- [ ] Agent tests in new project threads: fresh clone, project with its own assets, lab user with the full folder. Prove the real asset folder is untouched (file list and timestamps before and after; baseline taken 2026-11-05: 171 files)
 
 ## 3. Tool surface review: combine or remove
 
@@ -111,12 +97,6 @@ Plan, one pull request each, in this order:
 drop the ones that earn no place. **Nothing is removed or combined until Kaleb has approved the list**; Kaleb said the
 review itself is fine to do, and to land as its own branch.
 
-- [ ] **Inventory.** One table of every tool: group, what it does, the tools it overlaps, and how often agents used it in the fleet and plain-request runs (count calls from the saved transcripts, not by guess)
-- [ ] **Classify** each as keep, combine, rename, or remove, with a one-line reason and a risk: who might call it (README prompts, the skill, the UR5e twin, the docs, other repos)
-- [ ] **Bring the list to Kaleb.** He approves, changes or rejects each line before any code moves
-- [ ] **Implement the approved list** on its own branch: a merged tool keeps the old name as a thin alias for one release with a note in its description, and a removed one is documented
-- [ ] Update everything the counts touch: `AGENTS.md`, the README tier table, the skill, `docs/TOOLS-*.md`, the generated catalog and tool reference (`check_docs.py` and `gen_host_catalog.py --write` enforce this)
-- [ ] Re-run a plain-request tester afterwards to check an agent does at least as well with the smaller set (fewer wrong tool picks, same or fewer calls)
 
 Candidates to look at first (not decisions): the three step/play/pause paths (`sim__simulation__step`, `sim__timeline__control`, `sim__joints__move`); the joint family (`state`, `command`, `drive`, `gains`, `move`, `teleport`, `inspect`); the pack tools (`pack_adopt`, `pack_build`, `pack_pin`, `pack_doctor`, `packs`); the camera pair and the many `ur5e_dt__quick_start*` variants; `sim__prim__get`, `bounds` and `measure`; the desktop `window_*` tools.
 
@@ -151,8 +131,6 @@ and played in a window.
 
 Bring a robot in
 - [x] **MJCF import** (`assets__import_mjcf`): done in PR 82. Tested live on Sim 6.2 with the Menagerie UR5e (fixed base, 6 joints), Franka Panda (fixed, 9 joints) and Go2 (floating, 12 joints), with hostile files refused (absolute path, `..` escape, URL, missing include, DTD). Not yet: `sim__quick_start` for a `.xml`, packs for MJCF, and Isaac Sim 5.1 / 6.0 / 6.1 (the 6.0.x importers were not tried). The converter's documented gaps (no cameras, lights, sensors, flex) are listed in [ASSET-FORMATS.md](ASSET-FORMATS.md)
-- [ ] **Safe xacro to URDF**: many ROS repos (UR, xArm) ship only `.xacro`, and we refuse it. Convert on the host without running the downloaded repo's scripts
-- [ ] **Import a robot from a big repo without hand-packing**: one robot in a monorepo hit the 1,000-file / 256 MiB limit and needed `assets__dependencies` plus `assets__pack_build` by hand. An `auto_pack` option on `sim__quick_start` and `assets__import_urdf` (copy the closure, then import)
 - [ ] **A robot from your own URDF into an Isaac Lab task**: the tester registered a custom task package (works through `ISAACLAB_TASK_MODULES`) but only around the built-in Franka. A tool or recipe to scaffold a Lab task and robot config from a pack URDF is the biggest gap for real RL. Check what Lab needs (articulation config, actuators) before designing it
 
 Act on the robot
@@ -160,11 +138,9 @@ Act on the robot
 - [ ] **Gripper for any robot**: open, close and grip by width and force, sync the fingers, report contact. The Franka's second finger has no authored drive; now flagged by `sim__joints__inspect` (done). A second agent test (a UR5e, no gripper) stopped at the grasp: needs a public gripper that `sim__quick_start` can attach to any arm (the Robotiq 2F-85 inside the Franka asset is a candidate; check its licence and that it attaches), plus the command above
 - [x] `sim__prim__find` takes a `root` to search one subtree; `sim__joints__inspect` flags joints with no drive (`no_drive`, `joints_without_drive`)
 - [ ] **Attach / suction constraint** (`sim__physics__attach`, `sim__physics__detach`): a temporary fixed joint between a link and an object, for pick-and-place without finger friction (agent wishlist, UR5e run). Not physically realistic: label it so
-- [ ] **Create a joint between two prims** (`sim__joint__create`: fixed, revolute, prismatic) to build fingers or a tool; lower priority, overlaps the attach tool
 - [ ] **`screenshot` saves outside a sandbox** (`~/Pictures/screen-mcp`): say so in its description, and optionally respect `MCP_CLIENT_OUTPUT_DIR`. The agent that hit it stopped using it and reported it
 - [ ] **Twin quick-start descriptions** should say that for any robot other than the lab twin, or when a gripper is needed, `sim__quick_start` is the tool: an agent wanting a table picked `ur5e_dt__quick_start_with_workstation`, which has no gripper without private lab files (my guess at why; not verified)
 - [ ] IK follow-ups: one-call `move_to` (solve then move), a Cartesian straight-line path, a check that the arm will not hit the ground or itself, and an orientation-weighting test on a non-metre stage (a known test gap)
-- [ ] A tabletop preset for `sim__quick_start` (a table and a few pickable objects in one call). Low priority
 - [ ] Decide: may read-only scene tools omit `session_id` and `stage_id`? (Today a plain read fails until `sim__stage__info` is called; the IDs stop edits landing on the wrong stage.)
 - [ ] **Force, impulse and velocity on a running scene** (section 5): the tester dropped a 2 kg ball as a stand-in for a push
 - [ ] **Smooth joint trajectories during play**: `sim__joints__move` only works paused and `sim__joints__command` steps to the target. A trajectory tool (a spline or trapezoid over a duration)
@@ -180,7 +156,6 @@ RL workflow
 - [ ] **Eval beyond mean return**: survival rate, episode length and per-term reward in `eval_result` (the G1 run needed mean length to show no falls)
 
 Method
-- [ ] Add this section's list to the `mcp-wishlist-testing` skill as a worked example, and re-run both tester briefs after each item lands to confirm the friction is gone
 
 ## 5. Poke a running scene
 
@@ -194,10 +169,7 @@ Jenga, LEGO and manipulation need it.
 
 ## 6. Second PR: M6 and M7 (branched from `main`)
 
-- [ ] M6: `assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources
-- [ ] M7: `sim__viewport__screenshot`, `sim__viewport__record_start`, `sim__viewport__record_stop`, and the final demo
 - [ ] For LEGO and Jenga: an arm with a gripper in `sim__quick_start`, and a route from a saved scene to a Lab task
-- [ ] Update `docs/TOOLS-*.md`, the counts, and regenerate the catalog and tool reference (`check_docs.py` enforces this)
 
 ## 7. Small fixes
 
@@ -209,35 +181,25 @@ Host layer and refusals
 - [ ] `NO_SHARED_STAGING` comes before validating a root or path, so a typo reads as an unconfigured install
 - [ ] Range refusals show the value but not the argument name; NaN shows as `None`
 - [ ] A guessed argument gets `Extra inputs are not permitted` with no list of the real ones
-- [ ] `assets__*` `STALE_TARGET` is checked on the host, so it lacks the outside-change explanation
 
 Tools
 - [ ] `sim__light__modify` requires both intensity and color
-- [ ] `sim__map__occupancy` requires `min` and `max`; a default from colliders needs care with a ground plane
 - [ ] `sim__logs__tail` reads the last 32 KiB (about 2 s of Info lines): add level and text filtering
 - [ ] `sim__body__state` refuses while stopped, so "stop then read the pose" fails
-- [ ] `assets__pack_doctor` doesn't list a pack's files
 - [ ] `sim__lidar__read`: its 256 samples are the start of the buffer, not a whole sweep; say so on `limit`
 - [ ] `sim__lidar__read` `NOT_READY` text should mention a sensor inside its own robot's body (Carter's was on a chassis link)
 - [ ] `clock=auto` reuses any existing clock, even one with no time source
 - [ ] A twin tool (`ur5e_dt__set_object_pose`) tried on a non-twin object fails with a path nobody expects: its description should say it only works on the twin's objects
 - [ ] A very flat floor already saved in a file gets no warning; only `sim__prim__create` warns
-- [ ] A window appears 8 to 12 s before it renders: consider a `loading` field on `runs_status`
-- [ ] On 6.0.0.0, a LiDAR read after building a scan graph on a tool-created sensor reported `NOT_OWNED`, then `NOT_READY` while playing: a sensor `sim__lidar__create` made should be registered
-- [ ] Stale camera handles have no repair on open (only `RemoveProperty` from `run_python` worked); both documented repairs fail
 
 Docs and guides
 - [ ] Trim the guide's `--yaw-tolerance 3.2` advice to the measured 0.2 to 0.5
 - [ ] State that `num_episodes` is a floor: all parallel environments finish once first
 - [ ] Say in the guide that `isaac_assets.py adopt` (no approval) is the route for an agent building a pack, if true for a URDF with meshes
 - [ ] Docs say `Example_Rotary_2D` is 10 Hz; 5.1 reports 30
-- [ ] A documented example of a project shipping its own tools through the bridge
 - [ ] Say that `sim__camera__capture` made in a session loses its render handles across save and reopen (`NOT_OWNED`, fixed by `adopt=true`); keep the refusal's `retry_with`
 
 Lab
-- [ ] `runs_status.window` was missing on the lab PC, present on the desktop
-- [ ] Two windowed jobs have the same title, so only id and pid tell them apart
-- [ ] A window still loading is black for up to 4 minutes when two Kits share a GPU, with no signal
 - [ ] `timeout_s` with no host running waits until the next status call: a 25-minute play window stayed open 30 minutes. Enforce it from the job's own shell, and write an exit-code file when the timeout kills a job (today a script waiting for the file waits forever)
 
 Map and Nav2
@@ -245,34 +207,80 @@ Map and Nav2
 - [ ] With a robot on the origin, pass `start` on open floor; `nav2_params.py` needs ROS sourced
 
 Optional
-- [ ] Start a recording before a window exists, or stop on a log marker
 
 ## 8. Testing still owed
 
-- [ ] **Lab PC, when Kaleb says it is back** (it was down, shared workstation): 6.0.0.0, 6.0.0.1, 6.0.1 and 6.1 with the smoke test, M1 to M5 and the plain-request tests; Lab 3.0.0 with the eval fix and the refusal hints
-- [ ] 6.0.1 `sim__stop` fix, live (stop must leave nothing running)
-- [ ] Lab 3.0.0: windowed `play` cancel after a full load, and the `window` field
-- [ ] M1 to M5 on 6.0.0.0, 6.0.0.1, 6.0.1, 6.1 and Newton: only the API adapters and unit tests cover them
-- [ ] A **windowed** plain-request run on 6.2 with the viewport and capture tools (home runs so far were headless)
-- [ ] Have a plain-request tester use the new tools (tower, measure, raycast, poke) and fix what it fumbles
 - [ ] Mark Lab 2.3.2 with Sim 5.1 `tested: true` in the compatibility matrix (a small PR)
 - [ ] Re-run the README example prompts, including the LiDAR one, and fix any that fail
-- [ ] Merged M1 to M5 with the timeline playing: `sim__joints__move` was only checked after Stop
 
 ## 9. Known limitations to state in the docs
 
 - [ ] `--video` needs MoviePy and imageio-ffmpeg in the Lab environment
 - [ ] A screen recording belongs to the server process that started it, so a client that restarts between calls can't stop it
-- [ ] Real-robot mode is not enabled; `ursim` needs Docker
 - [ ] `randomize_single_object` often can't fit: a 4 cm by 20 cm strip with 0.18 m separation, not configurable
-- [ ] Why a floor scaled 20x20x0.1 gives wheels no contact is measured, not explained (133:1 fails, 100:1 drives on TurtleBot3; Carter erratic from 50:1)
-- [ ] `[spin] error in rcl_take: error not set` lines in the Kit log on 6.0.0.0: appears harmless, not explained
-- [ ] One `sim__camera__capture` had the selection outline in it after a prim was selected by hand; not reproduced in 4 tries
 
 ## 10. For Kaleb to decide
 
-- [ ] Approve, change or reject the keep/combine/remove list when it arrives (section 3)
 - [ ] Aldrin licence: Kaleb handles it. Update VENDORING, README and LICENSE only when he reports; do not ask again
+
+## Decided not to do (triage, 2026-11-05)
+
+Closed as done, or dropped as not needed. Reopen one if a real run needs it.
+
+- `sim__prim__clone` with a count and an offset, a grid or a stack (check what clone does today)
+- Batch transforms (move many prims in one call)
+- Look for other N-call patterns (joints, physics apply, lights) in the earlier test transcripts 
+- F1. A robot an agent puts in the project's own `./assets` cannot be loaded: "A pack named only 
+- F4. `assets__pack_adopt` and `pack_build` always write to the one primary asset folder, so an a
+- F6. The printed approval command must run as shown. Found by running it (2026-11-05): the helpe
+- F8. The store list names the same folder twice when a project's `asset_path` lists the workspac
+- Wait for more evidence: a settle or `after_command` option for `sim__camera__capture` (tester 1
+- F25. Expert-level asset coverage, with the tools we already have (Kaleb, 2026-11-05). Plan and 
+- F32. URDF with `.dae` (Collada) and other mesh files. Many ROS robots (the UR descriptions amon
+- F41. Fewer calls (section 1, in assets). (a) A bridge choice that survives between calls, or a 
+- F26. Wait for more evidence (tester B and A wishes): a choice of output folder for `sim__camera
+- F16. A named-source GitHub test: the prompt names the repository (for example `unitreerobotics/
+- PR 1: approval messages and Kit sees the project (F2, F3)
+- PR 3: workspace mode: with `ISAAC_MCP_WORKSPACE` set, an opt-in step (`isaac_env.py init`) appr
+- Scenario checks into the repo as tests (the throwaway-world resolver scenarios), and a live sce
+- Agent tests in new project threads: fresh clone, project with its own assets, lab user with the
+- Inventory. One table of every tool: group, what it does, the tools it overlaps, and how often a
+- Classify each as keep, combine, rename, or remove, with a one-line reason and a risk: who might
+- Bring the list to Kaleb. He approves, changes or rejects each line before any code moves
+- Implement the approved list on its own branch: a merged tool keeps the old name as a thin alias
+- Update everything the counts touch: `AGENTS.md`, the README tier table, the skill, `docs/TOOLS-
+- Re-run a plain-request tester afterwards to check an agent does at least as well with the small
+- Safe xacro to URDF: many ROS repos (UR, xArm) ship only `.xacro`, and we refuse it. Convert on 
+- Import a robot from a big repo without hand-packing: one robot in a monorepo hit the 1,000-file
+- Create a joint between two prims (`sim__joint__create`: fixed, revolute, prismatic) to build fi
+- A tabletop preset for `sim__quick_start` (a table and a few pickable objects in one call). Low 
+- Add this section's list to the `mcp-wishlist-testing` skill as a worked example, and re-run bot
+- M6: `assets__robot_library`, `assets__import_mjcf`, `bundled` and `nvidia` sources
+- M7: `sim__viewport__screenshot`, `sim__viewport__record_start`, `sim__viewport__record_stop`, a
+- Update `docs/TOOLS-*.md`, the counts, and regenerate the catalog and tool reference (`check_doc
+- `assets__*` `STALE_TARGET` is checked on the host, so it lacks the outside-change explanation
+- `sim__map__occupancy` requires `min` and `max`; a default from colliders needs care with a grou
+- `assets__pack_doctor` doesn't list a pack's files
+- A window appears 8 to 12 s before it renders: consider a `loading` field on `runs_status`
+- On 6.0.0.0, a LiDAR read after building a scan graph on a tool-created sensor reported `NOT_OWN
+- Stale camera handles have no repair on open (only `RemoveProperty` from `run_python` worked); b
+- A documented example of a project shipping its own tools through the bridge
+- `runs_status.window` was missing on the lab PC, present on the desktop
+- Two windowed jobs have the same title, so only id and pid tell them apart
+- A window still loading is black for up to 4 minutes when two Kits share a GPU, with no signal
+- Start a recording before a window exists, or stop on a log marker
+- Lab PC, when Kaleb says it is back (it was down, shared workstation): 6.0.0.0, 6.0.0.1, 6.0.1 a
+- 6.0.1 `sim__stop` fix, live (stop must leave nothing running)
+- Lab 3.0.0: windowed `play` cancel after a full load, and the `window` field
+- M1 to M5 on 6.0.0.0, 6.0.0.1, 6.0.1, 6.1 and Newton: only the API adapters and unit tests cover
+- A windowed plain-request run on 6.2 with the viewport and capture tools (home runs so far were 
+- Have a plain-request tester use the new tools (tower, measure, raycast, poke) and fix what it f
+- Merged M1 to M5 with the timeline playing: `sim__joints__move` was only checked after Stop
+- Real-robot mode is not enabled; `ursim` needs Docker
+- Why a floor scaled 20x20x0.1 gives wheels no contact is measured, not explained (133:1 fails, 1
+- `[spin] error in rcl_take: error not set` lines in the Kit log on 6.0.0.0: appears harmless, no
+- One `sim__camera__capture` had the selection outline in it after a prim was selected by hand; n
+- Approve, change or reject the keep/combine/remove list when it arrives (section 3)
 
 ## 11. Last of all
 
