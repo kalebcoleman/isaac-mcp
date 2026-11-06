@@ -475,6 +475,47 @@ Example play call shape (illustrative):
 - Re-check with `isaaclab__runs_list` / `isaaclab__runs_status`. Cancelled jobs release the
   job-vs-job guard.
 
+### 6. Your own task
+
+A task is a Python package the tools import before Lab looks up its id. In the MCP server's environment, set `ISAACLAB_TASK_PATH` to the folder that holds the package and `ISAACLAB_TASK_MODULES` to its name; keep the package's `__init__.py` free of Isaac Lab imports, because it is imported before Kit starts. Two examples are in `examples/`, both for Lab 3.0.0 with PhysX and registered in a few lines; copy them as a start.
+
+**Your own robot, from its URDF** (`examples/urdf_reach`, `ISAACLAB_TASK_MODULES=urdf_reach`). Any fixed-base arm learns to bring one link to random points. Give the file and the link:
+
+```
+isaaclab__train task=Isaac-Urdf-Reach rl_library=rsl_rl num_envs=512 max_iterations=200
+  extra_args=["env.urdf_path=/abs/so101.urdf", "env.end_link=gripper_frame_link", "env.stiffness=20.0", "env.damping=2.0", "env.target_radius_m=0.1"]
+```
+
+Pass the same `extra_args` to `eval` and `play`. A wrong path or link is refused with the robot's real link names. Meshes must be findable from the URDF by relative path: expand a xacro file first. A light arm wants lower `stiffness` and `damping`, and `target_radius_m` should fit its reach. Measured with the SO-101 from its public URDF: 512 environments, 200 iterations in 40 s at about 86,000 steps/s; eval over 64 episodes reached 95.3% of targets (within 3 cm) with a mean final distance of 8.7 mm. One seed; there is no self-collision, no obstacle and no orientation target. The importer's own fixed base joint breaks in cloned environments (their observations reach 1e12, then `normal expects all elements of std >= 0.0`), so write `fix_base=False` with `fix_root_link=True` in a task of your own.
+
+**A manipulation task with contacts** (`examples/jenga_lab`, `ISAACLAB_TASK_MODULES=jenga_lab`, `task=Isaac-Jenga-Push-Franka`). A Franka with a push rod pushes the middle block out of a 6-layer tower, with the blocks, rod and arm pose of [`sim__quick_start environment=jenga`](TOOLS-SCENE.md#a-jenga-tower-in-one-call). The policy moves the rod's tip; damped inverse kinematics turns that into joint targets and keeps the hand level. Reward: reach the block, line up with it, push it up to 10 cm, keep the other blocks still; moving another block 4 cm ends the episode. Measured: 1024 environments, 300 iterations in 431 s at about 36,000 steps/s; eval over 64 episodes had a success rate of 100%, the block out 13.0 cm, the worst other block moved 4.4 mm, and no falls. One seed, one fixed block, a start that varies by a few millimetres: this shows the training route works with contacts, not a policy for a real tower.
+
+Check a new task with a scripted action before training it. The first version of this one trained to 0% because a table under the wrist held the hand 3.5 cm too high; a fixed "push forward" through `scripts/environments/zero_agent.py` showed it in a minute, where 300 iterations had not.
+
+### 7. Choose what a walking policy does
+
+A trained velocity policy takes its command from the task, set through Hydra in `extra_args` for `eval` and `play`. On Lab 3.0.0 `ang_vel_z` is ignored while `heading_command` is on, so set the heading:
+
+```
+extra_args=["physics=isaacsim_physx", "env.commands.base_velocity.rel_standing_envs=0.0",
+  "env.commands.base_velocity.ranges.lin_vel_x=[0.7,0.7]", "env.commands.base_velocity.ranges.lin_vel_y=[0.0,0.0]", "env.commands.base_velocity.ranges.heading=[0.0,0.0]"]
+```
+
+Measured on `Isaac-Velocity-Flat-G1`, PhysX, 64 episodes: 98.4% reached the time limit with `track_lin_vel_xy_exp` 0.91, against 95.3% and 0.89 for the training commands.
+
+### 8. A video of a play run, and its camera
+
+`isaaclab__play` with `headless=true` and `extra_args=["--video", "--video_length", "400"]` writes an MP4; `runs_status` lists them newest first in `video_paths`. It needs `moviepy<2`, `decorator<5` and `imageio-ffmpeg` in the Lab interpreter, and a job refuses if they are missing. Aim the camera at world coordinates with `env.sim.default_visualizer_cfg.eye=[x,y,z]` and `env.sim.default_visualizer_cfg.lookat=[x,y,z]`, on a task that sets `default_visualizer_cfg` (both examples do; on one that does not, the job fails with `'NoneType' object has no attribute 'eye'`). With `num_envs=1` the environment sits at the origin.
+
+### 9. Walking on PhysX and on Newton
+
+Measured on `Isaac-Velocity-Flat-G1`, Lab 3.0.0, one run each, so this is not a statistical comparison.
+
+| Engine | 1500 iterations | Final episode length | Eval return | Falls in eval |
+|---|---|---|---|---|
+| PhysX (`physics=isaacsim_physx`, 1024 environments) | 762 s | 990 of 1000 | 33.8 over 64 episodes | 3 of 64 |
+| Newton MJWarp (the default) | 8.6 min | 948 of 1000 | 27.25 over 16 episodes | about 7% |
+
 ## Concurrency guards
 
 `isaaclab__train`, `isaaclab__eval` and `isaaclab__play` apply two independent guards

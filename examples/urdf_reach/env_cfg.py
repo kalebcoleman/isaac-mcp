@@ -10,10 +10,10 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import DirectRLEnvCfg
-from isaaclab.markers import VisualizationMarkersCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
+from isaaclab.visualizers import VisualizerCfg
 
 
 @configclass
@@ -22,7 +22,8 @@ class UrdfReachSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=sim_utils.UrdfFileCfg(
             asset_path="",  # set from env.urdf_path before the scene is built
-            fix_base=True,
+            fix_base=False,  # the importer's fixed joint does not survive cloning: fix_root_link pins the base in each environment instead
+            fix_root_link=True,
             merge_fixed_joints=False,  # the link to steer may hang from a fixed joint
             joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
                 gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=None, damping=None),
@@ -50,7 +51,12 @@ class UrdfReachEnvCfg(DirectRLEnvCfg):
     action_space = 0  # set from the URDF: one per driven joint
     observation_space = 0  # set from the URDF: two per driven joint, the target's offset, the last action
     state_space = 0
-    sim: SimulationCfg = SimulationCfg(dt=1 / 120, render_interval=2, physics=PhysxCfg())
+    sim: SimulationCfg = SimulationCfg(
+        dt=1 / 120,
+        render_interval=2,
+        physics=PhysxCfg(),
+        default_visualizer_cfg=VisualizerCfg(eye=(1.2, -1.2, 0.9), lookat=(0.0, 0.0, 0.2)),  # change with env.sim.default_visualizer_cfg.eye=[x,y,z]
+    )
     scene: UrdfReachSceneCfg = UrdfReachSceneCfg(num_envs=1024, env_spacing=2.0, replicate_physics=True)
 
     action_scale = 0.5  # radians (or metres) from the start pose at a full action

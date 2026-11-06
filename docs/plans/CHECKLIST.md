@@ -6,6 +6,13 @@ so nothing is lost.
 
 Claude codes and reviews. Testers are weaker models given short plain requests; what they fumble is the finding.
 
+## Findings from the overnight run (2026-11-05 to 06)
+
+- [x] **F52. `sim__arm__ik move=true` commanded failed solves.** A solve with `reached=false` swung the arm and knocked the tower over. It now commands nothing and says so.
+- [x] **F53. Holding a Franka's hand level needs about 60 cm above its base** (joint 6's limit). The Jenga scene stands the arm on the floor beside a low table, and the hand holds a rod, because the 20 cm palm hit the tower on a deep push. In the Lab task a table under the wrist held the hand 3.5 cm high; a scripted push found it where 300 training iterations could not.
+- [x] **F54. The URDF importer's fixed base joint breaks in cloned Lab environments.** Observations reach 1e12, then PPO fails with `normal expects all elements of std >= 0.0`. Use `fix_base=False` with `fix_root_link=True`.
+- [x] **F55. Branch review findings, all fixed:** percent-encoded glTF references could pass the folder check; `$(dirname)` in a folder name looped forever; output and parsing were bounded by element count, not bytes; mesh and map imports skipped the stage target and timeline guard; SDF degrees, quaternions, `expressed_in` and open limits were read wrong; several raw exceptions; map yaw, 16-bit PNG, PNG size check; 1000 files plus a generated one.
+
 ## Priorities (Kaleb, 2026-11-05)
 
 Most of what was on this list was triaged away: what is left serves these goals. **BrickSim, new Jenga work, and RL** come first. The claim is **Isaac Sim 6.2 with Lab 3.0.0, and Sim 5.1 with Lab 2.3.2**; other builds are best effort. The UR5e twin tools stay, and are not a focus. An option on an existing tool beats a new tool. Skip what is impossible or nobody uses (the list of what was dropped is at the end).
@@ -81,9 +88,9 @@ Found on 2026-11-05 by scripted scenarios (17 resolver checks in throwaway world
 - [x] **F48. An agent can ask for a broad approval by pointing at a parent folder.** Tester F passed `downloads/` and the tool, correctly, offered to approve `downloads/` (six repositories, 165 MiB). The operator approved the six smallest folders instead. No code change: the approval message already says to approve the smallest folder, and a human runs it. Worth keeping in mind when writing agent instructions: name the file, not its parent
 - [x] **F49. Findings from testers E and F, all fixed or decided:** an unapproved folder now gets the approval command (E, was "unsupported format"); a straight-down viewport view no longer refuses (E); xacro macro defaults with spaces (`xyz:='0 0 0'`), `**` block parameters, dotted access to YAML values, and xacro kept in a file named `.urdf` (F: Franka FR3 and TurtleBot3). Skipped on purpose: `xacro_args` on `sim__quick_start` (two calls are fine) and `path` against `prim_path` naming across `sim__prim__*` (not an asset issue)
 - [x] **F50. The three import tools were folded into `assets__import_path`** (Kaleb approved: one tool, formats as options). 126 tools became 123; the counts, docs, skill and scripts were updated; `root_id` with `relative_path` still works
-- [ ] **F13. Aim the camera of a Lab play window** (tester 2 wish): the play window is its own Kit app with no MCP bridge, so `sim__viewport__frame` cannot reach it. Either a camera pose argument on `isaaclab__play`, or run it with the bridge enabled. Needed for a good demo video
-- [ ] **F14. A one-call video of a play run** (tester 2 wish). Lab's own `--video` needs `moviepy` (1.x) and `imageio-ffmpeg` in the Lab interpreter, which the workspace env does not have; the tool refuses with that message and points at window recording, which worked. Decide whether to install them into the Lab env, or add a `record` option on `isaaclab__play`
-- [ ] **F15. A PhysX run of the same walking task** for comparison with the Newton one (Newton is experimental here). Check which Hydra preset or override selects it, and report it in `physics`
+- [x] **F13. Aim the camera of a Lab play window** (tester 2 wish): the play window is its own Kit app with no MCP bridge, so `sim__viewport__frame` cannot reach it. Either a camera pose argument on `isaaclab__play`, or run it with the bridge enabled. Needed for a good demo video **Done (2026-11-06):** `env.sim.default_visualizer_cfg.eye` and `lookat` in `extra_args` aim a `--video` camera, used on the Jenga and SO-101 runs; see TOOLS-ISAACLAB section 8. A live window is still not reachable from MCP.
+- [x] **F14. A one-call video of a play run** (tester 2 wish). Lab's own `--video` needs `moviepy` (1.x) and `imageio-ffmpeg` in the Lab interpreter, which the workspace env does not have; the tool refuses with that message and points at window recording, which worked. Decide whether to install them into the Lab env, or add a `record` option on `isaaclab__play` **Done (2026-11-06):** `--video` works headless on both claimed pairs once the packages are in the Lab env, and `video_paths` reads Lab 3's log lines.
+- [x] **F15. A PhysX run of the same walking task** for comparison with the Newton one (Newton is experimental here). Check which Hydra preset or override selects it, and report it in `physics` **Done (2026-11-05):** `physics=isaacsim_physx`, 762 s, length 990, eval 33.8 over 64 episodes with 3 falls; table in TOOLS-ISAACLAB section 9.
 - [x] Tester 2 wishes checked and not changed: live training curves (the tester did not try `metrics_summary` during a run; I did, mid-run at step 480, and it worked); per-episode eval is already the open item "Eval beyond mean return"
 
 Plan, one pull request each, in this order:
@@ -131,7 +138,7 @@ and played in a window.
 
 Bring a robot in
 - [x] **MJCF import** (`assets__import_mjcf`): done in PR 82. Tested live on Sim 6.2 with the Menagerie UR5e (fixed base, 6 joints), Franka Panda (fixed, 9 joints) and Go2 (floating, 12 joints), with hostile files refused (absolute path, `..` escape, URL, missing include, DTD). Not yet: `sim__quick_start` for a `.xml`, packs for MJCF, and Isaac Sim 5.1 / 6.0 / 6.1 (the 6.0.x importers were not tried). The converter's documented gaps (no cameras, lights, sensors, flex) are listed in [ASSET-FORMATS.md](ASSET-FORMATS.md)
-- [ ] **A robot from your own URDF into an Isaac Lab task**: the tester registered a custom task package (works through `ISAACLAB_TASK_MODULES`) but only around the built-in Franka. A tool or recipe to scaffold a Lab task and robot config from a pack URDF is the biggest gap for real RL. Check what Lab needs (articulation config, actuators) before designing it
+- [x] **A robot from your own URDF into an Isaac Lab task**: the tester registered a custom task package (works through `ISAACLAB_TASK_MODULES`) but only around the built-in Franka. A tool or recipe to scaffold a Lab task and robot config from a pack URDF is the biggest gap for real RL. Check what Lab needs (articulation config, actuators) before designing it **Done (2026-11-06):** `examples/urdf_reach` trained the public SO-101 in 40 s, 95.3% of targets reached in eval; TOOLS-ISAACLAB section 6.
 
 Act on the robot
 - [x] **Inverse and forward kinematics** (`sim__arm__ik`, `sim__arm__fk`): from the robot's own USD joints, no per-robot file; checked live on a Franka, UR5e, Unitree G1 arm, SO-ARM100 and a Barkour leg, and an agent found and used them unprompted. Solve only. Still open below: a one-call move-to-pose (solve then move), a straight-line Cartesian path, and collision awareness
@@ -147,13 +154,13 @@ Act on the robot
 - [ ] **Command a trained policy's velocity** in a windowed `isaaclab__play` (the G1 task tracks a velocity command; today it is whatever the task samples)
 
 RL workflow
-- [ ] **`isaaclab__runs_compare`**: several `job_id`s in, side-by-side scalars, FPS and final return out. The tester compared seeds, library and env counts by hand
+- [x] **`isaaclab__runs_compare`**: several `job_id`s in, side-by-side scalars, FPS and final return out. The tester compared seeds, library and env counts by hand **Done as an option:** `compare_jobs` on `isaaclab__metrics_summary`.
 - [ ] **A sweep tool**: seeds and hyperparameters as one queued request, run one at a time on a small GPU, with a summary table
-- [ ] **Resume that behaves the same on every library**: `rsl_rl` rejected an absolute checkpoint path (it matches a filename inside the run folder and needs a resume flag) while `rl_games` took it. Normalise `checkpoint` in `isaaclab__train`
-- [ ] **`video_paths` in `isaaclab__runs_status`** when a play or eval records video (the tester had to `find` the file); and make `--video_length 100` and `--video_length=100` both work
+- [x] **Resume that behaves the same on every library**: `rsl_rl` rejected an absolute checkpoint path (it matches a filename inside the run folder and needs a resume flag) while `rl_games` took it. Normalise `checkpoint` in `isaaclab__train` **Done** for `rsl_rl` on 2.3.2 and 3.0.0, measured.
+- [x] **`video_paths` in `isaaclab__runs_status`** when a play or eval records video (the tester had to `find` the file); and make `--video_length 100` and `--video_length=100` both work **Done**, both flag forms.
 - [ ] **`rl_games` pre-launch check**: `minibatch_size` must divide `num_envs * horizon`, and short runs save no checkpoint. Compute a valid value or say how before starting Kit
-- [ ] **`isaaclab__metrics_summary` takes `job_id`** (it wants `run_dir`, which no other Lab tool uses)
-- [ ] **Eval beyond mean return**: survival rate, episode length and per-term reward in `eval_result` (the G1 run needed mean length to show no falls)
+- [x] **`isaaclab__metrics_summary` takes `job_id`** (it wants `run_dir`, which no other Lab tool uses) **Done.**
+- [x] **Eval beyond mean return**: survival rate, episode length and per-term reward in `eval_result` (the G1 run needed mean length to show no falls) **Done:** `ended_early`, `survived_to_time_limit`, `reward_terms`, `termination_terms` and a task's own `task_metrics`. Terms count only at resets, weighted by how many environments ended; the first version counted stale log values on every step and read far too low.
 
 Method
 

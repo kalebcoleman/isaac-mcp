@@ -330,3 +330,18 @@ def test_a_tasks_own_metrics_are_reported():
     scorer = Scorer(num_episodes=1)
     scorer.observe([1.0], [True], [False], {"log": {"Metrics/success_rate": 1.0, "Metrics/block_pushed_m": 0.13, "Other/thing": 5.0}})
     assert scorer.result()["task_metrics"] == pytest.approx({"success_rate": 1.0, "block_pushed_m": 0.13})
+
+
+def test_terms_count_only_at_resets_weighted_by_how_many_ended():
+    from isaac_mcp.isaaclab.eval_runner import Scorer
+
+    scorer = Scorer(num_episodes=3)
+    stale = {"log": {"Metrics/closest": 9.0, "Episode_Reward/alive": 0.0}}  # what Lab's log holds from the reset before the first step
+    for _ in range(50):
+        scorer.observe([1.0, 1.0, 1.0], [False] * 3, [False] * 3, stale)
+    scorer.observe([1.0, 1.0, 1.0], [False, False, False], [True, True, False], {"log": {"Metrics/closest": 0.2, "Episode_Reward/alive": 1.0}})
+    scorer.observe([1.0, 1.0, 1.0], [False] * 3, [False] * 3, {"log": {"Metrics/closest": 0.2, "Episode_Reward/alive": 1.0}})
+    scorer.observe([1.0, 1.0, 1.0], [False, False, True], [False, False, False], {"log": {"Metrics/closest": 0.5, "Episode_Reward/alive": 4.0}})
+    result = scorer.result()
+    assert result["task_metrics"]["closest"] == pytest.approx((0.2 * 2 + 0.5) / 3)
+    assert result["reward_terms"]["alive"] == pytest.approx((1.0 * 2 + 4.0) / 3)

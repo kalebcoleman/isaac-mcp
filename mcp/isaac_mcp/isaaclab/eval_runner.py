@@ -210,7 +210,9 @@ class Scorer:
         truncs = _bools(truncated, n)
         success = _success_flags(env, info, n) if any(terms) or any(truncs) else None
         self.steps += 1
-        self._observe_terms(info)
+        ended = sum(1 for index in range(n) if terms[index] or truncs[index])
+        if ended:  # Lab refreshes info["log"] only when environments reset; on other steps it still holds the last values
+            self._observe_terms(info, ended)
         for index in range(n):
             self.returns[index] += rewards[index]
             self.lengths[index] += 1
@@ -222,8 +224,9 @@ class Scorer:
                 self.returns[index] = 0.0
                 self.lengths[index] = 0
 
-    def _observe_terms(self, info) -> None:
-        """Isaac Lab reports each reward and termination term, per episode, in info["log"] as environments reset; a task's own Metrics/ too."""
+    def _observe_terms(self, info, ended: int = 1) -> None:
+        """Isaac Lab reports each reward and termination term, per episode, in info["log"] as environments reset; a task's own Metrics/ too.
+        Each value is a mean over the *ended* environments, so it counts that many times."""
         log = info.get("log") if isinstance(info, dict) else None
         if not isinstance(log, dict):
             return
@@ -232,8 +235,8 @@ class Scorer:
                 continue
             numbers = _floats(value, 1)
             if numbers and math.isfinite(numbers[0]):
-                self.term_sums[key] = self.term_sums.get(key, 0.0) + numbers[0]
-                self.term_counts[key] = self.term_counts.get(key, 0) + 1
+                self.term_sums[key] = self.term_sums.get(key, 0.0) + numbers[0] * ended
+                self.term_counts[key] = self.term_counts.get(key, 0) + ended
 
     def decide(self) -> str | None:
         """The reason the run should stop, or None."""
