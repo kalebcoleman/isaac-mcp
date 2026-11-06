@@ -3,7 +3,6 @@
 This document covers the 12 host-side tools registered by `mcp/isaac_mcp/isaaclab/tools.py`
 (`install.py`, `jobs.py`, `metrics.py`). It is the implementation reference; every argument is
 listed in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#isaac-lab).
-For design history and the original job-guard write-up, see [ISAACLAB-TOOLS.md](ISAACLAB-TOOLS.md).
 
 ## Naming: host-side tools
 

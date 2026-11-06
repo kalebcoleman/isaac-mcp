@@ -4,7 +4,6 @@
 trusted local/shared-mount projects and explicit scene operations. Untrusted isolation, authenticated
 remote upload and named presets are **unavailable**, not silently substituted. Bounded USDZ support is available only in the trusted-project profile.
 See [compatibility](COMPATIBILITY.md) for tested builds and known limits.
-The earlier [design](GENERIC-SIM-TOOLS.md) is broader than this implementation.
 This page describes behavior and limits. For each tool's arguments and defaults, see [Tool arguments](TOOLS-ARGUMENTS.md).
 
 ## Start a scene
@@ -208,7 +207,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__graph__build` | Create a whole OmniGraph in one call from `nodes` ([name, type] pairs), `values`, `connections` ([from, to]) and prim `targets`; timeline stopped. Checks every port against the created nodes (a typo lists the real ports), creates Make Array-style `inputs:inputN`, stores a token's value when given its key (`toStage` -> `Convert to stage units`), authors everything in USD so saves keep it, and rolls the graph back on any error. `replace=true` rebuilds an existing graph. Returns the graph as `sim__graph__inspect` does. Also accepts nodes as `{"name", "type"}` objects or with the type first (it says so), and connections as `[srcNode, srcPort, dstNode, dstPort]` or `{"from", "to"}`. For ROS graphs the result includes the shell line that matches the simulator's DDS settings. |
 | `sim__graph__inspect` | Read a graph: each node's type, input values or upstream connections, and output connections, to check a hand-built Action Graph. Read-only. Lists allowed token values and each node's compute errors/warnings from its last run (`nodes_with_errors`). |
 | `sim__graph__show` | Open a graph in the Action Graph editor of a windowed Isaac Sim (optionally undocked and sized), expand and auto-arrange its nodes, and zoom to fit them on every call, for screenshots and demo videos. `layout=true` arranges only graphs with unpositioned or collapsed nodes and stores the positions in the stage (`ui:nodegraph:node:pos`); stop the timeline first, or use `layout=false` while playing. A `TIMELINE_ACTIVE` refusal includes `retry_with`. It waits only the frames the editor needs (reported as `frames_waited`/`seconds`). `close=true` hides the editor. The undocked editor floats inside the Isaac Sim window. Uses the editor's internal API and refuses cleanly if it changed. |
-| `sim__map__occupancy` | Generate a 2D occupancy map from the stage's colliders and write a Nav2 `map_server` PGM + YAML (origin = lower-left corner, +x right, +y up) to the output root. Starts from a stopped timeline and plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as `/clock` run meanwhile), then stops. Free space is flood-filled from `start` (default: the bounds' centre; cells it cannot reach are unknown). A collider anywhere in the `z` range marks its cells occupied (measured on 6.0.1 and 6.2); `clear` circles mark the robot's footprint free. Z-up stages only. If a floor within one cell of `z_min` fills the slice, it uses a higher `z_min` and reports `z_used`. `z_note` is truthful about that: omap releases before 2.3.3 can still map colliders below `z_used` within about a cell, while later releases start at `z_used`. With no collider in the slice the map is written and its `warning` says no occupied cells were reached from `start`. It builds the grid itself, because NVIDIA's `getBuffer()` can [overrun the heap and crash Kit](evidence/pr70-build-retest-2026-11-04.md#root-causes-found). |
+| `sim__map__occupancy` | Generate a 2D occupancy map from the stage's colliders and write a Nav2 `map_server` PGM + YAML (origin = lower-left corner, +x right, +y up) to the output root. Starts from a stopped timeline and plays 8 frames through the guarded timeline path (the generator needs running physics; OnPlaybackTick graphs such as `/clock` run meanwhile), then stops. Free space is flood-filled from `start` (default: the bounds' centre; cells it cannot reach are unknown). A collider anywhere in the `z` range marks its cells occupied (measured on 6.0.1 and 6.2); `clear` circles mark the robot's footprint free. Z-up stages only. If a floor within one cell of `z_min` fills the slice, it uses a higher `z_min` and reports `z_used`. `z_note` is truthful about that: omap releases before 2.3.3 can still map colliders below `z_used` within about a cell, while later releases start at `z_used`. With no collider in the slice the map is written and its `warning` says no occupied cells were reached from `start`. It builds the grid itself, because NVIDIA's `getBuffer()` can overrun the heap and crash Kit. |
 | `sim__ui__find` | List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views; labels when a query is given) with text, tooltip, current value, a `ref`, and their centre in Isaac Sim window pixels (the same pixels as `screenshot(window_id=...)`), plus the visible Kit windows. Hidden dock tabs and closed menus are left out. Read-only; works while the desktop is locked. Also returns `menu_bar` (top-level menu names; menus open with `sim__ui__act action=menu`). |
 | `sim__ui__act` | Drive Isaac Sim's UI through Kit's own input (`carb.input`, as `omni.kit.ui_test` does), not X11: `click`, `double_click`, `right_click`, `move`, `drag`, `scroll`, `type`, `keypress` (OpenAI-style key lists such as `["ctrl", "s"]`), `menu` (a path such as `Create/Mesh/Cube`; a wrong path lists the items that exist), `tab` (bring a docked window such as Console to the front, like clicking its tab; `sim__ui__find` lists `hidden_tabs`), `close` (hide a Kit window or docked panel such as Console through `ui.Workspace.show_window(title, False)`, reporting `hidden`; reopen it with `tab`) and `wait`. A top-level menu such as `Layouts` is opened to list its items and closed again; run an item with `Layouts/<item>`. Unknown window titles and malformed menu paths are refused before any input. Targets a `ref` from `sim__ui__find` or window pixels. Works on a locked or remote desktop, where `window_*` input is refused. UI actions can change or delete data like a person's clicks. |
 | `sim__ros2__tf_setup` | Build one ROS 2 graph for a robot: `/clock`, `/joint_states`, static `world -> base_link` (or `world -> odom` + odometry for a mobile base) and the link TF, rebuilt on every call so no frame is published twice. Resolves the articulation root, refuses colliding frame names; timeline stopped. See [ROS2-RVIZ.md](ROS2-RVIZ.md). After a save and reopen, calling it again deactivates the saved graph in the session layer and builds a new one, at `<graph>_r1` if the saved path is taken; `deactivated_saved_graphs` lists what it replaced. |
@@ -366,7 +365,7 @@ What the tools do:
 - **Diagnosing:** `sim__graph__inspect` adds `ros_render_status`, with `status` and `writer_computes` per helper, and `ros_publisher_note`, plus `ros_helpers_with_problems` when any helper has one, including a `texture_bound` helper whose `writer_computes` is 0 while playing (it can be 0 briefly after Play). `texture_bound` alone does not prove a healthy sensor. It reports render facts, **not publisher count**, which could not be read reliably from inside Kit. Confirm with `ros2 topic info`. It also adds `ros_domain_note` when a `ROS2Context` publishes on an authored domain other than `ROS_DOMAIN_ID`.
 
 Stale **camera** handles have no open-time repair, because the camera contract is unchanged. A LiDAR with no geometry between its near and far range (1 m to 200 m for `Example_Rotary` and `Example_Rotary_2D`) advertises `/scan` but sent no
-message in testing, and `sim__lidar__read` returns `NOT_READY`. UR5e Quick Start hides the ground plane's visual and puts the tabletop at z=0, so a 2D LiDAR above the bench can see nothing: on 6.2.0.0 all three test sensors there read `NOT_READY` until a wall stood in range. See the [run 8 record](evidence/lab3-run8-2026-11-03.md).
+message in testing, and `sim__lidar__read` returns `NOT_READY`. UR5e Quick Start hides the ground plane's visual and puts the tabletop at z=0, so a 2D LiDAR above the bench can see nothing: on 6.2.0.0 all three test sensors there read `NOT_READY` until a wall stood in range.
 
 Saves now accept a bare basename and add `.usda`, and report `graphs` (at most 32), `graph_count` and `graphs_truncated`, so a mislabeled checkpoint shows up. A tool's own `IsaacMCP_*` capture
 product needs no flag and does not make a graph's product on the same camera ambiguous; it is removed whole from the copy. Two producers on one LiDAR (LaserScan and PointCloud) share one product, which saves normally. A camera or LiDAR graph that leaves `inputs:width` and `inputs:height` unauthored uses the live node's values when a product with that camera and resolution proves them; if not, the refusal names those inputs.
@@ -502,7 +501,7 @@ session layer would not remove the schema: edit the source file instead.
 `normals`, `faceVertexIndices`, `faceVertexCounts`, `extent`, `xformOpOrder`, `xformOp:*`, `physics:*`,
 `physx*:*`) with the tool that owns them. `value` is JSON; pass `type` to create a missing attribute.
 
-Measured on 6.2.0.0 and 5.1.0.0 (see [evidence](evidence/scene-followup/README.md)): a visual-only cube
+Measured on 6.2.0.0 and 5.1.0.0: a visual-only cube
 from a USD file took a collider and rigid body, fell onto a moved table and rested; two pack-created
 cubes with masses 2.5 and 5.0 reported exactly those runtime masses through `sim__body__state`
 `include_dynamics`; `revert` restored the table's and cube's authored poses, and the source file's
@@ -681,7 +680,7 @@ Controller USD edits must respect layer strength (for pack-authored geometry, us
 layer). General graph topology and file/module hot-reload are not implemented. Existing trusted
 `run_python` is unchanged, and is never used as a substitute in the capability mapping.
 
-See [fork comparison](FORK-COMPARISON.md) for each narrower capability.
+
 
 ## URDF robots
 
@@ -692,13 +691,12 @@ From a public URDF to a moving joint, with these tools alone:
    Pass `fixed_base=false` for a robot that drives or walks.
 3. Play, then `sim__joints__state` and `sim__joints__command` on the reported `articulation_root`; `sim__joints__inspect` takes that same path (a link carrying the articulation API also works) to show authored limits and drives.
 
-Both importers are supported: the 6.x `URDFImporter` and the 5.x `URDFParseAndImportFile` command. Each is tested on the builds in
-[the record](evidence/urdf-robots-2026-11-04.md). Files are resolved against a verified snapshot, and a rewritten URDF
+Both importers are supported: the 6.x `URDFImporter` and the 5.x `URDFParseAndImportFile` command. They were exercised on the builds listed in [compatibility](COMPATIBILITY.md). Files are resolved against a verified snapshot, and a rewritten URDF
 with absolute paths into it goes to the importer. It stays in private staging. `mapped_files` and `packages` report the
 mapping. Conversion writes service-owned derived files, the active root and session layers are compared before and after,
 and a repeat import of the same file, options and importer reuses the conversion.
 
-Each robot and option set uses two of the 16 snapshot slots in staging, one for the URDF and one for its conversion. No tool cleans them:
+Each robot and option set uses two of the 256 snapshot slots in staging, one for the URDF and one for its conversion. No tool cleans them:
 at `QUOTA`, stop the simulators using them and clear the staging folder yourself.
 
 What the import does, and why:

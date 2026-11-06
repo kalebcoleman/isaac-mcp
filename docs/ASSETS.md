@@ -379,8 +379,7 @@ Safety here is mostly provenance: you should be able to see what a project used 
   `https://github.com/unitreerobotics/unitree_ros @ <commit>`). The pack's `isaac-mcp-pack.json` keeps it, and
   `assets__packs` lists it, so a later reader sees what the pack used and where it came from.
 - **MuJoCo Menagerie** (`google-deepmind/mujoco_menagerie`) holds most public robots as MuJoCo XML: approve one robot's folder and use
-  `assets__import_path` ([MuJoCo models](TOOLS-SCENE.md#mujoco-mjcf-models)). Robots written as xacro (UR, TurtleBot3, Franka descriptions) are refused until
-  expanded; see [Asset formats](plans/ASSET-FORMATS.md).
+  `assets__import_path` ([MuJoCo models](TOOLS-SCENE.md#mujoco-mjcf-models)). For xacro (UR, TurtleBot3, Franka descriptions), use `assets__import_path` with `xacro_args` as needed; see [asset import](ASSET-IMPORT.md).
 - **Prefer a name when one exists.** NVIDIA's own robots load by name from the simulator's assets root, with no
   download: `sim__quick_start robot="unitree_h1"` or `"unitree_g1"` for humanoids, and `franka`,
   `carter_v1` and the others listed in [TOOLS-SCENE.md](TOOLS-SCENE.md).

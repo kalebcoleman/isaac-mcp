@@ -194,7 +194,7 @@ even if a later target check rejects a click. Do not share the desktop concurren
 dedicated session for stronger isolation.
 Enabling the tools grants the client the ability to trigger any action available in the targeted app, including file
 deletion or network operations. Tool annotations are advisory, and X11 window IDs/PIDs are not authentication.
-See the [desktop control plan](plans/DESKTOP-CONTROL.md) for remaining work and validation.
+See the [working checklist](CHECKLIST.md#tool-surface-and-reliability) for remaining work and validation.
 
 ### Optional simulator sessions
 

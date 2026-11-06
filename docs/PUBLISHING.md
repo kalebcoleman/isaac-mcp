@@ -6,7 +6,7 @@ Not published to PyPI or npm yet. Names `isaac-mcp` on both were unclaimed on 20
 
 ## Before publishing
 1. `cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab --extra scene-test pytest -q`.
-   Record the current count and commit; see [ROADMAP.md](ROADMAP.md) for the last dated baseline.
+   Record the current count and commit.
    From the repo root also run `python3 scripts/check_docs.py` and review the latest CI result.
 2. Decide the version in `mcp/pyproject.toml` and `npm/package.json` (keep them equal).
 3. Check `docs/VENDORING.md` and the LICENSE files: the package contains Aldrin Inbaraj's MIT code. The upstream

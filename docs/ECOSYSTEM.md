@@ -13,7 +13,7 @@
 
 ## What to build next
 
-Use the [working checklist](plans/CHECKLIST.md) for current priorities and the
+Use the [working checklist](CHECKLIST.md) for current priorities and the
 [tool references](README.md#current-reference) for shipped capabilities. An older comparison
 of external servers was based on static source inspection, not live execution. Its detailed
 [capability catalog](https://github.com/kalebcoleman/isaac-mcp/blob/c66ae924bb6fe43387a2ab54f458d394bffb7255/docs/ECOSYSTEM.md) and

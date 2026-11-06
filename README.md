@@ -116,7 +116,7 @@ There was no agent prompt for this one: Claude Sonnet 5.5 called the tools direc
 So 12 more minutes of training took it from "stays up and mostly follows the command" to a much steadier and more accurate
 walk. These are one run each (different seeds: 1 and 2), not a measured average, and the pictures are a flat grid, not a
 rough-terrain test. Training your own robot requires a task supplied by your project; the
-[checklist](docs/plans/CHECKLIST.md#4-new-tools-for-robotics-and-rl-from-the-live-tests-2026-11-04) tracks further robotics work. The full
+[checklist](docs/CHECKLIST.md#robotics-and-learning) tracks further robotics work. The full
 40-second window recordings are kept with the project's draft evidence release, not in git.
 
 ### More prompts

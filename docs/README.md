@@ -53,30 +53,20 @@ over both.
 
 | Page | Use it for |
 |---|---|
-| [Working checklist](plans/CHECKLIST.md) | Current priorities and open work |
+| [Working checklist](CHECKLIST.md) | Current priorities and open work |
 | [Publishing](PUBLISHING.md) | PyPI and npm release steps |
 | [Vendoring](VENDORING.md) · [Asset provenance](provenance/ASSETS.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md) | Licenses and origins |
 | [Media](media/README.md) | Provenance of the images in the README |
 
-## Design and history
+## NVIDIA resources
 
-These explain why things are the way they are. They can describe proposals or behavior that later changed,
-so do not use them as an API reference.
-
-| Page | What it is |
-|---|---|
-| [Generic Sim tools design](GENERIC-SIM-TOOLS.md) | The original `sim.*` proposal; broader than what shipped |
-| [Isaac Lab design notes](ISAACLAB-TOOLS.md) | Design and job-guard history |
-| [Isaac ecosystem resources](ECOSYSTEM.md) | NVIDIA tools and skills; historical research |
-| [Fork comparison](FORK-COMPARISON.md) | Comparison with one pinned fork |
-| [Plans](plans/README.md) | Implementation plans and follow-ups |
-| [Roadmap](ROADMAP.md) | Historical 2026-11-03 status snapshot |
+[Isaac ecosystem resources](ECOSYSTEM.md) links NVIDIA's documentation MCP and official
+Isaac Sim and Isaac Lab skills. Use the [working checklist](CHECKLIST.md) for future work.
 
 ## Evidence
 
 Use [compatibility](COMPATIBILITY.md) for tested builds and known limits, and
-[verification](VERIFICATION.md) for checks. Selected task records remain under
-`docs/evidence/`; lengthy historical test ledgers are in Git history.
+[verification](VERIFICATION.md) for checks. The examples and navigation walkthrough keep their supporting material under `docs/evidence/`; earlier test ledgers are in Git history.
 
 ## Scripts
 

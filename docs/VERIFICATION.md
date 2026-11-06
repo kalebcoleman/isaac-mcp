@@ -104,8 +104,7 @@ On 2026-11-03, headless PhysX checks on Sim 6.2 passed `verify.sh`, the 20-check
 smoke, and generic scene checks with the stated test setup. They do not establish all tools,
 versions, windowed workflows, hardware or backends.
 
-<a id="lab-3-run-8-fixes-2026-11-03"></a> The [Lab 3 run 8 record](evidence/lab3-run8-2026-11-03.md)
-describes the LiDAR save/reopen checks and their scope.
+<a id="lab-3-run-8-fixes-2026-11-03"></a> LiDAR save/reopen behavior and recovery are described in [scene tools](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
 
 <a id="windowed-viewport-reset-comparison"></a> On 6.2, a windowed reset sequence logged
 `NoneType.GetCamera` while destroying the old stage. The tested sequence subsequently rendered
@@ -159,8 +158,7 @@ On 2026-10-30, the check passed on a working branch based on `584aa31`, using Ub
 Python 3.12.3, Isaac Sim 6.2.0.0, an RTX 5080 and NVIDIA driver 580.178.04. The anonymous stage had a nonempty `anon:`
 URL. The helper rejected the USD `Cube` type filter; it returned no matches for an anchored expression and for an
 invalid expression, while a simple alternation matched. A separate run with an intentionally wrong default-prim
-expectation printed the assertion and exited with status 1. See [the design observations](GENERIC-SIM-TOOLS.md#324-first-live-scene-inspection-observations)
-for the implications and remaining gaps. This is one version and machine, not a portability claim.
+expectation printed the assertion and exited with status 1. This is one version and machine, not a portability claim.
 
 ## Other checks
 
@@ -168,4 +166,4 @@ for the implications and remaining gaps. This is one version and machine, not a 
 - For ROS transforms, use `scripts/verify_tf.sh` with the matching `config/ros_dds.env` profile.
 - Before a training run, obtain operator authorization and check GPU capacity. Use the
   [Isaac Lab guide](TOOLS-ISAACLAB.md) for status, metrics, and guard behavior.
-- See [ROADMAP.md](ROADMAP.md) for remaining work.
+- See [working checklist](CHECKLIST.md) for remaining work.

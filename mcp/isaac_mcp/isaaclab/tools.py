@@ -2,7 +2,7 @@
 
 These are host-side tools (like the screen tools): they never need a Kit process. Each returns a JSON
 string; failures come back as ``{"error": ...}`` rather than exceptions so a client can read and retry.
-Design: docs/ISAACLAB-TOOLS.md.
+Reference: docs/TOOLS-ISAACLAB.md.
 """
 
 from __future__ import annotations

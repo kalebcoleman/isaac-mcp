@@ -4,7 +4,7 @@ One tool brings a robot or object into a scene: **`assets__import_path`**. Give 
 works out the format, checks it, converts it when it has to, and imports it. It replaced three tools, `assets__import_usd`,
 `assets__import_urdf` and `assets__import_mjcf`, so an agent has one place to look; an approved root is still addressable with
 `root_id` and `relative_path`. For how approval and the asset stores work, see [ASSETS.md](ASSETS.md);
-for every tool's arguments, [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md); for what is planned next, [plans/ASSET-FORMATS.md](plans/ASSET-FORMATS.md).
+for every tool's arguments, [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md); for what is planned next, [working checklist](CHECKLIST.md#assets-and-workspace).
 
 ```text
 assets__import_path  source_path=<file or folder>  prim_path=/World/robot
@@ -51,7 +51,7 @@ Or in one call that also builds the scene: `sim__quick_start robot=<absolute pat
 
 Not importable yet: CAD (STEP, IGES, JT), Gaussian splats, heightmap terrain and Collada (`.dae`) as a prop of its own (Collada works as
 the meshes of a URDF robot; as a prop it is refused with a message that says to convert it to glTF or OBJ). Isaac Sim ships converters for
-CAD and splats; they are on the plan in [plans/ASSET-FORMATS.md](plans/ASSET-FORMATS.md).
+CAD and splats; they are on the plan in [working checklist](CHECKLIST.md#assets-and-workspace).
 
 ## What is read and what is never run
 
@@ -167,7 +167,7 @@ An import authors a valid robot; it does not make it stand or walk. What to expe
 
 On Isaac Sim 5.1 (headless), representative USD, URDF, xacro, SDF, MuJoCo XML, glTF, maps and the warehouse were exercised through its older importers. A later sweep found MJCF failures: an SO-101 model returned `MJCF_PHYSICS`, and a Panda import lost the bridge connection; these cases remain unresolved. URDF export is refused because that exporter wrote an empty robot. The rest of this section is the 6.2 run.
 
-Run with a visible simulator window on Isaac Sim 6.2, from real downloads, not made-up files. Pictures and logs: `runs/universal-import-demo/` of the test workspace, summarised in [plans/CHECKLIST.md](plans/CHECKLIST.md).
+Run with a visible simulator window on Isaac Sim 6.2, from real downloads, not made-up files. Pictures and logs: `runs/universal-import-demo/` of the test workspace, summarised in the earlier project history.
 
 | Format | Asset | Result |
 |---|---|---|
