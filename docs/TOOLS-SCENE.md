@@ -33,7 +33,7 @@ UR5e twin, `ur5e_dt__quick_start`.
 
 The result's `environment.poke_example` has everything for one push: the `block`, the `approach`, `touch` and `through` points, and `ik` (the `link`, `offset` and `orientation` for `sim__arm__ik`). It is for layer 9. For another layer, change the `z` of each point by 3 cm a layer: the odd layers run along x, and only layers near 9 and above let the hand stay level.
 
-To push a block out: `sim__timeline__control action=play`, then call `sim__arm__ik` with `move=true`, `link`, `offset` and `orientation` from `ik`, and `position` stepping about 1 cm along x from `approach` to `through`, waiting half a second between calls. `move=true` commands the solved joints in one call and commands nothing when the target was not reached. `sim__body__state` on the block and on `top_block` shows what moved.
+To push a block out, in three calls: `sim__timeline__control action=play`; `sim__arm__ik` with `move=true`, `speed=0.1`, `link`, `offset` and `orientation` from `ik`, and `position` the `approach` point; then the same with `speed=0.02` and `position` the `through` point. `speed` runs the whole straight line in one call, and `path` in the result says where the tip really ended. `move=true` without `speed` goes straight to the solved joints, and nothing is commanded when the target was not reached. `sim__body__state paths=[block, top_block]` then shows what moved, at one instant.
 
 To knock something without the arm: `sim__physics__apply path=<block> impulse=[0.1,0,0]` gives a body one push (optionally `at` a world point). It needs a running simulation and edits nothing.
 

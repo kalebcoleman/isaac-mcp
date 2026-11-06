@@ -406,6 +406,7 @@ Inverse kinematics for any robot with revolute or prismatic joints, read from it
 - `offset` (array, optional): Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.
 - `frame` (string, default `"world"`): world (default) or base: the frame position and orientation are given in.
 - `move` (boolean, optional): Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.
+- `speed` (number, optional): With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended.
 - `position_tolerance` (number, default `0.001`): Metres of position error that counts as reached.
 - `orientation_tolerance` (number, default `0.01`): Radians of orientation error that counts as reached.
 
@@ -416,6 +417,7 @@ Read initialized rigid-body world pose on selected PhysX or qualified Newton bac
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, optional): Absolute rigid body path; prim and prim_path are aliases. Supply one.
+- `paths` (array, optional): Instead of path: up to 64 bodies read at one instant, returned as bodies.
 - `prim` (string, optional): Alias for path.
 - `prim_path` (string, optional): Alias for path.
 - `include_dynamics` (boolean, default `false`): Include measured world COM linear/angular velocity and runtime mass, including kg conversion.

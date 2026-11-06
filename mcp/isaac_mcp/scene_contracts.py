@@ -253,6 +253,7 @@ add(
     dict(
         **TARGET,
         path=field("string", "Absolute rigid body path; prim and prim_path are aliases. Supply one.", False),
+        paths=field("array", "Instead of path: up to 64 bodies read at one instant, returned as bodies.", False),
         prim=field("string", "Alias for path.", False),
         prim_path=field("string", "Alias for path.", False),
         include_dynamics=field(
@@ -758,6 +759,7 @@ add(
         offset=field("array", "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.", False),
         frame=field("string", "world (default) or base: the frame position and orientation are given in.", False, default="world"),
         move=field("boolean", "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.", False),
+        speed=field("number", "With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended.", False),
         position_tolerance=field("number", "Metres of position error that counts as reached.", False, default=0.001),
         orientation_tolerance=field("number", "Radians of orientation error that counts as reached.", False, default=0.01),
     ),

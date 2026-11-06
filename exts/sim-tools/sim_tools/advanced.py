@@ -1973,6 +1973,7 @@ class Advanced:
                         "or move them if the new pose must hold.",
             )
         if name == "sim.arm.ik":
+            a.pop("speed", None)  # a path is run by arm_path, which calls this once per point
             move = a.pop("move", False)
             if type(move) is not bool:
                 refuse("INVALID_VALUE", "move must be true or false.")

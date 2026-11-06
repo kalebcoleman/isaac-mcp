@@ -1235,6 +1235,11 @@
           "description": "Absolute rigid body path; prim and prim_path are aliases. Supply one.",
           "required": false
         },
+        "paths": {
+          "type": "array",
+          "description": "Instead of path: up to 64 bodies read at one instant, returned as bodies.",
+          "required": false
+        },
         "prim": {
           "type": "string",
           "description": "Alias for path.",
@@ -1279,6 +1284,15 @@
           "default": null,
           "has_default": false,
           "description": "Absolute rigid body path; prim and prim_path are aliases. Supply one."
+        },
+        {
+          "name": "paths",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Instead of path: up to 64 bodies read at one instant, returned as bodies."
         },
         {
           "name": "prim",
@@ -4613,6 +4627,11 @@
           "description": "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.",
           "required": false
         },
+        "speed": {
+          "type": "number",
+          "description": "With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended.",
+          "required": false
+        },
         "position_tolerance": {
           "type": "number",
           "description": "Metres of position error that counts as reached.",
@@ -4716,6 +4735,15 @@
           "default": null,
           "has_default": false,
           "description": "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only."
+        },
+        {
+          "name": "speed",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended."
         },
         {
           "name": "position_tolerance",

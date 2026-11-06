@@ -605,6 +605,12 @@ class Extension(omni.ext.IExt):
                         for key in ("session_id", "stage_id"):
                             args.pop(key, None)
                         result = import_map(self, args)
+                    elif name == "sim.arm.ik" and args.get("speed") is not None:
+                        from .arm_path import straight
+                        import omni.kit.app as kit_app
+
+                        result = await straight(args, self.dispatch, self.scene.timeline.is_playing, self.scene.timeline.get_current_time,
+                                                kit_app.get_app().next_update_async)
                     elif name == "sim.timeline.control":
                         result = await self._timeline_control(args)
                     elif name == "sim.map.occupancy":
@@ -866,6 +872,13 @@ class Extension(omni.ext.IExt):
 
             from .physics import body_path
 
+            if a.get("paths") is not None:  # many bodies from one instant
+                paths = a.pop("paths")
+                if not isinstance(paths, list) or not 1 <= len(paths) <= 64 or not all(isinstance(p, str) for p in paths):
+                    refuse("INVALID_VALUE", "paths must be a list of 1 to 64 prim paths.")
+                if any(a.get(k) for k in ("path", "prim", "prim_path")):
+                    refuse("INVALID_VALUE", "Give path or paths, not both.")
+                return dict(bodies=[dict(self.dispatch(name, dict(a, path=p)), path=p) for p in paths], time_s=s.timeline.get_current_time())
             a["path"] = body_path(a)
             prim = s.prim(stage, a["path"])
             if s.timeline.is_stopped():
