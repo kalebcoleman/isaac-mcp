@@ -66,11 +66,11 @@ read every supported format. Every result has one shape: articulation root, mova
 
 | Source | Format | Result | Gap |
 |---|---|---|---|
-| UniversalRobots ROS2 description (UR10e) | xacro | Only after six calls expanding it with the system `xacro`; one near-miss resolved the system's own `ur_description` | F29 safe xacro expansion |
+| UniversalRobots ROS2 description (UR10e) | xacro (with `.dae` meshes) | Only after six calls expanding it with the system `xacro`; one near-miss resolved the system's own `ur_description` | F29 safe xacro expansion; the expanded URDF with 14 `.dae` meshes then imported fine |
 | usd-wg/assets (Teapot) | USD | Worked | none |
 | Khronos glTF-Sample-Assets (Duck) | glTF | No route at all (the import is USD only) | F30 mesh import |
 | gz-sim `diff_drive.sdf` (blue vehicle) | SDF | Rebuilt by hand from primitives, no joints | F31 SDF reader |
-| Menagerie (Panda, UR5e, Go2, H1), tester D | MJCF | All four in one scene (this PR's tool) | verification of D's notes pending |
+| Menagerie (Panda, UR5e, Go2, H1), tester D | MJCF | All four loaded, moved and shown in one scene (verified) | F44: torque-driven robots have no drives |
 
 ## Build order
 
@@ -97,7 +97,7 @@ One real asset per row, downloaded by the tester from the named place, loaded th
 | # | Row | Named place | What must hold |
 |---|---|---|---|
 | 1 | USD | usd-wg/assets (Teapot) | loads; textures resolve (tester C saw a lime-green teapot: check it is the asset and not a lost texture) |
-| 2 | MJCF | MuJoCo Menagerie (Panda, UR5e, Go2, H1) | done in PR 82; tester D's notes still to verify |
+| 2 | MJCF | MuJoCo Menagerie (Panda, UR5e, Go2, H1) | **verified** (Gemini 3.8 Flash, windowed, 2026-11-05): all four load and move; torque-driven Go2 and H1 need gains (F44) |
 | 3 | URDF with `.dae` meshes | Universal_Robots_ROS2_Description, TurtleBot3 | meshes visible, not empty links; units correct |
 | 4 | xacro with arguments | Universal_Robots_ROS2_Description (`ur_type`) | expanded by the host reader; same result as the system `xacro`; hostile xacro (`python:`, `eval`, a path out of the folder) refused |
 | 5 | glTF / GLB, OBJ, STL, FBX | Khronos glTF-Sample-Assets (Duck), a Menagerie or ROS mesh | right scale and up axis stated; collider option works; a prop falls and rests on the ground |
