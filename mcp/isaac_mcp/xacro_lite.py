@@ -30,6 +30,9 @@ MAX_INCLUDE_DEPTH = 16
 MAX_STEPS = 2_000_000  # expression nodes plus elements, one expansion
 MAX_OUTPUT = 200_000  # elements in the result
 MAX_STRING = 1_000_000
+MAX_OUTPUT_BYTES = 64 * 1024**2  # names and values in the result: a URDF the importer can still read
+MAX_TEXT_BYTES = 256 * 1024**2  # text substituted, one expansion
+MAX_PARSED_BYTES = 256 * 1024**2  # XML files parsed, one expansion
 MAX_YAML = 1024**2
 _MATH = {name: getattr(math, name) for name in (
     "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sqrt", "exp", "log", "log10", "radians", "degrees", "pow",
@@ -43,6 +46,7 @@ _COMPARE = {ast.Eq: lambda a, b: a == b, ast.NotEq: lambda a, b: a != b, ast.Lt:
             ast.Gt: lambda a, b: a > b, ast.GtE: lambda a, b: a >= b, ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b,
             ast.Is: lambda a, b: a is b, ast.IsNot: lambda a, b: a is not b}
 _FILE_ROOT = "package://"
+_WIDE_FORMAT = re.compile(r"%[-+ #0]*(\*|\d{4,})|%[^%a-zA-Z]*\.(\*|\d{4,})")
 
 
 class XacroError(AssetError):
@@ -107,6 +111,13 @@ def _split_flow(text: str):
 
 def load_yaml_text(text: str):
     """The nested maps, lists and scalars that robot parameter files use; anything cleverer is refused."""
+    try:
+        return _load_yaml_text(text)
+    except RecursionError:
+        _fail("A YAML file nests too deeply.", "LIMIT")
+
+
+def _load_yaml_text(text: str):
     if len(text) > MAX_YAML:
         _fail("A YAML file is too large.", "LIMIT")
     lines = []
@@ -215,6 +226,18 @@ class Scope:
         return scope
 
 
+def _string_call_too_long(function, args) -> bool:
+    """Would this ``str.join`` or ``str.replace`` build more than MAX_STRING? Asked before it runs: the memory is spent by then."""
+    owner, name = getattr(function, "__self__", None), getattr(function, "__name__", "")
+    if not isinstance(owner, str):
+        return False
+    if name == "join" and args and isinstance(args[0], (list, tuple, str)):
+        return sum(len(item) if isinstance(item, str) else 0 for item in args[0]) + len(owner) * len(args[0]) > MAX_STRING
+    if name == "replace" and len(args) >= 2 and isinstance(args[0], str) and isinstance(args[1], str):
+        return len(owner) + owner.count(args[0]) * len(args[1]) > MAX_STRING
+    return False
+
+
 class Expander:
     def __init__(self, project: Project, args=None):
         self.project = project
@@ -223,6 +246,10 @@ class Expander:
         self.macros = {}
         self.steps = 0
         self.output = 0
+        self.output_bytes = 0
+        self.text_bytes = 0
+        self.parsed_bytes = 0
+        self.parsed = {}
         self.problems = []
         self.warnings = []
         self.read_files = set()
@@ -273,22 +300,29 @@ class Expander:
         return data
 
     def _parse(self, rel: str) -> ET.Element:
+        if rel in self.parsed:  # a file included many times is parsed once; nothing changes a parsed tree
+            return self.parsed[rel]
         data = self._read(rel)
+        self.parsed_bytes += len(data)
+        if self.parsed_bytes > MAX_PARSED_BYTES:
+            _fail("The xacro files are too large to read (more than 256 MiB in all).", "LIMIT")
         if b"\x00" in data:
             _fail(f"{rel}: only UTF-8 text is supported.", "XACRO_XML")
         upper = data.upper()
         if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
             _fail(f"{rel}: DTDs and entities are not supported.", "XACRO_XML")
         try:
-            return ET.fromstring(data)
+            self.parsed[rel] = ET.fromstring(data)
         except ET.ParseError as exc:
             _fail(f"{rel} is not valid XML: {exc}", "XACRO_XML")
+        return self.parsed[rel]
 
     # -- text substitution
     def text(self, text: str, scope: Scope, current: str):
         """Substitute ``${}`` and ``$()`` in *text*. A text that is exactly one ``${expr}`` keeps the value's type."""
         if "$" not in text:
             return text
+        self.tick(1 + len(text) // 1024)
         pieces, index, single = [], 0, None
         while index < len(text):
             if text.startswith("$$", index):
@@ -313,6 +347,9 @@ class Expander:
         joined = "".join(pieces)
         if len(joined) > MAX_STRING:
             _fail("A xacro string became too long.", "LIMIT")
+        self.text_bytes += len(joined)
+        if self.text_bytes > MAX_TEXT_BYTES:
+            _fail("The xacro file substitutes too much text (more than 256 MiB in all).", "LIMIT")
         return single if single is not None and text.startswith(("${", "$(")) and not isinstance(single, str) else joined
 
     @staticmethod
@@ -373,10 +410,16 @@ class Expander:
         if len(source) > MAX_EXPR:
             _fail("A xacro expression is too long.", "LIMIT")
         source = source.strip()
-        while "$(" in source:  # $(arg x) inside an expression is replaced by its text first, as xacro does
-            start = source.index("$(")
-            end = self._match(source, start + 2, "(", ")")
-            source = source[:start] + render(self.command(source[start + 2:end], scope, current)) + source[end + 1:]
+        if "$(" in source:  # $(arg x) inside an expression is replaced by its text first, as xacro does; once, so a value naming $( cannot loop
+            pieces, index = [], 0
+            while (start := source.find("$(", index)) >= 0:
+                self.tick()
+                end = self._match(source, start + 2, "(", ")")
+                pieces += [source[index:start], render(self.command(source[start + 2:end], scope, current))]
+                index = end + 1
+            source = "".join(pieces) + source[index:]
+            if len(source) > MAX_EXPR:
+                _fail("A xacro expression is too long.", "LIMIT")
         try:
             tree = ast.parse(source, mode="eval")
         except SyntaxError as exc:
@@ -437,10 +480,15 @@ class Expander:
                 _fail("A repeated string or list would be too long.", "LIMIT")
             if isinstance(node.op, ast.Mult) and isinstance(right, (str, list)) and isinstance(left, int) and len(right) * max(left, 0) > MAX_STRING:
                 _fail("A repeated string or list would be too long.", "LIMIT")
+            if isinstance(node.op, ast.Mod) and isinstance(left, str) and _WIDE_FORMAT.search(left):
+                _fail("A format width above 999 is not allowed.", "LIMIT")
             try:
-                return op(left, right)
+                result = op(left, right)
             except (TypeError, ZeroDivisionError, ValueError) as exc:
                 _fail(f"${{{source[:80]}}} cannot be computed ({exc}).", "XACRO_EVAL")
+            if isinstance(result, (str, list)) and len(result) > MAX_STRING:
+                _fail("A xacro string or list became too long.", "LIMIT")
+            return result
         if isinstance(node, ast.UnaryOp):
             value = go(node.operand)
             if isinstance(node.op, ast.USub):
@@ -505,6 +553,8 @@ class Expander:
             if not ok:
                 _fail(f"That function is not supported in ${{{source[:80]}}}.", "UNSUPPORTED_XACRO")
             args = [go(a) for a in node.args]
+            if _string_call_too_long(function, args):
+                _fail("A xacro string would become too long.", "LIMIT")
             try:
                 result = function(*args)
             except XacroError:
@@ -550,6 +600,9 @@ class Expander:
                 made.set(key, render(self.text(value, scope, current)))
             if element.text and element.text.strip():
                 made.text = render(self.text(element.text, scope, current)).strip()
+            self.output_bytes += sum(len(v) for v in made.attrib.values()) + len(made.text or "")
+            if self.output_bytes > MAX_OUTPUT_BYTES:
+                _fail("The expanded URDF would be larger than 64 MiB.", "LIMIT")
             self._emit(out, made)
             for child in list(element):
                 self.node(child, made, scope, current, depth, include_depth)
@@ -753,7 +806,18 @@ def _missing_args(entry: str, project: Project, args) -> list:
 
 
 def expand(entry: str, project: Project, args=None) -> dict:
-    """Expand the xacro file *entry* (a path in *project*): ``{"urdf": text, "files": [...], "args": {...}}``."""
+    """Expand the xacro file *entry* (a path in *project*): ``{"urdf": text, "files": [...], "args": {...}}``. Any failure is a XacroError."""
+    try:
+        return _expand(entry, project, args)
+    except XacroError:
+        raise
+    except RecursionError:
+        _fail(f"{entry} nests too deeply.", "LIMIT")
+    except (TypeError, ValueError, OverflowError, AttributeError, KeyError, IndexError) as exc:
+        _fail(f"{entry} cannot be expanded ({type(exc).__name__}: {str(exc)[:200]}).", "XACRO_EVAL")
+
+
+def _expand(entry: str, project: Project, args=None) -> dict:
     expander = Expander(project, args)
     try:
         root = expander.expand(entry)

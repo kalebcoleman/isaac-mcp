@@ -58,7 +58,7 @@ CAD and splats; they are on the plan in [plans/ASSET-FORMATS.md](plans/ASSET-FOR
 The same rules hold for every format.
 
 1. **The host reads the file first, and runs nothing from it.** There is no `xacro` program, no Python from a file, no plugin, no download and no URL.
-2. **Every file it names stays inside the folder you approved.** An absolute path, a URI, a backslash, a symlink or `..` out of the folder is refused.
+2. **Every file it names stays inside the folder you approved.** An absolute path, a URI, a backslash, a symlink or `..` out of the folder is refused, percent-encoded or not.
 3. **The approved folder is copied to a private snapshot and verified.** The importer reads only the snapshot. A converted file (xacro, SDF) is written into that snapshot, hashed like the rest, and becomes its entry.
 4. **The result says what it did.** The reply has an `import` block: the format, what was converted from what, the model chosen, the warnings and what was dropped.
 5. **Approval stays on.** A path outside an approved root or your asset store is refused with the exact command the user runs. See [ASSETS.md](ASSETS.md#when-something-comes-from-online).
@@ -75,7 +75,7 @@ xacro is XML with `${expression}`, `$(command)`, macros, includes and conditions
 - `xacro.load_yaml(file)` on a YAML file inside the folder (maps, lists, scalars, `!degrees`, `!radians`).
 
 Everything else is refused **by name**, not skipped: `__import__`, `open`, attributes that start with `_`, lambdas, comprehensions,
-`xacro:element`, `$(env)`, `$(anon)`, `**` parameters. Powers, repeated strings, macro depth (64), include depth (16), the number of steps and the size of the output are
+`xacro:element`, `$(env)`, `$(anon)`. Powers, repeated strings, format widths, macro depth (64), include depth (16), the number of steps, the bytes parsed and substituted (256 MiB each) and the size of the output (200,000 elements, 64 MiB) are
 bounded, so a hostile file ends with a `LIMIT` refusal and not a hang. `$(find pkg)` finds the package by its `package.xml` inside the folder; approve the package's folder, or the folder that holds the packages it uses.
 
 Checked against the real program: the Universal Robots UR10e description expands to the same links, joints, limits (including the `!degrees` ones), meshes and inertias as the system `xacro`.
@@ -101,7 +101,7 @@ A model whose joint names the `world` as its parent, or that is `<static>`, is i
 
 ### ROS maps
 
-`assets__import_path source_path=<folder>/map.yaml prim_path=/World/map wall_height=1.5` reads `image`, `resolution`, `origin`, `negate` and `occupied_thresh` from the YAML, reads the PGM (or a PNG) from the same folder, and builds the occupied cells as the fewest wall boxes the image allows (static colliders at the map's own coordinates). It is the inverse of `sim__map__occupancy`. There is a limit of 4,000 boxes: a noisy image is refused with a hint to clean it. Add a ground plane separately.
+`assets__import_path source_path=<folder>/map.yaml prim_path=/World/map wall_height=1.5` reads `image`, `resolution`, `origin`, `negate` and `occupied_thresh` from the YAML, reads the PGM (or a PNG) from the same folder, and builds the occupied cells as the fewest wall boxes the image allows (static colliders at the map's own coordinates). It is the inverse of `sim__map__occupancy`. A yaw in `origin` is not applied; the result warns and `orientation` on the import turns the map. There is a limit of 4,000 boxes: a noisy image is refused with a hint to clean it. Add a ground plane separately.
 
 ### Export
 

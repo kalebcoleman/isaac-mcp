@@ -24,6 +24,7 @@ from .urdf_refs import MAX_XML, SCHEME, Project, _parent, normal_path
 MAX_LINKS = 2000
 MAX_INCLUDES = 64
 HUGE = 1e9  # a revolute joint with limits this wide is a continuous one
+OPEN_SLIDE = 1000.0  # metres each way, for a prismatic joint with no limit
 DUMMY_MASS = 1e-3
 DUMMY_INERTIA = 1e-6
 _JOINTS = {"revolute", "continuous", "prismatic", "fixed", "ball", "universal", "revolute2"}
@@ -54,19 +55,40 @@ def _inverse(m):
     return inv + [[0, 0, 0, 1.0]]
 
 
-def _pose(text) -> list:
-    """An SDF ``x y z roll pitch yaw`` (radians, fixed axes) as a matrix."""
+def _pose_of(element) -> list:
+    """A ``<pose>`` element as a matrix, reading its ``degrees`` and ``rotation_format`` attributes; identity when there is none."""
+    if element is None:
+        return _identity()
+    return _pose(element.text, (element.get("degrees") or "").strip().lower() in ("true", "1"), (element.get("rotation_format") or "").strip())
+
+
+def _pose(text, degrees=False, rotation_format=None) -> list:
+    """An SDF ``x y z roll pitch yaw`` (radians unless *degrees*, fixed axes), or ``x y z qx qy qz qw``, as a matrix."""
     values = [0.0] * 6
     if text and text.strip():
         parts = text.split()
-        if len(parts) not in (6, 7) and len(parts) != 6:
-            _fail(f"A pose needs 6 numbers, not {text[:60]!r}.")
+        if rotation_format not in (None, "", "euler_rpy", "quat_xyzw"):
+            _fail(f"A pose's rotation_format {rotation_format[:40]!r} is not one SDF defines.")
+        wanted = 7 if rotation_format == "quat_xyzw" else 6
+        if len(parts) != wanted:
+            _fail(f"A pose needs {wanted} numbers, not {text[:60]!r}.")
         try:
-            values = [float(v) for v in parts[:6]]
+            values = [float(v) for v in parts]
         except ValueError:
             _fail(f"A pose has a value that is not a number: {text[:60]!r}.")
         if not all(math.isfinite(v) for v in values):
             _fail("A pose has a value that is not finite.")
+        if wanted == 7:
+            qx, qy, qz, qw = values[3:]
+            norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+            if norm < 1e-9:
+                _fail("A pose's quaternion is all zeros.")
+            qx, qy, qz, qw = qx / norm, qy / norm, qz / norm, qw / norm
+            values[3:] = [math.atan2(2 * (qw * qx + qy * qz), 1 - 2 * (qx * qx + qy * qy)),
+                          math.asin(max(-1.0, min(1.0, 2 * (qw * qy - qz * qx)))),
+                          math.atan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz))]
+        elif degrees:
+            values[3:] = [math.radians(v) for v in values[3:]]
     x, y, z, roll, pitch, yaw = values
     cr, sr, cp, sp, cy, sy = math.cos(roll), math.sin(roll), math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw)
     return [[cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr, x],
@@ -203,19 +225,20 @@ class _Converter:
                 config = f"{folder}/model.config"
                 if config in self.project.files:
                     try:
-                        for sdf in ET.fromstring(self.project.read(config)).iter("sdf"):
+                        for sdf in _parse(self.project, config).iter("sdf"):
                             if sdf.text and sdf.text.strip():
                                 path = normal_path(folder, sdf.text.strip())
                                 if path and path in self.project.files:
                                     return folder, path
-                    except (ET.ParseError, OSError):
-                        pass
+                    except (AssetError, OSError):
+                        pass  # no usable config: the include is reported as not found
             return None, None
         path = normal_path(_parent(current), uri)
         return (_parent(path), path) if path and path in self.project.files else (None, None)
 
     # -- one model
     def convert_model(self, name, model, model_file):
+        self.model_file = model_file or self.entry  # a relative mesh uri is relative to the file that names it
         links = {}
         order = []
         for link in model.findall("link"):
@@ -235,7 +258,7 @@ class _Converter:
                 self.drop(kind)
         if model.findall("model"):
             self.warn("Nested models were left out: only this model's own links are converted.")
-        pose_of = {lname: _pose(links[lname].findtext("pose")) for lname in order}
+        pose_of = {lname: _pose_of(links[lname].find("pose")) for lname in order}
         for lname in order:
             if links[lname].find("pose") is not None and links[lname].find("pose").get("relative_to"):
                 self.warn(f"Link {lname!r} has a pose relative_to another frame; it is read relative to the model.")
@@ -281,7 +304,7 @@ class _Converter:
                     _fail(f"Link {child!r} has two parents (a closed loop): a URDF is a tree.", "SDF_LOOP")
                 seen.add(child)
                 element = j["element"]
-                jpose = _pose(element.findtext("pose")) if element is not None else _identity()
+                jpose = _pose_of(element.find("pose")) if element is not None else _identity()
                 if element is not None and element.find("pose") is not None and element.find("pose").get("relative_to"):
                     self.warn(f"Joint {j['name']!r} has a pose relative_to another frame; it is read in the child link's frame.")
                 joint_frame = _mul(pose_of[child], jpose)
@@ -319,7 +342,7 @@ class _Converter:
             mass = _float(inertial.find("mass"), 0.0)
             inertia = inertial.find("inertia")
             if mass > 0:
-                ip = _mul(to_frame, _pose(inertial.findtext("pose")))
+                ip = _mul(to_frame, _pose_of(inertial.find("pose")))
                 parts = {k: _float(inertia.find(k) if inertia is not None else None, 0.0) for k in ("ixx", "ixy", "ixz", "iyy", "iyz", "izz")}
                 lines += ["    <inertial>", self._origin(ip, "      "), f'      <mass value="{_num(mass)}"/>',
                           '      <inertia ' + " ".join(f'{k}="{_num(v)}"' for k, v in parts.items()) + "/>", "    </inertial>"]
@@ -329,7 +352,7 @@ class _Converter:
                 shape = self._geometry(geometry, f"{lname}/{tag}")
                 if shape is None:
                     continue
-                pose = _mul(to_frame, _pose(element.findtext("pose")))
+                pose = _mul(to_frame, _pose_of(element.find("pose")))
                 name = element.get("name") or f"{tag}_{index}"
                 lines.append(f'    <{tag} name="{self._attr(name)}">')
                 lines.append(self._origin(pose, "      "))
@@ -425,7 +448,7 @@ class _Converter:
                 return None
             target = candidates[0]
         else:
-            target = normal_path(base, uri)
+            target = normal_path(_parent(getattr(self, "model_file", self.entry)), uri)
             if target is None:
                 _fail(f"The mesh uri {uri[:80]!r} climbs out of the approved folder.", "OUTSIDE_ROOT")
             if target not in self.project.files:
@@ -442,7 +465,11 @@ class _Converter:
         damping = friction = None
         if axis_el is not None:
             axis = _vec(axis_el.findtext("xyz") or "0 0 1", 3, f"joint {j['name']} axis")
-            if (axis_el.findtext("use_parent_model_frame") or "").strip().lower() in ("true", "1"):
+            xyz_el = axis_el.find("xyz")
+            expressed_in = (xyz_el.get("expressed_in") or "").strip() if xyz_el is not None else ""
+            if expressed_in not in ("", "__model__"):
+                self.warn(f"Joint {j['name']!r} gives its axis in the frame {expressed_in[:40]!r}; it is read in the joint's own frame.")
+            if expressed_in == "__model__" or (axis_el.findtext("use_parent_model_frame") or "").strip().lower() in ("true", "1"):
                 rot = [[joint_frame[r][c] for c in range(3)] for r in range(3)]
                 axis = [sum(rot[k][i] * axis[k] for k in range(3)) for i in range(3)]  # model frame -> joint frame
             limits = axis_el.find("limit")
@@ -461,8 +488,7 @@ class _Converter:
             if jtype_ != "fixed":
                 lines.append(f'    <axis xyz="{" ".join(_num(v) for v in axis_)}"/>')
                 if jtype_ in ("revolute", "prismatic"):
-                    lo = lower if lower is not None and math.isfinite(lower) else -3.14159265
-                    hi = upper if upper is not None and math.isfinite(upper) else 3.14159265
+                    lo, hi = lower, upper
                     lines.append(f'    <limit lower="{_num(lo)}" upper="{_num(hi)}" effort="{_num(effort if effort and math.isfinite(effort) and effort > 0 else 1e6)}" '
                                  f'velocity="{_num(velocity if velocity and math.isfinite(velocity) and velocity > 0 else 1e3)}"/>')
                 else:
@@ -473,11 +499,21 @@ class _Converter:
             lines.append("  </joint>")
             return lines
 
-        if jtype in ("revolute", "prismatic") and lower is not None and upper is not None and jtype == "revolute" \
-                and (abs(lower) > HUGE or abs(upper) > HUGE or (not math.isfinite(lower) and not math.isfinite(upper))):
+        low_open = lower is None or abs(lower) > HUGE
+        high_open = upper is None or abs(upper) > HUGE
+        if jtype == "revolute" and low_open and high_open:
             jtype = "continuous"
-        elif jtype == "revolute" and axis_el is not None and axis_el.find("limit") is None:
-            jtype = "continuous"
+        elif jtype == "revolute" and (low_open or high_open):  # a URDF limit needs both ends
+            lower, upper = (upper - 2 * math.pi, upper) if low_open else (lower, lower + 2 * math.pi)
+            self.warn(f"Joint {j['name']!r} has a limit on one side only; the other side is written one full turn away.")
+        elif jtype == "prismatic" and (low_open or high_open):  # SDF's default is unlimited, a URDF prismatic joint needs numbers
+            if low_open and high_open:
+                lower, upper = -OPEN_SLIDE, OPEN_SLIDE
+            elif low_open:
+                lower = upper - 2 * OPEN_SLIDE
+            else:
+                upper = lower + 2 * OPEN_SLIDE
+            self.warn(f"Joint {j['name']!r} slides without a limit in the SDF; it is written with a range of {_num(upper - lower)} m.")
         if jtype in ("revolute2", "universal"):
             self.warn(f"Joint {j['name']!r} is a two-axis joint; it is written as two continuous joints (the second axis is not read).")
             jtype = "continuous"
@@ -498,6 +534,18 @@ class _Converter:
 
 
 def convert(entry: str, project: Project, model: str | None = None) -> dict:
+    """One SDF model as a URDF. Any failure is an AssetError."""
+    try:
+        return _convert(entry, project, model)
+    except AssetError:
+        raise
+    except RecursionError:
+        _fail(f"{entry} nests too deeply.", "LIMIT")
+    except (TypeError, ValueError, OverflowError, AttributeError, KeyError, IndexError) as exc:
+        _fail(f"{entry} cannot be converted ({type(exc).__name__}: {str(exc)[:200]}).")
+
+
+def _convert(entry: str, project: Project, model: str | None = None) -> dict:
     """Read the SDF file *entry*, pick one model, and write it as a URDF: ``{"urdf", "model", "models", "static", "warnings", "dropped", "joints"}``."""
     if not is_sdf(entry):
         refuse("UNSUPPORTED_FORMAT", f"Expected a .sdf or .world file, not {entry}.")

@@ -11,7 +11,7 @@ from pathlib import PurePosixPath
 
 from . import urdf_refs
 from .project_assets import AssetError, refuse
-from .urdf_refs import SCHEME, Project, normal_path
+from .urdf_refs import Project
 
 MESH_SUFFIXES = (".gltf", ".glb", ".obj", ".stl", ".fbx", ".ply")
 NO_MATERIALS = {".fbx"}  # references hidden in a binary format
@@ -43,11 +43,7 @@ def check(entry: str, project: Project) -> dict:
     followed = urdf_refs.follow_mesh_files(project, [entry])
     outside, absent = [], []
     for item in followed["missing"]:
-        value = item["reference"][7:] if item["reference"].startswith("file://") else item["reference"]
-        value = value.replace("%20", " ")
-        leaves = (SCHEME.match(value) or value.startswith("/") or "\\" in value
-                  or normal_path(urdf_refs._parent(item["referenced_by"]), value) is None)
-        (outside if leaves else absent).append(item)
+        (absent if urdf_refs.mesh_reference(item["referenced_by"], item["reference"]) else outside).append(item)
     if outside:
         names = [f"{m['reference'][:80]} (named by {m['referenced_by']})" for m in outside[:6]]
         raise AssetError("MESH_REFERENCE", "A mesh names files outside the approved folder (an absolute path, a URL, or climbing out of it): "

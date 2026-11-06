@@ -22,6 +22,8 @@ FORMATS = ("auto", "usd", "urdf", "xacro", "sdf", "mjcf", "mesh", "map")
 GENERATED = ".generated.urdf"
 _MACRO_NAMES = re.compile(r"(macro|common|inc|materials|utils|defs|properties|inertia)", re.I)
 _SKIP_FOLDERS = {".git", "node_modules", "__pycache__", ".venv"}
+_MAX_CONFIG = 1024**2
+MAX_SNAPSHOT_READ = 256 * 1024**2
 
 
 def format_of(path) -> str | None:
@@ -103,6 +105,15 @@ def _is_mujoco(read, rel):
 def candidates(files, read, folder="") -> list[dict]:
     """The importable entry files a folder holds, best first: ``{"entry", "format", "why", "score"}`` (entry relative to the root)."""
     prefix = folder + "/" if folder else ""
+    inner_read, spent = read, [0]
+
+    def read(rel):  # looking through a folder reads no more than one snapshot could hold; past that, files are not candidates
+        if spent[0] > MAX_SNAPSHOT_READ:
+            refuse("LIMIT", "That folder holds too much to look through.")
+        data = inner_read(rel)
+        spent[0] += len(data)
+        return data
+
     inside = sorted(f for f in files if f.startswith(prefix) and not set(f.split("/")) & _SKIP_FOLDERS)
     found = []
 
@@ -115,10 +126,12 @@ def candidates(files, read, folder="") -> list[dict]:
         if lower == "model.config":  # a Gazebo model folder names its SDF
             sdf = None
             try:
-                for node in ET.fromstring(read(rel)).iter("sdf"):
-                    if node.text and node.text.strip():
-                        sdf = node.text.strip()
-            except (ET.ParseError, OSError):
+                data = read(rel)
+                if len(data) <= _MAX_CONFIG and b"<!DOCTYPE" not in data.upper() and b"<!ENTITY" not in data.upper():
+                    for node in ET.fromstring(data).iter("sdf"):
+                        if node.text and node.text.strip():
+                            sdf = node.text.strip()
+            except (ET.ParseError, OSError, AssetError):
                 pass
             target = f"{PurePosixPath(rel).parent.as_posix()}/{sdf or 'model.sdf'}".lstrip("./")
             target = target if target in files else f"{PurePosixPath(rel).parent.as_posix()}/model.sdf".lstrip("./")

@@ -591,12 +591,14 @@ class Extension(omni.ext.IExt):
                     elif name == "assets.import_path" and args.get("format") == "mesh":
                         from .mesh_import import run as import_mesh
 
+                        self.scene.target(args.get("session_id"), args.get("stage_id"), mutation=True)
                         args.pop("root_id", None)
                         args.pop("relative_path", None)
                         result = await import_mesh(self, args)
                     elif name == "assets.import_path" and args.get("format") == "map":
                         from .map_import import run as import_map
 
+                        self.scene.target(args.get("session_id"), args.get("stage_id"), mutation=True)
                         args.pop("root_id", None)
                         args.pop("relative_path", None)
                         args.pop("format", None)

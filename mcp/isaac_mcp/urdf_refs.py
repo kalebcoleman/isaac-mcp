@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import time
+from urllib.parse import unquote
 import xml.etree.ElementTree as ET
 
 from .project_assets import AssetError, refuse, relative
@@ -324,6 +325,19 @@ def _candidates(package, project):
     return [*project.named_packages().get(package, []), *project.folders_named(package), *([""] if project.name == package else [])]
 
 
+def mesh_reference(referrer: str, name: str) -> str | None:
+    """The folder-relative file a mesh's reference means, or None if it leaves the folder.
+
+    glTF names are URIs and a loader percent-decodes them, so the decoded form is what gets checked: ``%2e%2e/x.bin`` is ``../x.bin``.
+    A ``%`` left after decoding could be decoded again by something further along, so it is refused too.
+    """
+    value = name[7:] if name.startswith("file://") else name
+    decoded = unquote(value)
+    if "%" in decoded or SCHEME.match(value) or SCHEME.match(decoded) or decoded.startswith("/") or "\\" in decoded or any(ord(c) < 32 for c in decoded):
+        return None
+    return normal_path(_parent(referrer), decoded)
+
+
 def gltf_uris(suffix: str, data: bytes):
     """The external files a glTF or GLB names (buffers and images that are not embedded), or None if its JSON cannot be read."""
     import json
@@ -407,11 +421,7 @@ def follow_mesh_files(project: Project, meshes) -> dict:
             unfollowable.append(dict(file=rel, reason=str(exc)[:200]))
             continue
         for name in mesh_files(rel, data):
-            value = name[7:] if name.startswith("file://") else name
-            value = value.replace("%20", " ")
-            target = None
-            if not SCHEME.match(value) and not value.startswith("/") and "\\" not in value:
-                target = normal_path(_parent(rel), value)
+            target = mesh_reference(rel, name)
             if target and target in project.files and not project._unsafe(target):
                 found.add(target)
                 queue.append(target)

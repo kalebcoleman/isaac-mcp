@@ -754,6 +754,8 @@ class Broker:
             generated = None
             if generate is not None:
                 made = generate(path, files, lambda rel: (work / "project" / rel).read_bytes())
+                if len(files) >= MAX_FILES:
+                    refuse("LIMIT", f"The folder holds {len(files)} files, and the converted file would make it more than the limit of {MAX_FILES}. Approve a smaller folder.")
                 if made["entry"] in files:
                     refuse("INVALID_PATH", f"{made['entry']} is already in the folder; the converted file needs a name of its own.")
                 data = made["data"]

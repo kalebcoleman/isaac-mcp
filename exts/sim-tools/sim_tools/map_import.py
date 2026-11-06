@@ -43,11 +43,13 @@ def read_png(data: bytes):
         from PIL import Image
         import io
 
-        image = Image.open(io.BytesIO(data)).convert("L")
+        image = Image.open(io.BytesIO(data))  # reads the header only: the size is checked before any pixel is decoded
         width, height = image.size
         if width * height > MAX_PIXELS:
             refuse("LIMIT", "The map image is too large.")
-        return width, height, 255, list(image.getdata())
+        if image.mode in ("I;16", "I;16B", "I;16L", "I"):  # 16-bit grey: converting to 8 bits would saturate it
+            return width, height, 65535, list(image.getdata())
+        return width, height, 255, list(image.convert("L").getdata())
     except ImportError:
         refuse("IMPORTER_UNAVAILABLE", "This Kit cannot read a PNG map (no PIL). Use a PGM image.")
 
@@ -120,8 +122,14 @@ def run(ext, args: dict) -> dict:
         width, height, maxval, pixels = read_png(data) if data[:4] == b"\x89PNG" else read_pgm(data)
     except ValueError as exc:
         refuse("MAP_IMAGE", f"{image} is not a readable PGM or PNG image: {exc}")
-    negate = int(meta.get("negate", 0) or 0)
-    occupied_threshold = float(meta.get("occupied_thresh", 0.65))
+    negate = str(meta.get("negate", 0)).strip().lower() in ("1", "true", "yes")
+    try:
+        occupied_threshold = float(meta.get("occupied_thresh", 0.65))
+    except (TypeError, ValueError):
+        refuse("MAP_YAML", "occupied_thresh must be a number.")
+    warnings = []
+    if len(origin) >= 3 and abs(float(origin[2])) > 1e-6:
+        warnings.append(f"The map's origin has a yaw of {float(origin[2]):.3f} rad, which was not applied: use orientation on this import to turn the map.")
     occupied = []
     for value in pixels:
         probability = (value / maxval) if negate else (maxval - value) / maxval
@@ -152,7 +160,7 @@ def run(ext, args: dict) -> dict:
     return dict(
         prim_path=prim_path, image=image, size_px=[width, height], resolution=resolution, origin=[ox, oy],
         extent_m=[round(width * resolution, 4), round(height * resolution, 4)], occupied_cells=sum(occupied), walls=len(boxes),
-        wall_height=height_m, warnings=[] if boxes else ["No occupied cells were found: check negate and occupied_thresh."],
+        wall_height=height_m, warnings=warnings + ([] if boxes else ["No occupied cells were found: check negate and occupied_thresh."]),
         note="Walls are static boxes at the map's own coordinates; add a ground plane separately.",
         validation=dict(ok=bool(boxes), checks=[dict(name="has_walls", ok=bool(boxes), detail=f"{len(boxes)} boxes")]),
     )
