@@ -266,7 +266,8 @@ add(
 add(
     "sim.timeline.control",
     "Explicit play, pause or stop. Play keeps running between your calls, not always at real time; use sim__simulation__step for an exact duration. Stop rewinds physics and awaits pending render/writer and capture-settings completion; its five-second timeout is cooperative. Play only observes a pending Stop; TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection and explicit retry, never automatic replay. Leases the session edit target for physics writeback until Stop. Never pumps the Kit update loop.",
-    dict(**TARGET, action=field("string", "play, pause, or stop.")),
+    dict(**TARGET, action=field("string", "play, pause, or stop."),
+         resume=field("boolean", "With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it.", False)),
 )
 add(
     "sim.stage.save",

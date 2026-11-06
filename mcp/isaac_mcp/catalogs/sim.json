@@ -1328,6 +1328,11 @@
           "type": "string",
           "description": "play, pause, or stop.",
           "required": true
+        },
+        "resume": {
+          "type": "boolean",
+          "description": "With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it.",
+          "required": false
         }
       },
       "fields": [
@@ -1357,6 +1362,15 @@
           "default": null,
           "has_default": false,
           "description": "play, pause, or stop."
+        },
+        {
+          "name": "resume",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it."
         }
       ],
       "namespace": "sim",

@@ -891,19 +891,27 @@ class Extension(omni.ext.IExt):
                     "INVALID_ACTION",
                     "Use play, pause or stop; exact stepping uses sim__simulation__step.",
                 )
-            if a["action"] == "play":
+            resume = a.get("resume", False)
+            if type(resume) is not bool:
+                refuse("INVALID_VALUE", "resume must be true or false.")
+            if resume and (a["action"] != "play" or s.timeline.is_stopped()):
+                refuse("INVALID_VALUE", "resume=true continues a paused timeline with action=play; this timeline is stopped, or the action is not play.")
+            if a["action"] == "play" and not resume:
                 from .physics import prepare
 
                 prepare(stage)
                 s.begin_runtime_edit(stage)
             getattr(s.timeline, a["action"])()
-            return dict(
+            result = dict(
                 action=a["action"],
                 playing=s.timeline.is_playing(),
                 stopped=s.timeline.is_stopped(),
                 time_s=s.timeline.get_current_time(),
                 effects="Timeline request issued; physics readiness unknown.",
             )
+            if resume:
+                result["note"] = "Resumed without stopping. Physics writes where whoever started this timeline set it, not to the session layer, and scene edits stay refused until a stop."
+            return result
         if name == "sim.viewport.frame":
             from omni.kit.viewport.utility import (
                 get_active_viewport,

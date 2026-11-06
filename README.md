@@ -61,6 +61,10 @@ Add ROS 2 and the same scene runs Nav2: `Set up ROS 2 TF, build an occupancy map
 `sim__quick_start environment=warehouse` builds the room, the racks and the robot in one call, with nothing to download.
 For a real floor plan, a ROS Nav2 map becomes walls: see [importing any asset](docs/ASSET-IMPORT.md#ros-maps).
 
+**A Jenga tower you can really knock over.** `sim__quick_start environment=jenga` builds 54 dynamic blocks and a Franka with a push rod; `sim__arm__ik move=true` moves the arm in one call. In a live run it pushed a block 12 cm out and the tower stood. See [A Jenga tower in one call](docs/TOOLS-SCENE.md#a-jenga-tower-in-one-call).
+
+**Train a policy.** `isaaclab__train`, `eval` and `play` run on Isaac Lab, including your own robot from a URDF and a Jenga task with contacts: [your own task](docs/TOOLS-ISAACLAB.md#6-your-own-task). **BrickSim's LEGO simulator** runs next to these tools with no change to it: [BrickSim](docs/BRICKSIM.md).
+
 ### Import almost any robot or object file
 
 > Load the UR10e from the Universal Robots repo I downloaded and bend two joints. Then drop the glTF duck next to it so it falls.
@@ -244,8 +248,8 @@ That is it. From there, use any prompt above. Trouble connecting? See
 
 > [!NOTE]
 > **Pre-release, Linux x86_64 only.** PhysX is the release target; Newton is
-> [experimental](docs/COMPATIBILITY.md#release-backend-scope). The installer pins Isaac Sim **6.2.0.0**, and results exist for
-> 6.0.0.0, 6.0.0.1, 6.0.1.0, 6.1.0.0 and Sim 5.1 with Isaac Lab 2.3.2, recorded per build in the
+> [experimental](docs/COMPATIBILITY.md#release-backend-scope). The two claimed builds are Isaac Sim **6.2.0.0 with Isaac Lab 3.0.0** (the installer's pin)
+> and Isaac Sim **5.1.0.0 with Isaac Lab 2.3.2**. 6.0.0.0, 6.0.0.1, 6.0.1.0 and 6.1.0.0 are best effort; results per build are in the
 > [compatibility matrix](docs/COMPATIBILITY.md). This is not an all-version certification. Isaac Lab jobs and the simulator
 > share one GPU, so run one at a time on a 16 GB card.
 

@@ -27,6 +27,7 @@ over both.
 | [Host and bridge](TOOLS-HOST.md) | Gateway, desktop, opt-in input and sessions, bridge built-ins |
 | [UR5e twin](TOOLS-UR5E.md) | `ur5e_dt__*`: the digital twin pack |
 | [Isaac Lab](TOOLS-ISAACLAB.md) | `isaaclab__*`: discovery, jobs, guards, metrics |
+| [BrickSim](BRICKSIM.md) | LEGO bricks with these tools: the bridge next to BrickSim, which tools work on bricks, its RL task |
 | [Agent skill](AGENT-SKILLS.md) | The `isaac-mcp` skill and where each client finds it |
 
 **Workflows**

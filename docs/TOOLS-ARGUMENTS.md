@@ -969,6 +969,7 @@ Explicit play, pause or stop. Play keeps running between your calls, not always 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `action` (string, required): play, pause, or stop.
+- `resume` (boolean, optional): With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it.
 
 ### `sim__ui__act`
 

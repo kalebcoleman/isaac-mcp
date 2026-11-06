@@ -93,7 +93,7 @@ anything that replaces the stage. The calls below ran against a live 6.2.0.0 hea
    opens files under your home only.
 
 Two things to expect with the UR5e twin: `ur5e_dt__quick_start*` leaves the timeline **playing**, so call stop before generic
-edits. A first generic Play on a timeline something else started refuses with `TIMELINE_ALREADY_ACTIVE`, for the same fix.
+edits. A first generic Play on a timeline something else started refuses with `TIMELINE_ALREADY_ACTIVE`, for the same fix. When stopping would end a project's own script that paused it (a BrickSim demo waits for Play), `action=play resume=true` continues it instead.
 Helper scripts that speak MCP run as `uv run --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>`
 (`scene-test` adds the `pxr` and `numpy` the validators import).
 
