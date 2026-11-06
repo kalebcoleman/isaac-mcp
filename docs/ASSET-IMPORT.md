@@ -141,7 +141,7 @@ A tool can be called once from a shell, with no MCP client, against a bridge: `p
 | `UNITS_MISMATCH` | The stage's up axis or units differ from the asset's | Start a scene that matches (`sim__quick_start up_axis=... meters_per_unit=...`) |
 | `UNSUPPORTED_FORMAT` | Not a format here (CAD, splats, `.dae` as a prop, a bare `package.xml`) | Convert it to glTF, OBJ or URDF first |
 | `LIMIT` | The approved folder has over 1000 files or 256 MiB, or a file is too big | Approve a smaller folder |
-| `QUOTA` | 16 private snapshots exist in staging (each import uses two) | Stop the simulator, then clear the staging folder the refusal names |
+| `QUOTA` | 256 private snapshots exist in staging (each import uses two), or the disk has under about 2.3 GB free | Stop the simulator, then clear the staging folder |
 | `PACKAGE_MISSING` | A `$(find pkg)` or `package://` needs a package that is not in the approved folder | Approve the folder that holds it |
 
 ## Physics after the import
@@ -157,7 +157,7 @@ An import authors a valid robot; it does not make it stand or walk. What to expe
 ## Limits to know
 
 - **Approval is always on.** There is no switch to turn it off.
-- **Snapshot quota.** Staging holds 16 snapshots and each import uses two, so about eight imports per simulator session before a cleanup is needed.
+- **Snapshot quota.** Staging holds 256 snapshots and each import uses two, so about 128 different imports before a cleanup is needed; importing an unchanged folder again reuses its snapshot. A snapshot can be up to 256 MiB and nothing deletes them for you, so a long-used staging folder can grow large. A new one is refused when the disk would have under about 2 GB left.
 - **Collada (`.dae`)** works as a URDF robot's meshes but not as a prop of its own; CAD and Gaussian splats are not supported.
 - **FBX** comes in without materials (its texture paths cannot be checked). OBJ and glTF come in without materials if a named file is absent, with a warning.
 - **The SDF reader** converts one model at a time and drops plugins, sensors, lights and physics settings (listed in the result). A ball joint becomes three continuous joints.

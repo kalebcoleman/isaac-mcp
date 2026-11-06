@@ -278,3 +278,12 @@ def test_an_explicit_approval_file_still_decides_staging(tmp_path, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_STAGING", str(tmp_path / "default"))
     broker = a.Broker(str(tmp_path / "missing.json"))
     assert broker.staging is None and broker.config_error and not broker.default_staging
+
+
+def test_many_imports_fit_and_a_nearly_full_disk_refuses(broker, monkeypatch):
+    assert a.MAX_SNAPSHOTS >= 256  # a session importing many robots must not stop after a handful
+    monkeypatch.setattr(a.shutil, "disk_usage", lambda path: type("Usage", (), dict(free=a.MIN_FREE_BYTES))())
+    with pytest.raises(a.AssetError) as error:
+        broker.snapshot("demo", "robot.usda")
+    assert error.value.code == "QUOTA" and "MiB free" in str(error.value)
+    assert not list(broker.staging.iterdir())

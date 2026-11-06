@@ -26,7 +26,8 @@ MAX_BYTES = 256 * 1024**2
 MAX_FILES = 1000
 MAX_ENTRIES = 10000
 MAX_DEPTH = 8
-MAX_SNAPSHOTS = 16
+MAX_SNAPSHOTS = 256  # an import uses two, the folder and its converted copy; an identical folder is reused
+MIN_FREE_BYTES = 2 * 1024**3  # room a new snapshot must leave on the disk that holds staging
 USD = {".usd", ".usda", ".usdc", ".usdz"}
 
 
@@ -725,6 +726,13 @@ class Broker:
                 refuse(
                     "QUOTA",
                     "Snapshot quota exceeded. Stop consumers before user cleanup of staging.",
+                )
+            free = shutil.disk_usage(self.staging).free
+            if free < MIN_FREE_BYTES + MAX_BYTES:
+                refuse(
+                    "QUOTA",
+                    f"The disk holding {self.staging} has {free // 1024**2} MiB free, too little for another snapshot. "
+                    "Stop the simulators using them, then clear that folder.",
                 )
             work = Path(tempfile.mkdtemp(prefix=".pending-", dir=self.staging))
             files, total, packages = {}, 0, {}
