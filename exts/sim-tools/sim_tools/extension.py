@@ -878,24 +878,25 @@ class Extension(omni.ext.IExt):
                     refuse("INVALID_VALUE", "paths must be a list of 1 to 64 prim paths.")
                 if any(a.get(k) for k in ("path", "prim", "prim_path")):
                     refuse("INVALID_VALUE", "Give path or paths, not both.")
-                return dict(bodies=[dict(self.dispatch(name, dict(a, path=p)), path=p) for p in paths], time_s=s.timeline.get_current_time())
-            a["path"] = body_path(a)
-            prim = s.prim(stage, a["path"])
+            else:
+                paths = None
+                a["path"] = body_path(a)
             if s.timeline.is_stopped():
                 refuse("PHYSICS_NOT_READY", "The timeline is stopped, so there is no runtime body state. Play "
                        "(sim__timeline__control action=play) and let a few frames run; on Stop, robots return "
                        "to their authored start pose.")
-            if not prim.IsActive() or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
-                refuse("PHYSICS_NOT_READY", f"{a['path']} is not an active rigid body (no RigidBodyAPI). Use a "
-                       "link with physics, e.g. the robot's base link, or sim__prim__get for any prim's pose.")
             from .physics import body_state
 
-            return body_state(
-                a["path"],
-                s.timeline.get_current_time(),
-                a.get("include_dynamics", False),
-                stage,
-            )
+            def read(path):
+                prim = s.prim(stage, path)
+                if not prim.IsActive() or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                    refuse("PHYSICS_NOT_READY", f"{path} is not an active rigid body (no RigidBodyAPI). Use a "
+                           "link with physics, e.g. the robot's base link, or sim__prim__get for any prim's pose.")
+                return body_state(path, s.timeline.get_current_time(), a.get("include_dynamics", False), stage)
+
+            if paths is not None:
+                return dict(bodies=[dict(read(p), path=p) for p in paths], time_s=s.timeline.get_current_time())
+            return read(a["path"])
         if name == "sim.timeline.control":
             from isaac_mcp.project_assets import refuse
 

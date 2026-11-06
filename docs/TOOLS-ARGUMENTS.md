@@ -238,7 +238,8 @@ Run a checkpoint as a job and score it. Returns its job_id; when the job ends, i
 - `num_envs` (int | None, default `None`): Parallel environments. Default: the task's own.
 - `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.
-- `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `physics` (str | None, default `None`): physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets, such as examples/, refuses it: leave it out.
+- `extra_args` (list[str] | None, default `None`): More command-line arguments and Hydra overrides for the Isaac Lab script, e.g. ['--video', '--video_length', '400'] or ['env.commands.base_velocity.ranges.lin_vel_x=[0.5,0.5]'].
 - `num_episodes` (int, default `20`): Finished episodes to collect before the run stops itself.
 - `max_steps` (int | None, default `20000`): Environment-step bound that also ends the run; null removes it.
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
@@ -262,14 +263,15 @@ Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or
 
 ### `isaaclab__play`
 
-Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel.
+Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
 
 - `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
 - `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
 - `num_envs` (int, default `1`): Parallel environments.
 - `headless` (bool, default `False`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.
-- `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `physics` (str | None, default `None`): physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets, such as examples/, refuses it: leave it out.
+- `extra_args` (list[str] | None, default `None`): More command-line arguments and Hydra overrides for the Isaac Lab script, e.g. ['--video', '--video_length', '400'] or ['env.commands.base_velocity.ranges.lin_vel_x=[0.5,0.5]'].
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
@@ -321,7 +323,8 @@ Start a training job and return its job_id immediately; follow it with isaaclab_
 - `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `checkpoint` (str | None, default `None`): Checkpoint file to resume from, from isaaclab__checkpoints_list.
 - `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.
-- `extra_args` (list[str] | None, default `None`): More command-line arguments for the Isaac Lab script, e.g. ['--video'].
+- `physics` (str | None, default `None`): physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets, such as examples/, refuses it: leave it out.
+- `extra_args` (list[str] | None, default `None`): More command-line arguments and Hydra overrides for the Isaac Lab script, e.g. ['--video', '--video_length', '400'] or ['env.commands.base_velocity.ranges.lin_vel_x=[0.5,0.5]'].
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.

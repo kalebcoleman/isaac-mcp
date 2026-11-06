@@ -106,6 +106,24 @@ def _validate_task(task: str) -> None:
         raise ValueError(f"invalid task id: {task!r}")
 
 
+PHYSICS_PRESETS = {"physx": "physics=isaacsim_physx", "newton": "physics=newton_mjwarp"}  # Lab 3's own "physx" preset picks the optional OvPhysX runtime
+
+
+def _with_physics(physics, root, extras: list[str]) -> list[str]:
+    """The engine a job should use, as Isaac Lab 3's Hydra override. Lab 2.x has PhysX only, so there it needs no argument."""
+    if physics is None:
+        return extras
+    if physics not in PHYSICS_PRESETS:
+        raise ValueError(f"physics must be one of {', '.join(PHYSICS_PRESETS)}.")
+    if any(arg.split("=", 1)[0] == "physics" for arg in extras):
+        raise ValueError("Give physics as this option or in extra_args, not both.")
+    if _per_library(root) is not None:
+        if physics == "newton":
+            raise ValueError("This Isaac Lab has PhysX only: its scripts have no Newton engine.")
+        return extras
+    return [*extras, PHYSICS_PRESETS[physics]]
+
+
 def _validate_extra_args(extra_args) -> list[str]:
     if extra_args is None:
         return []
@@ -1040,6 +1058,7 @@ def train(
     device: str | None = None,
     headless: bool = True,
     checkpoint: Any = None,
+    physics: str | None = None,
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
@@ -1049,7 +1068,7 @@ def train(
     _validate_task(task)
     lib = _validate_library(rl_library)
     ckpt = _validate_checkpoint(checkpoint, root)
-    extras = _validate_extra_args(extra_args)
+    extras = _with_physics(physics, root, _validate_extra_args(extra_args))
     libraries = _per_library(root)
     if libraries is not None:
         lib = _per_library_choice(root, libraries, lib)
@@ -1087,6 +1106,7 @@ def eval_(
     checkpoint: Any,
     num_envs: int | None = None,
     headless: bool = True,
+    physics: str | None = None,
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
@@ -1103,7 +1123,7 @@ def eval_(
     num_episodes = _positive_int(num_episodes, "num_episodes")
     if max_steps is not None:
         max_steps = _positive_int(max_steps, "max_steps")
-    extras = _validate_extra_args(extra_args)
+    extras = _with_physics(physics, root, _validate_extra_args(extra_args))
     libraries = _per_library(root)
     inferred = None if lib else _library_from_checkpoint(ckpt, extras, libraries or _RL_LIBRARIES)
     lib = lib or inferred
@@ -1133,6 +1153,7 @@ def play(
     checkpoint: Any,
     num_envs: int = 1,
     headless: bool = False,
+    physics: str | None = None,
     extra_args: Any = None,
     timeout_s: float | None = None,
     rl_library: str | None = None,
@@ -1144,7 +1165,7 @@ def play(
     ckpt = _validate_checkpoint(checkpoint, root)
     if ckpt is None:
         raise ValueError("checkpoint is required for play")
-    extras = _validate_extra_args(extra_args)
+    extras = _with_physics(physics, root, _validate_extra_args(extra_args))
     libraries = _per_library(root)
     inferred = None if lib else _library_from_checkpoint(ckpt, extras, libraries or _RL_LIBRARIES)
     lib = lib or inferred
@@ -1233,6 +1254,8 @@ def runs_status(job_id: str) -> dict[str, Any]:
     failure = {}
     if data.get("status") == "failed":
         failure = {"last_stderr_lines": _tail_file(Path(data.get("log_dir", jd)) / "stderr.log", 20)}
+        if any("ovphysx" in str(line).lower() for line in failure["last_stderr_lines"]):
+            failure["hint"] = "Isaac Lab's physx preset picks the optional OvPhysX runtime, which this environment lacks. Use the option physics=physx on this tool, which selects isaacsim_physx."
     if data.get("status") == "failed" and data.get("note"):
         failure["note"] = data["note"]
     out = {

@@ -37,7 +37,8 @@ _JobId = Annotated[str, Field(description="job_id from isaaclab__train, eval or 
 _RunDir = Annotated[str, Field(description="Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status.")]
 _Headless = Annotated[bool, Field(description="false opens a window. true with extra_args=['--video'] keeps a renderer with no window.")]
 _RlLibrary = Annotated[str | None, Field(description="RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 has a default.")]
-_ExtraArgs = Annotated[list[str] | None, Field(description="More command-line arguments for the Isaac Lab script, e.g. ['--video'].")]
+_ExtraArgs = Annotated[list[str] | None, Field(description="More command-line arguments and Hydra overrides for the Isaac Lab script, e.g. ['--video', '--video_length', '400'] or ['env.commands.base_velocity.ranges.lin_vel_x=[0.5,0.5]'].")]
+_Physics = Annotated[str | None, Field(description="physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets, such as examples/, refuses it: leave it out.")]
 _Timeout = Annotated[float | None, Field(description="Stop the job after this many seconds. Default: no limit.")]
 _AllowConcurrent = Annotated[bool, Field(description="Start even if another job is running; a 16 GB GPU normally fits one.")]
 _AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
@@ -117,6 +118,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         headless: _Headless = True,
         checkpoint: Annotated[str | None, Field(description="Checkpoint file to resume from, from isaaclab__checkpoints_list.")] = None,
         rl_library: _RlLibrary = None,
+        physics: _Physics = None,
         extra_args: _ExtraArgs = None,
         timeout_s: _Timeout = None,
         allow_concurrent: _AllowConcurrent = False,
@@ -130,7 +132,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _launch(
             _jobs.train,
             task=task, num_envs=num_envs, max_iterations=max_iterations, seed=seed, device=device,
-            headless=headless, checkpoint=checkpoint, rl_library=rl_library, extra_args=extra_args,
+            headless=headless, checkpoint=checkpoint, rl_library=rl_library, physics=physics, extra_args=extra_args,
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
@@ -141,6 +143,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         num_envs: Annotated[int | None, Field(description="Parallel environments. Default: the task's own.")] = None,
         headless: _Headless = True,
         rl_library: _RlLibrary = None,
+        physics: _Physics = None,
         extra_args: _ExtraArgs = None,
         num_episodes: Annotated[int, Field(description="Finished episodes to collect before the run stops itself.")] = 20,
         max_steps: Annotated[int | None, Field(description="Environment-step bound that also ends the run; null removes it.")] = 20000,
@@ -160,7 +163,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _launch(
             _jobs.eval_,
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
-            rl_library=rl_library, extra_args=extra_args, num_episodes=num_episodes, max_steps=max_steps,
+            rl_library=rl_library, physics=physics, extra_args=extra_args, num_episodes=num_episodes, max_steps=max_steps,
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 
@@ -171,12 +174,13 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         num_envs: Annotated[int, Field(description="Parallel environments.")] = 1,
         headless: _Headless = False,
         rl_library: _RlLibrary = None,
+        physics: _Physics = None,
         extra_args: _ExtraArgs = None,
         timeout_s: _Timeout = None,
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
     ) -> str:
-        """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel.
+        """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
 
         Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true. Video needs optional
         MoviePy/imageio-ffmpeg in the Lab interpreter.
@@ -184,7 +188,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _launch(
             _jobs.play,
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
-            rl_library=rl_library, extra_args=extra_args, timeout_s=timeout_s,
+            rl_library=rl_library, physics=physics, extra_args=extra_args, timeout_s=timeout_s,
             allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
 

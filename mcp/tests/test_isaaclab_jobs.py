@@ -675,3 +675,18 @@ def test_a_timed_out_job_that_ignored_term_reports_a_timeout(tmp_path):
     jobs._write_job(tmp_path, data)
     jobs._settle_orphan(tmp_path, data)
     assert data["status"] == "timeout" and data.get("note") != "host restarted"
+
+
+def test_physics_is_the_hydra_override_on_lab_3_and_needs_nothing_on_lab_2(tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_per_library", lambda root: None)
+    assert jobs._with_physics("physx", tmp_path, ["--video"]) == ["--video", "physics=isaacsim_physx"]
+    assert jobs._with_physics("newton", tmp_path, []) == ["physics=newton_mjwarp"]
+    assert jobs._with_physics(None, tmp_path, ["a"]) == ["a"]
+    with pytest.raises(ValueError, match="not both"):
+        jobs._with_physics("physx", tmp_path, ["physics=newton_mjwarp"])
+    with pytest.raises(ValueError, match="must be one of"):
+        jobs._with_physics("ovphysx", tmp_path, [])
+    monkeypatch.setattr(jobs, "_per_library", lambda root: ["rsl_rl"])
+    assert jobs._with_physics("physx", tmp_path, ["--video"]) == ["--video"]
+    with pytest.raises(ValueError, match="PhysX only"):
+        jobs._with_physics("newton", tmp_path, [])

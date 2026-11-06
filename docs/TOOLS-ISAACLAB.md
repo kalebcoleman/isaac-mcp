@@ -230,6 +230,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `headless` | boolean | no | `true` | No window. Normally `--viz none`; `--video` selects Kit with child-only `HEADLESS=1`. `false` selects Kit with `HEADLESS=0`. |
   | `checkpoint` | string | no | `null` | Path to resume from (must be under allowed roots). |
   | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. Before launching, the tool runs `isaaclab__install_info`'s `rl_libraries` check in the same interpreter and refuses a library that is not importable there, naming the installed ones. If that check cannot run, the launch is not blocked. |
+  | `physics` | string | no | `null` | `physx` or `newton`. Default: the task's own, often Newton on Lab 3. On Lab 3 it selects `physics=isaacsim_physx` or `physics=newton_mjwarp`; Lab 3's own `physics=physx` picks the optional OvPhysX runtime, which fails if it is not installed. Lab 2.x is PhysX only. A task with no engine presets (both examples are PhysX by design) fails with `did not match a selectable preset`: leave it out. |
   | `extra_args` | array[string] | no | `null` | Validated flags/Hydra overrides. |
   | `timeout_s` | number | no | `null` | The host that started the job kills its process group after this many seconds. If that host has gone, the job runs on until the next `runs_status` or `runs_list`, and `runs_status` echoes it. |
   | `allow_concurrent` | boolean | no | `false` | Override the job-vs-job guard. |
@@ -248,6 +249,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `num_envs` | integer | no | `null` | |
   | `headless` | boolean | no | `true` | |
   | `rl_library` | string | no | `null` | |
+  | `physics` | string | no | `null` | As for `isaaclab__train`. |
   | `extra_args` | array[string] | no | `null` | |
   | `num_episodes` | integer | no | `20` | Finished episodes to collect. Must be at least 1. |
   | `max_steps` | integer | no | `20000` | Environment-step bound that also ends the run; `null` removes it. |
@@ -312,6 +314,7 @@ verified; an unscoreable script shows up as `episodes: 0` / no score, not a numb
   | `num_envs` | integer | no | `1` | |
   | `headless` | boolean | no | `false` | Defaults to a window (`--viz kit`). |
   | `rl_library` | string | no | `null` | |
+  | `physics` | string | no | `null` | As for `isaaclab__train`. |
   | `extra_args` | array[string] | no | `null` | |
   | `timeout_s` | number | no | `null` | |
   | `allow_concurrent` | boolean | no | `false` | |
@@ -483,10 +486,10 @@ A task is a Python package the tools import before Lab looks up its id. In the M
 
 ```
 isaaclab__train task=Isaac-Urdf-Reach rl_library=rsl_rl num_envs=512 max_iterations=200
-  extra_args=["env.urdf_path=/abs/so101.urdf", "env.end_link=gripper_frame_link", "env.stiffness=20.0", "env.damping=2.0", "env.target_radius_m=0.1"]
+  extra_args=["env.urdf_path=/abs/so101.urdf", "env.end_link=gripper_frame_link", "env.stiffness=20.0", "env.damping=2.0"]
 ```
 
-Pass the same `extra_args` to `eval` and `play`. A wrong path or link is refused with the robot's real link names. Meshes must be findable from the URDF by relative path: expand a xacro file first. A light arm wants lower `stiffness` and `damping`, and `target_radius_m` should fit its reach. Measured with the SO-101 from its public URDF: 512 environments, 200 iterations in 40 s at about 86,000 steps/s; eval over 64 episodes reached 95.3% of targets (within 3 cm) with a mean final distance of 8.7 mm. One seed; there is no self-collision, no obstacle and no orientation target. The importer's own fixed base joint breaks in cloned environments (their observations reach 1e12, then `normal expects all elements of std >= 0.0`), so write `fix_base=False` with `fix_root_link=True` in a task of your own.
+Pass the same `extra_args` to `eval` and `play`, and judge by `eval`: a task's `Metrics/` in training come from whichever environments reset last, often only a few, so a final 100% there can be one lucky arm. A wrong path or link is refused with the robot's real link names. Meshes must be findable from the URDF by relative path: expand a xacro file first. A light arm wants lower `stiffness` and `damping`. Targets are points the arm has really been at: at startup it is put in random poses within `action_scale` of its start, and where the link ends up is read from physics, so no workspace has to be guessed. Measured with the SO-101 from its public URDF: 512 environments, 200 iterations in about 30 s of training; eval over 64 episodes reached 100% of targets (within 3 cm) with a mean final distance of 2.6 mm. With no gains given and 64 environments, 100% and 7.4 mm. One seed; there is no self-collision, no obstacle and no orientation target. The importer's own fixed base joint breaks in cloned environments (their observations reach 1e12, then `normal expects all elements of std >= 0.0`), so write `fix_base=False` with `fix_root_link=True` in a task of your own.
 
 **A manipulation task with contacts** (`examples/jenga_lab`, `ISAACLAB_TASK_MODULES=jenga_lab`, `task=Isaac-Jenga-Push-Franka`). A Franka with a push rod pushes the middle block out of a 6-layer tower, with the blocks, rod and arm pose of [`sim__quick_start environment=jenga`](TOOLS-SCENE.md#a-jenga-tower-in-one-call), except that all its blocks are one height, so the target is not loose. The policy moves the rod's tip; damped inverse kinematics turns that into joint targets and keeps the hand level. Reward: reach the block, line up with it, push it up to 10 cm, keep the other blocks still; moving another block 4 cm ends the episode. Measured: 1024 environments, 300 iterations in 431 s at about 36,000 steps/s; eval over 64 episodes had a success rate of 100%, the block out 13.0 cm, the worst other block moved 4.4 mm, and no falls. One seed, one fixed block, a start that varies by a few millimetres: this shows the training route works with contacts, not a policy for a real tower.
 
@@ -494,10 +497,10 @@ Check a new task with a scripted action before training it. The first version of
 
 ### 7. Choose what a walking policy does
 
-A trained velocity policy takes its command from the task, set through Hydra in `extra_args` for `eval` and `play`. On Lab 3.0.0 `ang_vel_z` is ignored while `heading_command` is on, so set the heading:
+A trained velocity policy takes its command from the task, set through Hydra in `extra_args` for `eval` and `play`. On Lab 3.0.0 `ang_vel_z` is ignored while `heading_command` is on, so set the heading, or the robot turns to a random one:
 
 ```
-extra_args=["physics=isaacsim_physx", "env.commands.base_velocity.rel_standing_envs=0.0",
+physics=physx extra_args=["env.commands.base_velocity.rel_standing_envs=0.0",
   "env.commands.base_velocity.ranges.lin_vel_x=[0.7,0.7]", "env.commands.base_velocity.ranges.lin_vel_y=[0.0,0.0]", "env.commands.base_velocity.ranges.heading=[0.0,0.0]"]
 ```
 
@@ -513,7 +516,7 @@ Measured on `Isaac-Velocity-Flat-G1`, Lab 3.0.0, one run each, so this is not a 
 
 | Engine | 1500 iterations | Final episode length | Eval return | Falls in eval |
 |---|---|---|---|---|
-| PhysX (`physics=isaacsim_physx`, 1024 environments) | 762 s | 990 of 1000 | 33.8 over 64 episodes | 3 of 64 |
+| PhysX (`physics=physx`, 1024 environments) | 762 s | 990 of 1000 | 33.8 over 64 episodes | 3 of 64 |
 | Newton MJWarp (the default) | 8.6 min | 948 of 1000 | 27.25 over 16 episodes | about 7% |
 
 ## Concurrency guards

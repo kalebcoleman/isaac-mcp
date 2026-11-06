@@ -30,10 +30,30 @@ class UrdfReachEnv(DirectRLEnv):
         self._link_idx = self._robot.find_bodies(cfg.end_link)[0][0]
         self._previous_actions = torch.zeros_like(self.actions)
         self._target = torch.zeros((self.num_envs, 3), device=self.device)
-        self._home = None  # where the link is at the start pose, in the environment's frame: measured at the first reset
+        self._home, self._reachable = self._measure_reachable()
         self._closest = torch.full((self.num_envs,), 9.0, device=self.device)
         self._final = torch.zeros(self.num_envs, device=self.device)
         self._sums = {name: torch.zeros(self.num_envs, device=self.device) for name in ("reach", "action_rate", "joint_speed")}
+
+    def _measure_reachable(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Where the link is at the start pose, and points it can really get to: it is put in random poses the policy's actions can reach, and
+        where it ends up is read from physics. So a target suits any arm, with no workspace to guess. Runs once, before training."""
+        start = self._robot.data.default_joint_pos.torch.clone()
+        limits = self._robot.data.soft_joint_pos_limits.torch
+        points = []
+        for sample in range(1 + self.cfg.reachable_samples):
+            joints = start.clone()
+            if sample:  # the first pass, unchanged, is the start pose
+                noise = (torch.rand_like(joints[:, self._joint_ids]) * 2 - 1) * self.cfg.action_scale
+                joints[:, self._joint_ids] = torch.maximum(torch.minimum(joints[:, self._joint_ids] + noise, limits[:, self._joint_ids, 1]), limits[:, self._joint_ids, 0])
+            self._robot.write_joint_position_to_sim_index(position=joints)
+            self._robot.write_joint_velocity_to_sim_index(velocity=torch.zeros_like(joints))
+            self.sim.step(render=False)
+            self.scene.update(self.physics_dt)
+            points.append(self._link_pos().clone())
+        self._robot.write_joint_position_to_sim_index(position=start)
+        self._robot.write_joint_velocity_to_sim_index(velocity=torch.zeros_like(start))
+        return points[0], torch.cat(points[1:], dim=0)
 
     def _link_pos(self) -> torch.Tensor:
         return self._robot.data.body_pos_w.torch[:, self._link_idx] - self.scene.env_origins
@@ -51,10 +71,7 @@ class UrdfReachEnv(DirectRLEnv):
     def _get_observations(self) -> dict[str, torch.Tensor]:
         joints = self._robot.data.joint_pos.torch[:, self._joint_ids] - self._robot.data.default_joint_pos.torch[:, self._joint_ids]
         speeds = self._robot.data.joint_vel.torch[:, self._joint_ids]
-        return {"policy": torch.cat((joints, speeds, self._target - self._link_pos(), self._target - self._home_or_link(), self.actions), dim=-1)}
-
-    def _home_or_link(self) -> torch.Tensor:
-        return self._home if self._home is not None else self._link_pos()
+        return {"policy": torch.cat((joints, speeds, self._target - self._link_pos(), self._target - self._home, self.actions), dim=-1)}
 
     def _get_rewards(self) -> torch.Tensor:
         distance = torch.linalg.norm(self._target - self._link_pos(), dim=-1)
@@ -90,14 +107,8 @@ class UrdfReachEnv(DirectRLEnv):
         positions = self._robot.data.default_joint_pos.torch[env_ids].clone()
         self._robot.write_joint_position_to_sim_index(position=positions, env_ids=env_ids)
         self._robot.write_joint_velocity_to_sim_index(velocity=torch.zeros_like(positions), env_ids=env_ids)
-        if self._home is None and len(env_ids) == self.num_envs:  # the first reset covers every environment
-            self.scene.update(0.0)
-            self._home = self._link_pos().clone()
-        home = self._home if self._home is not None else self._link_pos()
-        direction = torch.randn((len(env_ids), 3), device=self.device)
-        direction = direction / torch.linalg.norm(direction, dim=-1, keepdim=True).clamp(min=1e-6)
-        radius = torch.rand((len(env_ids), 1), device=self.device) ** (1 / 3) * self.cfg.target_radius_m
-        self._target[env_ids] = home[env_ids] + radius * direction
+        picks = torch.randint(0, self._reachable.shape[0], (len(env_ids),), device=self.device)
+        self._target[env_ids] = self._reachable[picks]
         self.actions[env_ids] = 0.0
         self._previous_actions[env_ids] = 0.0
         self._closest[env_ids] = 9.0

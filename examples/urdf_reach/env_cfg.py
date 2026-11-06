@@ -59,8 +59,8 @@ class UrdfReachEnvCfg(DirectRLEnvCfg):
     )
     scene: UrdfReachSceneCfg = UrdfReachSceneCfg(num_envs=1024, env_spacing=2.0, replicate_physics=True)
 
-    action_scale = 0.5  # radians (or metres) from the start pose at a full action
-    target_radius_m = 0.15  # a new target lies within this of where the link starts, so any arm's reach fits a first run
+    action_scale = 0.5  # radians (or metres) from the start pose at a full action; targets are poses within this, so it also sets how far the arm has to go
+    reachable_samples = 8  # how many random poses per environment are measured at startup as targets
     reached_m = 0.03
     reach_scale = 2.0
     action_rate_scale = -0.01
