@@ -157,23 +157,36 @@ Do not launch a real robot driver for a simulation-only task.
 
 ## 3. Multi-Session Configuration (Ports)
 
-By default, the bridge binds to port **8766**. When running multiple concurrent simulation sessions, assign distinct ports using `UR5E_DT_PORT`:
+By default, the bridge binds to port **8766**. Parallel sessions need their own bridge ports, ROS domains, scene outputs and asset staging directories. For example, start these in separate terminals after replacing the placeholders with existing paths and creating the output directories:
 
 ```bash
-# Terminal 1: Primary session
-./run.sh --port 8766
+# Terminal 1: Sim 5.1
+ISAAC_MCP_PYTHON=<sim51-env>/bin/python \
+ISAAC_MCP_ASSET_CONFIG=<session51>/asset-config.json \
+ISAAC_MCP_SCENE_OUTPUT=<session51>/output ROS_DOMAIN_ID=41 \
+  ./run.sh --headless --port 18751
 
-# Terminal 2: Secondary session
-./run.sh --port 8767
+# Terminal 2: Sim 6.2
+ISAAC_MCP_PYTHON=<sim62-env>/bin/python \
+ISAAC_MCP_ASSET_CONFIG=<session62>/asset-config.json \
+ISAAC_MCP_SCENE_OUTPUT=<session62>/output ROS_DOMAIN_ID=42 \
+  ./run.sh --headless --port 18762
 ```
 
-An MCP client connected to port 8766 can switch to the second session at runtime:
+Each asset config must exist before that process starts; configure its own staging directory and approved roots as described in [trusted projects](TOOLS-SCENE.md#one-time-approval). Approved source roots can be shared when both sessions need the same read-only inputs; never share staging or output directories between concurrent jobs. ROS nodes that should talk to a session must use that session's domain. To discover the actual running processes and check the target before editing a scene:
 
-```python
-use_bridge(port=8767)
+```bash
+python3 mcp/isaac_mcp/client.py --list-bridges
+python3 mcp/isaac_mcp/client.py status --port 18751
+python3 mcp/isaac_mcp/client.py status --port 18762
 ```
 
-The switch persists until the MCP server process restarts.
+In an MCP client, call `list_bridges`, then select and verify the intended process with `use_bridge(port=18762)` and `status`. The selection belongs to the host MCP server process and persists until its restart. For agents working simultaneously, give each its **own MCP server process** and select its port there; otherwise one agent's `use_bridge` can redirect the other's next call. Keep each scene's returned `session_id` and `stage_id` with its own agent and recheck them after a restart or stage change.
+
+Two headless processes, Sim 5.1 and 6.2, were exercised together on a 16 GB RTX 5080 with small robot-import and physics workloads. This is not a capacity guarantee: scene complexity, sensors, renderers and training can require much more memory. Check available GPU and system memory before starting, monitor both workloads, and stop only sessions you own. Headless still uses GPU resources.
+
+For managed launches, `sim__launch` chooses distinct free ports and ROS domains, applies resource checks and gives each session its own output folder; its [configuration and limits](TOOLS-HOST.md#optional-simulator-sessions) describe how to select interpreters and inspect/stop sessions. Isaac Lab has separate job and GPU guards; its [concurrency rules](TOOLS-ISAACLAB.md#concurrency-guards) explain explicit overrides. Do not treat a guard override as extra GPU capacity.
+
 
 ---
 

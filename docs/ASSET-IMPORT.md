@@ -19,7 +19,7 @@ Or in one call that also builds the scene: `sim__quick_start robot=<absolute pat
 
 ## Set up, once
 
-1. **Isaac Sim** with this repository's MCP server (`./install.sh`, see [LINUX-SETUP.md](LINUX-SETUP.md)). The URDF and MJCF importers and the mesh converter are Isaac Sim's own. The formats were exercised on Isaac Sim 6.2 and attempted again on 5.1; some 5.1 MJCF cases failed. See [Tested](#tested). Nothing else is needed for USD, URDF, xacro, SDF, meshes or maps: **no ROS, no `xacro` program, no Gazebo, no internet.**
+1. **Isaac Sim** with this repository's MCP server (`./install.sh`, see [LINUX-SETUP.md](LINUX-SETUP.md)). The URDF and MJCF importers and the mesh converter are Isaac Sim's own. Representative formats were exercised on Isaac Sim 6.2 and 5.1; see [Tested](#tested) for scope and limits. Nothing else is needed for USD, URDF, xacro, SDF, meshes or maps: **no ROS, no `xacro` program, no Gazebo, no internet.**
 2. **Put the file where the tools may read it.** Either in your asset folder (`isaac-mcp-assets/<project>/`, loads with no approval) or in any folder you approve once, as a trusted root. Approve the **smallest folder that holds the files** (one robot's folder, not your whole downloads or projects folder): every import copies the approved folder, up to 1000 files and 256 MiB. An agent cannot approve anything. When it needs approval, the refusal prints the exact command; you run it, then restart the MCP server and Isaac Sim, because both read the approval file at startup.
 3. **Ask.** For example: *"Load the UR10e from <folder> and bend two joints"*, *"Put the Duck from <folder> in the scene as a prop that falls"*, *"Make a warehouse with a robot in it"*. The agent finds `assets__import_path` and picks the format.
 
@@ -143,6 +143,7 @@ A tool can be called once from a shell, with no MCP client, against a bridge: `p
 | `LIMIT` | The approved folder has over 1000 files or 256 MiB, or a file is too big | Approve a smaller folder |
 | `QUOTA` | 256 private snapshots exist in staging (each import uses two), or the disk has under about 2.3 GB free | Stop the simulator, then clear the staging folder |
 | `PACKAGE_MISSING` | A `$(find pkg)` or `package://` needs a package that is not in the approved folder | Approve the folder that holds it |
+| `MJCF_51_DEFAULTS` / `MJCF_51_MODEL` | Sim 5.1's older importer cannot safely normalize that combination of defaults or mesh references | Simplify the MJCF layout, or use Sim 6.2 |
 
 ## Physics after the import
 
@@ -165,7 +166,7 @@ An import authors a valid robot; it does not make it stand or walk. What to expe
 
 ## Tested
 
-On Isaac Sim 5.1 (headless), representative USD, URDF, xacro, SDF, MuJoCo XML, glTF, maps and the warehouse were exercised through its older importers. A later sweep found MJCF failures: an SO-101 model returned `MJCF_PHYSICS`, and a Panda import lost the bridge connection; these cases remain unresolved. URDF export is refused because that exporter wrote an empty robot. The rest of this section is the 6.2 run.
+On Isaac Sim 5.1 (headless), representative USD, URDF, xacro, SDF, MuJoCo XML, glTF, maps and the warehouse were exercised through its older importers. After fixes, the previously failing SO-101 and Panda models each imported and moved one joint; Go2 imported with a floating base and fell under gravity. The same three models were also checked in a concurrent headless 6.2 session. The 5.1 adapter merges only unambiguous named defaults and gives colliding mesh stems unique names in a private copy; the source stays unchanged. It refuses ambiguous cases with a reason. URDF export is refused because that exporter wrote an empty robot. The remaining results below are the earlier 6.2 run.
 
 Run with a visible simulator window on Isaac Sim 6.2, from real downloads, not made-up files. Pictures and logs: `runs/universal-import-demo/` of the test workspace, summarised in the earlier project history.
 

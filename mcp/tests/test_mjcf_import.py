@@ -118,3 +118,96 @@ def test_an_included_file_adds_its_joints():
     a = ET.fromstring("<mujoco><worldbody><body><joint/></body></worldbody></mujoco>")
     b = ET.fromstring("<mujoco><worldbody><body><joint/><joint/></body></worldbody></mujoco>")
     assert movable_joint_count([a, b]) == 3
+
+
+def test_legacy_normalization_merges_named_defaults_and_avoids_mesh_stem_collision(tmp_path):
+    import shutil
+    from isaac_mcp.urdf_refs import project_from_folder
+    from sim_tools.mjcf import _legacy_input
+
+    original = tmp_path / 'original'
+    (original / 'assets').mkdir(parents=True)
+    model = '''<mujoco><compiler meshdir="assets"/>
+      <default><default class="one"><joint damping="1"/></default></default>
+      <default><default class="two"><joint damping="2"/></default></default>
+      <asset><mesh name="collision" file="link.stl"/><mesh file="link.obj"/></asset>
+      <worldbody><body name="base"><freejoint/></body></worldbody></mujoco>'''
+    (original / 'robot.xml').write_text(model)
+    (original / 'assets/link.stl').write_bytes(b'stl')
+    (original / 'assets/link.obj').write_bytes(b'obj')
+    (original / 'assets/link__isaac_mcp_1.obj').write_bytes(b'do not overwrite')
+    (original / 'assets/link__isaac_mcp_2.stl').write_bytes(b'same stem, different extension')
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(original))
+    assert not found['problems']
+    private = tmp_path / 'private'
+    shutil.copytree(original, private)
+    assert _legacy_input(private, 'robot.xml', found) is True
+    result = ET.parse(private / 'robot.xml').getroot()
+    assert len(result.findall('default')) == 1
+    assert [e.get('class') for e in result.find('default').findall('default')] == ['one', 'two']
+    meshes = result.find('asset').findall('mesh')
+    assert meshes[0].get('file') == 'link.stl'
+    assert meshes[1].get('file') == 'link__isaac_mcp_3.obj' and meshes[1].get('name') == 'link'
+    assert (private / 'assets/link__isaac_mcp_3.obj').read_bytes() == b'obj'
+    assert (private / 'assets/link__isaac_mcp_1.obj').read_bytes() == b'do not overwrite'
+    assert (original / 'robot.xml').read_text() == model
+    assert not (original / 'assets/link__isaac_mcp_3.obj').exists()
+
+
+def test_legacy_normalization_refuses_ambiguous_defaults(tmp_path):
+    from isaac_mcp.urdf_refs import project_from_folder
+    from sim_tools.mjcf import _legacy_input
+
+    (tmp_path / 'robot.xml').write_text('<mujoco><default><joint damping="1"/></default><default><joint damping="2"/></default></mujoco>')
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(tmp_path))
+    with pytest.raises(AssetError) as caught:
+        _legacy_input(tmp_path, 'robot.xml', found)
+    assert caught.value.code == 'MJCF_51_DEFAULTS'
+
+
+def test_legacy_normalization_resolves_submodel_meshes_in_their_own_scope(tmp_path):
+    import shutil
+    from isaac_mcp.urdf_refs import project_from_folder
+    from sim_tools.mjcf import _legacy_input
+
+    source = tmp_path / 'source'
+    (source / 'sub').mkdir(parents=True)
+    (source / 'robot.xml').write_text('<mujoco><asset><mesh file="link.stl"/><model name="sub" file="sub/model.xml"/></asset></mujoco>')
+    (source / 'link.stl').write_bytes(b'parent')
+    (source / 'sub/model.xml').write_text('<mujoco><asset><mesh name="a" file="link.stl"/><mesh name="b" file="link.obj"/></asset></mujoco>')
+    (source / 'sub/link.stl').write_bytes(b'sub stl')
+    (source / 'sub/link.obj').write_bytes(b'sub obj')
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(source))
+    assert not found['problems']
+    assert found['mesh_sources']['robot.xml']['link.stl'] == ['link.stl']
+    assert found['mesh_sources']['sub/model.xml']['link.stl'] == ['sub/link.stl']
+    private = tmp_path / 'private'
+    shutil.copytree(source, private)
+    _legacy_input(private, 'robot.xml', found)
+    meshes = ET.parse(private / 'sub/model.xml').getroot().find('asset').findall('mesh')
+    assert [mesh.get('file') for mesh in meshes] == ['link.stl', 'link__isaac_mcp_1.obj']
+    assert (private / 'sub/link__isaac_mcp_1.obj').read_bytes() == b'sub obj'
+
+
+def test_legacy_shared_include_only_refuses_ambiguous_mesh_when_collision_needs_rewrite(tmp_path):
+    from isaac_mcp.urdf_refs import project_from_folder
+    from sim_tools.mjcf import _legacy_input
+
+    (tmp_path / 'a').mkdir()
+    (tmp_path / 'b').mkdir()
+    (tmp_path / 'robot.xml').write_text('<mujoco><asset><model name="a" file="a/model.xml"/><model name="b" file="b/model.xml"/></asset></mujoco>')
+    (tmp_path / 'shared.xml').write_text('<mujocoinclude><asset><mesh name="shared" file="link.stl"/></asset></mujocoinclude>')
+    for sub in ('a', 'b'):
+        (tmp_path / sub / 'model.xml').write_text('<mujoco><include file="../shared.xml"/></mujoco>')
+        (tmp_path / sub / 'link.stl').write_bytes(sub.encode())
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(tmp_path))
+    assert not found['problems']
+    assert found['mesh_sources']['shared.xml']['link.stl'] == ['a/link.stl', 'b/link.stl']
+    assert _legacy_input(tmp_path, 'robot.xml', found) is False
+
+    (tmp_path / 'a/model.xml').write_text('<mujoco><include file="../shared.xml"/><asset><mesh name="extra" file="link.obj"/></asset></mujoco>')
+    (tmp_path / 'a/link.obj').write_bytes(b'obj')
+    found = mjcf_refs.resolve('robot.xml', project_from_folder(tmp_path))
+    with pytest.raises(AssetError) as caught:
+        _legacy_input(tmp_path, 'robot.xml', found)
+    assert caught.value.code == 'MJCF_51_MODEL'

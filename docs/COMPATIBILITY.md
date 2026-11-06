@@ -3,15 +3,21 @@
 The full installer is pinned to **Isaac Sim 6.2.0.0 and Python 3.12**. The MCP host
 requires Python 3.10 or newer and can use a different interpreter. The results below
 are scoped observations, not guarantees for every machine, asset, tool or configuration.
-For installation choices see [Linux setup](LINUX-SETUP.md#choose-a-simulator-build).
+The primary tested pairings are **Isaac Sim 5.1 with Isaac Lab 2.3.2** and **Isaac Sim 6.2 with Isaac Lab 3.0.0**. The intermediate 6.x versions are best effort: selected Sim checks passed, but other workflows may have issues and their Lab pairings were not tested here. For installation choices see [Linux setup](LINUX-SETUP.md#choose-a-simulator-build).
 
 ## Release backend scope
 
 **PhysX is the release target; Newton is experimental.** Verify the selected engine and do
-not silently change the backend of an existing scene. Narrow 6.2 Newton twin experiments used
-MuJoCo Warp on CPU; they do not qualify all 6.2, generic-scene or Lab workflows. Earlier
-Newton twin tests produced native crashes, invalid state, rendering and contact failures. No
-reliable collider workaround was shipped.
+not silently change the backend of an existing scene. Earlier narrow 6.2 Newton twin experiments used
+MuJoCo Warp on CPU; earlier tests also produced native crashes, invalid state, rendering and contact failures.
+On 2026-11-06, a 6.2 headless Newton session reported the MuJoCo solver on `cuda:0` and a cube fell under
+gravity, but 20 exact steps at 0.002 s returned `STEP_TIMING_MISMATCH` (observed 0.020 s, expected 0.040 s).
+This does not qualify broader scene, contact, robot or Lab workflows. See the [Newton/Warp follow-up](CHECKLIST.md#newton-and-warp-gpu-physics-separate-follow-up-pr).
+
+Isaac Sim 6.2 loaded its bundled Warp 1.17.0 even though the Python environment also contained a different
+`warp-lang` distribution. Inspect the version **loaded inside Kit**, not just `pip show`. NVIDIA notes that
+its [Newton integration](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/physics/newton_physics.html) uses
+release-matched dependencies; installing a different version in the same environment can make it incompatible.
 
 A 6.0.1.0 windowed PhysX step stalled at `20f2953`. Two later scoped replays did not
 reproduce it, but its cause remains unknown. If a call stops returning, follow the
@@ -34,7 +40,7 @@ A listed tool does not establish that a compatible bridge is running.
 | `6.0.0.1` | Best effort; partial test | Headless and windowed 20-check smoke runs completed, including a decodable recording. A fresh window had the panel docked, and simulated object and camera transforms were received. Kit logged asynchronous task errors; a panel was undocked after one extension reload. Lab and physical hardware were not tested. |
 | `6.0.0.0` | Best effort; partial test | The initial object-pose graph failed because this release uses an older ROS publisher. With the compatibility fix, headless and windowed 20-check smoke runs passed, the optional panel was docked, and simulated object and camera transforms were received. Kit logged asynchronous task errors; Lab and physical hardware were not tested. |
 | Other 6.x releases | Not tested | A shared major version does not establish that this bridge, the twin or Lab jobs work on a new release. |
-| `5.1.0.0` | **Claimed, with Isaac Lab 2.3.2.** Not auto-detected, so name its interpreter with `ISAAC_MCP_PYTHON`. `run.sh` finds its bundled ROS libraries and `sim-tools` has adapters for its older APIs | Measured on 2026-11-05: `assets__import_path` for USD, URDF, xacro, SDF, MuJoCo XML, glTF and ROS maps through Isaac Sim's older importers; the warehouse quick start, with a Carter driving 15.7 m; Lab train, resume, compare, eval and play. Limits: a later MJCF sweep returned `MJCF_PHYSICS` for an SO-101 model and lost the bridge connection importing a Panda; those failures remain unresolved. URDF export writes an empty robot on this build, so it is refused with a reason; `sim__lidar__create` needs `config`; USD scenes keep their own units, so check them. Earlier: the PR 70 retest and one project scene, where most generic tools worked and `verify.sh` passed. The twin's full workflow was not verified here. |
+| `5.1.0.0` | **Claimed, with Isaac Lab 2.3.2.** Not auto-detected, so name its interpreter with `ISAAC_MCP_PYTHON`. `run.sh` finds its bundled ROS libraries and `sim-tools` has adapters for its older APIs | Representative USD, URDF, xacro, SDF, MJCF, glTF and ROS map imports; warehouse quick start with a Carter driving 15.7 m; and Lab train, resume, compare, eval and play were exercised. On 2026-11-06, the previously failing SO-101 and Panda MJCF models imported and each moved one joint; Go2 imported with a floating base and fell under gravity. Limits: URDF export writes an empty robot on this build, so it is refused with a reason; `sim__lidar__create` needs `config`; USD scenes keep their own units, so check them. Earlier: the PR 70 retest and one project scene, where most generic tools worked and `verify.sh` passed. The twin's full workflow was not verified here. |
 | Earlier releases | Not tested | No compatibility claim. |
 
 The 6.2 lock selects NumPy 2.3.1, matching the inspected `isaacsim-kernel` 6.2.0.0 wheel.

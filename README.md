@@ -251,7 +251,8 @@ That is it. From there, use any prompt above. Trouble connecting? See
 > [experimental](docs/COMPATIBILITY.md#release-backend-scope). The two claimed builds are Isaac Sim **6.2.0.0 with Isaac Lab 3.0.0** (the installer's pin)
 > and Isaac Sim **5.1.0.0 with Isaac Lab 2.3.2**. 6.0.0.0, 6.0.0.1, 6.0.1.0 and 6.1.0.0 are best effort; results per build are in the
 > [compatibility matrix](docs/COMPATIBILITY.md). This is not an all-version certification. Isaac Lab jobs and the simulator
-> share one GPU, so run one at a time on a 16 GB card.
+> share GPU memory. Two small headless sessions have run together on a 16 GB card; check workload and memory first. See
+> [parallel sessions](docs/MCP-SERVER.md#3-multi-session-configuration-ports) and the separate Lab job guards.
 
 > [!WARNING]
 > `run_python`, the file tools and trusted asset loading run with your account's permissions and are not sandboxed.

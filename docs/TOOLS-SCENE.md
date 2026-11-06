@@ -664,6 +664,8 @@ for measured outcomes and retained earlier failures; no indefinite lifetime guar
 Managed launches can select `physics_backend="newton"` (default `"physx"`); an unavailable
 requested engine fails instead of falling back. Newton uses its tensor adapter, explicit
 paused solver steps and Fabric publication; it does not report authored USD as runtime pose.
+On Sim 6.2 one GPU Newton exact-step probe returned `STEP_TIMING_MISMATCH`; inspect state and
+do not assume exact stepping succeeds on every Newton scene. See [compatibility](COMPATIBILITY.md#release-backend-scope).
 The older three releases need a scoped internal playing-flag adapter, restored even on error.
 Direct Newton steps invalidate captured CUDA graphs to avoid stale dt/state buffers.
 Newton requires meter stages and a qualified extension/library stack. Paused saves copy up to

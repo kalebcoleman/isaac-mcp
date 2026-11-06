@@ -11,9 +11,8 @@ unrelated jobs; record the source, versions, backend, observed effects and limit
 
 ## Release and compatibility
 
-- [ ] Investigate the Sim 5.1 MJCF SO-101 `MJCF_PHYSICS` refusal and Panda bridge disconnect;
-  retest the affected models and the other import formats after regression fixes.
-- [ ] Recheck mesh and Go2 import on 5.1, guards, and Jenga on both supported builds after the
+- [x] Fix the Sim 5.1 MJCF SO-101 and Panda failures; retest both arms and the floating-base Go2.
+- [ ] Recheck the other import formats, guards and Jenga on both supported builds after the
   latest changes. Report failures separately; a passing host suite is not a live Sim test.
 - [ ] Investigate the original 6.0.1 windowed PhysX step stall and fresh-Kit camera reuse;
   later non-reproduction is not a fix. Newton remains experimental.
@@ -21,6 +20,20 @@ unrelated jobs; record the source, versions, backend, observed effects and limit
   ROS/display combinations before making broader compatibility claims.
 - [ ] When release is requested, review licensing and notices, name availability, and PyPI/npm
   installation using [publishing](PUBLISHING.md) and [provenance](VENDORING.md).
+
+## Newton and Warp GPU physics (separate follow-up PR)
+
+- [ ] Investigate the Sim 6.2 Newton exact-step timing mismatch: 20 requested steps at
+  `dt=0.002` advanced the reported clock by 0.020 s, not 0.040 s. Check solver steps,
+  clock and body state independently before changing the timing guard.
+- [ ] Qualify the Isaac Sim, Newton, Warp, MuJoCo and GPU/driver versions that actually load;
+  document installation and diagnostics without replacing the simulator's matched packages.
+- [ ] Exercise GPU Newton with representative rigid contacts, articulations, control, sensors,
+  headless and windowed scenes, longer runs and the matching Lab version. Compare measured
+  results with PhysX, including failures, and verify actual solver device rather than CUDA availability alone.
+- [ ] Identify any agent-facing Warp/Newton tools from real workflows and verified gaps. Reuse
+  existing scene, physics and Lab tools where they suffice; propose additions separately with
+  clear inputs, device selection, resource limits and measured behavior.
 
 ## Robotics and learning
 

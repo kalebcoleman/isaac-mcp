@@ -118,6 +118,13 @@ renderer for ordinary jobs; adding `--video` requires rendering even headlessly.
 `play` defaults to `headless=false` and opens a window. No actual training run is
 required or performed by this documentation.
 
+On a 16 GB RTX 5080, one short headless Cartpole training job for Lab 2.3.2 / Sim 5.1 and one for
+Lab 3.0 / Sim 6.2 ran concurrently with PhysX, 16 environments and one iteration each; both exited
+successfully and wrote checkpoints. Their Lab roots and output directories were separate. The second
+job used `allow_concurrent=true` against the shared job-state directory. This is a small smoke test,
+not a memory reservation or a guarantee for longer training, larger environments, rendering or a
+simultaneously running Kit bridge. Keep the default guards unless you have checked the actual workload.
+
 ### Environment variables (summary)
 
 | Variable | Used by | Effect |
@@ -155,7 +162,7 @@ required or performed by this documentation.
 or starting Kit: `lab_version`, `isaaclab_version`, `isaacsim_version`, `layout`, `libraries` and, per script, its declared
 `flags` (including a helper beside it and AppLauncher's when that source is present). `flags: null` means unknown, not none.
 Isaac Lab 3's scripts hand over to a CLI elsewhere, so theirs are unknown. `tested` is a separate statement: whether that Lab and Sim pair
-was verified with real jobs, which so far is only Isaac Lab 3.0.0 on Isaac Sim 6.2.
+was verified with real jobs; the tested pairs are Lab 3.0.0 on Sim 6.2 and Lab 2.3.2 on Sim 5.1.
 
 | `layout` | Scripts | Library | Display |
 |---|---|---|---|
