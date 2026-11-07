@@ -1275,6 +1275,11 @@ def join_timeout(duration: float) -> int:
     return int(max(60, min(900, 30 + 3 * duration)))
 
 
+def _label_tag(label) -> str:
+    """'-name' for a screenshot file name; empty without a label. Only letters, digits, - and _."""
+    return "-" + re.sub(r"[^A-Za-z0-9_-]", "_", str(label))[:40] if label else ""
+
+
 def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
 
@@ -1500,6 +1505,7 @@ def register_screen_tools(
         window: _WindowTitle = None,
         window_id: _WindowId = None,
         max_width: Annotated[int, Field(description="Inline image width cap in pixels, 320-3840. The saved PNG stays full size.")] = 1600,
+        label: Annotated[str | None, Field(description="Short name added to the saved file, e.g. 'push_done'. Letters, digits, - and _ only; other characters become _; max 40.")] = None,
     ):
         """Capture the screen, a monitor or a window to see the result of your work. Returns the image
         and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise
@@ -1518,7 +1524,7 @@ def register_screen_tools(
             win = target
             full = _grab_window_image(win)
             source = f"{win['width']}x{win['height']}+{win['x']}+{win['y']}"
-            label = f"{win['title']} (id={win['id']})"
+            target_label = f"{win['title']} (id={win['id']})"
         else:
             bbox = _bbox(1 if monitor is None else monitor)
             composed = _screen_locked()
@@ -1529,9 +1535,9 @@ def register_screen_tools(
                     raw = sct.grab(bbox)
                 full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
             source = f"{bbox['width']}x{bbox['height']}+{bbox['left']}+{bbox['top']}"
-            label = f"monitor {1 if monitor is None else monitor}" + (
+            target_label = f"monitor {1 if monitor is None else monitor}" + (
                 f" (composed from {painted} window(s))" if composed else "")
-        path = SHOT_DIR / f"screen-{_stamp()}.png"
+        path = SHOT_DIR / f"screen-{_stamp()}{_label_tag(label)}.png"
         full.save(path, "PNG", optimize=True)
         inline = full
         if full.width > max_width:
@@ -1542,7 +1548,7 @@ def register_screen_tools(
             f"saved size: {full.width}x{full.height}\n"
             f"inline size: {inline.width}x{inline.height}\n"
             f"source: {source}\n"
-            f"window: {label}"
+            f"window: {target_label}"
         )
         if inline.width != full.width:
             # OpenAI's computer-use guide: map coordinates from a downscaled screenshot back to the

@@ -360,7 +360,9 @@ Every project under `projects/` inherits these rules. A project's own
 This workspace has the `isaac` MCP server. Before you write your own
 simulation, screenshot, recording or contact-logging code, try it:
 
-1. Load the tools: `ToolSearch` for `mcp__isaac` (or `refresh_tools`).
+1. Load the tools: `ToolSearch` for `mcp__isaac`, then call `isaac_help` with
+   what you want to do (for example "record a video" or "why did the grasp
+   fail"). It names the exact tools. Do not start from `sim__quick_start`.
 2. Run `status` and `list_bridges`. If a simulator is up, work through it.
 3. If nothing is up, start one with `sim__launch` (or `isaaclab__play` /
    `isaaclab__train` for Isaac Lab tasks) before falling back to scripts.

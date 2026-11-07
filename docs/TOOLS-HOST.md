@@ -21,6 +21,7 @@ bridge is unavailable.
 
 | MCP tool | Arguments | Use and effects |
 |---|---|---|
+| `isaac_help` | `task` (optional text) | Start here. Names the isaac tools to load and call for what you want to do (record a video, find why a grasp failed, train a policy, start a simulator). Reads nothing from the simulator and works with no bridge. |
 | `refresh_tools` | `wait_s=0` (seconds, clamped to 0-180) | Rediscover the selected bridge's registry after a bridge starts or a module changes. If nothing listens on the selected port and exactly one managed session started by this server is live on another loopback port (its PID and readiness checked), it selects that session, says so and why, and the choice lasts until `use_bridge` or a restart; this applies with `wait_s=0` too. It never leaves a port that answers, and with several sessions it names them instead. Adds or updates visible tools and removes tools no longer advertised; catalog-listed tools remain visible as proxies. A failed or malformed discovery, or a collision between bridge tool names or with a host tool, leaves the existing list intact. The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after a refresh that changed the list; a client that ignores the notification still needs a reconnect (or `python3 mcp/isaac_mcp/client.py list_tools`). When no bridge answers, or one accepts the connection but `list_tools` times out, the error says Kit is probably still starting and names any managed `sim__launch` session with its age; with `wait_s` > 0 it polls every 3 s until the bridge answers or the time runs out (the last sleep is shorter, so it uses the whole wait). When nothing listens on the selected port and another bridge is advertised, the error names the endpoint it tried, lists each advertised bridge's port, PID and app with the `use_bridge` call, and does not suggest waiting; an explicit `wait_s` is still honored, since you may be starting a simulator on that port. It returns at once on an ambiguous "multiple bridges" error, and when nothing listens on the selected port and this server launched several simulators that are still live: it will not choose one, so call `use_bridge`. A failed call sets MCP `isError`, with the same text. A first Kit start took 172 s on a lab PC. |
 | `use_bridge` | `port` (integer, required) | Connect to a different bridge on that port, report its identity, and replace the previously discovered bridge tools. The choice lasts until the host server restarts. Sends `notifications/tools/list_changed` after replacing the tools. A failed connection or tool discovery sets MCP `isError`. |
 
@@ -62,7 +63,7 @@ startup with a message listing the valid names; it never registers nothing silen
 | `isaaclab_probe` | `isaaclab__install_info`, `isaaclab__envs_list` |
 | `isaaclab_jobs` | `isaaclab__runs_list`, `isaaclab__runs_status`, `isaaclab__runs_tail` |
 | `isaaclab_run` | `isaaclab__train`, `isaaclab__eval`, `isaaclab__play`, `isaaclab__runs_cancel` |
-| `screen_read` | `screen_info`, `list_windows`, `screen_recording_status` |
+| `screen_read` | `screen_info`, `list_windows`, `screen_recording_status`, `isaac_help` |
 | `screen_capture` | `screenshot`, `start_screen_recording`, `stop_screen_recording`, `join_videos` |
 | `screen_control` | `raise_window`, `move_window`, `tile_windows` |
 | `screen_input` | `window_click`, `window_drag`, `window_scroll`, `window_type`, `window_key` (explicit opt-in) |
@@ -101,7 +102,7 @@ conservative destructive and open-world annotations. To enable the separate simu
   `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 69 generic `sim`/`assets`
   tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
   and optional managed-session tools are unaffected. With standard local groups, opting out
-  gives 54 tools, offline or with a bridge. These are visibility controls, not isolation.
+  gives 55 tools, offline or with a bridge. These are visibility controls, not isolation.
 - `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
   server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
   [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.
