@@ -33,6 +33,14 @@ untested.
 `<workspace>` can be any folder you own. The default is `~/isaac-workspace`, or whatever
 `ISAAC_MCP_WORKSPACE` says. It must not be inside the checkout; `init` refuses that.
 
+## Agent rules for every project
+
+`init` writes `<workspace>/AGENTS.md` and `<workspace>/CLAUDE.md` (which only contains `@AGENTS.md`). Claude Code, Codex
+and OpenCode read parent-folder instruction files, so every project under `projects/` gets them. The text is the `AGENTS`
+constant in `scripts/isaac_env.py`. In short: load the `mcp__isaac` tools, run `status` and `list_bridges`, use the
+screenshot, recording, contact and Isaac Lab tools, and say why before falling back to plain scripts. A project's own
+`AGENTS.md` can add to it. Run `init` again on an old workspace to add the files; nothing is overwritten.
+
 ## Set up a new machine
 
 1. **Create the folder and clone into it.**

@@ -259,6 +259,21 @@ That is it. From there, use any prompt above. Trouble connecting? See
 > Keep the bridge on loopback and approve only project folders you trust. See the
 > [trust limits](docs/TOOLS-HOST.md#trust-and-operational-limits).
 
+## Make your agent actually use it
+
+Agents often skip MCP tools and write their own scripts, screenshots and logging, even when the server is installed.
+Two things fix that:
+
+1. **Put the rule where every project inherits it.** `python3 scripts/isaac_env.py init` now writes `AGENTS.md` and
+   `CLAUDE.md` into your workspace folder (existing files are never overwritten). They tell the agent to load the
+   `mcp__isaac` tools, check `status`, and try the server before writing its own code. For an existing workspace, run
+   `init` again; it only adds the missing files. For a standalone repo, copy the block from
+   [docs/WORKSPACE.md](docs/WORKSPACE.md#agent-rules-for-every-project) into the repo's `AGENTS.md`.
+2. **Ask by name in the first prompt.** For example: "Use the isaac MCP for screenshots, recordings and contact checks.
+   If you can't, say why before you write a script."
+
+Headless runs are fine: `sim__camera__capture` takes pictures without a window.
+
 ## How it fits together
 
 Three programs are involved, and it helps to know which does what.
