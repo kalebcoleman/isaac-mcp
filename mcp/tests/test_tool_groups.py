@@ -153,7 +153,7 @@ def test_register_functions_default_to_standard_groups_on_a_plain_server():
     from isaac_mcp.isaaclab.tools import register_isaaclab_tools
     register_isaaclab_tools(plain)
     assert set(plain._tool_manager._tools) == (
-        lt.DEFAULT_TOOLS - lt.GROUPS["gateway"])
+        lt.DEFAULT_TOOLS - lt.GROUPS["gateway"] - {"isaac_help"})
 
 
 # ---- guards against a future tool escaping the scheme ----------------------------------

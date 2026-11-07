@@ -41,7 +41,7 @@ GROUPS: dict[str, frozenset[str]] = {
     "isaaclab_run": frozenset({
         "isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__runs_cancel",
     }),
-    "screen_read": frozenset({"screen_info", "list_windows", "screen_recording_status"}),
+    "screen_read": frozenset({"screen_info", "list_windows", "screen_recording_status", "isaac_help"}),
     "screen_capture": frozenset({
         "screenshot", "start_screen_recording", "stop_screen_recording", "join_videos",
     }),

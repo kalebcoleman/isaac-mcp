@@ -41,6 +41,14 @@ constant in `scripts/isaac_env.py`. In short: load the `mcp__isaac` tools, run `
 screenshot, recording, contact and Isaac Lab tools, and say why before falling back to plain scripts. A project's own
 `AGENTS.md` can add to it. Run `init` again on an old workspace to add the files; nothing is overwritten.
 
+To see at the start of every session whether a bridge is up, add a Claude Code hook to `~/.claude/settings.json`.
+`scripts/session_check.py` prints one line and always exits 0:
+
+```json
+{"hooks": {"SessionStart": [{"hooks": [{"type": "command",
+  "command": "python3 /path/to/isaac-mcp/scripts/session_check.py"}]}]}}
+```
+
 ## Set up a new machine
 
 1. **Create the folder and clone into it.**

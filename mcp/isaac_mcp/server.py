@@ -65,7 +65,7 @@ from .scene_contracts import HOST_ONLY
 from .tool_hints import CATALOG_HINTS
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
-from .local_tools import DEFAULT_GROUPS, IDEMPOTENT_WRITE, ScopedTools, local_tool_groups, strip_schema_titles
+from .local_tools import DEFAULT_GROUPS, IDEMPOTENT_WRITE, READ_ONLY, ScopedTools, local_tool_groups, strip_schema_titles
 from .desktop_input import register_desktop_input_tools
 from .sim_sessions import live_sessions, register_sim_session_tools
 from .screen import register_screen_tools
@@ -100,7 +100,9 @@ SERVER_INSTRUCTIONS = os.getenv(
     "even if it is covered. When a job or scene is running with a window (isaaclab__play, "
     "headless=false), look at it yourself: take screenshots or a short recording to check the result "
     "and decide the next step, without waiting to be asked. isaaclab__runs_status reports the job's "
-    "window for screenshot(window_id=...).")
+    "window for screenshot(window_id=...). Prefer these tools over writing your own capture, recording, "
+    "contact-logging or training-launch code. For evidence call screenshot(label=...) or "
+    "start_screen_recording; headless runs use sim__camera__capture. If you skip them, say why.")
 
 RESPONSE_TIMEOUT_S = 300.0
 # Discovery must not make host recovery tools wait behind a stalled native Kit
@@ -1498,6 +1500,38 @@ def _reported(text: str) -> Any:
     return text
 
 
+_HELP_TOPICS = (
+    ("see or record the result", ("screenshot", "record", "video", "picture", "frame", "evidence", "show", "look"),
+     "screenshot(label=...) for a window; start_screen_recording / stop_screen_recording / join_videos for video; "
+     "sim__camera__create + sim__camera__capture when headless. Save absolute paths and show them to the user."),
+    ("find out why something failed (contacts, forces, poses)", ("contact", "collision", "fail", "force", "grasp", "stuck", "why", "debug", "pose"),
+     "sim__physics__contacts, sim__physics__inspect, sim__body__state, sim__joints__state, sim__prim__measure, "
+     "sim__prim__bounds, sim__physics__raycast."),
+    ("build or change a scene", ("scene", "build", "robot", "load", "spawn", "import", "asset", "stage", "usd", "urdf"),
+     "sim__quick_start (new scene), sim__stage__info (existing), sim__prim__create / create_many, assets__search, "
+     "assets__import_path. ur5e_dt__* only for the lab UR5e twin."),
+    ("move a robot", ("move", "joint", "arm", "ik", "controller", "drive", "grip"),
+     "sim__joints__state, sim__joints__move, sim__joints__drive, sim__arm__ik, sim__arm__fk, sim__controller__create."),
+    ("train or evaluate a policy", ("train", "rl", "policy", "reward", "eval", "isaac lab", "isaaclab", "play", "checkpoint"),
+     "isaaclab__envs_list, isaaclab__train, isaaclab__runs_status, isaaclab__runs_tail, isaaclab__metrics_summary, "
+     "isaaclab__eval, isaaclab__play, isaaclab__runs_cancel. No bridge needed."),
+    ("start, check or recover a simulator", ("start", "launch", "bridge", "kit", "hang", "stuck kit", "status", "connect"),
+     "status, list_bridges, refresh_tools(wait_s=120), use_bridge, sim__launch, sim__status, sim__stop, sim__logs__tail."),
+)
+
+
+def _isaac_help(task: Optional[str]) -> str:
+    words = (task or "").lower()
+    hits = [t for t in _HELP_TOPICS if any(k in words for k in t[1])] if words else []
+    chosen = hits or list(_HELP_TOPICS)
+    lines = ["Use these isaac tools before writing your own code. If you skip them, say why."]
+    if task and not hits:
+        lines.append(f"No topic matched {task!r}; the full map follows.")
+    lines += [f"- {name}: {tools}" for name, _, tools in chosen]
+    lines.append("First calls: status and list_bridges. No bridge? sim__launch, or just use isaaclab__* and the screen tools.")
+    return "\n".join(lines)
+
+
 def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
     """Register ``refresh_tools`` and ``use_bridge`` (the ``gateway`` group) on ``server``.
 
@@ -1514,6 +1548,13 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
         launched the only live simulator, it selects that one and says so; otherwise it names
         candidates for use_bridge."""
         return _reported(await _refresh_tools(server, ctx, wait_s))
+
+    @mcp.tool(annotations=READ_ONLY)
+    def isaac_help(task: Annotated[str | None, Field(description="What you are trying to do, in a few words, e.g. 'record a video', 'why did the grasp fail', 'train a policy'. Omit for the full map.")] = None) -> str:
+        """Start here. Say what you want to do and get the exact isaac tools to load and call, in order,
+        instead of writing your own screenshot, recording, contact-logging or training code. Reads
+        nothing from the simulator and works with no bridge."""
+        return _isaac_help(task)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE, description=(
         "Switch this MCP server to another running Kit bridge on this machine. Use it when several run "

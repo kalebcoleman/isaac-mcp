@@ -10,7 +10,13 @@ bridge's own metadata takes precedence over these snapshots once discovered.
 
 ## Host gateway and desktop
 
-Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 12 tools.
+Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 13 tools.
+
+### `isaac_help`
+
+Start here. Say what you want to do and get the exact isaac tools to load and call, in order, instead of writing your own screenshot, recording, contact-logging or training code. Reads nothing from the simulator and works with no bridge.
+
+- `task` (str | None, default `None`): What you are trying to do, in a few words, e.g. 'record a video', 'why did the grasp fail', 'train a policy'. Omit for the full map.
 
 ### `join_videos`
 
@@ -76,6 +82,7 @@ Capture the screen, a monitor or a window to see the result of your work. Return
 - `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
 - `window_id` (int | None, default `None`): Window id from list_windows.
 - `max_width` (int, default `1600`): Inline image width cap in pixels, 320-3840. The saved PNG stays full size.
+- `label` (str | None, default `None`): Short name added to the saved file, e.g. 'push_done'. Letters, digits, - and _ only; other characters become _; max 40.
 
 ### `start_screen_recording`
 
