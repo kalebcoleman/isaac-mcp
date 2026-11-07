@@ -1524,7 +1524,7 @@ def register_screen_tools(
             win = target
             full = _grab_window_image(win)
             source = f"{win['width']}x{win['height']}+{win['x']}+{win['y']}"
-            label = f"{win['title']} (id={win['id']})"
+            target_label = f"{win['title']} (id={win['id']})"
         else:
             bbox = _bbox(1 if monitor is None else monitor)
             composed = _screen_locked()
@@ -1535,7 +1535,7 @@ def register_screen_tools(
                     raw = sct.grab(bbox)
                 full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
             source = f"{bbox['width']}x{bbox['height']}+{bbox['left']}+{bbox['top']}"
-            label = f"monitor {1 if monitor is None else monitor}" + (
+            target_label = f"monitor {1 if monitor is None else monitor}" + (
                 f" (composed from {painted} window(s))" if composed else "")
         path = SHOT_DIR / f"screen-{_stamp()}{_label_tag(label)}.png"
         full.save(path, "PNG", optimize=True)
@@ -1548,7 +1548,7 @@ def register_screen_tools(
             f"saved size: {full.width}x{full.height}\n"
             f"inline size: {inline.width}x{inline.height}\n"
             f"source: {source}\n"
-            f"window: {label}"
+            f"window: {target_label}"
         )
         if inline.width != full.width:
             # OpenAI's computer-use guide: map coordinates from a downscaled screenshot back to the

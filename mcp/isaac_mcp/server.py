@@ -100,7 +100,7 @@ SERVER_INSTRUCTIONS = os.getenv(
     "even if it is covered. When a job or scene is running with a window (isaaclab__play, "
     "headless=false), look at it yourself: take screenshots or a short recording to check the result "
     "and decide the next step, without waiting to be asked. isaaclab__runs_status reports the job's "
-    "window for screenshot(window_id=...). Prefer these tools over writing your own capture, recording, "
+    "window for screenshot(window_id=...). Start with isaac_help(task): it names the tools for what you want to do. Prefer these tools over writing your own capture, recording, "
     "contact-logging or training-launch code. For evidence call screenshot(label=...) or "
     "start_screen_recording; headless runs use sim__camera__capture. If you skip them, say why.")
 
@@ -1522,7 +1522,7 @@ _HELP_TOPICS = (
 
 def _isaac_help(task: Optional[str]) -> str:
     words = (task or "").lower()
-    hits = [t for t in _HELP_TOPICS if any(k in words for k in t[1])] if words else []
+    hits = [t for t in _HELP_TOPICS if any(re.search(rf"\b{re.escape(k)}", words) for k in t[1])] if words else []
     chosen = hits or list(_HELP_TOPICS)
     lines = ["Use these isaac tools before writing your own code. If you skip them, say why."]
     if task and not hits:
@@ -1533,7 +1533,7 @@ def _isaac_help(task: Optional[str]) -> str:
 
 
 def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
-    """Register ``refresh_tools`` and ``use_bridge`` (the ``gateway`` group) on ``server``.
+    """Register ``refresh_tools`` and ``use_bridge`` (the ``gateway`` group) and ``isaac_help`` on ``server``.
 
     Bridge discovery itself runs from the server lifespan, so omitting these two tools does not
     stop startup discovery; it only removes the client's way to re-run or redirect it."""

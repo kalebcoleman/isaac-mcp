@@ -31,3 +31,24 @@ def test_isaac_help_routes_by_task_and_falls_back():
     both = gw._isaac_help("something odd")
     assert "No topic matched" in both and "screenshot" in both and "isaaclab__train" in both
     assert "sim__launch" in gw._isaac_help(None)
+
+
+def test_session_check_survives_bad_port_env_and_args():
+    import os
+    env = dict(os.environ, ISAAC_MCP_PORT="not-a-number")
+    for args in ([], ["--bogus"]):
+        r = subprocess.run([sys.executable, str(ROOT / "scripts" / "session_check.py"), *args],
+                           capture_output=True, text=True, timeout=30, env=env)
+        assert r.returncode == 0 and r.stdout.startswith("isaac MCP:")
+
+
+def test_isaac_help_matches_word_starts_not_substrings():
+    assert "isaaclab__train" not in gw._isaac_help("build a world")
+    assert "sim__quick_start" in gw._isaac_help("build a world")
+
+
+def test_screenshot_label_is_not_shadowed_by_the_window_caption():
+    import inspect
+    src = inspect.getsource(screen.register_screen_tools)
+    body = src[src.index("def screenshot("):src.index("def start_screen_recording(")]
+    assert "_label_tag(label)" in body and "\n            label = " not in body and "target_label = f" in body

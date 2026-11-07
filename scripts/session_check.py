@@ -26,11 +26,14 @@ def report(port=None):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--port", type=int, default=int(os.environ["ISAAC_MCP_PORT"]) if os.environ.get("ISAAC_MCP_PORT") else None)
-    args = ap.parse_args(argv)
     try:
-        print(report(args.port))
+        ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+        ap.add_argument("--port", type=int, default=None)
+        args = ap.parse_args(argv)
+        port = args.port if args.port is not None else (int(os.environ["ISAAC_MCP_PORT"]) if os.environ.get("ISAAC_MCP_PORT") else None)
+        print(report(port))
+    except SystemExit:
+        print("isaac MCP: bad arguments to session_check. Still try the mcp__isaac tools first.")
     except Exception as exc:
         print(f"isaac MCP: check failed ({type(exc).__name__}). Still try the mcp__isaac tools first.")
     return 0

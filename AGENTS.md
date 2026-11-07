@@ -88,7 +88,7 @@ find out. Fewer tools mean a filter:
 
 The other 7 tools are the bridge built-ins, also listed from a snapshot. With the standard
 groups there are 124 tools in total; the optional desktop input and simulator session groups add 9 more.
-`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 54 tools with otherwise standard settings.
+`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 55 tools with otherwise standard settings.
 These filters control discovery, not security.
 
 `ur5e_dt__quick_start*` leaves the timeline playing, and generic edits refuse with `TIMELINE_ACTIVE` until an
