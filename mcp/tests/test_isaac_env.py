@@ -332,10 +332,14 @@ def test_init_creates_layout_idempotent_and_never_overwrites(world):
     assert "asset_path" in r.stdout
     for d in ("isaac-mcp-assets", "envs", "projects", "runs"):
         assert (target / d).is_dir()
+    assert "Try the Isaac MCP first" in (target / "AGENTS.md").read_text()
+    assert (target / "CLAUDE.md").read_text() == "@AGENTS.md\n"
+    (target / "AGENTS.md").write_text("mine too")
     (target / "README.md").write_text("mine")
     (target / "isaac-mcp-assets" / "keep.txt").write_text("x")
     assert run_cli(world, "init", "--workspace", str(target)).returncode == 0
     assert (target / "README.md").read_text() == "mine" and (target / "isaac-mcp-assets" / "keep.txt").exists()
+    assert (target / "AGENTS.md").read_text() == "mine too"
 
 
 def test_init_does_not_create_group_writable_folders(world):

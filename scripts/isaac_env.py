@@ -45,6 +45,7 @@ by the tools.
               `scripts/isaac_env.py find` picks them up automatically.
 - `projects/` one folder per project; put an `isaac-mcp.json` in each.
 - `runs/`     training runs, logs, recordings and other outputs.
+- `AGENTS.md`, `CLAUDE.md`  rules every agent in this workspace reads: try the Isaac MCP first.
 
 Set `ISAAC_MCP_WORKSPACE` to this folder to make it the default.
 """
@@ -348,6 +349,41 @@ def cmd_resolve(args, env):
     print(chosen["path"])
     return 0
 
+AGENTS = """\
+# Isaac workspace: agent rules
+
+Every project under `projects/` inherits these rules. A project's own
+`AGENTS.md` may add to them.
+
+## Try the Isaac MCP first
+
+This workspace has the `isaac` MCP server. Before you write your own
+simulation, screenshot, recording or contact-logging code, try it:
+
+1. Load the tools: `ToolSearch` for `mcp__isaac` (or `refresh_tools`).
+2. Run `status` and `list_bridges`. If a simulator is up, work through it.
+3. If nothing is up, start one with `sim__launch` (or `isaaclab__play` /
+   `isaaclab__train` for Isaac Lab tasks) before falling back to scripts.
+4. Use it for what it already does:
+   - `screenshot`, `start_screen_recording`, `stop_screen_recording`,
+     `sim__camera__capture`, `join_videos` for evidence;
+   - `sim__physics__contacts`, `sim__physics__inspect`, `sim__joints__state`,
+     `sim__body__state`, `sim__prim__measure` for diagnosis;
+   - `isaaclab__train`, `isaaclab__eval`, `isaaclab__runs_tail`,
+     `isaaclab__metrics_summary` for training.
+5. Headless is fine. Capture frames with `sim__camera__capture` instead of a
+   window screenshot.
+
+If you do not use it, say why in your first status message: tools not
+connected, no bridge, wrong Isaac version, or a missing feature. Use plain
+scripts only after that. Do not skip it silently.
+
+## Keep the user informed
+
+Post a screenshot or video frame at each milestone, with absolute paths.
+Name any MCP gap you hit so it can be fixed.
+"""
+
 
 def _default_workspace(env):
     return Path(os.path.expanduser(env.get("ISAAC_MCP_WORKSPACE") or "~/" + DEFAULT_WORKSPACE_NAME))
@@ -372,6 +408,12 @@ def cmd_init(args, env, repo=REPO):
         readme = ws / "README.md"
         if not readme.exists():
             readme.write_text(README, encoding="utf-8")
+        agents = ws / "AGENTS.md"
+        if not agents.exists():
+            agents.write_text(AGENTS, encoding="utf-8")
+        claude = ws / "CLAUDE.md"
+        if not claude.exists():
+            claude.write_text("@AGENTS.md\n", encoding="utf-8")
     except OSError as exc:
         print(f"cannot create workspace {ws}: {exc}", file=sys.stderr)
         return 1
