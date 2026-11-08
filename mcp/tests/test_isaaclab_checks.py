@@ -57,6 +57,7 @@ def test_runner_end_to_end_with_fake_gymnasium(tmp_path, monkeypatch):
     script.write_text("import gymnasium\nenv = gymnasium.make('T')\nfor _ in range(10): env.step([0.0])\nenv.close()\n")
     out = tmp_path / "check_result.json"
     monkeypatch.syspath_prepend(str(fake))
+    monkeypatch.delitem(sys.modules, "gymnasium", raising=False)
     monkeypatch.setattr(cr, "gpu_mib_for_pid", lambda pid: 1234)
     monkeypatch.setattr(cr, "_prepare", lambda: None)
     assert cr.main(["--steps", "4", "--output", str(out), "--script", str(script), "--", "--task", "T"]) == 0
@@ -113,3 +114,52 @@ def test_status_reads_check_result_and_videos(monkeypatch, tmp_path):
     assert jobs._check_result(jd) == {"steps": 3, "ok": True}
     (jd / "job.json").write_text(json.dumps({"job_id": jd.name, "kind": "record", "log_dir": str(jd), "status": "succeeded"}))
     assert jobs._crashed_with_exit_zero(jd) is None
+
+
+def test_runner_stops_a_loop_that_checks_sim_is_running(tmp_path, monkeypatch):
+    """Lab 3's agents loop on env.unwrapped.sim.is_running(); the runner must end that loop at the target."""
+    fake = tmp_path / "fakes"
+    fake.mkdir()
+    (fake / "gymnasium.py").write_text(
+        "class _Sim:\n    def is_running(s): return True\n"
+        "class _Env:\n"
+        "    def __init__(s): s.unwrapped=s; s.sim=_Sim(); s.action_space=type('A',(),{'sample':lambda self:[0.0]})()\n"
+        "    def step(s,a): return [[0.0]], [1.0], [False], [False], {}\n"
+        "    def close(s): pass\n"
+        "def make(*a, **k): return _Env()\n")
+    script = tmp_path / "agent.py"
+    script.write_text("import gymnasium\nenv = gymnasium.make('T')\nn=0\n"
+                      "while env.unwrapped.sim.is_running():\n    env.step([0.0]); n+=1\n    assert n < 1000\n")
+    out = tmp_path / "r.json"
+    monkeypatch.syspath_prepend(str(fake))
+    monkeypatch.delitem(sys.modules, "gymnasium", raising=False)
+    monkeypatch.setattr(cr, "_prepare", lambda: None)
+    monkeypatch.setattr(cr, "gpu_mib_for_pid", lambda pid: None)
+    assert cr.main(["--steps", "7", "--output", str(out), "--script", str(script), "--", "--task", "T"]) == 0
+    assert json.loads(out.read_text())["steps"] == 7
+
+
+def test_runner_raises_past_the_target_for_a_loop_with_no_stop_check(tmp_path, monkeypatch):
+    fake = tmp_path / "fakes"
+    fake.mkdir()
+    (fake / "gymnasium.py").write_text(
+        "class _Env:\n    def __init__(s): s.action_space=type('A',(),{'sample':lambda self:[0.0]})()\n"
+        "    def step(s,a): return [[0.0]], [1.0], [False], [False], {}\n    def close(s): pass\n"
+        "def make(*a, **k): return _Env()\n")
+    script = tmp_path / "agent.py"
+    script.write_text("import gymnasium\nenv = gymnasium.make('T')\nfor _ in range(10**6): env.step([0.0])\n")
+    out = tmp_path / "r.json"
+    monkeypatch.syspath_prepend(str(fake))
+    monkeypatch.delitem(sys.modules, "gymnasium", raising=False)
+    monkeypatch.setattr(cr, "_prepare", lambda: None)
+    monkeypatch.setattr(cr, "gpu_mib_for_pid", lambda pid: None)
+    assert cr.main(["--steps", "5", "--output", str(out), "--script", str(script), "--", "--task", "T"]) == 0
+    assert json.loads(out.read_text())["steps"] == 5
+
+
+def test_native_agent_video_detection(tmp_path):
+    assert not jobs._native_agent_video(tmp_path)
+    d = tmp_path / "source" / "isaaclab_rl" / "isaaclab_rl" / "entrypoints"
+    d.mkdir(parents=True)
+    (d / "simple_agents.py").write_text("")
+    assert jobs._native_agent_video(tmp_path)

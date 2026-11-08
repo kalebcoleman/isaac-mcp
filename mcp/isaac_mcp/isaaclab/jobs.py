@@ -1239,12 +1239,18 @@ def _check_job(kind: str, python: str, root: Any, task: str, num_envs: int, step
                                      "agent": agent, "video_length": video_length})
 
 
+def _native_agent_video(root: Any) -> bool:
+    """Lab 3's checkpoint-free agents take --video and --max_steps themselves."""
+    return (Path(root) / "source" / "isaaclab_rl" / "isaaclab_rl" / "entrypoints" / "simple_agents.py").is_file()
+
+
 def env_check(python: str, root: Any, task: str, num_envs: int = 4, steps: int = 60, agent: str = "zero",
               headless: bool = True, physics: str | None = None, extra_args: Any = None,
               timeout_s: float | None = 900, allow_concurrent: bool = False,
               allow_concurrent_gpu: bool = False) -> dict[str, Any]:
     return _check_job("env_check", python, root, task, num_envs, steps, agent, headless, physics, extra_args,
-                      timeout_s, allow_concurrent, allow_concurrent_gpu, [])
+                      timeout_s, allow_concurrent, allow_concurrent_gpu,
+                      ["--max_steps", str(int(steps))] if _native_agent_video(root) else [])
 
 
 def record(python: str, root: Any, task: str, checkpoint: Any = None, num_envs: int = 1, video_length: int = 200,
@@ -1258,9 +1264,15 @@ def record(python: str, root: Any, task: str, checkpoint: Any = None, num_envs: 
                    extra_args=extras, timeout_s=timeout_s, rl_library=rl_library,
                    allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
         return {**out, "note": "policy playback; isaaclab__runs_status lists video_paths when it finishes"}
-    out = _check_job("record", python, root, task, num_envs, video_length + 1, agent, headless, physics,
-                     extra_args, timeout_s, allow_concurrent, allow_concurrent_gpu, ["--enable_cameras"],
-                     video_length=video_length)
+    if _native_agent_video(root):
+        # Lab 3's zero/random agents record and stop by themselves (--video, --max_steps): no wrapper needed.
+        out = _check_job("env_check", python, root, task, num_envs, video_length + 1, agent, headless, physics,
+                         extra_args, timeout_s, allow_concurrent, allow_concurrent_gpu,
+                         ["--video", "--video_length", str(video_length), "--max_steps", str(video_length + 1)])
+    else:
+        out = _check_job("record", python, root, task, num_envs, video_length + 1, agent, headless, physics,
+                         extra_args, timeout_s, allow_concurrent, allow_concurrent_gpu, ["--enable_cameras"],
+                         video_length=video_length)
     return {**out, "note": f"{agent} actions, no policy; isaaclab__runs_status lists video_paths when it finishes"}
 
 

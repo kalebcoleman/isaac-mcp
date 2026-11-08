@@ -199,6 +199,10 @@ def build_command(python: str, script: str, script_args: list[str], output: str,
     return cmd + ["--script", str(script), "--", *[str(a) for a in script_args]]
 
 
+class CheckStop(BaseException):
+    """Raised on a step after the target, if the agent loop ignored every ``is_running()`` check."""
+
+
 class _Hooks:
     def __init__(self, stats: CheckStats, output: str, mode: str, task: str | None,
                  video_dir: str | None, video_length: int):
@@ -235,7 +239,19 @@ class _Hooks:
         original_step = env.step
         original_close = getattr(env, "close", None)
 
+        sim = getattr(getattr(env, "unwrapped", None), "sim", None)
+        sim_running = getattr(sim, "is_running", None)
+        if callable(sim_running):  # Lab 3's agents loop on `sim.is_running()`, not the app's
+            def running(*args, **kwargs):
+                return False if self.stats.finished else bool(sim_running(*args, **kwargs))
+            try:
+                sim.is_running = running
+            except Exception:  # noqa: BLE001
+                pass
+
         def step(action):
+            if self.stats.finished:
+                raise CheckStop()
             t = time.perf_counter()
             result = original_step(action)
             dt = time.perf_counter() - t
@@ -332,6 +348,8 @@ def main(argv=None) -> int:
         sys.argv = [a.script, *args]
         sys.path.insert(0, os.path.dirname(os.path.abspath(a.script)))
         runpy.run_path(a.script, run_name="__main__")
+    except CheckStop:
+        pass  # the agent loop stepped past the target; the result is already complete
     except BaseException as exc:  # noqa: BLE001 - write what was measured, then exit non-zero
         hooks.failure = f"{type(exc).__name__}: {exc}"
         raise
