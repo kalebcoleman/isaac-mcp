@@ -1229,7 +1229,7 @@ def _check_job(kind: str, python: str, root: Any, task: str, num_envs: int, step
     steps = _positive_int(steps, "steps")
     extras = _with_physics(physics, root, _validate_extra_args(extra_args))
     argv = ["--task", task, "--num_envs", str(num_envs)]
-    argv += _visualizer_args(headless, extras)
+    argv += _visualizer_args(headless, extras + extra_flags)  # --video must not get --viz none
     argv += extra_flags
     argv += extras
     argv += _crash_upload_args(root, extras)

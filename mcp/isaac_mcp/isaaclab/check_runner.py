@@ -350,6 +350,10 @@ def main(argv=None) -> int:
         runpy.run_path(a.script, run_name="__main__")
     except CheckStop:
         pass  # the agent loop stepped past the target; the result is already complete
+    except SystemExit as exc:
+        if exc.code not in (None, 0):  # Lab's agent scripts end with SystemExit(0), which is a normal exit
+            hooks.failure = f"SystemExit: {exc.code}"
+            raise
     except BaseException as exc:  # noqa: BLE001 - write what was measured, then exit non-zero
         hooks.failure = f"{type(exc).__name__}: {exc}"
         raise

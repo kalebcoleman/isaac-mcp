@@ -163,3 +163,33 @@ def test_native_agent_video_detection(tmp_path):
     d.mkdir(parents=True)
     (d / "simple_agents.py").write_text("")
     assert jobs._native_agent_video(tmp_path)
+
+
+def test_a_script_that_ends_with_systemexit_zero_is_not_a_problem(tmp_path, monkeypatch):
+    fake = tmp_path / "fakes"
+    fake.mkdir()
+    (fake / "gymnasium.py").write_text(
+        "class _Env:\n    def __init__(s): s.action_space=type('A',(),{'sample':lambda self:[0.0]})()\n"
+        "    def step(s,a): return [[0.0]], [1.0], [False], [False], {}\n    def close(s): pass\n"
+        "def make(*a, **k): return _Env()\n")
+    script = tmp_path / "agent.py"
+    script.write_text("import gymnasium\nenv = gymnasium.make('T')\nfor _ in range(3): env.step([0.0])\nraise SystemExit(0)\n")
+    out = tmp_path / "r.json"
+    monkeypatch.syspath_prepend(str(fake))
+    monkeypatch.delitem(sys.modules, "gymnasium", raising=False)
+    monkeypatch.setattr(cr, "_prepare", lambda: None)
+    monkeypatch.setattr(cr, "gpu_mib_for_pid", lambda pid: None)
+    cr.main(["--steps", "3", "--output", str(out), "--script", str(script), "--", "--task", "T"])
+    data = json.loads(out.read_text())
+    assert data["ok"] and data["problems"] == []
+
+
+def test_record_with_native_video_does_not_pass_viz_none(monkeypatch, tmp_path):
+    d = tmp_path / "source" / "isaaclab_rl" / "isaaclab_rl" / "entrypoints"
+    d.mkdir(parents=True)
+    (d / "simple_agents.py").write_text("")
+    seen = {}
+    monkeypatch.setattr(jobs, "_start_job", lambda python, root, kind, task, argv, **kw: seen.update(argv=argv, kind=kind) or {"job_id": "j"})
+    jobs.record("py", tmp_path, "T", video_length=50)
+    assert "--video" in seen["argv"] and seen["argv"][seen["argv"].index("--viz") + 1] == "kit"
+    assert "--max_steps" in seen["argv"]
