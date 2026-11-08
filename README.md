@@ -349,6 +349,19 @@ A call that needs the bridge when no simulator is running returns an error that 
 | Add my own tools | [Tool authoring](mcp/docs/tool-authoring.md) |
 | See everything | [Documentation index](docs/README.md) |
 
+## Check a machine
+
+After installing, on any machine (this PC, a home PC, a lab PC):
+
+```bash
+"$(uv tool dir)/isaac-mcp/bin/python" scripts/smoke_test.py            # add --no-lab if Isaac Lab is not installed
+```
+
+It checks that the server lists `isaac_help` and the Isaac Lab tools, that `isaaclab__preflight` answers, and, when
+Isaac Lab is found (`ISAACLAB_PYTHON` and `ISAACLAB_ROOT`, or automatically), runs a real `isaaclab__env_check` and
+`isaaclab__record` on `Isaac-Cartpole`. It prints PASS, FAIL or SKIP per item and exits 1 on any FAIL.
+Install with `./install.sh --no-sim --claude-code` so the `[isaaclab]` extra (TensorBoard, for the metrics tools) is included.
+
 ## Development
 
 The host lives in `mcp/`, the Kit extensions in `exts/`, and setup and validation helpers in `scripts/`.

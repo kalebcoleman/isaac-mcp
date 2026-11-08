@@ -193,3 +193,9 @@ def test_record_with_native_video_does_not_pass_viz_none(monkeypatch, tmp_path):
     jobs.record("py", tmp_path, "T", video_length=50)
     assert "--video" in seen["argv"] and seen["argv"][seen["argv"].index("--viz") + 1] == "kit"
     assert "--max_steps" in seen["argv"]
+
+
+def test_mtime_of_missing_file_is_zero(tmp_path):
+    assert jobs._mtime(tmp_path / "nope.mp4") == 0.0
+    (tmp_path / "a.mp4").write_bytes(b"x")
+    assert jobs._mtime(tmp_path / "a.mp4") > 0

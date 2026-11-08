@@ -221,6 +221,13 @@ def _eval_result(job_dir: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _mtime(path: Any) -> float:
+    try:
+        return Path(path).stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def _check_result(job_dir: Path) -> dict[str, Any] | None:
     """The result file an env_check or record job's runner wrote, if it is there and readable."""
     try:
@@ -1365,6 +1372,9 @@ def runs_status(job_id: str) -> dict[str, Any]:
         out["timeout_s"] = data["timeout_s"]
     out.update(_log_facts(Path(data.get("log_dir", jd)) / "stdout.log"))
     videos = _video_paths(run_dir, Path(data.get("log_dir", jd)) / "stdout.log")
+    if videos and data.get("kind") in ("env_check", "record") and data.get("started_at"):
+        # Lab's agent scripts reuse one video folder per task: keep only clips this job wrote.
+        videos = [v for v in videos if _mtime(v) >= float(data["started_at"]) - 2]
     if videos:
         out["video_paths"] = videos
     if out.get("physics") is None and data.get("library"):
