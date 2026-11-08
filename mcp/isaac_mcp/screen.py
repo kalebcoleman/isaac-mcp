@@ -473,7 +473,10 @@ def _xdisplay():
     try:
         return xdisplay.Display(DISPLAY)
     except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"cannot open X display {DISPLAY}: {exc}") from exc
+        raise RuntimeError(
+            f"cannot open X display {DISPLAY}: {exc}. This machine has no reachable desktop (a headless or SSH "
+            "session). Screen tools need a desktop session; for a picture of a headless scene use "
+            "sim__camera__create + sim__camera__capture, or isaaclab__record for an Isaac Lab task.") from exc
 
 
 def _window_title(win, disp) -> str:

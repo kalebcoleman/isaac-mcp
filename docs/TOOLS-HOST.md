@@ -59,10 +59,10 @@ startup with a message listing the valid names; it never registers nothing silen
 
 | Group | Tools |
 |---|---|
-| `isaaclab_read` | `isaaclab__checkpoints_list`, `isaaclab__metrics_summary`, `isaaclab__tensorboard_tail` |
+| `isaaclab_read` | `isaaclab__checkpoints_list`, `isaaclab__metrics_summary`, `isaaclab__tensorboard_tail`, `isaaclab__preflight` |
 | `isaaclab_probe` | `isaaclab__install_info`, `isaaclab__envs_list` |
 | `isaaclab_jobs` | `isaaclab__runs_list`, `isaaclab__runs_status`, `isaaclab__runs_tail` |
-| `isaaclab_run` | `isaaclab__train`, `isaaclab__eval`, `isaaclab__play`, `isaaclab__runs_cancel` |
+| `isaaclab_run` | `isaaclab__train`, `isaaclab__eval`, `isaaclab__play`, `isaaclab__runs_cancel`, `isaaclab__env_check`, `isaaclab__record` |
 | `screen_read` | `screen_info`, `list_windows`, `screen_recording_status`, `isaac_help` |
 | `screen_capture` | `screenshot`, `start_screen_recording`, `stop_screen_recording`, `join_videos` |
 | `screen_control` | `raise_window`, `move_window`, `tile_windows` |

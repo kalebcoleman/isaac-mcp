@@ -221,6 +221,22 @@ def _eval_result(job_dir: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _mtime(path: Any) -> float:
+    try:
+        return Path(path).stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _check_result(job_dir: Path) -> dict[str, Any] | None:
+    """The result file an env_check or record job's runner wrote, if it is there and readable."""
+    try:
+        data = json.loads((job_dir / "check_result.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _write_job(job_dir: Path, data: dict[str, Any]) -> None:
     # Status/cancel readers do not all hold the watcher lock. Publish one whole
     # JSON snapshot so they see the previous or next record, never truncation.
@@ -873,6 +889,10 @@ def _crashed_with_exit_zero(job_dir: Path) -> str | None:
         score = _eval_result(log_dir)
         if score and not score.get("error") and score.get("stopped_by") in ("episodes", "max_steps"):
             return None  # the runner ended the play loop on purpose and wrote its result: a trace in stderr isn't a crash
+    if data.get("kind") in ("env_check", "record"):
+        result = _check_result(log_dir)
+        if result and result.get("steps", 0) >= 1 and not result.get("error"):
+            return None  # the runner ended the agent loop on purpose and wrote its result
     if data.get("kind") == "train":
         run_dir = _run_dir_from_log(log_dir / "stdout.log")
         if run_dir and _latest_checkpoint(run_dir):
@@ -947,6 +967,7 @@ def _start_job_locked(
     library: str | None = None,
     rl_library_check: str | None = None,
     eval_options: dict[str, Any] | None = None,
+    check_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     if not allow_concurrent:
@@ -965,8 +986,11 @@ def _start_job_locked(
     _require_video_support(python, extra_validated)
     root_path = Path(root).resolve()
     # script selection
-    script_rel = "train.py" if kind == "train" else "play.py"
-    script_path = root_path / "scripts" / "reinforcement_learning" / (library or "") / script_rel
+    if check_options is not None:
+        script_path = root_path / "scripts" / "environments" / f"{check_options['agent']}_agent.py"
+    else:
+        script_rel = "train.py" if kind == "train" else "play.py"
+        script_path = root_path / "scripts" / "reinforcement_learning" / (library or "") / script_rel
     if not script_path.is_file():
         raise ValueError(f"{_install.lab_label(root_path, _install.lab_profile(root_path))} has no "
                          f"{script_path.relative_to(root_path)}, so no job could start. "
@@ -976,7 +1000,16 @@ def _start_job_locked(
     job_id = _job_id(task)
     jd = jobs_dir() / job_id
     jd.mkdir(parents=True, exist_ok=True)
-    if eval_options is not None:
+    if check_options is not None:
+        from .check_runner import build_command as _check_command
+
+        video_dir = str((jd / "videos").resolve()) if check_options["mode"] == "record" else None
+        full_cmd = _check_command(
+            python, str(script_path), list(argv), str((jd / "check_result.json").resolve()),
+            mode=check_options["mode"], steps=check_options["steps"], video_dir=video_dir,
+            video_length=check_options.get("video_length", 200),
+        )
+    elif eval_options is not None:
         # The scoring runner replaces play.py as the entry point: it wraps gymnasium.make, then runs
         # the real script unchanged. It imports ISAACLAB_TASK_MODULES itself (see its module docstring).
         from .eval_runner import build_command as _eval_command
@@ -1039,6 +1072,8 @@ def _start_job_locked(
     }
     if eval_options is not None:
         data["eval"] = dict(eval_options)
+    if check_options is not None:
+        data["check"] = dict(check_options)
     _write_job(jd, data)
 
     with _jobs_lock:
@@ -1187,6 +1222,67 @@ def play(
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
 
+_AGENTS = ("zero", "random")
+
+
+def _check_job(kind: str, python: str, root: Any, task: str, num_envs: int, steps: int, agent: str,
+               headless: bool, physics: str | None, extra_args: Any, timeout_s: float | None,
+               allow_concurrent: bool, allow_concurrent_gpu: bool, extra_flags: list[str],
+               video_length: int = 200) -> dict[str, Any]:
+    _validate_task(task)
+    if agent not in _AGENTS:
+        raise ValueError(f"agent must be one of {', '.join(_AGENTS)}")
+    num_envs = _positive_int(num_envs, "num_envs")
+    steps = _positive_int(steps, "steps")
+    extras = _with_physics(physics, root, _validate_extra_args(extra_args))
+    argv = ["--task", task, "--num_envs", str(num_envs)]
+    argv += _visualizer_args(headless, extras + extra_flags)  # --video must not get --viz none
+    argv += extra_flags
+    argv += extras
+    argv += _crash_upload_args(root, extras)
+    return _start_job(python, root, kind, task, argv, timeout_s=timeout_s, allow_concurrent=allow_concurrent,
+                      allow_concurrent_gpu=allow_concurrent_gpu, headless=headless, extra_validated=extras,
+                      check_options={"mode": "check" if kind == "env_check" else "record", "steps": steps,
+                                     "agent": agent, "video_length": video_length})
+
+
+def _native_agent_video(root: Any) -> bool:
+    """Lab 3's checkpoint-free agents take --video and --max_steps themselves."""
+    return (Path(root) / "source" / "isaaclab_rl" / "isaaclab_rl" / "entrypoints" / "simple_agents.py").is_file()
+
+
+def env_check(python: str, root: Any, task: str, num_envs: int = 4, steps: int = 60, agent: str = "zero",
+              headless: bool = True, physics: str | None = None, extra_args: Any = None,
+              timeout_s: float | None = 900, allow_concurrent: bool = False,
+              allow_concurrent_gpu: bool = False) -> dict[str, Any]:
+    return _check_job("env_check", python, root, task, num_envs, steps, agent, headless, physics, extra_args,
+                      timeout_s, allow_concurrent, allow_concurrent_gpu,
+                      ["--max_steps", str(int(steps))] if _native_agent_video(root) else [])
+
+
+def record(python: str, root: Any, task: str, checkpoint: Any = None, num_envs: int = 1, video_length: int = 200,
+           agent: str = "zero", headless: bool = True, rl_library: str | None = None, physics: str | None = None,
+           extra_args: Any = None, timeout_s: float | None = 1800, allow_concurrent: bool = False,
+           allow_concurrent_gpu: bool = False) -> dict[str, Any]:
+    video_length = _positive_int(video_length, "video_length")
+    if checkpoint:
+        extras = _validate_extra_args(extra_args) + ["--video", "--video_length", str(video_length)]
+        out = play(python, root, task, checkpoint, num_envs=num_envs, headless=headless, physics=physics,
+                   extra_args=extras, timeout_s=timeout_s, rl_library=rl_library,
+                   allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
+        return {**out, "note": "policy playback; isaaclab__runs_status lists video_paths when it finishes"}
+    if _native_agent_video(root):
+        # Lab 3's zero/random agents record and stop by themselves (--video, --max_steps): no wrapper needed.
+        out = _check_job("env_check", python, root, task, num_envs, video_length + 1, agent, headless, physics,
+                         extra_args, timeout_s, allow_concurrent, allow_concurrent_gpu,
+                         ["--video", "--video_length", str(video_length), "--max_steps", str(video_length + 1)])
+    else:
+        out = _check_job("record", python, root, task, num_envs, video_length + 1, agent, headless, physics,
+                         extra_args, timeout_s, allow_concurrent, allow_concurrent_gpu, ["--enable_cameras"],
+                         video_length=video_length)
+    return {**out, "note": f"{agent} actions, no policy; isaaclab__runs_status lists video_paths when it finishes"}
+
+
 def runs_list(state: str | None = None) -> dict[str, Any]:
     if state and state not in RUN_STATES:
         raise ValueError(f"unknown state {state!r}: use one of {', '.join(RUN_STATES)}, or omit it for all")
@@ -1276,10 +1372,24 @@ def runs_status(job_id: str) -> dict[str, Any]:
         out["timeout_s"] = data["timeout_s"]
     out.update(_log_facts(Path(data.get("log_dir", jd)) / "stdout.log"))
     videos = _video_paths(run_dir, Path(data.get("log_dir", jd)) / "stdout.log")
+    if videos and data.get("kind") in ("env_check", "record") and data.get("started_at"):
+        # Lab's agent scripts reuse one video folder per task: keep only clips this job wrote.
+        videos = [v for v in videos if _mtime(v) >= float(data["started_at"]) - 2]
     if videos:
         out["video_paths"] = videos
     if out.get("physics") is None and data.get("library"):
         out["physics"] = "physx"  # a Lab with one script folder per library (2.x) announces no engine: it only has PhysX
+    if data.get("kind") in ("env_check", "record"):
+        result = _check_result(jd)
+        if result is not None:
+            out["env_check_result"] = result
+            if result.get("error") and not result.get("steps") and out["state"] == "succeeded":
+                out["state"] = "failed"
+        if data.get("kind") == "record":
+            vdir = jd / "videos"
+            found = sorted(str(x.resolve()) for x in vdir.glob("*.mp4")) if vdir.is_dir() else []
+            if found:
+                out["video_paths"] = found
     if data.get("kind") == "eval":
         result = _eval_result(jd)
         if result is not None:

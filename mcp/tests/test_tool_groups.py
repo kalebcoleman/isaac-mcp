@@ -181,7 +181,7 @@ def test_every_local_tool_is_annotated_and_read_only_matches_the_groups():
         ann = tool.annotations
         assert ann is not None, f"{name} has no annotations"
         python_tools = lt.GROUPS["isaaclab_probe"] | lt.GROUPS["screen_input"] | lt.GROUPS["sim_launch"] | {
-            "isaaclab__train", "isaaclab__eval", "isaaclab__play"}
+            "isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__env_check", "isaaclab__record"}
         assert ann.openWorldHint is (name in python_tools), name
         if name in lt.READ_ONLY_TOOLS:
             assert ann.readOnlyHint is True and ann.idempotentHint is True, name
@@ -196,7 +196,7 @@ def test_previous_readonly_selection_can_be_restored_explicitly():
     old_isaaclab_read = {
         "isaaclab__install_info", "isaaclab__envs_list", "isaaclab__runs_list",
         "isaaclab__runs_status", "isaaclab__runs_tail", "isaaclab__checkpoints_list",
-        "isaaclab__metrics_summary", "isaaclab__tensorboard_tail",
+        "isaaclab__metrics_summary", "isaaclab__tensorboard_tail", "isaaclab__preflight",
     }
     assert local_names(build("readonly,isaaclab_probe,isaaclab_jobs")) == (
         old_isaaclab_read | lt.GROUPS["screen_read"])

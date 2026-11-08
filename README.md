@@ -171,12 +171,12 @@ Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
 
 ## The tools
 
-A client lists **124 tools** by default, or **133** with both optional groups. Most scene work uses the first row.
+A client lists **127 tools** by default, or **136** with both optional groups. Most scene work uses the first row.
 
 | Group | Tools | What they do |
 |---|--:|---|
 | Generic scene and assets | 69 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Import USD and URDF, and manage named asset packs. |
-| Isaac Lab | 12 | Find an install, list tasks, train, evaluate and play, read metrics and checkpoints, cancel jobs. No simulator needed. |
+| Isaac Lab | 15 | Find an install, list tasks, check an environment, train, evaluate, play and record, check GPU room, read metrics and checkpoints, cancel jobs. No simulator needed. |
 | Host gateway and desktop | 13 | `isaac_help`, `refresh_tools`, `use_bridge`, and screenshots, recordings and window tools. |
 | Bridge built-ins | 7 | `status`, `run_python`, and file transfer into and out of the running simulator. |
 | UR5e digital twin | 23 | The RISE lab's UR5e twin, Kaleb's work with that robot. Only needed for that twin. |
@@ -348,6 +348,19 @@ A call that needs the bridge when no simulator is running returns an error that 
 | Check results or report a problem | [Verification](docs/VERIFICATION.md) · [Reproducibility](docs/REPRODUCIBILITY.md) |
 | Add my own tools | [Tool authoring](mcp/docs/tool-authoring.md) |
 | See everything | [Documentation index](docs/README.md) |
+
+## Check a machine
+
+After installing, on any machine (this PC, a home PC, a lab PC):
+
+```bash
+"$(uv tool dir)/isaac-mcp/bin/python" scripts/smoke_test.py            # add --no-lab if Isaac Lab is not installed
+```
+
+It checks that the server lists `isaac_help` and the Isaac Lab tools, that `isaaclab__preflight` answers, and, when
+Isaac Lab is found (`ISAACLAB_PYTHON` and `ISAACLAB_ROOT`, or automatically), runs a real `isaaclab__env_check` and
+`isaaclab__record` on `Isaac-Cartpole`. It prints PASS, FAIL or SKIP per item and exits 1 on any FAIL.
+Install with `./install.sh --no-sim --claude-code` so the `[isaaclab]` extra (TensorBoard, for the metrics tools) is included.
 
 ## Development
 
