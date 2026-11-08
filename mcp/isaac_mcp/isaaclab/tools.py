@@ -16,6 +16,7 @@ from ..local_tools import DESTRUCTIVE, IDEMPOTENT_WRITE, PYTHON_EXECUTION, READ_
 from . import install as _install
 from . import jobs as _jobs
 from . import metrics as _metrics
+from . import preflight as _preflight
 
 _NO_INSTALL = {
     "error": "no Isaac Lab install found",
@@ -191,6 +192,61 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             rl_library=rl_library, physics=physics, extra_args=extra_args, timeout_s=timeout_s,
             allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         )
+
+    @mcp.tool(name="isaaclab__env_check", annotations=PYTHON_EXECUTION)
+    def isaaclab_env_check(
+        task: _Task,
+        num_envs: Annotated[int, Field(description="Parallel environments; keep it small (default 4).")] = 4,
+        steps: Annotated[int, Field(description="Environment steps to run before stopping.")] = 60,
+        agent: Annotated[str, Field(description="zero (all-zero actions) or random.")] = "zero",
+        headless: _Headless = True,
+        physics: _Physics = None,
+        extra_args: _ExtraArgs = None,
+        timeout_s: _Timeout = 900,
+        allow_concurrent: _AllowConcurrent = False,
+        allow_concurrent_gpu: _AllowGpu = False,
+    ) -> str:
+        """Build a task, step it with zero or random actions, and report what is wrong, as a job. Returns job_id;
+        isaaclab__runs_status then gives `env_check_result`: observation and action shapes, reward statistics,
+        non-finite values, episode ends in the first steps, step time, GPU memory, and a `problems` list. Run it
+        before a long train, and after changing a scene or asset. Task-specific checks (a tip height, a tower
+        standing) still need the task's own script.
+
+        Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true."""
+        return _launch(_jobs.env_check, task=task, num_envs=num_envs, steps=steps, agent=agent, headless=headless,
+                       physics=physics, extra_args=extra_args, timeout_s=timeout_s,
+                       allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
+
+    @mcp.tool(name="isaaclab__record", annotations=PYTHON_EXECUTION)
+    def isaaclab_record(
+        task: _Task,
+        checkpoint: Annotated[str | None, Field(description="Checkpoint to play. Omit to record zero or random actions.")] = None,
+        video_length: Annotated[int, Field(description="Steps to record.")] = 200,
+        num_envs: Annotated[int, Field(description="Parallel environments.")] = 1,
+        agent: Annotated[str, Field(description="Without a checkpoint: zero or random.")] = "zero",
+        headless: _Headless = True,
+        rl_library: _RlLibrary = None,
+        physics: _Physics = None,
+        extra_args: _ExtraArgs = None,
+        timeout_s: _Timeout = 1800,
+        allow_concurrent: _AllowConcurrent = False,
+        allow_concurrent_gpu: _AllowGpu = False,
+    ) -> str:
+        """Record an MP4 of a task with no window, as a job. With a checkpoint it plays the policy; without one it
+        runs zero or random actions, which is enough to see a scene. Returns job_id; isaaclab__runs_status lists
+        `video_paths` when it ends. Needs MoviePy or imageio-ffmpeg in the Lab interpreter when a checkpoint is given.
+
+        Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true."""
+        return _launch(_jobs.record, task=task, checkpoint=checkpoint, video_length=video_length, num_envs=num_envs,
+                       agent=agent, headless=headless, rl_library=rl_library, physics=physics, extra_args=extra_args,
+                       timeout_s=timeout_s, allow_concurrent=allow_concurrent,
+                       allow_concurrent_gpu=allow_concurrent_gpu)
+
+    @mcp.tool(name="isaaclab__preflight", annotations=READ_ONLY)
+    def isaaclab_preflight(task: Annotated[str | None, Field(description="Task id, to suggest a num_envs from its last isaaclab__env_check.")] = None) -> str:
+        """Before launching: free GPU memory and which processes hold it, running Lab jobs, any Kit bridge, a
+        can_start answer with reasons, and, if the task was env_checked, a conservative suggested num_envs."""
+        return _guard(lambda: _preflight.preflight(task))
 
     @mcp.tool(name="isaaclab__runs_list", annotations=DESTRUCTIVE)
     def isaaclab_runs_list(state: Annotated[str | None, Field(description="running or finished. Default: all.")] = None) -> str:

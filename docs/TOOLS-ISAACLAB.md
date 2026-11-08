@@ -148,6 +148,9 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__train` | Start a training job (async) and return its `job_id` |
 | `isaaclab__eval` | Run and score a policy checkpoint as a job (async) |
 | `isaaclab__play` | Play a checkpoint with a window (async, interactive) |
+| `isaaclab__env_check` | Build a task, step it with zero or random actions, and report problems (async) |
+| `isaaclab__record` | Record an MP4 with no window, from a checkpoint or from zero/random actions (async) |
+| `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start` and a suggested `num_envs` |
 | `isaaclab__runs_list` | List jobs (running/finished/all) |
 | `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir, window |
 | `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
@@ -308,6 +311,23 @@ Measured on Isaac Lab 2.3.2 with Isaac Sim 5.1 and `Isaac-Cartpole-v0` for `rsl_
 eval returned scores for early and trained checkpoints, and the trained checkpoint scored clearly higher.
 Isaac Lab 3's unified `play.py` was not run here, so whether its libraries are wrapped the same way is not
 verified; an unscoreable script shows up as `episodes: 0` / no score, not a number.
+
+### `isaaclab__env_check`, `isaaclab__record`, `isaaclab__preflight`
+
+`isaaclab__env_check(task, num_envs=4, steps=60, agent="zero")` starts a job that runs Lab's own
+`scripts/environments/zero_agent.py` (or `random_agent.py`) through `check_runner.py`. The runner watches each
+`env.step` and stops the loop after `steps`. `isaaclab__runs_status` then returns `env_check_result`: observation
+shapes, action shape, reward mean/min/max, non-finite observation and reward counts, episode ends (and how many in
+the first five steps), mean step time, `gpu_mib` for the process, and a `problems` list with `ok`. It checks any task
+the same way; checks that depend on the task (a tip height, a tower standing) still need the task's own script.
+
+`isaaclab__record(task, checkpoint=None, video_length=200)` records an MP4 with no window. With a checkpoint it runs
+`play` with `--video`. Without one it runs zero or random actions through the same runner with gymnasium's
+`RecordVideo` and `--enable_cameras`; `runs_status` lists `video_paths`.
+
+`isaaclab__preflight(task=None)` reads `nvidia-smi`, the jobs this host started and any Kit bridge, and returns
+`can_start` with reasons. With a task that has a finished `env_check` it adds `suggested_num_envs`, treating half of
+the measured GPU memory as fixed cost; the figure is deliberately low and should be confirmed with a short run.
 
 ### `isaaclab__play`
 

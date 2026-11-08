@@ -1514,7 +1514,8 @@ _HELP_TOPICS = (
      "sim__joints__state, sim__joints__move, sim__joints__drive, sim__arm__ik, sim__arm__fk, sim__controller__create."),
     ("train or evaluate a policy", ("train", "rl", "policy", "reward", "eval", "isaac lab", "isaaclab", "play", "checkpoint"),
      "isaaclab__envs_list, isaaclab__train, isaaclab__runs_status, isaaclab__runs_tail, isaaclab__metrics_summary, "
-     "isaaclab__eval, isaaclab__play, isaaclab__runs_cancel. No bridge needed."),
+     "isaaclab__eval, isaaclab__play, isaaclab__runs_cancel. Before a long run: isaaclab__preflight (GPU and jobs) and "
+     "isaaclab__env_check (NaNs, resets, memory). isaaclab__record gives an MP4 with no window. No bridge needed."),
     ("start, check or recover a simulator", ("start", "launch", "bridge", "kit", "hang", "stuck kit", "status", "connect"),
      "status, list_bridges, refresh_tools(wait_s=120), use_bridge, sim__launch, sim__status, sim__stop, sim__logs__tail."),
 )

@@ -31,6 +31,7 @@ ENV_VAR = "ISAAC_MCP_LOCAL_TOOLS"
 GROUPS: dict[str, frozenset[str]] = {
     "isaaclab_read": frozenset({
         "isaaclab__checkpoints_list", "isaaclab__metrics_summary", "isaaclab__tensorboard_tail",
+        "isaaclab__preflight",
     }),
     "isaaclab_probe": frozenset({
         "isaaclab__install_info", "isaaclab__envs_list",
@@ -40,6 +41,7 @@ GROUPS: dict[str, frozenset[str]] = {
     }),
     "isaaclab_run": frozenset({
         "isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__runs_cancel",
+        "isaaclab__env_check", "isaaclab__record",
     }),
     "screen_read": frozenset({"screen_info", "list_windows", "screen_recording_status", "isaac_help"}),
     "screen_capture": frozenset({
