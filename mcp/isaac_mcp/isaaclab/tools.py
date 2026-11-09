@@ -19,6 +19,7 @@ from . import install as _install
 from . import jobs as _jobs
 from . import metrics as _metrics
 from . import preflight as _preflight
+from . import evalsummary as _evalsummary
 from . import rundir as _rundir
 
 _NO_INSTALL = {
@@ -451,14 +452,32 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         tags: Annotated[list[str] | None, Field(description="Scalar tags to include. Default: all.")] = None,
         job_id: Annotated[str | None, Field(description="A job from isaaclab__train, instead of run_dir.")] = None,
         compare_jobs: Annotated[list[str] | None, Field(description="Several job_ids: returns their final scalars side by side, to compare seeds or settings.")] = None,
+        eval_json: Annotated[list[str] | None, Field(description="Evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars.")] = None,
+        criteria: Annotated[str | None, Field(description="With eval_json: v3 (default, = v3_ground_only: v3 before 3b, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.")] = None,
+        label: Annotated[str | None, Field(description="With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.")] = None,
+        baseline_json: Annotated[list[str] | None, Field(description="With eval_json: the baseline's evaluation files on the same pose set, for the comparison.")] = None,
+        baseline_label: Annotated[str | None, Field(description="With baseline_json: the baseline's name, e.g. recC.")] = None,
+        allow_test: Annotated[bool, Field(description="With eval_json: permit the TEST pose set. Default false: TEST stays untouched until a final claim.")] = False,
     ) -> str:
-        """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare several jobs' final values side by side."""
+        """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare several jobs' final values side by side.
+
+        With eval_json it instead summarises evaluation-result files of the G1 recovery layout (`final_*.json`): pass count
+        per file and its mean, min and max, the count per fall direction (side_a, prone, side_b, supine), the pose set
+        (DEV, HELDOUT or TEST), and with baseline_json the change against the baseline. Counts follow `criteria`.
+        TEST files, files of mixed splits, files with an unknown pose set and files missing an expected key are
+        refused with an `error` that names the file and key; nothing is guessed."""
         def summarise() -> dict:
+            if eval_json is not None:
+                if run_dir or job_id or compare_jobs or tags:
+                    raise ValueError("eval_json summarises evaluation files; do not combine it with run_dir, job_id, compare_jobs or tags.")
+                return _evalsummary.summarize(eval_json, criteria, label, baseline_json, baseline_label, allow_test)
+            if any(x is not None for x in (criteria, label, baseline_json, baseline_label)) or allow_test:
+                raise ValueError("criteria, label, baseline_json, baseline_label and allow_test apply only with eval_json.")
             if compare_jobs:
                 return _metrics.compare_runs({job: _jobs.runs_status(job).get("run_dir") for job in compare_jobs}, tags=tags)
             folder = run_dir or (_jobs.runs_status(job_id).get("run_dir") if job_id else None)
             if not folder:
-                raise ValueError("Give run_dir, job_id or compare_jobs. A job that has not written a run folder yet has no metrics.")
+                raise ValueError("Give run_dir, job_id, compare_jobs or eval_json. A job that has not written a run folder yet has no metrics.")
             return _metrics.metrics_summary(folder, tags=tags)
 
         return _guard(summarise)

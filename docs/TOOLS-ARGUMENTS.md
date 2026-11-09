@@ -292,6 +292,12 @@ Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or
 - `tags` (list[str] | None, default `None`): Scalar tags to include. Default: all.
 - `job_id` (str | None, default `None`): A job from isaaclab__train, instead of run_dir.
 - `compare_jobs` (list[str] | None, default `None`): Several job_ids: returns their final scalars side by side, to compare seeds or settings.
+- `eval_json` (list[str] | None, default `None`): Evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars.
+- `criteria` (str | None, default `None`): With eval_json: v3 (default, = v3_ground_only: v3 before 3b, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.
+- `label` (str | None, default `None`): With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.
+- `baseline_json` (list[str] | None, default `None`): With eval_json: the baseline's evaluation files on the same pose set, for the comparison.
+- `baseline_label` (str | None, default `None`): With baseline_json: the baseline's name, e.g. recC.
+- `allow_test` (bool, default `False`): With eval_json: permit the TEST pose set. Default false: TEST stays untouched until a final claim.
 
 ### `isaaclab__play`
 
