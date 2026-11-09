@@ -367,7 +367,7 @@ worked while locked on GNOME.
 | `window_*` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find`/`sim__ui__act`; other apps need the desktop unlocked |
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use the bridge CLI: `... list_tools --port <port>` |
 | Tools vanish, the client says the server "disconnected" and reconnected | Each client owns one server process; it ended (EOF, signal or crash) and a new one started | Read `~/.local/state/isaac-mcp/server-<pid>.log` (newest file first; the last lines say EOF, a signal, or a traceback). `status` shows `host.code_drift: true` when the checkout changed under a running server: reconnect |
-| Tool count differs from 127 | `ISAAC_MCP_LOCAL_TOOLS` etc. in the client entry: +5 `screen_input`, +4 `sim_launch` = 136 | Compare with the filters on the log's `process start` line |
+| Tool count differs from 129 | `ISAAC_MCP_LOCAL_TOOLS` etc. in the client entry: +5 `screen_input`, +4 `sim_launch` = 138 | Compare with the filters on the log's `process start` line |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed (Kit restarted, stage opened) | The message names the current `session_id` and `stage_id`: resend with those, never the old ones |

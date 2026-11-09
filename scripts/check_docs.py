@@ -212,6 +212,37 @@ def check_scene_opt_out(errors, pages=None, counts=None):
                           f"the standard groups without the generic pack list {expected}")
 
 
+TOTAL_PAGES = ("docs/TOOLS-HOST.md", "docs/MCP-SERVER.md")
+DEFAULT_TOTAL = re.compile(r"\*\*(\d+) tools\*\*(?: by default| with the default)")
+BOTH_TOTAL = re.compile(r"\*\*(\d+)\*\* with both")
+LAB_COUNT_PAGES = ("docs/TOOLS-ISAACLAB.md", "docs/MCP-SERVER.md")
+LAB_COUNT = re.compile(r"covers the (\d+) host-side")
+
+
+def check_prose_totals(errors, pages=None, skill=None, counts=None):
+    """The default and with-both-optional-groups totals, and the Lab tool count, wherever prose states them."""
+    counts = tier_counts() if counts is None else counts
+    default = standard_without_generic(counts) + counts["generic"]
+    both = default + counts["desktop_input"] + counts["sim_sessions"]
+    read = lambda names: {n: (ROOT / n).read_text(encoding="utf-8") for n in names}
+    for name, text in (pages if pages is not None else read(TOTAL_PAGES)).items():
+        for label, pattern, value in (("default total", DEFAULT_TOTAL, default), ("with-both total", BOTH_TOTAL, both)):
+            found = pattern.findall(text)
+            if found != [str(value)]:
+                errors.append(f"{name}: {label} says {found or 'nothing'}, the code lists {value}")
+    skill_path = ".agents/skills/isaac-mcp/SKILL.md"
+    skill = (ROOT / skill_path).read_text(encoding="utf-8") if skill is None else skill
+    for pattern, value in ((r"Tool count differs from (\d+)\b", default), (r"= (\d+) \|", both)):
+        found = re.findall(pattern, skill)
+        if found != [str(value)]:
+            errors.append(f"{skill_path}: tool count {pattern!r} says {found or 'nothing'}, the code lists {value}")
+    for name, text in (pages if pages is not None else read(LAB_COUNT_PAGES)).items():
+        if name in LAB_COUNT_PAGES:
+            found = LAB_COUNT.findall(text)
+            if found != [str(counts["isaaclab"])]:
+                errors.append(f"{name}: Lab tool count says {found or 'nothing'}, the code has {counts['isaaclab']}")
+
+
 def check_vendoring_claims(errors, text=None):
     """The vendoring page must not claim the UR5e asset payload is in the git tree."""
     text = (ROOT / "docs/VENDORING.md").read_text(encoding="utf-8") if text is None else text
@@ -283,6 +314,7 @@ def main():
     check_readme_counts(errors)
     check_generic_counts(errors)
     check_scene_opt_out(errors)
+    check_prose_totals(errors)
     check_vendoring_claims(errors)
     check_tool_reference(errors)
     for error in errors:
