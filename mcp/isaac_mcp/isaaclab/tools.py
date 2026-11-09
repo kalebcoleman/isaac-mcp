@@ -42,6 +42,9 @@ _ExtraArgs = Annotated[list[str] | None, Field(description="More command-line ar
 _Physics = Annotated[str | None, Field(description="physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets fails with it: leave it out.")]
 _Timeout = Annotated[float | None, Field(description="Stop the job after this many seconds. Default: no limit.")]
 _AllowConcurrent = Annotated[bool, Field(description="Start even if another job is running; a 16 GB GPU normally fits one.")]
+_PythonPath = Annotated[list[str] | None, Field(description="Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.")]
+_TaskEnv = Annotated[dict[str, str] | None, Field(description="Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.")]
+_ExternalCallback = Annotated[str | None, Field(description="Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK.")]
 _AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
 
 
@@ -62,6 +65,10 @@ _WINDOW_HINT = (
     "'Completed setting up the environment' (later lines can push it out of last_log_lines), wait ~5 s, then screenshot(window_id=...) or a short "
     "start_screen_recording(window_id=...) to inspect the result, and isaaclab__runs_cancel when done."
 )
+
+
+def _task_kw(python_path: Any, env: Any, external_callback: Any) -> dict[str, Any]:
+    return _jobs._launch_kw(python_path, env, external_callback)
 
 
 def _launch(fn: Callable[..., Any], **kwargs: Any) -> str:
@@ -103,11 +110,18 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _dump(_install.install_info())
 
     @mcp.tool(name="isaaclab__envs_list", annotations=PYTHON_EXECUTION)
-    def isaaclab_envs_list(filter: Annotated[str | None, Field(description="Keep task ids containing this text.")] = None) -> str:
+    def isaaclab_envs_list(filter: Annotated[str | None, Field(description="Keep task ids containing this text.")] = None,
+                           python_path: _PythonPath = None, env: _TaskEnv = None,
+                           external_callback: _ExternalCallback = None) -> str:
         """List registered Isaac Lab task ids (optionally filtered by substring).
 
+        Tasks of an external project appear only when its package is importable and its registration ran:
+        pass python_path and external_callback (called here with no arguments), or set ISAACLAB_TASK_PATH with
+        ISAACLAB_TASK_MODULES. An empty result carries a `hint` saying so.
+
         Runs Python and imports task modules, which may have side effects."""
-        return _dump(_install.envs_list(filter=filter))
+        return _guard(lambda: _install.envs_list(filter=filter, python_path=python_path, task_env=env,
+                                                 external_callback=external_callback))
 
     @mcp.tool(name="isaaclab__train", annotations=PYTHON_EXECUTION)
     def isaaclab_train(
@@ -124,6 +138,9 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         timeout_s: _Timeout = None,
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
     ) -> str:
         """Start a training job and return its job_id immediately; follow it with isaaclab__runs_status/tail.
 
@@ -135,6 +152,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             task=task, num_envs=num_envs, max_iterations=max_iterations, seed=seed, device=device,
             headless=headless, checkpoint=checkpoint, rl_library=rl_library, physics=physics, extra_args=extra_args,
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+            **_task_kw(python_path, env, external_callback),
         )
 
     @mcp.tool(name="isaaclab__eval", annotations=PYTHON_EXECUTION)
@@ -151,6 +169,9 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         timeout_s: _Timeout = None,
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
     ) -> str:
         """Run a checkpoint as a job and score it. Returns its job_id; when the job ends, isaaclab__runs_status
         reports `eval_result`: episodes, mean/std/min/max return, mean length, steps, and success_rate if the
@@ -166,6 +187,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
             rl_library=rl_library, physics=physics, extra_args=extra_args, num_episodes=num_episodes, max_steps=max_steps,
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+            **_task_kw(python_path, env, external_callback),
         )
 
     @mcp.tool(name="isaaclab__play", annotations=PYTHON_EXECUTION)
@@ -180,6 +202,9 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         timeout_s: _Timeout = None,
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
     ) -> str:
         """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
 
@@ -191,6 +216,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
             rl_library=rl_library, physics=physics, extra_args=extra_args, timeout_s=timeout_s,
             allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+            **_task_kw(python_path, env, external_callback),
         )
 
     @mcp.tool(name="isaaclab__env_check", annotations=PYTHON_EXECUTION)
@@ -205,6 +231,9 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         timeout_s: _Timeout = 900,
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
     ) -> str:
         """Build a task, step it with zero or random actions, and report what is wrong, as a job. Returns job_id;
         isaaclab__runs_status then gives `env_check_result`: observation and action shapes, reward statistics,
@@ -215,7 +244,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true."""
         return _launch(_jobs.env_check, task=task, num_envs=num_envs, steps=steps, agent=agent, headless=headless,
                        physics=physics, extra_args=extra_args, timeout_s=timeout_s,
-                       allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
+                       allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+                       **_task_kw(python_path, env, external_callback))
 
     @mcp.tool(name="isaaclab__record", annotations=PYTHON_EXECUTION)
     def isaaclab_record(
@@ -231,6 +261,9 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         timeout_s: _Timeout = 1800,
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
     ) -> str:
         """Record an MP4 of a task with no window, as a job. With a checkpoint it plays the policy; without one it
         runs zero or random actions, which is enough to see a scene. Returns job_id; isaaclab__runs_status lists
@@ -240,7 +273,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _launch(_jobs.record, task=task, checkpoint=checkpoint, video_length=video_length, num_envs=num_envs,
                        agent=agent, headless=headless, rl_library=rl_library, physics=physics, extra_args=extra_args,
                        timeout_s=timeout_s, allow_concurrent=allow_concurrent,
-                       allow_concurrent_gpu=allow_concurrent_gpu)
+                       allow_concurrent_gpu=allow_concurrent_gpu, **_task_kw(python_path, env, external_callback))
 
     @mcp.tool(name="isaaclab__preflight", annotations=READ_ONLY)
     def isaaclab_preflight(task: Annotated[str | None, Field(description="Task id, to suggest a num_envs from its last isaaclab__env_check.")] = None) -> str:
@@ -249,11 +282,19 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _guard(lambda: _preflight.preflight(task))
 
     @mcp.tool(name="isaaclab__runs_list", annotations=DESTRUCTIVE)
-    def isaaclab_runs_list(state: Annotated[str | None, Field(description="running or finished. Default: all.")] = None) -> str:
-        """List Isaac Lab jobs, to find a job_id.
+    def isaaclab_runs_list(
+        state: Annotated[str | None, Field(description="running or finished. Default: all.")] = None,
+        task: Annotated[str | None, Field(description="Keep jobs whose task id contains this text (case-insensitive).")] = None,
+        kind: Annotated[str | None, Field(description="Keep one kind of job: train, eval, play, env_check or record.")] = None,
+        since: Annotated[str | None, Field(description="Keep jobs started after this: an ISO time (2026-05-01T12:00, local time if no zone) or an age such as 90m, 2h, 1d, 1w.")] = None,
+        limit: Annotated[int, Field(description="Most jobs to return, newest first (1 to 500).")] = 25,
+    ) -> str:
+        """List Isaac Lab jobs, newest first, to find a job_id. Returns at most `limit` (default 25) matches,
+        with `total` (all matches) and `truncated`; narrow with task, kind, state or since, or raise limit.
+        Older versions returned every job oldest first.
 
         Reconciles orphaned jobs by updating their stored metadata."""
-        return _guard(lambda: _jobs.runs_list(state=state))
+        return _guard(lambda: _jobs.runs_list(state=state, task=task, kind=kind, since=since, limit=limit))
 
     @mcp.tool(name="isaaclab__runs_status", annotations=DESTRUCTIVE)
     def isaaclab_runs_status(job_id: _JobId) -> str:

@@ -202,6 +202,12 @@ def _child_env(root: Any, device: str | None) -> dict[str, str]:
     return env
 
 
+def _launch_kw(python_path: Any, env: Any, external_callback: Any) -> dict[str, Any]:
+    """The task-registration options a caller gave, for forwarding; empty when none, so older callers see no change."""
+    given = {"python_path": python_path, "env": env, "external_callback": external_callback}
+    return {k: v for k, v in given.items() if v is not None}
+
+
 def _read_job(job_dir: Path) -> dict[str, Any] | None:
     jf = job_dir / "job.json"
     if not jf.exists():
@@ -968,8 +974,14 @@ def _start_job_locked(
     rl_library_check: str | None = None,
     eval_options: dict[str, Any] | None = None,
     check_options: dict[str, Any] | None = None,
+    python_path: Any = None,
+    env: Any = None,
+    external_callback: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
+    opts = _install.validate_launch_options(python_path, env, external_callback)
+    if opts["external_callback"] and any(a.split("=", 1)[0] == "--external_callback" for a in argv):
+        raise ValueError("Give external_callback as this option or in extra_args, not both.")
     if not allow_concurrent:
         blocked = _concurrency_guard()
         if blocked is not None:
@@ -995,8 +1007,11 @@ def _start_job_locked(
         raise ValueError(f"{_install.lab_label(root_path, _install.lab_profile(root_path))} has no "
                          f"{script_path.relative_to(root_path)}, so no job could start. "
                          f"Expected {_install.EXPECTED_SCRIPTS}.")
-    task_modules, task_paths = _install.resolve_task_modules(root_path)
-    _require_known_task(root_path, task, task_modules)
+    task_modules, task_paths = _install.resolve_task_modules(root_path, {**os.environ, **opts["env"]})
+    external = bool(opts["python_path"] or opts["external_callback"])
+    _require_known_task(root_path, task, task_modules or (["<external>"] if external else []))
+    if opts["external_callback"]:
+        argv = list(argv) + [f"--external_callback={opts['external_callback']}"]
     job_id = _job_id(task)
     jd = jobs_dir() / job_id
     jd.mkdir(parents=True, exist_ok=True)
@@ -1030,6 +1045,7 @@ def _start_job_locked(
     stdout_f = open(stdout_path, "wb")
     stderr_f = open(stderr_path, "wb")
     env = _child_env(root_path, device)
+    env.update(opts["env"])
     if headless is not None:
         # A tool's explicit display choice wins over an inherited shell setting.
         # Do not mutate os.environ or another job's launch configuration.
@@ -1037,6 +1053,8 @@ def _start_job_locked(
     if task_modules:
         env["ISAACLAB_TASK_MODULES"] = ",".join(task_modules)
         env["PYTHONPATH"] = os.pathsep.join(task_paths + [env["PYTHONPATH"]])
+    if opts["python_path"]:
+        env["PYTHONPATH"] = os.pathsep.join(opts["python_path"] + [env["PYTHONPATH"]])
     proc = subprocess.Popen(
         _exit_recording(full_cmd, jd, timeout_s),
         stdout=stdout_f,
@@ -1074,6 +1092,9 @@ def _start_job_locked(
         data["eval"] = dict(eval_options)
     if check_options is not None:
         data["check"] = dict(check_options)
+    if external or opts["env"]:
+        data["launch"] = {"python_path": opts["python_path"], "external_callback": opts["external_callback"],
+                          "env_names": sorted(opts["env"])}  # names only: values may be secrets
     _write_job(jd, data)
 
     with _jobs_lock:
@@ -1101,6 +1122,9 @@ def train(
     rl_library: str | None = None,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
+    python_path: Any = None,
+    env: Any = None,
+    external_callback: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -1132,6 +1156,7 @@ def train(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         headless=headless, rl_library_check=lib, extra_validated=extras,
+        **_launch_kw(python_path, env, external_callback),
         **({} if libraries is None else {"library": lib}),
     )
 
@@ -1151,6 +1176,9 @@ def eval_(
     max_steps: int | None = 20000,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
+    python_path: Any = None,
+    env: Any = None,
+    external_callback: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -1179,6 +1207,7 @@ def eval_(
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, rl_library_check=lib, extra_validated=extras,
                         eval_options={"num_episodes": num_episodes, "max_steps": max_steps},
+                        **_launch_kw(python_path, env, external_callback),
                         **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
@@ -1196,6 +1225,9 @@ def play(
     rl_library: str | None = None,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
+    python_path: Any = None,
+    env: Any = None,
+    external_callback: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -1218,6 +1250,7 @@ def play(
     result = _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, rl_library_check=lib, extra_validated=extras,
+                        **_launch_kw(python_path, env, external_callback),
                         **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
@@ -1228,7 +1261,7 @@ _AGENTS = ("zero", "random")
 def _check_job(kind: str, python: str, root: Any, task: str, num_envs: int, steps: int, agent: str,
                headless: bool, physics: str | None, extra_args: Any, timeout_s: float | None,
                allow_concurrent: bool, allow_concurrent_gpu: bool, extra_flags: list[str],
-               video_length: int = 200) -> dict[str, Any]:
+               video_length: int = 200, launch: dict[str, Any] | None = None) -> dict[str, Any]:
     _validate_task(task)
     if agent not in _AGENTS:
         raise ValueError(f"agent must be one of {', '.join(_AGENTS)}")
@@ -1243,7 +1276,8 @@ def _check_job(kind: str, python: str, root: Any, task: str, num_envs: int, step
     return _start_job(python, root, kind, task, argv, timeout_s=timeout_s, allow_concurrent=allow_concurrent,
                       allow_concurrent_gpu=allow_concurrent_gpu, headless=headless, extra_validated=extras,
                       check_options={"mode": "check" if kind == "env_check" else "record", "steps": steps,
-                                     "agent": agent, "video_length": video_length})
+                                     "agent": agent, "video_length": video_length},
+                      **(launch or {}))
 
 
 def _native_agent_video(root: Any) -> bool:
@@ -1254,38 +1288,75 @@ def _native_agent_video(root: Any) -> bool:
 def env_check(python: str, root: Any, task: str, num_envs: int = 4, steps: int = 60, agent: str = "zero",
               headless: bool = True, physics: str | None = None, extra_args: Any = None,
               timeout_s: float | None = 900, allow_concurrent: bool = False,
-              allow_concurrent_gpu: bool = False) -> dict[str, Any]:
+              allow_concurrent_gpu: bool = False, python_path: Any = None, env: Any = None,
+              external_callback: Any = None) -> dict[str, Any]:
     return _check_job("env_check", python, root, task, num_envs, steps, agent, headless, physics, extra_args,
                       timeout_s, allow_concurrent, allow_concurrent_gpu,
-                      ["--max_steps", str(int(steps))] if _native_agent_video(root) else [])
+                      ["--max_steps", str(int(steps))] if _native_agent_video(root) else [],
+                      launch=_launch_kw(python_path, env, external_callback))
 
 
 def record(python: str, root: Any, task: str, checkpoint: Any = None, num_envs: int = 1, video_length: int = 200,
            agent: str = "zero", headless: bool = True, rl_library: str | None = None, physics: str | None = None,
            extra_args: Any = None, timeout_s: float | None = 1800, allow_concurrent: bool = False,
-           allow_concurrent_gpu: bool = False) -> dict[str, Any]:
+           allow_concurrent_gpu: bool = False, python_path: Any = None, env: Any = None,
+           external_callback: Any = None) -> dict[str, Any]:
+    launch = _launch_kw(python_path, env, external_callback)
     video_length = _positive_int(video_length, "video_length")
     if checkpoint:
         extras = _validate_extra_args(extra_args) + ["--video", "--video_length", str(video_length)]
         out = play(python, root, task, checkpoint, num_envs=num_envs, headless=headless, physics=physics,
                    extra_args=extras, timeout_s=timeout_s, rl_library=rl_library,
-                   allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
+                   allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu, **launch)
         return {**out, "note": "policy playback; isaaclab__runs_status lists video_paths when it finishes"}
     if _native_agent_video(root):
         # Lab 3's zero/random agents record and stop by themselves (--video, --max_steps): no wrapper needed.
         out = _check_job("env_check", python, root, task, num_envs, video_length + 1, agent, headless, physics,
                          extra_args, timeout_s, allow_concurrent, allow_concurrent_gpu,
-                         ["--video", "--video_length", str(video_length), "--max_steps", str(video_length + 1)])
+                         ["--video", "--video_length", str(video_length), "--max_steps", str(video_length + 1)],
+                         launch=launch)
     else:
         out = _check_job("record", python, root, task, num_envs, video_length + 1, agent, headless, physics,
                          extra_args, timeout_s, allow_concurrent, allow_concurrent_gpu, ["--enable_cameras"],
-                         video_length=video_length)
+                         video_length=video_length, launch=launch)
     return {**out, "note": f"{agent} actions, no policy; isaaclab__runs_status lists video_paths when it finishes"}
 
 
-def runs_list(state: str | None = None) -> dict[str, Any]:
+_RELATIVE_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*([smhdw])$", re.I)
+_UNIT_S = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+RUNS_LIST_DEFAULT_LIMIT = 25
+RUNS_LIST_MAX_LIMIT = 500
+
+
+def _parse_since(since: Any) -> float:
+    """An epoch time from an ISO date/time (naive means local time) or a relative age such as 90m, 2h, 1d, 1w."""
+    if not isinstance(since, str) or not since.strip():
+        raise ValueError("since must be an ISO time such as 2026-05-01T12:00 or a relative age such as 2h, 1d")
+    text = since.strip()
+    rel = _RELATIVE_RE.match(text)
+    if rel:
+        return _now() - float(rel.group(1)) * _UNIT_S[rel.group(2).lower()]
+    try:
+        from datetime import datetime
+
+        return datetime.fromisoformat(text).timestamp()
+    except ValueError:
+        raise ValueError(f"cannot read since={since!r}: use an ISO time such as 2026-05-01T12:00 or a relative age such as 2h, 1d") from None
+
+
+def runs_list(state: str | None = None, task: str | None = None, kind: str | None = None,
+              since: str | None = None, limit: int | None = RUNS_LIST_DEFAULT_LIMIT) -> dict[str, Any]:
+    """Jobs, newest first, filtered and bounded. ``total`` counts every match, ``truncated`` says ``limit`` cut some."""
     if state and state not in RUN_STATES:
         raise ValueError(f"unknown state {state!r}: use one of {', '.join(RUN_STATES)}, or omit it for all")
+    if limit is None:
+        limit = RUNS_LIST_DEFAULT_LIMIT
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= RUNS_LIST_MAX_LIMIT:
+        raise ValueError(f"limit must be an integer from 1 to {RUNS_LIST_MAX_LIMIT}")
+    for name, value in (("task", task), ("kind", kind)):
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{name} must be a string")
+    cutoff = _parse_since(since) if since is not None else None
     runs = []
     for jd in sorted(jobs_dir().iterdir()):
         if not jd.is_dir():
@@ -1303,7 +1374,13 @@ def runs_list(state: str | None = None) -> dict[str, Any]:
                 continue
             if state == "finished" and st == "running":
                 continue
+        if task and task.lower() not in str(data.get("task") or "").lower():
+            continue
+        if kind and kind != data.get("kind"):
+            continue
         started = data.get("started_at")
+        if cutoff is not None and (not started or float(started) < cutoff):
+            continue
         elapsed = (_now() - float(started)) if started else 0.0
         if st != "running" and data.get("finished_at"):
             elapsed = float(data["finished_at"]) - float(started)
@@ -1316,7 +1393,13 @@ def runs_list(state: str | None = None) -> dict[str, Any]:
             "elapsed_s": round(elapsed, 3),
             "log_dir": data.get("log_dir"),
         })
-    return {"runs": runs}
+    runs.sort(key=lambda r: float(r["started_at"] or 0), reverse=True)
+    total = len(runs)
+    result: dict[str, Any] = {"runs": runs[:limit], "total": total, "truncated": total > limit}
+    if result["truncated"]:
+        result["hint"] = (f"Showing the newest {limit} of {total}. Narrow with task, kind, state or since (such as 2h or 1d), "
+                          "or raise limit.")
+    return result
 
 
 def runs_status(job_id: str) -> dict[str, Any]:

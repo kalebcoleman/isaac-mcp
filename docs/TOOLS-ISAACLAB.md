@@ -83,6 +83,29 @@ changed, then call `isaaclab__install_info` and `isaaclab__envs_list` to check d
 be explicitly configured; sibling packages are no longer imported automatically. Jobs use the
 same resolver (`ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` are forwarded to the child).
 
+#### Tasks from an external project
+
+Tasks of a project that is not installed in the Lab environment register only when its package is importable
+and its registration code runs. Every launching tool (`isaaclab__envs_list`, `train`, `eval`, `play`,
+`env_check`, `record`) takes three optional arguments for this, per call:
+
+| Argument | Effect |
+|---|---|
+| `python_path` | List of existing absolute directories prepended to the child's `PYTHONPATH` (before `ISAACLAB_TASK_PATH`). |
+| `env` | Extra environment variables for the child: identifier names, string values. Refused: `PATH`, `HOME`, `LD_*`, `DYLD_*`, every `PYTHON*` except `PYTHONHASHSEED`/`PYTHONFAULTHANDLER` (use `python_path`), `CUDA_VISIBLE_DEVICES`, `HEADLESS`, `ISAAC_MCP_*` and the `ISAACLAB_PYTHON`/`ROOT`/`JOBS_DIR` settings. Values are not stored in the job record, only the names. |
+| `external_callback` | Dotted `module.function` (strict `^ident(\.ident)+$`), passed to the Isaac Lab script as `--external_callback=module.function`. Giving it also in `extra_args` is refused. `envs_list` has no Lab script, so it imports the module and calls the function with no arguments. |
+
+Persistent equivalents, set in the MCP server's environment: `ISAACLAB_TASK_PATH` (same as `python_path`),
+`ISAACLAB_TASK_MODULES` (modules imported first) and `ISAACLAB_EXTERNAL_CALLBACK` (default for
+`external_callback`). When any of these is supplied, the pre-launch check that refuses a task id the checkout does
+not register is skipped, since the project may register it. Whether a Lab script accepts `--external_callback`
+depends on the Lab version; an unsupported flag fails in the job log.
+
+Example: `isaaclab__envs_list {"python_path": ["<project>/src"], "external_callback": "g1_recovery.register.register", "filter": "getup"}`,
+then `isaaclab__train` with the same three arguments.
+
+When `isaaclab__envs_list` returns no tasks, or none match `filter`, the result carries a `hint` explaining this.
+
 ### TensorBoard readout
 
 `isaaclab__metrics_summary` and `isaaclab__tensorboard_tail` read `events.out.tfevents.*`
@@ -135,6 +158,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `ISAACLAB_LOGS_DIR` | metrics | Primary log root for checkpoints/metrics |
 | `ISAACLAB_TASK_MODULES` | install, jobs | Comma list of task modules to import before lookup |
 | `ISAACLAB_TASK_PATH` | install, jobs | `os.pathsep` list added to `PYTHONPATH` |
+| `ISAACLAB_EXTERNAL_CALLBACK` | install, jobs | Default `external_callback` (`module.function`) when a call gives none |
 | `ISAACLAB_ALLOW_TMP` | metrics | `1` adds the temp dir to allowed roots (tests only) |
 | `UR5E_DT_PORT` / `ISAAC_MCP_PORT` | jobs (Kit guard) | Fixed port probed for a running Kit bridge (default 8766) |
 | `CUDA_VISIBLE_DEVICES` | jobs (set by `device`) | Set per job from the `device` argument |
@@ -151,7 +175,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__env_check` | Build a task, step it with zero or random actions, and report problems (async) |
 | `isaaclab__record` | Record an MP4 with no window, from a checkpoint or from zero/random actions (async) |
 | `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start` and a suggested `num_envs` |
-| `isaaclab__runs_list` | List jobs (running/finished/all) |
+| `isaaclab__runs_list` | List jobs, newest first, filtered (task, kind, state, since) and limited (default 25) |
 | `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir, window |
 | `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
 | `isaaclab__runs_cancel` | Stop a job (SIGTERM then SIGKILL process group) |
@@ -221,8 +245,13 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
   | `filter` | string | no | `null` | Case-insensitive substring matched against the task id. |
-- Returns: `{envs: [{id, entry_point}], import_errors?}`. `import_errors` appears only if a
-  configured task module failed to import. Short-lived subprocess with a 60 s timeout.
+  | `python_path` | list of strings | no | `null` | Directories prepended to `PYTHONPATH`; see [external projects](#tasks-from-an-external-project). |
+  | `env` | object | no | `null` | Extra environment variables for the probe. |
+  | `external_callback` | string | no | `null` | `module.function` imported and called before the registry is read. |
+- Returns: `{envs: [{id, entry_point}], import_errors?, applied?, hint?}`. `import_errors` appears only if a
+  configured task module or callback failed. `applied` echoes the supplied `python_path`/callback. `hint` appears
+  when `envs` is empty (nothing registered, or `filter` matched nothing) and explains how external tasks register.
+  Short-lived subprocess with a 60 s timeout.
 - Example: `{"filter": "reach"}`
 
 ### `isaaclab__train`
@@ -355,8 +384,15 @@ the measured GPU memory as fixed cost; the figure is deliberately low and should
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
   | `state` | string | no | `null` | `"running"`, `"finished"` (any end state, including failed), `"all"`, or omitted for all; anything else returns an error naming these. |
-- Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, log_dir}]}`. Dead pids are reconciled to `failed` ("host restarted") on read.
-- Example: `{"state": "running"}`
+  | `task` | string | no | `null` | Case-insensitive substring of the task id. |
+  | `kind` | string | no | `null` | `train`, `eval`, `play`, `env_check` or `record`. |
+  | `since` | string | no | `null` | ISO time (local time without a zone) or an age such as `90m`, `2h`, `1d`, `1w`. |
+  | `limit` | integer | no | `25` | 1 to 500. |
+- Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, log_dir}], total, truncated, hint?}`, **newest first**.
+  `total` counts every match before `limit`; `truncated` is true when `limit` cut some (then `hint` says how to narrow).
+  Changed from earlier versions, which returned every job oldest first: callers that need all jobs pass `limit=500` or narrow with `since`.
+  Dead pids are reconciled to `failed` ("host restarted") on read.
+- Example: `{"task": "g1", "state": "finished", "since": "1d", "limit": 10}`
 
 ### `isaaclab__runs_status`
 
@@ -508,7 +544,8 @@ Example play call shape (illustrative):
 
 A task is a Python package the tools import before Lab looks up its id. In the MCP server's environment,
 set `ISAACLAB_TASK_PATH` to the folder containing the task package and `ISAACLAB_TASK_MODULES` to its module
-name. Keep the package's `__init__.py` free of Isaac Lab imports because it is imported before Kit starts.
+name (or pass `python_path` and `external_callback` per call, see
+[external projects](#tasks-from-an-external-project)). Keep the package's `__init__.py` free of Isaac Lab imports because it is imported before Kit starts.
 Task-specific environments, rewards and training code belong in the project using the MCP, not in this
 repository. Check a new task with a scripted action before training; evaluate completed episodes separately
 from training metrics and record the task configuration and seed.
