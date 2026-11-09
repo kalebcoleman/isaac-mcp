@@ -16,7 +16,7 @@ dependencies = [
     "httpx>=0.27.1,<1",
     # Host-side screen tools (isaac_mcp/screen.py).
     "mss>=10.0",
-    "pillow>=10.0",
+    "pillow>=10.1",
     "python-xlib>=0.33",
     "imageio-ffmpeg>=0.5",
 ]
