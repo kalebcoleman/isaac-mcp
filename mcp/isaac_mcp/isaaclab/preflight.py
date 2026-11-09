@@ -98,7 +98,7 @@ def preflight(task: str | None = None, ledger: bool = False, label: str | None =
     if running:
         reasons.append(f"Isaac Lab job {running.get('job_id')} is still running (pid {running.get('pid')})")
     if bridges:
-        where = ", ".join(f"{b['host']}:{b['port']}" for b in bridges)
+        where = ", ".join(f"{b.get('host', '127.0.0.1')}:{b.get('port', '?')}" for b in bridges)
         free = f" ({gpu['free_mib']} MiB free)" if gpu else ""
         reasons.append(f"a Kit bridge app at {where} shares the GPU{free}. Launching next to it is refused by default; when the free memory is "
                        "ample for your job and the person who owns that simulator agrees, pass allow_concurrent_gpu=true to launch anyway")
