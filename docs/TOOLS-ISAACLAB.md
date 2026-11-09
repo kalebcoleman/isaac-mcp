@@ -98,8 +98,10 @@ and its registration code runs. Every launching tool (`isaaclab__envs_list`, `tr
 Persistent equivalents, set in the MCP server's environment: `ISAACLAB_TASK_PATH` (same as `python_path`),
 `ISAACLAB_TASK_MODULES` (modules imported first) and `ISAACLAB_EXTERNAL_CALLBACK` (default for
 `external_callback`). When any of these is supplied, the pre-launch check that refuses a task id the checkout does
-not register is skipped, since the project may register it. Whether a Lab script accepts `--external_callback`
-depends on the Lab version; an unsupported flag fails in the job log.
+not register is skipped, since the project may register it. Isaac Lab 3.0.0 runs `--external_callback` only in the
+`rsl_rl` train and play entry points (eval is a play job). Other `rl_library` values, `env_check` and `record` (the
+zero/random agent scripts) refuse an explicit `external_callback`; an `ISAACLAB_EXTERNAL_CALLBACK` default is skipped
+there. For those, put the package on `python_path` and name a module that registers on import in `ISAACLAB_TASK_MODULES`.
 
 Example: `isaaclab__envs_list {"python_path": ["<project>/src"], "external_callback": "g1_recovery.register.register", "filter": "getup"}`,
 then `isaaclab__train` with the same three arguments.
@@ -378,8 +380,8 @@ never imported.
 | `cwd` | the script's folder | Must exist. |
 | `label` | script name | Used in the `job_id` and `runs_list`. |
 | `timeout_s` | `600` | Hard wall limit. At expiry the whole process group gets SIGTERM, then SIGKILL; a shell guard enforces it even if the host goes away. |
-| `min_free_vram_mb` | off | Refuse unless this much GPU memory (MiB) is free; refuses when `nvidia-smi` gives no answer. |
-| `wait_for_vram_s` | `0` | With `min_free_vram_mb`: poll up to this long (at most 3600) before refusing. |
+| `min_free_vram_mb` | off | Refuse unless this much GPU memory (MiB) is free on GPU 0; refuses when `nvidia-smi` gives no answer, or when `CUDA_VISIBLE_DEVICES` points the script at another GPU. |
+| `wait_for_vram_s` | `0` | Needs `min_free_vram_mb`: poll up to this long (at most 3600) before refusing. A cancelled call stops waiting and starts nothing. |
 | `single_instance_key` | none | Refuse while a running job has the same key, so a double-queued sweep cannot run twice. |
 | `allow_concurrent` | `false` | As for `isaaclab__train`: start although another job runs. |
 | `allow_concurrent_gpu` | `false` | As for `isaaclab__train`: refuse while a Kit bridge runs unless `true`. |

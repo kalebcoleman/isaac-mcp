@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from typing import Annotated, Any, Callable, Iterable
 
 from pydantic import BeforeValidator, Field
@@ -45,7 +46,7 @@ _Timeout = Annotated[float | None, Field(description="Stop the job after this ma
 _AllowConcurrent = Annotated[bool, Field(description="Start even if another job is running; a 16 GB GPU normally fits one.")]
 _PythonPath = Annotated[list[str] | None, Field(description="Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.")]
 _TaskEnv = Annotated[dict[str, str] | None, Field(description="Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.")]
-_ExternalCallback = Annotated[str | None, Field(description="Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK.")]
+_ExternalCallback = Annotated[str | None, Field(description="Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).")]
 _AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
 
 
@@ -286,7 +287,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         cwd: Annotated[str | None, Field(description="Working directory. Default: the script's folder.")] = None,
         label: Annotated[str | None, Field(description="Short name, used in the job_id and runs_list.")] = None,
         timeout_s: Annotated[float, Field(description="Hard wall limit in seconds; the whole process group is killed at expiry.")] = 600,
-        min_free_vram_mb: Annotated[int | None, Field(description="Refuse to start unless this much GPU memory (MiB) is free. Default: no check.")] = None,
+        min_free_vram_mb: Annotated[int | None, Field(description="Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.")] = None,
         wait_for_vram_s: Annotated[float, Field(description="With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).")] = 0,
         single_instance_key: Annotated[str | None, Field(description="Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.")] = None,
         allow_concurrent: _AllowConcurrent = False,
@@ -299,6 +300,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         outputs; isaaclab__runs_status then gives `script_result` (exit_code, wall_time_s, log_path, artifacts).
 
         Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true."""
+        cancel = threading.Event()
+
         def start() -> dict:
             py = python
             if not py:
@@ -310,10 +313,14 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
                 py, script, args=args, env=env, python_path=python_path, cwd=cwd, label=label,
                 timeout_s=timeout_s, min_free_vram_mb=min_free_vram_mb, wait_for_vram_s=wait_for_vram_s,
                 single_instance_key=single_instance_key, allow_concurrent=allow_concurrent,
-                allow_concurrent_gpu=allow_concurrent_gpu)
+                allow_concurrent_gpu=allow_concurrent_gpu, cancel=cancel)
 
         # wait_for_vram_s can sleep for minutes: keep it off the event loop so the server keeps answering.
-        return await asyncio.to_thread(_guard, start)
+        try:
+            return await asyncio.to_thread(_guard, start)
+        except asyncio.CancelledError:
+            cancel.set()  # the client gave up: stop waiting for GPU memory instead of launching later
+            raise
 
     @mcp.tool(name="isaaclab__preflight", annotations=READ_ONLY)
     def isaaclab_preflight(task: Annotated[str | None, Field(description="Task id, to suggest a num_envs from its last isaaclab__env_check.")] = None) -> str:

@@ -985,6 +985,20 @@ def _start_job_locked(
             raise ValueError("Give external_callback as this option or in extra_args, not both.")
         # Only the ISAACLAB_EXTERNAL_CALLBACK default is set: the caller's own extra_args win.
         opts = {**opts, "external_callback": None}
+    if opts["external_callback"]:
+        # Isaac Lab 3.0.0 runs --external_callback only in the rsl_rl train and play entry points. The zero/random
+        # agent scripts (env_check, record) never call it, so the task stays unregistered and the job fails late.
+        if check_options is not None:
+            why = "env_check and record run Isaac Lab's zero/random agent script, which does not run it"
+        elif library is None and rl_library_check not in (None, "rsl_rl"):
+            why = f"rl_library={rl_library_check} does not run it (only rsl_rl does)"
+        else:
+            why = None
+        if why:
+            if external_callback:
+                raise ValueError(f"external_callback is not supported here: {why}. Register the task with python_path plus "
+                                 "ISAACLAB_TASK_MODULES (a module that registers on import) instead.")
+            opts = {**opts, "external_callback": None}  # only the ISAACLAB_EXTERNAL_CALLBACK default: skip it here
     if not allow_concurrent:
         blocked = _concurrency_guard()
         if blocked is not None:
@@ -1379,12 +1393,18 @@ def _running_with_key(key: str) -> dict[str, Any] | None:
     return None
 
 
-def _wait_for_vram(min_free_mb: int, wait_s: float) -> dict[str, Any] | None:
+class LaunchCancelled(Exception):
+    """The caller gave up while run_script was waiting for GPU memory; nothing was started."""
+
+
+def _wait_for_vram(min_free_mb: int, wait_s: float, cancel: Any = None) -> dict[str, Any] | None:
     """None when enough GPU memory is free (waiting up to wait_s for it); otherwise a refusal."""
     from . import preflight as _preflight
 
     deadline = time.monotonic() + wait_s
     while True:
+        if cancel is not None and cancel.is_set():
+            raise LaunchCancelled()
         gpu = _preflight.gpu_state()
         if gpu is None:
             return {"error": "nvidia-smi gave no answer, so free GPU memory is unknown and min_free_vram_mb cannot be checked",
@@ -1395,7 +1415,12 @@ def _wait_for_vram(min_free_mb: int, wait_s: float) -> dict[str, Any] | None:
             return {"error": f"only {gpu['free_mib']} MiB of GPU memory is free; min_free_vram_mb={min_free_mb}",
                     "free_mib": gpu["free_mib"], "processes": gpu.get("processes", []),
                     "hint": "pass wait_for_vram_s to wait for it, or see isaaclab__preflight for what holds the GPU"}
-        time.sleep(max(0.01, min(_VRAM_POLL_S, deadline - time.monotonic())))
+        step = max(0.01, min(_VRAM_POLL_S, deadline - time.monotonic()))
+        if cancel is not None:
+            if cancel.wait(step):
+                raise LaunchCancelled()
+        else:
+            time.sleep(step)
 
 
 def run_script(
@@ -1412,6 +1437,7 @@ def run_script(
     single_instance_key: str | None = None,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
+    cancel: Any = None,
 ) -> dict[str, Any]:
     """Run a user's Python script as a job. It executes arbitrary code with this user's rights; nothing is sandboxed."""
     if not isinstance(script, (str, os.PathLike)) or not str(script):
@@ -1458,9 +1484,14 @@ def run_script(
     if label is not None and (not isinstance(label, str) or not label.strip()):
         raise ValueError("label must be a non-empty string")
     name = (label or script_path.stem)[:60]
-
+    if wait_for_vram_s and min_free_vram_mb is None:
+        raise ValueError("wait_for_vram_s needs min_free_vram_mb")
     if min_free_vram_mb is not None:
-        blocked = _wait_for_vram(min_free_vram_mb, float(wait_for_vram_s))  # outside the launch lock: it can take long
+        pinned = extra_env.get("CUDA_VISIBLE_DEVICES", os.environ.get("CUDA_VISIBLE_DEVICES", "")).strip()
+        if pinned not in ("", "0"):
+            raise ValueError("min_free_vram_mb measures GPU 0 only, but CUDA_VISIBLE_DEVICES=" + pinned +
+                             " moves the script elsewhere; leave one of them out")
+        blocked = _wait_for_vram(min_free_vram_mb, float(wait_for_vram_s), cancel)  # outside the launch lock: it can take long
         if blocked is not None:
             return blocked
     with _launch_lock:

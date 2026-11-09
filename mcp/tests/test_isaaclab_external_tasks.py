@@ -312,3 +312,25 @@ def test_runs_list_filters(many_jobs):
 def test_runs_list_rejects_bad_arguments(many_jobs, kwargs):
     with pytest.raises(ValueError):
         jobs.runs_list(**kwargs)
+
+
+# --- where Isaac Lab 3.0.0 runs --external_callback: only the rsl_rl entry points ---------------------
+
+def test_explicit_callback_refused_for_other_libraries_and_check_jobs(tmp_path):
+    root = make_root(tmp_path)
+    with pytest.raises(ValueError, match="only rsl_rl does"):
+        jobs._start_job_locked(str(fake_python(tmp_path)), root, "train", "T", [], rl_library_check="skrl",
+                               external_callback="p.m.f", allow_concurrent=True, allow_concurrent_gpu=True)
+    with pytest.raises(ValueError, match="zero/random agent"):
+        jobs._start_job_locked(str(fake_python(tmp_path)), root, "env_check", "T", [], check_options={"agent": "zero", "mode": "check", "steps": 1},
+                               external_callback="p.m.f", allow_concurrent=True, allow_concurrent_gpu=True)
+
+
+def test_env_default_callback_is_skipped_for_other_libraries(tmp_path, monkeypatch):
+    root = make_root(tmp_path)
+    monkeypatch.setenv("ISAACLAB_EXTERNAL_CALLBACK", "p.m.f")
+    monkeypatch.setattr(jobs, "_require_library_installed", lambda *a: None)
+    res = jobs.train(python=str(fake_python(tmp_path)), root=str(root), task="T", rl_library="skrl",
+                     allow_concurrent=True, allow_concurrent_gpu=True)
+    assert "--external_callback=p.m.f" not in res["command"]
+    wait(res["job_id"])

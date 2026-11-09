@@ -266,3 +266,26 @@ def test_tool_layer_json_and_errors(tmp_path, monkeypatch):
     assert ann.readOnlyHint is False and ann.idempotentHint is False
     monkeypatch.setattr(tools._install, "locate_install", lambda: None)
     assert "no Isaac Lab install" in json.loads(fn(script=str(tmp_path / "s.py")))["error"]
+
+
+def test_wait_for_vram_needs_a_minimum(tmp_path):
+    with pytest.raises(ValueError, match="needs min_free_vram_mb"):
+        jobs.run_script(sys.executable, script(tmp_path, "print(1)\n"), wait_for_vram_s=5)
+
+
+def test_vram_check_refuses_when_script_is_pinned_off_gpu0(tmp_path, monkeypatch):
+    monkeypatch.setattr(preflight, "gpu_state", fake_gpu([9000]))
+    with pytest.raises(ValueError, match="GPU 0 only"):
+        jobs.run_script(sys.executable, script(tmp_path, "print(1)\n"), min_free_vram_mb=100, env={"CUDA_VISIBLE_DEVICES": "1"})
+
+
+def test_cancelled_wait_never_launches(tmp_path, monkeypatch):
+    import threading
+
+    monkeypatch.setattr(preflight, "gpu_state", fake_gpu([1000]))
+    monkeypatch.setattr(jobs, "_VRAM_POLL_S", 0.05)
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(jobs.LaunchCancelled):
+        jobs.run_script(sys.executable, script(tmp_path, "print(1)\n"), min_free_vram_mb=4000, wait_for_vram_s=30, cancel=cancel)
+    assert not list(jobs.jobs_dir().iterdir())
