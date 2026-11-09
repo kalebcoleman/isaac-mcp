@@ -288,7 +288,7 @@ Run a checkpoint as a job and score it. Returns its job_id; when the job ends, i
 - `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
 - `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
-- `label` (str | None, default `None`): Short name for the job, kept in runs_list/runs_status and used to filter the GPU-hour ledger (isaaclab__preflight label=...), e.g. 'v3 before 3b'.
+- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.
 
 ### `isaaclab__install_info`
 
@@ -309,7 +309,7 @@ Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or
 - `label` (str | None, default `None`): With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.
 - `baseline_json` (list[str] | None, default `None`): With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.
 - `baseline_label` (str | None, default `None`): With baseline_json: the baseline's name, e.g. recC.
-- `allow_test` (bool, default `False`): With eval_json: set true ONLY if the user explicitly told you to score the TEST split (a single final evaluation). Never set it to see what happens. It also needs ISAAC_MCP_ALLOW_TEST_SPLIT=1 in the server's environment, which only the person running the server can set.
+- `allow_test` (bool, default `False`): With eval_json: permit the TEST pose set (refused by default). Set it only when the user asked to score TEST.
 
 ### `isaaclab__play`
 
@@ -328,17 +328,16 @@ Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cance
 - `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
 - `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
-- `label` (str | None, default `None`): Short name for the job, kept in runs_list/runs_status and used to filter the GPU-hour ledger (isaaclab__preflight label=...), e.g. 'v3 before 3b'.
+- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.
 
 ### `isaaclab__preflight`
 
-Before launching: free GPU memory and its holders, running Lab jobs, any Kit bridge, `can_start` with reasons, and, for an env_checked task, a conservative suggested num_envs.
+Before launching: free GPU memory and its holders, running Lab jobs, any Kit bridge, `can_start` with reasons, and, for an env_checked task, a conservative suggested num_envs. `ledger=true` adds an optional `gpu_hours` report (jobs sharing a GPU are counted once). Details: docs/TOOLS-ISAACLAB.md.
 
 - `task` (str | None, default `None`): Task id, to suggest a num_envs from its last isaaclab__env_check.
-- `ledger` (bool, default `False`): Include the GPU-hour ledger (`gpu_hours`) even when no budget is configured.
-- `label` (str | None, default `None`): Ledger: also report the jobs whose label or id contains this text, with their hours.
-- `since` (str | None, default `None`): Ledger: count jobs from this time (ISO, or an age such as 12h, 3d). Default: the configured `since`, else all jobs.
-- `budget_gpu_hours` (float | None, default `None`): Ledger: report against this cap for this call only. The enforced cap is ISAACLAB_GPU_BUDGET_HOURS or the ledger file.
+- `ledger` (bool, default `False`): Also report GPU-hours used by your jobs (`gpu_hours`).
+- `label` (str | None, default `None`): With ledger: also list the jobs whose label or id contains this text.
+- `since` (str | None, default `None`): With ledger: count jobs from this time (ISO, or an age such as 12h, 3d).
 
 ### `isaaclab__record`
 
@@ -443,7 +442,7 @@ Start a training job and return its job_id immediately; follow it with isaaclab_
 - `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
 - `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
-- `label` (str | None, default `None`): Short name for the job, kept in runs_list/runs_status and used to filter the GPU-hour ledger (isaaclab__preflight label=...), e.g. 'v3 before 3b'.
+- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.
 
 ## Bridge built-ins
 

@@ -85,8 +85,7 @@ def _in_group(pid: int, groups: set) -> bool:
         return False
 
 
-def preflight(task: str | None = None, ledger: bool = False, label: str | None = None, since: Any = None,
-              budget_gpu_hours: float | None = None) -> dict[str, Any]:
+def preflight(task: str | None = None, ledger: bool = False, label: str | None = None, since: Any = None) -> dict[str, Any]:
     gpu = gpu_state()
     running = _jobs._running_job()
     bridges = _jobs._probe_kit_bridges()
@@ -104,10 +103,10 @@ def preflight(task: str | None = None, ledger: bool = False, label: str | None =
                        "ample for your job and the person who owns that simulator agrees, pass allow_concurrent_gpu=true to launch anyway")
     from . import ledger as _ledger
 
-    wanted = ledger or label is not None or since is not None or budget_gpu_hours is not None
+    wanted = ledger or label is not None or since is not None
     gpu_hours = None
     if wanted or _ledger.config()["budget_hours"] is not None:
-        gpu_hours = _ledger.report(label=label, since=since, budget_hours=budget_gpu_hours)
+        gpu_hours = _ledger.report(label=label, since=since)
         if gpu_hours.get("exhausted"):
             reasons.append(f"the GPU budget is spent: {gpu_hours['used_hours']:.2f} of {gpu_hours['budget_hours']:.2f} GPU-hours, "
                            "so launches are refused")

@@ -140,3 +140,12 @@ def test_tool_layer(tmp_path):
     p = ckpt(tmp_path)
     assert json.loads(t.fn(path=str(p), role="baseline", provenance="x"))["registered"] is True
     assert "already registered" in json.loads(t.fn(path=str(p), role="baseline", provenance="x"))["error"]
+
+
+@pytest.mark.parametrize("role", ["baseline", "candidate", "init", "final"])
+def test_read_only_is_opt_in_and_off_for_every_role(tmp_path, role):
+    p = ckpt(tmp_path, f"{role}.pt")
+    out = registry.register(str(p), role, "p")
+    assert "read_only" not in out
+    assert p.stat().st_mode & 0o200  # still writable by the owner
+    p.write_bytes(b"changed later")  # a registered checkpoint can still be changed on disk; the README row then shows the mismatch

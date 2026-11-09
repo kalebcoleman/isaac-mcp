@@ -82,7 +82,6 @@ def test_label_filter_budget_and_carried(monkeypatch, tmp_path):
     assert r["label_attributed_hours"] == 1.5 and r["label_naive_hours"] == 2.0
     assert [j["label"] for j in r["jobs"]] == ["v3 before 3b"]
     assert r["used_hours"] == 5.5 and r["remaining_hours"] == 2.5 and r["exhausted"] is False  # label does not shrink the budget
-    assert ledger.report(budget_hours=5)["exhausted"] is True
 
 
 def test_since_clips_intervals(monkeypatch):

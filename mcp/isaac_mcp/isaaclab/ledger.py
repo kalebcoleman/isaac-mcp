@@ -109,14 +109,14 @@ def _attribute(items: list[dict[str, Any]]) -> float:
     return union
 
 
-def report(label: str | None = None, since: Any = None, budget_hours: float | None = None) -> dict[str, Any]:
+def report(label: str | None = None, since: Any = None) -> dict[str, Any]:
     """GPU-hours used, per job and per GPU, against the budget. *label* keeps jobs whose label or id contains it
-    (their union is reported on its own; the budget always counts every job). *budget_hours* overrides the configured cap for this report."""
+    (their union is reported on its own; the budget always counts every job)."""
     cfg = config()
     now = _jobs._now()
     since_value = since if since is not None else cfg["since"]
     since_ts = _jobs._parse_since(since_value) if since_value else None
-    cap = _hours(budget_hours, "budget_gpu_hours") if budget_hours is not None else cfg["budget_hours"]
+    cap = cfg["budget_hours"]
     everything = _intervals(since_ts, now)
     per_gpu: dict[str, dict[str, Any]] = {}
     for gpu in sorted({i["gpu"] for i in everything}):

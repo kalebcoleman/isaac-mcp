@@ -50,7 +50,7 @@ _AllowConcurrent = Annotated[bool, Field(description="Start even if another job 
 _PythonPath = Annotated[list[str] | None, Field(description="Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.")]
 _TaskEnv = Annotated[dict[str, str] | None, Field(description="Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.")]
 _ExternalCallback = Annotated[str | None, Field(description="Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).")]
-_Label = Annotated[str | None, Field(description="Short name for the job, kept in runs_list/runs_status and used to filter the GPU-hour ledger (isaaclab__preflight label=...), e.g. 'v3 before 3b'.")]
+_Label = Annotated[str | None, Field(description="Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.")]
 _AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
 
 
@@ -336,19 +336,14 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
     @mcp.tool(name="isaaclab__preflight", annotations=READ_ONLY)
     def isaaclab_preflight(
         task: Annotated[str | None, Field(description="Task id, to suggest a num_envs from its last isaaclab__env_check.")] = None,
-        ledger: Annotated[bool, Field(description="Include the GPU-hour ledger (`gpu_hours`) even when no budget is configured.")] = False,
-        label: Annotated[str | None, Field(description="Ledger: also report the jobs whose label or id contains this text, with their hours.")] = None,
-        since: Annotated[str | None, Field(description="Ledger: count jobs from this time (ISO, or an age such as 12h, 3d). Default: the configured `since`, else all jobs.")] = None,
-        budget_gpu_hours: Annotated[float | None, Field(description="Ledger: report against this cap for this call only. The enforced cap is ISAACLAB_GPU_BUDGET_HOURS or the ledger file.")] = None,
+        ledger: Annotated[bool, Field(description="Also report GPU-hours used by your jobs (`gpu_hours`).")] = False,
+        label: Annotated[str | None, Field(description="With ledger: also list the jobs whose label or id contains this text.")] = None,
+        since: Annotated[str | None, Field(description="With ledger: count jobs from this time (ISO, or an age such as 12h, 3d).")] = None,
     ) -> str:
         """Before launching: free GPU memory and its holders, running Lab jobs, any Kit bridge, `can_start` with
-        reasons, and, for an env_checked task, a conservative suggested num_envs.
-
-        `gpu_hours` (when a budget is configured, or ledger/label/since/budget_gpu_hours is given): hours used as the
-        wall-clock union of job intervals per GPU, so jobs sharing a GPU are not double counted; `naive_sum_hours` shows
-        the plain sum and `counted` the rule. With a cap (ISAACLAB_GPU_BUDGET_HOURS or a ledger file) new jobs are
-        refused once it is spent. Details: docs/TOOLS-ISAACLAB.md."""
-        return _guard(lambda: _preflight.preflight(task, ledger=ledger, label=label, since=since, budget_gpu_hours=budget_gpu_hours))
+        reasons, and, for an env_checked task, a conservative suggested num_envs. `ledger=true` adds an optional
+        `gpu_hours` report (jobs sharing a GPU are counted once). Details: docs/TOOLS-ISAACLAB.md."""
+        return _guard(lambda: _preflight.preflight(task, ledger=ledger, label=label, since=since))
 
     @mcp.tool(name="isaaclab__runs_list", annotations=DESTRUCTIVE)
     def isaaclab_runs_list(
@@ -450,7 +445,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         label: Annotated[str | None, Field(description="With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.")] = None,
         baseline_json: Annotated[list[str] | None, Field(description="With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.")] = None,
         baseline_label: Annotated[str | None, Field(description="With baseline_json: the baseline's name, e.g. recC.")] = None,
-        allow_test: Annotated[bool, Field(description="With eval_json: set true ONLY if the user explicitly told you to score the TEST split (a single final evaluation). Never set it to see what happens. It also needs ISAAC_MCP_ALLOW_TEST_SPLIT=1 in the server's environment, which only the person running the server can set.")] = False,
+        allow_test: Annotated[bool, Field(description="With eval_json: permit the TEST pose set (refused by default). Set it only when the user asked to score TEST.")] = False,
     ) -> str:
         """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare jobs' final values.
 

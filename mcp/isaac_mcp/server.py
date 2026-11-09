@@ -1521,9 +1521,9 @@ _HELP_TOPICS = (
      "assets__import_path. ur5e_dt__* only for the lab UR5e twin."),
     ("move a robot", ("move", "joint", "arm", "ik", "controller", "drive", "grip"),
      "sim__joints__state, sim__joints__move, sim__joints__drive, sim__arm__ik, sim__arm__fk, sim__controller__create."),
-    ("train or evaluate a policy", ("train", "rl", "policy", "reward", "eval", "isaac lab", "isaaclab", "play", "checkpoint", "budget", "gpu-hour", "gpu hour", "job", "wait", "baseline", "register", "summar", "pass count", "run dir", "exit code"),
+    ("train or evaluate a policy", ("train", "rl", "policy", "reward", "eval", "isaac lab", "isaaclab", "play", "checkpoint", "job", "wait", "baseline", "register", "summar", "pass count", "run dir", "exit code"),
      "isaaclab__envs_list, isaaclab__train, isaaclab__runs_status, isaaclab__runs_tail, isaaclab__metrics_summary, "
-     "isaaclab__eval, isaaclab__play, isaaclab__runs_cancel. Before a long run: isaaclab__preflight (GPU, jobs, GPU-hour budget) and "
+     "isaaclab__eval, isaaclab__play, isaaclab__runs_cancel. Before a long run: isaaclab__preflight (GPU and jobs) and "
      "isaaclab__env_check (NaNs, resets, memory). isaaclab__runs_status(job_id, wait_s=45) waits for a job to end; "
      "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises evaluation pass counts (TEST is refused); isaaclab__checkpoint_register protects a baseline; isaaclab__run_script runs your own script as a job. "
      "isaaclab__record gives an MP4 with no window. No bridge needed."),
