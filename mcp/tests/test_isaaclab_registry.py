@@ -80,7 +80,7 @@ def test_fields_required(tmp_path, kwargs, text):
 
 def test_bad_paths_and_registry(tmp_path):
     (tmp_path / "x.txt").write_text("x")
-    for bad, text in [("", "path is required"), (str(tmp_path / "none.pt"), "not an existing file"), (str(tmp_path / "x.txt"), "not a checkpoint")]:
+    for bad, text in [("", "path is required"), (str(tmp_path / "none.pt"), "not an existing file.*absolute path"), (str(tmp_path / "x.txt"), "not a checkpoint")]:
         with pytest.raises(ValueError, match=text):
             registry.register(bad, "r", "p")
     p = ckpt(tmp_path)

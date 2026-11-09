@@ -78,7 +78,8 @@ def _read(path: Any, criteria: str, allow_test: bool) -> dict[str, Any]:
         raise ValueError("every eval_json entry must be a non-empty path")
     p = Path(path).expanduser()
     if p.suffix != ".json" or not p.is_file():
-        raise ValueError(f"{path}: not an existing .json file")
+        raise ValueError(f"{path}: not an existing .json file (looked for {p.resolve()}; a relative path is resolved from the "
+                         "server's working directory, not yours, so pass an absolute path)")
     if p.stat().st_size > MAX_FILE_BYTES:
         raise ValueError(f"{path}: larger than {MAX_FILE_BYTES // 1024**2} MiB")
     try:

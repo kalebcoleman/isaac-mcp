@@ -81,7 +81,8 @@ def register(path: Any, role: Any, provenance: Any, registry: Any = None, read_o
         raise ValueError("path is required: the checkpoint file to register")
     ckpt = Path(path).expanduser()
     if not ckpt.is_file():
-        raise ValueError(f"{path}: not an existing file. Find checkpoints with isaaclab__checkpoints_list.")
+        raise ValueError(f"{path}: not an existing file (looked for {ckpt.resolve()}; a relative path is resolved from the server's "
+                         "working directory, not yours, so pass an absolute path). Find checkpoints with isaaclab__checkpoints_list.")
     ckpt = ckpt.resolve()
     if ckpt.suffix.lower() not in EXTENSIONS:
         raise ValueError(f"{path}: not a checkpoint file ({', '.join(EXTENSIONS)})")

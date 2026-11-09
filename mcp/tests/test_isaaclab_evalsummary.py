@@ -123,3 +123,9 @@ def test_tool_layer(tmp_path):
     assert "TEST split" in json.loads(t.fn(eval_json=[write(tmp_path, "t.json", result((1, 2, 3, 4), pose_set="test_v2.npz"))]))["error"]
     assert "do not combine" in json.loads(t.fn(eval_json=[f], job_id="20261102-100000-T"))["error"]
     assert "only with eval_json" in json.loads(t.fn(run_dir="/x", label="x"))["error"]
+
+
+def test_relative_path_error_says_where_it_looked_and_to_use_absolute(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match=r"looked for .*nope\.json.*working directory.*absolute path"):
+        ev.summarize(["nope.json"])
