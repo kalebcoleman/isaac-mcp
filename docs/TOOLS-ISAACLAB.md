@@ -129,7 +129,7 @@ Without `run_dir`, checkpoint discovery searches `ISAACLAB_LOGS_DIR` when set; o
 searches `<isaaclab_root>/logs` (if an install root is resolved) and the jobs directory.
 The former implicit project-specific log directory is no longer searched or allowed by default;
 set `ISAACLAB_LOGS_DIR` to continue using it. Paths outside the allowed roots are rejected with
-`{"error": "path outside allowed roots"}`.
+`{"error": "path outside allowed roots", "allowed_roots": [...], "hint": ...}`; the hint says to use `run_dir` from `isaaclab__runs_status` or set `ISAACLAB_LOGS_DIR`.
 
 ### GPU resources and authorization
 
@@ -161,6 +161,8 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `ISAACLAB_TASK_MODULES` | install, jobs | Comma list of task modules to import before lookup |
 | `ISAACLAB_TASK_PATH` | install, jobs | `os.pathsep` list added to `PYTHONPATH` |
 | `ISAACLAB_EXTERNAL_CALLBACK` | install, jobs | Default `external_callback` (`module.function`) when a call gives none |
+| `ISAACLAB_GPU_BUDGET_HOURS` | jobs, preflight | Optional GPU-hour cap (off by default) |
+| `ISAACLAB_GPU_LEDGER` | jobs, preflight | Optional JSON file for that cap (see preflight) |
 | `ISAACLAB_ALLOW_TMP` | metrics | `1` adds the temp dir to allowed roots (tests only) |
 | `UR5E_DT_PORT` / `ISAAC_MCP_PORT` | jobs (Kit guard) | Fixed port probed for a running Kit bridge (default 8766) |
 | `CUDA_VISIBLE_DEVICES` | jobs (set by `device`) | Set per job from the `device` argument |
@@ -177,13 +179,14 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__env_check` | Build a task, step it with zero or random actions, and report problems (async) |
 | `isaaclab__record` | Record an MP4 with no window, from a checkpoint or from zero/random actions (async) |
 | `isaaclab__run_script` | Run your own bounded Python script as a managed job (async; executes arbitrary code) |
-| `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start` and a suggested `num_envs` |
+| `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start`, a suggested `num_envs`, and optionally GPU-hours used |
 | `isaaclab__runs_list` | List jobs, newest first, filtered (task, kind, state, since) and limited (default 25) |
-| `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir, window |
+| `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir (with its source), window; `wait_s` waits for the job to end; or a run folder by name under a log root |
 | `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
 | `isaaclab__runs_cancel` | Stop a job (SIGTERM then SIGKILL process group) |
 | `isaaclab__checkpoints_list` | List `*.pt`/`*.pth` checkpoints (newest first) |
-| `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count) |
+| `isaaclab__checkpoint_register` | Record a checkpoint's sha256, role and provenance in an append-only README table; refuses to overwrite a registered path |
+| `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count), or, with `eval_json`, pass counts of evaluation-result files by fall direction against a baseline |
 | `isaaclab__tensorboard_tail` | Last points of one TensorBoard scalar |
 
 ## What a checkout offers: the profile
@@ -276,6 +279,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `timeout_s` | number | no | `null` | The job's own watchdog enforces this limit, even after the host exits; `runs_status` echoes it. |
   | `allow_concurrent` | boolean | no | `false` | Override the job-vs-job guard. |
   | `allow_concurrent_gpu` | boolean | no | `false` | Override the Kit-bridge (GPU) guard. |
+  | `label` | string | no | `null` | Short name shown in `runs_list`/`runs_status` (`isaaclab__eval` and `isaaclab__play` take it too, as does `run_script`). |
 - Returns on success: `{job_id, log_dir, command}`. A guard refusal includes `error` and `hint`, along with `running_job_id`/`running_pid` (job guard) or `kit_bridges` (Kit guard). On no install: `{"error": "no Isaac Lab install found", "hint": ...}`.
 - Example: `{"task": "Isaac-Reach-UR10", "num_envs": 64, "max_iterations": 2, "rl_library": "rl_games", "headless": true}`
 
@@ -357,10 +361,21 @@ the same way; checks that depend on the task (a tip height, a tower standing) st
 `play` with `--video`. Without one it runs zero or random actions through the same runner with gymnasium's
 `RecordVideo` and `--enable_cameras`; `runs_status` lists `video_paths`.
 
-`isaaclab__preflight(task=None)` reads `nvidia-smi`, the jobs this host started and any Kit bridge, and returns
+`isaaclab__preflight(task=None, ledger=False, label=None, since=None)` reads `nvidia-smi`, the jobs this host started and any Kit bridge, and returns
 `can_start` with reasons. `gpu.processes` lists every GPU compute process (`pid`, `name`, `mib`), and
 `other_gpu_processes` leaves out those in a running job's process group, so other projects' work shows up. With a task that has a finished `env_check` it adds `suggested_num_envs`, treating half of
 the measured GPU memory as fixed cost; the figure is deliberately low and should be confirmed with a short run.
+
+#### Optional: GPU-hours used
+
+`ledger=true` (or `label`, `since`) adds `gpu_hours`, computed from the start and end times in the job records: `used_hours` is the
+wall-clock *union* of the jobs' intervals on each GPU, so jobs sharing a GPU are counted once; `naive_sum_hours` is the plain sum of
+wall times, `counted` states the rule, and each entry of `jobs` has `wall_s`, `shared_s` and `attributed_hours`. `label` lists the jobs
+whose label or id contains the text. Nothing is configured and nothing is refused by default.
+
+An optional cap exists for those who want one: `ISAACLAB_GPU_BUDGET_HOURS`, or a JSON file `ISAACLAB_GPU_LEDGER` (default
+`<jobs dir>/gpu_ledger.json`) with `budget_hours`, `since` and `carried_hours`. With a cap, `gpu_hours` shows `remaining_hours`, and
+the job tools refuse to start once it is used up. A malformed setting is an error, never a silently absent cap.
 
 ### `isaaclab__run_script`
 
@@ -422,7 +437,7 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
   | `kind` | string | no | `null` | `train`, `eval`, `play`, `env_check` or `record`. |
   | `since` | string | no | `null` | ISO time (local time without a zone) or an age such as `90m`, `2h`, `1d`, `1w`. |
   | `limit` | integer | no | `25` | 1 to 500. |
-- Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, log_dir}], total, truncated, hint?}`, **newest first**.
+- Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, exit_code, log_dir, label?}], total, truncated, hint?}`, **newest first**.
   `total` counts every match before `limit`; `truncated` is true when `limit` cut some (then `hint` says how to narrow).
   Changed from earlier versions, which returned every job oldest first: callers that need all jobs pass `limit=500` or narrow with `since`.
   Dead pids are reconciled to `failed` ("host restarted") on read.
@@ -434,13 +449,27 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `job_id` | string | yes | — | Validated id. |
+  | `job_id` | string | one of | — | Validated id. |
+  | `require_run_dir` | boolean | no | `false` | With `job_id`: an `error` instead of a status when no Lab run folder is known for the job. |
+  | `log_root` | string | one of | — | Instead of a job: resolve a run folder by name under this logs folder (Lab `logs/`, a library folder, or `ISAACLAB_LOGS_DIR`; it must be inside the allowed roots). Needs `run_name`. |
+  | `run_name` | string | with `log_root` | — | The `--run_name` the run used; matches folders `<timestamp>_<run_name>` exactly, so `recC` does not match `recC_v2`. |
+  | `experiment` | string | no | — | With `log_root`: experiment folder name, to narrow several matches. |
+  | `latest` | boolean | no | `false` | With `log_root`: take the newest when several folders match `run_name` (otherwise that is an `error` listing them, so a re-run never silently resolves to the wrong folder). |
+  | `wait_s` | number | no | `0` | With `job_id`: block up to this many seconds (at most 3600) until the job is no longer running. See below. |
 - Returns:
-  `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, log_dir, pid, environment_ready}` and `physics` (the engine Lab's banner names, such as `newton_mjwarp` or `physx`; a task picks its own, and Newton is not PhysX)
+  `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, run_dir_source, log_dir, pid, environment_ready}`.
+  `exit_code` is the Isaac Lab process's own (recorded by a shell wrapper, so it survives a host restart). `run_dir_source` says where `run_dir` came from: `lab_log` (the log names the run folder), `checkpoint` (the folder of the newest checkpoint) or `job_dir`, meaning no Lab run folder is known yet and `run_dir` is the job's own folder (a `run_dir_warning` says so; with `require_run_dir=true` it is an `error`).
+  With `log_root` and `run_name` instead: `{run_dir, source: "log_root", run_name, latest_checkpoint, candidates?, note?}` (`candidates` lists every match newest first when `latest=true` chose among several). An empty or path-like name, a missing or foreign `log_root`, no match, or several matches without `latest=true` is an `error` (a no-match error lists the newest run folders it did find); the lookup never returns an empty or guessed path.
+  For a job, also `physics` (the engine Lab's banner names, such as `newton_mjwarp` or `physx`; a task picks its own, and Newton is not PhysX)
   plus `window: {id, title, width, height}` when the job is live and owns a window, and `eval_result`
   (`episodes`, `mean_return`, ...) for an `isaaclab__eval` job whose runner has written it, including after the
   host that started the job has gone (it is read from `eval_result.json` in the job folder). `last_log_lines` is the last 20 useful lines of `stdout.log` (a progress-bar line keeps only its newest text after a carriage return, and a line that is only a bar is dropped, so skrl and sb3 tails show log text rather than bars); a failed job also has `last_stderr_lines`, the last 20 of `stderr.log`, where launch and import failures go. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
-- Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10"}`
+- **Waiting.** `wait_s` replaces a poll loop (and a background-task wait that returns at once). It returns the final status as
+  soon as the job ends for any reason (success, failure, timeout, cancel), with `exit_code`, `last_log_lines` and `waited_s`.
+  If the wait runs out first, the status is still `running` with `wait_timed_out: true`, and you call again. The wait polls every
+  2 s on a worker thread and holds no lock, so other tool calls and launches proceed. Many MCP clients cut a call off after about a
+  minute, so wait in slices of 30 to 60 s. `wait_s` without `job_id`, or outside 0 to 3600, is an `error`.
+- Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10"}`; to wait: `{"job_id": "20261030-120000-Isaac-Reach-UR10", "wait_s": 45}`
 
 ### `isaaclab__runs_tail`
 
@@ -482,10 +511,61 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `run_dir` | string | yes | — | Must be under allowed roots. |
+  | `run_dir` | string | one of | — | Must be under allowed roots. Or give `job_id`, or `compare_jobs` (final scalars of several jobs side by side). |
   | `tags` | array[string] | no | `null` | Tag list; `null` summarises every available tag. |
+  | `eval_json` | array[string] | one of | `null` | Evaluation-result JSON files: switches to pass-count mode (below). |
+  | `criteria` | string | no | `v3` | With `eval_json`. `v3` (= `v3_ground_only`: criteria v3 before 3b, ground-only flight), `v3_latest_substep`, `v3_a4`, `v21`, `v2` or `strict`. |
+  | `label` | string | no | `null` | With `eval_json`: your name for the result, e.g. `v3 before 3b`; echoed back. |
+  | `baseline_json` / `baseline_label` | array[string] / string | no | `null` | With `eval_json`: the baseline's files on the same pose set, and its name (e.g. `recC`). |
+  | `allow_test` | boolean | no | `false` | With `eval_json`: permit the TEST pose set. Set it only when the user asked to score TEST. The result then has `test_split_used: true`. |
 - Returns: `{scalars: {<tag>: {last, min, max, step, count}}}`. Unknown tags return `{"error": "unknown tag", "available": [...]}`. Non-finite values are encoded as the strings `"nan"`, `"inf"`, `"-inf"`. Requires the `tensorboard` extra.
 - Example: `{"run_dir": "/abs/path/to/run", "tags": ["rewards/iter", "Episode/dist_m"]}`
+
+**Pass-count mode (`eval_json`).** Summarises a project's evaluation-result files instead of TensorBoard scalars, in the layout
+of the G1 recovery evaluators (`final_<name>_heldout_r1.json`, ...). It reads the files only. Give the repeat evaluations of one
+checkpoint on one pose set; the result is `{label, criteria, criteria_definition, split, pose_set, runs, pass_counts, mean_pass,
+min_pass, max_pass, n, pass_fraction_mean, by_direction_mean, baseline?, warnings?}`. Each run lists `pass_count`, `by_direction`
+(`side_a`, `prone`, `side_b`, `supine`), `direction_n`, `checkpoint`, `task` and `path`. With `baseline_json`, `baseline` has the
+same figures plus `delta_mean_pass` and `delta_by_direction`.
+
+Where each figure comes from (the file's own keys, so a different layout fails rather than guesses): `v3` reads
+`amendment3.ground_only_flight.v3_before_selfpen` and `.by_category` (counts); `v3_latest_substep` reads
+`amendment3.plausible_v3_before_selfpen` and `..._by_category`; `v3_a4` reads
+`amendment3.proposed_a4_flight_history.v3_before_selfpen_with_a4` and `.v3_with_a4_by_category`; `v21` and `v2` read
+`plausible.plausible_v21_successes` / `plausible_v2_successes` and the `..._by_category` rates; `strict` reads
+`strict_supported_stand.successes` and `.by_category` rates. Rates become counts as rate times that direction's `by_category.<d>.n`
+(a count that does not add up to the file's total shows in `warnings`). The pose set comes from `pose_set`: `dev_v1.npz` and
+`heldout_poses.npz` are DEV, `heldout_v2.npz` is HELDOUT, `test_v2.npz` (or any name containing "test") is TEST.
+
+Refused with an `error` naming the file: the **TEST** split (unless `allow_test=true` is passed); a
+file with no `pose_set` or an unknown one; mixed splits or pose counts in one call, or a baseline on another split; a missing
+expected key. Paths should be absolute: a relative one resolves from the server's working directory, and the error says where it looked. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
+Example: `{"eval_json": ["<run>/final_recC_heldout_r1.json", "<run>/final_recC_heldout_r2.json"], "label": "v3 before 3b", "baseline_json": ["<run>/final_base_heldout_r1.json"], "baseline_label": "R9hg_it1100"}`
+
+### `isaaclab__checkpoint_register`
+
+Protects a checkpoint you must not lose (a baseline, an initial policy) by recording it in a Markdown table that only grows.
+The only tool of the pack that writes next to your files, so it is annotated additive (not read-only, not destructive).
+
+- Parameters:
+
+  | Name | Type | Required | Default | Notes |
+  |---|---|---|---|---|
+  | `path` | string | yes | — | The checkpoint (`.pt`, `.pth`, `.zip`, `.ckpt`, `.onnx`), from `isaaclab__checkpoints_list`. |
+  | `role` | string | yes | — | One line, at most 40 characters: `baseline`, `candidate`, `init`, `final`... |
+  | `provenance` | string | yes | — | One line, at most 500 characters: run name, commit, settings, evaluation result. |
+  | `registry` | string | no | `README.md` beside the checkpoint | A `.md` file in the checkpoint's folder or one above it; a path in the row is relative to it. |
+  | `read_only` | boolean | no | `false` | Also remove write permission from the checkpoint file. Opt-in for every role, `baseline` included: checkpoints do get changed, so nothing is locked unless you ask. |
+- Returns: `{registered: true, path, role, sha256, size_bytes, registry, row, same_content_as?, read_only?, git?}`. The table has the columns
+  Checkpoint, Role, SHA-256, Size (bytes), Registered (UTC), Provenance; a README that has other text keeps it and gets the table at the end.
+  One atomic write (a temporary file renamed over the README, under a lock) adds the row, and the old text is always an exact prefix of the new.
+- Refusals (`error`): a path that already has a row is never overwritten; the error shows the existing role, hash and time and says whether the file
+  on disk still matches that hash or now differs (register a changed checkpoint under a new file name). Also an empty role or provenance, a
+  missing file, an unsupported extension, a registry that is not `.md`, is a symbolic link, or sits outside the checkpoint's folder tree.
+  `same_content_as` lists other registered paths with identical bytes (not an error).
+- Git: `*.pt` is usually ignored, so in a work tree `git` reports `ignored_by_git` and the command to use, `git add -f <checkpoint> <registry>`.
+  The tool never runs git.
+- Example: `{"path": "<repo>/checkpoints/recC.pt", "role": "baseline", "provenance": "g4j1_b1p2_it1425; 174.7/256 HELDOUT, criteria v3 before 3b"}`
 
 ### `isaaclab__tensorboard_tail`
 

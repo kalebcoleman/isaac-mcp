@@ -20,14 +20,16 @@ Start here. Say what you want to do and get the exact isaac tools to load and ca
 
 ### `join_videos`
 
-Join 2-8 finished video clips into one new MP4 with the bundled ffmpeg, in order or stacked. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour.
+Join 2-8 finished clips into one new MP4 with the bundled ffmpeg, or (mode=sheet) make a matched PNG contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour. Sheets do not upload.
 
-- `inputs` (list[str], required): 2-8 absolute paths under home, or file names in ~/Videos/screen-mcp.
-- `mode` (str, default `'concat'`): concat (one after another), hstack (side by side) or vstack (top to bottom).
-- `output` (str | None, default `None`): New file name in ~/Videos/screen-mcp, or an absolute .mp4 path under home. Default joined-<time>.mp4.
+- `inputs` (list[str] | None, default `None`): Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/screen-mcp. Or give job_id.
+- `mode` (str, default `'concat'`): concat (one after another), hstack (side by side), vstack (top to bottom), or sheet (a PNG contact sheet: one row per video, one column per time).
+- `output` (str | None, default `None`): New file name in ~/Videos/screen-mcp (.mp4), or ~/Pictures/screen-mcp (.png, sheet), or an absolute path under home. Default joined-<time>.mp4 / sheet-<time>.png.
 - `max_width` (int, default `1920`): Output width cap in pixels.
 - `fps` (int | None, default `None`): Output rate, at most 60. Default: the fastest input.
 - `shortest` (bool, default `False`): hstack/vstack: end with the shortest clip instead of freezing it on its last frame.
+- `times` (list[float] | None, default `None`): sheet: seconds to sample in every clip, up to 12. Default 0.5, 1, 2, 4, 6, 9. A time past a clip's end is an error.
+- `job_id` (str | None, default `None`): sheet: use the videos of this Isaac Lab job (isaaclab__runs_status video_paths) instead of inputs.
 
 ### `list_windows`
 
@@ -221,7 +223,17 @@ Stop only the identified managed process; unsaved changes can be lost. Refuses e
 
 ## Isaac Lab
 
-Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 16 tools.
+Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 17 tools.
+
+### `isaaclab__checkpoint_register`
+
+Record a checkpoint in a README table (path, role, sha256, size, time, provenance) so a baseline cannot be replaced unnoticed. Append-only: one atomic write adds a row; a path that already has a row is refused with the existing row and whether the file still matches its hash. Returns the sha256 and the row, `same_content_as` if another registered path has identical bytes, and, in a git work tree, a `git` hint: `.pt` files are usually ignored, so commit them with `git add -f` (this tool never runs git). Reads the checkpoint, writes only the registry.
+
+- `path` (str, required): Absolute path of the checkpoint file (.pt, .pth, .zip, .ckpt, .onnx) to register, e.g. from isaaclab__checkpoints_list.
+- `role` (str, required): What it is for, one short line: baseline, candidate, init, final...
+- `provenance` (str, required): Where it came from, one line: run name, commit, settings, evaluation result.
+- `registry` (str | None, default `None`): Markdown file to add the row to. Default: README.md in the checkpoint's folder. It must be in that folder or one above it.
+- `read_only` (bool, default `False`): Also remove write permission from the checkpoint file, so a later run cannot overwrite it.
 
 ### `isaaclab__checkpoints_list`
 
@@ -276,6 +288,7 @@ Run a checkpoint as a job and score it. Returns its job_id; when the job ends, i
 - `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
 - `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
+- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.
 
 ### `isaaclab__install_info`
 
@@ -285,12 +298,18 @@ No arguments.
 
 ### `isaaclab__metrics_summary`
 
-Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare several jobs' final values side by side.
+Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare jobs' final values.
 
 - `run_dir` (str | None, default `None`): Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status. Or give job_id.
 - `tags` (list[str] | None, default `None`): Scalar tags to include. Default: all.
 - `job_id` (str | None, default `None`): A job from isaaclab__train, instead of run_dir.
 - `compare_jobs` (list[str] | None, default `None`): Several job_ids: returns their final scalars side by side, to compare seeds or settings.
+- `eval_json` (list[str] | None, default `None`): ABSOLUTE paths of evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.
+- `criteria` (str | None, default `None`): With eval_json: v3 (default, = v3_ground_only: v3 before 3b, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.
+- `label` (str | None, default `None`): With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.
+- `baseline_json` (list[str] | None, default `None`): With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.
+- `baseline_label` (str | None, default `None`): With baseline_json: the baseline's name, e.g. recC.
+- `allow_test` (bool, default `False`): With eval_json: permit the TEST pose set (refused by default). Set it only when the user asked to score TEST.
 
 ### `isaaclab__play`
 
@@ -309,12 +328,16 @@ Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cance
 - `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
 - `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
+- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.
 
 ### `isaaclab__preflight`
 
-Before launching: free GPU memory and which processes hold it, running Lab jobs, any Kit bridge, a can_start answer with reasons, and, if the task was env_checked, a conservative suggested num_envs.
+Before launching: free GPU memory and its holders, running Lab jobs, any Kit bridge, `can_start` with reasons, and, for an env_checked task, a conservative suggested num_envs. `ledger=true` adds an optional `gpu_hours` report (jobs sharing a GPU are counted once). Details: docs/TOOLS-ISAACLAB.md.
 
 - `task` (str | None, default `None`): Task id, to suggest a num_envs from its last isaaclab__env_check.
+- `ledger` (bool, default `False`): Also report GPU-hours used by your jobs (`gpu_hours`).
+- `label` (str | None, default `None`): With ledger: also list the jobs whose label or id contains this text.
+- `since` (str | None, default `None`): With ledger: count jobs from this time (ISO, or an age such as 12h, 3d).
 
 ### `isaaclab__record`
 
@@ -373,9 +396,15 @@ List Isaac Lab jobs, newest first, to find a job_id. Returns at most `limit` (de
 
 ### `isaaclab__runs_status`
 
-State, exit code, elapsed time, last log lines, newest checkpoint, `physics` (the engine Lab announced, such as newton_mjwarp or physx), `environment_ready`, and, for an eval job, its `eval_result` score once written. For a windowed job also `window` (id, title, size): pass its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result. Reconciles orphaned jobs by updating their stored metadata.
+State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source` (lab_log, checkpoint, or job_dir plus a `run_dir_warning` when no Lab run folder is known), `physics`, `environment_ready`, an eval job's `eval_result`, and a windowed job's `window`.
 
-- `job_id` (str, required): job_id from isaaclab__train, eval or play, or isaaclab__runs_list.
+- `job_id` (str | None, default `None`): job_id from isaaclab__train, eval or play, or isaaclab__runs_list. Give this, or log_root with run_name.
+- `require_run_dir` (bool, default `False`): With job_id: return an `error` instead of a status when no Lab run folder is found for the job (else run_dir may be the job's own folder; see run_dir_source).
+- `log_root` (str | None, default `None`): Instead of a job: resolve a run folder by name under this logs folder. Needs run_name.
+- `run_name` (str | None, default `None`): With log_root: the --run_name the run used; matches folders named <timestamp>_<run_name> exactly.
+- `experiment` (str | None, default `None`): With log_root: experiment folder name, to narrow several matches.
+- `latest` (bool, default `False`): With log_root: when several folders match run_name, take the newest instead of an error listing them.
+- `wait_s` (float, default `0`): With job_id: block up to this many seconds (0 to 3600) until the job is no longer running, then return the final status. Many clients cut a tool call off after a minute or so: wait in slices of 30 to 60 s.
 
 ### `isaaclab__runs_tail`
 
@@ -413,6 +442,7 @@ Start a training job and return its job_id immediately; follow it with isaaclab_
 - `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
 - `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
+- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.
 
 ## Bridge built-ins
 

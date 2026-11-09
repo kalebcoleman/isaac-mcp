@@ -621,3 +621,11 @@ def test_checkpoints_list_honours_explicit_search_roots(tmp_path):
 def test_checkpoints_list_search_roots_without_run_dir_skips_missing_roots(tmp_path):
     res = metrics.checkpoints_list(search_roots=[str(tmp_path / "missing")])
     assert res["checkpoints"] == []
+
+
+def test_outside_roots_error_says_which_roots_and_what_to_do(tmp_path):
+    from isaac_mcp.isaaclab import metrics
+
+    res = metrics.checkpoints_list(run_dir="/etc")
+    assert res["error"] == "path outside allowed roots" and isinstance(res["allowed_roots"], list)
+    assert "ISAACLAB_LOGS_DIR" in res["hint"] and "runs_status" in res["hint"]

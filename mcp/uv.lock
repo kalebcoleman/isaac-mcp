@@ -469,7 +469,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"], specifier = ">=1.22,<2" },
     { name = "mss", specifier = ">=10.0" },
     { name = "numpy", marker = "extra == 'scene-test'" },
-    { name = "pillow", specifier = ">=10.0" },
+    { name = "pillow", specifier = ">=10.1" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "python-xlib", specifier = ">=0.33" },
     { name = "pyyaml", marker = "extra == 'test'" },

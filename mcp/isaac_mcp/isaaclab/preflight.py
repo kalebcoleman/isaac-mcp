@@ -85,7 +85,7 @@ def _in_group(pid: int, groups: set) -> bool:
         return False
 
 
-def preflight(task: str | None = None) -> dict[str, Any]:
+def preflight(task: str | None = None, ledger: bool = False, label: str | None = None, since: Any = None) -> dict[str, Any]:
     gpu = gpu_state()
     running = _jobs._running_job()
     bridges = _jobs._probe_kit_bridges()
@@ -97,7 +97,19 @@ def preflight(task: str | None = None) -> dict[str, Any]:
     if running:
         reasons.append(f"Isaac Lab job {running.get('job_id')} is still running (pid {running.get('pid')})")
     if bridges:
-        reasons.append("a Kit bridge app is using the GPU (pass allow_concurrent_gpu=true to launch anyway)")
+        where = ", ".join(f"{b.get('host', '127.0.0.1')}:{b.get('port', '?')}" for b in bridges)
+        free = f" ({gpu['free_mib']} MiB free)" if gpu else ""
+        reasons.append(f"a Kit bridge app at {where} shares the GPU{free}. Launching next to it is refused by default; when the free memory is "
+                       "ample for your job and the person who owns that simulator agrees, pass allow_concurrent_gpu=true to launch anyway")
+    from . import ledger as _ledger
+
+    wanted = ledger or label is not None or since is not None
+    gpu_hours = None
+    if wanted or _ledger.config()["budget_hours"] is not None:
+        gpu_hours = _ledger.report(label=label, since=since)
+        if gpu_hours.get("exhausted"):
+            reasons.append(f"the GPU budget is spent: {gpu_hours['used_hours']:.2f} of {gpu_hours['budget_hours']:.2f} GPU-hours, "
+                           "so launches are refused")
     out: dict[str, Any] = {
         "gpu": gpu,
         "running_job": ({"job_id": running.get("job_id"), "pid": running.get("pid")} if running else None),
@@ -105,6 +117,8 @@ def preflight(task: str | None = None) -> dict[str, Any]:
         "can_start": not reasons,
         "reasons": reasons,
     }
+    if gpu_hours is not None:
+        out["gpu_hours"] = gpu_hours
     if gpu:
         own = {running.get("pid")} if running else set()
         out["other_gpu_processes"] = [p for p in gpu.get("processes", []) if not _in_group(p["pid"], own)]

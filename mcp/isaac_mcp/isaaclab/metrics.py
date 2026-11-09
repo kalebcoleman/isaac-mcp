@@ -80,7 +80,9 @@ def _resolve_run_dir(run_dir, search_roots=None) -> (str, Optional[Dict[str, Any
     for root in allowed:
         if real == root or real.startswith(root + os.sep):
             return real, None
-    return "", {"error": "path outside allowed roots"}
+    return "", {"error": "path outside allowed roots", "allowed_roots": allowed,
+                "hint": "Only run folders under the Lab logs folder, the jobs folder or ISAACLAB_LOGS_DIR are read. Use run_dir from "
+                        "isaaclab__runs_status, or start the server with ISAACLAB_LOGS_DIR set to your project's logs folder."}
 
 
 def _is_under_allowed(path: str, allowed: List[str]) -> bool:

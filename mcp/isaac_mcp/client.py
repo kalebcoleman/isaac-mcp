@@ -58,6 +58,7 @@ import stat
 import re
 import secrets
 import socket
+import time
 from typing import Any, Dict, Optional
 
 _log = logging.getLogger("isaac_mcp.client")
@@ -116,6 +117,34 @@ def queue_budget(timeout: float, execution_reserve_s: Optional[float] = None) ->
     reserve = (timeout * DEFAULT_RESERVE_FRACTION if execution_reserve_s is None
                else float(execution_reserve_s))
     return max(0.0, timeout - reserve - REFUSAL_MARGIN_S)
+
+
+#: Tools that are safe to send twice: they only read, so a repeat after a lost connection cannot change anything. This is the one
+#: place that decides it; every other tool is never re-sent once its request has reached the bridge (it may have run).
+#: Names are the bridge's canonical tool names. `sim.logs.mark` (writes a marker) is deliberately not here.
+IDEMPOTENT_TOOLS = frozenset({
+    "list_tools", "status", "list_bridges", "stat_file", "get_file",
+    "assets.roots", "assets.scan", "assets.search", "assets.packs", "assets.pack_doctor", "assets.dependencies",
+    "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.prim.bounds", "sim.prim.measure",
+    "sim.camera.list", "sim.physics.inspect", "sim.physics.raycast", "sim.physics.contacts", "sim.body.state",
+    "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "sim.logs.summary",
+    "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find",
+})
+
+
+#: A kept connection idle this long is probed with the cheap read-only `status` before a tool that must not be re-sent, so a Kit
+#: that restarted in the meantime is noticed while nothing has been sent yet (and the connection is rebuilt) instead of
+#: after the request went into a dead socket.
+STALE_PROBE_IDLE_S = 1.0
+
+
+class BridgeDispatchUncertain(ConnectionError):
+    """The connection broke after the request had been sent, so the tool may already have run (or still be running) in Kit.
+    It is not retried: a repeat could run a non-idempotent tool twice."""
+
+
+class BridgeConnectTimeout(TimeoutError):
+    """The TCP connection to the bridge timed out before any request was sent, so no tool ran."""
 
 
 class BridgeError(Exception):
@@ -311,6 +340,8 @@ class BridgeClient:
         self.timeout = timeout     # bridge can be re-discovered
         self._sock: Optional[socket.socket] = None
         self._buffer = b""
+        self._request_sent = False
+        self._last_used = 0.0
 
     @property
     def host(self) -> str:
@@ -324,10 +355,21 @@ class BridgeClient:
 
     def connect(self, timeout: Optional[float] = None) -> None:
         if self._sock is None:
-            self._sock = socket.create_connection(
-                _resolve_endpoint(self._host, self._port),
-                timeout=self.timeout if timeout is None else timeout)
+            endpoint = _resolve_endpoint(self._host, self._port)
+            wait = self.timeout if timeout is None else timeout
+            try:
+                self._sock = socket.create_connection(endpoint, timeout=wait)
+            except ConnectionRefusedError as exc:
+                # Same class, so callers that match it keep working; the text now says where and what to do.
+                raise ConnectionRefusedError(
+                    exc.errno, f"bridge not reachable at {endpoint[0]}:{endpoint[1]} (connection refused): nothing is listening there. "
+                    f"Start Kit with `./run.sh --headless`, or find a running bridge with `python3 mcp/isaac_mcp/client.py --list-bridges`") from exc
+            except socket.timeout as exc:
+                raise BridgeConnectTimeout(
+                    f"bridge at {endpoint[0]}:{endpoint[1]} did not accept a connection within {wait}s: Kit may still be starting "
+                    "(2-3 minutes on a first start) or its main thread is busy. Nothing was sent, so no tool ran") from exc
             self._buffer = b""
+            self._last_used = time.monotonic()  # a new connection is not stale
             try:
                 _log.info("bridge connected: %s:%s", *self._sock.getpeername()[:2])
             except OSError:
@@ -386,6 +428,7 @@ class BridgeClient:
     def _roundtrip(self, tool: str, params: Dict[str, Any], timeout: float,
                    execution_reserve_s: Optional[float] = None) -> Any:
         self._sock.settimeout(timeout)
+        self._request_sent = False
         request = {"type": tool, "params": params}
         token = hold_token()
         if token:
@@ -394,6 +437,7 @@ class BridgeClient:
             request["queue_s"] = queue_budget(timeout, execution_reserve_s)
         frame = json.dumps(request).encode("utf-8") + b"\n"
         self._sock.sendall(frame)
+        self._request_sent = True  # from here the bridge may be running the tool
         buffer, scanned = bytearray(self._buffer), 0  # a growing array, searched only where new: large replies stay linear
         while (end := buffer.find(b"\n", scanned)) < 0:
             scanned = len(buffer)
@@ -410,7 +454,20 @@ class BridgeClient:
         except (ValueError, RecursionError) as exc:  # the stream can't be trusted to line up with the next request
             self.close()
             raise BridgeError(f"the bridge sent an unreadable reply ({type(exc).__name__}); disconnected") from exc
+        self._last_used = time.monotonic()
         return _decode(reply)
+
+    def _probe_if_idle(self, tool: str, timeout: float) -> None:
+        """Before a tool that is never re-sent: if the kept connection has been idle a while, prove it still works with `status`."""
+        if (self._sock is None or tool in IDEMPOTENT_TOOLS or time.monotonic() - self._last_used < STALE_PROBE_IDLE_S):
+            return
+        try:
+            self._roundtrip("status", {}, min(timeout, 5.0))
+        except BridgeError:
+            pass  # it answered (even "unknown tool"): the connection is alive
+        except (OSError, TimeoutError):
+            _log.warning("idle bridge connection did not answer a probe before %s; reconnecting", tool)
+            self.close()
 
     def call(self, tool: str, params: Optional[Dict[str, Any]] = None, *,
              timeout: Optional[float] = None,
@@ -427,16 +484,30 @@ class BridgeClient:
         if self._sock is not None and not self._healthy():
             _log.warning("bridge connection lost (peer closed or reset); reconnecting for %s", tool)
             self.close()
+        self._probe_if_idle(tool, t)
         for attempt in (0, 1):
+            self._request_sent = False
             try:
                 self.connect(timeout=t)
                 return self._roundtrip(tool, params, t, execution_reserve_s)
+            except BridgeConnectTimeout:
+                self.close()
+                raise  # nothing was sent: unlike a reply timeout, the tool did not run
             except socket.timeout:
                 self.close()   # response may still arrive on the old socket
                 raise TimeoutError(
                     f"no response for {tool!r} within {t}s (the tool may still "
                     f"be executing on Kit's main thread)")
             except (ConnectionError, BrokenPipeError, ConnectionResetError, OSError) as exc:
+                sent = self._request_sent
+                if sent and tool not in IDEMPOTENT_TOOLS:
+                    _log.warning("bridge call %s lost its connection after it was sent (%s); not retrying", tool, type(exc).__name__)
+                    self.close()
+                    raise BridgeDispatchUncertain(
+                        f"the connection to the bridge broke after {tool!r} was sent ({type(exc).__name__}: {exc}), so it may already have run "
+                        "in Kit, or still be running. It was NOT sent again. Check what happened before repeating it: sim__stage__info for a "
+                        "scene tool, isaaclab__runs_status or isaaclab__runs_list for a Lab job, and the Kit log (sim__logs__tail). "
+                        "If Kit restarted, select it again with use_bridge and call refresh_tools.") from exc
                 _log.warning("bridge call %s failed (%s)%s", tool, type(exc).__name__,
                              "" if attempt else "; retrying once")
                 self.close()

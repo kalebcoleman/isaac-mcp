@@ -52,3 +52,11 @@ def test_screenshot_label_is_not_shadowed_by_the_window_caption():
     src = inspect.getsource(screen.register_screen_tools)
     body = src[src.index("def screenshot("):src.index("def start_screen_recording(")]
     assert "_label_tag(label)" in body and "\n            label = " not in body and "target_label = f" in body
+
+
+def test_isaac_help_finds_contact_sheets_and_job_workflow_tools():
+    sheet = gw._isaac_help("make a contact sheet from two videos to attach to a message")
+    assert 'join_videos(mode="sheet"' in sheet and "home folder" in sheet
+    work = gw._isaac_help("wait for a job, register a baseline and summarise pass counts")
+    for name in ("isaaclab__preflight", "isaaclab__runs_status(job_id, wait_s=45)", "isaaclab__checkpoint_register", "eval_json"):
+        assert name in work

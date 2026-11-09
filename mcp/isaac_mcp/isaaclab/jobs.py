@@ -28,6 +28,7 @@ Jobs are launched with ``shell=False`` and an explicit argv list, with
 
 from __future__ import annotations
 
+import glob
 import itertools
 import errno
 import json
@@ -200,6 +201,14 @@ def _child_env(root: Any, device: str | None) -> dict[str, str]:
     pp = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = rp + (os.pathsep + pp if pp else "")
     return env
+
+
+def _validate_label(label: Any) -> str | None:
+    if label is None:
+        return None
+    if not isinstance(label, str) or not label.strip() or len(label) > 120 or any(ord(c) < 32 for c in label):
+        raise ValueError("label must be a short non-empty text (at most 120 characters)")
+    return label.strip()
 
 
 def _launch_kw(python_path: Any, env: Any, external_callback: Any) -> dict[str, Any]:
@@ -625,6 +634,19 @@ def _running_job() -> dict[str, Any] | None:
     return None
 
 
+def _gpu_index(visible: Any) -> str:
+    """The GPU a job uses, for the GPU-hour ledger: the first id of CUDA_VISIBLE_DEVICES, else GPU 0."""
+    first = str(visible or "").split(",")[0].strip()
+    return first or "0"
+
+
+def _budget_guard() -> dict[str, Any] | None:
+    """Refuse a new job once a configured GPU-hour budget is spent. No budget configured: never refuses."""
+    from . import ledger
+
+    return ledger.budget_guard()
+
+
 def _concurrency_guard() -> dict[str, Any] | None:
     """Refuse to start a second job: one 16 GB GPU, so two jobs contend and OOM."""
     other = _running_job()
@@ -756,6 +778,21 @@ def _run_dir_from_log(log_path: Path) -> str | None:
     if any(ord(c) < 32 for c in root):
         return None
     return str(Path(root) / name)
+
+
+def _existing_run_dir(logged: str | None) -> str | None:
+    """The run folder a log names, if it exists. Lab 3 logs only the timestamp ("2026-11-09_12-51-31") as the experiment name and
+    adds "_<run_name>" to the folder afterwards, so a missing folder also matches a single sibling "<logged>_*"."""
+    if not logged:
+        return None
+    path = Path(logged)
+    if path.is_dir():
+        return str(path)
+    try:
+        siblings = sorted(p for p in path.parent.glob(glob.escape(path.name) + "_*") if p.is_dir())
+    except OSError:
+        return None
+    return str(siblings[0]) if len(siblings) == 1 else None
 
 
 _PHYSICS_RE = re.compile(r"Physics {2,}([A-Za-z][A-Za-z0-9_]*)")
@@ -977,8 +1014,10 @@ def _start_job_locked(
     python_path: Any = None,
     env: Any = None,
     external_callback: Any = None,
+    label: str | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
+    label = _validate_label(label)
     opts = _install.validate_launch_options(python_path, env, external_callback)
     if any(a.split("=", 1)[0] == "--external_callback" for a in argv):
         if external_callback:
@@ -1007,6 +1046,9 @@ def _start_job_locked(
         blocked = _kit_bridge_guard()
         if blocked is not None:
             return blocked
+    blocked = _budget_guard()
+    if blocked is not None:
+        return blocked
     if extra_validated is None:
         extra_validated = []
     # Cheap interpreter probes, so a missing library or video encoder refuses now rather than
@@ -1092,6 +1134,8 @@ def _start_job_locked(
         "job_id": job_id,
         "kind": kind,
         "task": task,
+        "label": label,
+        "gpu": _gpu_index(env.get("CUDA_VISIBLE_DEVICES")),
         "command": full_cmd,
         "pid": proc.pid,
         "pid_start": _process_start(proc.pid),
@@ -1142,6 +1186,7 @@ def train(
     python_path: Any = None,
     env: Any = None,
     external_callback: Any = None,
+    label: str | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -1173,7 +1218,7 @@ def train(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         headless=headless, rl_library_check=lib, extra_validated=extras,
-        **_launch_kw(python_path, env, external_callback),
+        label=label, **_launch_kw(python_path, env, external_callback),
         **({} if libraries is None else {"library": lib}),
     )
 
@@ -1196,6 +1241,7 @@ def eval_(
     python_path: Any = None,
     env: Any = None,
     external_callback: Any = None,
+    label: str | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -1224,7 +1270,7 @@ def eval_(
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, rl_library_check=lib, extra_validated=extras,
                         eval_options={"num_episodes": num_episodes, "max_steps": max_steps},
-                        **_launch_kw(python_path, env, external_callback),
+                        label=label, **_launch_kw(python_path, env, external_callback),
                         **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
@@ -1245,6 +1291,7 @@ def play(
     python_path: Any = None,
     env: Any = None,
     external_callback: Any = None,
+    label: str | None = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -1267,7 +1314,7 @@ def play(
     result = _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, rl_library_check=lib, extra_validated=extras,
-                        **_launch_kw(python_path, env, external_callback),
+                        label=label, **_launch_kw(python_path, env, external_callback),
                         **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
@@ -1509,6 +1556,9 @@ def run_script(
             blocked = _kit_bridge_guard()
             if blocked is not None:
                 return blocked
+        blocked = _budget_guard()
+        if blocked is not None:
+            return blocked
         job_id = _job_id(name)
         jd = jobs_dir() / job_id
         jd.mkdir(parents=True, exist_ok=True)
@@ -1527,7 +1577,7 @@ def run_script(
                 env=child, cwd=str(workdir), shell=False, start_new_session=True,
             )
         data = {
-            "id": job_id, "job_id": job_id, "kind": "script", "task": name, "label": label,
+            "id": job_id, "job_id": job_id, "kind": "script", "task": name, "label": label, "gpu": _gpu_index(child.get("CUDA_VISIBLE_DEVICES")),
             "script": str(script_path), "command": full_cmd, "cwd": str(workdir.resolve()),
             "pid": proc.pid, "pid_start": _process_start(proc.pid), "timeout_s": timeout_s,
             "single_instance_key": single_instance_key,
@@ -1613,6 +1663,8 @@ def runs_list(state: str | None = None, task: str | None = None, kind: str | Non
             "started_at": started,
             "elapsed_s": round(elapsed, 3),
             "log_dir": data.get("log_dir"),
+            "exit_code": data.get("exit_code"),
+            **({"label": data["label"]} if data.get("label") else {}),
         })
     runs.sort(key=lambda r: float(r["started_at"] or 0), reverse=True)
     total = len(runs)
@@ -1642,16 +1694,19 @@ def runs_status(job_id: str) -> dict[str, Any]:
     if not last_lines:
         last_lines = _tail_file(jd / "stdout.log", 20)
     run_dir = data.get("run_dir")
+    run_dir_source = "job_dir"  # until a Lab run folder is found, run_dir is the job's own folder
     ckpt = _latest_checkpoint(run_dir) or _checkpoint_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
     if not ckpt:
-        logged = _run_dir_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
-        if logged and Path(logged).exists():
+        logged = _existing_run_dir(_run_dir_from_log(Path(data.get("log_dir", jd)) / "stdout.log"))
+        if logged:
             run_dir = logged
+            run_dir_source = "lab_log"
             ckpt = _latest_checkpoint(run_dir)
     if ckpt and not _latest_checkpoint(run_dir):
         # the experiment dir (parent of nn/ for rl_games) is the run dir tools like metrics_summary want
         p = Path(ckpt).parent
         run_dir = str(p.parent if p.name == "nn" else p)
+        run_dir_source = "checkpoint"
     # A launch or import failure often writes only to stderr, which would leave last_log_lines empty.
     failure = {}
     if data.get("status") == "failed":
@@ -1669,8 +1724,12 @@ def runs_status(job_id: str) -> dict[str, Any]:
         **failure,
         "latest_checkpoint": ckpt,
         "run_dir": run_dir,
+        "run_dir_source": run_dir_source,
+        **({"run_dir_warning": "No Lab run folder found yet (the log names none and there is no checkpoint): run_dir is this job's own folder, not <timestamp>_<run_name>."}
+           if run_dir_source == "job_dir" else {}),
         "log_dir": data.get("log_dir", str(jd)),
         "pid": data.get("pid"),
+        **({"label": data["label"]} if data.get("label") else {}),
     }
     if data.get("timeout_s") is not None:
         out["timeout_s"] = data["timeout_s"]
