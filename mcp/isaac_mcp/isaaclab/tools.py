@@ -341,14 +341,13 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         since: Annotated[str | None, Field(description="Ledger: count jobs from this time (ISO, or an age such as 12h, 3d). Default: the configured `since`, else all jobs.")] = None,
         budget_gpu_hours: Annotated[float | None, Field(description="Ledger: report against this cap for this call only. The enforced cap is ISAACLAB_GPU_BUDGET_HOURS or the ledger file.")] = None,
     ) -> str:
-        """Before launching: free GPU memory and which processes hold it, running Lab jobs, any Kit bridge, a
-        can_start answer with reasons, and, if the task was env_checked, a conservative suggested num_envs.
+        """Before launching: free GPU memory and its holders, running Lab jobs, any Kit bridge, `can_start` with
+        reasons, and, for an env_checked task, a conservative suggested num_envs.
 
-        GPU-hours (`gpu_hours`, when a budget is configured or ledger/label/since/budget_gpu_hours is given): hours used
-        as the wall-clock union of job intervals per GPU, so jobs sharing the GPU are not double counted;
-        `naive_sum_hours` shows the plain sum of wall times, `counted` states the rule, and each job lists
-        wall_s, shared_s and attributed_hours. With a configured cap (ISAACLAB_GPU_BUDGET_HOURS or a ledger
-        file, see docs/TOOLS-ISAACLAB.md) `remaining_hours` is reported and new jobs are refused once it is spent."""
+        `gpu_hours` (when a budget is configured, or ledger/label/since/budget_gpu_hours is given): hours used as the
+        wall-clock union of job intervals per GPU, so jobs sharing a GPU are not double counted; `naive_sum_hours` shows
+        the plain sum and `counted` the rule. With a cap (ISAACLAB_GPU_BUDGET_HOURS or a ledger file) new jobs are
+        refused once it is spent. Details: docs/TOOLS-ISAACLAB.md."""
         return _guard(lambda: _preflight.preflight(task, ledger=ledger, label=label, since=since, budget_gpu_hours=budget_gpu_hours))
 
     @mcp.tool(name="isaaclab__runs_list", annotations=DESTRUCTIVE)
@@ -377,19 +376,12 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         wait_s: Annotated[float, Field(description="With job_id: block up to this many seconds (0 to 3600) until the job is no longer running, then return the final status. Many clients cut a tool call off after a minute or so: wait in slices of 30 to 60 s.")] = 0,
     ) -> str:
         """State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source`
-        (lab_log, checkpoint, or job_dir when no Lab run folder is known yet, with a `run_dir_warning`),
-        `physics` (the engine Lab announced, such as newton_mjwarp or physx), `environment_ready`, and, for an
-        eval job, its `eval_result` score once written. For a windowed job also `window` (id, title, size): pass
-        its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result.
+        (lab_log, checkpoint, or job_dir plus a `run_dir_warning` when no Lab run folder is known), `physics`,
+        `environment_ready`, an eval job's `eval_result`, and a windowed job's `window`.
 
-        With log_root and run_name instead of job_id it resolves the Lab run folder `<timestamp>_<run_name>`
-        and returns run_dir and latest_checkpoint. A lookup that finds nothing, finds several (unless latest=true),
-        or is given an empty name is an `error`, never an empty or guessed path.
-
-        With wait_s it waits for the job to end (a timeout, a cancel and a crash all end it) and returns the final
-        status with `exit_code` and `last_log_lines`; if the wait runs out first the state is still `running`, with
-        `wait_timed_out=true` and `waited_s`, and you call again. It polls without holding any lock, so other
-        calls and launches are not blocked.
+        wait_s blocks until the job ends (or returns `running` with `wait_timed_out`) and holds no lock.
+        log_root + run_name instead of job_id resolves a run folder by name; no match, several (unless
+        latest=true) or an empty name is an `error`.
 
         Reconciles orphaned jobs by updating their stored metadata."""
         def status() -> dict:
@@ -460,13 +452,11 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         baseline_label: Annotated[str | None, Field(description="With baseline_json: the baseline's name, e.g. recC.")] = None,
         allow_test: Annotated[bool, Field(description="With eval_json: permit the TEST pose set. Default false: TEST stays untouched until a final claim.")] = False,
     ) -> str:
-        """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare several jobs' final values side by side.
+        """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare jobs' final values.
 
-        With eval_json it instead summarises evaluation-result files of the G1 recovery layout (`final_*.json`): pass count
-        per file and its mean, min and max, the count per fall direction (side_a, prone, side_b, supine), the pose set
-        (DEV, HELDOUT or TEST), and with baseline_json the change against the baseline. Counts follow `criteria`.
-        TEST files, files of mixed splits, files with an unknown pose set and files missing an expected key are
-        refused with an `error` that names the file and key; nothing is guessed."""
+        With eval_json it summarises evaluation-result files (G1 recovery `final_*.json`): pass count and mean per file
+        set, count per fall direction, the pose set (DEV/HELDOUT/TEST), and the change against baseline_json. TEST,
+        mixed splits, unknown pose sets and missing keys are refused with an `error`. Details: docs/TOOLS-ISAACLAB.md."""
         def summarise() -> dict:
             if eval_json is not None:
                 if run_dir or job_id or compare_jobs or tags:

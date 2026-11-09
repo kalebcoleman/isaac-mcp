@@ -296,7 +296,7 @@ No arguments.
 
 ### `isaaclab__metrics_summary`
 
-Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare several jobs' final values side by side.
+Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare jobs' final values.
 
 - `run_dir` (str | None, default `None`): Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status. Or give job_id.
 - `tags` (list[str] | None, default `None`): Scalar tags to include. Default: all.
@@ -330,7 +330,7 @@ Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cance
 
 ### `isaaclab__preflight`
 
-Before launching: free GPU memory and which processes hold it, running Lab jobs, any Kit bridge, a can_start answer with reasons, and, if the task was env_checked, a conservative suggested num_envs.
+Before launching: free GPU memory and its holders, running Lab jobs, any Kit bridge, `can_start` with reasons, and, for an env_checked task, a conservative suggested num_envs.
 
 - `task` (str | None, default `None`): Task id, to suggest a num_envs from its last isaaclab__env_check.
 - `ledger` (bool, default `False`): Include the GPU-hour ledger (`gpu_hours`) even when no budget is configured.
@@ -395,7 +395,7 @@ List Isaac Lab jobs, newest first, to find a job_id. Returns at most `limit` (de
 
 ### `isaaclab__runs_status`
 
-State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source` (lab_log, checkpoint, or job_dir when no Lab run folder is known yet, with a `run_dir_warning`), `physics` (the engine Lab announced, such as newton_mjwarp or physx), `environment_ready`, and, for an eval job, its `eval_result` score once written. For a windowed job also `window` (id, title, size): pass its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result.
+State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source` (lab_log, checkpoint, or job_dir plus a `run_dir_warning` when no Lab run folder is known), `physics`, `environment_ready`, an eval job's `eval_result`, and a windowed job's `window`.
 
 - `job_id` (str | None, default `None`): job_id from isaaclab__train, eval or play, or isaaclab__runs_list. Give this, or log_root with run_name.
 - `require_run_dir` (bool, default `False`): With job_id: return an `error` instead of a status when no Lab run folder is found for the job (else run_dir may be the job's own folder; see run_dir_source).
