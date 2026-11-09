@@ -82,7 +82,7 @@ find out. Fewer tools mean a filter:
 
 - `ISAAC_MCP_BUILTINS=0` hides the bridge built-ins, `ISAAC_MCP_NAMESPACE` hides namespaced
   bridge and catalog tools, and `ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack;
-- `ISAAC_MCP_LOCAL_TOOLS` is restricting the local tools (the default, `all`, registers 24 local tools),
+- `ISAAC_MCP_LOCAL_TOOLS` is restricting the local tools (the default, `all`, registers 30 local tools),
   so the listed host and Isaac Lab tools may be a subset. If its `gateway` group is excluded,
   `refresh_tools` and `use_bridge` are not listed: bridge tools are then discovered only when
   the server starts, so restart the MCP connection after starting Kit.

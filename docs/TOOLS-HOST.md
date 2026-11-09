@@ -52,7 +52,7 @@ such as `ur5e_dt__play_scene`.
 
 ## Choosing which local tools a server exposes
 
-The 24 standard local tools (the twelve host gateway and desktop tools and the twelve `isaaclab__*` tools) are registered by
+The 30 standard local tools (the thirteen host gateway and desktop tools and the seventeen `isaaclab__*` tools) are registered by
 default. Five desktop input tools and four simulator-session tools are opt-in. `ISAAC_MCP_LOCAL_TOOLS` selects groups for one server process, read once at startup. It is a
 comma-separated list of group names and aliases; unset or empty means `all`. An unknown name stops the server at
 startup with a message listing the valid names; it never registers nothing silently.

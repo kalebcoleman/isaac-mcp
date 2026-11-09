@@ -142,7 +142,7 @@ Details and parameter tables: [references/isaac-lab.md](references/isaac-lab.md)
    stop the Sim or to pass `allow_concurrent_gpu=true`; do not set it on your own.
 3. Smoke test first: `isaaclab__train` with a small `num_envs` and `max_iterations`, and a
    `timeout_s`. Keep the returned `job_id`.
-4. Poll with `isaaclab__runs_status`, and `isaaclab__runs_tail` (`stream="stderr"`) on failure.
+4. Wait with `isaaclab__runs_status` `wait_s=45` (repeat until `state` is not `running`; it returns the exit code and log tail), and read `isaaclab__runs_tail` (`stream="stderr"`) on failure. `run_dir_source` says whether `run_dir` is a real Lab run folder; `isaaclab__runs_status` with `log_root` and `run_name` finds one by name and errors rather than guess.
    Do not busy-loop: check, report progress, check again later.
 5. Read results with `isaaclab__metrics_summary` (`run_dir` from status) and
    `isaaclab__checkpoints_list`. Judge by task metrics, not reward alone.
@@ -169,7 +169,7 @@ Details: [references/isaac-sim.md](references/isaac-sim.md).
   overlap (or `move_window`, whose x/y/size are the client area), then
   `start_screen_recording(window_ids=[sim, rviz])` records both into ONE synced video from each
   window's own pixels, so covering windows, focus changes and a locked screen do not matter. Output
-  is native size up to 1920 wide. Join clips with `join_videos` (`concat`, `hstack`, `vstack`)
+  is native size up to 1920 wide. Join clips with `join_videos` (`concat`, `hstack`, `vstack`; `sheet` makes a PNG contact sheet at matched times plus an attachment descriptor)
   instead of hand-written ffmpeg.
 - Prefer a pack's named tools (for example `ur5e_dt__play_scene`) over hand-written `run_python`
   when one exists; they carry the project's checks.

@@ -176,7 +176,7 @@ A client lists **129 tools** by default, or **138** with both optional groups. M
 | Group | Tools | What they do |
 |---|--:|---|
 | Generic scene and assets | 69 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Import USD and URDF, and manage named asset packs. |
-| Isaac Lab | 17 | Find an install, list tasks, check an environment, train, evaluate, play and record, check GPU room, read metrics and checkpoints, cancel jobs. No simulator needed. |
+| Isaac Lab | 17 | Find an install, list tasks, check an environment, train, evaluate, play and record, check GPU room and GPU-hours against a budget, wait for a job and read its exit code and run folder, summarise evaluation pass counts, register baseline checkpoints, read metrics and checkpoints, cancel jobs. No simulator needed. |
 | Host gateway and desktop | 13 | `isaac_help`, `refresh_tools`, `use_bridge`, and screenshots, recordings and window tools. |
 | Bridge built-ins | 7 | `status`, `run_python`, and file transfer into and out of the running simulator. |
 | UR5e digital twin | 23 | The RISE lab's UR5e twin, Kaleb's work with that robot. Only needed for that twin. |

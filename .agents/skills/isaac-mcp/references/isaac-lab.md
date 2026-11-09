@@ -75,7 +75,7 @@ carries a `hint`. `runs_list` returns the newest 25 jobs (`total`, `truncated`);
 1. `isaaclab__install_info` and confirm `isaaclab_version`.
 2. `isaaclab__envs_list` `{"filter": "Reach"}` and choose the id.
 3. `isaaclab__train` `{"task": "<id>", "num_envs": 32, "max_iterations": 20, "timeout_s": 900}`.
-4. `isaaclab__runs_status` `{"job_id": "<job_id>"}` until `state` is no longer `running`. Report
+4. `isaaclab__runs_status` `{"job_id": "<job_id>", "wait_s": 45}`, repeated until `state` is no longer `running` (it blocks without holding a lock). Report
    progress between checks instead of polling in a tight loop.
 5. On failure: `isaaclab__runs_tail` `{"job_id": "<job_id>", "stream": "stderr", "lines": 200}`.
    Classify the failure (install, task import, config, GPU memory, runner) before changing anything.
@@ -83,7 +83,8 @@ carries a `hint`. `runs_list` returns the newest 25 jobs (`total`, `truncated`);
 
 ## Reading results
 
-- `isaaclab__runs_status` gives `run_dir` and `latest_checkpoint`.
+- `isaaclab__runs_status` gives `run_dir` (with `run_dir_source`; `job_dir` means no Lab run folder yet, and `require_run_dir=true` makes that an error) and `latest_checkpoint`; `{"log_root": ..., "run_name": ...}` resolves a run folder by name.
+- Evaluation JSON from a project's own scripts: `isaaclab__metrics_summary` with `eval_json` (pass counts by fall direction, baseline comparison; TEST is refused). Protect a baseline with `isaaclab__checkpoint_register`. GPU-hours against a budget: `isaaclab__preflight` (`gpu_hours`).
 - `isaaclab__metrics_summary` `{"run_dir": "<run_dir>"}` lists every scalar with last, min, max,
   step and count. Unknown tags return the `available` list. Then `isaaclab__tensorboard_tail` for
   the curve of one tag.

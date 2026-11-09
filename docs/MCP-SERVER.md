@@ -311,7 +311,7 @@ clear about which of the settings below limit what.
 
 Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOLS-HOST.md)):
 
-- `ISAAC_MCP_LOCAL_TOOLS` selects groups of the host's own tools (24 standard screen, Isaac Lab, gateway tools, plus
+- `ISAAC_MCP_LOCAL_TOOLS` selects groups of the host's own tools (30 standard screen, Isaac Lab, gateway tools, plus
   five opt-in desktop input and four opt-in simulator-session tools). `readonly`
   keeps only local tools annotated as read-only; `none` keeps none. The default is `all`. The Python probes and job
   inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for groups and
