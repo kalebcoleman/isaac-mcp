@@ -35,13 +35,22 @@ jobs:
       - name: Check packaged UR5e catalog
         run: python3 scripts/gen_host_catalog.py --check
 
+      - name: Check simulator lockfile
+        run: uv lock --check
+
+      - name: Check host lockfile
+        working-directory: mcp
+        run: uv lock --check
+
       - name: Run host test suite (Python 3.12)
         working-directory: mcp
-        run: uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab --extra scene-test pytest -q
+        run: uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test pytest -q
 
+      # --no-project is required. mcp/uv.lock pins a newer SDK; this job must
+      # still import against the stated floor, mcp==1.22.0.
       - name: Check minimum supported MCP SDK
         working-directory: mcp
-        run: uv run --no-project --python 3.12 --with-editable '.[test,isaaclab]' --with 'mcp[cli]==1.22.0' pytest -q tests/test_packaging.py tests/test_tool_groups.py tests/test_desktop_input.py tests/test_sim_sessions.py tests/test_screen_windows.py tests/test_check_docs.py tests/test_host_catalog_gateway.py tests/test_scene_gateway.py tests/test_project_assets.py
+        run: uv run --no-project --python 3.12 --with-editable '.[test,isaaclab]' --with 'mcp[cli]==1.22.0' pytest -q tests/test_packaging.py tests/test_tool_groups.py tests/test_desktop_input.py tests/test_sim_sessions.py tests/test_screen_windows.py tests/test_check_docs.py tests/test_host_catalog_gateway.py tests/test_scene_gateway.py tests/test_project_assets.py tests/test_host_lock.py
 
       - name: Build wheel and sdist
         working-directory: mcp

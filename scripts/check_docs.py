@@ -186,6 +186,41 @@ def check_generic_counts(errors, pages=None, generic=None):
                 errors.append(f"{name}: says {match.group(0)!r}, but the generic pack has {generic} tools")
 
 
+OPT_OUT_PAGES = ("AGENTS.md", "docs/TOOLS-HOST.md")
+OPT_OUT_COUNT = re.compile(r"leaving (\d+) tools")
+
+
+def standard_without_generic(counts=None):
+    """Tools still listed when the generic pack is hidden and the optional groups are off."""
+    counts = tier_counts() if counts is None else counts
+    return counts["host"] + counts["isaaclab"] + counts["builtins"] + counts["ur5e"]
+
+
+def check_scene_opt_out(errors, pages=None, counts=None):
+    """The 'leaving N tools' figure is the standard total minus the generic pack.
+
+    A parenthetical such as 'tools (55)' does not match the generic-pack regex, so this
+    sentence is checked on its own. Each page must state the figure exactly once.
+    """
+    expected = standard_without_generic(counts)
+    pages = pages if pages is not None else {
+        name: (ROOT / name).read_text(encoding="utf-8") for name in OPT_OUT_PAGES}
+    for name, text in pages.items():
+        found = OPT_OUT_COUNT.findall(text)
+        if found != [str(expected)]:
+            errors.append(f"{name}: 'leaving N tools' says {found or 'nothing'}, "
+                          f"the standard groups without the generic pack list {expected}")
+
+
+def check_vendoring_claims(errors, text=None):
+    """The vendoring page must not claim the UR5e asset payload is in the git tree."""
+    text = (ROOT / "docs/VENDORING.md").read_text(encoding="utf-8") if text is None else text
+    if re.search(r"\d+\s*MB of assets", text):
+        errors.append("docs/VENDORING.md: claims a vendored asset payload; the tree is code-only")
+    if "ships none" not in text:
+        errors.append("docs/VENDORING.md: must state that the repository ships none of those assets")
+
+
 def check_readme_counts(errors, text=None, counts=None):
     """The README states the totals and a count per row; keep them equal to the code."""
     text = (ROOT / "README.md").read_text() if text is None else text
@@ -247,6 +282,8 @@ def main():
     check_agent_guide(errors)
     check_readme_counts(errors)
     check_generic_counts(errors)
+    check_scene_opt_out(errors)
+    check_vendoring_claims(errors)
     check_tool_reference(errors)
     for error in errors:
         print(f"FAIL: {error}")

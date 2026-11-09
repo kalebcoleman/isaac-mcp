@@ -71,7 +71,7 @@ Use [compatibility](COMPATIBILITY.md) for tested builds and known limits, and
 ## Scripts
 
 Run these from the checkout root. **Disposable** means the script changes the stage, so point it at a session you can throw
-away. Scripts that import `mcp` need `uv run --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>`
+away. Scripts that import `mcp` need `uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>`
 (`scene-test` adds the `pxr` and `numpy` the scene validators import); a plain `python3` will not find them.
 
 | Purpose | Scripts |

@@ -372,7 +372,7 @@ python3 scripts/check_docs.py
 python3 scripts/check_assets.py
 python3 scripts/check_portable_paths.py
 python3 scripts/gen_host_catalog.py --check
-cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab --extra scene-test pytest -q
+cd mcp && uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test pytest -q
 ```
 
 CI covers the host only; it does not establish GPU or simulator behavior. Live checks are in

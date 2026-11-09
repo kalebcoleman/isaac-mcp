@@ -41,13 +41,13 @@ The host MCP server is installed automatically when running `./install.sh` from 
 For the pinned simulator installation, follow [Linux setup](LINUX-SETUP.md); the full installer
 requires `--accept-eula` (or an existing `OMNI_KIT_ACCEPT_EULA=YES`).
 
-To install or reinstall only the host MCP tool manually:
+To install or reinstall only the host MCP tool manually, from the repository root:
 
 ```bash
-uv tool install --force --editable ./mcp
+uv sync --project mcp --locked --extra isaaclab --no-dev
 ```
 
-Because it is installed in editable mode from `./mcp`, modifications to `mcp/isaac_mcp/` take effect whenever the MCP server process restarts.
+`uv tool install` does not read `uv.lock`, so it is not the checkout install. `uv sync --locked` installs the versions in `mcp/uv.lock` and checks their hashes. The project is editable: modifications to `mcp/isaac_mcp/` take effect whenever the MCP server process restarts. `./install.sh --no-sim` runs the same sync and links `~/.local/bin/isaac-mcp`. Refresh the lock with `uv lock --directory mcp`, never `uv lock` in the repository root (that project is the simulator).
 
 `install.sh` also creates an ffmpeg shim at `~/.local/bin/ffmpeg` (a fixed default) for the twin's viewport recorder, unless an
 unrelated file or symlink already occupies that path. Direct `uv tool install` does not create the shim.

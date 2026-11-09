@@ -31,6 +31,15 @@ def test_host_install_preserves_unrelated_ffmpeg(tmp_path, existing):
         'mkdir -p "$HOME/.local/bin"\n'
         'printf "#!/bin/sh\\nexit 0\\n" > "$HOME/.local/bin/isaac-mcp"\n'
         'chmod +x "$HOME/.local/bin/isaac-mcp"\n'
+        'prev=\n'
+        'for arg in "$@"; do\n'
+        '  if [ "$prev" = "--project" ]; then\n'
+        '    mkdir -p "$arg/.venv/bin"\n'
+        '    printf "#!/bin/sh\\nexit 0\\n" > "$arg/.venv/bin/isaac-mcp"\n'
+        '    chmod +x "$arg/.venv/bin/isaac-mcp"\n'
+        '  fi\n'
+        '  prev=$arg\n'
+        'done\n'
     )
     uv.chmod(0o755)
     env = os.environ | {"HOME": str(home), "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}"}
@@ -78,9 +87,19 @@ def _sandbox(tmp_path):
     log = tmp_path / "calls.log"
     scripts = {
         "uv": f'echo "uv $*" >> "{log}"\n'
+              f'echo "UV_PROJECT_ENVIRONMENT=$UV_PROJECT_ENVIRONMENT" >> "{log}"\n'
               'mkdir -p "$HOME/.local/bin"\n'
               'printf "#!/bin/sh\\nexit 0\\n" > "$HOME/.local/bin/isaac-mcp"\n'
-              'chmod +x "$HOME/.local/bin/isaac-mcp"\n',
+              'chmod +x "$HOME/.local/bin/isaac-mcp"\n'
+              'prev=\n'
+              'for arg in "$@"; do\n'
+              '  if [ "$prev" = "--project" ]; then\n'
+              '    mkdir -p "$arg/.venv/bin"\n'
+              '    printf "#!/bin/sh\\nexit 0\\n" > "$arg/.venv/bin/isaac-mcp"\n'
+              '    chmod +x "$arg/.venv/bin/isaac-mcp"\n'
+              '  fi\n'
+              '  prev=$arg\n'
+              'done\n',
         "claude": f'echo "claude $*" >> "{log}"\n',
         "nvidia-smi": 'echo "NVIDIA RTX PRO 6000 Blackwell, 595.99"\n',
         "df": 'printf "Avail\\n500G\\n"\n',
@@ -104,13 +123,24 @@ def _calls(log):
     return log.read_text() if log.exists() else ""
 
 
+def _sim_synced(log):
+    """The ~20 GB Isaac Sim environment sync, not the host project's locked sync."""
+    return "uv sync --python 3.12" in _calls(log)
+
+
+def _host_locked(log):
+    text = _calls(log)
+    return ("uv sync --project" in text and "--locked" in text
+            and "--extra isaaclab" in text and "--no-dev" in text)
+
+
 def test_an_explicitly_named_isaac_sim_is_used_and_saved_for_the_client(tmp_path):
     root, env, log = _sandbox(tmp_path)
     env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / "lab-isaac", "6.0.0"))
     result = _install(root, env, "--claude-code")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "using the Isaac Sim already installed" in result.stdout
-    assert "uv sync" not in _calls(log)  # no ~20 GB download
+    assert not _sim_synced(log) and _host_locked(log)  # no ~20 GB download
     assert "not the tested 6.2 release" in result.stderr
     assert f"ISAAC_MCP_PYTHON={env['ISAAC_MCP_PYTHON']}" in _calls(log)  # sim__launch will find it
 
@@ -120,7 +150,7 @@ def test_an_isaac_sim_next_to_the_checkout_is_found_without_any_variable(tmp_pat
     python = _fake_isaac(root.parent / "other-project" / ".venv", "6.2.0.0")
     result = _install(root, env, "--claude-code")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert str(python) in result.stdout and "uv sync" not in _calls(log)
+    assert str(python) in result.stdout and not _sim_synced(log) and _host_locked(log)
     assert f"ISAAC_MCP_PYTHON={python}" in _calls(log)
 
 
@@ -132,7 +162,7 @@ def test_without_any_isaac_sim_the_locked_environment_is_downloaded(tmp_path):
     root, env, log = _sandbox(tmp_path)
     result = _install(root, env, "--accept-eula")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "uv sync" in _calls(log)
+    assert _sim_synced(log) and _host_locked(log)
 
 
 def test_download_sim_downloads_even_with_an_existing_isaac_sim(tmp_path):
@@ -141,7 +171,7 @@ def test_download_sim_downloads_even_with_an_existing_isaac_sim(tmp_path):
     result = _install(root, env, "--accept-eula", "--download-sim")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "using the Isaac Sim already installed" not in result.stdout
-    assert "uv sync" in _calls(log)
+    assert _sim_synced(log) and _host_locked(log)
 
 
 @pytest.mark.parametrize("value", ["/no/such/python", "/usr/bin/python3"])
@@ -150,7 +180,7 @@ def test_a_named_install_that_is_not_isaac_sim_6_stops_instead_of_downloading(tm
     env["ISAAC_MCP_PYTHON"] = value
     result = _install(root, env, "--accept-eula")
     assert result.returncode == 1 and "does not point at an Isaac Sim 6.x" in result.stderr
-    assert "uv sync" not in _calls(log)
+    assert not _sim_synced(log) and not _host_locked(log)
 
 
 def test_install_refuses_no_sim_with_download_sim(tmp_path):
@@ -174,7 +204,7 @@ def test_a_valid_standalone_isaacsim_path_is_used(tmp_path):
     env["ISAACSIM_PATH"] = str(_fake_standalone(tmp_path / "isaac-sim", "6.2.0"))
     result = _install(root, env, "--claude-code")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "standalone:ISAACSIM_PATH" in result.stdout and "uv sync" not in _calls(log)
+    assert "standalone:ISAACSIM_PATH" in result.stdout and not _sim_synced(log) and _host_locked(log)
     assert "ISAAC_MCP_PYTHON=" in _calls(log)
 
 
@@ -185,7 +215,7 @@ def test_a_typo_is_reported_even_when_another_environment_is_active(tmp_path):
     env["VIRTUAL_ENV"] = str(_fake_isaac(tmp_path / "active-venv", "6.2.0.0").parent.parent)
     result = _install(root, env, "--claude-code")
     assert result.returncode == 1 and "ISAAC_MCP_PYTHON is set but does not point" in result.stderr
-    assert "uv sync" not in _calls(log) and "claude mcp add" not in _calls(log)
+    assert not _sim_synced(log) and not _host_locked(log) and "claude mcp add" not in _calls(log)
 
 
 def test_the_opencode_snippet_is_valid_json_for_unusual_paths(tmp_path):
@@ -206,16 +236,16 @@ def test_no_sim_records_an_installed_isaac_sim_and_never_syncs(tmp_path):
     env["OMNI_KIT_ACCEPT_EULA"] = "YES"
     result = _install(root, env, "--no-sim", "--claude-code")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "uv sync" not in _calls(log)
+    assert not _sim_synced(log) and _host_locked(log)
     assert f"ISAAC_MCP_PYTHON={env['ISAAC_MCP_PYTHON']}" in _calls(log)
 
 
-def test_no_sim_without_any_isaac_sim_never_syncs_even_with_the_eula_accepted(tmp_path):
+def test_no_sim_without_any_isaac_sim_never_syncs_the_simulator_even_with_the_eula_accepted(tmp_path):
     root, env, log = _sandbox(tmp_path)
     env["OMNI_KIT_ACCEPT_EULA"] = "YES"
     result = _install(root, env, "--no-sim", "--claude-code")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "uv sync" not in _calls(log) and "ISAAC_MCP_PYTHON=" not in _calls(log)
+    assert not _sim_synced(log) and _host_locked(log) and "ISAAC_MCP_PYTHON=" not in _calls(log)
     assert "no Isaac Sim 6.x found to record" in result.stdout
 
 
@@ -226,7 +256,7 @@ def test_no_sim_with_a_bad_named_interpreter_warns_and_still_installs_the_host(t
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ISAAC_MCP_PYTHON is set but does not point" in result.stderr
     assert "no interpreter recorded" in result.stderr
-    assert "uv sync" not in _calls(log) and "ISAAC_MCP_PYTHON=" not in _calls(log)
+    assert not _sim_synced(log) and _host_locked(log) and "ISAAC_MCP_PYTHON=" not in _calls(log)
 
 
 def test_opencode_entry_uses_the_installed_path_so_it_starts_without_path_setup(tmp_path):
@@ -241,7 +271,7 @@ def test_an_explicitly_named_51_is_used_with_a_clear_warning(tmp_path):
     env["ISAAC_MCP_PYTHON"] = str(_fake_isaac(tmp_path / "bricksim", "5.1.0.0"))
     result = _install(root, env, "--claude-code")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "uv sync" not in _calls(log)
+    assert not _sim_synced(log) and _host_locked(log)
     assert "explicitly pinned older build" in result.stderr and "auto-detection never picks it" in result.stderr
     assert f"ISAAC_MCP_PYTHON={env['ISAAC_MCP_PYTHON']}" in _calls(log)
 
@@ -267,6 +297,19 @@ def test_a_bad_port_stops_before_anything_is_installed(tmp_path, port):
     root, env, log = _sandbox(tmp_path)[:3]
     result = _install(root, env, "--no-sim", "--port", port)
     assert result.returncode == 2 and "port must be a number" in result.stderr
+
+
+def test_host_sync_is_locked_into_the_checkout_and_not_the_simulator_venv(tmp_path):
+    root, env, log = _sandbox(tmp_path)
+    result = _install(root, env, "--no-sim")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _sim_synced(log) and _host_locked(log)
+    venv = root / "mcp" / ".venv"
+    assert f"UV_PROJECT_ENVIRONMENT={venv}" in _calls(log)
+    assert f"uv sync --project {root / 'mcp'} --locked --extra isaaclab --no-dev" in _calls(log)
+    assert (venv / "bin" / "isaac-mcp").is_file()
+    link = Path(env["HOME"]) / ".local" / "bin" / "isaac-mcp"
+    assert link.is_symlink() and link.resolve() == (venv / "bin" / "isaac-mcp").resolve()
 
 
 def test_a_claude_desktop_config_it_cannot_parse_is_left_alone_with_the_entry_to_add(tmp_path):

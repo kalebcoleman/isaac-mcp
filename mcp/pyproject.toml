@@ -9,6 +9,8 @@ dependencies = [
     # 1.22 is the lowest version tested with current Pydantic 2 releases.
     # Upper bound <2: mcp 2 renamed FastMCP to MCPServer and removed
     # `mcp.server.fastmcp`, which isaac_mcp/server.py imports.
+    # The installed version is the one in uv.lock. `uv sync --locked` and
+    # `uv run --locked` use that file. `uv tool install` does not.
     "mcp[cli]>=1.22,<2",
     # Older supported MCP releases do not constrain HTTPX 1.x, whose API breaks them.
     "httpx>=0.27.1,<1",
@@ -36,6 +38,14 @@ isaaclab = [
 # The Kit-side socket server lives in exts/isaac.mcp.bridge/ and is loaded by Kit, not pip.
 [project.scripts]
 isaac-mcp = "isaac_mcp.server:main"
+
+# Keep this project's resolver independent of the repository-root simulator
+# project, which sets prerelease = "allow" and pins the Isaac Sim stack.
+# `if-necessary` is uv's default: a pre-release is used only when a requirement
+# asks for one. `uv lock` and `uv sync --locked` then match from this directory
+# alone and from the repository root.
+[tool.uv]
+prerelease = "if-necessary"
 
 [build-system]
 requires = ["hatchling"]

@@ -11,8 +11,9 @@ per-tool reference lives in `docs/` ([index](docs/README.md), [every tool's argu
   (it uses an installed Isaac Sim 6.x and skips the download; `--no-sim` guarantees that, and still records the install it finds). Do not run
   `./install.sh --download-sim`, `uv sync`, `pip install isaacsim`, or `uv run`/`uv lock`/`uv add` in
   the repository root (the root project depends on Isaac Sim, so they create a ~20 GB `.venv`) without
-  the user asking; run tools with `python3 scripts/...` or `cd mcp && uv run --isolated ...`, and
-  do not replace or upgrade their Isaac Sim or Isaac Lab environment. If `find` shows nothing,
+  the user asking; run tools with `python3 scripts/...` or `cd mcp && uv run --locked --isolated ...`, and
+  refresh the host lock only with `uv lock --directory mcp`. Do not replace or upgrade their Isaac Sim
+  or Isaac Lab environment. If `find` shows nothing,
   stop and ask where Isaac Sim is installed (`ISAACSIM_PATH` or `ISAAC_MCP_PYTHON`) instead of
   installing one.
 - **PhysX is the release target. Newton is experimental.** Use PhysX for release validation;
@@ -88,7 +89,7 @@ find out. Fewer tools mean a filter:
 
 The other 7 tools are the bridge built-ins, also listed from a snapshot. With the standard
 groups there are 127 tools in total; the optional desktop input and simulator session groups add 9 more.
-`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 55 tools with otherwise standard settings.
+`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 58 tools with otherwise standard settings.
 These filters control discovery, not security.
 
 `ur5e_dt__quick_start*` leaves the timeline playing, and generic edits refuse with `TIMELINE_ACTIVE` until an
