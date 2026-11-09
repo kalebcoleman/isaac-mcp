@@ -221,7 +221,7 @@ Stop only the identified managed process; unsaved changes can be lost. Refuses e
 
 ## Isaac Lab
 
-Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 15 tools.
+Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 16 tools.
 
 ### `isaaclab__checkpoints_list`
 
@@ -244,12 +244,18 @@ Build a task, step it with zero or random actions, and report what is wrong, as 
 - `timeout_s` (float | None, default `900`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
+- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
 
 ### `isaaclab__envs_list`
 
 List registered Isaac Lab task ids (optionally filtered by substring).
 
 - `filter` (str | None, default `None`): Keep task ids containing this text.
+- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
 
 ### `isaaclab__eval`
 
@@ -267,6 +273,9 @@ Run a checkpoint as a job and score it. Returns its job_id; when the job ends, i
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
+- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
 
 ### `isaaclab__install_info`
 
@@ -297,6 +306,9 @@ Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cance
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
+- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
 
 ### `isaaclab__preflight`
 
@@ -320,6 +332,27 @@ Record an MP4 of a task with no window, as a job. With a checkpoint it plays the
 - `timeout_s` (float | None, default `1800`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
+- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
+
+### `isaaclab__run_script`
+
+Run your own bounded Python script as a managed job (kind "script") and return its job_id at once.
+
+- `script` (str, required): Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.
+- `args` (list[str] | None, default `None`): Command-line arguments for the script.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables; keys must be valid identifiers.
+- `python_path` (list[str] | None, default `None`): Folders put at the front of PYTHONPATH.
+- `python` (str | None, default `None`): Interpreter. Default: the configured ISAACLAB_PYTHON.
+- `cwd` (str | None, default `None`): Working directory. Default: the script's folder.
+- `label` (str | None, default `None`): Short name, used in the job_id and runs_list.
+- `timeout_s` (float, default `600`): Hard wall limit in seconds; the whole process group is killed at expiry.
+- `min_free_vram_mb` (int | None, default `None`): Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.
+- `wait_for_vram_s` (float, default `0`): With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).
+- `single_instance_key` (str | None, default `None`): Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.
+- `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
+- `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
 
 ### `isaaclab__runs_cancel`
 
@@ -330,9 +363,13 @@ Stop a job: SIGTERM to its process group, SIGKILL after grace_s seconds.
 
 ### `isaaclab__runs_list`
 
-List Isaac Lab jobs, to find a job_id.
+List Isaac Lab jobs, newest first, to find a job_id. Returns at most `limit` (default 25) matches, with `total` (all matches) and `truncated`; narrow with task, kind, state or since, or raise limit. Older versions returned every job oldest first.
 
 - `state` (str | None, default `None`): running or finished. Default: all.
+- `task` (str | None, default `None`): Keep jobs whose task id contains this text (case-insensitive).
+- `kind` (str | None, default `None`): Keep one kind of job: train, eval, play, env_check or record.
+- `since` (str | None, default `None`): Keep jobs started after this: an ISO time (2026-05-01T12:00, local time if no zone) or an age such as 90m, 2h, 1d, 1w.
+- `limit` (int, default `25`): Most jobs to return, newest first (1 to 500).
 
 ### `isaaclab__runs_status`
 
@@ -373,6 +410,9 @@ Start a training job and return its job_id immediately; follow it with isaaclab_
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
+- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
 
 ## Bridge built-ins
 

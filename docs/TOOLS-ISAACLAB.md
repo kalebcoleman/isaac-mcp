@@ -83,6 +83,31 @@ changed, then call `isaaclab__install_info` and `isaaclab__envs_list` to check d
 be explicitly configured; sibling packages are no longer imported automatically. Jobs use the
 same resolver (`ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` are forwarded to the child).
 
+#### Tasks from an external project
+
+Tasks of a project that is not installed in the Lab environment register only when its package is importable
+and its registration code runs. Every launching tool (`isaaclab__envs_list`, `train`, `eval`, `play`,
+`env_check`, `record`) takes three optional arguments for this, per call:
+
+| Argument | Effect |
+|---|---|
+| `python_path` | List of existing absolute directories prepended to the child's `PYTHONPATH` (before `ISAACLAB_TASK_PATH`). |
+| `env` | Extra environment variables for the child: identifier names, string values. Refused: `PATH`, `HOME`, `LD_*`, `DYLD_*`, every `PYTHON*` except `PYTHONHASHSEED`/`PYTHONFAULTHANDLER` (use `python_path`), `CUDA_VISIBLE_DEVICES`, `HEADLESS`, `ISAAC_MCP_*` and the `ISAACLAB_PYTHON`/`ROOT`/`JOBS_DIR` settings. Values are not stored in the job record, only the names. |
+| `external_callback` | Dotted `module.function` (strict `^ident(\.ident)+$`), passed to the Isaac Lab script as `--external_callback=module.function`. Giving it also in `extra_args` is refused. `envs_list` has no Lab script, so it imports the module and calls the function with no arguments. |
+
+Persistent equivalents, set in the MCP server's environment: `ISAACLAB_TASK_PATH` (same as `python_path`),
+`ISAACLAB_TASK_MODULES` (modules imported first) and `ISAACLAB_EXTERNAL_CALLBACK` (default for
+`external_callback`). When any of these is supplied, the pre-launch check that refuses a task id the checkout does
+not register is skipped, since the project may register it. Isaac Lab 3.0.0 runs `--external_callback` only in the
+`rsl_rl` train and play entry points (eval is a play job). Other `rl_library` values, `env_check` and `record` (the
+zero/random agent scripts) refuse an explicit `external_callback`; an `ISAACLAB_EXTERNAL_CALLBACK` default is skipped
+there. For those, put the package on `python_path` and name a module that registers on import in `ISAACLAB_TASK_MODULES`.
+
+Example: `isaaclab__envs_list {"python_path": ["<project>/src"], "external_callback": "g1_recovery.register.register", "filter": "getup"}`,
+then `isaaclab__train` with the same three arguments.
+
+When `isaaclab__envs_list` returns no tasks, or none match `filter`, the result carries a `hint` explaining this.
+
 ### TensorBoard readout
 
 `isaaclab__metrics_summary` and `isaaclab__tensorboard_tail` read `events.out.tfevents.*`
@@ -135,6 +160,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `ISAACLAB_LOGS_DIR` | metrics | Primary log root for checkpoints/metrics |
 | `ISAACLAB_TASK_MODULES` | install, jobs | Comma list of task modules to import before lookup |
 | `ISAACLAB_TASK_PATH` | install, jobs | `os.pathsep` list added to `PYTHONPATH` |
+| `ISAACLAB_EXTERNAL_CALLBACK` | install, jobs | Default `external_callback` (`module.function`) when a call gives none |
 | `ISAACLAB_ALLOW_TMP` | metrics | `1` adds the temp dir to allowed roots (tests only) |
 | `UR5E_DT_PORT` / `ISAAC_MCP_PORT` | jobs (Kit guard) | Fixed port probed for a running Kit bridge (default 8766) |
 | `CUDA_VISIBLE_DEVICES` | jobs (set by `device`) | Set per job from the `device` argument |
@@ -150,8 +176,9 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__play` | Play a checkpoint with a window (async, interactive) |
 | `isaaclab__env_check` | Build a task, step it with zero or random actions, and report problems (async) |
 | `isaaclab__record` | Record an MP4 with no window, from a checkpoint or from zero/random actions (async) |
+| `isaaclab__run_script` | Run your own bounded Python script as a managed job (async; executes arbitrary code) |
 | `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start` and a suggested `num_envs` |
-| `isaaclab__runs_list` | List jobs (running/finished/all) |
+| `isaaclab__runs_list` | List jobs, newest first, filtered (task, kind, state, since) and limited (default 25) |
 | `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir, window |
 | `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
 | `isaaclab__runs_cancel` | Stop a job (SIGTERM then SIGKILL process group) |
@@ -221,8 +248,13 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
   | `filter` | string | no | `null` | Case-insensitive substring matched against the task id. |
-- Returns: `{envs: [{id, entry_point}], import_errors?}`. `import_errors` appears only if a
-  configured task module failed to import. Short-lived subprocess with a 60 s timeout.
+  | `python_path` | list of strings | no | `null` | Directories prepended to `PYTHONPATH`; see [external projects](#tasks-from-an-external-project). |
+  | `env` | object | no | `null` | Extra environment variables for the probe. |
+  | `external_callback` | string | no | `null` | `module.function` imported and called before the registry is read. |
+- Returns: `{envs: [{id, entry_point}], import_errors?, applied?, hint?}`. `import_errors` appears only if a
+  configured task module or callback failed. `applied` echoes the supplied `python_path`/callback. `hint` appears
+  when `envs` is empty (nothing registered, or `filter` matched nothing) and explains how external tasks register.
+  Short-lived subprocess with a 60 s timeout.
 - Example: `{"filter": "reach"}`
 
 ### `isaaclab__train`
@@ -326,8 +358,39 @@ the same way; checks that depend on the task (a tip height, a tower standing) st
 `RecordVideo` and `--enable_cameras`; `runs_status` lists `video_paths`.
 
 `isaaclab__preflight(task=None)` reads `nvidia-smi`, the jobs this host started and any Kit bridge, and returns
-`can_start` with reasons. With a task that has a finished `env_check` it adds `suggested_num_envs`, treating half of
+`can_start` with reasons. `gpu.processes` lists every GPU compute process (`pid`, `name`, `mib`), and
+`other_gpu_processes` leaves out those in a running job's process group, so other projects' work shows up. With a task that has a finished `env_check` it adds `suggested_num_envs`, treating half of
 the measured GPU memory as fixed cost; the figure is deliberately low and should be confirmed with a short run.
+
+### `isaaclab__run_script`
+
+Runs **your own Python script** as a job of kind `script`, for work the registered-task tools cannot express
+(a sweep, a standalone Kit script, a custom evaluation). **It executes arbitrary code from the script with your
+rights on this host; nothing is sandboxed.** The tool is annotated not read-only and not idempotent, like the other
+job tools. `script` must be an existing `.py` file; it is run as `<python> <script> <args...>` with `shell=False`,
+never imported.
+
+| Name | Default | Notes |
+|---|---|---|
+| `script` | required | Existing `.py` file. |
+| `args` | none | List of strings. |
+| `env` | none | Extra variables; keys must be valid identifiers, values strings. |
+| `python_path` | none | Folders put in front of `PYTHONPATH`. |
+| `python` | configured `ISAACLAB_PYTHON` | Must be an executable file. |
+| `cwd` | the script's folder | Must exist. |
+| `label` | script name | Used in the `job_id` and `runs_list`. |
+| `timeout_s` | `600` | Hard wall limit. At expiry the whole process group gets SIGTERM, then SIGKILL; a shell guard enforces it even if the host goes away. |
+| `min_free_vram_mb` | off | Refuse unless this much GPU memory (MiB) is free on GPU 0; refuses when `nvidia-smi` gives no answer, or when `CUDA_VISIBLE_DEVICES` points the script at another GPU. |
+| `wait_for_vram_s` | `0` | Needs `min_free_vram_mb`: poll up to this long (at most 3600) before refusing. A cancelled call stops waiting and starts nothing. |
+| `single_instance_key` | none | Refuse while a running job has the same key, so a double-queued sweep cannot run twice. |
+| `allow_concurrent` | `false` | As for `isaaclab__train`: start although another job runs. |
+| `allow_concurrent_gpu` | `false` | As for `isaaclab__train`: refuse while a Kit bridge runs unless `true`. |
+
+The script leads its own session and process group, so `isaaclab__runs_cancel` and the timeout kill Kit, ffmpeg
+and any other child it started. Output goes to the job's `stdout.log` and `stderr.log`; follow it with
+`isaaclab__runs_tail`. A line `ISAAC_MCP_ARTIFACT: <path>` on stdout names an output file. When the job ends,
+`isaaclab__runs_status` returns `script_result`: `status`, `exit_code`, `wall_time_s`, `log_path`,
+`stderr_log_path` and `artifacts` (the printed paths, in order; they are not checked to exist).
 
 ### `isaaclab__play`
 
@@ -355,8 +418,15 @@ the measured GPU memory as fixed cost; the figure is deliberately low and should
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
   | `state` | string | no | `null` | `"running"`, `"finished"` (any end state, including failed), `"all"`, or omitted for all; anything else returns an error naming these. |
-- Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, log_dir}]}`. Dead pids are reconciled to `failed` ("host restarted") on read.
-- Example: `{"state": "running"}`
+  | `task` | string | no | `null` | Case-insensitive substring of the task id. |
+  | `kind` | string | no | `null` | `train`, `eval`, `play`, `env_check` or `record`. |
+  | `since` | string | no | `null` | ISO time (local time without a zone) or an age such as `90m`, `2h`, `1d`, `1w`. |
+  | `limit` | integer | no | `25` | 1 to 500. |
+- Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, log_dir}], total, truncated, hint?}`, **newest first**.
+  `total` counts every match before `limit`; `truncated` is true when `limit` cut some (then `hint` says how to narrow).
+  Changed from earlier versions, which returned every job oldest first: callers that need all jobs pass `limit=500` or narrow with `since`.
+  Dead pids are reconciled to `failed` ("host restarted") on read.
+- Example: `{"task": "g1", "state": "finished", "since": "1d", "limit": 10}`
 
 ### `isaaclab__runs_status`
 
@@ -508,7 +578,8 @@ Example play call shape (illustrative):
 
 A task is a Python package the tools import before Lab looks up its id. In the MCP server's environment,
 set `ISAACLAB_TASK_PATH` to the folder containing the task package and `ISAACLAB_TASK_MODULES` to its module
-name. Keep the package's `__init__.py` free of Isaac Lab imports because it is imported before Kit starts.
+name (or pass `python_path` and `external_callback` per call, see
+[external projects](#tasks-from-an-external-project)). Keep the package's `__init__.py` free of Isaac Lab imports because it is imported before Kit starts.
 Task-specific environments, rewards and training code belong in the project using the MCP, not in this
 repository. Check a new task with a scripted action before training; evaluate completed episodes separately
 from training metrics and record the task configuration and seed.
@@ -536,6 +607,39 @@ Measured on `Isaac-Velocity-Flat-G1`, Lab 3.0.0, one run each, so this is not a 
 |---|---|---|---|---|
 | PhysX (`physics=physx`, 1024 environments) | 762 s | 990 of 1000 | 33.8 over 64 episodes | 3 of 64 |
 | Newton MJWarp (the default) | 8.6 min | 948 of 1000 | 27.25 over 16 episodes | about 7% |
+
+### 10. Chained jobs gated on exit codes
+
+A second job (an eval of the checkpoint a train just wrote, a play after an eval) must start only if the first one
+really succeeded. The host has no job dependency feature; the caller is the sequencer, and each hop is an explicit
+check, not "the next step in the plan":
+
+1. `isaaclab__train` returns `{job_id}`. Poll `isaaclab__runs_status` until `state` is no longer `running`
+   (`runs_list` with `{"state": "running"}` shows the others; the GPU guard allows one at a time anyway).
+2. Continue only when `state == "succeeded"` **and** `exit_code == 0`. Treat `failed`, `cancelled` and `timeout` as
+   stops: read `last_stderr_lines` and `last_log_lines`, report them, and do not start the next job. A process that
+   exits 0 after an uncaught traceback is already reported as `failed` with a note, so gate on `state`, not on the
+   exit code alone.
+3. Take the next job's input from the first job's `latest_checkpoint` / `run_dir` in that same `runs_status` answer;
+   do not guess a path. An empty `latest_checkpoint` after `succeeded` is also a stop.
+4. Use `timeout_s` on each job so a hung stage ends itself even if the host is gone. After a host restart, call
+   `runs_status` again: the exit code is recorded in the job folder, and `failed` with `note: "host restarted"` means
+   no code was left.
+
+For a chain run unattended outside the MCP (a cron script or a tmux shell calling Lab's own scripts), do the same
+in shell. `set -e` stops at the first non-zero status; without it, check each status yourself, and never chain
+with `;` or a bare `&`:
+
+```bash
+set -euo pipefail
+train() { ./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py "$@"; }   # your Lab launcher
+play()  { ./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/play.py "$@"; }
+train --task <task> --headless || { rc=$?; echo "train failed rc=$rc" >&2; exit "$rc"; }
+play  --task <task> --headless --checkpoint <run_dir>/model_<n>.pt || { rc=$?; echo "play failed rc=$rc" >&2; exit "$rc"; }
+```
+
+Under `set -e` a failing stage inside `a | tee log` is hidden unless `pipefail` is set, as above. Lab's
+launcher must be the one your install provides (see `isaaclab__install_info`), not a guessed path.
 
 ## Concurrency guards
 

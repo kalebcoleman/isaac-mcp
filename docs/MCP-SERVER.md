@@ -363,6 +363,82 @@ Client side (these are client settings, not part of this server; check your clie
   prompts. Bridge tools do not. Annotations are hints, not an access control; the filters above decide what is
   registered at all, and none of them replaces a policy enforced at the bridge.
 
+### Tool counts depend on `ISAAC_MCP_LOCAL_TOOLS`
+
+A client lists **127 tools** with the default groups, **+5** (`window_*`) when `screen_input` is selected and **+4**
+(`sim__*` session tools) when `sim_launch` is selected: **136** with both. `ISAAC_MCP_NAMESPACE`,
+`ISAAC_MCP_BUILTINS=0` and `ISAAC_MCP_SCENE_TOOLS=0` lower the count further. A client that shows a different number
+has a filter set in its server entry; the server logs its tool count and filters at startup (below).
+
+### Diagnosing disconnects: the server log
+
+**Each MCP client starts its own `isaac-mcp` process** (Claude Code, Codex, OpenCode and every subagent that
+inherits the server each get one), and the process lives exactly as long as its client keeps stdin open. Selections
+made with `use_bridge` belong to that one process. A client that reports "disconnected" and reconnects has therefore
+ended one process and started another; the new process knows nothing about the old one.
+
+A client discards the server's stderr, so the server also writes a durable log, one file per process:
+
+| Setting | Meaning |
+|---|---|
+| `~/.local/state/isaac-mcp/server-<pid>.log` | Default file. `$XDG_STATE_HOME` is honoured. The directory is created `0700`, the file `0600`. |
+| `ISAAC_MCP_LOG_DIR=<dir>` | Another directory. It is the same variable that sets where the Kit bridge writes `tool-failures-<pid>.log`. |
+| `ISAAC_MCP_LOG=0` | No file (stderr only). |
+
+Each file rotates at 1 MB and keeps two older copies; logs of ended processes beyond the newest 30 are deleted. Every
+line carries `pid=`. Request arguments, tool results, file contents and environment values other than the tool filters
+are never written. The log records:
+
+- `process start`: pid, ppid and the parent's command name (the client), version, git commit of the checkout (or
+  `unknown` for a wheel), Python, tool count and the `ISAAC_MCP_*` filters in force;
+- `bridge connected` / `bridge connection lost` / `bridge call ... failed` / `bridge selected` (each Kit reconnect);
+- `sent tools/list_changed`;
+- `signal received: SIGTERM|SIGINT|SIGHUP|SIGPIPE` followed by `clean shutdown: signal ...`;
+- `clean shutdown: stdio transport closed (client closed stdin: EOF)` when the client simply went away;
+- `unhandled exception` / `server crashed` with the traceback, and Python tracebacks for native faults (SIGSEGV);
+- `alive:` every five minutes with the current ppid. A changed ppid means the client died and the server was orphaned.
+
+How to read it: find the newest files with `ls -t ~/.local/state/isaac-mcp/` and read the last lines of the one whose
+`process start` line names your client.
+
+| The log ends with | Meaning |
+|---|---|
+| `clean shutdown: ... EOF` | The client closed the pipe: it restarted or exited the server on its own (a client restart, a timeout, a reconnect button). Not a server fault. |
+| `signal received: SIGTERM` or `SIGHUP` | Something sent the signal: the client, a terminal closing, `systemd`, or a cleanup command. |
+| `unhandled exception` or `server crashed` | A server bug. Report the traceback. |
+| No shutdown line at all | `SIGKILL`, the out-of-memory killer or a native crash that Python could not log. Check `dmesg` and `journalctl` for the pid. |
+
+**Stale code.** The live servers may be editable installs of a git checkout that is updated in place (for example a
+timer that fast-forwards it). Python has already imported its modules, so a running server keeps the old code until its
+client reconnects. `status` returns `host.code_drift: true` and `host.code_drift_message` ("checkout moved from X to Y
+since this server started; reconnect to load it") when the checkout's `HEAD` moved, or when a catalog or core module
+file changed on disk, since the process started. The check reads `.git` files directly and caches the file check for
+30 s; `isaac_help` repeats the warning, and the error of a `status` call that no bridge answered carries it too. The Kit
+side has the same hazard: Kit reloads an extension in place when its files change unless `ISAAC_MCP_NO_HOT_RELOAD=1`,
+and clients must then reconnect.
+
+### Attaching the MCP to a Kit that a script launched
+
+`sim__launch` is optional and manages only the Kit processes it started. Any other Kit can be used, because
+the host only needs a bridge to dial. The mechanism, from `exts/isaac.mcp.bridge`:
+
+1. The Kit process must enable the extension: launch it with `--ext-folder <repo>/exts --enable isaac.mcp.bridge`
+   (`run.sh` also enables `ur5e-dt` and `sim-tools`; the generic `sim__*` and `assets__*` tools need `sim-tools`).
+2. The bridge binds one socket at startup, on `ISAAC_MCP_PORT` if set, else the persisted `autostartPort` setting that
+   `scripts/install.py` writes. Its address is `ISAAC_MCP_BIND`, default `localhost`. With no port configured, no socket
+   is started. There is **no fallback port**: if the declared port is taken, the extension refuses to start and says why.
+   Choose a free port yourself, or `ISAAC_MCP_PORT=0` only for the deferred-start launchers (`ISAAC_MCP_DEFER_START=1`),
+   which ask the OS for one.
+3. The bridge writes an advertisement, `<pid>-<port>.json`, in `$XDG_RUNTIME_DIR/isaac-mcp/` (else
+   `/tmp/isaac-mcp-<uid>/`) and removes it on exit.
+4. The host picks its target in this order: an explicit port (`use_bridge`), `UR5E_DT_PORT`, `ISAAC_MCP_PORT`, then
+   discovery of the advertisements **if exactly one bridge is advertised**. With several it refuses and lists them.
+
+So for a Kit started by your own script: set `ISAAC_MCP_PORT=<free port>` in that script's environment, enable the
+extension, wait for it to log `serving on`, then in the client call `list_bridges`, `use_bridge(port=<port>)` and
+`status` and confirm the PID. `sim__list` shows such a bridge as `managed: false` (`external-<pid>-<port>`); `sim__stop`
+will not stop it. A host server started before Kit may need `refresh_tools(wait_s=120)`.
+
 ---
 
 ## 5. Verification

@@ -202,6 +202,12 @@ def _child_env(root: Any, device: str | None) -> dict[str, str]:
     return env
 
 
+def _launch_kw(python_path: Any, env: Any, external_callback: Any) -> dict[str, Any]:
+    """The task-registration options a caller gave, for forwarding; empty when none, so older callers see no change."""
+    given = {"python_path": python_path, "env": env, "external_callback": external_callback}
+    return {k: v for k, v in given.items() if v is not None}
+
+
 def _read_job(job_dir: Path) -> dict[str, Any] | None:
     jf = job_dir / "job.json"
     if not jf.exists():
@@ -968,8 +974,31 @@ def _start_job_locked(
     rl_library_check: str | None = None,
     eval_options: dict[str, Any] | None = None,
     check_options: dict[str, Any] | None = None,
+    python_path: Any = None,
+    env: Any = None,
+    external_callback: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
+    opts = _install.validate_launch_options(python_path, env, external_callback)
+    if any(a.split("=", 1)[0] == "--external_callback" for a in argv):
+        if external_callback:
+            raise ValueError("Give external_callback as this option or in extra_args, not both.")
+        # Only the ISAACLAB_EXTERNAL_CALLBACK default is set: the caller's own extra_args win.
+        opts = {**opts, "external_callback": None}
+    if opts["external_callback"]:
+        # Isaac Lab 3.0.0 runs --external_callback only in the rsl_rl train and play entry points. The zero/random
+        # agent scripts (env_check, record) never call it, so the task stays unregistered and the job fails late.
+        if check_options is not None:
+            why = "env_check and record run Isaac Lab's zero/random agent script, which does not run it"
+        elif library is None and rl_library_check not in (None, "rsl_rl"):
+            why = f"rl_library={rl_library_check} does not run it (only rsl_rl does)"
+        else:
+            why = None
+        if why:
+            if external_callback:
+                raise ValueError(f"external_callback is not supported here: {why}. Register the task with python_path plus "
+                                 "ISAACLAB_TASK_MODULES (a module that registers on import) instead.")
+            opts = {**opts, "external_callback": None}  # only the ISAACLAB_EXTERNAL_CALLBACK default: skip it here
     if not allow_concurrent:
         blocked = _concurrency_guard()
         if blocked is not None:
@@ -995,8 +1024,11 @@ def _start_job_locked(
         raise ValueError(f"{_install.lab_label(root_path, _install.lab_profile(root_path))} has no "
                          f"{script_path.relative_to(root_path)}, so no job could start. "
                          f"Expected {_install.EXPECTED_SCRIPTS}.")
-    task_modules, task_paths = _install.resolve_task_modules(root_path)
-    _require_known_task(root_path, task, task_modules)
+    task_modules, task_paths = _install.resolve_task_modules(root_path, {**os.environ, **opts["env"]})
+    external = bool(opts["python_path"] or opts["external_callback"])
+    _require_known_task(root_path, task, task_modules or (["<external>"] if external else []))
+    if opts["external_callback"]:
+        argv = list(argv) + [f"--external_callback={opts['external_callback']}"]
     job_id = _job_id(task)
     jd = jobs_dir() / job_id
     jd.mkdir(parents=True, exist_ok=True)
@@ -1030,6 +1062,7 @@ def _start_job_locked(
     stdout_f = open(stdout_path, "wb")
     stderr_f = open(stderr_path, "wb")
     env = _child_env(root_path, device)
+    env.update(opts["env"])
     if headless is not None:
         # A tool's explicit display choice wins over an inherited shell setting.
         # Do not mutate os.environ or another job's launch configuration.
@@ -1037,6 +1070,8 @@ def _start_job_locked(
     if task_modules:
         env["ISAACLAB_TASK_MODULES"] = ",".join(task_modules)
         env["PYTHONPATH"] = os.pathsep.join(task_paths + [env["PYTHONPATH"]])
+    if opts["python_path"]:
+        env["PYTHONPATH"] = os.pathsep.join(opts["python_path"] + [env["PYTHONPATH"]])
     proc = subprocess.Popen(
         _exit_recording(full_cmd, jd, timeout_s),
         stdout=stdout_f,
@@ -1074,6 +1109,9 @@ def _start_job_locked(
         data["eval"] = dict(eval_options)
     if check_options is not None:
         data["check"] = dict(check_options)
+    if external or opts["env"]:
+        data["launch"] = {"python_path": opts["python_path"], "external_callback": opts["external_callback"],
+                          "env_names": sorted(opts["env"])}  # names only: values may be secrets
     _write_job(jd, data)
 
     with _jobs_lock:
@@ -1101,6 +1139,9 @@ def train(
     rl_library: str | None = None,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
+    python_path: Any = None,
+    env: Any = None,
+    external_callback: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -1132,6 +1173,7 @@ def train(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         headless=headless, rl_library_check=lib, extra_validated=extras,
+        **_launch_kw(python_path, env, external_callback),
         **({} if libraries is None else {"library": lib}),
     )
 
@@ -1151,6 +1193,9 @@ def eval_(
     max_steps: int | None = 20000,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
+    python_path: Any = None,
+    env: Any = None,
+    external_callback: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -1179,6 +1224,7 @@ def eval_(
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, rl_library_check=lib, extra_validated=extras,
                         eval_options={"num_episodes": num_episodes, "max_steps": max_steps},
+                        **_launch_kw(python_path, env, external_callback),
                         **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
@@ -1196,6 +1242,9 @@ def play(
     rl_library: str | None = None,
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
+    python_path: Any = None,
+    env: Any = None,
+    external_callback: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
@@ -1218,6 +1267,7 @@ def play(
     result = _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, rl_library_check=lib, extra_validated=extras,
+                        **_launch_kw(python_path, env, external_callback),
                         **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
@@ -1228,7 +1278,7 @@ _AGENTS = ("zero", "random")
 def _check_job(kind: str, python: str, root: Any, task: str, num_envs: int, steps: int, agent: str,
                headless: bool, physics: str | None, extra_args: Any, timeout_s: float | None,
                allow_concurrent: bool, allow_concurrent_gpu: bool, extra_flags: list[str],
-               video_length: int = 200) -> dict[str, Any]:
+               video_length: int = 200, launch: dict[str, Any] | None = None) -> dict[str, Any]:
     _validate_task(task)
     if agent not in _AGENTS:
         raise ValueError(f"agent must be one of {', '.join(_AGENTS)}")
@@ -1243,7 +1293,8 @@ def _check_job(kind: str, python: str, root: Any, task: str, num_envs: int, step
     return _start_job(python, root, kind, task, argv, timeout_s=timeout_s, allow_concurrent=allow_concurrent,
                       allow_concurrent_gpu=allow_concurrent_gpu, headless=headless, extra_validated=extras,
                       check_options={"mode": "check" if kind == "env_check" else "record", "steps": steps,
-                                     "agent": agent, "video_length": video_length})
+                                     "agent": agent, "video_length": video_length},
+                      **(launch or {}))
 
 
 def _native_agent_video(root: Any) -> bool:
@@ -1254,38 +1305,279 @@ def _native_agent_video(root: Any) -> bool:
 def env_check(python: str, root: Any, task: str, num_envs: int = 4, steps: int = 60, agent: str = "zero",
               headless: bool = True, physics: str | None = None, extra_args: Any = None,
               timeout_s: float | None = 900, allow_concurrent: bool = False,
-              allow_concurrent_gpu: bool = False) -> dict[str, Any]:
+              allow_concurrent_gpu: bool = False, python_path: Any = None, env: Any = None,
+              external_callback: Any = None) -> dict[str, Any]:
     return _check_job("env_check", python, root, task, num_envs, steps, agent, headless, physics, extra_args,
                       timeout_s, allow_concurrent, allow_concurrent_gpu,
-                      ["--max_steps", str(int(steps))] if _native_agent_video(root) else [])
+                      ["--max_steps", str(int(steps))] if _native_agent_video(root) else [],
+                      launch=_launch_kw(python_path, env, external_callback))
 
 
 def record(python: str, root: Any, task: str, checkpoint: Any = None, num_envs: int = 1, video_length: int = 200,
            agent: str = "zero", headless: bool = True, rl_library: str | None = None, physics: str | None = None,
            extra_args: Any = None, timeout_s: float | None = 1800, allow_concurrent: bool = False,
-           allow_concurrent_gpu: bool = False) -> dict[str, Any]:
+           allow_concurrent_gpu: bool = False, python_path: Any = None, env: Any = None,
+           external_callback: Any = None) -> dict[str, Any]:
+    launch = _launch_kw(python_path, env, external_callback)
     video_length = _positive_int(video_length, "video_length")
     if checkpoint:
         extras = _validate_extra_args(extra_args) + ["--video", "--video_length", str(video_length)]
         out = play(python, root, task, checkpoint, num_envs=num_envs, headless=headless, physics=physics,
                    extra_args=extras, timeout_s=timeout_s, rl_library=rl_library,
-                   allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu)
+                   allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu, **launch)
         return {**out, "note": "policy playback; isaaclab__runs_status lists video_paths when it finishes"}
     if _native_agent_video(root):
         # Lab 3's zero/random agents record and stop by themselves (--video, --max_steps): no wrapper needed.
         out = _check_job("env_check", python, root, task, num_envs, video_length + 1, agent, headless, physics,
                          extra_args, timeout_s, allow_concurrent, allow_concurrent_gpu,
-                         ["--video", "--video_length", str(video_length), "--max_steps", str(video_length + 1)])
+                         ["--video", "--video_length", str(video_length), "--max_steps", str(video_length + 1)],
+                         launch=launch)
     else:
         out = _check_job("record", python, root, task, num_envs, video_length + 1, agent, headless, physics,
                          extra_args, timeout_s, allow_concurrent, allow_concurrent_gpu, ["--enable_cameras"],
-                         video_length=video_length)
+                         video_length=video_length, launch=launch)
     return {**out, "note": f"{agent} actions, no policy; isaaclab__runs_status lists video_paths when it finishes"}
 
 
-def runs_list(state: str | None = None) -> dict[str, Any]:
+# ---- generic script jobs (isaaclab__run_script) ----------------------------------------------------------------
+
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_ARTIFACT_PREFIX = "ISAAC_MCP_ARTIFACT:"
+_ARTIFACT_LOG_MAX = 32 * 1024**2
+_ARTIFACT_LIMIT = 200
+SCRIPT_DEFAULT_TIMEOUT_S = 600.0
+MAX_VRAM_WAIT_S = 3600.0
+_VRAM_POLL_S = 5.0  # patched by tests
+
+
+def _script_artifacts(log_path: Path) -> list[str]:
+    """Paths the script printed on a line `ISAAC_MCP_ARTIFACT: <path>`, in order, without repeats."""
+    found: list[str] = []
+    try:
+        size = log_path.stat().st_size
+        with log_path.open("rb") as f:
+            f.seek(max(0, size - _ARTIFACT_LOG_MAX))
+            text = f.read().decode(errors="replace")
+    except OSError:
+        return found
+    for line in text.splitlines():
+        line = _ANSI_RE.sub("", line).strip()
+        if line.startswith(_ARTIFACT_PREFIX):
+            value = line[len(_ARTIFACT_PREFIX):].strip()
+            if value and value not in found:
+                found.append(value)
+                if len(found) >= _ARTIFACT_LIMIT:
+                    break
+    return found
+
+
+def _script_result(jd: Path, data: dict[str, Any], elapsed: float) -> dict[str, Any]:
+    return {
+        "status": data.get("status"),
+        "exit_code": data.get("exit_code"),
+        "wall_time_s": round(elapsed, 3),
+        "log_path": data.get("stdout_log"),
+        "stderr_log_path": data.get("stderr_log"),
+        "artifacts": _script_artifacts(jd / "stdout.log"),
+    }
+
+
+def _running_with_key(key: str) -> dict[str, Any] | None:
+    for jd in sorted(jobs_dir().iterdir()):
+        data = _read_job(jd) if jd.is_dir() else None
+        if not data or data.get("status") != "running" or data.get("single_instance_key") != key:
+            continue
+        proc = _active.get(jd.name)
+        if (proc is not None and proc.poll() is None) or (proc is None and _job_alive(data)):
+            return data
+    return None
+
+
+class LaunchCancelled(Exception):
+    """The caller gave up while run_script was waiting for GPU memory; nothing was started."""
+
+
+def _wait_for_vram(min_free_mb: int, wait_s: float, cancel: Any = None) -> dict[str, Any] | None:
+    """None when enough GPU memory is free (waiting up to wait_s for it); otherwise a refusal."""
+    from . import preflight as _preflight
+
+    deadline = time.monotonic() + wait_s
+    while True:
+        if cancel is not None and cancel.is_set():
+            raise LaunchCancelled()
+        gpu = _preflight.gpu_state()
+        if gpu is None:
+            return {"error": "nvidia-smi gave no answer, so free GPU memory is unknown and min_free_vram_mb cannot be checked",
+                    "hint": "leave min_free_vram_mb out to start without the check"}
+        if gpu["free_mib"] >= min_free_mb:
+            return None
+        if time.monotonic() >= deadline:
+            return {"error": f"only {gpu['free_mib']} MiB of GPU memory is free; min_free_vram_mb={min_free_mb}",
+                    "free_mib": gpu["free_mib"], "processes": gpu.get("processes", []),
+                    "hint": "pass wait_for_vram_s to wait for it, or see isaaclab__preflight for what holds the GPU"}
+        step = max(0.01, min(_VRAM_POLL_S, deadline - time.monotonic()))
+        if cancel is not None:
+            if cancel.wait(step):
+                raise LaunchCancelled()
+        else:
+            time.sleep(step)
+
+
+def run_script(
+    python: str,
+    script: Any,
+    args: Any = None,
+    env: Any = None,
+    python_path: Any = None,
+    cwd: Any = None,
+    label: str | None = None,
+    timeout_s: float | None = SCRIPT_DEFAULT_TIMEOUT_S,
+    min_free_vram_mb: int | None = None,
+    wait_for_vram_s: float = 0,
+    single_instance_key: str | None = None,
+    allow_concurrent: bool = False,
+    allow_concurrent_gpu: bool = False,
+    cancel: Any = None,
+) -> dict[str, Any]:
+    """Run a user's Python script as a job. It executes arbitrary code with this user's rights; nothing is sandboxed."""
+    if not isinstance(script, (str, os.PathLike)) or not str(script):
+        raise ValueError("script must be a path to a .py file")
+    script_path = Path(script).expanduser()
+    if script_path.suffix != ".py" or not script_path.is_file():
+        raise ValueError(f"script must be an existing .py file: {script}")
+    script_path = script_path.resolve()
+    argv = []
+    for a in (args or []):
+        if not isinstance(a, str) or "\0" in a:
+            raise ValueError("args must be a list of strings without NUL characters")
+        argv.append(a)
+    if env is not None and not isinstance(env, dict):
+        raise ValueError("env must be an object of NAME: value strings")
+    extra_env: dict[str, str] = {}
+    for k, v in (env or {}).items():
+        if not isinstance(k, str) or not _ENV_KEY_RE.match(k):
+            raise ValueError(f"env key {k!r} is not a valid identifier")
+        if not isinstance(v, str) or "\0" in v:
+            raise ValueError(f"env value for {k} must be a string without NUL characters")
+        extra_env[k] = v
+    paths = []
+    for p in (python_path or []):
+        if not isinstance(p, str) or not p or "\0" in p or os.pathsep in p:
+            raise ValueError("python_path must be a list of non-empty path strings")
+        paths.append(str(Path(p).expanduser()))
+    py = Path(str(python)).expanduser()
+    if not py.is_file() or not os.access(py, os.X_OK):
+        raise ValueError(f"python is not an executable file: {python}")
+    workdir = Path(cwd).expanduser() if cwd else script_path.parent
+    if not workdir.is_dir():
+        raise ValueError(f"cwd is not a directory: {workdir}")
+    if timeout_s is None:
+        timeout_s = SCRIPT_DEFAULT_TIMEOUT_S
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not 0 < timeout_s <= 7 * 86400:
+        raise ValueError("timeout_s must be a number of seconds greater than 0 (at most 7 days)")
+    if min_free_vram_mb is not None and (type(min_free_vram_mb) is not int or min_free_vram_mb <= 0):
+        raise ValueError("min_free_vram_mb must be a positive integer")
+    if isinstance(wait_for_vram_s, bool) or not isinstance(wait_for_vram_s, (int, float)) or not 0 <= wait_for_vram_s <= MAX_VRAM_WAIT_S:
+        raise ValueError(f"wait_for_vram_s must be between 0 and {int(MAX_VRAM_WAIT_S)}")
+    if single_instance_key is not None and (not isinstance(single_instance_key, str) or not 0 < len(single_instance_key) <= 200):
+        raise ValueError("single_instance_key must be a non-empty string of at most 200 characters")
+    if label is not None and (not isinstance(label, str) or not label.strip()):
+        raise ValueError("label must be a non-empty string")
+    name = (label or script_path.stem)[:60]
+    if wait_for_vram_s and min_free_vram_mb is None:
+        raise ValueError("wait_for_vram_s needs min_free_vram_mb")
+    if min_free_vram_mb is not None:
+        pinned = extra_env.get("CUDA_VISIBLE_DEVICES", os.environ.get("CUDA_VISIBLE_DEVICES", "")).strip()
+        if pinned not in ("", "0"):
+            raise ValueError("min_free_vram_mb measures GPU 0 only, but CUDA_VISIBLE_DEVICES=" + pinned +
+                             " moves the script elsewhere; leave one of them out")
+        blocked = _wait_for_vram(min_free_vram_mb, float(wait_for_vram_s), cancel)  # outside the launch lock: it can take long
+        if blocked is not None:
+            return blocked
+    with _launch_lock:
+        if single_instance_key is not None:
+            other = _running_with_key(single_instance_key)
+            if other is not None:
+                return {"error": f"a job with single_instance_key {single_instance_key!r} is already running: {other.get('job_id')} (pid {other.get('pid')})",
+                        "running_job_id": other.get("job_id"), "running_pid": other.get("pid"),
+                        "hint": "wait for it, or cancel it with isaaclab__runs_cancel"}
+        if not allow_concurrent:
+            blocked = _concurrency_guard()
+            if blocked is not None:
+                return blocked
+        if not allow_concurrent_gpu:
+            blocked = _kit_bridge_guard()
+            if blocked is not None:
+                return blocked
+        job_id = _job_id(name)
+        jd = jobs_dir() / job_id
+        jd.mkdir(parents=True, exist_ok=True)
+        full_cmd = [str(py), str(script_path)] + argv
+        child = os.environ.copy()
+        child["OMNI_KIT_ACCEPT_EULA"] = "YES"
+        child["PYTHONUNBUFFERED"] = "1"
+        child.update(extra_env)
+        if paths:
+            existing = child.get("PYTHONPATH", "")
+            child["PYTHONPATH"] = os.pathsep.join(paths + ([existing] if existing else []))
+        stdout_path, stderr_path = jd / "stdout.log", jd / "stderr.log"
+        with open(stdout_path, "wb") as out_f, open(stderr_path, "wb") as err_f:
+            proc = subprocess.Popen(
+                _exit_recording(full_cmd, jd, timeout_s), stdout=out_f, stderr=err_f, stdin=subprocess.DEVNULL,
+                env=child, cwd=str(workdir), shell=False, start_new_session=True,
+            )
+        data = {
+            "id": job_id, "job_id": job_id, "kind": "script", "task": name, "label": label,
+            "script": str(script_path), "command": full_cmd, "cwd": str(workdir.resolve()),
+            "pid": proc.pid, "pid_start": _process_start(proc.pid), "timeout_s": timeout_s,
+            "single_instance_key": single_instance_key,
+            "started_at": _now(), "finished_at": None, "status": "running", "exit_code": None,
+            "log_dir": str(jd.resolve()), "run_dir": str(jd.resolve()),
+            "stdout_log": str(stdout_path.resolve()), "stderr_log": str(stderr_path.resolve()),
+        }
+        _write_job(jd, data)
+        with _jobs_lock:
+            _active[job_id] = proc
+        threading.Thread(target=_watcher, args=(jd, job_id, proc, timeout_s), daemon=True).start()
+    return {"job_id": job_id, "log_dir": str(jd.resolve()), "command": full_cmd, "timeout_s": timeout_s,
+            "note": "Runs the script as arbitrary code with your rights. Print `ISAAC_MCP_ARTIFACT: <path>` for outputs; runs_status lists them as script_result.artifacts."}
+
+
+_RELATIVE_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*([smhdw])$", re.I)
+_UNIT_S = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+RUNS_LIST_DEFAULT_LIMIT = 25
+RUNS_LIST_MAX_LIMIT = 500
+
+
+def _parse_since(since: Any) -> float:
+    """An epoch time from an ISO date/time (naive means local time) or a relative age such as 90m, 2h, 1d, 1w."""
+    if not isinstance(since, str) or not since.strip():
+        raise ValueError("since must be an ISO time such as 2026-05-01T12:00 or a relative age such as 2h, 1d")
+    text = since.strip()
+    rel = _RELATIVE_RE.match(text)
+    if rel:
+        return _now() - float(rel.group(1)) * _UNIT_S[rel.group(2).lower()]
+    try:
+        from datetime import datetime
+
+        return datetime.fromisoformat(text).timestamp()
+    except ValueError:
+        raise ValueError(f"cannot read since={since!r}: use an ISO time such as 2026-05-01T12:00 or a relative age such as 2h, 1d") from None
+
+
+def runs_list(state: str | None = None, task: str | None = None, kind: str | None = None,
+              since: str | None = None, limit: int | None = RUNS_LIST_DEFAULT_LIMIT) -> dict[str, Any]:
+    """Jobs, newest first, filtered and bounded. ``total`` counts every match, ``truncated`` says ``limit`` cut some."""
     if state and state not in RUN_STATES:
         raise ValueError(f"unknown state {state!r}: use one of {', '.join(RUN_STATES)}, or omit it for all")
+    if limit is None:
+        limit = RUNS_LIST_DEFAULT_LIMIT
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= RUNS_LIST_MAX_LIMIT:
+        raise ValueError(f"limit must be an integer from 1 to {RUNS_LIST_MAX_LIMIT}")
+    for name, value in (("task", task), ("kind", kind)):
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{name} must be a string")
+    cutoff = _parse_since(since) if since is not None else None
     runs = []
     for jd in sorted(jobs_dir().iterdir()):
         if not jd.is_dir():
@@ -1303,7 +1595,13 @@ def runs_list(state: str | None = None) -> dict[str, Any]:
                 continue
             if state == "finished" and st == "running":
                 continue
+        if task and task.lower() not in str(data.get("task") or "").lower():
+            continue
+        if kind and kind != data.get("kind"):
+            continue
         started = data.get("started_at")
+        if cutoff is not None and (not started or float(started) < cutoff):
+            continue
         elapsed = (_now() - float(started)) if started else 0.0
         if st != "running" and data.get("finished_at"):
             elapsed = float(data["finished_at"]) - float(started)
@@ -1316,7 +1614,13 @@ def runs_list(state: str | None = None) -> dict[str, Any]:
             "elapsed_s": round(elapsed, 3),
             "log_dir": data.get("log_dir"),
         })
-    return {"runs": runs}
+    runs.sort(key=lambda r: float(r["started_at"] or 0), reverse=True)
+    total = len(runs)
+    result: dict[str, Any] = {"runs": runs[:limit], "total": total, "truncated": total > limit}
+    if result["truncated"]:
+        result["hint"] = (f"Showing the newest {limit} of {total}. Narrow with task, kind, state or since (such as 2h or 1d), "
+                          "or raise limit.")
+    return result
 
 
 def runs_status(job_id: str) -> dict[str, Any]:
@@ -1390,6 +1694,8 @@ def runs_status(job_id: str) -> dict[str, Any]:
             found = sorted(str(x.resolve()) for x in vdir.glob("*.mp4")) if vdir.is_dir() else []
             if found:
                 out["video_paths"] = found
+    if data.get("kind") == "script":
+        out["script_result"] = _script_result(jd, {**data, "status": out["state"], "exit_code": out["exit_code"]}, elapsed)
     if data.get("kind") == "eval":
         result = _eval_result(jd)
         if result is not None:
@@ -1496,6 +1802,7 @@ _rehydrate()  # last: it can need anything above
 __all__ = [
     "jobs_dir",
     "train",
+    "run_script",
     "eval_",
     "play",
     "runs_list",
