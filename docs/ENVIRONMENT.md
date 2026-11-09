@@ -16,6 +16,8 @@ starts `run.sh`. Set host variables in the client's `env` for the `isaac` server
 | `ISAAC_MCP_BUILTINS` | `1` | `0` hides the bridge built-ins. |
 | `ISAAC_MCP_SCENE_TOOLS` | `1` | `0` hides all generic `sim__*` and `assets__*` tools. |
 | `ISAAC_MCP_NAME`, `ISAAC_MCP_INSTRUCTIONS` | built in | Cosmetic server identity. |
+| `ISAAC_MCP_LOG` | `1` | `0` turns off the host server's durable log file (stderr logging stays). See [Diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log). |
+| `ISAAC_MCP_LOG_DIR` | `$XDG_STATE_HOME/isaac-mcp`, else `~/.local/state/isaac-mcp` | Directory of the host's `server-<pid>.log` (1 MB x 3, private). The bridge reads the same variable for its failure log. |
 | `DISPLAY` | `:0` | X11 display for the desktop tools. Match your session. |
 | `ISAAC_MCP_HOLD_TOKEN`, `ISAAC_MCP_HOLD_TOKEN_FILE` | unset | Token for a held bridge doorway. See [protocol](../mcp/docs/protocol.md). |
 
@@ -81,7 +83,7 @@ Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).
 | `ISAAC_MCP_TOOL_MODULES`, `ISAAC_MCP_TOOL_PATHS` | persisted setting | Per-launch tool packages and their search paths. |
 | `ISAAC_MCP_QUEUE_CAP_S` | `900` | Longest wait a request may state. |
 | `ISAAC_MCP_QUEUE_LIMIT` | `64` | Maximum waiting requests. |
-| `ISAAC_MCP_LOG_DIR` | bridge runtime directory | Where a failing call's frames are written. |
+| `ISAAC_MCP_LOG_DIR` | bridge runtime directory | Where a failing call's frames are written (`tool-failures-<pid>.log`). The host server reads the same variable for its `server-<pid>.log`; see the host table above. |
 | `ISAAC_MCP_AUTHORING_TELEMETRY` | unset | File that receives a record of each completed tool call. See [protocol](../mcp/docs/protocol.md). |
 
 ## Both host and Kit

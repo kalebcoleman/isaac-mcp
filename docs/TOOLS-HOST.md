@@ -57,6 +57,10 @@ default. Five desktop input tools and four simulator-session tools are opt-in. `
 comma-separated list of group names and aliases; unset or empty means `all`. An unknown name stops the server at
 startup with a message listing the valid names; it never registers nothing silently.
 
+The count a client sees follows this setting: **127 tools** by default, **+5** with `screen_input` and **+4** with
+`sim_launch`, **136** with both. The server writes its tool count and filters to its log at startup; see
+[diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log).
+
 | Group | Tools |
 |---|---|
 | `isaaclab_read` | `isaaclab__checkpoints_list`, `isaaclab__metrics_summary`, `isaaclab__tensorboard_tail`, `isaaclab__preflight` |
