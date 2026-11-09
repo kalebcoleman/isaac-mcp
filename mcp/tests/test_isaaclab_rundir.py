@@ -125,3 +125,23 @@ def test_log_naming_a_missing_folder_is_not_trusted(tmp_path, _dirs):
 
 def test_unknown_job_is_an_error():
     assert "unknown job" in status_tool(job_id="20261102-100003-Nope")["error"]
+
+
+def test_lab3_logs_only_the_timestamp_and_the_run_name_is_added_to_the_folder(tmp_path, _dirs):
+    """Seen in a real G1 smoke job: the log says 'experiment name ... 2026-11-09_12-51-31', the folder is '..._pr90_smoke'."""
+    run = make_run(_dirs, "g1", "2026-11-09_12-51-31", "pr90_smoke")
+    (run / "model_1.pt").write_bytes(b"x")
+    jid = "20261109-125128-T"
+    write_job(jid, f"[INFO] Logging experiment in directory: {run.parent}\n"
+                   "Exact experiment name requested from command line: 2026-11-09_12-51-31\n", tmp_path)
+    out = status_tool(job_id=jid, require_run_dir=True)
+    assert out["run_dir"] == str(run) and out["run_dir_source"] == "lab_log" and out["latest_checkpoint"].endswith("model_1.pt")
+
+
+def test_two_candidate_folders_for_one_logged_timestamp_are_not_guessed(tmp_path, _dirs):
+    make_run(_dirs, "g1", "2026-11-09_12-51-31", "a")
+    make_run(_dirs, "g1", "2026-11-09_12-51-31", "b")
+    jid = "20261109-125129-T"
+    write_job(jid, f"[INFO] Logging experiment in directory: {_dirs / 'rsl_rl' / 'g1'}\n"
+                   "Exact experiment name requested from command line: 2026-11-09_12-51-31\n", tmp_path)
+    assert status_tool(job_id=jid)["run_dir_source"] == "job_dir"

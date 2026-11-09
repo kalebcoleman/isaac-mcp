@@ -28,6 +28,7 @@ Jobs are launched with ``shell=False`` and an explicit argv list, with
 
 from __future__ import annotations
 
+import glob
 import itertools
 import errno
 import json
@@ -777,6 +778,21 @@ def _run_dir_from_log(log_path: Path) -> str | None:
     if any(ord(c) < 32 for c in root):
         return None
     return str(Path(root) / name)
+
+
+def _existing_run_dir(logged: str | None) -> str | None:
+    """The run folder a log names, if it exists. Lab 3 logs only the timestamp ("2026-11-09_12-51-31") as the experiment name and
+    adds "_<run_name>" to the folder afterwards, so a missing folder also matches a single sibling "<logged>_*"."""
+    if not logged:
+        return None
+    path = Path(logged)
+    if path.is_dir():
+        return str(path)
+    try:
+        siblings = sorted(p for p in path.parent.glob(glob.escape(path.name) + "_*") if p.is_dir())
+    except OSError:
+        return None
+    return str(siblings[0]) if len(siblings) == 1 else None
 
 
 _PHYSICS_RE = re.compile(r"Physics {2,}([A-Za-z][A-Za-z0-9_]*)")
@@ -1681,8 +1697,8 @@ def runs_status(job_id: str) -> dict[str, Any]:
     run_dir_source = "job_dir"  # until a Lab run folder is found, run_dir is the job's own folder
     ckpt = _latest_checkpoint(run_dir) or _checkpoint_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
     if not ckpt:
-        logged = _run_dir_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
-        if logged and Path(logged).exists():
+        logged = _existing_run_dir(_run_dir_from_log(Path(data.get("log_dir", jd)) / "stdout.log"))
+        if logged:
             run_dir = logged
             run_dir_source = "lab_log"
             ckpt = _latest_checkpoint(run_dir)
