@@ -1106,6 +1106,7 @@ def _probe_locked() -> bool | None:
 # ---------------------------------------------------------------- joining clips
 
 JOIN_MODES = ("concat", "hstack", "vstack")
+SHEET_MODE = "sheet"
 VIDEO_SUFFIXES = (".mp4", ".mov", ".mkv", ".webm")
 MAX_JOIN_INPUTS = 8
 MAX_JOIN_SECONDS = 3600
@@ -1265,6 +1266,75 @@ def join_command(ffmpeg: str, inputs: list[Path], plan: dict, output: Path, over
     cmd += ["-filter_complex", plan["filter"], "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "veryfast",
             "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output)]
     return cmd
+
+
+def safe_output_image(raw: str | None, roots: list[Path] | None = None) -> Path:
+    """Output PNG: a new file in the screen-mcp picture folder (bare name) or under home. Never an existing file."""
+    roots = roots or (_allowed_roots() + [SHOT_DIR.resolve()])
+    if raw is None or raw == "":
+        return SHOT_DIR / f"sheet-{_stamp()}.png"
+    if not isinstance(raw, str) or "\0" in raw:
+        raise ValueError("output must be a file name or path")
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        if len(candidate.parts) != 1:
+            raise ValueError(f"output {raw!r}: give a file name (saved in {SHOT_DIR}) or an absolute path")
+        candidate = SHOT_DIR / candidate
+    if candidate.suffix.lower() != ".png":
+        raise ValueError("a sheet's output must end in .png")
+    parent = candidate.parent.resolve() if candidate.parent.exists() else candidate.parent
+    if parent == SHOT_DIR and not parent.exists():
+        parent.mkdir(parents=True, exist_ok=True)
+        parent = parent.resolve()
+    path = parent / candidate.name
+    if not _under(Path(parent), roots):
+        raise ValueError(f"output {raw!r} is outside your home folder; only that is written")
+    if not Path(parent).is_dir():
+        raise ValueError(f"output folder {parent} does not exist")
+    if os.path.lexists(path):
+        raise ValueError(f"output {path} already exists; join_videos never overwrites, choose another name")
+    return path
+
+
+def _contact_sheet(inputs, job_id, times, output) -> str:
+    from . import contact_sheet
+
+    if (inputs is None) == (job_id is None):
+        raise ValueError("sheet: give inputs (video paths) or job_id, not both and not neither")
+    if job_id is not None:
+        from .isaaclab import jobs as _lab_jobs
+
+        found = _lab_jobs.runs_status(job_id).get("video_paths") or []
+        if not found:
+            raise ValueError(f"job {job_id} has no videos yet; isaaclab__runs_status lists video_paths when a record or play --video job writes them")
+        inputs = list(reversed(found))  # oldest first
+    if not isinstance(inputs, list) or not 1 <= len(inputs) <= contact_sheet.MAX_ROWS:
+        raise ValueError(f"sheet: 1..{contact_sheet.MAX_ROWS} videos")
+    when = contact_sheet.check_times(times)
+    roots = _allowed_roots()
+    paths = [safe_input_video(raw, roots) for raw in inputs]
+    out = safe_output_image(output)
+    try:
+        ffmpeg = _ffmpeg()
+    except RuntimeError as exc:
+        raise RuntimeError("ffmpeg is not available: install imageio-ffmpeg (a dependency of isaac-mcp) or put ffmpeg on PATH; no sheet was made") from exc
+    infos = [probe_video(ffmpeg, p) for p in paths]
+    tmp = out.with_name(f".{out.stem}.partial-{os.getpid()}-{threading.get_ident()}.png")
+    try:
+        info = contact_sheet.build(paths, infos, when, tmp, ffmpeg)
+        try:
+            os.link(tmp, out)
+        except FileExistsError as exc:
+            raise RuntimeError(f"{out} appeared while building; nothing was overwritten") from exc
+        except OSError:
+            os.replace(tmp, out)
+    finally:
+        tmp.unlink(missing_ok=True)
+    os.chmod(out, 0o666 & ~_umask())
+    desc = contact_sheet.attachment(out)
+    result = {"path": str(out), "mode": SHEET_MODE, "width": info["width"], "height": info["height"], "rows": ", ".join(info["rows"]),
+              "times_s": ", ".join(f"{t:g}" for t in info["times"]), "attachment": json.dumps(desc)}
+    return "\n".join(f"{k}: {v}" for k, v in result.items())
 
 
 def _umask() -> int:
@@ -1781,22 +1851,27 @@ def register_screen_tools(
             LOCKED_RECORD_NOTE if locked else "")
 
     @mcp.tool(annotations=ADDITIVE)
-    def join_videos(inputs: Annotated[list[str], Field(description="2-8 absolute paths under home, or file names in ~/Videos/screen-mcp.")],
-                    mode: Annotated[str, Field(description="concat (one after another), hstack (side by side) or vstack (top to bottom).")] = "concat",
-                    output: Annotated[str | None, Field(description="New file name in ~/Videos/screen-mcp, or an absolute .mp4 path under home. Default joined-<time>.mp4.")] = None,
+    def join_videos(inputs: Annotated[list[str] | None, Field(description="Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/screen-mcp. Or give job_id.")] = None,
+                    mode: Annotated[str, Field(description="concat (one after another), hstack (side by side), vstack (top to bottom), or sheet (a PNG contact sheet: one row per video, one column per time).")] = "concat",
+                    output: Annotated[str | None, Field(description="New file name in ~/Videos/screen-mcp (.mp4), or ~/Pictures/screen-mcp (.png, sheet), or an absolute path under home. Default joined-<time>.mp4 / sheet-<time>.png.")] = None,
                     max_width: Annotated[int, Field(description="Output width cap in pixels.")] = DEFAULT_MAX_WIDTH,
                     fps: Annotated[int | None, Field(description="Output rate, at most 60. Default: the fastest input.")] = None,
-                    shortest: Annotated[bool, Field(description="hstack/vstack: end with the shortest clip instead of freezing it on its last frame.")] = False) -> str:
-        """Join 2-8 finished video clips into one new MP4 with the bundled ffmpeg, in order or stacked.
+                    shortest: Annotated[bool, Field(description="hstack/vstack: end with the shortest clip instead of freezing it on its last frame.")] = False,
+                    times: Annotated[list[float] | None, Field(description="sheet: seconds to sample in every clip, up to 12. Default 0.5, 1, 2, 4, 6, 9. A time past a clip's end is an error.")] = None,
+                    job_id: Annotated[str | None, Field(description="sheet: use the videos of this Isaac Lab job (isaaclab__runs_status video_paths) instead of inputs.")] = None) -> str:
+        """Join 2-8 finished clips into one new MP4 with the bundled ffmpeg, or (mode=sheet) make a matched PNG
+        contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload.
         Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...).
-        Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour.
+        Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour. Sheets do not upload.
 
-        Privacy: reads and writes video files on this machine only; returns paths and sizes.
+        Privacy: reads and writes video and image files on this machine only; returns paths and sizes.
         """
-        if not isinstance(inputs, list) or not 2 <= len(inputs) <= MAX_JOIN_INPUTS:
+        if mode == SHEET_MODE:
+            return _contact_sheet(inputs, job_id, times, output)
+        if inputs is None or not isinstance(inputs, list) or not 2 <= len(inputs) <= MAX_JOIN_INPUTS:
             raise ValueError(f"inputs: 2..{MAX_JOIN_INPUTS} video paths")
         if mode not in JOIN_MODES:
-            raise ValueError(f"mode must be one of {', '.join(JOIN_MODES)}")
+            raise ValueError(f"mode must be one of {', '.join(JOIN_MODES + (SHEET_MODE,))}")
         max_width = max(320, min(int(max_width), 3840))
         if fps is not None and not 1 <= int(fps) <= 60:
             raise ValueError("fps must be 1..60")

@@ -20,14 +20,16 @@ Start here. Say what you want to do and get the exact isaac tools to load and ca
 
 ### `join_videos`
 
-Join 2-8 finished video clips into one new MP4 with the bundled ffmpeg, in order or stacked. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour.
+Join 2-8 finished clips into one new MP4 with the bundled ffmpeg, or (mode=sheet) make a matched PNG contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour. Sheets do not upload.
 
-- `inputs` (list[str], required): 2-8 absolute paths under home, or file names in ~/Videos/screen-mcp.
-- `mode` (str, default `'concat'`): concat (one after another), hstack (side by side) or vstack (top to bottom).
-- `output` (str | None, default `None`): New file name in ~/Videos/screen-mcp, or an absolute .mp4 path under home. Default joined-<time>.mp4.
+- `inputs` (list[str] | None, default `None`): Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/screen-mcp. Or give job_id.
+- `mode` (str, default `'concat'`): concat (one after another), hstack (side by side), vstack (top to bottom), or sheet (a PNG contact sheet: one row per video, one column per time).
+- `output` (str | None, default `None`): New file name in ~/Videos/screen-mcp (.mp4), or ~/Pictures/screen-mcp (.png, sheet), or an absolute path under home. Default joined-<time>.mp4 / sheet-<time>.png.
 - `max_width` (int, default `1920`): Output width cap in pixels.
 - `fps` (int | None, default `None`): Output rate, at most 60. Default: the fastest input.
 - `shortest` (bool, default `False`): hstack/vstack: end with the shortest clip instead of freezing it on its last frame.
+- `times` (list[float] | None, default `None`): sheet: seconds to sample in every clip, up to 12. Default 0.5, 1, 2, 4, 6, 9. A time past a clip's end is an error.
+- `job_id` (str | None, default `None`): sheet: use the videos of this Isaac Lab job (isaaclab__runs_status video_paths) instead of inputs.
 
 ### `list_windows`
 
