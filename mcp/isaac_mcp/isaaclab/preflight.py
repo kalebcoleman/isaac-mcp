@@ -9,6 +9,7 @@ includes the simulator's own fixed cost), so the suggestion is conservative.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -32,10 +33,12 @@ def gpu_state() -> dict[str, Any] | None:
         return None
     name, total, used, free = [p.strip() for p in out.strip().splitlines()[0].split(",")]
     procs = []
-    apps = _smi(["--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"]) or ""
+    apps = _smi(["--query-compute-apps=pid,process_name,used_memory", "--format=csv,noheader,nounits"]) or ""
     for line in apps.splitlines():
-        parts = [p.strip() for p in line.split(",")]
-        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+        parts = [x.strip() for x in line.split(",")]
+        if len(parts) >= 3 and parts[0].isdigit() and parts[-1].isdigit():
+            procs.append({"pid": int(parts[0]), "name": ",".join(parts[1:-1]), "mib": int(parts[-1])})
+        elif len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
             procs.append({"pid": int(parts[0]), "mib": int(parts[1])})
     return {"name": name, "total_mib": int(total), "used_mib": int(used), "free_mib": int(free), "processes": procs}
 
@@ -72,6 +75,16 @@ def suggest_num_envs(free_mib: int, measured: dict[str, Any] | None, fixed_fract
     return max(0, int(budget // per_env))
 
 
+def _in_group(pid: int, groups: set) -> bool:
+    """True when pid belongs to the process group of a job this host is running."""
+    if not groups:
+        return False
+    try:
+        return os.getpgid(pid) in groups
+    except OSError:
+        return False
+
+
 def preflight(task: str | None = None) -> dict[str, Any]:
     gpu = gpu_state()
     running = _jobs._running_job()
@@ -92,6 +105,9 @@ def preflight(task: str | None = None) -> dict[str, Any]:
         "can_start": not reasons,
         "reasons": reasons,
     }
+    if gpu:
+        own = {running.get("pid")} if running else set()
+        out["other_gpu_processes"] = [p for p in gpu.get("processes", []) if not _in_group(p["pid"], own)]
     if task:
         measured = _measurements(task)
         out["measured"] = measured

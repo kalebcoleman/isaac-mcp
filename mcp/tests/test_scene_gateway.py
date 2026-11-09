@@ -124,8 +124,8 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
     hidden = gw.build_server({"ISAAC_MCP_SCENE_TOOLS": "0"})
     visible = gw.build_server({})
     # The 7 bridge built-ins are listed offline too (PR D), so offline == with a bridge.
-    assert len(hidden._tool_manager._tools) == 58
-    assert len(visible._tool_manager._tools) == 127
+    assert len(hidden._tool_manager._tools) == 59
+    assert len(visible._tool_manager._tools) == 128
     assert "run_python" in visible._tool_manager._tools and "status" in hidden._tool_manager._tools
     assert "sim__stage__info" in visible._tool_manager._tools
     assert "sim__stage__info" not in hidden._tool_manager._tools
@@ -137,7 +137,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
         gw._state_for(visible).client = BridgeClient(port=bridge.port)
 
         async def run():
-            for server, enabled, count in ((hidden, False, 58), (visible, True, 127)):
+            for server, enabled, count in ((hidden, False, 59), (visible, True, 128)):
                 async with create_connected_server_and_client_session(
                     server._mcp_server
                 ) as client:
