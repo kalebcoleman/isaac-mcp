@@ -276,6 +276,7 @@ Run a checkpoint as a job and score it. Returns its job_id; when the job ends, i
 - `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
 - `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
+- `label` (str | None, default `None`): Short name for the job, kept in runs_list/runs_status and used to filter the GPU-hour ledger (isaaclab__preflight label=...), e.g. 'v3 before 3b'.
 
 ### `isaaclab__install_info`
 
@@ -309,12 +310,17 @@ Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cance
 - `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
 - `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
+- `label` (str | None, default `None`): Short name for the job, kept in runs_list/runs_status and used to filter the GPU-hour ledger (isaaclab__preflight label=...), e.g. 'v3 before 3b'.
 
 ### `isaaclab__preflight`
 
 Before launching: free GPU memory and which processes hold it, running Lab jobs, any Kit bridge, a can_start answer with reasons, and, if the task was env_checked, a conservative suggested num_envs.
 
 - `task` (str | None, default `None`): Task id, to suggest a num_envs from its last isaaclab__env_check.
+- `ledger` (bool, default `False`): Include the GPU-hour ledger (`gpu_hours`) even when no budget is configured.
+- `label` (str | None, default `None`): Ledger: also report the jobs whose label or id contains this text, with their hours.
+- `since` (str | None, default `None`): Ledger: count jobs from this time (ISO, or an age such as 12h, 3d). Default: the configured `since`, else all jobs.
+- `budget_gpu_hours` (float | None, default `None`): Ledger: report against this cap for this call only. The enforced cap is ISAACLAB_GPU_BUDGET_HOURS or the ledger file.
 
 ### `isaaclab__record`
 
@@ -417,6 +423,7 @@ Start a training job and return its job_id immediately; follow it with isaaclab_
 - `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
 - `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).
+- `label` (str | None, default `None`): Short name for the job, kept in runs_list/runs_status and used to filter the GPU-hour ledger (isaaclab__preflight label=...), e.g. 'v3 before 3b'.
 
 ## Bridge built-ins
 

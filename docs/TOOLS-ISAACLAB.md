@@ -161,6 +161,8 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `ISAACLAB_TASK_MODULES` | install, jobs | Comma list of task modules to import before lookup |
 | `ISAACLAB_TASK_PATH` | install, jobs | `os.pathsep` list added to `PYTHONPATH` |
 | `ISAACLAB_EXTERNAL_CALLBACK` | install, jobs | Default `external_callback` (`module.function`) when a call gives none |
+| `ISAACLAB_GPU_BUDGET_HOURS` | jobs, preflight | Opt-in GPU-hour cap; new jobs are refused once the ledger reaches it |
+| `ISAACLAB_GPU_LEDGER` | jobs, preflight | JSON file `{budget_hours, since, carried_hours}` for that cap (default `<jobs dir>/gpu_ledger.json` if present) |
 | `ISAACLAB_ALLOW_TMP` | metrics | `1` adds the temp dir to allowed roots (tests only) |
 | `UR5E_DT_PORT` / `ISAAC_MCP_PORT` | jobs (Kit guard) | Fixed port probed for a running Kit bridge (default 8766) |
 | `CUDA_VISIBLE_DEVICES` | jobs (set by `device`) | Set per job from the `device` argument |
@@ -177,7 +179,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__env_check` | Build a task, step it with zero or random actions, and report problems (async) |
 | `isaaclab__record` | Record an MP4 with no window, from a checkpoint or from zero/random actions (async) |
 | `isaaclab__run_script` | Run your own bounded Python script as a managed job (async; executes arbitrary code) |
-| `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start` and a suggested `num_envs` |
+| `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start`, a suggested `num_envs`, and the GPU-hour ledger against an optional budget |
 | `isaaclab__runs_list` | List jobs, newest first, filtered (task, kind, state, since) and limited (default 25) |
 | `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir (with its source), window; or a run folder by name under a log root |
 | `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
@@ -276,6 +278,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `timeout_s` | number | no | `null` | The job's own watchdog enforces this limit, even after the host exits; `runs_status` echoes it. |
   | `allow_concurrent` | boolean | no | `false` | Override the job-vs-job guard. |
   | `allow_concurrent_gpu` | boolean | no | `false` | Override the Kit-bridge (GPU) guard. |
+  | `label` | string | no | `null` | Short name kept in `runs_list`/`runs_status` and used to filter the GPU-hour ledger (`isaaclab__eval` and `isaaclab__play` take it too, as does `run_script`). |
 - Returns on success: `{job_id, log_dir, command}`. A guard refusal includes `error` and `hint`, along with `running_job_id`/`running_pid` (job guard) or `kit_bridges` (Kit guard). On no install: `{"error": "no Isaac Lab install found", "hint": ...}`.
 - Example: `{"task": "Isaac-Reach-UR10", "num_envs": 64, "max_iterations": 2, "rl_library": "rl_games", "headless": true}`
 
@@ -357,10 +360,33 @@ the same way; checks that depend on the task (a tip height, a tower standing) st
 `play` with `--video`. Without one it runs zero or random actions through the same runner with gymnasium's
 `RecordVideo` and `--enable_cameras`; `runs_status` lists `video_paths`.
 
-`isaaclab__preflight(task=None)` reads `nvidia-smi`, the jobs this host started and any Kit bridge, and returns
+`isaaclab__preflight(task=None, ledger=False, label=None, since=None, budget_gpu_hours=None)` reads `nvidia-smi`, the jobs this host started and any Kit bridge, and returns
 `can_start` with reasons. `gpu.processes` lists every GPU compute process (`pid`, `name`, `mib`), and
 `other_gpu_processes` leaves out those in a running job's process group, so other projects' work shows up. With a task that has a finished `env_check` it adds `suggested_num_envs`, treating half of
 the measured GPU memory as fixed cost; the figure is deliberately low and should be confirmed with a short run.
+
+#### GPU-hour ledger and budget
+
+Preflight also answers "how many GPU-hours have my jobs used?" from the job records this host keeps (start, end,
+GPU, `label`), so there is no ledger file to maintain by hand. `gpu_hours` appears when a budget is configured or
+when `ledger`, `label`, `since` or `budget_gpu_hours` is given:
+
+- **How it counts.** `used_hours` is the wall-clock *union* of the jobs' intervals on each GPU, summed over GPUs, plus
+  `carried_hours` from the ledger file. Jobs that share a GPU at the same time are counted once for the overlap.
+  `naive_sum_hours` (the plain sum of each job's wall time) is reported beside `union_hours`, and
+  `overlap_saved_hours` is the difference: adding wall times over-counts whenever runs overlap. A running job
+  counts up to now; a record that never finished (the host died) counts to its last write. `counted` states the rule in the result.
+- **Per job.** `jobs` lists `job_id`, `label`, `kind`, `gpu`, `wall_s`, `shared_s` (time overlapping another job) and
+  `attributed_hours` (its wall time split equally among the jobs sharing each moment; these sum to the union).
+  `label` keeps the jobs whose label or id contains the text and adds `label_attributed_hours` and `label_naive_hours`.
+  Jobs started before the `label` argument existed, and jobs without a recorded GPU, count on GPU 0.
+- **Budget.** Opt in with `ISAACLAB_GPU_BUDGET_HOURS=8`, or a JSON file at `ISAACLAB_GPU_LEDGER` (default
+  `<jobs dir>/gpu_ledger.json`, if it exists): `{"budget_hours": 8, "since": "2026-11-08T00:00", "carried_hours": 1.5}`.
+  `since` (ISO time or an age such as `3d`) starts the period; `carried_hours` is usage from before the jobs were
+  recorded; the environment variable overrides `budget_hours`. With a budget, the result has `remaining_hours` and
+  `exhausted`, and once it is spent `can_start` is false, and `train`, `eval`, `play`, `env_check`, `record` and
+  `run_script` refuse to start with an `error` (and the `gpu_ledger` figures) until the cap is raised. A malformed
+  ledger file or variable is an error, never a silently absent cap. Without a budget nothing is refused and nothing changes.
 
 ### `isaaclab__run_script`
 

@@ -48,6 +48,7 @@ _AllowConcurrent = Annotated[bool, Field(description="Start even if another job 
 _PythonPath = Annotated[list[str] | None, Field(description="Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.")]
 _TaskEnv = Annotated[dict[str, str] | None, Field(description="Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.")]
 _ExternalCallback = Annotated[str | None, Field(description="Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train, play and eval; other libraries, env_check and record refuse it (an env default is skipped there).")]
+_Label = Annotated[str | None, Field(description="Short name for the job, kept in runs_list/runs_status and used to filter the GPU-hour ledger (isaaclab__preflight label=...), e.g. 'v3 before 3b'.")]
 _AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
 
 
@@ -144,6 +145,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         python_path: _PythonPath = None,
         env: _TaskEnv = None,
         external_callback: _ExternalCallback = None,
+        label: _Label = None,
     ) -> str:
         """Start a training job and return its job_id immediately; follow it with isaaclab__runs_status/tail.
 
@@ -155,7 +157,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             task=task, num_envs=num_envs, max_iterations=max_iterations, seed=seed, device=device,
             headless=headless, checkpoint=checkpoint, rl_library=rl_library, physics=physics, extra_args=extra_args,
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-            **_task_kw(python_path, env, external_callback),
+            label=label, **_task_kw(python_path, env, external_callback),
         )
 
     @mcp.tool(name="isaaclab__eval", annotations=PYTHON_EXECUTION)
@@ -175,6 +177,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         python_path: _PythonPath = None,
         env: _TaskEnv = None,
         external_callback: _ExternalCallback = None,
+        label: _Label = None,
     ) -> str:
         """Run a checkpoint as a job and score it. Returns its job_id; when the job ends, isaaclab__runs_status
         reports `eval_result`: episodes, mean/std/min/max return, mean length, steps, and success_rate if the
@@ -190,7 +193,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
             rl_library=rl_library, physics=physics, extra_args=extra_args, num_episodes=num_episodes, max_steps=max_steps,
             timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-            **_task_kw(python_path, env, external_callback),
+            label=label, **_task_kw(python_path, env, external_callback),
         )
 
     @mcp.tool(name="isaaclab__play", annotations=PYTHON_EXECUTION)
@@ -208,6 +211,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         python_path: _PythonPath = None,
         env: _TaskEnv = None,
         external_callback: _ExternalCallback = None,
+        label: _Label = None,
     ) -> str:
         """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
 
@@ -219,7 +223,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
             rl_library=rl_library, physics=physics, extra_args=extra_args, timeout_s=timeout_s,
             allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
-            **_task_kw(python_path, env, external_callback),
+            label=label, **_task_kw(python_path, env, external_callback),
         )
 
     @mcp.tool(name="isaaclab__env_check", annotations=PYTHON_EXECUTION)
@@ -324,10 +328,22 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             raise
 
     @mcp.tool(name="isaaclab__preflight", annotations=READ_ONLY)
-    def isaaclab_preflight(task: Annotated[str | None, Field(description="Task id, to suggest a num_envs from its last isaaclab__env_check.")] = None) -> str:
+    def isaaclab_preflight(
+        task: Annotated[str | None, Field(description="Task id, to suggest a num_envs from its last isaaclab__env_check.")] = None,
+        ledger: Annotated[bool, Field(description="Include the GPU-hour ledger (`gpu_hours`) even when no budget is configured.")] = False,
+        label: Annotated[str | None, Field(description="Ledger: also report the jobs whose label or id contains this text, with their hours.")] = None,
+        since: Annotated[str | None, Field(description="Ledger: count jobs from this time (ISO, or an age such as 12h, 3d). Default: the configured `since`, else all jobs.")] = None,
+        budget_gpu_hours: Annotated[float | None, Field(description="Ledger: report against this cap for this call only. The enforced cap is ISAACLAB_GPU_BUDGET_HOURS or the ledger file.")] = None,
+    ) -> str:
         """Before launching: free GPU memory and which processes hold it, running Lab jobs, any Kit bridge, a
-        can_start answer with reasons, and, if the task was env_checked, a conservative suggested num_envs."""
-        return _guard(lambda: _preflight.preflight(task))
+        can_start answer with reasons, and, if the task was env_checked, a conservative suggested num_envs.
+
+        GPU-hours (`gpu_hours`, when a budget is configured or ledger/label/since/budget_gpu_hours is given): hours used
+        as the wall-clock union of job intervals per GPU, so jobs sharing the GPU are not double counted;
+        `naive_sum_hours` shows the plain sum of wall times, `counted` states the rule, and each job lists
+        wall_s, shared_s and attributed_hours. With a configured cap (ISAACLAB_GPU_BUDGET_HOURS or a ledger
+        file, see docs/TOOLS-ISAACLAB.md) `remaining_hours` is reported and new jobs are refused once it is spent."""
+        return _guard(lambda: _preflight.preflight(task, ledger=ledger, label=label, since=since, budget_gpu_hours=budget_gpu_hours))
 
     @mcp.tool(name="isaaclab__runs_list", annotations=DESTRUCTIVE)
     def isaaclab_runs_list(

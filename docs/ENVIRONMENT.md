@@ -46,6 +46,8 @@ The filters are visibility preferences, not a security boundary. See
 | `ISAACLAB_ROOT` | discovered | Lab checkout. |
 | `ISAACLAB_JOBS_DIR` | `~/.local/share/isaac-mcp/jobs` | Job state. |
 | `ISAACLAB_LOGS_DIR` | unset | Extra run directory for checkpoints and metrics. |
+| `ISAACLAB_GPU_BUDGET_HOURS` | unset | Opt-in GPU-hour cap for Lab jobs; see [the ledger](TOOLS-ISAACLAB.md#gpu-hour-ledger-and-budget). |
+| `ISAACLAB_GPU_LEDGER` | `<jobs dir>/gpu_ledger.json` | JSON `{budget_hours, since, carried_hours}` for that cap. |
 | `ISAACLAB_TASK_MODULES` | unset | Modules to import so custom tasks register. |
 | `ISAACLAB_TASK_PATH` | unset | Added to `PYTHONPATH` for those modules. |
 | `ISAACLAB_EXTERNAL_CALLBACK` | unset | Default `module.function` passed as `--external_callback=` to Lab jobs. |
