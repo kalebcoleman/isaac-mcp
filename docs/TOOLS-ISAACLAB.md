@@ -129,7 +129,7 @@ Without `run_dir`, checkpoint discovery searches `ISAACLAB_LOGS_DIR` when set; o
 searches `<isaaclab_root>/logs` (if an install root is resolved) and the jobs directory.
 The former implicit project-specific log directory is no longer searched or allowed by default;
 set `ISAACLAB_LOGS_DIR` to continue using it. Paths outside the allowed roots are rejected with
-`{"error": "path outside allowed roots"}`.
+`{"error": "path outside allowed roots", "allowed_roots": [...], "hint": ...}`; the hint says to use `run_dir` from `isaaclab__runs_status` or set `ISAACLAB_LOGS_DIR`.
 
 ### GPU resources and authorization
 

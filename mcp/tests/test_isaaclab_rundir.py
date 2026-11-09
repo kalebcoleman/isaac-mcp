@@ -82,7 +82,8 @@ def test_no_match_lists_what_exists(_dirs):
 
 def test_missing_and_foreign_log_root_are_errors(tmp_path, _dirs):
     assert "not a directory" in status_tool(log_root=str(_dirs / "nope"), run_name="x")["error"]
-    assert "outside allowed roots" in status_tool(log_root="/etc", run_name="x")["error"]
+    err = status_tool(log_root="/etc", run_name="x")["error"]
+    assert "outside allowed roots" in err and "ISAACLAB_LOGS_DIR" in err
 
 
 def write_job(job_id, run_dir_text, tmp_path, status="succeeded"):

@@ -54,7 +54,7 @@ def from_log_root(log_root: Any, run_name: Any, experiment: Any = None, latest: 
         raise ValueError(f"run_name {name!r} is not a plain name (letters, digits, '_', '.', '-'; no '/').")
     real, err = _metrics._resolve_run_dir(root)
     if err:
-        raise ValueError(f"log_root {root!r}: {err['error']}. Allowed: the Isaac Lab logs folder, ISAACLAB_LOGS_DIR and the jobs folder.")
+        raise ValueError(f"log_root {root!r}: {err['error']} ({', '.join(err['allowed_roots'])}). Set ISAACLAB_LOGS_DIR to your project's logs folder to allow another.")
     if not os.path.isdir(real):
         raise ValueError(f"log_root {real} is not a directory.")
     scope = real
