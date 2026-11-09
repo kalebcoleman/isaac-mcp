@@ -417,6 +417,20 @@ file changed on disk, since the process started. The check reads `.git` files di
 side has the same hazard: Kit reloads an extension in place when its files change unless `ISAAC_MCP_NO_HOT_RELOAD=1`,
 and clients must then reconnect.
 
+**Connection errors and what they tell you.** The bridge client (`isaac_mcp/client.py`) checks a kept connection before each
+call (a Kit restart leaves a dead socket, which is detected and replaced), re-resolves the endpoint on every reconnect (a
+pinned port stays, an advertised one is rediscovered), and retries once if the connection fails. Errors name the endpoint:
+
+| Error | Meaning |
+|---|---|
+| `bridge not reachable at HOST:PORT (connection refused): nothing is listening there. Start Kit with ./run.sh --headless ...` | The port is closed: Kit is not running or listens elsewhere. The tool was not sent. `refresh_tools(wait_s=120)` waits for a Kit that is starting. |
+| `bridge at HOST:PORT did not accept a connection within Ns ... Nothing was sent, so no tool ran` | Kit is starting or its main thread is busy. Safe to retry. |
+| `no response for 'TOOL' within Ns (the tool may still be executing on Kit's main thread)` | The request was sent and no reply came. The tool may be running or may have run; check the scene before repeating a non-idempotent call. |
+| `bridge closed the connection mid-response` | Kit exited or crashed after the request was sent. Look at Kit's log and restart it; select it again with `use_bridge` and call `refresh_tools`. |
+
+Not done, deliberately: automatic reconnect with backoff beyond the single retry, and replaying a request after a reply timeout (it
+could run a non-idempotent tool twice). After a Kit restart the tool list can differ: call `refresh_tools`.
+
 ### Attaching the MCP to a Kit that a script launched
 
 `sim__launch` is optional and manages only the Kit processes it started. Any other Kit can be used, because

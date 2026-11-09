@@ -118,6 +118,10 @@ def queue_budget(timeout: float, execution_reserve_s: Optional[float] = None) ->
     return max(0.0, timeout - reserve - REFUSAL_MARGIN_S)
 
 
+class BridgeConnectTimeout(TimeoutError):
+    """The TCP connection to the bridge timed out before any request was sent, so no tool ran."""
+
+
 class BridgeError(Exception):
     """The bridge answered with an error envelope.
 
@@ -324,9 +328,19 @@ class BridgeClient:
 
     def connect(self, timeout: Optional[float] = None) -> None:
         if self._sock is None:
-            self._sock = socket.create_connection(
-                _resolve_endpoint(self._host, self._port),
-                timeout=self.timeout if timeout is None else timeout)
+            endpoint = _resolve_endpoint(self._host, self._port)
+            wait = self.timeout if timeout is None else timeout
+            try:
+                self._sock = socket.create_connection(endpoint, timeout=wait)
+            except ConnectionRefusedError as exc:
+                # Same class, so callers that match it keep working; the text now says where and what to do.
+                raise ConnectionRefusedError(
+                    exc.errno, f"bridge not reachable at {endpoint[0]}:{endpoint[1]} (connection refused): nothing is listening there. "
+                    f"Start Kit with `./run.sh --headless`, or find a running bridge with `python3 mcp/isaac_mcp/client.py --list-bridges`") from exc
+            except socket.timeout as exc:
+                raise BridgeConnectTimeout(
+                    f"bridge at {endpoint[0]}:{endpoint[1]} did not accept a connection within {wait}s: Kit may still be starting "
+                    "(2-3 minutes on a first start) or its main thread is busy. Nothing was sent, so no tool ran") from exc
             self._buffer = b""
             try:
                 _log.info("bridge connected: %s:%s", *self._sock.getpeername()[:2])
@@ -431,6 +445,9 @@ class BridgeClient:
             try:
                 self.connect(timeout=t)
                 return self._roundtrip(tool, params, t, execution_reserve_s)
+            except BridgeConnectTimeout:
+                self.close()
+                raise  # nothing was sent: unlike a reply timeout, the tool did not run
             except socket.timeout:
                 self.close()   # response may still arrive on the old socket
                 raise TimeoutError(

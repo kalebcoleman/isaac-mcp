@@ -330,3 +330,37 @@ def test_module_form_keeps_its_usage():
     usage = subprocess.run([sys.executable, "-m", "isaac_mcp.client", "--help"],
                            capture_output=True, text=True, timeout=30)
     assert usage.returncode == 0 and "python3 -m isaac_mcp.client" in usage.stdout
+
+
+# ---- connection errors say where the bridge was expected and whether a tool could have run ----
+
+def _closed_port():
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def test_refused_connection_names_host_port_and_how_to_start_it():
+    from isaac_mcp import client
+
+    port = _closed_port()
+    with pytest.raises(ConnectionRefusedError) as exc:
+        client.call("status", host="127.0.0.1", port=port, timeout=2)
+    text = str(exc.value)
+    assert f"bridge not reachable at 127.0.0.1:{port}" in text and "./run.sh --headless" in text and "--list-bridges" in text
+
+
+def test_connect_timeout_says_no_tool_ran(monkeypatch):
+    import socket
+
+    from isaac_mcp import client
+
+    def slow(*args, **kwargs):
+        raise socket.timeout("timed out")
+
+    monkeypatch.setattr(client.socket, "create_connection", slow)
+    with pytest.raises(client.BridgeConnectTimeout, match=r"127\.0\.0\.1:9.*did not accept a connection within 3s.*no tool ran"):
+        client.call("status", host="127.0.0.1", port=9, timeout=3)
+    assert issubclass(client.BridgeConnectTimeout, TimeoutError)  # the gateway still treats it as a timeout
