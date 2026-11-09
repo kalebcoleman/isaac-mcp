@@ -8,6 +8,7 @@ refused unless the caller passes ``allow_test=True``, and a pose set that cannot
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,9 @@ CRITERIA: dict[str, tuple[str, tuple[str, ...], tuple[str, ...], str]] = {
 ALIASES = {"v3": "v3_ground_only", "v3_before_3b": "v3_ground_only"}
 
 POSE_SETS = {"dev_v1.npz": "DEV", "heldout_poses.npz": "DEV", "heldout_v2.npz": "HELDOUT", "test_v2.npz": "TEST"}
+
+
+TEST_ENV = "ISAAC_MCP_ALLOW_TEST_SPLIT"
 
 
 def _criteria(name: Any) -> str:
@@ -70,6 +74,10 @@ def _split(data: dict[str, Any], file: str, allow_test: bool) -> tuple[str, str]
     if split == "TEST" and not allow_test:
         raise ValueError(f"{file}: pose_set {pose_set!r} is the TEST split, which stays untouched until a final claim. "
                          "Pass allow_test=true only for that final, approved evaluation.")
+    if split == "TEST" and os.environ.get(TEST_ENV) != "1":
+        raise ValueError(f"{file}: allow_test=true is not enough: the TEST split also needs the person running this server to set "
+                         f"{TEST_ENV}=1 in the server's environment (an agent cannot grant itself the TEST split). Ask them if a final TEST "
+                         "evaluation is really intended.")
     return split, pose_set
 
 

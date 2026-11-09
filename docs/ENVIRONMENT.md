@@ -51,6 +51,7 @@ The filters are visibility preferences, not a security boundary. See
 | `ISAACLAB_TASK_MODULES` | unset | Modules to import so custom tasks register. |
 | `ISAACLAB_TASK_PATH` | unset | Added to `PYTHONPATH` for those modules. |
 | `ISAACLAB_EXTERNAL_CALLBACK` | unset | Default `module.function` passed as `--external_callback=` to Lab jobs. |
+| `ISAAC_MCP_ALLOW_TEST_SPLIT` | unset | `1` lets `isaaclab__metrics_summary` score the TEST pose set when asked with `allow_test=true`. Set only for a final approved evaluation. |
 | `ISAACLAB_ALLOW_TMP` | unset | `1` allows the temp directory for metrics. Tests only. |
 
 Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).

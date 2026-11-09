@@ -62,7 +62,8 @@ def test_strict_uses_rates_times_direction_n(tmp_path):
 
 
 @pytest.mark.parametrize("pose_set", ["test_v2.npz", "/x/sets/TEST_v9.npz"])
-def test_test_split_refused_unless_allowed(tmp_path, pose_set):
+def test_test_split_refused_unless_allowed(tmp_path, pose_set, monkeypatch):
+    monkeypatch.setenv(ev.TEST_ENV, "1")
     f = write(tmp_path, "t.json", result((1, 2, 3, 4), pose_set=pose_set))
     with pytest.raises(ValueError, match="TEST split"):
         ev.summarize([f])
@@ -131,7 +132,18 @@ def test_relative_path_error_says_where_it_looked_and_to_use_absolute(tmp_path, 
         ev.summarize(["nope.json"])
 
 
-def test_allowed_test_split_is_marked_in_the_result(tmp_path):
+def test_allow_test_alone_is_not_enough_without_the_operator_setting(tmp_path, monkeypatch):
+    monkeypatch.delenv(ev.TEST_ENV, raising=False)
+    f = write(tmp_path, "t.json", result((1, 2, 3, 4), pose_set="test_v2.npz"))
+    with pytest.raises(ValueError, match=r"allow_test=true is not enough.*ISAAC_MCP_ALLOW_TEST_SPLIT=1.*cannot grant itself"):
+        ev.summarize([f], allow_test=True)
+    monkeypatch.setenv(ev.TEST_ENV, "yes")
+    with pytest.raises(ValueError, match="not enough"):
+        ev.summarize([f], allow_test=True)
+
+
+def test_allowed_test_split_is_marked_in_the_result(tmp_path, monkeypatch):
+    monkeypatch.setenv(ev.TEST_ENV, "1")
     f = write(tmp_path, "t.json", result((1, 2, 3, 4), pose_set="test_v2.npz"))
     out = ev.summarize([f], allow_test=True)
     assert out["test_split_used"] is True and "do not tune" in out["warning"]

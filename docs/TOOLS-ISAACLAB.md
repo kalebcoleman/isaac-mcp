@@ -163,6 +163,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `ISAACLAB_EXTERNAL_CALLBACK` | install, jobs | Default `external_callback` (`module.function`) when a call gives none |
 | `ISAACLAB_GPU_BUDGET_HOURS` | jobs, preflight | Opt-in GPU-hour cap; new jobs are refused once the ledger reaches it |
 | `ISAACLAB_GPU_LEDGER` | jobs, preflight | JSON file `{budget_hours, since, carried_hours}` for that cap (default `<jobs dir>/gpu_ledger.json` if present) |
+| `ISAAC_MCP_ALLOW_TEST_SPLIT` | metrics | `1` lets `metrics_summary` with `allow_test=true` score the TEST pose set; unset (the default) refuses it |
 | `ISAACLAB_ALLOW_TMP` | metrics | `1` adds the temp dir to allowed roots (tests only) |
 | `UR5E_DT_PORT` / `ISAAC_MCP_PORT` | jobs (Kit guard) | Fixed port probed for a running Kit bridge (default 8766) |
 | `CUDA_VISIBLE_DEVICES` | jobs (set by `device`) | Set per job from the `device` argument |
@@ -529,7 +530,7 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
   | `criteria` | string | no | `v3` | With `eval_json`. `v3` (= `v3_ground_only`: criteria v3 before 3b, ground-only flight), `v3_latest_substep`, `v3_a4`, `v21`, `v2` or `strict`. |
   | `label` | string | no | `null` | With `eval_json`: your name for the result, e.g. `v3 before 3b`; echoed back. |
   | `baseline_json` / `baseline_label` | array[string] / string | no | `null` | With `eval_json`: the baseline's files on the same pose set, and its name (e.g. `recC`). |
-  | `allow_test` | boolean | no | `false` | With `eval_json`: permit the TEST pose set. Set it only when the user explicitly asked for the single final TEST evaluation; the result then has `test_split_used: true` and a `warning`. |
+  | `allow_test` | boolean | no | `false` | With `eval_json`: permit the TEST pose set. Set it only when the user explicitly asked for the single final TEST evaluation. It is not enough by itself: the server's environment must also have `ISAAC_MCP_ALLOW_TEST_SPLIT=1`, which only the person running the server can set (found in agent testing: a cheap model set the flag on its own). The result then has `test_split_used: true` and a `warning`. |
 - Returns: `{scalars: {<tag>: {last, min, max, step, count}}}`. Unknown tags return `{"error": "unknown tag", "available": [...]}`. Non-finite values are encoded as the strings `"nan"`, `"inf"`, `"-inf"`. Requires the `tensorboard` extra.
 - Example: `{"run_dir": "/abs/path/to/run", "tags": ["rewards/iter", "Episode/dist_m"]}`
 
@@ -549,7 +550,7 @@ Where each figure comes from (the file's own keys, so a different layout fails r
 (a count that does not add up to the file's total shows in `warnings`). The pose set comes from `pose_set`: `dev_v1.npz` and
 `heldout_poses.npz` are DEV, `heldout_v2.npz` is HELDOUT, `test_v2.npz` (or any name containing "test") is TEST.
 
-Refused with an `error` naming the file: the **TEST** split (unless `allow_test=true`, for the final approved evaluation only); a
+Refused with an `error` naming the file: the **TEST** split (unless `allow_test=true` and the server runs with `ISAAC_MCP_ALLOW_TEST_SPLIT=1`, for the final approved evaluation only); a
 file with no `pose_set` or an unknown one; mixed splits or pose counts in one call, or a baseline on another split; a missing
 expected key. Paths should be absolute: a relative one resolves from the server's working directory, and the error says where it looked. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
 Example: `{"eval_json": ["<run>/final_recC_heldout_r1.json", "<run>/final_recC_heldout_r2.json"], "label": "v3 before 3b", "baseline_json": ["<run>/final_base_heldout_r1.json"], "baseline_label": "R9hg_it1100"}`

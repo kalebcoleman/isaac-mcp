@@ -450,7 +450,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         label: Annotated[str | None, Field(description="With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.")] = None,
         baseline_json: Annotated[list[str] | None, Field(description="With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.")] = None,
         baseline_label: Annotated[str | None, Field(description="With baseline_json: the baseline's name, e.g. recC.")] = None,
-        allow_test: Annotated[bool, Field(description="With eval_json: set true ONLY if the user explicitly told you to score the TEST split (a single final evaluation). Never set it to see what happens; the result is marked test_split_used.")] = False,
+        allow_test: Annotated[bool, Field(description="With eval_json: set true ONLY if the user explicitly told you to score the TEST split (a single final evaluation). Never set it to see what happens. It also needs ISAAC_MCP_ALLOW_TEST_SPLIT=1 in the server's environment, which only the person running the server can set.")] = False,
     ) -> str:
         """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare jobs' final values.
 
