@@ -45,7 +45,7 @@ def _scan(root: str, run_name: str | None) -> list[Path]:
     return found
 
 
-def from_log_root(log_root: Any, run_name: Any, experiment: Any = None) -> dict[str, Any]:
+def from_log_root(log_root: Any, run_name: Any, experiment: Any = None, latest: bool = False) -> dict[str, Any]:
     if log_root is None or run_name is None:
         raise ValueError("Give job_id, or log_root and run_name together; one of them is missing.")
     root = _nonblank(log_root, "log_root")
@@ -71,10 +71,14 @@ def from_log_root(log_root: Any, run_name: Any, experiment: Any = None) -> dict[
         newest = [p.name for p in _scan(scope, None)[:5]]
         raise ValueError(f"no run folder '<timestamp>_{name}' under {scope}. "
                          + (f"Newest run folders there: {', '.join(newest)}." if newest else "It holds no run folders."))
+    if len(runs) > 1 and not latest:
+        listed = ", ".join(p.name for p in runs[:_MAX_CANDIDATES])
+        raise ValueError(f"{len(runs)} run folders match '<timestamp>_{name}' under {scope}: {listed}. Pass latest=true for the newest, "
+                         "or experiment= to narrow it.")
     out: dict[str, Any] = {"run_dir": str(runs[0]), "source": "log_root", "run_name": name}
     if len(runs) > 1:
         out["candidates"] = [str(p) for p in runs[:_MAX_CANDIDATES]]
-        out["note"] = f"{len(runs)} folders match; run_dir is the newest. Pass experiment= to narrow it."
+        out["note"] = f"{len(runs)} folders match; run_dir is the newest because latest=true."
     ckpt = _jobs._latest_checkpoint(str(runs[0]))
     out["latest_checkpoint"] = ckpt
     return out

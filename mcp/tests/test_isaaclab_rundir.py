@@ -43,7 +43,9 @@ def test_run_name_resolves_newest_exact_match(tmp_path, _dirs):
     new = make_run(_dirs, "g1", "2026-11-02_10-00-00", "recC")
     make_run(_dirs, "g1", "2026-11-03_10-00-00", "recC_v2")  # a longer name is not a match
     (new / "model_5.pt").write_bytes(b"x")
-    out = rundir.from_log_root(str(_dirs), "recC")
+    with pytest.raises(ValueError, match=r"2 run folders match.*latest=true"):
+        rundir.from_log_root(str(_dirs), "recC")
+    out = rundir.from_log_root(str(_dirs), "recC", latest=True)
     assert out["run_dir"] == str(new) and out["source"] == "log_root"
     assert out["candidates"] == [str(new), str(old)]
     assert out["latest_checkpoint"].endswith("model_5.pt")

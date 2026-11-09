@@ -386,6 +386,7 @@ State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` wit
 - `log_root` (str | None, default `None`): Instead of a job: resolve a run folder by name under this logs folder. Needs run_name.
 - `run_name` (str | None, default `None`): With log_root: the --run_name the run used; matches folders named <timestamp>_<run_name> exactly.
 - `experiment` (str | None, default `None`): With log_root: experiment folder name, to narrow several matches.
+- `latest` (bool, default `False`): With log_root: when several folders match run_name, take the newest instead of an error listing them.
 - `wait_s` (float, default `0`): With job_id: block up to this many seconds (0 to 3600) until the job is no longer running, then return the final status. Many clients cut a tool call off after a minute or so: wait in slices of 30 to 60 s.
 
 ### `isaaclab__runs_tail`

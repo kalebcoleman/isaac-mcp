@@ -371,6 +371,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         log_root: Annotated[str | None, Field(description="Instead of a job: resolve a run folder by name under this logs folder. Needs run_name.")] = None,
         run_name: Annotated[str | None, Field(description="With log_root: the --run_name the run used; matches folders named <timestamp>_<run_name> exactly.")] = None,
         experiment: Annotated[str | None, Field(description="With log_root: experiment folder name, to narrow several matches.")] = None,
+        latest: Annotated[bool, Field(description="With log_root: when several folders match run_name, take the newest instead of an error listing them.")] = False,
         wait_s: Annotated[float, Field(description="With job_id: block up to this many seconds (0 to 3600) until the job is no longer running, then return the final status. Many clients cut a tool call off after a minute or so: wait in slices of 30 to 60 s.")] = 0,
     ) -> str:
         """State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source`
@@ -380,8 +381,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result.
 
         With log_root and run_name instead of job_id it resolves the Lab run folder `<timestamp>_<run_name>`
-        and returns run_dir, candidates (newest first) and latest_checkpoint. A lookup that finds nothing, or
-        is given an empty name, is an `error`, never an empty or guessed path.
+        and returns run_dir and latest_checkpoint. A lookup that finds nothing, finds several (unless latest=true),
+        or is given an empty name is an `error`, never an empty or guessed path.
 
         With wait_s it waits for the job to end (a timeout, a cancel and a crash all end it) and returns the final
         status with `exit_code` and `last_log_lines`; if the wait runs out first the state is still `running`, with
@@ -391,7 +392,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         Reconciles orphaned jobs by updating their stored metadata."""
         def status() -> dict:
             if job_id is None:
-                return _rundir.from_log_root(log_root, run_name, experiment)
+                return _rundir.from_log_root(log_root, run_name, experiment, latest)
             if log_root is not None or run_name is not None:
                 raise ValueError("Give job_id, or log_root with run_name, not both.")
             st = _jobs.runs_status(job_id)

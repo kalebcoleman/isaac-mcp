@@ -465,11 +465,12 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
   | `log_root` | string | one of | — | Instead of a job: resolve a run folder by name under this logs folder (Lab `logs/`, a library folder, or `ISAACLAB_LOGS_DIR`; it must be inside the allowed roots). Needs `run_name`. |
   | `run_name` | string | with `log_root` | — | The `--run_name` the run used; matches folders `<timestamp>_<run_name>` exactly, so `recC` does not match `recC_v2`. |
   | `experiment` | string | no | — | With `log_root`: experiment folder name, to narrow several matches. |
+  | `latest` | boolean | no | `false` | With `log_root`: take the newest when several folders match `run_name` (otherwise that is an `error` listing them, so a re-run never silently resolves to the wrong folder). |
   | `wait_s` | number | no | `0` | With `job_id`: block up to this many seconds (at most 3600) until the job is no longer running. See below. |
 - Returns:
   `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, run_dir_source, log_dir, pid, environment_ready}`.
   `exit_code` is the Isaac Lab process's own (recorded by a shell wrapper, so it survives a host restart). `run_dir_source` says where `run_dir` came from: `lab_log` (the log names the run folder), `checkpoint` (the folder of the newest checkpoint) or `job_dir`, meaning no Lab run folder is known yet and `run_dir` is the job's own folder (a `run_dir_warning` says so; with `require_run_dir=true` it is an `error`).
-  With `log_root` and `run_name` instead: `{run_dir, source: "log_root", run_name, latest_checkpoint, candidates?, note?}`, where `candidates` lists every match newest first. An empty or path-like name, a missing or foreign `log_root`, or no match is an `error` (a no-match error lists the newest run folders it did find); the lookup never returns an empty or guessed path.
+  With `log_root` and `run_name` instead: `{run_dir, source: "log_root", run_name, latest_checkpoint, candidates?, note?}` (`candidates` lists every match newest first when `latest=true` chose among several). An empty or path-like name, a missing or foreign `log_root`, no match, or several matches without `latest=true` is an `error` (a no-match error lists the newest run folders it did find); the lookup never returns an empty or guessed path.
   For a job, also `physics` (the engine Lab's banner names, such as `newton_mjwarp` or `physx`; a task picks its own, and Newton is not PhysX)
   plus `window: {id, title, width, height}` when the job is live and owns a window, and `eval_result`
   (`episodes`, `mean_return`, ...) for an `isaaclab__eval` job whose runner has written it, including after the
