@@ -229,7 +229,7 @@ Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 17 tools.
 
 Record a checkpoint in a README table (path, role, sha256, size, time, provenance) so a baseline cannot be replaced unnoticed. Append-only: one atomic write adds a row; a path that already has a row is refused with the existing row and whether the file still matches its hash. Returns the sha256 and the row, `same_content_as` if another registered path has identical bytes, and, in a git work tree, a `git` hint: `.pt` files are usually ignored, so commit them with `git add -f` (this tool never runs git). Reads the checkpoint, writes only the registry.
 
-- `path` (str, required): The checkpoint file (.pt, .pth, .zip, .ckpt, .onnx) to register, e.g. from isaaclab__checkpoints_list.
+- `path` (str, required): Absolute path of the checkpoint file (.pt, .pth, .zip, .ckpt, .onnx) to register, e.g. from isaaclab__checkpoints_list.
 - `role` (str, required): What it is for, one short line: baseline, candidate, init, final...
 - `provenance` (str, required): Where it came from, one line: run name, commit, settings, evaluation result.
 - `registry` (str | None, default `None`): Markdown file to add the row to. Default: README.md in the checkpoint's folder. It must be in that folder or one above it.
@@ -304,12 +304,12 @@ Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or
 - `tags` (list[str] | None, default `None`): Scalar tags to include. Default: all.
 - `job_id` (str | None, default `None`): A job from isaaclab__train, instead of run_dir.
 - `compare_jobs` (list[str] | None, default `None`): Several job_ids: returns their final scalars side by side, to compare seeds or settings.
-- `eval_json` (list[str] | None, default `None`): Evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars.
+- `eval_json` (list[str] | None, default `None`): ABSOLUTE paths of evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.
 - `criteria` (str | None, default `None`): With eval_json: v3 (default, = v3_ground_only: v3 before 3b, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.
 - `label` (str | None, default `None`): With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.
-- `baseline_json` (list[str] | None, default `None`): With eval_json: the baseline's evaluation files on the same pose set, for the comparison.
+- `baseline_json` (list[str] | None, default `None`): With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.
 - `baseline_label` (str | None, default `None`): With baseline_json: the baseline's name, e.g. recC.
-- `allow_test` (bool, default `False`): With eval_json: permit the TEST pose set. Default false: TEST stays untouched until a final claim.
+- `allow_test` (bool, default `False`): With eval_json: set true ONLY if the user explicitly told you to score the TEST split (a single final evaluation). Never set it to see what happens; the result is marked test_split_used.
 
 ### `isaaclab__play`
 

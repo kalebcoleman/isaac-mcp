@@ -1508,8 +1508,10 @@ def _reported(text: str) -> Any:
 
 
 _HELP_TOPICS = (
-    ("see or record the result", ("screenshot", "record", "video", "picture", "frame", "evidence", "show", "look"),
-     "screenshot(label=...) for a window; start_screen_recording / stop_screen_recording / join_videos for video; "
+    ("see or record the result", ("screenshot", "record", "video", "picture", "frame", "evidence", "show", "look", "contact sheet", "sheet", "montage", "attach", "upload"),
+     "screenshot(label=...) for a window; start_screen_recording / stop_screen_recording for video; "
+     "join_videos to join clips, or join_videos(mode=\"sheet\", inputs=[...] or job_id=..., times=[...]) for a PNG contact sheet of the "
+     "same moments of one or more clips with an upload-ready attachment descriptor (clips must be under your home folder); "
      "sim__camera__create + sim__camera__capture when headless. Save absolute paths and show them to the user."),
     ("find out why something failed (contacts, forces, poses)", ("contact", "collision", "fail", "force", "grasp", "stuck", "why", "debug", "pose"),
      "sim__physics__contacts, sim__physics__inspect, sim__body__state, sim__joints__state, sim__prim__measure, "
@@ -1519,11 +1521,11 @@ _HELP_TOPICS = (
      "assets__import_path. ur5e_dt__* only for the lab UR5e twin."),
     ("move a robot", ("move", "joint", "arm", "ik", "controller", "drive", "grip"),
      "sim__joints__state, sim__joints__move, sim__joints__drive, sim__arm__ik, sim__arm__fk, sim__controller__create."),
-    ("train or evaluate a policy", ("train", "rl", "policy", "reward", "eval", "isaac lab", "isaaclab", "play", "checkpoint"),
+    ("train or evaluate a policy", ("train", "rl", "policy", "reward", "eval", "isaac lab", "isaaclab", "play", "checkpoint", "budget", "gpu-hour", "gpu hour", "job", "wait", "baseline", "register", "summar", "pass count", "run dir", "exit code"),
      "isaaclab__envs_list, isaaclab__train, isaaclab__runs_status, isaaclab__runs_tail, isaaclab__metrics_summary, "
      "isaaclab__eval, isaaclab__play, isaaclab__runs_cancel. Before a long run: isaaclab__preflight (GPU, jobs, GPU-hour budget) and "
      "isaaclab__env_check (NaNs, resets, memory). isaaclab__runs_status(job_id, wait_s=45) waits for a job to end; "
-     "isaaclab__metrics_summary(eval_json=[...]) summarises evaluation pass counts; isaaclab__checkpoint_register protects a baseline. "
+     "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises evaluation pass counts (TEST is refused); isaaclab__checkpoint_register protects a baseline; isaaclab__run_script runs your own script as a job. "
      "isaaclab__record gives an MP4 with no window. No bridge needed."),
     ("start, check or recover a simulator", ("start", "launch", "bridge", "kit", "hang", "stuck kit", "status", "connect"),
      "status, list_bridges, refresh_tools(wait_s=120), use_bridge, sim__launch, sim__status, sim__stop, sim__logs__tail."),

@@ -139,6 +139,7 @@ def summarize(eval_json: Any, criteria: Any = None, label: Any = None, baseline_
     warnings = [r["consistency_warning"] for r in runs if "consistency_warning" in r]
     if warnings:
         out["warnings"] = warnings
+    base_runs: list[dict[str, Any]] = []
     if baseline_json:
         base_runs = [_read(p, key, bool(allow_test)) for p in baseline_json]
         if {r["split"] for r in base_runs} != {runs[0]["split"]} or {r["n"] for r in base_runs} != {runs[0]["n"]}:
@@ -147,4 +148,7 @@ def summarize(eval_json: Any, criteria: Any = None, label: Any = None, baseline_
         base["delta_mean_pass"] = round(out["mean_pass"] - base["mean_pass"], 2)
         base["delta_by_direction"] = {d: round(out["by_direction_mean"][d] - base["by_direction_mean"][d], 2) for d in DIRECTIONS}
         out["baseline"] = base
+    if out["split"] == "TEST" or any(r["split"] == "TEST" for r in (base_runs if baseline_json else [])):
+        out["test_split_used"] = True
+        out["warning"] = "The TEST split was scored because allow_test=true. It stays untouched until a final claim: do not tune against this number."
     return out

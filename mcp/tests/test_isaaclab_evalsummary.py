@@ -129,3 +129,10 @@ def test_relative_path_error_says_where_it_looked_and_to_use_absolute(tmp_path, 
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError, match=r"looked for .*nope\.json.*working directory.*absolute path"):
         ev.summarize(["nope.json"])
+
+
+def test_allowed_test_split_is_marked_in_the_result(tmp_path):
+    f = write(tmp_path, "t.json", result((1, 2, 3, 4), pose_set="test_v2.npz"))
+    out = ev.summarize([f], allow_test=True)
+    assert out["test_split_used"] is True and "do not tune" in out["warning"]
+    assert "test_split_used" not in ev.summarize([write(tmp_path, "h.json", result((1, 2, 3, 4)))])

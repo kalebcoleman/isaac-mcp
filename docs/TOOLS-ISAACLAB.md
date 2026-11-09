@@ -529,7 +529,7 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
   | `criteria` | string | no | `v3` | With `eval_json`. `v3` (= `v3_ground_only`: criteria v3 before 3b, ground-only flight), `v3_latest_substep`, `v3_a4`, `v21`, `v2` or `strict`. |
   | `label` | string | no | `null` | With `eval_json`: your name for the result, e.g. `v3 before 3b`; echoed back. |
   | `baseline_json` / `baseline_label` | array[string] / string | no | `null` | With `eval_json`: the baseline's files on the same pose set, and its name (e.g. `recC`). |
-  | `allow_test` | boolean | no | `false` | With `eval_json`: permit the TEST pose set. |
+  | `allow_test` | boolean | no | `false` | With `eval_json`: permit the TEST pose set. Set it only when the user explicitly asked for the single final TEST evaluation; the result then has `test_split_used: true` and a `warning`. |
 - Returns: `{scalars: {<tag>: {last, min, max, step, count}}}`. Unknown tags return `{"error": "unknown tag", "available": [...]}`. Non-finite values are encoded as the strings `"nan"`, `"inf"`, `"-inf"`. Requires the `tensorboard` extra.
 - Example: `{"run_dir": "/abs/path/to/run", "tags": ["rewards/iter", "Episode/dist_m"]}`
 
@@ -551,7 +551,7 @@ Where each figure comes from (the file's own keys, so a different layout fails r
 
 Refused with an `error` naming the file: the **TEST** split (unless `allow_test=true`, for the final approved evaluation only); a
 file with no `pose_set` or an unknown one; mixed splits or pose counts in one call, or a baseline on another split; a missing
-expected key. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
+expected key. Paths should be absolute: a relative one resolves from the server's working directory, and the error says where it looked. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
 Example: `{"eval_json": ["<run>/final_recC_heldout_r1.json", "<run>/final_recC_heldout_r2.json"], "label": "v3 before 3b", "baseline_json": ["<run>/final_base_heldout_r1.json"], "baseline_label": "R9hg_it1100"}`
 
 ### `isaaclab__checkpoint_register`

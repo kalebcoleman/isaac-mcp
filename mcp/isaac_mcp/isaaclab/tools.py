@@ -445,12 +445,12 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         tags: Annotated[list[str] | None, Field(description="Scalar tags to include. Default: all.")] = None,
         job_id: Annotated[str | None, Field(description="A job from isaaclab__train, instead of run_dir.")] = None,
         compare_jobs: Annotated[list[str] | None, Field(description="Several job_ids: returns their final scalars side by side, to compare seeds or settings.")] = None,
-        eval_json: Annotated[list[str] | None, Field(description="Evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars.")] = None,
+        eval_json: Annotated[list[str] | None, Field(description="ABSOLUTE paths of evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.")] = None,
         criteria: Annotated[str | None, Field(description="With eval_json: v3 (default, = v3_ground_only: v3 before 3b, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.")] = None,
         label: Annotated[str | None, Field(description="With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.")] = None,
-        baseline_json: Annotated[list[str] | None, Field(description="With eval_json: the baseline's evaluation files on the same pose set, for the comparison.")] = None,
+        baseline_json: Annotated[list[str] | None, Field(description="With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.")] = None,
         baseline_label: Annotated[str | None, Field(description="With baseline_json: the baseline's name, e.g. recC.")] = None,
-        allow_test: Annotated[bool, Field(description="With eval_json: permit the TEST pose set. Default false: TEST stays untouched until a final claim.")] = False,
+        allow_test: Annotated[bool, Field(description="With eval_json: set true ONLY if the user explicitly told you to score the TEST split (a single final evaluation). Never set it to see what happens; the result is marked test_split_used.")] = False,
     ) -> str:
         """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare jobs' final values.
 
@@ -475,7 +475,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
 
     @mcp.tool(name="isaaclab__checkpoint_register", annotations=ADDITIVE)
     def isaaclab_checkpoint_register(
-        path: Annotated[str, Field(description="The checkpoint file (.pt, .pth, .zip, .ckpt, .onnx) to register, e.g. from isaaclab__checkpoints_list.")],
+        path: Annotated[str, Field(description="Absolute path of the checkpoint file (.pt, .pth, .zip, .ckpt, .onnx) to register, e.g. from isaaclab__checkpoints_list.")],
         role: Annotated[str, Field(description="What it is for, one short line: baseline, candidate, init, final...")],
         provenance: Annotated[str, Field(description="Where it came from, one line: run name, commit, settings, evaluation result.")],
         registry: Annotated[str | None, Field(description="Markdown file to add the row to. Default: README.md in the checkpoint's folder. It must be in that folder or one above it.")] = None,
