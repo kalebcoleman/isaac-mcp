@@ -46,6 +46,7 @@ The filters are visibility preferences, not a security boundary. See
 | `ISAACLAB_LOGS_DIR` | unset | Extra run directory for checkpoints and metrics. |
 | `ISAACLAB_TASK_MODULES` | unset | Modules to import so custom tasks register. |
 | `ISAACLAB_TASK_PATH` | unset | Added to `PYTHONPATH` for those modules. |
+| `ISAACLAB_EXTERNAL_CALLBACK` | unset | Default `module.function` passed as `--external_callback=` to Lab jobs. |
 | `ISAACLAB_ALLOW_TMP` | unset | `1` allows the temp directory for metrics. Tests only. |
 
 Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).

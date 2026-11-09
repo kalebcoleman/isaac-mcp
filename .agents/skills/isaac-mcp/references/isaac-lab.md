@@ -57,6 +57,11 @@ These were checked against an Isaac Lab 3.0.0 checkout and NVIDIA's own skills:
 forwarded to jobs. Set them in the MCP server's environment (client config), then restart the
 connection. Importing a task module runs its code, so only add modules the user trusts.
 
+Per call instead: `python_path` (directories for `PYTHONPATH`), `env` (extra variables; `PATH`, `LD_*`, `PYTHON*`
+are refused) and `external_callback` (`module.function`, passed as `--external_callback=`) on `envs_list`, `train`,
+`eval`, `play`, `env_check` and `record`. `ISAACLAB_EXTERNAL_CALLBACK` sets a default. An empty `envs_list` result
+carries a `hint`. `runs_list` returns the newest 25 jobs (`total`, `truncated`); filter with `task`, `kind`, `state`, `since`, `limit`.
+
 ## Guards
 
 - **Job guard**: one Isaac Lab job at a time. A refusal includes `running_job_id`; wait for it, cancel

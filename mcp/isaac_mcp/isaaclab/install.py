@@ -396,6 +396,75 @@ def resolve_task_modules(root: Any, env: Any = None) -> tuple[list[str], list[st
     return modules, paths
 
 
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_CALLBACK_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+\Z")
+# Variables a caller may not set: they change which code the interpreter loads, where it looks, or how this server
+# manages the job. PYTHONPATH has its own argument (python_path); the device, display and EULA have theirs.
+_PROTECTED_ENV = frozenset({
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "IFS", "BASH_ENV", "ENV", "CDPATH", "TMPDIR", "PWD",
+    "CUDA_VISIBLE_DEVICES", "HEADLESS", "OMNI_KIT_ACCEPT_EULA", "PYTHONUNBUFFERED",
+    "ISAACLAB_PYTHON", "ISAACLAB_ROOT", "ISAACLAB_JOBS_DIR", "ISAACSIM_PATH", "ISAAC_MCP_PYTHON",
+})
+_PROTECTED_ENV_PREFIXES = ("LD_", "DYLD_", "PYTHON", "ISAAC_MCP_", "BASH_FUNC_")
+_SAFE_PYTHON_ENV = frozenset({"PYTHONHASHSEED", "PYTHONFAULTHANDLER"})
+_MAX_ENV_VALUE = 4096
+
+
+def validate_launch_options(python_path: Any = None, env: Any = None, external_callback: Any = None,
+                            environ: Any = None) -> dict:
+    """Check the optional task-registration settings of a launch; returns ``python_path``, ``env``, ``external_callback``.
+
+    ``python_path`` is a list of existing absolute directories (prepended to PYTHONPATH), ``env`` a dict of extra
+    environment variables, ``external_callback`` a dotted ``module.func`` passed to Isaac Lab as
+    ``--external_callback=...``. Without ``external_callback``, ``ISAACLAB_EXTERNAL_CALLBACK`` is the default.
+    """
+    paths: list[str] = []
+    if python_path is not None:
+        if isinstance(python_path, str) or not isinstance(python_path, (list, tuple)):
+            raise ValueError("python_path must be a list of directories")
+        for entry in python_path:
+            if not isinstance(entry, str) or not entry.strip() or "\0" in entry or os.pathsep in entry:
+                raise ValueError(f"invalid python_path entry: {entry!r}")
+            d = Path(entry).expanduser()
+            if not d.is_absolute():
+                raise ValueError(f"python_path entries must be absolute directories: {entry!r}")
+            if not d.is_dir():
+                raise ValueError(f"python_path entry is not an existing directory: {entry!r}")
+            paths.append(str(d))
+    extra: dict[str, str] = {}
+    if env is not None:
+        if not isinstance(env, dict):
+            raise ValueError("env must be an object of variable names to string values")
+        for key, value in env.items():
+            if not isinstance(key, str) or not _ENV_KEY_RE.match(key):
+                raise ValueError(f"invalid env variable name: {key!r}: use letters, digits and underscores")
+            upper = key.upper()
+            if key not in _SAFE_PYTHON_ENV and (upper in _PROTECTED_ENV or upper.startswith(_PROTECTED_ENV_PREFIXES)):
+                hint = " Use python_path instead." if upper == "PYTHONPATH" else ""
+                raise ValueError(f"env variable {key} is protected and cannot be set here.{hint}")
+            if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+                raise ValueError(f"env value for {key} must be a string")
+            text = str(value)
+            if "\0" in text or len(text) > _MAX_ENV_VALUE:
+                raise ValueError(f"env value for {key} is invalid or too long")
+            extra[key] = text
+    callback = external_callback
+    if callback is None:
+        callback = str(_env(environ).get("ISAACLAB_EXTERNAL_CALLBACK") or "").strip() or None
+    if callback is not None and (not isinstance(callback, str) or not _CALLBACK_RE.match(callback)):
+        raise ValueError(f"invalid external_callback: {callback!r}: use a dotted module.function such as pkg.register.register")
+    return {"python_path": paths, "env": extra, "external_callback": callback}
+
+
+EXTERNAL_TASKS_HINT = (
+    "Tasks from an external project register only when its package is importable and its registration runs. "
+    "Pass python_path=['<dir containing the package>'] and external_callback='pkg.module.register' (passed to Isaac Lab as "
+    "--external_callback=pkg.module.register), or configure the server with ISAACLAB_TASK_PATH (directories) plus "
+    "ISAACLAB_TASK_MODULES (modules to import) or ISAACLAB_EXTERNAL_CALLBACK. Example: "
+    "isaaclab__envs_list(python_path=['/path/to/project/src'], external_callback='my_pkg.register.register', filter='my_task')."
+)
+
+
 _TASK_ID_RE = re.compile(r"""\bid\s*=\s*["'](Isaac-[A-Za-z0-9_.-]+)["']""")
 
 
@@ -412,7 +481,9 @@ def scan_task_ids(root: Any) -> list[str]:
     return sorted(found)
 
 
-def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
+def envs_list(filter: Any = None, env: Any = None, timeout: int = 60, python_path: Any = None,
+              task_env: Any = None, external_callback: Any = None) -> dict:
+    opts = validate_launch_options(python_path, task_env, external_callback, env)
     loc = locate_install(env)
     if not loc:
         return dict(_MISSING)
@@ -420,8 +491,10 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
     root = loc["isaaclab_root"]
 
     run_env = dict(os.environ)
+    run_env.update(opts["env"])
     run_env["OMNI_KIT_ACCEPT_EULA"] = "YES"
-    modules, paths = resolve_task_modules(root, env)
+    modules, paths = resolve_task_modules(root, {**_env(env), **opts["env"]})
+    paths = opts["python_path"] + paths
     existing_pp = run_env.get("PYTHONPATH")
     if existing_pp:
         paths.append(existing_pp)
@@ -441,6 +514,13 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
         "            errors[_m] = f'{type(_exc).__name__}: {_exc}'\n"
         "        except Exception:\n"
         "            errors[_m] = type(_exc).__name__\n"
+        f"_cb = {opts['external_callback']!r}\n"
+        "if _cb:\n"
+        "    try:\n"
+        "        _mod, _fn = _cb.rsplit('.', 1)\n"
+        "        getattr(importlib.import_module(_mod), _fn)()\n"
+        "    except BaseException as _exc:\n"
+        "        errors['external_callback ' + _cb] = f'{type(_exc).__name__}: {_exc}'\n"
         "envs = []\n"
         "for _eid, _spec in getattr(gymnasium, 'registry', {}).items():\n"
         "    try:\n"
@@ -492,4 +572,10 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60) -> dict:
                                              "-v0 where they have one.")
     if data.get("import_errors"):
         result["import_errors"] = data["import_errors"]
+    if opts["python_path"] or opts["external_callback"]:
+        result["applied"] = {"python_path": opts["python_path"], "modules": modules,
+                             "external_callback": opts["external_callback"]}
+    if not result["envs"]:
+        what = f"No task id contains {filter!r}." if filter is not None else "No tasks were found."
+        result["hint"] = what + " " + EXTERNAL_TASKS_HINT
     return result
