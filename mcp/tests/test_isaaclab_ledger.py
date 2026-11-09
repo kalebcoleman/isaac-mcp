@@ -167,3 +167,15 @@ def test_preflight_ledger_on_request():
 def test_label_validated(bad):
     with pytest.raises(ValueError, match="label"):
         jobs._validate_label(bad)
+
+
+def test_used_hours_breakdown_and_kit_reason_are_spelled_out(monkeypatch):
+    freeze(monkeypatch, 10)
+    add_job("20261101-000000-a", 0, 2)
+    (jobs.jobs_dir() / "gpu_ledger.json").write_text(json.dumps({"budget_hours": 8, "carried_hours": 1.5}))
+    assert ledger.report()["used_hours_breakdown"] == "2.0000 h from jobs (union) + 1.5 h carried_hours"
+    monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [{"host": "127.0.0.1", "port": 8766}])
+    monkeypatch.setattr(preflight, "_smi", lambda a: "RTX, 100, 40, 60\n" if a[0].startswith("--query-gpu") else "")
+    pf = preflight.preflight()
+    reason = next(r for r in pf["reasons"] if "Kit bridge" in r)
+    assert "127.0.0.1:8766" in reason and "60 MiB free" in reason and "allow_concurrent_gpu=true" in reason and "agrees" in reason

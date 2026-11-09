@@ -134,7 +134,9 @@ def report(label: str | None = None, since: Any = None, budget_hours: float | No
                 for i in shown]
     out: dict[str, Any] = {
         "counted": HOW_COUNTED,
-        "used_hours": round(used, 4), "union_hours": round(union_h, 4), "naive_sum_hours": round(naive_h, 4),
+        "used_hours": round(used, 4),
+        "used_hours_breakdown": f"{union_h:.4f} h from jobs (union) + {carried:g} h carried_hours",
+        "union_hours": round(union_h, 4), "naive_sum_hours": round(naive_h, 4),
         "overlap_saved_hours": round(naive_h - union_h, 4), "carried_hours": carried,
         "since": since_value, "per_gpu": per_gpu, "jobs": jobs_out,
         "budget_hours": cap, "config_source": cfg["source"],

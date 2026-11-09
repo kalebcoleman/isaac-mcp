@@ -372,7 +372,7 @@ Preflight also answers "how many GPU-hours have my jobs used?" from the job reco
 GPU, `label`), so there is no ledger file to maintain by hand. `gpu_hours` appears when a budget is configured or
 when `ledger`, `label`, `since` or `budget_gpu_hours` is given:
 
-- **How it counts.** `used_hours` is the wall-clock *union* of the jobs' intervals on each GPU, summed over GPUs, plus
+- **How it counts.** `used_hours` (with `used_hours_breakdown` spelling out the two parts) is the wall-clock *union* of the jobs' intervals on each GPU, summed over GPUs, plus
   `carried_hours` from the ledger file. Jobs that share a GPU at the same time are counted once for the overlap.
   `naive_sum_hours` (the plain sum of each job's wall time) is reported beside `union_hours`, and
   `overlap_saved_hours` is the difference: adding wall times over-counts whenever runs overlap. A running job
