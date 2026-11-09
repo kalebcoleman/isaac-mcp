@@ -181,7 +181,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__run_script` | Run your own bounded Python script as a managed job (async; executes arbitrary code) |
 | `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start`, a suggested `num_envs`, and the GPU-hour ledger against an optional budget |
 | `isaaclab__runs_list` | List jobs, newest first, filtered (task, kind, state, since) and limited (default 25) |
-| `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir (with its source), window; or a run folder by name under a log root |
+| `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir (with its source), window; `wait_s` waits for the job to end; or a run folder by name under a log root |
 | `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
 | `isaaclab__runs_cancel` | Stop a job (SIGTERM then SIGKILL process group) |
 | `isaaclab__checkpoints_list` | List `*.pt`/`*.pth` checkpoints (newest first) |
@@ -448,7 +448,7 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
   | `kind` | string | no | `null` | `train`, `eval`, `play`, `env_check` or `record`. |
   | `since` | string | no | `null` | ISO time (local time without a zone) or an age such as `90m`, `2h`, `1d`, `1w`. |
   | `limit` | integer | no | `25` | 1 to 500. |
-- Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, log_dir}], total, truncated, hint?}`, **newest first**.
+- Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, exit_code, log_dir, label?}], total, truncated, hint?}`, **newest first**.
   `total` counts every match before `limit`; `truncated` is true when `limit` cut some (then `hint` says how to narrow).
   Changed from earlier versions, which returned every job oldest first: callers that need all jobs pass `limit=500` or narrow with `since`.
   Dead pids are reconciled to `failed` ("host restarted") on read.
@@ -465,6 +465,7 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
   | `log_root` | string | one of | — | Instead of a job: resolve a run folder by name under this logs folder (Lab `logs/`, a library folder, or `ISAACLAB_LOGS_DIR`; it must be inside the allowed roots). Needs `run_name`. |
   | `run_name` | string | with `log_root` | — | The `--run_name` the run used; matches folders `<timestamp>_<run_name>` exactly, so `recC` does not match `recC_v2`. |
   | `experiment` | string | no | — | With `log_root`: experiment folder name, to narrow several matches. |
+  | `wait_s` | number | no | `0` | With `job_id`: block up to this many seconds (at most 3600) until the job is no longer running. See below. |
 - Returns:
   `{state, pid_alive, elapsed_s, exit_code, last_log_lines, latest_checkpoint, run_dir, run_dir_source, log_dir, pid, environment_ready}`.
   `exit_code` is the Isaac Lab process's own (recorded by a shell wrapper, so it survives a host restart). `run_dir_source` says where `run_dir` came from: `lab_log` (the log names the run folder), `checkpoint` (the folder of the newest checkpoint) or `job_dir`, meaning no Lab run folder is known yet and `run_dir` is the job's own folder (a `run_dir_warning` says so; with `require_run_dir=true` it is an `error`).
@@ -473,7 +474,12 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
   plus `window: {id, title, width, height}` when the job is live and owns a window, and `eval_result`
   (`episodes`, `mean_return`, ...) for an `isaaclab__eval` job whose runner has written it, including after the
   host that started the job has gone (it is read from `eval_result.json` in the job folder). `last_log_lines` is the last 20 useful lines of `stdout.log` (a progress-bar line keeps only its newest text after a carriage return, and a line that is only a bar is dropped, so skrl and sb3 tails show log text rather than bars); a failed job also has `last_stderr_lines`, the last 20 of `stderr.log`, where launch and import failures go. `latest_checkpoint` is the newest `*.pt`/`*.pth` under `run_dir` (or parsed from the log's "saving checkpoint '...'" lines); `run_dir` is the experiment directory reported by status (may be updated from the log). Discovery accepts both a complete experiment path and Isaac Lab 3's separate experiment-root/run-name lines, then locates checkpoints in that directory. `log_dir` remains the MCP job's stdout/stderr directory; it is not necessarily where training artifacts are written.
-- Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10"}`
+- **Waiting.** `wait_s` replaces a poll loop (and a background-task wait that returns at once). It returns the final status as
+  soon as the job ends for any reason (success, failure, timeout, cancel), with `exit_code`, `last_log_lines` and `waited_s`.
+  If the wait runs out first, the status is still `running` with `wait_timed_out: true`, and you call again. The wait polls every
+  2 s on a worker thread and holds no lock, so other tool calls and launches proceed. Many MCP clients cut a call off after about a
+  minute, so wait in slices of 30 to 60 s. `wait_s` without `job_id`, or outside 0 to 3600, is an `error`.
+- Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10"}`; to wait: `{"job_id": "20261030-120000-Isaac-Reach-UR10", "wait_s": 45}`
 
 ### `isaaclab__runs_tail`
 

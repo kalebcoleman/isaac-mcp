@@ -52,6 +52,10 @@ _Label = Annotated[str | None, Field(description="Short name for the job, kept i
 _AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
 
 
+_MAX_WAIT_S = 3600.0
+_WAIT_POLL_S = 2.0  # patched by tests
+
+
 def _dump(obj: Any) -> str:
     return json.dumps(obj, indent=2, default=str)
 
@@ -361,12 +365,13 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _guard(lambda: _jobs.runs_list(state=state, task=task, kind=kind, since=since, limit=limit))
 
     @mcp.tool(name="isaaclab__runs_status", annotations=DESTRUCTIVE)
-    def isaaclab_runs_status(
+    async def isaaclab_runs_status(
         job_id: Annotated[str | None, Field(description="job_id from isaaclab__train, eval or play, or isaaclab__runs_list. Give this, or log_root with run_name.")] = None,
         require_run_dir: Annotated[bool, Field(description="With job_id: return an `error` instead of a status when no Lab run folder is found for the job (else run_dir may be the job's own folder; see run_dir_source).")] = False,
         log_root: Annotated[str | None, Field(description="Instead of a job: resolve a run folder by name under this logs folder. Needs run_name.")] = None,
         run_name: Annotated[str | None, Field(description="With log_root: the --run_name the run used; matches folders named <timestamp>_<run_name> exactly.")] = None,
         experiment: Annotated[str | None, Field(description="With log_root: experiment folder name, to narrow several matches.")] = None,
+        wait_s: Annotated[float, Field(description="With job_id: block up to this many seconds (0 to 3600) until the job is no longer running, then return the final status. Many clients cut a tool call off after a minute or so: wait in slices of 30 to 60 s.")] = 0,
     ) -> str:
         """State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source`
         (lab_log, checkpoint, or job_dir when no Lab run folder is known yet, with a `run_dir_warning`),
@@ -377,6 +382,11 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         With log_root and run_name instead of job_id it resolves the Lab run folder `<timestamp>_<run_name>`
         and returns run_dir, candidates (newest first) and latest_checkpoint. A lookup that finds nothing, or
         is given an empty name, is an `error`, never an empty or guessed path.
+
+        With wait_s it waits for the job to end (a timeout, a cancel and a crash all end it) and returns the final
+        status with `exit_code` and `last_log_lines`; if the wait runs out first the state is still `running`, with
+        `wait_timed_out=true` and `waited_s`, and you call again. It polls without holding any lock, so other
+        calls and launches are not blocked.
 
         Reconciles orphaned jobs by updating their stored metadata."""
         def status() -> dict:
@@ -397,7 +407,25 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
                     st["window"] = {k: w[k] for k in ("id", "title", "width", "height")}
             return st
 
-        return _guard(status)
+        if not wait_s:
+            return _guard(status)
+        if job_id is None:
+            return _dump({"error": "wait_s needs a job_id"})
+        if isinstance(wait_s, bool) or not 0 < wait_s <= _MAX_WAIT_S:
+            return _dump({"error": f"wait_s must be between 0 and {int(_MAX_WAIT_S)} seconds"})
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        while True:
+            out = await asyncio.to_thread(_guard, status)
+            parsed = json.loads(out)
+            waited = loop.time() - started
+            if "error" in parsed or parsed.get("state") != "running":
+                parsed["waited_s"] = round(waited, 1)
+                return _dump(parsed)
+            if waited >= wait_s:
+                parsed.update(wait_timed_out=True, waited_s=round(waited, 1))
+                return _dump(parsed)
+            await asyncio.sleep(min(_WAIT_POLL_S, max(0.01, wait_s - waited)))
 
     @mcp.tool(name="isaaclab__runs_tail", annotations=IDEMPOTENT_WRITE)
     def isaaclab_runs_tail(job_id: _JobId, stream: Annotated[str, Field(description="stdout or stderr.")] = "stdout",
