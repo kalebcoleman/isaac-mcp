@@ -14,11 +14,12 @@ from typing import Annotated, Any, Callable, Iterable
 
 from pydantic import BeforeValidator, Field
 
-from ..local_tools import DESTRUCTIVE, IDEMPOTENT_WRITE, PYTHON_EXECUTION, READ_ONLY, ScopedTools
+from ..local_tools import ADDITIVE, DESTRUCTIVE, IDEMPOTENT_WRITE, PYTHON_EXECUTION, READ_ONLY, ScopedTools
 from . import install as _install
 from . import jobs as _jobs
 from . import metrics as _metrics
 from . import preflight as _preflight
+from . import registry as _registry
 from . import evalsummary as _evalsummary
 from . import rundir as _rundir
 
@@ -481,6 +482,21 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             return _metrics.metrics_summary(folder, tags=tags)
 
         return _guard(summarise)
+
+    @mcp.tool(name="isaaclab__checkpoint_register", annotations=ADDITIVE)
+    def isaaclab_checkpoint_register(
+        path: Annotated[str, Field(description="The checkpoint file (.pt, .pth, .zip, .ckpt, .onnx) to register, e.g. from isaaclab__checkpoints_list.")],
+        role: Annotated[str, Field(description="What it is for, one short line: baseline, candidate, init, final...")],
+        provenance: Annotated[str, Field(description="Where it came from, one line: run name, commit, settings, evaluation result.")],
+        registry: Annotated[str | None, Field(description="Markdown file to add the row to. Default: README.md in the checkpoint's folder. It must be in that folder or one above it.")] = None,
+        read_only: Annotated[bool, Field(description="Also remove write permission from the checkpoint file, so a later run cannot overwrite it.")] = False,
+    ) -> str:
+        """Record a checkpoint in a README table (path, role, sha256, size, time, provenance) so a baseline cannot be
+        replaced unnoticed. Append-only: one atomic write adds a row; a path that already has a row is refused with the
+        existing row and whether the file still matches its hash. Returns the sha256 and the row, `same_content_as`
+        if another registered path has identical bytes, and, in a git work tree, a `git` hint: `.pt` files are usually
+        ignored, so commit them with `git add -f` (this tool never runs git). Reads the checkpoint, writes only the registry."""
+        return _guard(lambda: _registry.register(path, role, provenance, registry, read_only))
 
     @mcp.tool(name="isaaclab__tensorboard_tail", annotations=READ_ONLY)
     def isaaclab_tensorboard_tail(run_dir: _RunDir, tag: Annotated[str, Field(description="Scalar tag, from isaaclab__metrics_summary.")], last_n: _LastN = 50) -> str:

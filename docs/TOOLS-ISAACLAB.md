@@ -185,6 +185,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
 | `isaaclab__runs_cancel` | Stop a job (SIGTERM then SIGKILL process group) |
 | `isaaclab__checkpoints_list` | List `*.pt`/`*.pth` checkpoints (newest first) |
+| `isaaclab__checkpoint_register` | Record a checkpoint's sha256, role and provenance in an append-only README table; refuses to overwrite a registered path |
 | `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count), or, with `eval_json`, pass counts of evaluation-result files by fall direction against a baseline |
 | `isaaclab__tensorboard_tail` | Last points of one TensorBoard scalar |
 
@@ -552,6 +553,31 @@ Refused with an `error` naming the file: the **TEST** split (unless `allow_test=
 file with no `pose_set` or an unknown one; mixed splits or pose counts in one call, or a baseline on another split; a missing
 expected key. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
 Example: `{"eval_json": ["<run>/final_recC_heldout_r1.json", "<run>/final_recC_heldout_r2.json"], "label": "v3 before 3b", "baseline_json": ["<run>/final_base_heldout_r1.json"], "baseline_label": "R9hg_it1100"}`
+
+### `isaaclab__checkpoint_register`
+
+Protects a checkpoint you must not lose (a baseline, an initial policy) by recording it in a Markdown table that only grows.
+The only tool of the pack that writes next to your files, so it is annotated additive (not read-only, not destructive).
+
+- Parameters:
+
+  | Name | Type | Required | Default | Notes |
+  |---|---|---|---|---|
+  | `path` | string | yes | — | The checkpoint (`.pt`, `.pth`, `.zip`, `.ckpt`, `.onnx`), from `isaaclab__checkpoints_list`. |
+  | `role` | string | yes | — | One line, at most 40 characters: `baseline`, `candidate`, `init`, `final`... |
+  | `provenance` | string | yes | — | One line, at most 500 characters: run name, commit, settings, evaluation result. |
+  | `registry` | string | no | `README.md` beside the checkpoint | A `.md` file in the checkpoint's folder or one above it; a path in the row is relative to it. |
+  | `read_only` | boolean | no | `false` | Also remove write permission from the checkpoint file. |
+- Returns: `{registered: true, path, role, sha256, size_bytes, registry, row, same_content_as?, read_only?, git?}`. The table has the columns
+  Checkpoint, Role, SHA-256, Size (bytes), Registered (UTC), Provenance; a README that has other text keeps it and gets the table at the end.
+  One atomic write (a temporary file renamed over the README, under a lock) adds the row, and the old text is always an exact prefix of the new.
+- Refusals (`error`): a path that already has a row is never overwritten; the error shows the existing role, hash and time and says whether the file
+  on disk still matches that hash or now differs (register a changed checkpoint under a new file name). Also an empty role or provenance, a
+  missing file, an unsupported extension, a registry that is not `.md`, is a symbolic link, or sits outside the checkpoint's folder tree.
+  `same_content_as` lists other registered paths with identical bytes (not an error).
+- Git: `*.pt` is usually ignored, so in a work tree `git` reports `ignored_by_git` and the command to use, `git add -f <checkpoint> <registry>`.
+  The tool never runs git.
+- Example: `{"path": "<repo>/checkpoints/recC.pt", "role": "baseline", "provenance": "g4j1_b1p2_it1425; 174.7/256 HELDOUT, criteria v3 before 3b"}`
 
 ### `isaaclab__tensorboard_tail`
 

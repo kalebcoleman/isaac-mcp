@@ -31,7 +31,7 @@ VAR = lt.ENV_VAR
 # say (tests/test_host_catalog_gateway.py covers them); these tests are about the local tools.
 OFFLINE = {gw._mcp_name(canonical) for canonical in host_catalog.catalog_tool_names()}
 # Named in the task as the tools a read-only profile must not expose.
-MUTATING = {"isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__runs_cancel",
+MUTATING = {"isaaclab__checkpoint_register", "isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__runs_cancel",
             "screenshot", "start_screen_recording", "stop_screen_recording", "raise_window", "move_window",
             "use_bridge", "refresh_tools", "isaaclab__install_info", "isaaclab__envs_list",
             "isaaclab__runs_list", "isaaclab__runs_status", "isaaclab__runs_tail"}

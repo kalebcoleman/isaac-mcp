@@ -221,7 +221,17 @@ Stop only the identified managed process; unsaved changes can be lost. Refuses e
 
 ## Isaac Lab
 
-Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 16 tools.
+Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 17 tools.
+
+### `isaaclab__checkpoint_register`
+
+Record a checkpoint in a README table (path, role, sha256, size, time, provenance) so a baseline cannot be replaced unnoticed. Append-only: one atomic write adds a row; a path that already has a row is refused with the existing row and whether the file still matches its hash. Returns the sha256 and the row, `same_content_as` if another registered path has identical bytes, and, in a git work tree, a `git` hint: `.pt` files are usually ignored, so commit them with `git add -f` (this tool never runs git). Reads the checkpoint, writes only the registry.
+
+- `path` (str, required): The checkpoint file (.pt, .pth, .zip, .ckpt, .onnx) to register, e.g. from isaaclab__checkpoints_list.
+- `role` (str, required): What it is for, one short line: baseline, candidate, init, final...
+- `provenance` (str, required): Where it came from, one line: run name, commit, settings, evaluation result.
+- `registry` (str | None, default `None`): Markdown file to add the row to. Default: README.md in the checkpoint's folder. It must be in that folder or one above it.
+- `read_only` (bool, default `False`): Also remove write permission from the checkpoint file, so a later run cannot overwrite it.
 
 ### `isaaclab__checkpoints_list`
 
