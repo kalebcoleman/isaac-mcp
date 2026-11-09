@@ -151,6 +151,16 @@ def test_env_default_callback_is_used(tmp_path, monkeypatch):
     wait(res["job_id"])
 
 
+def test_env_default_callback_yields_to_callback_in_extra_args(tmp_path, monkeypatch):
+    root = make_root(tmp_path)
+    monkeypatch.setenv("ISAACLAB_EXTERNAL_CALLBACK", "p.m.f")
+    res = jobs.train(python=str(fake_python(tmp_path)), root=str(root), task="T",
+                     extra_args=["--external_callback=mine.reg"], allow_concurrent=True, allow_concurrent_gpu=True)
+    assert "--external_callback=mine.reg" in res["command"]
+    assert "--external_callback=p.m.f" not in res["command"]
+    wait(res["job_id"])
+
+
 @pytest.mark.parametrize("fn", ["env_check", "record"])
 def test_check_and_record_forward_options(tmp_path, monkeypatch, fn):
     seen = {}

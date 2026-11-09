@@ -7,6 +7,7 @@ Reference: docs/TOOLS-ISAACLAB.md.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Annotated, Any, Callable, Iterable
 
@@ -276,7 +277,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
                        allow_concurrent_gpu=allow_concurrent_gpu, **_task_kw(python_path, env, external_callback))
 
     @mcp.tool(name="isaaclab__run_script", annotations=PYTHON_EXECUTION)
-    def isaaclab_run_script(
+    async def isaaclab_run_script(
         script: Annotated[str, Field(description="Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.")],
         args: Annotated[list[str] | None, Field(description="Command-line arguments for the script.")] = None,
         env: Annotated[dict[str, str] | None, Field(description="Extra environment variables; keys must be valid identifiers.")] = None,
@@ -311,7 +312,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
                 single_instance_key=single_instance_key, allow_concurrent=allow_concurrent,
                 allow_concurrent_gpu=allow_concurrent_gpu)
 
-        return _guard(start)
+        # wait_for_vram_s can sleep for minutes: keep it off the event loop so the server keeps answering.
+        return await asyncio.to_thread(_guard, start)
 
     @mcp.tool(name="isaaclab__preflight", annotations=READ_ONLY)
     def isaaclab_preflight(task: Annotated[str | None, Field(description="Task id, to suggest a num_envs from its last isaaclab__env_check.")] = None) -> str:

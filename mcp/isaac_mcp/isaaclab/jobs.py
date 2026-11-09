@@ -980,8 +980,11 @@ def _start_job_locked(
 ) -> dict[str, Any]:
     _validate_task(task)
     opts = _install.validate_launch_options(python_path, env, external_callback)
-    if opts["external_callback"] and any(a.split("=", 1)[0] == "--external_callback" for a in argv):
-        raise ValueError("Give external_callback as this option or in extra_args, not both.")
+    if any(a.split("=", 1)[0] == "--external_callback" for a in argv):
+        if external_callback:
+            raise ValueError("Give external_callback as this option or in extra_args, not both.")
+        # Only the ISAACLAB_EXTERNAL_CALLBACK default is set: the caller's own extra_args win.
+        opts = {**opts, "external_callback": None}
     if not allow_concurrent:
         blocked = _concurrency_guard()
         if blocked is not None:

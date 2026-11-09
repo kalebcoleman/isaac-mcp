@@ -1,5 +1,6 @@
 """isaaclab__run_script: managed user-script jobs (fake scripts, no GPU, nvidia-smi mocked)."""
 
+import asyncio
 import json
 import os
 import sys
@@ -251,7 +252,11 @@ def test_tool_layer_json_and_errors(tmp_path, monkeypatch):
 
     server = FastMCP("t")
     tools.register_isaaclab_tools(server)
-    fn = server._tool_manager._tools["isaaclab__run_script"].fn
+    afn = server._tool_manager._tools["isaaclab__run_script"].fn
+
+    def fn(**kw):  # the tool is async so a VRAM wait cannot block the event loop
+        return asyncio.run(afn(**kw))
+
     bad = json.loads(fn(script=str(tmp_path / "nope.py")))
     assert "existing .py" in bad["error"]
     ok = json.loads(fn(script=str(script(tmp_path, "print('hi')\n"))))
