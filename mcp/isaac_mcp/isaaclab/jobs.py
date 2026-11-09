@@ -1283,6 +1283,193 @@ def record(python: str, root: Any, task: str, checkpoint: Any = None, num_envs: 
     return {**out, "note": f"{agent} actions, no policy; isaaclab__runs_status lists video_paths when it finishes"}
 
 
+# ---- generic script jobs (isaaclab__run_script) ----------------------------------------------------------------
+
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_ARTIFACT_PREFIX = "ISAAC_MCP_ARTIFACT:"
+_ARTIFACT_LOG_MAX = 32 * 1024**2
+_ARTIFACT_LIMIT = 200
+SCRIPT_DEFAULT_TIMEOUT_S = 600.0
+MAX_VRAM_WAIT_S = 3600.0
+_VRAM_POLL_S = 5.0  # patched by tests
+
+
+def _script_artifacts(log_path: Path) -> list[str]:
+    """Paths the script printed on a line `ISAAC_MCP_ARTIFACT: <path>`, in order, without repeats."""
+    found: list[str] = []
+    try:
+        size = log_path.stat().st_size
+        with log_path.open("rb") as f:
+            f.seek(max(0, size - _ARTIFACT_LOG_MAX))
+            text = f.read().decode(errors="replace")
+    except OSError:
+        return found
+    for line in text.splitlines():
+        line = _ANSI_RE.sub("", line).strip()
+        if line.startswith(_ARTIFACT_PREFIX):
+            value = line[len(_ARTIFACT_PREFIX):].strip()
+            if value and value not in found:
+                found.append(value)
+                if len(found) >= _ARTIFACT_LIMIT:
+                    break
+    return found
+
+
+def _script_result(jd: Path, data: dict[str, Any], elapsed: float) -> dict[str, Any]:
+    return {
+        "status": data.get("status"),
+        "exit_code": data.get("exit_code"),
+        "wall_time_s": round(elapsed, 3),
+        "log_path": data.get("stdout_log"),
+        "stderr_log_path": data.get("stderr_log"),
+        "artifacts": _script_artifacts(jd / "stdout.log"),
+    }
+
+
+def _running_with_key(key: str) -> dict[str, Any] | None:
+    for jd in sorted(jobs_dir().iterdir()):
+        data = _read_job(jd) if jd.is_dir() else None
+        if not data or data.get("status") != "running" or data.get("single_instance_key") != key:
+            continue
+        proc = _active.get(jd.name)
+        if (proc is not None and proc.poll() is None) or (proc is None and _job_alive(data)):
+            return data
+    return None
+
+
+def _wait_for_vram(min_free_mb: int, wait_s: float) -> dict[str, Any] | None:
+    """None when enough GPU memory is free (waiting up to wait_s for it); otherwise a refusal."""
+    from . import preflight as _preflight
+
+    deadline = time.monotonic() + wait_s
+    while True:
+        gpu = _preflight.gpu_state()
+        if gpu is None:
+            return {"error": "nvidia-smi gave no answer, so free GPU memory is unknown and min_free_vram_mb cannot be checked",
+                    "hint": "leave min_free_vram_mb out to start without the check"}
+        if gpu["free_mib"] >= min_free_mb:
+            return None
+        if time.monotonic() >= deadline:
+            return {"error": f"only {gpu['free_mib']} MiB of GPU memory is free; min_free_vram_mb={min_free_mb}",
+                    "free_mib": gpu["free_mib"], "processes": gpu.get("processes", []),
+                    "hint": "pass wait_for_vram_s to wait for it, or see isaaclab__preflight for what holds the GPU"}
+        time.sleep(max(0.01, min(_VRAM_POLL_S, deadline - time.monotonic())))
+
+
+def run_script(
+    python: str,
+    script: Any,
+    args: Any = None,
+    env: Any = None,
+    python_path: Any = None,
+    cwd: Any = None,
+    label: str | None = None,
+    timeout_s: float | None = SCRIPT_DEFAULT_TIMEOUT_S,
+    min_free_vram_mb: int | None = None,
+    wait_for_vram_s: float = 0,
+    single_instance_key: str | None = None,
+    allow_concurrent: bool = False,
+    allow_concurrent_gpu: bool = False,
+) -> dict[str, Any]:
+    """Run a user's Python script as a job. It executes arbitrary code with this user's rights; nothing is sandboxed."""
+    if not isinstance(script, (str, os.PathLike)) or not str(script):
+        raise ValueError("script must be a path to a .py file")
+    script_path = Path(script).expanduser()
+    if script_path.suffix != ".py" or not script_path.is_file():
+        raise ValueError(f"script must be an existing .py file: {script}")
+    script_path = script_path.resolve()
+    argv = []
+    for a in (args or []):
+        if not isinstance(a, str) or "\0" in a:
+            raise ValueError("args must be a list of strings without NUL characters")
+        argv.append(a)
+    if env is not None and not isinstance(env, dict):
+        raise ValueError("env must be an object of NAME: value strings")
+    extra_env: dict[str, str] = {}
+    for k, v in (env or {}).items():
+        if not isinstance(k, str) or not _ENV_KEY_RE.match(k):
+            raise ValueError(f"env key {k!r} is not a valid identifier")
+        if not isinstance(v, str) or "\0" in v:
+            raise ValueError(f"env value for {k} must be a string without NUL characters")
+        extra_env[k] = v
+    paths = []
+    for p in (python_path or []):
+        if not isinstance(p, str) or not p or "\0" in p or os.pathsep in p:
+            raise ValueError("python_path must be a list of non-empty path strings")
+        paths.append(str(Path(p).expanduser()))
+    py = Path(str(python)).expanduser()
+    if not py.is_file() or not os.access(py, os.X_OK):
+        raise ValueError(f"python is not an executable file: {python}")
+    workdir = Path(cwd).expanduser() if cwd else script_path.parent
+    if not workdir.is_dir():
+        raise ValueError(f"cwd is not a directory: {workdir}")
+    if timeout_s is None:
+        timeout_s = SCRIPT_DEFAULT_TIMEOUT_S
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not 0 < timeout_s <= 7 * 86400:
+        raise ValueError("timeout_s must be a number of seconds greater than 0 (at most 7 days)")
+    if min_free_vram_mb is not None and (type(min_free_vram_mb) is not int or min_free_vram_mb <= 0):
+        raise ValueError("min_free_vram_mb must be a positive integer")
+    if isinstance(wait_for_vram_s, bool) or not isinstance(wait_for_vram_s, (int, float)) or not 0 <= wait_for_vram_s <= MAX_VRAM_WAIT_S:
+        raise ValueError(f"wait_for_vram_s must be between 0 and {int(MAX_VRAM_WAIT_S)}")
+    if single_instance_key is not None and (not isinstance(single_instance_key, str) or not 0 < len(single_instance_key) <= 200):
+        raise ValueError("single_instance_key must be a non-empty string of at most 200 characters")
+    if label is not None and (not isinstance(label, str) or not label.strip()):
+        raise ValueError("label must be a non-empty string")
+    name = (label or script_path.stem)[:60]
+
+    if min_free_vram_mb is not None:
+        blocked = _wait_for_vram(min_free_vram_mb, float(wait_for_vram_s))  # outside the launch lock: it can take long
+        if blocked is not None:
+            return blocked
+    with _launch_lock:
+        if single_instance_key is not None:
+            other = _running_with_key(single_instance_key)
+            if other is not None:
+                return {"error": f"a job with single_instance_key {single_instance_key!r} is already running: {other.get('job_id')} (pid {other.get('pid')})",
+                        "running_job_id": other.get("job_id"), "running_pid": other.get("pid"),
+                        "hint": "wait for it, or cancel it with isaaclab__runs_cancel"}
+        if not allow_concurrent:
+            blocked = _concurrency_guard()
+            if blocked is not None:
+                return blocked
+        if not allow_concurrent_gpu:
+            blocked = _kit_bridge_guard()
+            if blocked is not None:
+                return blocked
+        job_id = _job_id(name)
+        jd = jobs_dir() / job_id
+        jd.mkdir(parents=True, exist_ok=True)
+        full_cmd = [str(py), str(script_path)] + argv
+        child = os.environ.copy()
+        child["OMNI_KIT_ACCEPT_EULA"] = "YES"
+        child["PYTHONUNBUFFERED"] = "1"
+        child.update(extra_env)
+        if paths:
+            existing = child.get("PYTHONPATH", "")
+            child["PYTHONPATH"] = os.pathsep.join(paths + ([existing] if existing else []))
+        stdout_path, stderr_path = jd / "stdout.log", jd / "stderr.log"
+        with open(stdout_path, "wb") as out_f, open(stderr_path, "wb") as err_f:
+            proc = subprocess.Popen(
+                _exit_recording(full_cmd, jd, timeout_s), stdout=out_f, stderr=err_f, stdin=subprocess.DEVNULL,
+                env=child, cwd=str(workdir), shell=False, start_new_session=True,
+            )
+        data = {
+            "id": job_id, "job_id": job_id, "kind": "script", "task": name, "label": label,
+            "script": str(script_path), "command": full_cmd, "cwd": str(workdir.resolve()),
+            "pid": proc.pid, "pid_start": _process_start(proc.pid), "timeout_s": timeout_s,
+            "single_instance_key": single_instance_key,
+            "started_at": _now(), "finished_at": None, "status": "running", "exit_code": None,
+            "log_dir": str(jd.resolve()), "run_dir": str(jd.resolve()),
+            "stdout_log": str(stdout_path.resolve()), "stderr_log": str(stderr_path.resolve()),
+        }
+        _write_job(jd, data)
+        with _jobs_lock:
+            _active[job_id] = proc
+        threading.Thread(target=_watcher, args=(jd, job_id, proc, timeout_s), daemon=True).start()
+    return {"job_id": job_id, "log_dir": str(jd.resolve()), "command": full_cmd, "timeout_s": timeout_s,
+            "note": "Runs the script as arbitrary code with your rights. Print `ISAAC_MCP_ARTIFACT: <path>` for outputs; runs_status lists them as script_result.artifacts."}
+
+
 def runs_list(state: str | None = None) -> dict[str, Any]:
     if state and state not in RUN_STATES:
         raise ValueError(f"unknown state {state!r}: use one of {', '.join(RUN_STATES)}, or omit it for all")
@@ -1390,6 +1577,8 @@ def runs_status(job_id: str) -> dict[str, Any]:
             found = sorted(str(x.resolve()) for x in vdir.glob("*.mp4")) if vdir.is_dir() else []
             if found:
                 out["video_paths"] = found
+    if data.get("kind") == "script":
+        out["script_result"] = _script_result(jd, {**data, "status": out["state"], "exit_code": out["exit_code"]}, elapsed)
     if data.get("kind") == "eval":
         result = _eval_result(jd)
         if result is not None:
@@ -1496,6 +1685,7 @@ _rehydrate()  # last: it can need anything above
 __all__ = [
     "jobs_dir",
     "train",
+    "run_script",
     "eval_",
     "play",
     "runs_list",

@@ -181,7 +181,8 @@ def test_every_local_tool_is_annotated_and_read_only_matches_the_groups():
         ann = tool.annotations
         assert ann is not None, f"{name} has no annotations"
         python_tools = lt.GROUPS["isaaclab_probe"] | lt.GROUPS["screen_input"] | lt.GROUPS["sim_launch"] | {
-            "isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__env_check", "isaaclab__record"}
+            "isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__env_check", "isaaclab__record",
+                "isaaclab__run_script"}
         assert ann.openWorldHint is (name in python_tools), name
         if name in lt.READ_ONLY_TOOLS:
             assert ann.readOnlyHint is True and ann.idempotentHint is True, name

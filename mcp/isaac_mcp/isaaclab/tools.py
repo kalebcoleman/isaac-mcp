@@ -242,6 +242,44 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
                        timeout_s=timeout_s, allow_concurrent=allow_concurrent,
                        allow_concurrent_gpu=allow_concurrent_gpu)
 
+    @mcp.tool(name="isaaclab__run_script", annotations=PYTHON_EXECUTION)
+    def isaaclab_run_script(
+        script: Annotated[str, Field(description="Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.")],
+        args: Annotated[list[str] | None, Field(description="Command-line arguments for the script.")] = None,
+        env: Annotated[dict[str, str] | None, Field(description="Extra environment variables; keys must be valid identifiers.")] = None,
+        python_path: Annotated[list[str] | None, Field(description="Folders put at the front of PYTHONPATH.")] = None,
+        python: Annotated[str | None, Field(description="Interpreter. Default: the configured ISAACLAB_PYTHON.")] = None,
+        cwd: Annotated[str | None, Field(description="Working directory. Default: the script's folder.")] = None,
+        label: Annotated[str | None, Field(description="Short name, used in the job_id and runs_list.")] = None,
+        timeout_s: Annotated[float, Field(description="Hard wall limit in seconds; the whole process group is killed at expiry.")] = 600,
+        min_free_vram_mb: Annotated[int | None, Field(description="Refuse to start unless this much GPU memory (MiB) is free. Default: no check.")] = None,
+        wait_for_vram_s: Annotated[float, Field(description="With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).")] = 0,
+        single_instance_key: Annotated[str | None, Field(description="Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.")] = None,
+        allow_concurrent: _AllowConcurrent = False,
+        allow_concurrent_gpu: _AllowGpu = False,
+    ) -> str:
+        """Run your own bounded Python script as a managed job (kind "script") and return its job_id at once.
+
+        WARNING: executes arbitrary code with your rights; not sandboxed, not idempotent. Own process
+        group: timeout or isaaclab__runs_cancel kills all of it. Print `ISAAC_MCP_ARTIFACT: <path>` to list
+        outputs; isaaclab__runs_status then gives `script_result` (exit_code, wall_time_s, log_path, artifacts).
+
+        Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true."""
+        def start() -> dict:
+            py = python
+            if not py:
+                inst = _install.locate_install()
+                if not inst:
+                    return dict(_NO_INSTALL)
+                py = inst["python"]
+            return _jobs.run_script(
+                py, script, args=args, env=env, python_path=python_path, cwd=cwd, label=label,
+                timeout_s=timeout_s, min_free_vram_mb=min_free_vram_mb, wait_for_vram_s=wait_for_vram_s,
+                single_instance_key=single_instance_key, allow_concurrent=allow_concurrent,
+                allow_concurrent_gpu=allow_concurrent_gpu)
+
+        return _guard(start)
+
     @mcp.tool(name="isaaclab__preflight", annotations=READ_ONLY)
     def isaaclab_preflight(task: Annotated[str | None, Field(description="Task id, to suggest a num_envs from its last isaaclab__env_check.")] = None) -> str:
         """Before launching: free GPU memory and which processes hold it, running Lab jobs, any Kit bridge, a

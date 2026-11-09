@@ -150,6 +150,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__play` | Play a checkpoint with a window (async, interactive) |
 | `isaaclab__env_check` | Build a task, step it with zero or random actions, and report problems (async) |
 | `isaaclab__record` | Record an MP4 with no window, from a checkpoint or from zero/random actions (async) |
+| `isaaclab__run_script` | Run your own bounded Python script as a managed job (async; executes arbitrary code) |
 | `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start` and a suggested `num_envs` |
 | `isaaclab__runs_list` | List jobs (running/finished/all) |
 | `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir, window |
@@ -326,8 +327,39 @@ the same way; checks that depend on the task (a tip height, a tower standing) st
 `RecordVideo` and `--enable_cameras`; `runs_status` lists `video_paths`.
 
 `isaaclab__preflight(task=None)` reads `nvidia-smi`, the jobs this host started and any Kit bridge, and returns
-`can_start` with reasons. With a task that has a finished `env_check` it adds `suggested_num_envs`, treating half of
+`can_start` with reasons. `gpu.processes` lists every GPU compute process (`pid`, `name`, `mib`), and
+`other_gpu_processes` leaves out those in a running job's process group, so other projects' work shows up. With a task that has a finished `env_check` it adds `suggested_num_envs`, treating half of
 the measured GPU memory as fixed cost; the figure is deliberately low and should be confirmed with a short run.
+
+### `isaaclab__run_script`
+
+Runs **your own Python script** as a job of kind `script`, for work the registered-task tools cannot express
+(a sweep, a standalone Kit script, a custom evaluation). **It executes arbitrary code from the script with your
+rights on this host; nothing is sandboxed.** The tool is annotated not read-only and not idempotent, like the other
+job tools. `script` must be an existing `.py` file; it is run as `<python> <script> <args...>` with `shell=False`,
+never imported.
+
+| Name | Default | Notes |
+|---|---|---|
+| `script` | required | Existing `.py` file. |
+| `args` | none | List of strings. |
+| `env` | none | Extra variables; keys must be valid identifiers, values strings. |
+| `python_path` | none | Folders put in front of `PYTHONPATH`. |
+| `python` | configured `ISAACLAB_PYTHON` | Must be an executable file. |
+| `cwd` | the script's folder | Must exist. |
+| `label` | script name | Used in the `job_id` and `runs_list`. |
+| `timeout_s` | `600` | Hard wall limit. At expiry the whole process group gets SIGTERM, then SIGKILL; a shell guard enforces it even if the host goes away. |
+| `min_free_vram_mb` | off | Refuse unless this much GPU memory (MiB) is free; refuses when `nvidia-smi` gives no answer. |
+| `wait_for_vram_s` | `0` | With `min_free_vram_mb`: poll up to this long (at most 3600) before refusing. |
+| `single_instance_key` | none | Refuse while a running job has the same key, so a double-queued sweep cannot run twice. |
+| `allow_concurrent` | `false` | As for `isaaclab__train`: start although another job runs. |
+| `allow_concurrent_gpu` | `false` | As for `isaaclab__train`: refuse while a Kit bridge runs unless `true`. |
+
+The script leads its own session and process group, so `isaaclab__runs_cancel` and the timeout kill Kit, ffmpeg
+and any other child it started. Output goes to the job's `stdout.log` and `stderr.log`; follow it with
+`isaaclab__runs_tail`. A line `ISAAC_MCP_ARTIFACT: <path>` on stdout names an output file. When the job ends,
+`isaaclab__runs_status` returns `script_result`: `status`, `exit_code`, `wall_time_s`, `log_path`,
+`stderr_log_path` and `artifacts` (the printed paths, in order; they are not checked to exist).
 
 ### `isaaclab__play`
 

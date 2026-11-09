@@ -62,7 +62,7 @@ startup with a message listing the valid names; it never registers nothing silen
 | `isaaclab_read` | `isaaclab__checkpoints_list`, `isaaclab__metrics_summary`, `isaaclab__tensorboard_tail`, `isaaclab__preflight` |
 | `isaaclab_probe` | `isaaclab__install_info`, `isaaclab__envs_list` |
 | `isaaclab_jobs` | `isaaclab__runs_list`, `isaaclab__runs_status`, `isaaclab__runs_tail` |
-| `isaaclab_run` | `isaaclab__train`, `isaaclab__eval`, `isaaclab__play`, `isaaclab__runs_cancel`, `isaaclab__env_check`, `isaaclab__record` |
+| `isaaclab_run` | `isaaclab__train`, `isaaclab__eval`, `isaaclab__play`, `isaaclab__runs_cancel`, `isaaclab__env_check`, `isaaclab__record`, `isaaclab__run_script` |
 | `screen_read` | `screen_info`, `list_windows`, `screen_recording_status`, `isaac_help` |
 | `screen_capture` | `screenshot`, `start_screen_recording`, `stop_screen_recording`, `join_videos` |
 | `screen_control` | `raise_window`, `move_window`, `tile_windows` |
@@ -102,7 +102,7 @@ conservative destructive and open-world annotations. To enable the separate simu
   `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 69 generic `sim`/`assets`
   tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
   and optional managed-session tools are unaffected. With standard local groups, opting out
-  keeps the other tiers, leaving 58 tools, offline or with a bridge. These are visibility controls, not isolation.
+  keeps the other tiers, leaving 59 tools, offline or with a bridge. These are visibility controls, not isolation.
 - `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
   server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
   [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.
