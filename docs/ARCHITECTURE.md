@@ -31,7 +31,7 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 +---------------------------------------v---------------------------------------+
 | Layer 3: Tool packs on the shared bridge                                      |
 | Generic scene tools (exts/sim-tools/), Extension ID: sim-tools                |
-| - Registers sim.* and assets.* tools (55), robot-agnostic                     |
+| - Registers 69 generic sim and assets tools, robot-agnostic                   |
 | UR5e Digital Twin (exts/ur5e-dt/), Package: ur5e_dt, Extension ID: ur5e-dt    |
 | - Registers ur5e_dt.* tools (23)                                              |
 | - Builds and manages the workstation scene (UR5e, RG2 gripper, QuickChanger)  |

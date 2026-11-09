@@ -87,7 +87,7 @@ same resolver (`ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` are forwarded to t
 
 `isaaclab__metrics_summary` and `isaaclab__tensorboard_tail` read `events.out.tfevents.*`
 files and require the `tensorboard` Python package. Install the extra:
-from the repo root use `uv tool install --force --editable './mcp[isaaclab]'`; `install.sh` includes this extra. Without it these tools
+from the repo root use `uv sync --project mcp --locked --extra isaaclab --no-dev`; `install.sh` includes this extra. Without it these tools
 return `{"error": "install the 'isaaclab' extra: pip install 'isaac-mcp[isaaclab]'"}`.
 
 ### Log and checkpoint roots

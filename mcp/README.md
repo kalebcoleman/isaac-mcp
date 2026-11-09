@@ -10,14 +10,15 @@ This page covers the host package and adding your own tools. For the project ove
 Install it as an editable tool, shared by every MCP client. The simulator and desktop tools are Linux x86_64 only.
 
 ```bash
-# From the repository root:
+# From the repository root. This links ~/.local/bin/isaac-mcp.
 ./install.sh --no-sim
-# Or the host package alone:
-uv tool install --force --editable ./mcp
+# The same host environment, without client registration or the ffmpeg shim:
+uv sync --project mcp --locked --extra isaaclab --no-dev
 ```
 
-Both install `isaac-mcp`. The installer also creates an `~/.local/bin/ffmpeg` shim for the Kit viewport recorder when
-that path does not already hold an unrelated file; a direct `uv tool install` does not. For the pinned Sim
+Both use `mcp/uv.lock`. `uv tool install` does not read that lock, so it is not a reproducible checkout install.
+`uv sync --locked` checks the lock's hashes and installs the `isaaclab` extra (TensorBoard). The installer also creates an `~/.local/bin/ffmpeg` shim for the Kit viewport recorder when
+that path does not already hold an unrelated file; the sync command alone does not. For the pinned Sim
 installation and EULA requirements, see [Linux setup](../docs/LINUX-SETUP.md). For where things live, see
 [Workspace](../docs/WORKSPACE.md).
 
@@ -204,5 +205,5 @@ scripts/install.py           permanent registration: base install + add-project
 
 ```bash
 cd mcp
-uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab --extra scene-test pytest -q
+uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test pytest -q
 ```

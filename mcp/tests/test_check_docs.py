@@ -243,3 +243,49 @@ def test_generic_count_catches_a_stale_page_and_passes_the_real_ones():
     assert errors == []
     check_docs.check_generic_counts(errors, pages={"x.md": "the 54-tool pack and 40 generic tools"}, generic=55)
     assert len(errors) == 2
+
+
+def test_architecture_generic_wording_is_checked():
+    """'tools (55)' is invisible to the generic-pack regex; 'N generic sim' is not."""
+    text = (ROOT / "docs/ARCHITECTURE.md").read_text()
+    assert "generic sim" in text
+    errors = []
+    check_docs.check_generic_counts(
+        errors, pages={"docs/ARCHITECTURE.md": text.replace("69 generic sim", "55 generic sim")})
+    assert any("55 generic sim" in error for error in errors)
+    ignored = []
+    check_docs.check_generic_counts(
+        ignored, pages={"docs/ARCHITECTURE.md": "Registers sim.* and assets.* tools (55), robot-agnostic"},
+        generic=69)
+    assert ignored == []
+
+
+def test_scene_opt_out_count_matches_and_a_stale_value_fails():
+    errors = []
+    check_docs.check_scene_opt_out(errors)
+    assert errors == []
+    expected = check_docs.standard_without_generic()
+    agents = (ROOT / "AGENTS.md").read_text().replace(
+        f"leaving {expected} tools", f"leaving {expected + 1} tools")
+    host = (ROOT / "docs/TOOLS-HOST.md").read_text()
+    errors = []
+    check_docs.check_scene_opt_out(errors, pages={"AGENTS.md": agents, "docs/TOOLS-HOST.md": host})
+    assert len(errors) == 1 and "AGENTS.md" in errors[0] and str(expected + 1) in errors[0]
+    missing = agents.replace(f"leaving {expected + 1} tools", "hides the generic pack")
+    errors = []
+    check_docs.check_scene_opt_out(errors, pages={"AGENTS.md": missing})
+    assert any("says nothing" in error for error in errors)
+
+
+def test_vendoring_rejects_a_bundled_asset_claim():
+    errors = []
+    check_docs.check_vendoring_claims(errors)
+    assert errors == []
+    text = (ROOT / "docs/VENDORING.md").read_text().replace(
+        "extension code only", "the extension and its 111 MB of assets")
+    errors = []
+    check_docs.check_vendoring_claims(errors, text=text)
+    assert any("code-only" in error for error in errors)
+    errors = []
+    check_docs.check_vendoring_claims(errors, text="Vendored path only.\n")
+    assert any("ships none" in error for error in errors)

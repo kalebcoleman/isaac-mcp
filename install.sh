@@ -278,12 +278,23 @@ if [ ! -d "$MCP_DIR" ]; then
   exit 1
 fi
 
-echo "== installing isaac-mcp (editable) from $MCP_DIR"
-uv tool install --force --editable "${MCP_DIR}[isaaclab]"   # [isaaclab] adds tensorboard for the metrics tools
+# uv tool install does not read uv.lock (uv 0.13 installs the newest match for the
+# pyproject range and ignores hashes). uv sync --locked installs mcp/uv.lock and
+# verifies those hashes. UV_PROJECT_ENVIRONMENT keeps the host env out of an
+# activated simulator .venv. The isaaclab extra adds tensorboard for the metrics tools.
+echo "== syncing locked host environment from mcp/uv.lock (extra: isaaclab)"
+uv tool uninstall isaac-mcp >/dev/null 2>&1 || true
+UV_PROJECT_ENVIRONMENT="$MCP_DIR/.venv" \
+  uv sync --project "$MCP_DIR" --locked --extra isaaclab --no-dev
+if [ ! -x "$MCP_DIR/.venv/bin/isaac-mcp" ]; then
+  echo "FAIL: mcp/.venv has no isaac-mcp. The locked host sync did not install the project." >&2
+  exit 1
+fi
 
-# Step 3: Install ffmpeg shim at ~/.local/bin/ffmpeg
+# Step 3: Put the locked executable on PATH, then the ffmpeg shim.
 BIN_DIR="${HOME}/.local/bin"
 mkdir -p "$BIN_DIR"
+ln -sfn "$MCP_DIR/.venv/bin/isaac-mcp" "$BIN_DIR/isaac-mcp"
 FFMPEG_SHIM="$BIN_DIR/ffmpeg"
 if [ -L "$FFMPEG_SHIM" ] || { [ -e "$FFMPEG_SHIM" ] && ! grep -Fq '# ffmpeg shim: prefer the static build shipped with imageio-ffmpeg.' "$FFMPEG_SHIM" 2>/dev/null; }; then
   echo "== preserving existing $FFMPEG_SHIM (not an isaac-mcp shim)" >&2
@@ -296,7 +307,8 @@ else
 # working on machines with no system package. Re-resolved on every call so a
 # version bump in any uv tool env cannot leave a dangling path.
 set -euo pipefail
-BIN="$(ls -1 "$HOME"/.local/share/uv/tools/*/lib/python*/site-packages/imageio_ffmpeg/binaries/ffmpeg-* 2>/dev/null | sort -V | tail -1 || true)"
+HOST_VENV=__HOST_VENV__
+BIN="$(ls -1 "$HOST_VENV"/lib/python*/site-packages/imageio_ffmpeg/binaries/ffmpeg-* "$HOME"/.local/share/uv/tools/*/lib/python*/site-packages/imageio_ffmpeg/binaries/ffmpeg-* 2>/dev/null | sort -V | tail -1 || true)"
 if [ -z "$BIN" ]; then
   for candidate in /usr/bin/ffmpeg /usr/local/bin/ffmpeg /snap/bin/ffmpeg; do
     if [ -x "$candidate" ]; then
@@ -308,6 +320,12 @@ if [ -z "$BIN" ]; then
 fi
 exec "$BIN" "$@"
 SH
+  # Quoted heredoc, so substitute the checkout venv without expanding $HOME.
+  shim_tmp="${FFMPEG_SHIM}.tmp"
+  while IFS= read -r line || [ -n "$line" ]; do
+    printf '%s\n' "${line/__HOST_VENV__/$MCP_DIR/.venv}"
+  done < "$FFMPEG_SHIM" > "$shim_tmp"
+  mv "$shim_tmp" "$FFMPEG_SHIM"
   chmod +x "$FFMPEG_SHIM"
 fi
 

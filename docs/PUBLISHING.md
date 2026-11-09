@@ -5,7 +5,7 @@ Not published to PyPI or npm yet. Names `isaac-mcp` on both were unclaimed on 20
 `https://registry.npmjs.org/isaac-mcp`; 404 = free).
 
 ## Before publishing
-1. `cd mcp && uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab --extra scene-test pytest -q`.
+1. `cd mcp && uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test pytest -q`.
    Record the current count and commit.
    From the repo root also run `python3 scripts/check_docs.py` and review the latest CI result.
 2. Decide the version in `mcp/pyproject.toml` and `npm/package.json` (keep them equal).

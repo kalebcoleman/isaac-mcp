@@ -375,7 +375,7 @@ worked while locked on GNOME.
 | `RENDER_TIMEOUT` on a fresh camera capture | Matching render completions or CPU transfer did not finish within five seconds | Check rendering and `sim__logs__tail`; no image or stale fallback was returned. A pending native transfer can cause `RENDER_BUSY` on retry; allow completion before another fresh request |
 | `assets__roots` empty or a path is refused | No launch-approved root, or the file is outside it | Run the `isaac_mcp.project_assets` approval command in `docs/TOOLS-SCENE.md`; no tool can grant roots |
 | `envs_list` shows `import_errors` | A task module failed to import | Read the error; custom tasks need `ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` |
-| Metrics tools ask for the `isaaclab` extra | `tensorboard` not installed in the server env | `uv tool install --force --editable './mcp[isaaclab]'` from the repo |
+| Metrics tools ask for the `isaaclab` extra | `tensorboard` not installed in the server env | `./install.sh --no-sim` from the repo (syncs `mcp/uv.lock` with the isaaclab extra) |
 
 ## Reference
 

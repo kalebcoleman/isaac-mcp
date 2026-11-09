@@ -23,7 +23,7 @@ From the repo root, run:
 
 ```bash
 cd mcp
-uv run --isolated --python 3.12 --with-editable . --extra test --extra isaaclab --extra scene-test pytest -q
+uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test pytest -q
 uv build
 ```
 

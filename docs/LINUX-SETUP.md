@@ -68,10 +68,13 @@ The convenience installer:
   EULA check unless `--accept-eula` was given or `OMNI_KIT_ACCEPT_EULA=YES` is already exported; in those two cases it
   downloads the environment**. An existing checkout `.venv` is re-synced unless you pass `--no-sim`, the one form that never
   downloads or syncs a simulator. `--no-sim` still looks for an installed Isaac Sim 6.x and records it in client entries.
-- Runs **`uv sync --python 3.12` in the current directory**. It may update the lock/environment;
-  it does not enforce `--locked` and does not use `ISAAC_MCP_PYTHON` (or its alias `UR5E_DT_PYTHON`) as its install target.
-- Runs `uv tool install --force --editable` for the host with the `isaaclab` metrics extra.
-  This replaces the user's existing `isaac-mcp` tool and ties it to this checkout. Keep the checkout.
+- Runs **`uv sync --python 3.12` in the current directory** only when it is installing the simulator.
+  That sync may update the root lock's environment; it does not enforce `--locked` and does not use
+  `ISAAC_MCP_PYTHON` (or its alias `UR5E_DT_PYTHON`) as its install target.
+- Installs the host from `mcp/uv.lock`, not from a fresh resolve:
+  `uv sync --project mcp --locked --extra isaaclab --no-dev`, with `UV_PROJECT_ENVIRONMENT` set to
+  `mcp/.venv` so an activated simulator environment is left alone. `uv tool install` does not read
+  `uv.lock`. The installer then links `~/.local/bin/isaac-mcp` at that executable. Keep the checkout.
 - Creates or refreshes its `~/.local/bin/ffmpeg` shim, preserving unrelated files/symlinks.
 - Changes client configuration **only** when requested with registration flags.
   `--claude-code` replaces the user-scope `isaac` entry and removes the legacy `twin` entry;
@@ -294,8 +297,8 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | `Asset not available: objects/...` | Object tools need your lab files. See [public and lab files](ASSETS.md#public-files-and-lab-files) |
 | `fetch_ur5e_assets.py` exits 1 and lists files it kept | They differ from NVIDIA's. Run `isaac_assets.py pin` if the change is yours, or `--force` to replace them |
 | `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
-| `No module named 'Xlib'` when starting the MCP host | You ran the host with Isaac Sim's Python. It has its own dependencies: use the installed `isaac-mcp`, or `cd mcp && uv run --isolated --with-editable . ...` |
-| `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
+| `No module named 'Xlib'` when starting the MCP host | You ran the host with Isaac Sim's Python. It has its own dependencies: use the installed `isaac-mcp`, or `cd mcp && uv run --locked --isolated ...` |
+| `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
 | `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; for the twin that is `/World/UR5e/root_joint`. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
 | `./verify.sh` stops with `FAILED: checkpoint` | A pre-migration `checkpoints/*.usda` has dead references. Inspect it and move it aside. See [Verification](VERIFICATION.md#live-ur5e-baseline) |

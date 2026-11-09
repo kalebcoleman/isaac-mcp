@@ -94,7 +94,7 @@ anything that replaces the stage. The calls below ran against a live 6.2.0.0 hea
 
 Two things to expect with the UR5e twin: `ur5e_dt__quick_start*` leaves the timeline **playing**, so call stop before generic
 edits. A first generic Play on a timeline something else started refuses with `TIMELINE_ALREADY_ACTIVE`, for the same fix. When stopping would end a project's own script that paused it (a BrickSim demo waits for Play), `action=play resume=true` continues it instead.
-Helper scripts that speak MCP run as `uv run --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>`
+Helper scripts that speak MCP run as `uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>`
 (`scene-test` adds the `pxr` and `numpy` the validators import).
 
 ## One-time approval
@@ -103,7 +103,7 @@ The user runs this outside the model-facing tool interface:
 
 ```bash
 # From the checkout root:
-uv run --isolated --project mcp --python 3.12 python -m isaac_mcp.project_assets --config /absolute/private/approval.json \
+uv run --locked --isolated --project mcp --python 3.12 python -m isaac_mcp.project_assets --config /absolute/private/approval.json \
   --root-id project --root /absolute/project/assets \
   --staging /absolute/private/staging --trust-project
 ```
@@ -766,7 +766,7 @@ unrestored ones. Tendon imports carry a fidelity warning. See [asset import](ASS
 ```bash
 python3 scripts/make_scene_fixture.py /absolute/new-fixture
 # Approve new-fixture above with --root-id fixture, launch a disposable Sim on a free port, then:
-MCPPY="uv run --isolated --project mcp --extra scene-test --python 3.12 python"  # pxr and numpy for the validators
+MCPPY="uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python"  # pxr and numpy for the validators
 $MCPPY scripts/scene_mcp_client.py --port 18861 assets__roots '{}'
 $MCPPY scripts/scene_mcp_client.py --port 18861 sim__stage__info '{}'
 $MCPPY scripts/validate_scene_tools.py --port 18861 --output /absolute/transcript.json

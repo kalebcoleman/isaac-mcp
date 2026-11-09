@@ -22,7 +22,7 @@ This repository consolidates two previously submodule-managed codebases into a s
 - **Upstream:** `https://github.com/inbarajaldrin/isaac-sim-mcp`
 - **Fork:** `https://github.com/kalebcoleman/isaac-sim-mcp`
 - **Pinned Commit:** `27f6100` (*"ur5e-dt: add valid convexHull collider to the Quick-Changer"*)
-- **Vendored Path:** `exts/ur5e-dt/` (the extension and its 111 MB of assets).
+- **Vendored Path:** `exts/ur5e-dt/` (extension code only; the robot, gripper, and scene assets are not in this tree).
 - **Dead code excluded:** `external/isaac-sim-mcp/isaac_mcp/` was not vendored because it was an obsolete host server implementation superseded by `omni-kit-mcp`.
 - **Tools preserved:** Asset conversion utilities for the Husarion RG2 gripper were preserved under `tools/` (`convert_husarion_rg2_urdf.py`, `rewire_husarion_rg2_usd.py`).
 
