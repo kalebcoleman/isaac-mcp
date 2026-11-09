@@ -418,18 +418,25 @@ side has the same hazard: Kit reloads an extension in place when its files chang
 and clients must then reconnect.
 
 **Connection errors and what they tell you.** The bridge client (`isaac_mcp/client.py`) checks a kept connection before each
-call (a Kit restart leaves a dead socket, which is detected and replaced), re-resolves the endpoint on every reconnect (a
-pinned port stays, an advertised one is rediscovered), and retries once if the connection fails. Errors name the endpoint:
+call (a Kit restart leaves a dead socket, which is detected and replaced) and re-resolves the endpoint on every reconnect (a
+pinned port stays, an advertised one is rediscovered). A connection that has been idle for a second or more is first proved
+alive with the cheap read-only `status` before a tool that must not be sent twice, so a Kit that restarted in the meantime is
+noticed before anything is sent. What is retried depends on whether the request had already reached the bridge:
+
+- **Before the request is sent** (connecting, the dead-socket check): retried once for any tool.
+- **After it was sent:** never silently re-sent, because it may have run. Only tools that purely read are re-sent once
+  (`IDEMPOTENT_TOOLS` in `client.py`, an explicit list: status, listings, `sim.stage.info`, `sim.prim.get`, `sim.logs.tail`, ...;
+  `sim.logs.mark` and every tool that changes anything are not in it). Everything else raises the error below.
 
 | Error | Meaning |
 |---|---|
 | `bridge not reachable at HOST:PORT (connection refused): nothing is listening there. Start Kit with ./run.sh --headless ...` | The port is closed: Kit is not running or listens elsewhere. The tool was not sent. `refresh_tools(wait_s=120)` waits for a Kit that is starting. |
 | `bridge at HOST:PORT did not accept a connection within Ns ... Nothing was sent, so no tool ran` | Kit is starting or its main thread is busy. Safe to retry. |
-| `no response for 'TOOL' within Ns (the tool may still be executing on Kit's main thread)` | The request was sent and no reply came. The tool may be running or may have run; check the scene before repeating a non-idempotent call. |
-| `bridge closed the connection mid-response` | Kit exited or crashed after the request was sent. Look at Kit's log and restart it; select it again with `use_bridge` and call `refresh_tools`. |
+| `the connection to the bridge broke after 'TOOL' was sent ... it may already have run in Kit ... It was NOT sent again` | Kit exited, restarted or the link broke after the request went out. The tool may have run, or still be running. Check first (`sim__stage__info` for a scene tool, `isaaclab__runs_status` / `isaaclab__runs_list` for a Lab job, `sim__logs__tail`), then repeat only if it did not happen. If Kit restarted, select it again with `use_bridge` and call `refresh_tools`. The error is a `ConnectionError` subclass (`BridgeDispatchUncertain`). |
+| `no response for 'TOOL' within Ns (the tool may still be executing on Kit's main thread)` | The request was sent and no reply came within the timeout. The tool may be running or may have run; check before repeating a non-idempotent call. |
 
-Not done, deliberately: automatic reconnect with backoff beyond the single retry, and replaying a request after a reply timeout (it
-could run a non-idempotent tool twice). After a Kit restart the tool list can differ: call `refresh_tools`.
+Not done, deliberately: automatic reconnect with backoff beyond the single pre-send retry. After a Kit restart the tool list can
+differ: call `refresh_tools`.
 
 ### Attaching the MCP to a Kit that a script launched
 

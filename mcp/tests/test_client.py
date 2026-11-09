@@ -83,7 +83,10 @@ def test_reconnects_after_bridge_restart(live):
     live.bridge = test_bridge.make_bridge(live.loop)
     live.bridge.register_owner("A", "demo").add(td("ping", lambda: {"back": True}))
     live.bridge.start(live.port)
-    # Health check must detect the dead socket and reconnect transparently.
+    # A real Kit restart takes seconds. The connection is idle by then, so a probe notices the dead socket before anything is sent,
+    # and the call goes to the new bridge. (A request sent into a socket that dies under it is not repeated: see below.)
+    import time as _time
+    _time.sleep(1.2)
     assert c.call("demo.ping") == {"back": True}
     c.close()
 
@@ -364,3 +367,113 @@ def test_connect_timeout_says_no_tool_ran(monkeypatch):
     with pytest.raises(client.BridgeConnectTimeout, match=r"127\.0\.0\.1:9.*did not accept a connection within 3s.*no tool ran"):
         client.call("status", host="127.0.0.1", port=9, timeout=3)
     assert issubclass(client.BridgeConnectTimeout, TimeoutError)  # the gateway still treats it as a timeout
+
+
+# ---- a request that reached Kit is never silently sent again (unless the tool only reads) ----
+
+class _DroppingBridge:
+    """Reads one request per connection; the first `drop` connections are closed without a reply, the rest answer."""
+
+    def __init__(self, drop):
+        import socket
+        import threading
+
+        self.drop, self.requests = drop, []
+        self.server = socket.socket()
+        self.server.bind(("127.0.0.1", 0))
+        self.server.listen(5)
+        self.port = self.server.getsockname()[1]
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _serve(self):
+        while True:
+            try:
+                conn, _ = self.server.accept()
+            except OSError:
+                return
+            with conn:
+                data = b""
+                while not data.endswith(b"\n"):
+                    chunk = conn.recv(65536)
+                    if not chunk:
+                        break
+                    data += chunk
+                if not data:
+                    continue
+                self.requests.append(json.loads(data))
+                if len(self.requests) <= self.drop:
+                    continue  # close with no reply: Kit died or the link broke after receiving it
+                conn.sendall(json.dumps({"status": "success", "result": {"answer": len(self.requests)}}).encode() + b"\n")
+
+    def close(self):
+        self.server.close()
+
+
+def _answer(result):
+    return result["answer"] if isinstance(result, dict) and "answer" in result else result
+
+
+def test_lost_connection_after_send_is_not_retried_and_says_the_tool_may_have_run():
+    from isaac_mcp.client import BridgeDispatchUncertain
+
+    bridge = _DroppingBridge(drop=1)
+    try:
+        with BridgeClient(host="127.0.0.1", port=bridge.port, timeout=5) as client:
+            with pytest.raises(BridgeDispatchUncertain) as exc:
+                client.call("sim.prim.create", {"path": "/World/x"})
+        text = str(exc.value)
+        assert "'sim.prim.create' was sent" in text and "may already have run" in text and "NOT sent again" in text
+        assert "isaaclab__runs_status" in text and "sim__stage__info" in text
+        assert len(bridge.requests) == 1                       # exactly one dispatch, no silent second one
+        assert isinstance(exc.value, ConnectionError)           # existing handlers still catch it
+    finally:
+        bridge.close()
+
+
+def test_read_only_tool_is_retried_once_after_a_lost_connection():
+    bridge = _DroppingBridge(drop=1)
+    try:
+        with BridgeClient(host="127.0.0.1", port=bridge.port, timeout=5) as client:
+            assert _answer(client.call("sim.stage.info")) == 2  # the retry reached the bridge and was answered
+        assert [r["type"] for r in bridge.requests] == ["sim.stage.info", "sim.stage.info"]
+    finally:
+        bridge.close()
+
+
+def test_connection_setup_failure_before_sending_is_still_retried(monkeypatch):
+    """A failure while connecting happens before anything is sent, so even a non-idempotent tool may try again."""
+    import socket
+
+    from isaac_mcp import client as cmod
+
+    bridge = _DroppingBridge(drop=0)
+    real = socket.create_connection
+    calls = {"n": 0}
+
+    def flaky(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConnectionResetError("reset while connecting")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(cmod.socket, "create_connection", flaky)
+    try:
+        c = BridgeClient(host="127.0.0.1", port=bridge.port, timeout=5)
+        try:
+            assert _answer(c.call("sim.prim.create", {"path": "/World/x"})) == 1
+        finally:
+            c.close()
+        assert calls["n"] == 2 and len(bridge.requests) == 1
+    finally:
+        bridge.close()
+
+
+def test_the_retry_set_is_explicit_known_and_read_only():
+    from isaac_mcp import client as cmod
+    from isaac_mcp import host_catalog
+
+    known = set(host_catalog.catalog_tool_names()) | {"list_tools"}
+    assert cmod.IDEMPOTENT_TOOLS <= known, sorted(cmod.IDEMPOTENT_TOOLS - known)
+    writers = {"sim.prim.create", "sim.prim.delete", "sim.simulation.step", "sim.timeline.control", "sim.logs.mark", "run_python",
+               "put_file", "sim.stage.open", "sim.quick_start"}
+    assert not (cmod.IDEMPOTENT_TOOLS & writers)
