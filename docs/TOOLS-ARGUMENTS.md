@@ -373,9 +373,13 @@ List Isaac Lab jobs, newest first, to find a job_id. Returns at most `limit` (de
 
 ### `isaaclab__runs_status`
 
-State, exit code, elapsed time, last log lines, newest checkpoint, `physics` (the engine Lab announced, such as newton_mjwarp or physx), `environment_ready`, and, for an eval job, its `eval_result` score once written. For a windowed job also `window` (id, title, size): pass its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result. Reconciles orphaned jobs by updating their stored metadata.
+State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source` (lab_log, checkpoint, or job_dir when no Lab run folder is known yet, with a `run_dir_warning`), `physics` (the engine Lab announced, such as newton_mjwarp or physx), `environment_ready`, and, for an eval job, its `eval_result` score once written. For a windowed job also `window` (id, title, size): pass its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result.
 
-- `job_id` (str, required): job_id from isaaclab__train, eval or play, or isaaclab__runs_list.
+- `job_id` (str | None, default `None`): job_id from isaaclab__train, eval or play, or isaaclab__runs_list. Give this, or log_root with run_name.
+- `require_run_dir` (bool, default `False`): With job_id: return an `error` instead of a status when no Lab run folder is found for the job (else run_dir may be the job's own folder; see run_dir_source).
+- `log_root` (str | None, default `None`): Instead of a job: resolve a run folder by name under this logs folder. Needs run_name.
+- `run_name` (str | None, default `None`): With log_root: the --run_name the run used; matches folders named <timestamp>_<run_name> exactly.
+- `experiment` (str | None, default `None`): With log_root: experiment folder name, to narrow several matches.
 
 ### `isaaclab__runs_tail`
 

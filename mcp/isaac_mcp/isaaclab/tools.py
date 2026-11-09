@@ -19,6 +19,7 @@ from . import install as _install
 from . import jobs as _jobs
 from . import metrics as _metrics
 from . import preflight as _preflight
+from . import rundir as _rundir
 
 _NO_INSTALL = {
     "error": "no Isaac Lab install found",
@@ -344,14 +345,34 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         return _guard(lambda: _jobs.runs_list(state=state, task=task, kind=kind, since=since, limit=limit))
 
     @mcp.tool(name="isaaclab__runs_status", annotations=DESTRUCTIVE)
-    def isaaclab_runs_status(job_id: _JobId) -> str:
-        """State, exit code, elapsed time, last log lines, newest checkpoint, `physics` (the engine Lab
-        announced, such as newton_mjwarp or physx), `environment_ready`, and, for an eval job, its
-        `eval_result` score once written. For a windowed job also `window` (id, title, size): pass its id to
-        screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result. Reconciles
-        orphaned jobs by updating their stored metadata."""
+    def isaaclab_runs_status(
+        job_id: Annotated[str | None, Field(description="job_id from isaaclab__train, eval or play, or isaaclab__runs_list. Give this, or log_root with run_name.")] = None,
+        require_run_dir: Annotated[bool, Field(description="With job_id: return an `error` instead of a status when no Lab run folder is found for the job (else run_dir may be the job's own folder; see run_dir_source).")] = False,
+        log_root: Annotated[str | None, Field(description="Instead of a job: resolve a run folder by name under this logs folder. Needs run_name.")] = None,
+        run_name: Annotated[str | None, Field(description="With log_root: the --run_name the run used; matches folders named <timestamp>_<run_name> exactly.")] = None,
+        experiment: Annotated[str | None, Field(description="With log_root: experiment folder name, to narrow several matches.")] = None,
+    ) -> str:
+        """State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source`
+        (lab_log, checkpoint, or job_dir when no Lab run folder is known yet, with a `run_dir_warning`),
+        `physics` (the engine Lab announced, such as newton_mjwarp or physx), `environment_ready`, and, for an
+        eval job, its `eval_result` score once written. For a windowed job also `window` (id, title, size): pass
+        its id to screenshot(window_id=...) or start_screen_recording(window_id=...) to see the result.
+
+        With log_root and run_name instead of job_id it resolves the Lab run folder `<timestamp>_<run_name>`
+        and returns run_dir, candidates (newest first) and latest_checkpoint. A lookup that finds nothing, or
+        is given an empty name, is an `error`, never an empty or guessed path.
+
+        Reconciles orphaned jobs by updating their stored metadata."""
         def status() -> dict:
+            if job_id is None:
+                return _rundir.from_log_root(log_root, run_name, experiment)
+            if log_root is not None or run_name is not None:
+                raise ValueError("Give job_id, or log_root with run_name, not both.")
             st = _jobs.runs_status(job_id)
+            if require_run_dir and st.get("run_dir_source") == "job_dir":
+                raise ValueError(
+                    f"job {job_id} ({st.get('state')}) has not written a Lab run folder: its log names none and no checkpoint exists. "
+                    f"Its own job folder is {st.get('log_dir')}; read isaaclab__runs_tail for the reason.")
             if st.get("pid_alive"):
                 from ..screen import window_for_pid
 

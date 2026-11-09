@@ -1642,16 +1642,19 @@ def runs_status(job_id: str) -> dict[str, Any]:
     if not last_lines:
         last_lines = _tail_file(jd / "stdout.log", 20)
     run_dir = data.get("run_dir")
+    run_dir_source = "job_dir"  # until a Lab run folder is found, run_dir is the job's own folder
     ckpt = _latest_checkpoint(run_dir) or _checkpoint_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
     if not ckpt:
         logged = _run_dir_from_log(Path(data.get("log_dir", jd)) / "stdout.log")
         if logged and Path(logged).exists():
             run_dir = logged
+            run_dir_source = "lab_log"
             ckpt = _latest_checkpoint(run_dir)
     if ckpt and not _latest_checkpoint(run_dir):
         # the experiment dir (parent of nn/ for rl_games) is the run dir tools like metrics_summary want
         p = Path(ckpt).parent
         run_dir = str(p.parent if p.name == "nn" else p)
+        run_dir_source = "checkpoint"
     # A launch or import failure often writes only to stderr, which would leave last_log_lines empty.
     failure = {}
     if data.get("status") == "failed":
@@ -1669,6 +1672,9 @@ def runs_status(job_id: str) -> dict[str, Any]:
         **failure,
         "latest_checkpoint": ckpt,
         "run_dir": run_dir,
+        "run_dir_source": run_dir_source,
+        **({"run_dir_warning": "No Lab run folder found yet (the log names none and there is no checkpoint): run_dir is this job's own folder, not <timestamp>_<run_name>."}
+           if run_dir_source == "job_dir" else {}),
         "log_dir": data.get("log_dir", str(jd)),
         "pid": data.get("pid"),
     }
