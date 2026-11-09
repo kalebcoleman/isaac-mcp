@@ -439,6 +439,22 @@ stays in that state; a replacement stage or concurrent Stop is never resumed.
 
 ---
 
+## Which colliders the workstation has
+
+Answered from `exts/ur5e-dt/ur5e_dt/extension.py` only; where the code does not say, this page says unknown.
+
+| Part | Colliders | Source |
+|---|---|---|
+| Default ground plane (`/World/defaultGroundPlane`) | Yes, at z=0. `load_workstation` and `load_simple_room` hide only its visual and keep the collision. | Comments and code in `_load_workstation` and `_load_simple_room` |
+| Vention bench (`/World/Vention`, from `workstation/vention.usd`, or the placeholder bench) | Documented as "no colliders" (visual-only). The code does not strip colliders from the bench itself, so this holds only if the operator-supplied USD has none: **unknown** for your file. The placeholder bench's colliders: unknown. | `_load_workstation` docstring; `_make_visual_only` is not called on the bench |
+| Simple Room (`/World/SimpleRoom`) | None. The asset ships 59 colliders; `_make_visual_only` disables every `CollisionAPI` collision and rigid body in the subtree, then the timeline is stopped and played to rebuild PhysX. The floor collider for objects is the ground plane at z=0. | `_load_simple_room`, `_make_visual_only` |
+| UR5e (`robot/ur5e.usd`) and the RG2 gripper | The code reads finger-pad collision meshes under `<link>/collisions` for the gripper gap measurement, and binds a physics material to the fingertip links and any collider children. Which other links have colliders, and their approximations: **unknown** (they come from the USD files, not from this code). | `robot/ur5e.usd` and `gripper` assets; gap measurement and material binding in `extension.py` |
+| Objects from `add_objects` (boards, blocks, sockets, pegs) | The baked USD collider is kept. Only if a prim has no authored `physics:approximation` does the extension author a default: `sdf` for all four categories (`sdfResolution` 256), with `convexDecomposition` as the only alternative the code names. Rest and contact offsets are not re-authored by that fallback (the code says they come from the USD or PhysX defaults), so their effective values are **unknown** here. | `extension.py` collision settings and the object restore path |
+| Quick Changer (`/World/QuickChanger`) | **Unknown**: referenced from `gripper/QuickChanger.usd`; the code authors nothing about its colliders. | `extension.py` |
+
+Inspect the live scene instead of trusting this table: `sim__physics__inspect` and `sim__prim__get` report whether a
+prim has a collider, and `sim__physics__contacts` reports what touches what once the timeline plays.
+
 ## Typical safe simulation workflow
 
 1. **Connect**: call `refresh_tools`, discover bridges and select the intended endpoint

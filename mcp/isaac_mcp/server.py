@@ -60,7 +60,7 @@ from pydantic import Field
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.lowlevel.server import NotificationOptions
 
-from . import host_catalog
+from . import diagnostics, host_catalog
 from .scene_contracts import HOST_ONLY
 from .tool_hints import CATALOG_HINTS
 from .client import BridgeClient, BridgeError
@@ -166,6 +166,7 @@ def _read_git_head(root: Optional[Path]) -> Optional[str]:
 _HOST_VERSION = _package_version()
 _HOST_CHECKOUT = _find_checkout()
 _HOST_COMMIT = _read_git_head(_HOST_CHECKOUT)
+_HOST_DRIFT = diagnostics.DriftMonitor.for_package(Path(__file__).resolve().parent)
 
 
 def _compare_with_bridge(identity: Dict[str, Any], extension: Any) -> None:
@@ -207,6 +208,7 @@ def _host_identity(extension: Any = None) -> Dict[str, Any]:
             f"This MCP server started from commit {_HOST_COMMIT[:12]} but its checkout is now at "
             f"{current[:12]}, so it is still running the old host code. Restart the MCP connection "
             "(for OpenCode, restart `opencode serve`) to load the new code.")
+    identity.update(_HOST_DRIFT.describe(_HOST_COMMIT, current))
     if extension is not None:
         _compare_with_bridge(identity, extension)
     return identity
@@ -217,7 +219,8 @@ def _host_identity_text() -> str:
     identity = _host_identity()
     commit = f", commit {identity['commit'][:12]}" if "commit" in identity else ""
     warning = f" Warning: {identity['warning']}" if "warning" in identity else ""
-    return f" MCP host: version {identity['version']}{commit}, PID {identity['pid']}.{warning}"
+    drift = f" code_drift: true ({identity['code_drift_message']})." if identity.get("code_drift") else ""
+    return f" MCP host: version {identity['version']}{commit}, PID {identity['pid']}.{warning}{drift}"
 
 
 def _namespace_filter() -> Optional[set]:
@@ -1116,7 +1119,7 @@ def _forbid_unknown_arguments(server: FastMCP, name: str) -> None:
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     state = _state_for(server)
     try:
-        logger.info("KitMCP server starting up")
+        logger.info(f"KitMCP server starting up: {len(server._tool_manager._tools)} tools listed")
         try:
             _sync_offline(server, state)   # policy hooks are registered by now
         except Exception as e:  # noqa: BLE001
@@ -1168,6 +1171,8 @@ async def _notify_tools_changed(ctx: Optional[Context]) -> None:
         await ctx.request_context.session.send_tool_list_changed()
     except Exception as e:  # noqa: BLE001
         logger.warning(f"Could not send tools/list_changed notification: {e}")
+    else:
+        logger.info("sent tools/list_changed to the client")
 
 
 def _tool_list_surface(server: FastMCP) -> Dict[str, Any]:
@@ -1457,6 +1462,8 @@ async def _use_bridge(server: FastMCP, port: int, ctx: Optional[Context] = None)
     before = _tool_list_surface(server)
     old_client = state.client
     state.client = new_client
+    logger.info(f"bridge selected: use_bridge port {port} (previous client "
+                f"{'closed' if old_client is not None else 'none'})")
     for name in list(state.name_map):
         _drop_tool(server, name)
     state.name_map.clear()
@@ -1530,6 +1537,9 @@ def _isaac_help(task: Optional[str]) -> str:
         lines.append(f"No topic matched {task!r}; the full map follows.")
     lines += [f"- {name}: {tools}" for name, _, tools in chosen]
     lines.append("First calls: status and list_bridges. No bridge? sim__launch, or just use isaaclab__* and the screen tools.")
+    host = _host_identity()
+    if host.get("code_drift"):
+        lines.append(f"code_drift: true - {host['code_drift_message']}.")
     return "\n".join(lines)
 
 
@@ -1645,7 +1655,18 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {_package_version()}")
     parser.parse_args(argv)
-    mcp.run()
+    log_path = diagnostics.setup_server_log(os.environ)
+    if log_path is not None:
+        diagnostics.install_handlers()
+        diagnostics.install_crash_hooks()
+        diagnostics.start_heartbeat()
+    diagnostics.log_startup(_HOST_VERSION, _HOST_COMMIT, len(mcp._tool_manager._tools), os.environ)
+    if log_path is not None:
+        logger.info(f"server log: {log_path}")
+    try:
+        diagnostics.run_logged(mcp.run)
+    finally:
+        diagnostics.teardown_server_log()
 
 
 if __name__ == "__main__":

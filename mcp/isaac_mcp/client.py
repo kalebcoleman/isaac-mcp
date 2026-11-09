@@ -52,12 +52,16 @@ Exit codes: 0 = success · 1 = bridge answered with an error ·
 """
 
 import json
+import logging
 import os
 import stat
 import re
 import secrets
 import socket
 from typing import Any, Dict, Optional
+
+_log = logging.getLogger("isaac_mcp.client")
+_log.addHandler(logging.NullHandler())   # the CLI stays silent; the server's handlers still see it
 
 # The cross-process public names for the bridge endpoint. PORT_ENV is kept in
 # sync with the bridge-side knob table (isaac_mcp_bridge.knobs.PORT.env) by test,
@@ -324,9 +328,14 @@ class BridgeClient:
                 _resolve_endpoint(self._host, self._port),
                 timeout=self.timeout if timeout is None else timeout)
             self._buffer = b""
+            try:
+                _log.info("bridge connected: %s:%s", *self._sock.getpeername()[:2])
+            except OSError:
+                _log.info("bridge connected")
 
     def close(self) -> None:
         if self._sock is not None:
+            _log.info("bridge connection closed")
             try:
                 self._sock.close()
             finally:
@@ -415,7 +424,8 @@ class BridgeClient:
         and occupied, and the tool did NOT run."""
         params = params or {}
         t = self.timeout if timeout is None else timeout
-        if not self._healthy():
+        if self._sock is not None and not self._healthy():
+            _log.warning("bridge connection lost (peer closed or reset); reconnecting for %s", tool)
             self.close()
         for attempt in (0, 1):
             try:
@@ -426,7 +436,9 @@ class BridgeClient:
                 raise TimeoutError(
                     f"no response for {tool!r} within {t}s (the tool may still "
                     f"be executing on Kit's main thread)")
-            except (ConnectionError, BrokenPipeError, ConnectionResetError, OSError):
+            except (ConnectionError, BrokenPipeError, ConnectionResetError, OSError) as exc:
+                _log.warning("bridge call %s failed (%s)%s", tool, type(exc).__name__,
+                             "" if attempt else "; retrying once")
                 self.close()
                 if attempt:
                     raise

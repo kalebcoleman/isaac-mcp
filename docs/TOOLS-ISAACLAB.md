@@ -537,6 +537,39 @@ Measured on `Isaac-Velocity-Flat-G1`, Lab 3.0.0, one run each, so this is not a 
 | PhysX (`physics=physx`, 1024 environments) | 762 s | 990 of 1000 | 33.8 over 64 episodes | 3 of 64 |
 | Newton MJWarp (the default) | 8.6 min | 948 of 1000 | 27.25 over 16 episodes | about 7% |
 
+### 10. Chained jobs gated on exit codes
+
+A second job (an eval of the checkpoint a train just wrote, a play after an eval) must start only if the first one
+really succeeded. The host has no job dependency feature; the caller is the sequencer, and each hop is an explicit
+check, not "the next step in the plan":
+
+1. `isaaclab__train` returns `{job_id}`. Poll `isaaclab__runs_status` until `state` is no longer `running`
+   (`runs_list` with `{"state": "running"}` shows the others; the GPU guard allows one at a time anyway).
+2. Continue only when `state == "succeeded"` **and** `exit_code == 0`. Treat `failed`, `cancelled` and `timeout` as
+   stops: read `last_stderr_lines` and `last_log_lines`, report them, and do not start the next job. A process that
+   exits 0 after an uncaught traceback is already reported as `failed` with a note, so gate on `state`, not on the
+   exit code alone.
+3. Take the next job's input from the first job's `latest_checkpoint` / `run_dir` in that same `runs_status` answer;
+   do not guess a path. An empty `latest_checkpoint` after `succeeded` is also a stop.
+4. Use `timeout_s` on each job so a hung stage ends itself even if the host is gone. After a host restart, call
+   `runs_status` again: the exit code is recorded in the job folder, and `failed` with `note: "host restarted"` means
+   no code was left.
+
+For a chain run unattended outside the MCP (a cron script or a tmux shell calling Lab's own scripts), do the same
+in shell. `set -e` stops at the first non-zero status; without it, check each status yourself, and never chain
+with `;` or a bare `&`:
+
+```bash
+set -euo pipefail
+train() { ./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py "$@"; }   # your Lab launcher
+play()  { ./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/play.py "$@"; }
+train --task <task> --headless || { rc=$?; echo "train failed rc=$rc" >&2; exit "$rc"; }
+play  --task <task> --headless --checkpoint <run_dir>/model_<n>.pt || { rc=$?; echo "play failed rc=$rc" >&2; exit "$rc"; }
+```
+
+Under `set -e` a failing stage inside `a | tee log` is hidden unless `pipefail` is set, as above. Lab's
+launcher must be the one your install provides (see `isaaclab__install_info`), not a guessed path.
+
 ## Concurrency guards
 
 `isaaclab__train`, `isaaclab__eval` and `isaaclab__play` apply two independent guards
