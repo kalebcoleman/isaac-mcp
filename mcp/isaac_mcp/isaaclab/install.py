@@ -562,24 +562,40 @@ def resolve_task_modules(root: Any, env: Any = None) -> tuple[list[str], list[st
 
 _ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _CALLBACK_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+\Z")
-# Variables a caller may not set: they change which code the interpreter loads, where it looks, or how this server
-# manages the job. PYTHONPATH has its own argument (python_path); the device, display and EULA have theirs.
-_PROTECTED_ENV = frozenset({
-    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "IFS", "BASH_ENV", "ENV", "CDPATH", "TMPDIR", "PWD",
-    "ISAACLAB_PYTHON", "ISAACLAB_ROOT", "ISAACLAB_JOBS_DIR", "ISAACSIM_PATH", "ISAAC_MCP_PYTHON",
-})
-_PROTECTED_ENV_PREFIXES = ("LD_", "DYLD_", "PYTHON", "ISAAC_MCP_", "BASH_FUNC_")
-_SAFE_PYTHON_ENV = frozenset({"PYTHONHASHSEED", "PYTHONFAULTHANDLER"})
+# Variables a caller may not set, each with what to use instead. Only what would break or hijack the chosen install, the job
+# supervisor or this server is refused; everything else (HOME, TMPDIR, PYTHON* other than PYTHONHOME, OMNI_KIT_ACCEPT_EULA,
+# CUDA_VISIBLE_DEVICES, HEADLESS, ...) is accepted.
+_REFUSED_ENV = {
+    "PYTHONHOME": "it would replace the install's own Python; pass install='<name or venv path>' to use another Isaac Lab",
+    "ISAACLAB_PYTHON": "pass install='<name or venv path>' to choose the Isaac Lab for one call",
+    "ISAACLAB_ROOT": "pass install='<name or venv path>' to choose the Isaac Lab for one call",
+    "ISAACSIM_PATH": "pass install='<name or venv path>' to choose the Isaac Lab / Sim for one call",
+    "ISAAC_MCP_PYTHON": "pass install='<name or venv path>' to choose the install for one call",
+    "ISAACLAB_JOBS_DIR": "it is a server setting (MCP client config), not a per-call one",
+    "LD_PRELOAD": "it would inject a library into every process the job starts; put it in a wrapper script and run that with isaaclab__run_script",
+    "LD_AUDIT": "it would inject a library into every process the job starts; put it in a wrapper script and run that with isaaclab__run_script",
+    "DYLD_INSERT_LIBRARIES": "it would inject a library into every process the job starts",
+    "BASH_ENV": "it would run code in the shell that supervises the job",
+    "ENV": "it would run code in the shell that supervises the job",
+    "IFS": "it would change how the supervising shell splits words",
+    "CDPATH": "it would change how the supervising shell changes directory; use the cwd argument",
+}
+_REFUSED_ENV_PREFIXES = {
+    "ISAAC_MCP_": "these are this server's own settings; set them in the MCP client config",
+    "BASH_FUNC_": "exported shell functions would run in the shell that supervises the job",
+}
+# Added in front of what the install already has, never replacing it.
+_PREPEND_ENV = frozenset({"PATH", "LD_LIBRARY_PATH", "PYTHONPATH"})
 _MAX_ENV_VALUE = 4096
 
 
 def validate_env(env: Any) -> dict[str, str]:
     """The one environment-variable policy of every Isaac Lab tool (train, eval, play, env_check, record, envs_list, run_script).
 
-    Names are identifiers, values short strings without NUL. Refused: variables that change which code the
-    interpreter loads or where it looks (PATH, HOME, LD_*, PYTHON* except PYTHONHASHSEED/PYTHONFAULTHANDLER, ...)
-    and the settings this server owns (ISAAC_MCP_*, ISAACLAB_PYTHON/ROOT/JOBS_DIR). OMNI_KIT_ACCEPT_EULA,
-    CUDA_VISIBLE_DEVICES and HEADLESS are allowed: a tool's own device/headless argument still wins for the last two.
+    Names are identifiers, values short strings without NUL. PATH, LD_LIBRARY_PATH and PYTHONPATH are *prepended* to the
+    install's own value (see apply_env), so a project can add import roots and libraries without losing the install's.
+    Refused only: what would replace or hijack the install, the job supervisor or this server (PYTHONHOME, LD_PRELOAD,
+    LD_AUDIT, BASH_ENV, ISAACLAB_PYTHON/ROOT, ISAAC_MCP_*, ...); each refusal names the argument to use instead.
     """
     extra: dict[str, str] = {}
     if env is None:
@@ -590,9 +606,9 @@ def validate_env(env: Any) -> dict[str, str]:
         if not isinstance(key, str) or not _ENV_KEY_RE.match(key):
             raise ValueError(f"invalid env variable name: {key!r}: use letters, digits and underscores")
         upper = key.upper()
-        if key not in _SAFE_PYTHON_ENV and (upper in _PROTECTED_ENV or upper.startswith(_PROTECTED_ENV_PREFIXES)):
-            hint = " Use python_path instead." if upper == "PYTHONPATH" else ""
-            raise ValueError(f"env variable {key} is protected and cannot be set by any Isaac Lab tool.{hint or ' Set it in the MCP server environment (client config) if it is really needed.'}")
+        advice = _REFUSED_ENV.get(upper) or next((m for p, m in _REFUSED_ENV_PREFIXES.items() if upper.startswith(p)), None)
+        if advice:
+            raise ValueError(f"env variable {key} is not accepted by any Isaac Lab tool: {advice}.")
         if isinstance(value, bool) or not isinstance(value, (str, int, float)):
             raise ValueError(f"env value for {key} must be a string")
         text = str(value)
@@ -600,6 +616,30 @@ def validate_env(env: Any) -> dict[str, str]:
             raise ValueError(f"env value for {key} is invalid or too long")
         extra[key] = text
     return extra
+
+
+def apply_env(base: dict, extra: dict) -> None:
+    """Put validated ``extra`` variables into a child environment: PATH, LD_LIBRARY_PATH and PYTHONPATH go in front of the
+    existing value, the rest replace it."""
+    for key, value in extra.items():
+        if key.upper() in _PREPEND_ENV and base.get(key):
+            base[key] = value + os.pathsep + base[key] if value else base[key]
+        else:
+            base[key] = value
+
+
+def merge_python_paths(python_path: Any = None, python_paths: Any = None) -> list[str] | None:
+    """``python_paths`` (the documented argument) and its older alias ``python_path``, merged without repeats; None when neither is given."""
+    if python_path is None and python_paths is None:
+        return None
+    merged: list[Any] = []
+    for part in (python_paths, python_path):
+        if part is None:
+            continue
+        if isinstance(part, str) or not isinstance(part, (list, tuple)):
+            raise ValueError("python_paths must be a list of directories")
+        merged.extend(x for x in part if x not in merged)
+    return merged
 
 
 _MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\Z")
@@ -618,20 +658,20 @@ def validate_cwd(cwd: Any) -> Path | None:
 
 
 def validate_python_path(python_path: Any) -> list[str]:
-    """``python_path`` for every Isaac Lab tool (run_script included): a list of existing absolute directories."""
+    """``python_paths`` for every Isaac Lab tool (run_script included): a list of existing absolute directories."""
     paths: list[str] = []
     if python_path is None:
         return paths
     if isinstance(python_path, str) or not isinstance(python_path, (list, tuple)):
-        raise ValueError("python_path must be a list of directories")
+        raise ValueError("python_paths must be a list of directories")
     for entry in python_path:
         if not isinstance(entry, str) or not entry.strip() or "\0" in entry or os.pathsep in entry:
-            raise ValueError(f"invalid python_path entry: {entry!r}")
+            raise ValueError(f"invalid python_paths entry: {entry!r}")
         d = Path(entry).expanduser()
         if not d.is_absolute():
-            raise ValueError(f"python_path entries must be absolute directories: {entry!r}")
+            raise ValueError(f"python_paths entries must be absolute directories: {entry!r}")
         if not d.is_dir():
-            raise ValueError(f"python_path entry is not an existing directory: {entry!r}")
+            raise ValueError(f"python_paths entry is not an existing directory: {entry!r}")
         paths.append(str(d))
     return paths
 
@@ -640,7 +680,7 @@ def validate_launch_options(python_path: Any = None, env: Any = None, external_c
                             environ: Any = None, task_modules: Any = None) -> dict:
     """Check the optional task-registration settings of a launch; returns ``python_path``, ``env``, ``external_callback``.
 
-    ``python_path`` is a list of existing absolute directories (prepended to PYTHONPATH), ``env`` a dict of extra
+    ``python_path`` is a list of existing absolute directories (prepended to PYTHONPATH, as is any PYTHONPATH in ``env``), ``env`` a dict of extra
     environment variables, ``external_callback`` a dotted ``module.func`` passed to Isaac Lab as
     ``--external_callback=...``. Without ``external_callback``, ``ISAACLAB_EXTERNAL_CALLBACK`` is the default.
     """
@@ -667,10 +707,10 @@ def validate_launch_options(python_path: Any = None, env: Any = None, external_c
 
 EXTERNAL_TASKS_HINT = (
     "Tasks from an external project register only when its package is importable and its registration runs. "
-    "Pass python_path=['<dir containing the package>'] and external_callback='pkg.module.register' (passed to Isaac Lab as "
+    "Pass python_paths=['<dir containing the package>'] and external_callback='pkg.module.register' (passed to Isaac Lab as "
     "--external_callback=pkg.module.register), or configure the server with ISAACLAB_TASK_PATH (directories) plus "
     "ISAACLAB_TASK_MODULES (modules to import) or ISAACLAB_EXTERNAL_CALLBACK. Example: "
-    "isaaclab__envs_list(python_path=['/path/to/project/src'], external_callback='my_pkg.register.register', filter='my_task')."
+    "isaaclab__envs_list(python_paths=['/path/to/project/src'], external_callback='my_pkg.register.register', filter='my_task')."
 )
 
 
@@ -703,7 +743,7 @@ def envs_list(filter: Any = None, env: Any = None, timeout: int = 60, python_pat
     root = loc["isaaclab_root"]
 
     run_env = dict(os.environ)
-    run_env.update(opts["env"])
+    apply_env(run_env, opts["env"])
     run_env["OMNI_KIT_ACCEPT_EULA"] = "YES"
     modules, paths = resolve_task_modules(root, {**_env(env), **opts["env"]})
     paths = opts["python_path"] + paths

@@ -61,10 +61,9 @@ def test_validate_accepts_good_options(tmp_path):
                    "external_callback": "g1_recovery.register.register"}
 
 
-@pytest.mark.parametrize("key", ["LD_PRELOAD", "ld_library_path", "PATH", "PYTHONPATH", "PYTHONSTARTUP", "HOME",
-                                 "ISAAC_MCP_X", "ISAACLAB_PYTHON", "BASH_ENV"])
+@pytest.mark.parametrize("key", ["LD_PRELOAD", "ld_audit", "PYTHONHOME", "ISAAC_MCP_X", "ISAACLAB_PYTHON", "BASH_ENV"])
 def test_validate_refuses_protected_env(key):
-    with pytest.raises(ValueError, match="protected"):
+    with pytest.raises(ValueError, match="not accepted"):
         install.validate_launch_options(env={key: "x"}, environ={})
 
 
@@ -136,7 +135,7 @@ def test_callback_in_extra_args_and_option_conflict(tmp_path):
 
 def test_bad_options_refuse_before_launch(tmp_path):
     root = make_root(tmp_path)
-    with pytest.raises(ValueError, match="protected"):
+    with pytest.raises(ValueError, match="not accepted"):
         jobs.train(python=str(fake_python(tmp_path)), root=str(root), task="T", env={"LD_PRELOAD": "/x.so"},
                    allow_concurrent=True, allow_concurrent_gpu=True)
     assert not (tmp_path / "jobs").exists() or not list((tmp_path / "jobs").iterdir())

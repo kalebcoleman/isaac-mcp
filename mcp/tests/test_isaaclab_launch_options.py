@@ -1,5 +1,5 @@
-"""Usage gaps found reproducing PolicyIK: external_callback for every library, cwd, one env policy,
-checkpoint roots, task_modules and the progress marker. No Isaac Lab and no GPU: fake interpreters."""
+"""Launch options of the Isaac Lab tools: external_callback for every library, cwd, one env policy, python_paths,
+checkpoint roots, task_modules, the progress marker and per-call install. No Isaac Lab and no GPU: fake interpreters."""
 
 import asyncio
 import json
@@ -145,15 +145,58 @@ def test_tools_declare_cwd_and_task_modules():
 
 # --- 3. one env policy --------------------------------------------------------------------------
 
-@pytest.mark.parametrize("key", ["OMNI_KIT_ACCEPT_EULA", "CUDA_VISIBLE_DEVICES", "HEADLESS", "MY_FLAG"])
+@pytest.mark.parametrize("key", ["OMNI_KIT_ACCEPT_EULA", "CUDA_VISIBLE_DEVICES", "HEADLESS", "MY_FLAG", "PYTHONPATH", "PATH",
+                                 "LD_LIBRARY_PATH", "HOME", "TMPDIR", "PYTHONDONTWRITEBYTECODE"])
 def test_shared_env_policy_allows(key):
     assert install.validate_env({key: "1"}) == {key: "1"}
 
 
-@pytest.mark.parametrize("key", ["PATH", "HOME", "LD_PRELOAD", "PYTHONPATH", "ISAAC_MCP_X", "ISAACLAB_ROOT"])
-def test_shared_env_policy_refuses(key):
-    with pytest.raises(ValueError, match="protected"):
+@pytest.mark.parametrize("key,advice", [("PYTHONHOME", "install="), ("ISAACLAB_ROOT", "install="), ("ISAACLAB_PYTHON", "install="),
+                                        ("LD_PRELOAD", "run_script"), ("LD_AUDIT", "run_script"), ("BASH_ENV", "shell"),
+                                        ("ISAAC_MCP_X", "MCP client config"), ("ISAACLAB_JOBS_DIR", "server setting")])
+def test_shared_env_policy_refuses_only_hijacks_and_says_what_to_use(key, advice):
+    with pytest.raises(ValueError, match="not accepted") as err:
         install.validate_env({key: "x"})
+    assert advice in str(err.value)
+
+
+def test_path_like_variables_are_prepended_not_replaced():
+    base = {"PATH": "/usr/bin", "PYTHONPATH": "/root", "LD_LIBRARY_PATH": "", "KEEP": "a"}
+    install.apply_env(base, {"PATH": "/mine", "PYTHONPATH": "/proj", "LD_LIBRARY_PATH": "/lib", "KEEP": "b", "NEW": "c"})
+    assert base == {"PATH": "/mine" + os.pathsep + "/usr/bin", "PYTHONPATH": "/proj" + os.pathsep + "/root",
+                    "LD_LIBRARY_PATH": "/lib", "KEEP": "b", "NEW": "c"}
+
+
+def test_pythonpath_in_env_reaches_the_job_in_front_of_the_install_path(tmp_path, monkeypatch):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    script = tmp_path / "s.py"
+    script.write_text("import os\nprint('PP=' + os.environ['PYTHONPATH'])\n")
+    monkeypatch.setenv("PYTHONPATH", "/inherited")
+    res = jobs.run_script(sys.executable, str(script), env={"PYTHONPATH": str(proj)}, python_path=[str(tmp_path)],
+                          allow_concurrent=True, allow_concurrent_gpu=True)
+    deadline = time.time() + 20
+    while jobs.runs_status(res["job_id"])["state"] == "running" and time.time() < deadline:
+        time.sleep(0.05)
+    line = [x for x in jobs.runs_tail(res["job_id"])["lines"] if x.startswith("PP=")][0]
+    assert line == "PP=" + os.pathsep.join([str(tmp_path), str(proj), "/inherited"])
+
+
+def test_python_paths_is_the_documented_argument_and_python_path_its_alias(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir(), b.mkdir()
+    assert install.merge_python_paths(None, None) is None
+    assert install.merge_python_paths([str(b)], [str(a)]) == [str(a), str(b)]
+    assert install.merge_python_paths([str(a)], [str(a)]) == [str(a)]
+    with pytest.raises(ValueError, match="python_paths"):
+        install.merge_python_paths(None, str(a))
+    from mcp.server.fastmcp import FastMCP
+
+    server = FastMCP("t")
+    tools.register_isaaclab_tools(server)
+    listed = {t.name: t for t in asyncio.run(server.list_tools())}
+    for name in ("train", "eval", "play", "env_check", "record", "envs_list", "run_script"):
+        assert {"python_paths", "python_path"} <= set(listed[f"isaaclab__{name}"].inputSchema["properties"]), name
 
 
 def test_play_and_run_script_agree(tmp_path):
@@ -166,9 +209,9 @@ def test_play_and_run_script_agree(tmp_path):
     script = tmp_path / "s.py"
     script.write_text("print(1)\n")
     assert jobs.run_script(sys.executable, str(script), env=env, allow_concurrent=True, allow_concurrent_gpu=True)["job_id"]
-    for fn in (lambda: jobs.run_script(sys.executable, str(script), env={"PATH": "/x"}),
-               lambda: launch(jobs.train, tmp_path, task="T", env={"PATH": "/x"})):
-        with pytest.raises(ValueError, match="protected"):
+    for fn in (lambda: jobs.run_script(sys.executable, str(script), env={"PYTHONHOME": "/x"}),
+               lambda: launch(jobs.train, tmp_path, task="T", env={"PYTHONHOME": "/x"})):
+        with pytest.raises(ValueError, match="not accepted"):
             fn()
 
 
@@ -344,6 +387,6 @@ def test_metrics_roots_include_checkpoint_roots_and_known_install_logs(two_insta
     assert metrics._resolve_run_dir(str(scratch / "run1"))[1] is None
 
 
-def test_protected_env_error_says_where_to_set_it():
-    with pytest.raises(ValueError, match="MCP server environment"):
-        install.validate_env({"PATH": "/x"})
+def test_server_owned_env_error_says_where_to_set_it():
+    with pytest.raises(ValueError, match="MCP client config"):
+        install.validate_env({"ISAAC_MCP_PORT": "1"})

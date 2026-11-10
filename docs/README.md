@@ -65,8 +65,7 @@ and official Isaac Sim and Isaac Lab skills. Use the [working checklist](CHECKLI
 
 ## Evidence
 
-Use [compatibility](COMPATIBILITY.md) for tested builds and known limits, the
-[PolicyIK usage gaps](POLICYIK-USAGE-GAPS.md) for the Isaac Lab tool problems found reproducing an external project, and
+Use [compatibility](COMPATIBILITY.md) for tested builds and known limits, and
 [verification](VERIFICATION.md) for checks. The examples and navigation walkthrough keep their supporting material under `docs/evidence/`; earlier test ledgers are in Git history.
 
 ## Scripts

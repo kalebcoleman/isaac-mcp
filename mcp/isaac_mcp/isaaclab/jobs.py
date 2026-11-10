@@ -1118,7 +1118,7 @@ def _start_job_locked(
     stdout_f = open(stdout_path, "wb")
     stderr_f = open(stderr_path, "wb")
     env = _child_env(root_path, device)
-    env.update(opts["env"])
+    _install.apply_env(env, opts["env"])  # PATH, LD_LIBRARY_PATH and PYTHONPATH are prepended
     if headless is not None:
         # A tool's explicit display choice wins over an inherited shell setting.
         # Do not mutate os.environ or another job's launch configuration.
@@ -1618,7 +1618,7 @@ def run_script(
         child = os.environ.copy()
         child["OMNI_KIT_ACCEPT_EULA"] = "YES"
         child["PYTHONUNBUFFERED"] = "1"
-        child.update(extra_env)
+        _install.apply_env(child, extra_env)  # PATH, LD_LIBRARY_PATH and PYTHONPATH are prepended
         if paths:
             existing = child.get("PYTHONPATH", "")
             child["PYTHONPATH"] = os.pathsep.join(paths + ([existing] if existing else []))

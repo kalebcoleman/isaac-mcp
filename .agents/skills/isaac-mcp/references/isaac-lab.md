@@ -57,13 +57,14 @@ These were checked against an Isaac Lab 3.0.0 checkout and NVIDIA's own skills:
 forwarded to jobs. Set them in the MCP server's environment (client config), then restart the
 connection. Importing a task module runs its code, so only add modules the user trusts.
 
-Per call instead: `python_path` (directories for `PYTHONPATH`), `env` (extra variables; `PATH`, `LD_*`, `PYTHON*`
-are refused, `OMNI_KIT_ACCEPT_EULA` is fine; the same rules in every Isaac Lab tool, `run_script` too),
+Per call instead: `python_paths` (import roots, added in front of `PYTHONPATH`; `python_path` is the older name), `env`
+(extra variables, the same rules in every Isaac Lab tool, `run_script` too: `PYTHONPATH`, `PATH` and `LD_LIBRARY_PATH`
+are prepended to the install's own; `PYTHONHOME`, `ISAACLAB_PYTHON`/`ROOT`, `LD_PRELOAD`, `ISAAC_MCP_*` are refused and the error names the argument to use),
 `external_callback` (`module.function`; works for rsl_rl, rl_games, skrl, sb3, `env_check` and `record`) and
 `task_modules` (modules to import, for tasks that register on import) on `envs_list`, `train`, `eval`, `play`,
 `env_check` and `record`. `ISAACLAB_EXTERNAL_CALLBACK` sets a default. `train`, `eval`, `play`, `env_check` and `record`
 also take `cwd` (the job's working directory, for relative data paths). A `checkpoint` may live under the Lab root,
-the jobs folder, a `python_path`/`cwd` folder you pass or `ISAACLAB_CHECKPOINT_ROOTS`. A project's own evaluator
+the jobs folder, a `python_paths`/`cwd` folder you pass or `ISAACLAB_CHECKPOINT_ROOTS`. A project's own evaluator
 goes through `run_script`; a script that prints `ISAAC_MCP_PROGRESS: 3/10 text` shows up as `progress` in
 `runs_status`. An empty `envs_list` result carries a `hint`. To run a call on another Lab (for example Lab 2.3.2 with Sim 5.1) pass `install='lab-2.3.2'` (name, version or absolute venv path; `install_info` lists `known_installs`); the 3.0.0 default is unchanged and no restart is needed. `runs_list` returns the newest 25 jobs (`total`, `truncated`); filter with `task`, `kind`, `state`, `since`, `limit`.
 
