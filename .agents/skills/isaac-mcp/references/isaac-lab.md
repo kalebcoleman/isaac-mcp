@@ -90,7 +90,7 @@ goes through `run_script`; a script that prints `ISAAC_MCP_PROGRESS: 3/10 text` 
 ## Reading results
 
 - `isaaclab__runs_status` gives `run_dir` (with `run_dir_source`; `job_dir` means no Lab run folder yet, and `require_run_dir=true` makes that an error) and `latest_checkpoint`; `{"log_root": ..., "run_name": ...}` resolves a run folder by name.
-- Evaluation JSON from a project's own scripts: `isaaclab__metrics_summary` with `eval_json` (pass counts by fall direction, baseline comparison; TEST is refused). Protect a baseline with `isaaclab__checkpoint_register`.
+- Evaluation JSON from a project's own scripts: `isaaclab__metrics_summary` with `eval_json` (paths or globs) and `criteria` (`[{key, op, value, label}]` or a JSON/YAML file): per-file values, pass/fail, mean/min/max and baseline deltas; without criteria it just reports the numbers. Protect a baseline with `isaaclab__checkpoint_register`.
 - `isaaclab__metrics_summary` `{"run_dir": "<run_dir>"}` lists every scalar with last, min, max,
   step and count. Unknown tags return the `available` list. Then `isaaclab__tensorboard_tail` for
   the curve of one tag.

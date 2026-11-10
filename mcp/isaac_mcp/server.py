@@ -1525,7 +1525,7 @@ _HELP_TOPICS = (
      "isaaclab__envs_list, isaaclab__train, isaaclab__runs_status, isaaclab__runs_tail, isaaclab__metrics_summary, "
      "isaaclab__eval, isaaclab__play, isaaclab__runs_cancel. Before a long run: isaaclab__preflight (GPU and jobs) and "
      "isaaclab__env_check (NaNs, resets, memory). isaaclab__runs_status(job_id, wait_s=45) waits for a job to end; "
-     "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises evaluation pass counts (TEST is refused); isaaclab__checkpoint_register protects a baseline; isaaclab__run_script runs your own script as a job. "
+     "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises your evaluation-result files against criteria you give; isaaclab__checkpoint_register protects a baseline; isaaclab__run_script runs your own script as a job. "
      "isaaclab__record gives an MP4 with no window. No bridge needed."),
     ("start, check or recover a simulator", ("start", "launch", "bridge", "kit", "hang", "stuck kit", "status", "connect"),
      "status, list_bridges, refresh_tools(wait_s=120), use_bridge, sim__launch, sim__status, sim__stop, sim__logs__tail."),

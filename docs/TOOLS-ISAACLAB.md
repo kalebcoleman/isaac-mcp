@@ -225,7 +225,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__runs_cancel` | Stop a job (SIGTERM then SIGKILL process group) |
 | `isaaclab__checkpoints_list` | List `*.pt`/`*.pth` checkpoints (newest first) |
 | `isaaclab__checkpoint_register` | Record a checkpoint's sha256, role and provenance in an append-only README table; refuses to overwrite a registered path |
-| `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count), or, with `eval_json`, pass counts of evaluation-result files by fall direction against a baseline |
+| `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count), or, with `eval_json`, your evaluation-result files scored against criteria you give (optionally against a baseline) |
 | `isaaclab__tensorboard_tail` | Last points of one TensorBoard scalar |
 
 ## What a checkout offers: the profile
@@ -557,34 +557,34 @@ report `progress` (see [progress](#progress-marker)). A script job's `run_dir` i
   |---|---|---|---|---|
   | `run_dir` | string | one of | — | Must be under allowed roots. Or give `job_id`, or `compare_jobs` (final scalars of several jobs side by side). |
   | `tags` | array[string] | no | `null` | Tag list; `null` summarises every available tag. |
-  | `eval_json` | array[string] | one of | `null` | Evaluation-result JSON files: switches to pass-count mode (below). |
-  | `criteria` | string | no | `v3` | With `eval_json`. `v3` (= `v3_ground_only`: criteria v3 before 3b, ground-only flight), `v3_latest_substep`, `v3_a4`, `v21`, `v2` or `strict`. |
-  | `label` | string | no | `null` | With `eval_json`: your name for the result, e.g. `v3 before 3b`; echoed back. |
-  | `baseline_json` / `baseline_label` | array[string] / string | no | `null` | With `eval_json`: the baseline's files on the same pose set, and its name (e.g. `recC`). |
-  | `allow_test` | boolean | no | `false` | With `eval_json`: permit the TEST pose set. Set it only when the user asked to score TEST. The result then has `test_split_used: true`. |
+  | `eval_json` | array[string] | one of | `null` | Evaluation-result JSON files or glob patterns: switches to result-file mode (below). |
+  | `criteria` | array[object] or string | no | `null` | With `eval_json`: `[{key, op, value, label?}]`, or an absolute path to a `.json`/`.yaml` file holding that list (or `{"criteria": [...]}`). |
+  | `label` | string | no | `null` | With `eval_json`: your name for the result, e.g. `candidate run`; echoed back. |
+  | `baseline_json` / `baseline_label` | array[string] / string | no | `null` | With `eval_json`: a baseline's files or patterns, scored with the same criteria, and its name. |
 - Returns: `{scalars: {<tag>: {last, min, max, step, count}}}`. Unknown tags return `{"error": "unknown tag", "available": [...]}`. Non-finite values are encoded as the strings `"nan"`, `"inf"`, `"-inf"`. Requires the `tensorboard` extra.
 - Example: `{"run_dir": "/abs/path/to/run", "tags": ["rewards/iter", "Episode/dist_m"]}`
 
-**Pass-count mode (`eval_json`).** Summarises a project's evaluation-result files instead of TensorBoard scalars, in the layout
-of an evaluator that writes `final_<name>_heldout_r1.json` files. It reads the files only. Give the repeat evaluations of one
-checkpoint on one pose set; the result is `{label, criteria, criteria_definition, split, pose_set, runs, pass_counts, mean_pass,
-min_pass, max_pass, n, pass_fraction_mean, by_direction_mean, baseline?, warnings?}`. Each run lists `pass_count`, `by_direction`
-(`side_a`, `prone`, `side_b`, `supine`), `direction_n`, `checkpoint`, `task` and `path`. With `baseline_json`, `baseline` has the
-same figures plus `delta_mean_pass` and `delta_by_direction`.
+**Result-file mode (`eval_json`).** Reads your own evaluator's result files (any JSON objects) instead of TensorBoard scalars; the
+files are read, never run or modified. `eval_json` and `baseline_json` entries are absolute paths or glob patterns
+(`*`, `?`, `[...]`, `**`), expanded in sorted order (at most 50 files); a pattern that matches nothing is an error.
 
-Where each figure comes from (the file's own keys, so a different layout fails rather than guesses): `v3` reads
-`amendment3.ground_only_flight.v3_before_selfpen` and `.by_category` (counts); `v3_latest_substep` reads
-`amendment3.plausible_v3_before_selfpen` and `..._by_category`; `v3_a4` reads
-`amendment3.proposed_a4_flight_history.v3_before_selfpen_with_a4` and `.v3_with_a4_by_category`; `v21` and `v2` read
-`plausible.plausible_v21_successes` / `plausible_v2_successes` and the `..._by_category` rates; `strict` reads
-`strict_supported_stand.successes` and `.by_category` rates. Rates become counts as rate times that direction's `by_category.<d>.n`
-(a count that does not add up to the file's total shows in `warnings`). The pose set comes from `pose_set`: `dev_v1.npz` and
-`heldout_poses.npz` are DEV, `heldout_v2.npz` is HELDOUT, `test_v2.npz` (or any name containing "test") is TEST.
+A criterion is `{key, op, value, label?}`: `key` is a dotted path to a number in the file (`stats.success_rate`,
+`episodes.0.reward`; a list index is a number; a boolean counts as 0/1), `op` one of `>=` (default), `>`, `<=`, `<`, `==`, `!=`
+(or `ge`, `gt`, `le`, `lt`, `eq`, `ne`), `value` the threshold, `label` a unique name (default `<key> <op> <value>`). `criteria` can
+instead be the absolute path of a `.json` file (or `.yaml`/`.yml` when PyYAML is installed) holding that list.
 
-Refused with an `error` naming the file: the **TEST** split (unless `allow_test=true` is passed); a
-file with no `pose_set` or an unknown one; mixed splits or pose counts in one call, or a baseline on another split; a missing
-expected key. Paths should be absolute: a relative one resolves from the server's working directory, and the error says where it looked. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
-Example: `{"eval_json": ["<run>/final_recC_heldout_r1.json", "<run>/final_recC_heldout_r2.json"], "label": "candidate", "baseline_json": ["<run>/final_base_heldout_r1.json"], "baseline_label": "baseline"}`
+With criteria the result is `{label, n_files, criteria, runs, summary, runs_passing_all, baseline?}`. Each run has `path`, `results`
+(`label`, `key`, `value`, `passed` per criterion), `passed` (all criteria) and `checkpoint`/`task` when the file has them. `summary`
+has per criterion `values`, `mean`, `min`, `max`, `passed_runs` and `n_runs`. With `baseline_json`, `baseline` has the same figures
+plus `delta_mean` (this mean minus the baseline's, per criterion).
+With no criteria nothing passes or fails: each run lists its `metrics` (every numeric value, flattened to dotted keys, at most 200),
+`metrics` gives mean/min/max over the files, and `note` says how to add criteria; `baseline.delta_mean` is per metric.
+
+A criterion whose key a file lacks, or whose value is not a number, is an `error` naming the file and the key path (and what the file
+has there). Paths should be absolute: a relative one resolves from the server's working directory, and the error says where it
+looked. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
+
+Example: `{"eval_json": ["<run>/eval_*.json"], "criteria": [{"key": "stats.success_rate", "op": ">=", "value": 0.9, "label": "success"}, {"key": "stats.mean_reward", "op": ">", "value": 100}], "label": "candidate", "baseline_json": ["<base>/eval_*.json"], "baseline_label": "baseline"}`
 
 ### `isaaclab__checkpoint_register`
 

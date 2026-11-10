@@ -475,25 +475,24 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         tags: Annotated[list[str] | None, Field(description="Scalar tags to include. Default: all.")] = None,
         job_id: Annotated[str | None, Field(description="A job from isaaclab__train, instead of run_dir.")] = None,
         compare_jobs: Annotated[list[str] | None, Field(description="Several job_ids: returns their final scalars side by side, to compare seeds or settings.")] = None,
-        eval_json: Annotated[list[str] | None, Field(description="ABSOLUTE paths of evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.")] = None,
-        criteria: Annotated[str | None, Field(description="With eval_json: v3 (default, = v3_ground_only: criteria v3, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.")] = None,
+        eval_json: Annotated[list[str] | None, Field(description="ABSOLUTE paths or glob patterns (e.g. '/runs/eval_*.json') of evaluation-result JSON files, such as repeat runs of one checkpoint: reports each file's metrics against `criteria` instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.")] = None,
+        criteria: Annotated[list[dict[str, Any]] | str | None, Field(description="With eval_json: what counts as a pass, as a list of {key, op, value, label?} (key = dotted path into the file such as 'stats.success_rate', op one of >= > <= < == !=, default >=) or an absolute path to a .json/.yaml file holding that list. Default: none, so the numeric metrics are just reported.")] = None,
         label: Annotated[str | None, Field(description="With eval_json: your name for this result, e.g. 'candidate run'; echoed back.")] = None,
-        baseline_json: Annotated[list[str] | None, Field(description="With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.")] = None,
-        baseline_label: Annotated[str | None, Field(description="With baseline_json: the baseline's name, e.g. recC.")] = None,
-        allow_test: Annotated[bool, Field(description="With eval_json: permit the TEST pose set (refused by default). Set it only when the user asked to score TEST.")] = False,
+        baseline_json: Annotated[list[str] | None, Field(description="With eval_json: absolute paths or glob patterns of a baseline's result files, scored with the same criteria, for the comparison.")] = None,
+        baseline_label: Annotated[str | None, Field(description="With baseline_json: the baseline's name, e.g. 'baseline'.")] = None,
     ) -> str:
         """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare jobs' final values.
 
-        With eval_json it summarises evaluation-result files (`final_*.json` layout): pass count and mean per file
-        set, count per fall direction, the pose set (DEV/HELDOUT/TEST), and the change against baseline_json. TEST,
-        mixed splits, unknown pose sets and missing keys are refused with an `error`. Details: docs/TOOLS-ISAACLAB.md."""
+        With eval_json it reads your evaluation-result JSON files: each file's value and pass/fail for every criterion,
+        mean/min/max over the files, and the change against baseline_json; with no criteria, just the numeric metrics.
+        A missing key is an `error` naming the file. Details: docs/TOOLS-ISAACLAB.md."""
         def summarise() -> dict:
             if eval_json is not None:
                 if run_dir or job_id or compare_jobs or tags:
                     raise ValueError("eval_json summarises evaluation files; do not combine it with run_dir, job_id, compare_jobs or tags.")
-                return _evalsummary.summarize(eval_json, criteria, label, baseline_json, baseline_label, allow_test)
-            if any(x is not None for x in (criteria, label, baseline_json, baseline_label)) or allow_test:
-                raise ValueError("criteria, label, baseline_json, baseline_label and allow_test apply only with eval_json.")
+                return _evalsummary.summarize(eval_json, criteria, label, baseline_json, baseline_label)
+            if any(x is not None for x in (criteria, label, baseline_json, baseline_label)):
+                raise ValueError("criteria, label, baseline_json and baseline_label apply only with eval_json.")
             if compare_jobs:
                 return _metrics.compare_runs({job: _jobs.runs_status(job).get("run_dir") for job in compare_jobs}, tags=tags)
             folder = run_dir or (_jobs.runs_status(job_id).get("run_dir") if job_id else None)

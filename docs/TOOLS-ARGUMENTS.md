@@ -315,12 +315,11 @@ Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or
 - `tags` (list[str] | None, default `None`): Scalar tags to include. Default: all.
 - `job_id` (str | None, default `None`): A job from isaaclab__train, instead of run_dir.
 - `compare_jobs` (list[str] | None, default `None`): Several job_ids: returns their final scalars side by side, to compare seeds or settings.
-- `eval_json` (list[str] | None, default `None`): ABSOLUTE paths of evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.
-- `criteria` (str | None, default `None`): With eval_json: v3 (default, = v3_ground_only: criteria v3, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.
+- `eval_json` (list[str] | None, default `None`): ABSOLUTE paths or glob patterns (e.g. '/runs/eval_*.json') of evaluation-result JSON files, such as repeat runs of one checkpoint: reports each file's metrics against `criteria` instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.
+- `criteria` (list[dict[str, Any]] | str | None, default `None`): With eval_json: what counts as a pass, as a list of {key, op, value, label?} (key = dotted path into the file such as 'stats.success_rate', op one of >= > <= < == !=, default >=) or an absolute path to a .json/.yaml file holding that list. Default: none, so the numeric metrics are just reported.
 - `label` (str | None, default `None`): With eval_json: your name for this result, e.g. 'candidate run'; echoed back.
-- `baseline_json` (list[str] | None, default `None`): With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.
-- `baseline_label` (str | None, default `None`): With baseline_json: the baseline's name, e.g. recC.
-- `allow_test` (bool, default `False`): With eval_json: permit the TEST pose set (refused by default). Set it only when the user asked to score TEST.
+- `baseline_json` (list[str] | None, default `None`): With eval_json: absolute paths or glob patterns of a baseline's result files, scored with the same criteria, for the comparison.
+- `baseline_label` (str | None, default `None`): With baseline_json: the baseline's name, e.g. 'baseline'.
 
 ### `isaaclab__play`
 
