@@ -126,7 +126,7 @@ not register is skipped, since the project may register it. Isaac Lab 3.0.0 runs
 `env_check` and `record` this server calls the callback itself; the `ISAACLAB_EXTERNAL_CALLBACK` default behaves the same.
 A callback that fails ends the job with its traceback in `runs_tail(stream="stderr")`.
 
-Example: `isaaclab__envs_list {"python_paths": ["<project>/src"], "external_callback": "g1_recovery.register.register", "filter": "getup"}`,
+Example: `isaaclab__envs_list {"python_paths": ["<project>/src"], "external_callback": "my_project.register.register", "filter": "my_task"}`,
 then `isaaclab__train` with the same three arguments.
 
 When `isaaclab__envs_list` returns no tasks, or none match `filter`, the result carries a `hint` explaining this.
@@ -609,7 +609,7 @@ The only tool of the pack that writes next to your files, so it is annotated add
   `same_content_as` lists other registered paths with identical bytes (not an error).
 - Git: `*.pt` is usually ignored, so in a work tree `git` reports `ignored_by_git` and the command to use, `git add -f <checkpoint> <registry>`.
   The tool never runs git.
-- Example: `{"path": "<repo>/checkpoints/recC.pt", "role": "baseline", "provenance": "g4j1_b1p2_it1425; 174.7/256 HELDOUT, criteria v3"}`
+- Example: `{"path": "<repo>/checkpoints/baseline.pt", "role": "baseline", "provenance": "run 2026-11-01_12-00-00, iteration 1425; mean success 0.91 on the validation set"}`
 
 ### `isaaclab__tensorboard_tail`
 
