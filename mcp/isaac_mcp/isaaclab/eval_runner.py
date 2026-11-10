@@ -507,6 +507,10 @@ def _prepare() -> None:
     for name in (entry.strip() for entry in os.environ.get("ISAACLAB_TASK_MODULES", "").split(",")):
         if name:
             __import__(name)
+    callback = os.environ.get("ISAAC_MCP_EXTERNAL_CALLBACK", "").strip()  # see launcher.py
+    if callback:
+        module, _, function = callback.rpartition(".")
+        getattr(__import__(module, fromlist=["_"]), function)()
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:

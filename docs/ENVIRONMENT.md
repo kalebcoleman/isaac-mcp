@@ -50,7 +50,9 @@ The filters are visibility preferences, not a security boundary. See
 | `ISAACLAB_GPU_LEDGER` | unset | Optional JSON file for that cap. |
 | `ISAACLAB_TASK_MODULES` | unset | Modules to import so custom tasks register. |
 | `ISAACLAB_TASK_PATH` | unset | Added to `PYTHONPATH` for those modules. |
-| `ISAACLAB_EXTERNAL_CALLBACK` | unset | Default `module.function` passed as `--external_callback=` to Lab jobs. |
+| `ISAACLAB_EXTERNAL_CALLBACK` | unset | Default `module.function` for Lab jobs: `--external_callback=` for rsl_rl train/play, called by the server for other libraries, `env_check` and `record`. |
+| `ISAACLAB_INSTALLS` | unset | `os.pathsep` list of extra Isaac Lab venvs (or folders of them) that the `install` argument can select by name. |
+| `ISAACLAB_CHECKPOINT_ROOTS` | unset | `os.pathsep` list of extra folders train, eval and play may load checkpoints from. |
 | `ISAACLAB_ALLOW_TMP` | unset | `1` allows the temp directory for metrics. Tests only. |
 
 Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).

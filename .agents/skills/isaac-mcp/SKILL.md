@@ -136,8 +136,8 @@ Details and parameter tables: [references/isaac-lab.md](references/isaac-lab.md)
 1. `isaaclab__envs_list` with a `filter` substring to find the task id. Isaac Lab 3 ids have no
    `-v0` suffix (for example `Isaac-Reach-Franka`); Lab 2.3 ids keep it (`Isaac-Cartpole-v0`), and Lab 2.x
    needs `rl_library` too (`install_info` lists the installed ones). A task from an external project
-   needs `python_path` and `external_callback` (on `envs_list` and on the job), or the server's
-   `ISAACLAB_TASK_PATH`/`ISAACLAB_TASK_MODULES`. `runs_list` is newest first and limited to 25: filter by `task`, `kind`, `state`, `since`.
+   needs `python_paths` plus `external_callback` or `task_modules` (on `envs_list` and on the job), or the server's
+   `ISAACLAB_TASK_PATH`/`ISAACLAB_TASK_MODULES`; pass `cwd` when its config uses relative data paths. `runs_list` is newest first and limited to 25: filter by `task`, `kind`, `state`, `since`.
 2. Training refuses to start next to a running Kit bridge (the GPU guard). Ask the user whether to
    stop the Sim or to pass `allow_concurrent_gpu=true`; do not set it on your own.
 3. Smoke test first: `isaaclab__train` with a small `num_envs` and `max_iterations`, and a
@@ -378,7 +378,7 @@ worked while locked on GNOME.
 | `NOT_READY` on a nonwaiting camera capture | No validated tool-acquired frame in this sensor's cache | Capture with default/`wait_for_render=true`; ordinary Play or waiting a few frames will not seed it |
 | `RENDER_TIMEOUT` on a fresh camera capture | Matching render completions or CPU transfer did not finish within five seconds | Check rendering and `sim__logs__tail`; no image or stale fallback was returned. A pending native transfer can cause `RENDER_BUSY` on retry; allow completion before another fresh request |
 | `assets__roots` empty or a path is refused | No launch-approved root, or the file is outside it | Run the `isaac_mcp.project_assets` approval command in `docs/TOOLS-SCENE.md`; no tool can grant roots |
-| `envs_list` is empty or has no match, with a `hint` | The task lives in an external project and nothing registered it | Pass `python_path=[<dir>]` and `external_callback='pkg.register.register'` to `envs_list` and to train/eval/play/record/env_check, or set `ISAACLAB_TASK_PATH` + `ISAACLAB_TASK_MODULES` |
+| `envs_list` is empty or has no match, with a `hint` | The task lives in an external project and nothing registered it | Pass `python_paths=[<dir>]` and `external_callback='pkg.register.register'` to `envs_list` and to train/eval/play/record/env_check (any `rl_library`), or `task_modules=['pkg.tasks']`, or set `ISAACLAB_TASK_PATH` + `ISAACLAB_TASK_MODULES` |
 | `runs_list` shows `truncated` | It returns the newest 25 jobs by default | Filter with `task`, `kind`, `state`, `since` (`2h`, `1d`) or raise `limit` |
 | `envs_list` shows `import_errors` | A task module failed to import | Read the error; custom tasks need `ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` |
 | Metrics tools ask for the `isaaclab` extra | `tensorboard` not installed in the server env | `./install.sh --no-sim` from the repo (syncs `mcp/uv.lock` with the isaaclab extra) |

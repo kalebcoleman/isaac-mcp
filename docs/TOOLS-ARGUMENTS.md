@@ -256,25 +256,32 @@ Build a task, step it with zero or random actions, and report what is wrong, as 
 - `timeout_s` (float | None, default `900`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
-- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
-- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train and play (eval runs as play); other libraries, env_check and record refuse it (an env default is skipped there).
+- `python_paths` (list[str] | None, default `None`): Absolute folders added to the front of PYTHONPATH (before the install's own path, never replacing it): the import roots of a project that is not installed, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way.
+- `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
+- `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
+- `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
 
 ### `isaaclab__envs_list`
 
 List registered Isaac Lab task ids (optionally filtered by substring).
 
 - `filter` (str | None, default `None`): Keep task ids containing this text.
-- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
-- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train and play (eval runs as play); other libraries, env_check and record refuse it (an env default is skipped there).
+- `python_paths` (list[str] | None, default `None`): Absolute folders added to the front of PYTHONPATH (before the install's own path, never replacing it): the import roots of a project that is not installed, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way.
+- `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
+- `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
 
 ### `isaaclab__eval`
 
 Run a checkpoint as a job and score it. Returns its job_id; when the job ends, isaaclab__runs_status reports `eval_result`: episodes, mean/std/min/max return, mean length, steps, and success_rate if the task reports one. It counts complete episodes, stops after num_episodes (waiting for each environment's first finished episode where possible) or max_steps, then exits by itself. Without a finished episode it reports no return, never a made-up score.
 
 - `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
-- `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
+- `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list. Must lie under the Isaac Lab checkout, the jobs folder, a python_paths or cwd folder you pass, or a folder in ISAACLAB_CHECKPOINT_ROOTS; the error names the allowed roots.
 - `num_envs` (int | None, default `None`): Parallel environments. Default: the task's own.
 - `headless` (bool, default `True`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 uses the task's registered default and needs this only for a task with none.
@@ -285,16 +292,20 @@ Run a checkpoint as a job and score it. Returns its job_id; when the job ends, i
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
-- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
-- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train and play (eval runs as play); other libraries, env_check and record refuse it (an env default is skipped there).
-- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.
+- `python_paths` (list[str] | None, default `None`): Absolute folders added to the front of PYTHONPATH (before the install's own path, never replacing it): the import roots of a project that is not installed, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way.
+- `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
+- `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
+- `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.
 
 ### `isaaclab__install_info`
 
 Report the Isaac Lab install: interpreter, versions, root, venv.
 
-No arguments.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
 
 ### `isaaclab__metrics_summary`
 
@@ -304,19 +315,18 @@ Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or
 - `tags` (list[str] | None, default `None`): Scalar tags to include. Default: all.
 - `job_id` (str | None, default `None`): A job from isaaclab__train, instead of run_dir.
 - `compare_jobs` (list[str] | None, default `None`): Several job_ids: returns their final scalars side by side, to compare seeds or settings.
-- `eval_json` (list[str] | None, default `None`): ABSOLUTE paths of evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.
-- `criteria` (str | None, default `None`): With eval_json: v3 (default, = v3_ground_only: v3 before 3b, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.
-- `label` (str | None, default `None`): With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.
-- `baseline_json` (list[str] | None, default `None`): With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.
-- `baseline_label` (str | None, default `None`): With baseline_json: the baseline's name, e.g. recC.
-- `allow_test` (bool, default `False`): With eval_json: permit the TEST pose set (refused by default). Set it only when the user asked to score TEST.
+- `eval_json` (list[str] | None, default `None`): ABSOLUTE paths or glob patterns (e.g. '/runs/eval_*.json') of evaluation-result JSON files, such as repeat runs of one checkpoint: reports each file's metrics against `criteria` instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.
+- `criteria` (list[dict[str, Any]] | str | None, default `None`): With eval_json: what counts as a pass, as a list of {key, op, value, label?} (key = dotted path into the file such as 'stats.success_rate', op one of >= > <= < == !=, default >=) or an absolute path to a .json/.yaml file holding that list. Default: none, so the numeric metrics are just reported.
+- `label` (str | None, default `None`): With eval_json: your name for this result, e.g. 'candidate run'; echoed back.
+- `baseline_json` (list[str] | None, default `None`): With eval_json: absolute paths or glob patterns of a baseline's result files, scored with the same criteria, for the comparison.
+- `baseline_label` (str | None, default `None`): With baseline_json: the baseline's name, e.g. 'baseline'.
 
 ### `isaaclab__play`
 
 Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
 
 - `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
-- `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list.
+- `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list. Must lie under the Isaac Lab checkout, the jobs folder, a python_paths or cwd folder you pass, or a folder in ISAACLAB_CHECKPOINT_ROOTS; the error names the allowed roots.
 - `num_envs` (int, default `1`): Parallel environments.
 - `headless` (bool, default `False`): false opens a window. true with extra_args=['--video'] keeps a renderer with no window.
 - `rl_library` (str | None, default `None`): RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 uses the task's registered default and needs this only for a task with none.
@@ -325,10 +335,14 @@ Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cance
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
-- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
-- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train and play (eval runs as play); other libraries, env_check and record refuse it (an env default is skipped there).
-- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.
+- `python_paths` (list[str] | None, default `None`): Absolute folders added to the front of PYTHONPATH (before the install's own path, never replacing it): the import roots of a project that is not installed, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way.
+- `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
+- `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
+- `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.
 
 ### `isaaclab__preflight`
 
@@ -355,9 +369,13 @@ Record an MP4 of a task with no window, as a job. With a checkpoint it plays the
 - `timeout_s` (float | None, default `1800`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
-- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
-- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train and play (eval runs as play); other libraries, env_check and record refuse it (an env default is skipped there).
+- `python_paths` (list[str] | None, default `None`): Absolute folders added to the front of PYTHONPATH (before the install's own path, never replacing it): the import roots of a project that is not installed, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way.
+- `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
+- `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
+- `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
 
 ### `isaaclab__run_script`
 
@@ -365,9 +383,11 @@ Run your own bounded Python script as a managed job (kind "script") and return i
 
 - `script` (str, required): Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.
 - `args` (list[str] | None, default `None`): Command-line arguments for the script.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables; keys must be valid identifiers.
-- `python_path` (list[str] | None, default `None`): Folders put at the front of PYTHONPATH.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables; the same rules as the env argument of isaaclab__train (PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value).
+- `python_paths` (list[str] | None, default `None`): Absolute folders added to the front of PYTHONPATH (before the install's own path, never replacing it): the import roots of a project that is not installed, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way.
+- `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
 - `python` (str | None, default `None`): Interpreter. Default: the configured ISAACLAB_PYTHON.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
 - `cwd` (str | None, default `None`): Working directory. Default: the script's folder.
 - `label` (str | None, default `None`): Short name, used in the job_id and runs_list.
 - `timeout_s` (float, default `600`): Hard wall limit in seconds; the whole process group is killed at expiry.
@@ -439,10 +459,14 @@ Start a training job and return its job_id immediately; follow it with isaaclab_
 - `timeout_s` (float | None, default `None`): Stop the job after this many seconds. Default: no limit.
 - `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
-- `python_path` (list[str] | None, default `None`): Absolute directories prepended to PYTHONPATH, for tasks that live in a project package that is not installed. Also ISAACLAB_TASK_PATH.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers). PATH, LD_*, PYTHON*, HOME and similar are refused; use python_path for PYTHONPATH.
-- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, passed as --external_callback=module.function, e.g. g1_recovery.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. Isaac Lab 3.0.0 runs it only in rsl_rl train and play (eval runs as play); other libraries, env_check and record refuse it (an env default is skipped there).
-- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.
+- `python_paths` (list[str] | None, default `None`): Absolute folders added to the front of PYTHONPATH (before the install's own path, never replacing it): the import roots of a project that is not installed, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way.
+- `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
+- `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
+- `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.
 
 ## Bridge built-ins
 

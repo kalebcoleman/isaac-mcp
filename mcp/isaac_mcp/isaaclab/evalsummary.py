@@ -1,82 +1,178 @@
-"""Summarise pass counts from a project's evaluation-result JSON files (the ``final_<name>_heldout_r1.json`` layout).
+"""Summarise metrics in a project's evaluation-result JSON files, against criteria the caller supplies.
 
-The files are read, never run or modified. Expected keys are explicit (see ``CRITERIA``); a file that lacks one is
-refused naming the file and key path, so a layout change cannot produce a made-up number. The TEST pose set is
-refused unless the caller passes ``allow_test=True``, and a pose set that cannot be classified is refused too.
+The files are read, never run or modified. Any JSON object works: a criterion names a metric by a dotted key path
+(``stats.success_rate``, ``episodes.0.reward``), a comparison and a threshold, and the summary reports each file's value,
+whether it passed, and the pass count / mean / min / max over the files. With no criteria the summary just reports the
+numeric metrics (no pass or fail). A criterion whose key a file lacks is refused naming the file and key path, so a layout
+change cannot produce a made-up number.
 """
 
 from __future__ import annotations
 
+import glob
 import json
+import math
+import operator
+import os
 from pathlib import Path
 from typing import Any
 
-DIRECTIONS = ("side_a", "prone", "side_b", "supine")
 MAX_FILE_BYTES = 64 * 1024**2
 MAX_FILES = 50
+MAX_METRICS = 200  # numeric leaves reported per file when no criteria are given
+MAX_DEPTH = 6
 
-# criteria name -> (what it is, path of the pass count, path of the per-direction figures, whether those are counts or rates)
-CRITERIA: dict[str, tuple[str, tuple[str, ...], tuple[str, ...], str]] = {
-    "v3_ground_only": ("criteria v3 before 3b (self-penetration not applied), ground-only flight",
-                       ("amendment3", "ground_only_flight", "v3_before_selfpen"),
-                       ("amendment3", "ground_only_flight", "by_category"), "counts"),
-    "v3_latest_substep": ("criteria v3 before 3b, flight measured on the latest sub-step only",
-                          ("amendment3", "plausible_v3_before_selfpen"),
-                          ("amendment3", "plausible_v3_before_selfpen_by_category"), "counts"),
-    "v3_a4": ("criteria v3 before 3b with the proposed A4 flight history",
-              ("amendment3", "proposed_a4_flight_history", "v3_before_selfpen_with_a4"),
-              ("amendment3", "proposed_a4_flight_history", "v3_with_a4_by_category"), "counts"),
-    "v21": ("plausible recovery v2.1", ("plausible", "plausible_v21_successes"),
-            ("plausible", "plausible_v21_by_category"), "rates"),
-    "v2": ("plausible recovery v2", ("plausible", "plausible_v2_successes"),
-           ("plausible", "plausible_v2_by_category"), "rates"),
-    "strict": ("strict supported stand", ("strict_supported_stand", "successes"),
-               ("strict_supported_stand", "by_category"), "rates"),
-}
-ALIASES = {"v3": "v3_ground_only", "v3_before_3b": "v3_ground_only"}
-
-POSE_SETS = {"dev_v1.npz": "DEV", "heldout_poses.npz": "DEV", "heldout_v2.npz": "HELDOUT", "test_v2.npz": "TEST"}
+_OPS = {">=": operator.ge, ">": operator.gt, "<=": operator.le, "<": operator.lt, "==": operator.eq, "!=": operator.ne}
+_OP_WORDS = {"ge": ">=", "gte": ">=", "gt": ">", "le": "<=", "lte": "<=", "lt": "<", "eq": "==", "ne": "!=", "neq": "!=", "=": "=="}
 
 
-def _criteria(name: Any) -> str:
-    key = ALIASES.get(str(name).strip().lower(), str(name).strip().lower()) if name is not None else "v3_ground_only"
-    if key not in CRITERIA:
-        raise ValueError(f"unknown criteria {name!r}; use one of {', '.join(CRITERIA)} (alias v3 = v3_ground_only)")
-    return key
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        return float(value)
+    return None
 
 
-def _dig(data: dict[str, Any], path: tuple[str, ...], file: str) -> Any:
-    node: Any = data
-    for i, key in enumerate(path):
-        if not isinstance(node, dict) or key not in node:
-            where = ".".join(path[:i]) or "<top level>"
-            have = ", ".join(sorted(node)[:12]) if isinstance(node, dict) else type(node).__name__
-            raise ValueError(f"{file}: expected key {'.'.join(path)}, but {where} has no {key!r} (it has: {have}). "
-                             "This is not the evaluation-result layout this summary reads.")
-        node = node[key]
-    return node
+def _clean(value: float) -> float | int:
+    return int(value) if float(value).is_integer() and abs(value) < 1e15 else round(value, 6)
 
 
-def _split(data: dict[str, Any], file: str, allow_test: bool) -> tuple[str, str]:
-    pose_set = data.get("pose_set")
-    if not isinstance(pose_set, str) or not pose_set:
-        raise ValueError(f"{file}: no 'pose_set' key, so the evaluation set (DEV, HELDOUT or TEST) cannot be told; refusing to guess.")
-    name = Path(pose_set).name
-    split = POSE_SETS.get(name)
-    if split is None:
-        split = "TEST" if "test" in name.lower() else None
-    if split is None:
-        raise ValueError(f"{file}: pose_set {pose_set!r} is not one of {', '.join(POSE_SETS)}, so its split is unknown; refusing to guess.")
-    if split == "TEST" and not allow_test:
-        raise ValueError(f"{file}: pose_set {pose_set!r} is the TEST split, which stays untouched until a final claim. "
-                         "Pass allow_test=true only for that final, approved evaluation.")
-    return split, pose_set
+def _lookup(node: Any, parts: list[str]) -> Any:
+    """The value at a dotted path; a dict key that itself contains dots is tried first. Raises KeyError with the dotted prefix."""
+    if not parts:
+        return node
+    if isinstance(node, dict):
+        joined = ".".join(parts)
+        if joined in node:
+            return node[joined]
+        if parts[0] in node:
+            return _lookup(node[parts[0]], parts[1:])
+    elif isinstance(node, list) and parts[0].isdigit() and int(parts[0]) < len(node):
+        return _lookup(node[int(parts[0])], parts[1:])
+    raise KeyError(parts[0])
 
 
-def _read(path: Any, criteria: str, allow_test: bool) -> dict[str, Any]:
-    if not isinstance(path, str) or not path.strip():
-        raise ValueError("every eval_json entry must be a non-empty path")
+def _dig(data: Any, key: str, file: str) -> Any:
+    parts = [p for p in key.split(".") if p != ""]
+    if not parts:
+        raise ValueError("empty criterion key (use a dotted path such as 'stats.success_rate')")
+    try:
+        return _lookup(data, parts)
+    except KeyError:
+        pass
+    node, walked = data, []  # find where the path stops, to say what is there instead
+    for part in parts:
+        if isinstance(node, dict) and part in node:
+            node = node[part]
+        elif isinstance(node, list) and part.isdigit() and int(part) < len(node):
+            node = node[int(part)]
+        else:
+            where = ".".join(walked) or "<top level>"
+            have = (", ".join(sorted(map(str, node))[:12]) if isinstance(node, dict)
+                    else f"a list of {len(node)}" if isinstance(node, list) else type(node).__name__)
+            raise ValueError(f"{file}: expected key {key}, but {where} has no {part!r} (it has: {have}).")
+        walked.append(part)
+    raise ValueError(f"{file}: cannot read key {key}")
+
+
+def _flatten(node: Any, prefix: str = "", depth: int = 0, out: dict[str, float] | None = None) -> dict[str, float]:
+    out = {} if out is None else out
+    if len(out) >= MAX_METRICS or depth > MAX_DEPTH:
+        return out
+    if isinstance(node, dict):
+        for k, v in node.items():
+            _flatten(v, f"{prefix}.{k}" if prefix else str(k), depth + 1, out)
+    elif isinstance(node, list):
+        if len(node) <= 16:
+            for i, v in enumerate(node):
+                _flatten(v, f"{prefix}.{i}" if prefix else str(i), depth + 1, out)
+    else:
+        n = _number(node) if not isinstance(node, bool) else None
+        if n is not None and prefix:
+            out[prefix] = n
+    return out
+
+
+def _load_criteria_file(path: str) -> Any:
     p = Path(path).expanduser()
+    if not p.is_file():
+        raise ValueError(f"criteria file not found: {path} (looked for {p.resolve()}; pass an absolute path)")
+    text = p.read_text(encoding="utf-8")
+    if p.suffix.lower() in (".yaml", ".yml"):
+        try:
+            import yaml
+        except ImportError:
+            raise ValueError(f"{path}: reading YAML needs PyYAML; use a .json criteria file or pass the criteria as a list") from None
+        try:
+            data = yaml.safe_load(text)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"{path}: not readable YAML ({exc})") from None
+    else:
+        try:
+            data = json.loads(text)
+        except ValueError as exc:
+            raise ValueError(f"{path}: not readable JSON ({exc})") from None
+    if isinstance(data, dict) and "criteria" in data:
+        data = data["criteria"]
+    return data
+
+
+def normalize_criteria(criteria: Any) -> list[dict[str, Any]]:
+    """A list of ``{key, op, value, label}``, from that list, a single such object, or a path to a JSON/YAML file holding either
+    (or ``{"criteria": [...]}``). ``op`` is one of >= > <= < == != (or ge gt le lt eq ne); it defaults to >=. Empty means none."""
+    if criteria is None or criteria == [] or criteria == "":
+        return []
+    if isinstance(criteria, str):
+        criteria = _load_criteria_file(criteria)
+    if isinstance(criteria, dict):
+        criteria = [criteria]
+    if not isinstance(criteria, list) or len(criteria) > 100:
+        raise ValueError("criteria must be a list of {key, op, value, label} objects (at most 100), or a path to a JSON/YAML file holding one")
+    out = []
+    for i, item in enumerate(criteria):
+        if not isinstance(item, dict) or not isinstance(item.get("key"), str) or not item["key"].strip():
+            raise ValueError(f"criteria[{i}] needs a 'key': a dotted path into the result file, e.g. 'stats.success_rate'")
+        op = str(item.get("op", ">=")).strip().lower()
+        op = _OP_WORDS.get(op, op)
+        if op not in _OPS:
+            raise ValueError(f"criteria[{i}]: op {item.get('op')!r} must be one of {', '.join(_OPS)}")
+        value = _number(item.get("value"))
+        if value is None:
+            raise ValueError(f"criteria[{i}] needs a numeric 'value' (the threshold to compare against)")
+        label = item.get("label")
+        if label is not None and not isinstance(label, str):
+            raise ValueError(f"criteria[{i}]: label must be text")
+        out.append({"label": label or f"{item['key'].strip()} {op} {_clean(value)}", "key": item["key"].strip(), "op": op,
+                    "value": _clean(value)})
+    labels = [c["label"] for c in out]
+    if len(set(labels)) != len(labels):
+        raise ValueError("criteria labels must be unique; give each criterion its own 'label'")
+    return out
+
+
+def _expand(paths: Any, name: str) -> list[str]:
+    """Absolute file paths and/or glob patterns (``*``, ``?``, ``[...]``, ``**``), expanded in sorted order."""
+    if not isinstance(paths, list) or not paths or any(not isinstance(p, str) or not p.strip() for p in paths):
+        raise ValueError(f"{name} must be a list of 1 to {MAX_FILES} result-file paths or glob patterns")
+    out: list[str] = []
+    for entry in paths:
+        pattern = os.path.expanduser(entry.strip())
+        if any(c in pattern for c in "*?["):
+            found = sorted(glob.glob(pattern, recursive=True))
+            if not found:
+                raise ValueError(f"{name}: pattern {entry!r} matched no files (looked for {pattern}; patterns are matched from the "
+                                 "server's working directory unless absolute)")
+            out.extend(f for f in found if f not in out)
+        elif pattern not in out:
+            out.append(pattern)
+    if len(out) > MAX_FILES:
+        raise ValueError(f"{name} expands to {len(out)} files; the limit is {MAX_FILES}. Narrow the pattern.")
+    return out
+
+
+def _read(path: str) -> tuple[Path, dict[str, Any]]:
+    p = Path(path)
     if p.suffix != ".json" or not p.is_file():
         raise ValueError(f"{path}: not an existing .json file (looked for {p.resolve()}; a relative path is resolved from the "
                          "server's working directory, not yours, so pass an absolute path)")
@@ -88,66 +184,65 @@ def _read(path: Any, criteria: str, allow_test: bool) -> dict[str, Any]:
         raise ValueError(f"{path}: not readable JSON ({exc})")
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected a JSON object")
-    split, pose_set = _split(data, path, allow_test)
-    _desc, count_path, dir_path, kind = CRITERIA[criteria]
-    passed = _dig(data, count_path, path)
-    per_dir = _dig(data, dir_path, path)
-    cats = _dig(data, ("by_category",), path)
-    if isinstance(passed, bool) or not isinstance(passed, (int, float)):
-        raise ValueError(f"{path}: {'.'.join(count_path)} is not a number")
-    by_dir: dict[str, int] = {}
-    sizes: dict[str, int] = {}
-    for d in DIRECTIONS:
-        if d not in per_dir or d not in cats or "n" not in cats[d]:
-            raise ValueError(f"{path}: expected direction {d!r} under {'.'.join(dir_path)} and by_category.{d}.n")
-        sizes[d] = int(cats[d]["n"])
-        value = per_dir[d]
-        by_dir[d] = int(round(value * sizes[d])) if kind == "rates" else int(value)
-    n = int(_dig(data, ("num_envs",), path))
-    out = {"path": str(p), "checkpoint": data.get("checkpoint"), "task": data.get("task"), "split": split, "pose_set": pose_set,
-           "n": n, "pass_count": int(passed), "by_direction": by_dir, "direction_n": sizes}
-    if sum(by_dir.values()) != int(passed) or sum(sizes.values()) != n:
-        out["consistency_warning"] = (f"per-direction passes sum to {sum(by_dir.values())} (n {sum(sizes.values())}) but the file reports "
-                                      f"{int(passed)} of {n}; check the file before quoting it")
+    return p, data
+
+
+def _evaluate(path: str, criteria: list[dict[str, Any]]) -> dict[str, Any]:
+    p, data = _read(path)
+    run: dict[str, Any] = {"path": str(p.resolve())}
+    for key in ("checkpoint", "task"):
+        if isinstance(data.get(key), (str, int, float)):
+            run[key] = data[key]
+    if not criteria:
+        run["metrics"] = {k: _clean(v) for k, v in _flatten(data).items()}
+        return run
+    results = []
+    for c in criteria:
+        raw = _dig(data, c["key"], str(p))
+        value = _number(raw)
+        if value is None:
+            raise ValueError(f"{p}: {c['key']} is not a number (it is {type(raw).__name__}); a criterion compares one numeric metric")
+        results.append({"label": c["label"], "key": c["key"], "value": _clean(value), "passed": bool(_OPS[c["op"]](value, c["value"]))})
+    run["results"] = results
+    run["passed"] = all(r["passed"] for r in results)
+    return run
+
+
+def _aggregate(runs: list[dict[str, Any]], criteria: list[dict[str, Any]]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if criteria:
+        rows = []
+        for i, c in enumerate(criteria):
+            vals = [r["results"][i]["value"] for r in runs]
+            rows.append({"label": c["label"], "key": c["key"], "op": c["op"], "threshold": c["value"],
+                         "values": vals, "mean": _clean(sum(vals) / len(vals)), "min": min(vals), "max": max(vals),
+                         "passed_runs": sum(1 for r in runs if r["results"][i]["passed"]), "n_runs": len(runs)})
+        out["summary"] = rows
+        out["runs_passing_all"] = sum(1 for r in runs if r["passed"])
+    else:
+        keys = sorted({k for r in runs for k in r["metrics"]})
+        out["metrics"] = {k: {"mean": _clean(sum(v) / len(v)), "min": _clean(min(v)), "max": _clean(max(v)), "n": len(v)}
+                          for k in keys for v in [[r["metrics"][k] for r in runs if k in r["metrics"]]]}
     return out
 
 
-def _stats(runs: list[dict[str, Any]]) -> dict[str, Any]:
-    counts = [r["pass_count"] for r in runs]
-    return {"pass_counts": counts, "mean_pass": round(sum(counts) / len(counts), 2), "min_pass": min(counts), "max_pass": max(counts),
-            "n": runs[0]["n"], "by_direction_mean": {d: round(sum(r["by_direction"][d] for r in runs) / len(runs), 2) for d in DIRECTIONS}}
-
-
-def summarize(eval_json: Any, criteria: Any = None, label: Any = None, baseline_json: Any = None, baseline_label: Any = None,
-              allow_test: bool = False) -> dict[str, Any]:
-    key = _criteria(criteria)
-    for name, value in (("eval_json", eval_json), ("baseline_json", baseline_json)):
-        if value is not None and (not isinstance(value, list) or not value or len(value) > MAX_FILES):
-            raise ValueError(f"{name} must be a list of 1 to {MAX_FILES} paths")
+def summarize(eval_json: Any, criteria: Any = None, label: Any = None, baseline_json: Any = None,
+              baseline_label: Any = None) -> dict[str, Any]:
     if not eval_json:
-        raise ValueError("Give eval_json: a list of evaluation-result JSON files (repeat evaluations of one checkpoint, or several).")
-    runs = [_read(p, key, bool(allow_test)) for p in eval_json]
-    splits = {r["split"] for r in runs}
-    if len(splits) > 1:
-        raise ValueError(f"eval_json mixes splits {sorted(splits)}; summarise one split at a time.")
-    ns = {r["n"] for r in runs}
-    if len(ns) > 1:
-        raise ValueError(f"eval_json files have different pose counts {sorted(ns)}; they are not repeat runs of one set.")
-    out: dict[str, Any] = {"label": label, "criteria": key, "criteria_definition": CRITERIA[key][0], "split": runs[0]["split"],
-                           "pose_set": runs[0]["pose_set"], "runs": runs, **_stats(runs)}
-    out["pass_fraction_mean"] = round(out["mean_pass"] / out["n"], 4)
-    warnings = [r["consistency_warning"] for r in runs if "consistency_warning" in r]
-    if warnings:
-        out["warnings"] = warnings
-    base_runs: list[dict[str, Any]] = []
+        raise ValueError("Give eval_json: result-file paths or glob patterns (repeat evaluations of one checkpoint, or several).")
+    crit = normalize_criteria(criteria)
+    runs = [_evaluate(p, crit) for p in _expand(eval_json, "eval_json")]
+    out: dict[str, Any] = {"label": label, "n_files": len(runs), "criteria": crit or None, "runs": runs, **_aggregate(runs, crit)}
+    if not crit:
+        out["note"] = ("No criteria given, so only the numeric metrics are reported (no pass or fail). Pass criteria="
+                       "[{\"key\": \"stats.success_rate\", \"op\": \">=\", \"value\": 0.9, \"label\": \"success\"}] (or a path to a "
+                       "JSON/YAML file holding that list) to score the files.")
     if baseline_json:
-        base_runs = [_read(p, key, bool(allow_test)) for p in baseline_json]
-        if {r["split"] for r in base_runs} != {runs[0]["split"]} or {r["n"] for r in base_runs} != {runs[0]["n"]}:
-            raise ValueError("baseline_json is on a different split or pose count than eval_json, so the comparison would be meaningless.")
-        base = {"label": baseline_label, "runs": base_runs, **_stats(base_runs)}
-        base["delta_mean_pass"] = round(out["mean_pass"] - base["mean_pass"], 2)
-        base["delta_by_direction"] = {d: round(out["by_direction_mean"][d] - base["by_direction_mean"][d], 2) for d in DIRECTIONS}
+        base_runs = [_evaluate(p, crit) for p in _expand(baseline_json, "baseline_json")]
+        base = {"label": baseline_label, "n_files": len(base_runs), "runs": base_runs, **_aggregate(base_runs, crit)}
+        if crit:
+            base["delta_mean"] = {r["label"]: _clean(r["mean"] - b["mean"]) for r, b in zip(out["summary"], base["summary"])}
+        else:
+            base["delta_mean"] = {k: _clean(v["mean"] - base["metrics"][k]["mean"]) for k, v in out["metrics"].items() if k in base["metrics"]}
         out["baseline"] = base
-    if out["split"] == "TEST" or any(r["split"] == "TEST" for r in (base_runs if baseline_json else [])):
-        out["test_split_used"] = True
     return out

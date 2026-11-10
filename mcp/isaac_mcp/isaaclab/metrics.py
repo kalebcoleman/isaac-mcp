@@ -50,6 +50,17 @@ def _allowed_roots(search_roots=None) -> List[str]:
 
     roots.append(str(_jobs_path()))
     roots.append(os.path.expanduser("~/.local/share/isaac-mcp/jobs"))
+    # The folders train/eval/play accept checkpoints from (a project's checkpoints/ folder, scratch), and the logs of every
+    # known install, so runs started with install=... on another Isaac Lab are readable too.
+    roots.extend(p for p in os.environ.get("ISAACLAB_CHECKPOINT_ROOTS", "").split(os.pathsep) if p.strip())
+    try:
+        from .install import known_installs
+
+        for rec in known_installs():
+            if rec.get("isaaclab_root"):
+                roots.append(os.path.join(rec["isaaclab_root"], "logs"))
+    except Exception:  # noqa: BLE001 - roots are best effort
+        pass
     # Runs started by isaaclab__train land under <isaaclab_root>/logs.
     try:
         from .install import locate_install
@@ -81,8 +92,8 @@ def _resolve_run_dir(run_dir, search_roots=None) -> (str, Optional[Dict[str, Any
         if real == root or real.startswith(root + os.sep):
             return real, None
     return "", {"error": "path outside allowed roots", "allowed_roots": allowed,
-                "hint": "Only run folders under the Lab logs folder, the jobs folder or ISAACLAB_LOGS_DIR are read. Use run_dir from "
-                        "isaaclab__runs_status, or start the server with ISAACLAB_LOGS_DIR set to your project's logs folder."}
+                "hint": "Only run folders under the Lab logs folder, the jobs folder, ISAACLAB_LOGS_DIR or ISAACLAB_CHECKPOINT_ROOTS are read. Use run_dir from "
+                        "isaaclab__runs_status, or start the server with ISAACLAB_LOGS_DIR (or ISAACLAB_CHECKPOINT_ROOTS) set to your project's folder."}
 
 
 def _is_under_allowed(path: str, allowed: List[str]) -> bool:

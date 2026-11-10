@@ -172,7 +172,22 @@ def _positive_int(value: Any, name: str) -> int:
     return value
 
 
-def _validate_checkpoint(checkpoint: Any, root: Any) -> str | None:
+def _checkpoint_roots(root: Any, python_path: Any = None, cwd: Any = None) -> list[Path]:
+    """Folders a checkpoint may live in: the Lab checkout, the jobs folder, the caller's project (python_path entries and
+    cwd) and any folder named in ISAACLAB_CHECKPOINT_ROOTS (os.pathsep list, for scratch or release folders)."""
+    roots = [Path(root).resolve(), jobs_dir().resolve()]
+    extra: list[str] = [p for p in (python_path or []) if isinstance(p, str)] if isinstance(python_path, (list, tuple)) else []
+    if isinstance(cwd, (str, os.PathLike)) and str(cwd):
+        extra.append(str(cwd))
+    extra += [p for p in os.environ.get("ISAACLAB_CHECKPOINT_ROOTS", "").split(os.pathsep) if p.strip()]
+    for entry in extra:
+        d = Path(entry).expanduser()
+        if d.is_absolute() and d.is_dir():
+            roots.append(d.resolve())
+    return roots
+
+
+def _validate_checkpoint(checkpoint: Any, root: Any, python_path: Any = None, cwd: Any = None) -> str | None:
     if checkpoint is None:
         return None
     if not isinstance(checkpoint, str) or not checkpoint:
@@ -181,9 +196,12 @@ def _validate_checkpoint(checkpoint: Any, root: Any) -> str | None:
     if not p.exists():
         raise ValueError(f"checkpoint does not exist: {checkpoint}; find one with isaaclab__checkpoints_list")
     rp = p.resolve()
-    allowed = [Path(root).resolve(), jobs_dir().resolve()]
+    allowed = _checkpoint_roots(root, python_path, cwd)
     if not any(_under(rp, r) for r in allowed):
-        raise ValueError(f"checkpoint resolves outside allowed roots: {checkpoint}")
+        raise ValueError(f"checkpoint resolves outside allowed roots: {checkpoint}. Allowed: "
+                         + ", ".join(str(r) for r in allowed)
+                         + ". Put the checkpoint under one of them, under a python_path or cwd folder you pass, "
+                           "or add its folder to ISAACLAB_CHECKPOINT_ROOTS.")
     return str(rp)
 
 
@@ -211,9 +229,11 @@ def _validate_label(label: Any) -> str | None:
     return label.strip()
 
 
-def _launch_kw(python_path: Any, env: Any, external_callback: Any) -> dict[str, Any]:
+def _launch_kw(python_path: Any, env: Any, external_callback: Any, task_modules: Any = None,
+               cwd: Any = None) -> dict[str, Any]:
     """The task-registration options a caller gave, for forwarding; empty when none, so older callers see no change."""
-    given = {"python_path": python_path, "env": env, "external_callback": external_callback}
+    given = {"python_path": python_path, "env": env, "external_callback": external_callback,
+             "task_modules": task_modules, "cwd": cwd}
     return {k: v for k, v in given.items() if v is not None}
 
 
@@ -1015,29 +1035,23 @@ def _start_job_locked(
     env: Any = None,
     external_callback: Any = None,
     label: str | None = None,
+    task_modules: Any = None,
+    cwd: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     label = _validate_label(label)
-    opts = _install.validate_launch_options(python_path, env, external_callback)
+    opts = _install.validate_launch_options(python_path, env, external_callback, None, task_modules)
+    workdir = _install.validate_cwd(cwd)
     if any(a.split("=", 1)[0] == "--external_callback" for a in argv):
         if external_callback:
             raise ValueError("Give external_callback as this option or in extra_args, not both.")
         # Only the ISAACLAB_EXTERNAL_CALLBACK default is set: the caller's own extra_args win.
         opts = {**opts, "external_callback": None}
-    if opts["external_callback"]:
-        # Isaac Lab 3.0.0 runs --external_callback only in the rsl_rl train and play entry points. The zero/random
-        # agent scripts (env_check, record) never call it, so the task stays unregistered and the job fails late.
-        if check_options is not None:
-            why = "env_check and record run Isaac Lab's zero/random agent script, which does not run it"
-        elif library is None and rl_library_check not in (None, "rsl_rl"):
-            why = f"rl_library={rl_library_check} does not run it (only rsl_rl does)"
-        else:
-            why = None
-        if why:
-            if external_callback:
-                raise ValueError(f"external_callback is not supported here: {why}. Register the task with python_path plus "
-                                 "ISAACLAB_TASK_MODULES (a module that registers on import) instead.")
-            opts = {**opts, "external_callback": None}  # only the ISAACLAB_EXTERNAL_CALLBACK default: skip it here
+    # Isaac Lab 3.0.0 runs --external_callback only in the rsl_rl train and play entry points. Everywhere else (other
+    # libraries, env_check, record) this server calls the function itself, before the task is looked up.
+    own_callback = None
+    if opts["external_callback"] and (check_options is not None or (library is None and rl_library_check not in (None, "rsl_rl"))):
+        own_callback, opts = opts["external_callback"], {**opts, "external_callback": None}
     if not allow_concurrent:
         blocked = _concurrency_guard()
         if blocked is not None:
@@ -1067,7 +1081,7 @@ def _start_job_locked(
                          f"{script_path.relative_to(root_path)}, so no job could start. "
                          f"Expected {_install.EXPECTED_SCRIPTS}.")
     task_modules, task_paths = _install.resolve_task_modules(root_path, {**os.environ, **opts["env"]})
-    external = bool(opts["python_path"] or opts["external_callback"])
+    external = bool(opts["python_path"] or opts["external_callback"] or own_callback)
     _require_known_task(root_path, task, task_modules or (["<external>"] if external else []))
     if opts["external_callback"]:
         argv = list(argv) + [f"--external_callback={opts['external_callback']}"]
@@ -1092,7 +1106,7 @@ def _start_job_locked(
             python, str(script_path), list(argv), str((jd / "eval_result.json").resolve()),
             num_episodes=eval_options["num_episodes"], max_steps=eval_options["max_steps"],
         )
-    elif task_modules:
+    elif task_modules or own_callback:
         # Isaac Lab's stock scripts do not know project tasks: import them first (see launcher.py).
         full_cmd = [str(python), str(_LAUNCHER), str(script_path)] + list(argv)
     else:
@@ -1104,7 +1118,7 @@ def _start_job_locked(
     stdout_f = open(stdout_path, "wb")
     stderr_f = open(stderr_path, "wb")
     env = _child_env(root_path, device)
-    env.update(opts["env"])
+    _install.apply_env(env, opts["env"])  # PATH, LD_LIBRARY_PATH and PYTHONPATH are prepended
     if headless is not None:
         # A tool's explicit display choice wins over an inherited shell setting.
         # Do not mutate os.environ or another job's launch configuration.
@@ -1114,13 +1128,15 @@ def _start_job_locked(
         env["PYTHONPATH"] = os.pathsep.join(task_paths + [env["PYTHONPATH"]])
     if opts["python_path"]:
         env["PYTHONPATH"] = os.pathsep.join(opts["python_path"] + [env["PYTHONPATH"]])
+    if own_callback:
+        env["ISAAC_MCP_EXTERNAL_CALLBACK"] = own_callback  # read by launcher.py, eval_runner.py and check_runner.py
     proc = subprocess.Popen(
         _exit_recording(full_cmd, jd, timeout_s),
         stdout=stdout_f,
         stderr=stderr_f,
         stdin=subprocess.DEVNULL,
         env=env,
-        cwd=str(root_path),
+        cwd=str(workdir or root_path),
         shell=False,
         start_new_session=True,
     )
@@ -1154,8 +1170,10 @@ def _start_job_locked(
     if check_options is not None:
         data["check"] = dict(check_options)
     if external or opts["env"]:
-        data["launch"] = {"python_path": opts["python_path"], "external_callback": opts["external_callback"],
+        data["launch"] = {"python_path": opts["python_path"], "external_callback": own_callback or opts["external_callback"],
                           "env_names": sorted(opts["env"])}  # names only: values may be secrets
+    if workdir is not None:
+        data["cwd"] = str(workdir)
     _write_job(jd, data)
 
     with _jobs_lock:
@@ -1187,10 +1205,12 @@ def train(
     env: Any = None,
     external_callback: Any = None,
     label: str | None = None,
+    task_modules: Any = None,
+    cwd: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
-    ckpt = _validate_checkpoint(checkpoint, root)
+    ckpt = _validate_checkpoint(checkpoint, root, python_path, cwd)
     extras = _with_physics(physics, root, _validate_extra_args(extra_args))
     libraries = _per_library(root)
     if libraries is not None:
@@ -1218,7 +1238,7 @@ def train(
         python, root, "train", task, argv, timeout_s=timeout_s, device=device,
         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
         headless=headless, rl_library_check=lib, extra_validated=extras,
-        label=label, **_launch_kw(python_path, env, external_callback),
+        label=label, **_launch_kw(python_path, env, external_callback, task_modules, cwd),
         **({} if libraries is None else {"library": lib}),
     )
 
@@ -1242,10 +1262,12 @@ def eval_(
     env: Any = None,
     external_callback: Any = None,
     label: str | None = None,
+    task_modules: Any = None,
+    cwd: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
-    ckpt = _validate_checkpoint(checkpoint, root)
+    ckpt = _validate_checkpoint(checkpoint, root, python_path, cwd)
     if ckpt is None:
         raise ValueError("checkpoint is required for eval")
     num_episodes = _positive_int(num_episodes, "num_episodes")
@@ -1270,7 +1292,7 @@ def eval_(
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, rl_library_check=lib, extra_validated=extras,
                         eval_options={"num_episodes": num_episodes, "max_steps": max_steps},
-                        label=label, **_launch_kw(python_path, env, external_callback),
+                        label=label, **_launch_kw(python_path, env, external_callback, task_modules, cwd),
                         **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
@@ -1292,10 +1314,12 @@ def play(
     env: Any = None,
     external_callback: Any = None,
     label: str | None = None,
+    task_modules: Any = None,
+    cwd: Any = None,
 ) -> dict[str, Any]:
     _validate_task(task)
     lib = _validate_library(rl_library)
-    ckpt = _validate_checkpoint(checkpoint, root)
+    ckpt = _validate_checkpoint(checkpoint, root, python_path, cwd)
     if ckpt is None:
         raise ValueError("checkpoint is required for play")
     extras = _with_physics(physics, root, _validate_extra_args(extra_args))
@@ -1314,7 +1338,7 @@ def play(
     result = _start_job(python, root, "play", task, argv, timeout_s=timeout_s,
                         allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
                         headless=headless, rl_library_check=lib, extra_validated=extras,
-                        label=label, **_launch_kw(python_path, env, external_callback),
+                        label=label, **_launch_kw(python_path, env, external_callback, task_modules, cwd),
                         **({} if libraries is None else {"library": lib}))
     return {**result, "rl_library_from_checkpoint_path": inferred} if inferred else result
 
@@ -1353,19 +1377,19 @@ def env_check(python: str, root: Any, task: str, num_envs: int = 4, steps: int =
               headless: bool = True, physics: str | None = None, extra_args: Any = None,
               timeout_s: float | None = 900, allow_concurrent: bool = False,
               allow_concurrent_gpu: bool = False, python_path: Any = None, env: Any = None,
-              external_callback: Any = None) -> dict[str, Any]:
+              external_callback: Any = None, task_modules: Any = None, cwd: Any = None) -> dict[str, Any]:
     return _check_job("env_check", python, root, task, num_envs, steps, agent, headless, physics, extra_args,
                       timeout_s, allow_concurrent, allow_concurrent_gpu,
                       ["--max_steps", str(int(steps))] if _native_agent_video(root) else [],
-                      launch=_launch_kw(python_path, env, external_callback))
+                      launch=_launch_kw(python_path, env, external_callback, task_modules, cwd))
 
 
 def record(python: str, root: Any, task: str, checkpoint: Any = None, num_envs: int = 1, video_length: int = 200,
            agent: str = "zero", headless: bool = True, rl_library: str | None = None, physics: str | None = None,
            extra_args: Any = None, timeout_s: float | None = 1800, allow_concurrent: bool = False,
            allow_concurrent_gpu: bool = False, python_path: Any = None, env: Any = None,
-           external_callback: Any = None) -> dict[str, Any]:
-    launch = _launch_kw(python_path, env, external_callback)
+           external_callback: Any = None, task_modules: Any = None, cwd: Any = None) -> dict[str, Any]:
+    launch = _launch_kw(python_path, env, external_callback, task_modules, cwd)
     video_length = _positive_int(video_length, "video_length")
     if checkpoint:
         extras = _validate_extra_args(extra_args) + ["--video", "--video_length", str(video_length)]
@@ -1416,6 +1440,48 @@ def _script_artifacts(log_path: Path) -> list[str]:
                 if len(found) >= _ARTIFACT_LIMIT:
                     break
     return found
+
+
+_PROGRESS_PREFIX = "ISAAC_MCP_PROGRESS:"
+_PROGRESS_LOG_TAIL = 256 * 1024
+
+
+def _progress(log_path: Path) -> dict[str, Any] | None:
+    """The newest line `ISAAC_MCP_PROGRESS: <fraction | percent% | done/total> [text]` a job printed, as
+    {fraction, text, ...}; None when it printed none or the newest is malformed."""
+    try:
+        size = log_path.stat().st_size
+        with log_path.open("rb") as f:
+            f.seek(max(0, size - _PROGRESS_LOG_TAIL))
+            text = f.read().decode(errors="replace")
+    except OSError:
+        return None
+    for line in reversed(text.splitlines()):
+        line = _ANSI_RE.sub("", line).strip()
+        if not line.startswith(_PROGRESS_PREFIX):
+            continue
+        parts = line[len(_PROGRESS_PREFIX):].strip().split(None, 1)
+        if not parts:
+            return None
+        token, note = parts[0], (parts[1] if len(parts) > 1 else "")
+        out: dict[str, Any] = {}
+        try:
+            if "/" in token:
+                done, total = (float(x) for x in token.split("/", 1))
+                if total <= 0:
+                    return None
+                frac = done / total
+                out.update({"done": done, "total": total})
+            elif token.endswith("%"):
+                frac = float(token[:-1]) / 100.0
+            else:
+                frac = float(token)
+        except ValueError:
+            return None
+        if not 0.0 <= frac <= 1.0 or frac != frac:
+            return None
+        return {"fraction": round(frac, 4), "percent": round(frac * 100, 1), **out, **({"text": note[:200]} if note else {})}
+    return None
 
 
 def _script_result(jd: Path, data: dict[str, Any], elapsed: float) -> dict[str, Any]:
@@ -1498,26 +1564,12 @@ def run_script(
         if not isinstance(a, str) or "\0" in a:
             raise ValueError("args must be a list of strings without NUL characters")
         argv.append(a)
-    if env is not None and not isinstance(env, dict):
-        raise ValueError("env must be an object of NAME: value strings")
-    extra_env: dict[str, str] = {}
-    for k, v in (env or {}).items():
-        if not isinstance(k, str) or not _ENV_KEY_RE.match(k):
-            raise ValueError(f"env key {k!r} is not a valid identifier")
-        if not isinstance(v, str) or "\0" in v:
-            raise ValueError(f"env value for {k} must be a string without NUL characters")
-        extra_env[k] = v
-    paths = []
-    for p in (python_path or []):
-        if not isinstance(p, str) or not p or "\0" in p or os.pathsep in p:
-            raise ValueError("python_path must be a list of non-empty path strings")
-        paths.append(str(Path(p).expanduser()))
+    extra_env = _install.validate_env(env)  # the same policy as train, eval, play, env_check and record
+    paths = _install.validate_python_path(python_path)  # the same rule as train, eval, play, env_check and record
     py = Path(str(python)).expanduser()
     if not py.is_file() or not os.access(py, os.X_OK):
         raise ValueError(f"python is not an executable file: {python}")
-    workdir = Path(cwd).expanduser() if cwd else script_path.parent
-    if not workdir.is_dir():
-        raise ValueError(f"cwd is not a directory: {workdir}")
+    workdir = _install.validate_cwd(cwd) or script_path.parent
     if timeout_s is None:
         timeout_s = SCRIPT_DEFAULT_TIMEOUT_S
     if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not 0 < timeout_s <= 7 * 86400:
@@ -1566,7 +1618,7 @@ def run_script(
         child = os.environ.copy()
         child["OMNI_KIT_ACCEPT_EULA"] = "YES"
         child["PYTHONUNBUFFERED"] = "1"
-        child.update(extra_env)
+        _install.apply_env(child, extra_env)  # PATH, LD_LIBRARY_PATH and PYTHONPATH are prepended
         if paths:
             existing = child.get("PYTHONPATH", "")
             child["PYTHONPATH"] = os.pathsep.join(paths + ([existing] if existing else []))
@@ -1590,7 +1642,7 @@ def run_script(
             _active[job_id] = proc
         threading.Thread(target=_watcher, args=(jd, job_id, proc, timeout_s), daemon=True).start()
     return {"job_id": job_id, "log_dir": str(jd.resolve()), "command": full_cmd, "timeout_s": timeout_s,
-            "note": "Runs the script as arbitrary code with your rights. Print `ISAAC_MCP_ARTIFACT: <path>` for outputs; runs_status lists them as script_result.artifacts."}
+            "note": "Runs the script as arbitrary code with your rights. Print `ISAAC_MCP_ARTIFACT: <path>` for outputs; runs_status lists them as script_result.artifacts. Print `ISAAC_MCP_PROGRESS: <fraction|percent%|done/total> [text]` for a progress signal (runs_status `progress`)."}
 
 
 _RELATIVE_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*([smhdw])$", re.I)
@@ -1734,6 +1786,9 @@ def runs_status(job_id: str) -> dict[str, Any]:
     if data.get("timeout_s") is not None:
         out["timeout_s"] = data["timeout_s"]
     out.update(_log_facts(Path(data.get("log_dir", jd)) / "stdout.log"))
+    progress = _progress(Path(data.get("log_dir", jd)) / "stdout.log")
+    if progress is not None:
+        out["progress"] = progress
     videos = _video_paths(run_dir, Path(data.get("log_dir", jd)) / "stdout.log")
     if videos and data.get("kind") in ("env_check", "record") and data.get("started_at"):
         # Lab's agent scripts reuse one video folder per task: keep only clips this job wrote.

@@ -83,27 +83,50 @@ changed, then call `isaaclab__install_info` and `isaaclab__envs_list` to check d
 be explicitly configured; sibling packages are no longer imported automatically. Jobs use the
 same resolver (`ISAACLAB_TASK_MODULES` / `ISAACLAB_TASK_PATH` are forwarded to the child).
 
+#### Choosing the Isaac Lab / Sim install per call
+
+The server's `ISAACLAB_PYTHON` / `ISAACLAB_ROOT` (Isaac Lab 3.0.0 with Sim 6.2 on this setup) stay the **default** and are
+never changed. Every launching tool (`train`, `eval`, `play`, `env_check`, `record`, `run_script`, `envs_list`,
+`install_info`) also takes an optional `install`, so one server can run Lab 2.3.2 with Sim 5.1 for one call and 3.0.0 for
+the next, with no restart:
+
+| `install` value | Meaning |
+|---|---|
+| omitted or `default` | The configured default. If the server was started with `ISAAC_MCP_PROJECT` naming a project whose `isaac-mcp.json` has `"isaaclab_install": "<selector>"`, that selector is used instead (an explicit `default` opts out). A project file found only by walking up from the working directory is never honored. |
+| a name or version | A *known install*: `lab-2.3.2`, `2.3`, `2.3.2`, `3.0.0`. Names are virtual-environment folder names; versions are read from the folder name or the installed `isaaclab` distribution. Several matches is an error that lists them. |
+| an absolute path | A virtual environment folder, its `bin/python`, or a Lab checkout holding a `.venv`. It must be a virtual environment with Isaac Lab installed (checked from its files before anything runs). |
+
+Known installs are read from files, nothing is run: the configured default, its sibling environments, `<ISAAC_MCP_WORKSPACE>/envs/*`,
+`ISAACLAB_INSTALLS` (`os.pathsep` list of venvs, interpreters, checkouts or folders of venvs) and what
+`scripts/isaac_env.py find` reports when the script sits beside the package. `isaaclab__install_info` returns them as
+`known_installs`. The checkout is the install's own (`<env>/IsaacLab`, a checkout holding the `.venv`, or `<env>-src` beside it),
+so Lab 2.3's per-library scripts and `rl_library` rules apply as for any 2.3 call. A successful launch returns `install`
+(`python`, `isaaclab_root`, `source`) so a wrong pick is visible. `metrics_summary`, `checkpoints_list` and `tensorboard_tail`
+accept the logs of every known install. Mixing is the caller's job: a checkpoint trained on Lab 2.3 is for Lab 2.3.
+
 #### Tasks from an external project
 
 Tasks of a project that is not installed in the Lab environment register only when its package is importable
 and its registration code runs. Every launching tool (`isaaclab__envs_list`, `train`, `eval`, `play`,
-`env_check`, `record`) takes three optional arguments for this, per call:
+`env_check`, `record`) takes these optional arguments for this, per call (`envs_list` has no `cwd`):
 
 | Argument | Effect |
 |---|---|
-| `python_path` | List of existing absolute directories prepended to the child's `PYTHONPATH` (before `ISAACLAB_TASK_PATH`). |
-| `env` | Extra environment variables for the child: identifier names, string values. Refused: `PATH`, `HOME`, `LD_*`, `DYLD_*`, every `PYTHON*` except `PYTHONHASHSEED`/`PYTHONFAULTHANDLER` (use `python_path`), `CUDA_VISIBLE_DEVICES`, `HEADLESS`, `ISAAC_MCP_*` and the `ISAACLAB_PYTHON`/`ROOT`/`JOBS_DIR` settings. Values are not stored in the job record, only the names. |
-| `external_callback` | Dotted `module.function` (strict `^ident(\.ident)+$`), passed to the Isaac Lab script as `--external_callback=module.function`. Giving it also in `extra_args` is refused. `envs_list` has no Lab script, so it imports the module and calls the function with no arguments. |
+| `python_paths` | List of existing absolute directories added to the front of the child's `PYTHONPATH`, before the install's own path and `ISAACLAB_TASK_PATH`, never replacing them. The documented way to add import roots. `python_path` is the older name; both may be given and are merged. Also on `run_script`. |
+| `env` | Extra environment variables for the child: identifier names, string values. **One policy for every Isaac Lab tool, `run_script` included** (`install.validate_env`). `PYTHONPATH`, `PATH` and `LD_LIBRARY_PATH` are *prepended* to the install's own value, not replacing it; `OMNI_KIT_ACCEPT_EULA`, `CUDA_VISIBLE_DEVICES`, `HEADLESS`, `HOME`, `TMPDIR` and other `PYTHON*` variables are accepted (a tool's own `device`/`headless` argument still wins for the middle two). Refused, because they would replace or hijack the install, the job's supervising shell or this server, each with the argument to use instead: `PYTHONHOME`, `ISAACLAB_PYTHON`, `ISAACLAB_ROOT`, `ISAACSIM_PATH`, `ISAAC_MCP_PYTHON` (use `install`), `LD_PRELOAD`, `LD_AUDIT`, `DYLD_INSERT_LIBRARIES` (use a wrapper script run by `run_script`), `BASH_ENV`, `ENV`, `IFS`, `CDPATH`, `BASH_FUNC_*`, `ISAAC_MCP_*` and `ISAACLAB_JOBS_DIR` (server settings). Values are not stored in the job record, only the names. |
+| `external_callback` | Dotted `module.function` (strict `^ident(\.ident)+$`). Works with every `rl_library`, `env_check` and `record`: with `rsl_rl` train/play (and eval) it is passed to the Isaac Lab script as `--external_callback=module.function`; everywhere else this server calls the function itself, with no arguments, after the task modules are imported and before the script runs (`launcher.py`, `eval_runner.py`, `check_runner.py`; the job gets `ISAAC_MCP_EXTERNAL_CALLBACK`). Giving it also in `extra_args` is refused. `envs_list` has no Lab script, so it imports the module and calls the function with no arguments. |
+| `task_modules` | List of dotted module names imported before the task is looked up, for a project whose tasks register on import, e.g. `["my_project.tasks"]`. Same effect as `ISAACLAB_TASK_MODULES` in `env`, which it is merged with. |
+| `cwd` | Working directory of the job (`train`, `eval`, `play`, `env_check`, `record`), for projects whose configs use relative data paths. Must be an existing folder, validated as for `run_script`. Default: the Isaac Lab checkout. |
 
-Persistent equivalents, set in the MCP server's environment: `ISAACLAB_TASK_PATH` (same as `python_path`),
+Persistent equivalents, set in the MCP server's environment: `ISAACLAB_TASK_PATH` (same as `python_paths`),
 `ISAACLAB_TASK_MODULES` (modules imported first) and `ISAACLAB_EXTERNAL_CALLBACK` (default for
 `external_callback`). When any of these is supplied, the pre-launch check that refuses a task id the checkout does
 not register is skipped, since the project may register it. Isaac Lab 3.0.0 runs `--external_callback` only in the
-`rsl_rl` train and play entry points (eval is a play job). Other `rl_library` values, `env_check` and `record` (the
-zero/random agent scripts) refuse an explicit `external_callback`; an `ISAACLAB_EXTERNAL_CALLBACK` default is skipped
-there. For those, put the package on `python_path` and name a module that registers on import in `ISAACLAB_TASK_MODULES`.
+`rsl_rl` train and play entry points (eval is a play job), so for every other `rl_library` (rl_games, skrl, sb3) and for
+`env_check` and `record` this server calls the callback itself; the `ISAACLAB_EXTERNAL_CALLBACK` default behaves the same.
+A callback that fails ends the job with its traceback in `runs_tail(stream="stderr")`.
 
-Example: `isaaclab__envs_list {"python_path": ["<project>/src"], "external_callback": "g1_recovery.register.register", "filter": "getup"}`,
+Example: `isaaclab__envs_list {"python_paths": ["<project>/src"], "external_callback": "my_project.register.register", "filter": "my_task"}`,
 then `isaaclab__train` with the same three arguments.
 
 When `isaaclab__envs_list` returns no tasks, or none match `filter`, the result carries a `hint` explaining this.
@@ -114,6 +137,20 @@ When `isaaclab__envs_list` returns no tasks, or none match `filter`, the result 
 files and require the `tensorboard` Python package. Install the extra:
 from the repo root use `uv sync --project mcp --locked --extra isaaclab --no-dev`; `install.sh` includes this extra. Without it these tools
 return `{"error": "install the 'isaaclab' extra: pip install 'isaac-mcp[isaaclab]'"}`.
+
+### Progress marker
+
+Any job (train, eval, script, ...) may print `ISAAC_MCP_PROGRESS: <value> [text]` on stdout, where `<value>` is a fraction
+from 0 to 1 (`0.4`), a percentage (`40%`) or `done/total` (`3/10`). `isaaclab__runs_status` then returns
+`progress: {fraction, percent, done?, total?, text?}` from the newest such line in the last 256 KiB of the log; a
+malformed newest line is ignored. Jobs that print no marker have no `progress` field.
+
+### Checkpoint roots for train, eval and play
+
+A `checkpoint` must exist and, after resolving symlinks, lie under one of: the Isaac Lab checkout, the jobs folder, any
+`python_paths` entry or the `cwd` passed to the same call (so a project's own `checkpoints/` folder works when its source
+folder is on `python_paths`), or a folder listed in `ISAACLAB_CHECKPOINT_ROOTS` (`os.pathsep` list, for scratch or release
+folders). A refusal names every allowed root.
 
 ### Log and checkpoint roots
 
@@ -161,6 +198,8 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `ISAACLAB_TASK_MODULES` | install, jobs | Comma list of task modules to import before lookup |
 | `ISAACLAB_TASK_PATH` | install, jobs | `os.pathsep` list added to `PYTHONPATH` |
 | `ISAACLAB_EXTERNAL_CALLBACK` | install, jobs | Default `external_callback` (`module.function`) when a call gives none |
+| `ISAACLAB_CHECKPOINT_ROOTS` | jobs, metrics | `os.pathsep` list of extra folders train/eval/play may take checkpoints from; `metrics_summary`, `checkpoints_list` and `tensorboard_tail` may read runs there too |
+| `ISAACLAB_INSTALLS` | install | `os.pathsep` list of venvs, interpreters, checkouts or folders of venvs added to the known installs selectable with `install` |
 | `ISAACLAB_GPU_BUDGET_HOURS` | jobs, preflight | Optional GPU-hour cap (off by default) |
 | `ISAACLAB_GPU_LEDGER` | jobs, preflight | Optional JSON file for that cap (see preflight) |
 | `ISAACLAB_ALLOW_TMP` | metrics | `1` adds the temp dir to allowed roots (tests only) |
@@ -186,7 +225,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__runs_cancel` | Stop a job (SIGTERM then SIGKILL process group) |
 | `isaaclab__checkpoints_list` | List `*.pt`/`*.pth` checkpoints (newest first) |
 | `isaaclab__checkpoint_register` | Record a checkpoint's sha256, role and provenance in an append-only README table; refuses to overwrite a registered path |
-| `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count), or, with `eval_json`, pass counts of evaluation-result files by fall direction against a baseline |
+| `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count), or, with `eval_json`, your evaluation-result files scored against criteria you give (optionally against a baseline) |
 | `isaaclab__tensorboard_tail` | Last points of one TensorBoard scalar |
 
 ## What a checkout offers: the profile
@@ -227,8 +266,8 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
 - `task` must match `^[A-Za-z0-9_.:-]+$`. `rl_library` must match `^[a-z0-9_]+$`.
 - `extra_args` accepts syntactically validated `--flag`/`--flag=value` arguments and Hydra overrides
   such as `key.sub=value`, `+key=value`, or `~key`. It is not a semantic allowlist.
-- Checkpoint paths are resolved and must exist and lie under the Isaac Lab root or the jobs
-  directory. `run_dir` for metrics must lie under the allowed roots above.
+- Checkpoint paths are resolved and must exist and lie under the Isaac Lab root, the jobs
+  directory, a `python_paths`/`cwd` folder of the same call or `ISAACLAB_CHECKPOINT_ROOTS`. `run_dir` for metrics must lie under the allowed roots above.
 - Job ids match `^\d{8}-\d{6}-[A-Za-z0-9_.-]+$` (timestamp + task slug, with `-2`, `-3`
   suffixes if two launches land in the same second).
 - Durations are in seconds. `num_envs` defaults to 64 for train, 1 for play.
@@ -238,7 +277,8 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
 ### `isaaclab__install_info`
 
 - Parameters: none.
-- Returns: `{python, isaaclab_version, isaacsim_version, isaaclab_root, venv, source, rl_libraries, tested, profile}` on success, with a `note` if this pair isn't tested;
+- Parameters: `install` (optional), see [choosing the install](#choosing-the-isaac-lab-sim-install-per-call).
+- Returns: `{known_installs, python, isaaclab_version, isaacsim_version, isaaclab_root, venv, source, rl_libraries, tested, profile}` on success, with a `note` if this pair isn't tested;
   `{"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}` (or a probe error)
   on failure. A successful probe can still return null version fields if distributions are absent;
   it does not establish task import, renderer or training readiness.
@@ -251,11 +291,12 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
   | `filter` | string | no | `null` | Case-insensitive substring matched against the task id. |
-  | `python_path` | list of strings | no | `null` | Directories prepended to `PYTHONPATH`; see [external projects](#tasks-from-an-external-project). |
+  | `python_paths` | list of strings | no | `null` | Directories added to the front of `PYTHONPATH` (`python_path` is the older name); see [external projects](#tasks-from-an-external-project). |
   | `env` | object | no | `null` | Extra environment variables for the probe. |
   | `external_callback` | string | no | `null` | `module.function` imported and called before the registry is read. |
+  | `task_modules` | list of strings | no | `null` | Modules imported before the registry is read. |
 - Returns: `{envs: [{id, entry_point}], import_errors?, applied?, hint?}`. `import_errors` appears only if a
-  configured task module or callback failed. `applied` echoes the supplied `python_path`/callback. `hint` appears
+  configured task module or callback failed. `applied` echoes the supplied `python_paths`/callback. `hint` appears
   when `envs` is empty (nothing registered, or `filter` matched nothing) and explains how external tasks register.
   Short-lived subprocess with a 60 s timeout.
 - Example: `{"filter": "reach"}`
@@ -272,7 +313,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | `seed` | integer | no | `null` | |
   | `device` | string | no | `null` | Sets `CUDA_VISIBLE_DEVICES` when not `cpu`. |
   | `headless` | boolean | no | `true` | No window. Normally `--viz none`; `--video` selects Kit with child-only `HEADLESS=1`. `false` selects Kit with `HEADLESS=0`. |
-  | `checkpoint` | string | no | `null` | Path to resume from (must be under allowed roots). |
+  | `checkpoint` | string | no | `null` | Path to resume from (must be under the [checkpoint roots](#checkpoint-roots-for-train-eval-and-play)). |
   | `rl_library` | string | no | `null` | RL backend, e.g. `rl_games`, `rsl_rl`, `skrl`. Before launching, the tool runs `isaaclab__install_info`'s `rl_libraries` check in the same interpreter and refuses a library that is not importable there, naming the installed ones. If that check cannot run, the launch is not blocked. |
   | `physics` | string | no | `null` | `physx` or `newton`. Default: the task's own, often Newton on Lab 3. On Lab 3 it selects `physics=isaacsim_physx` or `physics=newton_mjwarp`; Lab 3's own `physics=physx` picks the optional OvPhysX runtime, which fails if it is not installed. Lab 2.x is PhysX only. A task with no engine presets fails with `did not match a selectable preset`: leave it out. |
   | `extra_args` | array[string] | no | `null` | Validated flags/Hydra overrides. |
@@ -389,8 +430,8 @@ never imported.
 |---|---|---|
 | `script` | required | Existing `.py` file. |
 | `args` | none | List of strings. |
-| `env` | none | Extra variables; keys must be valid identifiers, values strings. |
-| `python_path` | none | Folders put in front of `PYTHONPATH`. |
+| `env` | none | Extra variables, under the same rules as the `env` argument of `isaaclab__train` (see [external projects](#tasks-from-an-external-project)). |
+| `python_paths` | none | Folders put in front of `PYTHONPATH` (`python_path` is the older name). A `PYTHONPATH` in `env` is added the same way. |
 | `python` | configured `ISAACLAB_PYTHON` | Must be an executable file. |
 | `cwd` | the script's folder | Must exist. |
 | `label` | script name | Used in the `job_id` and `runs_list`. |
@@ -403,7 +444,10 @@ never imported.
 
 The script leads its own session and process group, so `isaaclab__runs_cancel` and the timeout kill Kit, ffmpeg
 and any other child it started. Output goes to the job's `stdout.log` and `stderr.log`; follow it with
-`isaaclab__runs_tail`. A line `ISAAC_MCP_ARTIFACT: <path>` on stdout names an output file. When the job ends,
+`isaaclab__runs_tail`. This is the supported route for a project's own evaluator (`isaaclab__eval` only scores Isaac
+Lab's `play.py` loop). A line `ISAAC_MCP_PROGRESS: <fraction | percent% | done/total> [text]` makes `isaaclab__runs_status`
+report `progress` (see [progress](#progress-marker)). A script job's `run_dir` is the job folder, so `metrics_summary` and
+`checkpoints_list` need the real run folder passed explicitly. A line `ISAAC_MCP_ARTIFACT: <path>` on stdout names an output file. When the job ends,
 `isaaclab__runs_status` returns `script_result`: `status`, `exit_code`, `wall_time_s`, `log_path`,
 `stderr_log_path` and `artifacts` (the printed paths, in order; they are not checked to exist).
 
@@ -513,34 +557,34 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
   |---|---|---|---|---|
   | `run_dir` | string | one of | — | Must be under allowed roots. Or give `job_id`, or `compare_jobs` (final scalars of several jobs side by side). |
   | `tags` | array[string] | no | `null` | Tag list; `null` summarises every available tag. |
-  | `eval_json` | array[string] | one of | `null` | Evaluation-result JSON files: switches to pass-count mode (below). |
-  | `criteria` | string | no | `v3` | With `eval_json`. `v3` (= `v3_ground_only`: criteria v3 before 3b, ground-only flight), `v3_latest_substep`, `v3_a4`, `v21`, `v2` or `strict`. |
-  | `label` | string | no | `null` | With `eval_json`: your name for the result, e.g. `v3 before 3b`; echoed back. |
-  | `baseline_json` / `baseline_label` | array[string] / string | no | `null` | With `eval_json`: the baseline's files on the same pose set, and its name (e.g. `recC`). |
-  | `allow_test` | boolean | no | `false` | With `eval_json`: permit the TEST pose set. Set it only when the user asked to score TEST. The result then has `test_split_used: true`. |
+  | `eval_json` | array[string] | one of | `null` | Evaluation-result JSON files or glob patterns: switches to result-file mode (below). |
+  | `criteria` | array[object] or string | no | `null` | With `eval_json`: `[{key, op, value, label?}]`, or an absolute path to a `.json`/`.yaml` file holding that list (or `{"criteria": [...]}`). |
+  | `label` | string | no | `null` | With `eval_json`: your name for the result, e.g. `candidate run`; echoed back. |
+  | `baseline_json` / `baseline_label` | array[string] / string | no | `null` | With `eval_json`: a baseline's files or patterns, scored with the same criteria, and its name. |
 - Returns: `{scalars: {<tag>: {last, min, max, step, count}}}`. Unknown tags return `{"error": "unknown tag", "available": [...]}`. Non-finite values are encoded as the strings `"nan"`, `"inf"`, `"-inf"`. Requires the `tensorboard` extra.
 - Example: `{"run_dir": "/abs/path/to/run", "tags": ["rewards/iter", "Episode/dist_m"]}`
 
-**Pass-count mode (`eval_json`).** Summarises a project's evaluation-result files instead of TensorBoard scalars, in the layout
-of an evaluator that writes `final_<name>_heldout_r1.json` files. It reads the files only. Give the repeat evaluations of one
-checkpoint on one pose set; the result is `{label, criteria, criteria_definition, split, pose_set, runs, pass_counts, mean_pass,
-min_pass, max_pass, n, pass_fraction_mean, by_direction_mean, baseline?, warnings?}`. Each run lists `pass_count`, `by_direction`
-(`side_a`, `prone`, `side_b`, `supine`), `direction_n`, `checkpoint`, `task` and `path`. With `baseline_json`, `baseline` has the
-same figures plus `delta_mean_pass` and `delta_by_direction`.
+**Result-file mode (`eval_json`).** Reads your own evaluator's result files (any JSON objects) instead of TensorBoard scalars; the
+files are read, never run or modified. `eval_json` and `baseline_json` entries are absolute paths or glob patterns
+(`*`, `?`, `[...]`, `**`), expanded in sorted order (at most 50 files); a pattern that matches nothing is an error.
 
-Where each figure comes from (the file's own keys, so a different layout fails rather than guesses): `v3` reads
-`amendment3.ground_only_flight.v3_before_selfpen` and `.by_category` (counts); `v3_latest_substep` reads
-`amendment3.plausible_v3_before_selfpen` and `..._by_category`; `v3_a4` reads
-`amendment3.proposed_a4_flight_history.v3_before_selfpen_with_a4` and `.v3_with_a4_by_category`; `v21` and `v2` read
-`plausible.plausible_v21_successes` / `plausible_v2_successes` and the `..._by_category` rates; `strict` reads
-`strict_supported_stand.successes` and `.by_category` rates. Rates become counts as rate times that direction's `by_category.<d>.n`
-(a count that does not add up to the file's total shows in `warnings`). The pose set comes from `pose_set`: `dev_v1.npz` and
-`heldout_poses.npz` are DEV, `heldout_v2.npz` is HELDOUT, `test_v2.npz` (or any name containing "test") is TEST.
+A criterion is `{key, op, value, label?}`: `key` is a dotted path to a number in the file (`stats.success_rate`,
+`episodes.0.reward`; a list index is a number; a boolean counts as 0/1), `op` one of `>=` (default), `>`, `<=`, `<`, `==`, `!=`
+(or `ge`, `gt`, `le`, `lt`, `eq`, `ne`), `value` the threshold, `label` a unique name (default `<key> <op> <value>`). `criteria` can
+instead be the absolute path of a `.json` file (or `.yaml`/`.yml` when PyYAML is installed) holding that list.
 
-Refused with an `error` naming the file: the **TEST** split (unless `allow_test=true` is passed); a
-file with no `pose_set` or an unknown one; mixed splits or pose counts in one call, or a baseline on another split; a missing
-expected key. Paths should be absolute: a relative one resolves from the server's working directory, and the error says where it looked. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
-Example: `{"eval_json": ["<run>/final_recC_heldout_r1.json", "<run>/final_recC_heldout_r2.json"], "label": "candidate", "baseline_json": ["<run>/final_base_heldout_r1.json"], "baseline_label": "baseline"}`
+With criteria the result is `{label, n_files, criteria, runs, summary, runs_passing_all, baseline?}`. Each run has `path`, `results`
+(`label`, `key`, `value`, `passed` per criterion), `passed` (all criteria) and `checkpoint`/`task` when the file has them. `summary`
+has per criterion `values`, `mean`, `min`, `max`, `passed_runs` and `n_runs`. With `baseline_json`, `baseline` has the same figures
+plus `delta_mean` (this mean minus the baseline's, per criterion).
+With no criteria nothing passes or fails: each run lists its `metrics` (every numeric value, flattened to dotted keys, at most 200),
+`metrics` gives mean/min/max over the files, and `note` says how to add criteria; `baseline.delta_mean` is per metric.
+
+A criterion whose key a file lacks, or whose value is not a number, is an `error` naming the file and the key path (and what the file
+has there). Paths should be absolute: a relative one resolves from the server's working directory, and the error says where it
+looked. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
+
+Example: `{"eval_json": ["<run>/eval_*.json"], "criteria": [{"key": "stats.success_rate", "op": ">=", "value": 0.9, "label": "success"}, {"key": "stats.mean_reward", "op": ">", "value": 100}], "label": "candidate", "baseline_json": ["<base>/eval_*.json"], "baseline_label": "baseline"}`
 
 ### `isaaclab__checkpoint_register`
 
@@ -565,7 +609,7 @@ The only tool of the pack that writes next to your files, so it is annotated add
   `same_content_as` lists other registered paths with identical bytes (not an error).
 - Git: `*.pt` is usually ignored, so in a work tree `git` reports `ignored_by_git` and the command to use, `git add -f <checkpoint> <registry>`.
   The tool never runs git.
-- Example: `{"path": "<repo>/checkpoints/recC.pt", "role": "baseline", "provenance": "g4j1_b1p2_it1425; 174.7/256 HELDOUT, criteria v3"}`
+- Example: `{"path": "<repo>/checkpoints/baseline.pt", "role": "baseline", "provenance": "run 2026-11-01_12-00-00, iteration 1425; mean success 0.91 on the validation set"}`
 
 ### `isaaclab__tensorboard_tail`
 
@@ -658,7 +702,7 @@ Example play call shape (illustrative):
 
 A task is a Python package the tools import before Lab looks up its id. In the MCP server's environment,
 set `ISAACLAB_TASK_PATH` to the folder containing the task package and `ISAACLAB_TASK_MODULES` to its module
-name (or pass `python_path` and `external_callback` per call, see
+name (or pass `python_paths` and `external_callback` per call, see
 [external projects](#tasks-from-an-external-project)). Keep the package's `__init__.py` free of Isaac Lab imports because it is imported before Kit starts.
 Task-specific environments, rewards and training code belong in the project using the MCP, not in this
 repository. Check a new task with a scripted action before training; evaluate completed episodes separately
@@ -784,8 +828,8 @@ the launch proceeds as before.
 ## Security and trust boundaries
 
 - Jobs invoke `train.py`/`play.py` with `shell=False` and a validated argument list.
-  Checkpoint paths are resolved against the Isaac Lab root and the jobs directory; metrics
-  paths against the allowed roots.
+  Checkpoint paths are resolved against the Isaac Lab root, the jobs directory, the call's
+  `python_paths`/`cwd` folders and `ISAACLAB_CHECKPOINT_ROOTS`; metrics paths against the allowed roots.
 - `extra_args` is syntactically validated (flags and Hydra overrides) but is not a semantic
   allow-list of safe flags.
 - The child process inherits a copy of the host environment; do not assume credentials or
@@ -794,6 +838,12 @@ the launch proceeds as before.
   trusted. Lab tools provide no `run_python` equivalent.
 
 ## Verified vs. version and platform limitations
+
+Known limits of the per-call options:
+
+- `isaaclab__preflight`, `runs_list` and the GPU-hour ledger look at the default install only; jobs do not record which `install` ran them.
+- `isaaclab__checkpoint_register` takes any readable checkpoint file; the root rules above apply to the launching tools, not to it.
+- Checkpoint and metric discovery is tested most for `rsl_rl` and `rl_games`: `checkpoints_list` finds stable-baselines3 `.zip` files only under a path containing `sb3`, and `metrics_summary` reads TensorBoard scalars only.
 
 See the [compatibility matrix](COMPATIBILITY.md) for simulator and Isaac Lab version pairings and the scope of each test.
 

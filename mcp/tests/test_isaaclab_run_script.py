@@ -156,9 +156,9 @@ def test_concurrency_and_kit_bridge_guards(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("kwargs,msg", [
-    ({"env": {"1BAD": "x"}}, "valid identifier"),
-    ({"env": {"A-B": "x"}}, "valid identifier"),
-    ({"env": {"OK": 1}}, "must be a string"),
+    ({"env": {"1BAD": "x"}}, "invalid env variable name"),
+    ({"env": {"A-B": "x"}}, "invalid env variable name"),
+    ({"env": {"OK": True}}, "must be a string"),
     ({"args": [1]}, "list of strings"),
     ({"timeout_s": 0}, "timeout_s"),
     ({"timeout_s": True}, "timeout_s"),
