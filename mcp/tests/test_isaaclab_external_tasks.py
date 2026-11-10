@@ -62,7 +62,7 @@ def test_validate_accepts_good_options(tmp_path):
 
 
 @pytest.mark.parametrize("key", ["LD_PRELOAD", "ld_library_path", "PATH", "PYTHONPATH", "PYTHONSTARTUP", "HOME",
-                                 "CUDA_VISIBLE_DEVICES", "ISAAC_MCP_X", "ISAACLAB_PYTHON", "BASH_ENV"])
+                                 "ISAAC_MCP_X", "ISAACLAB_PYTHON", "BASH_ENV"])
 def test_validate_refuses_protected_env(key):
     with pytest.raises(ValueError, match="protected"):
         install.validate_launch_options(env={key: "x"}, environ={})
@@ -172,7 +172,7 @@ def test_check_and_record_forward_options(tmp_path, monkeypatch, fn):
 
 def test_record_with_checkpoint_forwards_options(tmp_path, monkeypatch):
     seen = {}
-    monkeypatch.setattr(jobs, "_validate_checkpoint", lambda c, r: str(c))
+    monkeypatch.setattr(jobs, "_validate_checkpoint", lambda c, r, *a: str(c))
     monkeypatch.setattr(jobs, "_start_job", lambda *a, **kw: seen.update(kw) or {"job_id": "x"})
     jobs.record(python="python", root=tmp_path, task="T", checkpoint="/c.pt", external_callback="a.b")
     assert seen["external_callback"] == "a.b"
@@ -316,17 +316,19 @@ def test_runs_list_rejects_bad_arguments(many_jobs, kwargs):
 
 # --- where Isaac Lab 3.0.0 runs --external_callback: only the rsl_rl entry points ---------------------
 
-def test_explicit_callback_refused_for_other_libraries_and_check_jobs(tmp_path):
+def test_explicit_callback_is_run_by_the_server_for_other_libraries_and_check_jobs(tmp_path):
     root = make_root(tmp_path)
-    with pytest.raises(ValueError, match="only rsl_rl does"):
-        jobs._start_job_locked(str(fake_python(tmp_path)), root, "train", "T", [], rl_library_check="skrl",
-                               external_callback="p.m.f", allow_concurrent=True, allow_concurrent_gpu=True)
-    with pytest.raises(ValueError, match="zero/random agent"):
-        jobs._start_job_locked(str(fake_python(tmp_path)), root, "env_check", "T", [], check_options={"agent": "zero", "mode": "check", "steps": 1},
-                               external_callback="p.m.f", allow_concurrent=True, allow_concurrent_gpu=True)
+    (root / "scripts" / "environments").mkdir(parents=True)
+    (root / "scripts" / "environments" / "zero_agent.py").write_text("")
+    for kw in ({"kind": "train", "rl_library_check": "skrl"},
+               {"kind": "env_check", "check_options": {"agent": "zero", "mode": "check", "steps": 1}}):
+        res = jobs._start_job_locked(str(fake_python(tmp_path)), root, kw.pop("kind"), "T", [],
+                                     external_callback="p.m.f", allow_concurrent=True, allow_concurrent_gpu=True, **kw)
+        assert not any(str(c).startswith("--external_callback") for c in res["command"])
+        wait(res["job_id"])
 
 
-def test_env_default_callback_is_skipped_for_other_libraries(tmp_path, monkeypatch):
+def test_env_default_callback_is_run_by_the_server_for_other_libraries(tmp_path, monkeypatch):
     root = make_root(tmp_path)
     monkeypatch.setenv("ISAACLAB_EXTERNAL_CALLBACK", "p.m.f")
     monkeypatch.setattr(jobs, "_require_library_installed", lambda *a: None)

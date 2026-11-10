@@ -42,6 +42,10 @@ def _derive_root(python: Path) -> Path | None:
     candidate = venv.parent / "IsaacLab"
     if candidate.is_dir():
         return candidate
+    # A workspace keeps each environment beside its checkout: envs/<name> with envs/<name>-src.
+    sibling = venv.parent / f"{venv.name}-src"
+    if (sibling / "scripts" / "reinforcement_learning").is_dir():
+        return sibling
     return None
 
 
@@ -218,7 +222,164 @@ def project_lab_setting(env: Any = None) -> dict | None:
     return {"file": str(file), "python": str(python), "root": str(root) if root else None, "venv": str(venv)}
 
 
-def locate_install(env: Any = None) -> dict | None:
+_INSTALLS_ENV = "ISAACLAB_INSTALLS"
+_DIST_RE = re.compile(r"^isaaclab-(?P<v>[0-9][^-]*)\.dist-info$")
+
+
+def _venv_lab_version(venv: Path) -> str | None:
+    """The isaaclab distribution version of a virtual environment, from its files; nothing is run."""
+    for lib in ("lib", "lib64"):
+        for site in (venv / lib).glob("python*/site-packages"):
+            for d in site.glob("isaaclab-*.dist-info"):
+                m = _DIST_RE.match(d.name)
+                if m:
+                    return m.group("v")
+    return None
+
+
+def _install_record(python: Path, root: Path | None, source: str) -> dict | None:
+    venv = _derive_venv(python)
+    if venv is None or not python.is_file() or not os.access(python, os.X_OK) or not _has_isaaclab_metadata(venv):
+        return None
+    root = root or _derive_root(python)
+    return {"name": venv.name, "python": str(python), "isaaclab_root": str(root) if root else None,
+            "venv": str(venv), "isaaclab_version": _venv_lab_version(venv), "source": source}
+
+
+def _records_under(entry: str, source: str) -> list[dict]:
+    """Installs named by one path: a venv folder, its interpreter, a Lab checkout (with .venv), or a folder of venvs."""
+    p = Path(entry).expanduser()
+    if not p.is_absolute() or not p.exists():
+        return []
+    if p.is_file():
+        rec = _install_record(p, None, source)
+        return [rec] if rec else []
+    if (p / "bin" / "python").is_file():
+        rec = _install_record(p / "bin" / "python", None, source)
+        return [rec] if rec else []
+    if (p / ".venv" / "bin" / "python").is_file() and (p / "scripts" / "reinforcement_learning").is_dir():
+        rec = _install_record(p / ".venv" / "bin" / "python", p, source)
+        return [rec] if rec else []
+    out = []
+    for py in sorted(p.glob("*/bin/python")):
+        rec = _install_record(py, None, source)
+        if rec:
+            out.append(rec)
+    return out
+
+
+def _isaac_env_candidates(env: Any) -> list[str]:
+    """Interpreters scripts/isaac_env.py finds (it reads files only); empty when the script is not beside this package."""
+    script = Path(__file__).resolve().parents[3] / "scripts" / "isaac_env.py"
+    if not script.is_file():
+        return []
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("_isaac_env_discovery", script)
+        mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return [c["path"] for c in mod.find_candidates(dict(env)) if c.get("kind") == "pip" and c.get("isaaclab")]
+    except Exception:  # noqa: BLE001 - discovery is a convenience; the explicit forms still work
+        return []
+
+
+def known_installs(env: Any = None) -> list[dict]:
+    """Isaac Lab installs this server can target by name: the configured default, ``ISAACLAB_INSTALLS`` (os.pathsep list of
+    venvs, interpreters, checkouts or folders of venvs), the folder holding the default's venv and the workspace's
+    ``envs/`` (where isaac_env.py looks), and what isaac_env.py finds. Read from files; nothing is run."""
+    e = _env(env)
+    found: dict[str, dict] = {}
+
+    def add(rec: dict | None) -> None:
+        if rec and os.path.realpath(rec["venv"]) not in found:
+            found[os.path.realpath(rec["venv"])] = rec
+
+    default = (locate_install() if env is None else locate_install(e))
+    if default and default.get("python"):
+        add(_install_record(Path(default["python"]), Path(default["isaaclab_root"]) if default.get("isaaclab_root") else None, "default"))
+        if found:
+            next(iter(found.values()))["default"] = True
+        venv = _derive_venv(Path(default["python"]))
+        if venv is not None:
+            for rec in _records_under(str(venv.parent), "sibling"):
+                add(rec)
+    workspace = str(e.get("ISAAC_MCP_WORKSPACE") or "").strip()
+    if workspace:
+        for rec in _records_under(str(Path(workspace).expanduser() / "envs"), "workspace"):
+            add(rec)
+    for entry in str(e.get(_INSTALLS_ENV) or "").split(os.pathsep):
+        if entry.strip():
+            for rec in _records_under(entry.strip(), _INSTALLS_ENV):
+                add(rec)
+    for path in _isaac_env_candidates(e):
+        add(_install_record(Path(path), None, "isaac_env.py"))
+    return [r for r in found.values() if r.get("isaaclab_version")]
+
+
+def _public_install(rec: dict) -> dict:
+    return {k: rec.get(k) for k in ("name", "isaaclab_version", "python", "isaaclab_root", "source", "default") if rec.get(k) is not None}
+
+
+def _project_install_selector(env: Any) -> str | None:
+    """``isaaclab_install`` from the project file named by ISAAC_MCP_PROJECT (never a file found by walking up)."""
+    file = _named_project_file(env)
+    if file is None:
+        return None
+    try:
+        value = json.loads(file.read_text(encoding="utf-8")).get("isaaclab_install")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _matches(rec: dict, sel: str) -> bool:
+    s = sel.lower().lstrip("v")
+    name, ver = rec["name"].lower(), str(rec.get("isaaclab_version") or "").lower()
+    return (s == name or s == f"lab-{name}" or re.search(rf"(?<![0-9.]){re.escape(s)}(?![0-9])", name) is not None
+            or ver == s or ver.startswith(s + "."))
+
+
+def resolve_install(selector: Any, env: Any = None) -> tuple[dict | None, str | None]:
+    """Pick the Isaac Lab install for one call: ``(location, None)`` or ``(None, error)``.
+
+    ``selector`` is None/"default" (the configured default, which stays Isaac Lab 3.0.0 on this setup), a known install's name
+    or version (``lab-2.3.2``, ``2.3``, ``3.0.0``; see isaaclab__install_info's ``known_installs``), or an absolute path to a
+    venv, its interpreter, or a Lab checkout holding a ``.venv``. A path must be a virtual environment with Isaac Lab
+    installed (checked from its files). The server's ISAACLAB_PYTHON is never changed, and nothing is restarted."""
+    e = _env(env)
+    if selector is None or (isinstance(selector, str) and not selector.strip()):
+        selector = _project_install_selector(e)  # an explicit project choice wins over the harness default
+    if selector is None or selector == "default":
+        loc = (locate_install() if env is None else locate_install(e))
+        return (loc, None) if loc else (None, "no default Isaac Lab install is configured")
+    if not isinstance(selector, str) or "\0" in selector:
+        return None, "install must be a name, a version or an absolute path"
+    if selector.startswith(("/", "~")):
+        recs = _records_under(selector, "path")
+        if len(recs) != 1:
+            return None, (f"install {selector!r} is not one virtual environment with Isaac Lab installed "
+                          "(give its folder, its bin/python, or a checkout with a .venv)")
+        recs[0]["source"] = f"install:{selector}"
+        return recs[0], None
+    known = known_installs(e)
+    hits = [r for r in known if _matches(r, selector)]
+    exact = [r for r in hits if r["name"].lower() == selector.lower()]
+    hits = exact or hits
+    if len(hits) > 1:  # duplicates of one Lab (a sim env holding the same Lab): prefer the one that has a checkout
+        rooted = [r for r in hits if r.get("isaaclab_root")]
+        hits = rooted if len(rooted) == 1 else hits
+    if len(hits) == 1:
+        return {**hits[0], "source": f"install:{selector}"}, None
+    names = ", ".join(f"{r['name']} (isaaclab {r['isaaclab_version']})" for r in known) or "none found"
+    what = "matches several installs" if hits else "matches no known install"
+    return None, (f"install {selector!r} {what}. Known: {names}. Use a more specific name, an absolute path, "
+                  f"or list more with {_INSTALLS_ENV} (os.pathsep list of venvs).")
+
+
+def locate_install(env: Any = None, install: Any = None) -> dict | None:
+    if install is not None and install != "default":
+        return resolve_install(install, env)[0]
     e = _env(env)
 
     isaac_python = None
@@ -295,8 +456,10 @@ def locate_install(env: Any = None) -> dict | None:
 _MISSING = {"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}
 
 
-def install_info(env: Any = None) -> dict:
-    loc = locate_install(env)
+def install_info(env: Any = None, install: Any = None) -> dict:
+    loc, why = resolve_install(install, env)
+    if why and install is not None:
+        return {"error": why, "known_installs": [_public_install(r) for r in known_installs(env)]}
     if not loc:
         project = project_lab_setting(env)
         if project is not None and "error" in project:
@@ -341,6 +504,7 @@ def install_info(env: Any = None) -> dict:
     except (json.JSONDecodeError, ValueError):
         return {"error": f"malformed output: {(proc.stdout or '')[:200]}", "hint": "set ISAACLAB_PYTHON"}
     result = {
+        "known_installs": [_public_install(r) for r in known_installs(env)],
         "python": python,
         "isaaclab_version": data.get("isaaclab"),
         "isaacsim_version": data.get("isaacsim"),
@@ -402,7 +566,6 @@ _CALLBACK_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+\Z
 # manages the job. PYTHONPATH has its own argument (python_path); the device, display and EULA have theirs.
 _PROTECTED_ENV = frozenset({
     "PATH", "HOME", "USER", "LOGNAME", "SHELL", "IFS", "BASH_ENV", "ENV", "CDPATH", "TMPDIR", "PWD",
-    "CUDA_VISIBLE_DEVICES", "HEADLESS", "OMNI_KIT_ACCEPT_EULA", "PYTHONUNBUFFERED",
     "ISAACLAB_PYTHON", "ISAACLAB_ROOT", "ISAACLAB_JOBS_DIR", "ISAACSIM_PATH", "ISAAC_MCP_PYTHON",
 })
 _PROTECTED_ENV_PREFIXES = ("LD_", "DYLD_", "PYTHON", "ISAAC_MCP_", "BASH_FUNC_")
@@ -410,44 +573,90 @@ _SAFE_PYTHON_ENV = frozenset({"PYTHONHASHSEED", "PYTHONFAULTHANDLER"})
 _MAX_ENV_VALUE = 4096
 
 
+def validate_env(env: Any) -> dict[str, str]:
+    """The one environment-variable policy of every Isaac Lab tool (train, eval, play, env_check, record, envs_list, run_script).
+
+    Names are identifiers, values short strings without NUL. Refused: variables that change which code the
+    interpreter loads or where it looks (PATH, HOME, LD_*, PYTHON* except PYTHONHASHSEED/PYTHONFAULTHANDLER, ...)
+    and the settings this server owns (ISAAC_MCP_*, ISAACLAB_PYTHON/ROOT/JOBS_DIR). OMNI_KIT_ACCEPT_EULA,
+    CUDA_VISIBLE_DEVICES and HEADLESS are allowed: a tool's own device/headless argument still wins for the last two.
+    """
+    extra: dict[str, str] = {}
+    if env is None:
+        return extra
+    if not isinstance(env, dict):
+        raise ValueError("env must be an object of variable names to string values")
+    for key, value in env.items():
+        if not isinstance(key, str) or not _ENV_KEY_RE.match(key):
+            raise ValueError(f"invalid env variable name: {key!r}: use letters, digits and underscores")
+        upper = key.upper()
+        if key not in _SAFE_PYTHON_ENV and (upper in _PROTECTED_ENV or upper.startswith(_PROTECTED_ENV_PREFIXES)):
+            hint = " Use python_path instead." if upper == "PYTHONPATH" else ""
+            raise ValueError(f"env variable {key} is protected and cannot be set by any Isaac Lab tool.{hint or ' Set it in the MCP server environment (client config) if it is really needed.'}")
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            raise ValueError(f"env value for {key} must be a string")
+        text = str(value)
+        if "\0" in text or len(text) > _MAX_ENV_VALUE:
+            raise ValueError(f"env value for {key} is invalid or too long")
+        extra[key] = text
+    return extra
+
+
+_MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\Z")
+
+
+def validate_cwd(cwd: Any) -> Path | None:
+    """A working directory for a job: an existing directory (``~`` expanded), or None when not given."""
+    if cwd is None or cwd == "":
+        return None
+    if not isinstance(cwd, (str, os.PathLike)) or "\0" in str(cwd):
+        raise ValueError("cwd must be a directory path")
+    d = Path(cwd).expanduser()
+    if not d.is_dir():
+        raise ValueError(f"cwd is not a directory: {d}")
+    return d.resolve()
+
+
+def validate_python_path(python_path: Any) -> list[str]:
+    """``python_path`` for every Isaac Lab tool (run_script included): a list of existing absolute directories."""
+    paths: list[str] = []
+    if python_path is None:
+        return paths
+    if isinstance(python_path, str) or not isinstance(python_path, (list, tuple)):
+        raise ValueError("python_path must be a list of directories")
+    for entry in python_path:
+        if not isinstance(entry, str) or not entry.strip() or "\0" in entry or os.pathsep in entry:
+            raise ValueError(f"invalid python_path entry: {entry!r}")
+        d = Path(entry).expanduser()
+        if not d.is_absolute():
+            raise ValueError(f"python_path entries must be absolute directories: {entry!r}")
+        if not d.is_dir():
+            raise ValueError(f"python_path entry is not an existing directory: {entry!r}")
+        paths.append(str(d))
+    return paths
+
+
 def validate_launch_options(python_path: Any = None, env: Any = None, external_callback: Any = None,
-                            environ: Any = None) -> dict:
+                            environ: Any = None, task_modules: Any = None) -> dict:
     """Check the optional task-registration settings of a launch; returns ``python_path``, ``env``, ``external_callback``.
 
     ``python_path`` is a list of existing absolute directories (prepended to PYTHONPATH), ``env`` a dict of extra
     environment variables, ``external_callback`` a dotted ``module.func`` passed to Isaac Lab as
     ``--external_callback=...``. Without ``external_callback``, ``ISAACLAB_EXTERNAL_CALLBACK`` is the default.
     """
-    paths: list[str] = []
-    if python_path is not None:
-        if isinstance(python_path, str) or not isinstance(python_path, (list, tuple)):
-            raise ValueError("python_path must be a list of directories")
-        for entry in python_path:
-            if not isinstance(entry, str) or not entry.strip() or "\0" in entry or os.pathsep in entry:
-                raise ValueError(f"invalid python_path entry: {entry!r}")
-            d = Path(entry).expanduser()
-            if not d.is_absolute():
-                raise ValueError(f"python_path entries must be absolute directories: {entry!r}")
-            if not d.is_dir():
-                raise ValueError(f"python_path entry is not an existing directory: {entry!r}")
-            paths.append(str(d))
-    extra: dict[str, str] = {}
-    if env is not None:
-        if not isinstance(env, dict):
-            raise ValueError("env must be an object of variable names to string values")
-        for key, value in env.items():
-            if not isinstance(key, str) or not _ENV_KEY_RE.match(key):
-                raise ValueError(f"invalid env variable name: {key!r}: use letters, digits and underscores")
-            upper = key.upper()
-            if key not in _SAFE_PYTHON_ENV and (upper in _PROTECTED_ENV or upper.startswith(_PROTECTED_ENV_PREFIXES)):
-                hint = " Use python_path instead." if upper == "PYTHONPATH" else ""
-                raise ValueError(f"env variable {key} is protected and cannot be set here.{hint}")
-            if isinstance(value, bool) or not isinstance(value, (str, int, float)):
-                raise ValueError(f"env value for {key} must be a string")
-            text = str(value)
-            if "\0" in text or len(text) > _MAX_ENV_VALUE:
-                raise ValueError(f"env value for {key} is invalid or too long")
-            extra[key] = text
+    paths = validate_python_path(python_path)
+    extra = validate_env(env)
+    if task_modules is not None:
+        if isinstance(task_modules, str) or not isinstance(task_modules, (list, tuple)):
+            raise ValueError("task_modules must be a list of dotted module names")
+        mods = []
+        for m in task_modules:
+            if not isinstance(m, str) or not _MODULE_RE.match(m):
+                raise ValueError(f"invalid task_modules entry: {m!r}: use a dotted module name such as pkg.tasks")
+            mods.append(m)
+        if mods:  # same effect as ISAACLAB_TASK_MODULES, which the launchers import before the task is looked up
+            have = [x.strip() for x in extra.get("ISAACLAB_TASK_MODULES", "").split(",") if x.strip()]
+            extra["ISAACLAB_TASK_MODULES"] = ",".join(have + [m for m in mods if m not in have])
     callback = external_callback
     if callback is None:
         callback = str(_env(environ).get("ISAACLAB_EXTERNAL_CALLBACK") or "").strip() or None
@@ -482,9 +691,12 @@ def scan_task_ids(root: Any) -> list[str]:
 
 
 def envs_list(filter: Any = None, env: Any = None, timeout: int = 60, python_path: Any = None,
-              task_env: Any = None, external_callback: Any = None) -> dict:
-    opts = validate_launch_options(python_path, task_env, external_callback, env)
-    loc = locate_install(env)
+              task_env: Any = None, external_callback: Any = None, task_modules: Any = None,
+              install: Any = None) -> dict:
+    opts = validate_launch_options(python_path, task_env, external_callback, env, task_modules)
+    loc, why = resolve_install(install, env)
+    if why and install is not None:
+        return {"error": why}
     if not loc:
         return dict(_MISSING)
     python = loc["python"]
