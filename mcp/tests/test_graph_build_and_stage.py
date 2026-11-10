@@ -1,8 +1,7 @@
 """sim.graph.build spec checks, sim.stage.open path checks, and the save composition-error filter.
 
-From DeepSeek student run 4: every graph was built by hand in run_python, the scene was opened in
-run_python, and saving a scene with a ROS camera was a dead end because the lab handout has two
-dangling internal references.
+Graphs are otherwise built by hand in run_python, scenes opened in run_python, and saving a scene
+with a ROS camera fails on dangling internal references; these tools cover each of those.
 """
 
 import importlib.util
@@ -25,6 +24,7 @@ def load(name):
 gb = load("graph_build")
 so = load("stage_open")
 
+TICK, PUB = "omni.graph.action.OnPlaybackTick", "isaacsim.ros2.bridge.ROS2PublishClock"
 NODES = [["tick", "omni.graph.action.OnPlaybackTick"], ["pub", "isaacsim.ros2.bridge.ROS2PublishClock"]]
 
 
@@ -39,7 +39,7 @@ def test_spec_accepts_the_lab_clock_graph_and_full_paths():
     assert spec["evaluator"] == "execution"
 
 
-def test_antigravity_serialized_clock_payload_and_nested_targets():
+def test_serialized_clock_payload_and_nested_targets():
     spec = gb.parse_spec({
         "path": "/World/ROS_Clock",
         "nodes": ['["tick", "omni.graph.action.OnPlaybackTick"]',
@@ -129,7 +129,7 @@ def test_spec_refuses_bad_input_with_a_code(bad, code):
 
 
 def test_token_keys_are_stored_as_their_values():
-    # Scale To/From Stage Units: the student's "toStage" made the node output zeros silently.
+    # Scale To/From Stage Units: the key "toStage" (not "Convert to stage units") made the node output zeros silently.
     raw = {"toStage": "Convert to stage units", "toMeters": "Convert to meters"}
     assert gb.token_value("Convert to stage units", raw) == ("Convert to stage units", None)
     value, note = gb.token_value("toStage", raw)
@@ -192,7 +192,7 @@ def test_node_types_report_allowed_token_values():
 
 
 def test_allowed_tokens_in_list_and_string_form():
-    # Review of #64: Isaac's ALLOWED_TOKENS_RAW can be a JSON list or a comma string, not only a dict.
+    # Isaac's ALLOWED_TOKENS_RAW can be a JSON list or a comma string, not only a dict.
     assert gb.token_value("B", ["foo", "B"]) == ("B", None)
     assert gb.token_value("foo", "foo,B") == ("foo", None)
     with pytest.raises(gb.SpecError):
@@ -319,3 +319,20 @@ def test_a_clock_with_no_time_source_is_noted():
     assert gb.unstamped_clocks(dict(nodes=nodes, connections=[], values=[])) == ["clock"]
     assert gb.unstamped_clocks(dict(nodes=nodes, connections=wired, values=[])) == []
     assert gb.unstamped_clocks(dict(nodes=nodes, connections=[], values=[("clock", "inputs:timeStamp", 1.0)])) == []
+
+
+def test_graph_spec_accepts_the_shapes_weak_models_send():
+    spec = gb.parse_spec(dict(path="/World/ROS_Clock",
+                              nodes=[[TICK, "tick"], {"name": "pub", "type": PUB}],   # type first; object
+                              connections=[["tick", "tick", "pub", "execIn"],          # 4 parts, bare ports
+                                           {"from": "tick.outputs:tick", "to": "pub.inputs:execIn"}]))
+    assert spec["nodes"] == [("tick", TICK), ("pub", PUB)]
+    # A bare source port stays unresolved until build() sees the real node (constant nodes have
+    # only inputs:value); a bare destination is always an input.
+    assert spec["connections"] == [(("tick", "?tick"), ("pub", "inputs:execIn")),
+                                   (("tick", "outputs:tick"), ("pub", "inputs:execIn"))]
+    assert any("type first" in n for n in spec["notes"])
+    with pytest.raises(gb.SpecError, match="name, node_type"):
+        gb.parse_spec(dict(path="/G", nodes=[{"kind": TICK}]))
+    with pytest.raises(gb.SpecError, match="srcNode, srcPort"):
+        gb.parse_spec(dict(path="/G", nodes=[["tick", TICK]], connections=[["a", "b", "c"]]))

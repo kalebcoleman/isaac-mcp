@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -287,3 +286,25 @@ def test_many_imports_fit_and_a_nearly_full_disk_refuses(broker, monkeypatch):
         broker.snapshot("demo", "robot.usda")
     assert error.value.code == "QUOTA" and "MiB free" in str(error.value)
     assert not list(broker.staging.iterdir())
+
+
+def test_a_folder_that_is_the_approved_root_picks_the_usd_named_after_it():
+    """The recommended smallest folder is the root itself, whose relative name was empty, so Teapot/Teapot.usd was not picked."""
+    from isaac_mcp import asset_formats
+
+    files = ["Teapot.usd", "DrawModes.usd", "geo/Fancy.usd"]
+    found = asset_formats.candidates(files, lambda rel: b"", "", "Teapot")
+    assert asset_formats.choose(found)["entry"] == "Teapot.usd"
+    with pytest.raises(a.AssetError):
+        asset_formats.choose(asset_formats.candidates(files, lambda rel: b"", "", "Other"))
+    inner = [f"sub/{f}" for f in ("sub.usd", "other.usd")]
+    assert asset_formats.choose(asset_formats.candidates(inner, lambda rel: b"", "sub", "Root"))["entry"] == "sub/sub.usd"
+
+
+def test_the_snapshot_quota_refusal_names_the_folder_and_what_to_do(broker, monkeypatch):
+    monkeypatch.setattr(a, "MAX_SNAPSHOTS", 1)
+    broker.snapshot("demo", "robot.usda")
+    (broker.roots["demo"][0] / "robot.usda").write_text("#usda 1.0\n#\n")
+    with pytest.raises(a.AssetError) as error:
+        broker.snapshot("demo", "robot.usda")
+    assert error.value.code == "QUOTA" and str(broker.staging) in str(error.value) and "delete" in str(error.value)

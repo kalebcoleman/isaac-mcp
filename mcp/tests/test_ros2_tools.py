@@ -449,7 +449,7 @@ def test_rviz_config_sets_a_usable_window_size(tmp_path):
 
 
 def test_rviz_config_scan_is_flat_coloured_and_odometry_keeps_one_arrow(tmp_path):
-    # Student run 2: Isaac's 2D lidar sends zero intensities (scan invisible with Intensity colouring),
+    # Isaac's 2D lidar sends zero intensities (scan invisible with Intensity colouring),
     # and 50 default-size odometry arrows covered the view.
     out = tmp_path / "s.rviz"
     rviz.main(["--fixed-frame", "odom", "--out", str(out), "--scan", "/scan", "--odom", "/odom"])
@@ -504,7 +504,7 @@ def test_a_timeline_restart_is_a_warning_not_an_error(monkeypatch, capsys):
 
 
 def test_tf_far_from_the_clock_is_an_error():
-    # The twin's clock keeps counting across stop/play while TF restarted at 0 (round-1 finding).
+    # The twin's clock keeps counting across stop/play while TF restarted at 0.
     edges = GOOD[:1] + [e("base_link", "tool0", stamp=2.0)]
     errors, *_ = doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/twin"], clock_times=[121.9, 122.0])
     assert any("1 frame(s) differ from /clock" in x and "tool0 -120.0 s" in x for x in errors)
@@ -652,7 +652,7 @@ def test_one_robot_on_the_wrong_time_base_is_not_hidden_by_another():
 
 
 def test_sensor_stamps_far_from_the_clock_are_an_error():
-    # Student run 2: the clock graph had resetOnStop=False, the lidar helper restarted at 0 on Stop,
+    # The clock graph had resetOnStop=False, the lidar helper restarted at 0 on Stop,
     # and RViz dropped every /scan. TF looked fine, so only a per-topic check finds it.
     edges = GOOD[:1] + [e("base_link", "tool0", stamp=40.0)]
     stamps = {"/scan": [(3.0, 39.9), (3.1, 40.0)], "/camera/image_raw": [(40.0, 40.0)], "/odom": []}
@@ -681,7 +681,7 @@ def test_doctor_passes_extra_topics_to_capture(monkeypatch, capsys):
 
 
 def test_unchecked_topics_and_wall_clock_sensor_stamps():
-    # Review of #60: a headerless --topic (e.g. /cmd_vel) is "not checked", not "no messages";
+    # A headerless --topic (e.g. /cmd_vel) is "not checked", not "no messages";
     # a sensor on wall-clock time next to a sim-time /clock is an error.
     edges = GOOD[:1]
     errors, warnings, info = doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/c"],
@@ -694,13 +694,13 @@ def test_unchecked_topics_and_wall_clock_sensor_stamps():
 
 
 def test_wall_clock_sensor_stamps_are_fine_when_clock_is_wall_time_too():
-    # Round 2 of #60: `ros2 bag play --clock` publishes wall time on /clock.
+    # `ros2 bag play --clock` publishes wall time on /clock.
     errors, *_ = doctor.analyze(GOOD[:1], "world", clock_seen=True, clock_publishers=["/bag"],
                                 clock_times=[1.79e9], topic_stamps={"/scan": [(1.79e9, 1.79e9)]})
     assert not any("wall-clock time" in x for x in errors)
 
 
-# ---- PR D: RViz view options, the /cmd_vel driver and scripts/ros_env.sh ---------------------
+# ---- RViz view options, the /cmd_vel driver and scripts/ros_env.sh ---------------------
 
 def _rviz(tmp_path, *extra):
     out = tmp_path / "v.rviz"

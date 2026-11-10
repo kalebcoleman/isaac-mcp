@@ -241,7 +241,7 @@ Each run used `--realtime`, the room above and a goal at (2.2, 0), with ROS 2 Ja
 
 Without `--realtime`, TurtleBot3 reached `SUCCEEDED` on 6.2 and `ABORTED` on 5.1 at the goal position. `franka` loads on both builds; it was not driven. Isaac Sim 6.0 and 6.1 weren't available on the machine used: NVIDIA's files for these names exist on both, and TurtleBot3's 6.1 files are identical to 6.2's, but the runs are still to do. RViz was not opened in these runs.
 
-Details and pictures: [the evidence record](evidence/public-robot-nav2-2026-11-04/README.md).
+Details and pictures: [the evidence record](evidence/public-robot-nav2/README.md).
 
 
 ### Wheels spin but the robot stays put

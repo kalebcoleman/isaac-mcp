@@ -75,7 +75,7 @@ In 6.2, `isaacsim.ros2.bridge.ROS2PublishTransformTree` has two input paths:
    Set `targetPrims` (and `parentPrim`) on the **compute** node. The publisher uses these arrays when
    `parentFrames` is non-empty at its first compute.
 
-So both student reports were right: TF works without the compute node, with a deprecation warning,
+So both layouts work: TF works without the compute node, with a deprecation warning,
 and the compute node is the supported 6.2 layout. One difference was measured on this scene:
 
 | Compute node `targetPrims` | Frames on `/tf` |
@@ -96,7 +96,7 @@ graphs unless the lab asks for its own graph.
 - The `PoseTree` warning naming a camera can repeat every frame. It is harmless, but it floods the log.
 - A flattened checkpoint is large (about 97 MB for the RAS545 scene), because saves flatten everything.
 - A LiDAR topic missing after reopening a saved scene has a known cause and fix; see [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
-- In the RAS545 starter, the ground plane is at z=-0.75, and it reports `composition_errors: 2` on opening. Neither was a fault in run 8.
+- In the RAS545 starter, the ground plane is at z=-0.75, and it reports `composition_errors: 2` on opening. Neither is a fault of the tools.
 - Lab instructions that assume ROS domain 0 need adapting if another simulator holds it. A saved graph can author its own domain: a `ROS2Context` node with `useDomainIDEnvVar` off publishes on its authored `domain_id`, whatever `ROS_DOMAIN_ID` and `sim__stage__info` say, so a shell on another domain sees no topics. Lab files were seen authoring different domains, so check the graph; `sim__graph__inspect` adds `ros_domain_note` when they differ.
 - OpenCode Code Mode has no timers, so agents use shell sleeps, and tool results arrive as JSON inside a `result` string.
 
@@ -105,5 +105,5 @@ graphs unless the lab asks for its own graph.
 Isaac Sim 6.2 bundles both Humble and Jazzy bridge libraries. `run.sh` picks Humble on Ubuntu
 22.04 and Jazzy otherwise, unless `ROS_DISTRO` is exported. Use the same distro for RViz 2, Nav2
 and the `ros2` CLI: with `config/ros_dds.env` (Cyclone, loopback only), Jazzy -> Humble delivered 0 of 8
-messages in a test on an Ubuntu 24.04 desktop (reported by the user; not re-run on the 22.04 PC). See
+messages in a test on an Ubuntu 24.04 desktop (observed on that desktop; not re-run on 22.04). See
 [ROS2-RVIZ.md](ROS2-RVIZ.md#installing-ros-2-for-rviz-2-and-the-doctor).

@@ -1,9 +1,12 @@
 """Real composed USD graph preservation; native execution remains a live gate."""
 import importlib.util
+import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
 
 pytest.importorskip("pxr.Usd")
 from pxr import Sdf, Usd
@@ -81,3 +84,35 @@ def test_new_graph_uses_native_controller_once(graph):
     stage, og, plan, calls, _ = graph
     module.ensure_fixed_graph(stage, og, {"graph_path": "/Graph/New"}, plan)
     assert len(calls) == 1 and calls[0][0]["graph_path"] == "/Graph/New"
+
+
+def _compat():
+    spec = importlib.util.spec_from_file_location("sim_tools_compat_under_test", ROOT / "exts/sim-tools/sim_tools/compat.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _omni(monkeypatch, tools_keys, core_keys):
+    graph, core, tools, ogn, omni = (ModuleType(n) for n in
+                                     ("omni.graph", "omni.graph.core", "omni.graph.tools", "omni.graph.tools.ogn", "omni"))
+    core.MetadataKeys = core_keys
+    if tools_keys is not None:
+        ogn.MetadataKeys = tools_keys
+    omni.graph, graph.core, graph.tools, tools.ogn = graph, core, tools, ogn
+    for name, module in (("omni", omni), ("omni.graph", graph), ("omni.graph.core", core),
+                         ("omni.graph.tools", tools), ("omni.graph.tools.ogn", ogn)):
+        monkeypatch.setitem(sys.modules, name, module)
+
+
+def test_metadata_keys_prefers_the_current_home_and_falls_back(monkeypatch):
+    compat = _compat()
+    _omni(monkeypatch, "new", "old")
+    assert compat.metadata_keys() == "new"
+    _omni(monkeypatch, None, "old")
+    assert compat.metadata_keys() == "old"
+
+
+def test_graph_tools_do_not_use_the_deprecated_metadata_name():
+    for name in ("graph.py", "graph_build.py"):
+        assert "og.MetadataKeys" not in (ROOT / "exts/sim-tools/sim_tools" / name).read_text()

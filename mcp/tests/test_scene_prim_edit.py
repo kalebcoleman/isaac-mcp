@@ -1,4 +1,4 @@
-"""M5: editing any prim in the session layer, with before/after values and a working revert (no Kit)."""
+"""Editing any prim in the session layer, with before/after values and a working revert (no Kit)."""
 
 import math
 import sys

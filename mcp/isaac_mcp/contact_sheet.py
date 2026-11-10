@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 from PIL import Image, ImageDraw, ImageFont
 
-DEFAULT_TIMES = (0.5, 1.0, 2.0, 4.0, 6.0, 9.0)  # the G1 recovery contact-sheet convention (an uncut 10 s clip)
+DEFAULT_TIMES = (0.5, 1.0, 2.0, 4.0, 6.0, 9.0)  # a spread over an uncut 10 s clip
 MAX_TIMES = 12
 MAX_ROWS = 8
 CELL_WIDTH = 480

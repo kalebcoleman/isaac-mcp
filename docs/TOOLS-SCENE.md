@@ -75,7 +75,7 @@ at the robot with `sim__camera__create`: `path="/World/Camera2", frame="world", 
 
 Most tools take the `session_id` and `stage_id` from `sim__stage__info`; `sim__graph__node_types`, `sim__logs__tail`, `sim__logs__mark`, `sim__logs__summary` and the `sim__ui__*` tools do not. Call it first, and again after
 anything that replaces the stage. The calls below ran against a live 6.2.0.0 headless PhysX session
-([record](VERIFICATION.md#documentation-check-2026-11-03)).
+([record](VERIFICATION.md#headless-physx-check)).
 
 1. **Identify:** `sim__stage__info`, then `sim__stage__tree` with `root="/"` and `depth=2`.
 2. **Author on a stopped timeline.** A parent must already exist, and a new stage has no `/World`, so create it first:

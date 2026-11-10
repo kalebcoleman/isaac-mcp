@@ -1,4 +1,4 @@
-"""Summarise pass counts from a project's evaluation-result JSON files (the G1 recovery ``final_*.json`` layout).
+"""Summarise pass counts from a project's evaluation-result JSON files (the ``final_<name>_heldout_r1.json`` layout).
 
 The files are read, never run or modified. Expected keys are explicit (see ``CRITERIA``); a file that lacks one is
 refused naming the file and key path, so a layout change cannot produce a made-up number. The TEST pose set is

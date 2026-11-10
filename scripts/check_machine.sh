@@ -27,7 +27,7 @@ if command -v nvidia-smi >/dev/null 2>&1; then
   else
     warn "driver ${drv:-unknown}: want >= $min for this GPU"
   fi
-  # Verified 2026-10-29 on an RTX PRO 6000 Blackwell with driver 595.99.02: Isaac Sim 6.2 renders the
+  # Verified on an RTX PRO 6000 Blackwell with driver 595.99.02: Isaac Sim 6.2 renders the
   # twin in a window and headless. (Isaac Sim 5.1 crashed in librtx.scenedb.plugin.so on that driver.)
 else
   bad "nvidia-smi not found: install the NVIDIA driver"

@@ -230,7 +230,7 @@ def _root_of(text):
 
 
 def test_a_urdf_in_a_ros_package_approves_the_package_not_its_urdf_folder(tmp_path, monkeypatch):
-    """Found by an agent test: the command offered `<package>/urdf`, whose meshes (package://...) live above it."""
+    """The command offered `<package>/urdf`, whose meshes (package://...) live above it."""
     monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
     pkg = tmp_path / "repo" / "robots" / "go2_description"

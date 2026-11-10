@@ -1,7 +1,7 @@
 """Saving and reopening RTX LiDAR graphs, pack-owned capture products, and save result fields.
 
-Lab 3 run 8 lost /scan after a reopen: Flatten copied the session-only viewportHandle of the helper's
-render product into the file, and Replicator's attach_hydra_texture skips any product that has one.
+A LiDAR's /scan is lost after a reopen when Flatten copied the session-only viewportHandle of the helper's
+render product into the file and Replicator's attach_hydra_texture skips any product that has one.
 These are real USD policy tests; the reopen itself is verified live.
 """
 
@@ -223,7 +223,7 @@ def test_session_lidar_handle_beside_a_saved_one_still_needs_the_flag(lidar):
 
 
 def test_repaired_stage_saves_a_working_copy(lidar):
-    """The whole chain for a student's stale file: repair at open, Play makes a new product, save with the flag."""
+    """The whole chain for a stale file: repair at open, Play makes a new product, save with the flag."""
     scene, stage, _, _, _ = lidar
     stale = add_product(stage, PRODUCT, "/World/Lidar2D", session=False)
     repair = render_export.repair_stale_lidar_products(stage, set())
@@ -348,7 +348,7 @@ def test_lidar_writer_without_a_matching_helper_still_refuses(lidar):
     assert error.value.details["node_type"] == "isaacsim.ros2.bridge.ROS2PublishLaserScan"
 
 
-# ---- Pack-owned capture products (Finding 5)
+# ---- Pack-owned capture products
 
 
 def test_owned_camera_product_needs_no_flag_and_is_reported(camera):
@@ -413,7 +413,7 @@ def test_native_camera_product_still_needs_the_flag(camera):
     assert error.value.details["retry_with"] == {"reset_camera_render_handles": True}
 
 
-# ---- Finding 9: filename and graph inventory
+# ---- Filename and graph inventory
 
 
 def test_bare_basename_gets_the_extension(camera):
@@ -514,7 +514,7 @@ def test_texture_bound_with_an_idle_writer_is_a_problem_only_while_playing(entry
         assert PRODUCT in problem and "sim__logs__tail" in problem
 
 
-# ---- Fleet 5: scenes that could not be saved at all
+# ---- Scenes that could not be saved at all
 
 
 def test_our_capture_product_does_not_make_the_graph_product_ambiguous(camera):
@@ -596,7 +596,7 @@ def test_save_size_note_names_the_size():
     assert "359 MB" in flattened_size_note(359 * 1024 * 1024)
 
 
-# ---- Fleet 10
+# ---- All-free maps and saved pipelines
 
 
 def _occupancy_world(monkeypatch, tmp_path, hits):

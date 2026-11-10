@@ -1,6 +1,6 @@
-"""M1-M3 pure logic: world bounds, cameras, log parsing/cursors, PhysX query shapes.
+"""Pure logic: world bounds, cameras, log parsing/cursors, PhysX query shapes.
 
-These run without Kit. Live behavior is covered by the milestone run records.
+These run without Kit. Live behavior needs a running simulator.
 """
 
 import ast
@@ -28,7 +28,7 @@ def refusal(call, *args, **kwargs):
     return error.value
 
 
-# --- M1: bounds, measure, camera list -------------------------------------------------------
+# --- bounds, measure, camera list -------------------------------------------------------
 
 
 def test_bounds_match_bboxcache_to_1e_6_and_measure_hand_calculation(scene):
@@ -99,7 +99,7 @@ def test_camera_list_bounds_limit_and_no_viewport(scene):
     assert refusal(geometry.cameras, stage, "/Nope", 1, None, False).code == "NOT_FOUND"
 
 
-# --- M2: logs ------------------------------------------------------------------------------
+# --- logs ------------------------------------------------------------------------------
 
 
 def _log(tmp_path, monkeypatch, text):
@@ -251,7 +251,7 @@ def test_pack_installs_no_log_hook_from_s13():
     assert not used, f"log hook(s) would deadlock Kit: {sorted(used)}"
 
 
-# --- M3: raycast and contacts --------------------------------------------------------------
+# --- raycast and contacts --------------------------------------------------------------
 
 
 class _Stopped:

@@ -500,7 +500,7 @@ def test_legacy_asset_cache_env_still_works(cli, capsys, tmp_path, monkeypatch):
     assert info["status"] == "pinned"
 
 
-# --------------------------------------------------------- review regressions (PR 51)
+# --------------------------------------------------------- Symlinks and unrelated files in a pack
 
 
 def tar_bytes(members: list[tuple[str, bytes | None]]) -> bytes:
@@ -630,10 +630,10 @@ def test_names_the_pin_format_cannot_hold_are_refused(cli, capsys, tmp_path, mon
     assert code == 2 and "unsupported" in err
 
 
-# ------------------------------------------------- round-2 review regressions (PR 51)
+# ------------------------------------------------- Hard links and archive size limits
 
 
-def test_r1_no_hard_links_never_overwrites_a_file_that_appears_meanwhile(
+def test_no_hard_links_never_overwrites_a_file_that_appears_meanwhile(
     cli, capsys, tmp_path, monkeypatch
 ):
     """Hard links unavailable, and another writer creates the destination at the worst moment.
@@ -683,7 +683,7 @@ def test_r1_no_hard_links_never_overwrites_a_file_that_appears_meanwhile(
     assert [p.name for p in pack.iterdir() if p.name.endswith(".part")] == []
 
 
-def test_r1_no_hard_links_still_installs_a_new_file(cli, capsys, tmp_path, monkeypatch):
+def test_no_hard_links_still_installs_a_new_file(cli, capsys, tmp_path, monkeypatch):
     import errno
 
     store = make_store(tmp_path, monkeypatch)
@@ -700,7 +700,7 @@ def test_r1_no_hard_links_still_installs_a_new_file(cli, capsys, tmp_path, monke
     assert [p.name for p in pack.iterdir() if p.name.endswith(".part")] == []
 
 
-def test_r2_extended_header_data_counts_against_the_limits(cli, capsys, tmp_path, monkeypatch):
+def test_extended_header_data_counts_against_the_limits(cli, capsys, tmp_path, monkeypatch):
     make_store(tmp_path, monkeypatch)
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz", format=tarfile.PAX_FORMAT) as tf:
@@ -720,7 +720,7 @@ def test_r2_extended_header_data_counts_against_the_limits(cli, capsys, tmp_path
     assert not (tmp_path / "store" / "ur5e-dt" / "a.usd").exists()
 
 
-def test_r2_zip_member_count_is_checked_before_the_directory_is_parsed(
+def test_zip_member_count_is_checked_before_the_directory_is_parsed(
     cli, capsys, tmp_path, monkeypatch
 ):
     make_store(tmp_path, monkeypatch)
@@ -752,7 +752,7 @@ def test_a_failed_copy_leaves_no_temporary_files(cli, capsys, tmp_path, monkeypa
     assert [p.name for p in pack.iterdir()] == []
 
 
-def test_r6_a_refused_add_creates_nothing_through_a_symlinked_ancestor(
+def test_a_refused_add_creates_nothing_through_a_symlinked_ancestor(
     cli, capsys, tmp_path, monkeypatch
 ):
     store = make_store(tmp_path, monkeypatch)
@@ -807,7 +807,7 @@ def test_tar_extraction_closes_every_file_handle(cli, capsys, tmp_path, monkeypa
     assert opened and all(h.closed for h in opened)
 
 
-# ------------------------------------------------- round-3 review regressions (PR 51)
+# ------------------------------------------------- Forged zip counts and failed publishes
 
 
 def _forge_zip_counts(data: bytes, count: int) -> bytes:
@@ -818,7 +818,7 @@ def _forge_zip_counts(data: bytes, count: int) -> bytes:
     return data[: i + 8] + struct.pack("<HH", count, count) + data[i + 12 :]
 
 
-def test_n1_a_forged_zip_entry_count_cannot_hide_a_huge_directory(cli, capsys, tmp_path, monkeypatch):
+def test_a_forged_zip_entry_count_cannot_hide_a_huge_directory(cli, capsys, tmp_path, monkeypatch):
     make_store(tmp_path, monkeypatch)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -835,7 +835,7 @@ def test_n1_a_forged_zip_entry_count_cannot_hide_a_huge_directory(cli, capsys, t
     assert code == 2 and "more than 1" in err
 
 
-def test_n1_a_zip_whose_declared_count_disagrees_with_its_records_is_refused(
+def test_a_zip_whose_declared_count_disagrees_with_its_records_is_refused(
     cli, capsys, tmp_path, monkeypatch
 ):
     make_store(tmp_path, monkeypatch)
@@ -849,7 +849,7 @@ def test_n1_a_zip_whose_declared_count_disagrees_with_its_records_is_refused(
     assert code == 2 and "declares 2" in err
 
 
-def test_n1_an_honest_zip_still_installs(cli, capsys, tmp_path, monkeypatch):
+def test_an_honest_zip_still_installs(cli, capsys, tmp_path, monkeypatch):
     store = make_store(tmp_path, monkeypatch)
     archive = tmp_path / "ok.zip"
     with zipfile.ZipFile(archive, "w") as zf:
@@ -859,7 +859,7 @@ def test_n1_an_honest_zip_still_installs(cli, capsys, tmp_path, monkeypatch):
     assert (store / "ur5e-dt" / "robot" / "b.usd").read_bytes() == b"b"
 
 
-def test_n2_a_failed_publish_leaves_no_temporary_file(cli, capsys, tmp_path, monkeypatch):
+def test_a_failed_publish_leaves_no_temporary_file(cli, capsys, tmp_path, monkeypatch):
     store = make_store(tmp_path, monkeypatch)
     pack = store / "ur5e-dt"
     (pack / "directory.usd").mkdir(parents=True)  # cannot be replaced by a file
@@ -870,7 +870,7 @@ def test_n2_a_failed_publish_leaves_no_temporary_file(cli, capsys, tmp_path, mon
     assert [p.name for p in pack.iterdir() if p.name.endswith(".part")] == []
 
 
-def test_n2_a_failed_pin_write_leaves_no_temporary_file(cli, capsys, tmp_path, monkeypatch):
+def test_a_failed_pin_write_leaves_no_temporary_file(cli, capsys, tmp_path, monkeypatch):
     store = make_store(tmp_path, monkeypatch)
     pack = store / "ur5e-dt"
     pack.mkdir()
@@ -900,7 +900,7 @@ def _tar_gz_bytes() -> bytes:
         ("garbage.zip", b"PK\x03\x04 not really a zip"),
     ],
 )
-def test_n3_corrupt_or_truncated_archives_are_clean_refusals(
+def test_corrupt_or_truncated_archives_are_clean_refusals(
     cli, capsys, tmp_path, monkeypatch, name, payload
 ):
     make_store(tmp_path, monkeypatch)
@@ -921,10 +921,10 @@ def test_n3_corrupt_or_truncated_archives_are_clean_refusals(
     assert "Traceback" not in err
 
 
-# ------------------------------------------------- round-4 review regressions (PR 51)
+# ------------------------------------------------- Zip64 and encrypted archives
 
 
-def test_v1_a_valid_offset_only_zip64_archive_installs(cli, capsys, tmp_path, monkeypatch):
+def test_a_valid_offset_only_zip64_archive_installs(cli, capsys, tmp_path, monkeypatch):
     """Python's own writer emits zip64 records when the data starts past 2 GiB."""
     store = make_store(tmp_path, monkeypatch)
     archive = tmp_path / "big-offset.zip"
@@ -956,7 +956,7 @@ def _zip64_with_zeroed_legacy_fields(entries: int) -> bytes:
     return data[:i] + record + locator + legacy
 
 
-def test_v1_zip64_records_are_used_even_when_legacy_fields_are_zero(
+def test_zip64_records_are_used_even_when_legacy_fields_are_zero(
     cli, capsys, tmp_path, monkeypatch
 ):
     make_store(tmp_path, monkeypatch)
@@ -971,7 +971,7 @@ def test_v1_zip64_records_are_used_even_when_legacy_fields_are_zero(
     assert code == 2 and "more than 1" in err
 
 
-def test_v1_the_synthetic_zip64_archive_is_a_valid_zip(tmp_path):
+def test_the_synthetic_zip64_archive_is_a_valid_zip(tmp_path):
     """Guards the helper above: Python must read what the test builds."""
     archive = tmp_path / "z.zip"
     archive.write_bytes(_zip64_with_zeroed_legacy_fields(3))
@@ -990,7 +990,7 @@ def _patch_zip_header_field(data: bytes, local_off: int, central_off: int, value
     return bytes(out)
 
 
-def test_v2_an_encrypted_zip_entry_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
+def test_an_encrypted_zip_entry_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
     make_store(tmp_path, monkeypatch)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -1002,7 +1002,7 @@ def test_v2_an_encrypted_zip_entry_is_a_clean_refusal(cli, capsys, tmp_path, mon
     assert code == 2 and "Traceback" not in err and "unsupported zip entry" in err
 
 
-def test_v2_an_unsupported_zip_compression_method_is_a_clean_refusal(
+def test_an_unsupported_zip_compression_method_is_a_clean_refusal(
     cli, capsys, tmp_path, monkeypatch
 ):
     make_store(tmp_path, monkeypatch)
@@ -1016,7 +1016,7 @@ def test_v2_an_unsupported_zip_compression_method_is_a_clean_refusal(
     assert code == 2 and "Traceback" not in err and "unsupported zip entry" in err
 
 
-def test_v3_a_failed_cleanup_does_not_hide_the_original_error(cli, capsys, tmp_path, monkeypatch):
+def test_a_failed_cleanup_does_not_hide_the_original_error(cli, capsys, tmp_path, monkeypatch):
     import errno
 
     make_store(tmp_path, monkeypatch)
@@ -1040,7 +1040,7 @@ def test_v3_a_failed_cleanup_does_not_hide_the_original_error(cli, capsys, tmp_p
     assert "disk on fire" in err and "cleanup denied" not in err
 
 
-# ---------------------------------------------- final-review regressions (PR 51: M1, M3)
+# ---------------------------------------------- Oversized tar headers and zip versions
 
 
 def _tar_gz_with_pax_comment(size: int) -> bytes:
@@ -1053,7 +1053,7 @@ def _tar_gz_with_pax_comment(size: int) -> bytes:
     return buf.getvalue()
 
 
-def test_m1_an_oversized_pax_header_is_refused_before_it_is_read(cli, capsys, tmp_path, monkeypatch):
+def test_an_oversized_pax_header_is_refused_before_it_is_read(cli, capsys, tmp_path, monkeypatch):
     import tracemalloc
 
     make_store(tmp_path, monkeypatch)
@@ -1069,7 +1069,7 @@ def test_m1_an_oversized_pax_header_is_refused_before_it_is_read(cli, capsys, tm
     assert peak < 4 << 20, f"peak {peak} bytes: the header data was read into memory"
 
 
-def test_m1_an_oversized_gnu_long_name_is_refused(cli, capsys, tmp_path, monkeypatch):
+def test_an_oversized_gnu_long_name_is_refused(cli, capsys, tmp_path, monkeypatch):
     make_store(tmp_path, monkeypatch)
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w", format=tarfile.GNU_FORMAT) as tf:
@@ -1082,7 +1082,7 @@ def test_m1_an_oversized_gnu_long_name_is_refused(cli, capsys, tmp_path, monkeyp
     assert code == 2 and "extended tar header" in err
 
 
-def test_m1_ordinary_pax_headers_still_work(cli, capsys, tmp_path, monkeypatch):
+def test_ordinary_pax_headers_still_work(cli, capsys, tmp_path, monkeypatch):
     store = make_store(tmp_path, monkeypatch)
     archive = tmp_path / "pax-ok.tar.gz"
     archive.write_bytes(_tar_gz_with_pax_comment(200))
@@ -1090,7 +1090,7 @@ def test_m1_ordinary_pax_headers_still_work(cli, capsys, tmp_path, monkeypatch):
     assert (store / "ur5e-dt" / "a.usd").read_bytes() == b"1"
 
 
-def test_m3_a_zip_needing_a_newer_zip_version_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
+def test_a_zip_needing_a_newer_zip_version_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
     make_store(tmp_path, monkeypatch)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -1102,7 +1102,7 @@ def test_m3_a_zip_needing_a_newer_zip_version_is_a_clean_refusal(cli, capsys, tm
     assert code == 2 and "Traceback" not in err and "unsupported zip archive" in err
 
 
-def test_m3_a_zip_member_with_an_empty_name_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
+def test_a_zip_member_with_an_empty_name_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
     make_store(tmp_path, monkeypatch)
     archive = tmp_path / "empty-name.zip"
     with zipfile.ZipFile(archive, "w") as zf:
@@ -1111,7 +1111,7 @@ def test_m3_a_zip_member_with_an_empty_name_is_a_clean_refusal(cli, capsys, tmp_
     assert code == 2 and "Traceback" not in err and "empty name" in err
 
 
-# ------------------------------------------- review follow-ups (M2, M4, F1, F2)
+# ------------------------------------------- Extended header chains and zip64 extensions
 
 
 def _pax_record(key: str, value: str) -> bytes:
@@ -1154,7 +1154,7 @@ def _tar_entries(entries: list[tuple]) -> bytes:
     return bytes(out + b"\0" * 1024)
 
 
-def test_f1_global_pax_headers_are_capped_per_archive(cli, capsys, tmp_path, monkeypatch):
+def test_global_pax_headers_are_capped_per_archive(cli, capsys, tmp_path, monkeypatch):
     make_store(tmp_path, monkeypatch)
     big = "x" * ((1 << 20) - 1000)  # each header just under the per-header cap
     entries = []
@@ -1167,7 +1167,7 @@ def test_f1_global_pax_headers_are_capped_per_archive(cli, capsys, tmp_path, mon
     assert code == 2 and "in total" in err
 
 
-def test_f2_a_long_chain_of_extended_headers_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
+def test_a_long_chain_of_extended_headers_is_a_clean_refusal(cli, capsys, tmp_path, monkeypatch):
     make_store(tmp_path, monkeypatch)
     headers = [(tarfile.XHDTYPE, _pax_record("comment", "c")) for _ in range(400)]
     archive = tmp_path / "chain.tar"
@@ -1176,7 +1176,7 @@ def test_f2_a_long_chain_of_extended_headers_is_a_clean_refusal(cli, capsys, tmp
     assert code == 2 and "in a row" in err and "Traceback" not in err
 
 
-def test_f2_a_short_legitimate_header_chain_still_installs(cli, capsys, tmp_path, monkeypatch):
+def test_a_short_legitimate_header_chain_still_installs(cli, capsys, tmp_path, monkeypatch):
     store = make_store(tmp_path, monkeypatch)
     headers = [
         (tarfile.XGLTYPE, _pax_record("comment", "global")),
@@ -1188,7 +1188,7 @@ def test_f2_a_short_legitimate_header_chain_still_installs(cli, capsys, tmp_path
     assert (store / "ur5e-dt" / "a.usd").read_bytes() == b"ok"
 
 
-def test_m2_zip64_with_extensible_data_is_refused_before_parsing(cli, capsys, tmp_path, monkeypatch):
+def test_zip64_with_extensible_data_is_refused_before_parsing(cli, capsys, tmp_path, monkeypatch):
     import struct
 
     make_store(tmp_path, monkeypatch)
@@ -1211,7 +1211,7 @@ def test_m2_zip64_with_extensible_data_is_refused_before_parsing(cli, capsys, tm
     assert code == 2 and "extensible data" in err
 
 
-def test_m4_a_blocked_destination_is_found_before_anything_is_copied(cli, capsys, tmp_path, monkeypatch):
+def test_a_blocked_destination_is_found_before_anything_is_copied(cli, capsys, tmp_path, monkeypatch):
     store = make_store(tmp_path, monkeypatch)
     pack = store / "ur5e-dt"
     pack.mkdir()
@@ -1226,7 +1226,7 @@ def test_m4_a_blocked_destination_is_found_before_anything_is_copied(cli, capsys
     assert not (pack / "SHA256SUMS").exists()
 
 
-def test_m4_a_non_utf8_member_name_is_refused_before_copying(cli, capsys, tmp_path, monkeypatch):
+def test_a_non_utf8_member_name_is_refused_before_copying(cli, capsys, tmp_path, monkeypatch):
     store = make_store(tmp_path, monkeypatch)
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w", format=tarfile.GNU_FORMAT, encoding="latin-1") as tf:
@@ -1244,7 +1244,7 @@ def test_m4_a_non_utf8_member_name_is_refused_before_copying(cli, capsys, tmp_pa
     assert run(cli, capsys, "add", str(tmp_path / "ok.usd"))[0] == 0
 
 
-def test_m4_files_installed_before_a_failure_are_still_pinned(cli, capsys, tmp_path, monkeypatch):
+def test_files_installed_before_a_failure_are_still_pinned(cli, capsys, tmp_path, monkeypatch):
     store = make_store(tmp_path, monkeypatch)
     source = tmp_path / "src"
     source.mkdir()
@@ -1464,7 +1464,7 @@ def _manifest_with_robot(cli, tmp_path, monkeypatch, nvidia=b"nvidia robot"):
 
 
 def test_migrate_pins_a_lab_modified_robot_from_the_checkout(cli, capsys, tmp_path, monkeypatch):
-    # Review finding 1: a robot at NVIDIA's path that is not NVIDIA's file is the user's copy.
+    # A robot at NVIDIA's path that is not NVIDIA's file is the user's copy.
     store = make_store(tmp_path, monkeypatch)
     _manifest_with_robot(cli, tmp_path, monkeypatch)
     checkout, assets = _old_checkout(tmp_path)
@@ -1517,7 +1517,7 @@ def test_migrate_skips_a_file_that_no_longer_matches_its_old_pin(cli, capsys, tm
 
 
 def test_migrate_reads_history_even_when_untracked_copies_remain(cli, capsys, tmp_path, monkeypatch):
-    # Review finding 2: after pulling the code-only repo, ignored copies stay in the folder.
+    # After pulling the code-only repo, ignored copies stay in the folder.
     store = make_store(tmp_path, monkeypatch)
     checkout, assets = _old_checkout(tmp_path)
     (checkout / ".gitignore").write_text("exts/ur5e-dt/assets/workstation/\n")
@@ -1538,7 +1538,6 @@ def test_migrate_reads_history_even_when_untracked_copies_remain(cli, capsys, tm
 
 
 def test_migrate_leaves_other_packs_in_an_old_folder_alone(cli, capsys, tmp_path, monkeypatch):
-    # Review finding 4.
     store = make_store(tmp_path, monkeypatch)
     old = tmp_path / "old-cache"
     (old / "mylab").mkdir(parents=True)
@@ -1555,7 +1554,7 @@ def test_migrate_leaves_other_packs_in_an_old_folder_alone(cli, capsys, tmp_path
 
 
 def test_the_store_folder_itself_keeps_its_permissions(cli, capsys, tmp_path, monkeypatch):
-    # Review finding 5: only the pack folder is tightened.
+    # Only the pack folder is tightened.
     store = make_store(tmp_path, monkeypatch)
     store.chmod(0o775)
     source = tmp_path / "a.usd"
@@ -1566,7 +1565,7 @@ def test_the_store_folder_itself_keeps_its_permissions(cli, capsys, tmp_path, mo
 
 
 def test_migrate_skips_an_unpinned_old_nvidia_file_with_the_wrong_bytes(cli, capsys, tmp_path, monkeypatch):
-    # Round 2 finding 1: the old resolver refused it, so it must not become "yours".
+    # The old resolver refused it, so it must not become "yours".
     store = make_store(tmp_path, monkeypatch)
     _manifest_with_robot(cli, tmp_path, monkeypatch)
     old = tmp_path / "old-cache"

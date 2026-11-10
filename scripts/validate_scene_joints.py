@@ -1,4 +1,4 @@
-"""Live M4 validation: joint command by name, velocity targets, clamping, gains, settle and teleport.
+"""Live validation: joint command by name, velocity targets, clamping, gains, settle and teleport.
 
 One robot per run (``--robot ur5e`` or ``--robot franka`` from sim__quick_start). It plays to initialize
 physics, then drives the robot while paused, so every assertion is on real PhysX/Newton tensor data.

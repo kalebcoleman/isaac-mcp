@@ -297,7 +297,7 @@ BUILTINS = {"run_python", "status", "list_bridges", "reload_tools", "put_file", 
 
 
 def test_builtins_are_listed_offline_and_follow_the_builtins_switch(monkeypatch):
-    # PR D: OpenCode ignores tools/list_changed, so the built-ins must be listed before discovery.
+    # Clients such as OpenCode ignore tools/list_changed, so the built-ins must be listed before discovery.
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
     monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "no-such-namespace")   # as live: built-ins have none
     assert BUILTINS <= set(build("none")._tool_manager._tools)

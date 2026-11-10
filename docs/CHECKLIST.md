@@ -21,7 +21,7 @@ unrelated jobs; record the source, versions, backend, observed effects and limit
 - [ ] When release is requested, review licensing and notices, name availability, and PyPI/npm
   installation using [publishing](PUBLISHING.md) and [provenance](VENDORING.md).
 
-## Newton and Warp GPU physics (separate follow-up PR)
+## Newton and Warp GPU physics
 
 - [ ] Investigate the Sim 6.2 Newton exact-step timing mismatch: 20 requested steps at
   `dt=0.002` advanced the reported clock by 0.020 s, not 0.040 s. Check solver steps,

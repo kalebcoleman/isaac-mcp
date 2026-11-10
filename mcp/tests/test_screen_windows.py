@@ -1,5 +1,6 @@
 """Unit tests for screen window enumeration (no X display required)."""
 
+import types
 from unittest.mock import MagicMock
 
 import pytest
@@ -250,3 +251,145 @@ def test_raise_window_refuses_an_unexpected_pid(monkeypatch):
     screen.register_screen_tools(server, groups={"screen_control"})
     with pytest.raises(ValueError, match="PID"):
         server._tool_manager._tools["raise_window"].fn(window_id=7, expected_pid=23)
+
+
+def test_move_window_unmaximizes_moves_and_reports_geometry(monkeypatch):
+    from mcp.server.fastmcp import FastMCP
+
+    disp = MagicMock()
+    obj = disp.create_resource_object.return_value
+    obj.get_geometry.return_value = types.SimpleNamespace(width=900, height=1000)
+    disp.screen.return_value.root.translate_coords.return_value = types.SimpleNamespace(x=960, y=40)
+    monkeypatch.setattr(screen, "_xdisplay", lambda: disp)
+    monkeypatch.setattr(screen, "_match_window", lambda *_: {"id": 7, "title": "RViz", "pid": 5})
+    monkeypatch.setattr(screen.xevent, "ClientMessage", lambda **kwargs: kwargs)
+    server = FastMCP("screen-test")
+    screen.register_screen_tools(server, groups={"screen_control"})
+    tool = server._tool_manager._tools["move_window"].fn
+    assert tool(x=960, y=40, width=900, height=1000, window_id=7).startswith("moved: RViz (id=7) now 900x1000+960+40")
+    sent = [c.args[0] for c in disp.screen.return_value.root.send_event.call_args_list]
+    assert len(sent) == 2 and sent[1]["data"][1][1:] == [960, 40, 900, 1000]
+    with pytest.raises(ValueError, match="PID"):
+        tool(x=0, y=0, width=900, height=900, window_id=7, expected_pid=99)
+    with pytest.raises(ValueError, match="100..16384"):
+        tool(x=0, y=0, width=10, height=900, window_id=7)
+
+
+def test_move_window_waits_for_a_position_only_move(monkeypatch):
+    from mcp.server.fastmcp import FastMCP
+
+    disp = MagicMock()
+    obj = disp.create_resource_object.return_value
+    obj.get_geometry.return_value = types.SimpleNamespace(width=900, height=1000)
+    positions = iter([types.SimpleNamespace(x=0, y=0)] * 2 + [types.SimpleNamespace(x=960, y=40)] * 50)
+    disp.screen.return_value.root.translate_coords.side_effect = lambda *a: next(positions)
+    monkeypatch.setattr(screen, "_xdisplay", lambda: disp)
+    monkeypatch.setattr(screen, "_match_window", lambda *_: {"id": 7, "title": "RViz", "pid": 5})
+    monkeypatch.setattr(screen.xevent, "ClientMessage", lambda **kwargs: kwargs)
+    monkeypatch.setattr(screen.time, "sleep", lambda s: None)
+    server = FastMCP("screen-test")
+    screen.register_screen_tools(server, groups={"screen_control"})
+    out = server._tool_manager._tools["move_window"].fn(x=960, y=40, width=900, height=1000, window_id=7)
+    assert "now 900x1000+960+40" in out  # not the stale +0+0 read right after sending
+
+
+def test_locked_screen_is_detected_from_loginctl_or_the_screensaver(monkeypatch):
+    import itertools
+
+    from isaac_mcp import screen
+
+    ticks = itertools.count(100, 10)  # each call is 10 s after the last: no cache hits
+
+    outputs = {}
+    monkeypatch.setattr(screen, "_LOCK_CACHE", [-1e9, False])
+    monkeypatch.setattr(screen.time, "monotonic", lambda: 0.0 + len(outputs) * 0 + next(ticks))
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1/bus")
+    monkeypatch.setattr(screen.shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+    monkeypatch.setattr(screen.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(stdout=outputs.get(cmd[0], "")))
+    monkeypatch.setenv("XDG_SESSION_ID", "3")
+    outputs.update(loginctl="yes\n")
+    assert screen._screen_locked()
+    outputs.update(loginctl="no", gdbus="(true,)")
+    assert screen._screen_locked()
+    outputs.update(gdbus="(false,)")
+    assert not screen._screen_locked()
+    monkeypatch.setattr(screen.shutil, "which", lambda cmd: None)
+    assert not screen._screen_locked()
+
+
+def test_lock_probe_is_cached_and_skips_gdbus_without_a_session_bus(monkeypatch):
+    from isaac_mcp import screen
+
+    calls = []
+    monkeypatch.setattr(screen.shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+    monkeypatch.setattr(screen.subprocess, "run",
+                        lambda cmd, **kw: calls.append(cmd[0]) or types.SimpleNamespace(stdout="(true,)"))
+    monkeypatch.delenv("XDG_SESSION_ID", raising=False)
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/nonexistent-runtime-dir")
+    monkeypatch.setattr(screen, "_LOCK_CACHE", [-1e9, False])
+    assert not screen._screen_locked() and calls == []  # no bus: no gdbus autolaunch
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1/bus")
+    assert not screen._screen_locked()  # cached for 5 s
+    monkeypatch.setattr(screen, "_LOCK_CACHE", [-1e9, False])
+    assert screen._screen_locked() and calls == ["gdbus"]
+
+
+def test_monitor_captures_warn_when_locked_and_window_captures_do_not(monkeypatch, tmp_path):
+    from mcp.server.fastmcp import FastMCP
+
+    from isaac_mcp import screen
+
+    class FakeShot:
+        size = (4, 2)
+        bgra = bytes(4 * 2 * 4)
+
+    class FakeMSS:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def grab(self, bbox):
+            return FakeShot()
+
+    monkeypatch.setattr(screen, "_screen_locked", lambda: True)
+    monkeypatch.setattr(screen, "_composite", lambda bbox: (screen.PILImage.new("RGB", (4, 2)), 1))
+    monkeypatch.setattr(screen, "SHOT_DIR", tmp_path)
+    monkeypatch.setattr(screen.mss, "MSS", FakeMSS)
+    monkeypatch.setattr(screen, "_bbox", lambda m=0: {"left": 0, "top": 0, "width": 4, "height": 2})
+    window = {"id": 7, "title": "Isaac Sim", "x": 0, "y": 0, "width": 4, "height": 2}
+    monkeypatch.setattr(screen, "_match_window", lambda *a, **k: window)
+    monkeypatch.setattr(screen, "_grab_window_image", lambda win: screen.PILImage.new("RGB", (4, 2)))
+    server = FastMCP("t")
+    screen.register_screen_tools(server)
+    shot = server._tool_manager._tools["screenshot"].fn
+    assert "screen is locked" in shot(monitor=1)[1]
+    assert "screen is locked" not in shot(window_id=7)[1]
+
+
+def test_locked_screenshot_is_composed_bottom_to_top_without_wm_frames():
+    from isaac_mcp import screen
+
+    wins = [{"id": 1, "class": "Isaac"}, {"id": 2, "class": "mutter-x11-frames"}, {"id": 3, "class": "rviz2"},
+            {"id": 4, "class": "unmanaged"}]
+    order = [w["id"] for w in screen.composite_order(wins, stacking=[3, 1])]
+    assert order == [3, 1, 4]  # unmanaged (popups, tooltips) above the managed windows
+
+
+def test_lock_probe_is_unknown_when_only_loginctl_says_no(monkeypatch):
+    # Started over SSH, XDG_SESSION_ID is the SSH session: "no" says nothing about the desktop.
+    from isaac_mcp import screen
+
+    outputs = {"loginctl": "no", "gdbus": ""}
+    monkeypatch.setattr(screen.shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+    monkeypatch.setattr(screen.subprocess, "run", lambda cmd, **kw: types.SimpleNamespace(stdout=outputs[cmd[0]]))
+    monkeypatch.setenv("XDG_SESSION_ID", "7")
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1/bus")
+    assert screen._probe_locked() is None
+    outputs["gdbus"] = "(false,)"
+    assert screen._probe_locked() is False
+    outputs["gdbus"] = "(true,)"
+    assert screen._probe_locked() is True

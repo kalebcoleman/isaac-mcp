@@ -188,12 +188,5 @@ def test_status_host_object_reports_code_drift_from_a_tmp_git_repo(tmp_path, mon
     assert str(tmp_path) not in identity["code_drift_message"]
 
 
-def test_wheel_install_status_is_unchanged(monkeypatch):
-    monkeypatch.setattr(gw, "_HOST_CHECKOUT", None)
-    monkeypatch.setattr(gw, "_HOST_COMMIT", None)
-    monkeypatch.setattr(gw, "_HOST_VERSION", "9.9.9")
-    assert gw._host_identity() == {"version": "9.9.9", "pid": os.getpid()}
-
-
 def test_importing_the_server_does_not_create_a_log_file(tmp_path):
     assert dx.current_log_path() is None

@@ -110,7 +110,7 @@ RESPONSE_TIMEOUT_S = 300.0
 DISCOVERY_TIMEOUT_S = 5.0
 
 
-# ---- What this host process is running (Lab 3 run 8: `opencode serve` keeps an MCP child per
+# ---- What this host process is running (`opencode serve` keeps an MCP child per
 # instance, so after a git pull an old server silently keeps running the old code) ----
 
 def _package_version() -> str:
@@ -1100,8 +1100,8 @@ def _explain_missing_target(model) -> None:
 def _forbid_unknown_arguments(server: FastMCP, name: str) -> None:
     """Refuse arguments a scene tool does not have instead of silently dropping them.
 
-    A student passed properties={...} to sim__graph__build; FastMCP ignored the key, the call
-    "succeeded", and the values it meant to set were never applied."""
+    FastMCP otherwise ignores an extra key such as properties={...} on sim__graph__build: the call
+    "succeeds" and the values it meant to set are never applied."""
     tool = server._tool_manager._tools.get(name)
     model = getattr(getattr(tool, "fn_metadata", None), "arg_model", None)
     if model is None:

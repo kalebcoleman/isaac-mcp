@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 import pytest
 
@@ -199,7 +200,7 @@ def _fake_standalone(root: Path, version: str) -> Path:
 
 
 def test_a_valid_standalone_isaacsim_path_is_used(tmp_path):
-    # Round 2 finding 1: the README's ISAACSIM_PATH advice must work.
+    # The README's ISAACSIM_PATH advice must work.
     root, env, log = _sandbox(tmp_path)
     env["ISAACSIM_PATH"] = str(_fake_standalone(tmp_path / "isaac-sim", "6.2.0"))
     result = _install(root, env, "--claude-code")
@@ -209,7 +210,7 @@ def test_a_valid_standalone_isaacsim_path_is_used(tmp_path):
 
 
 def test_a_typo_is_reported_even_when_another_environment_is_active(tmp_path):
-    # Round 2 finding 2: an activated venv must not silently replace what the user named.
+    # An activated venv must not silently replace what the user named.
     root, env, log = _sandbox(tmp_path)
     env["ISAAC_MCP_PYTHON"] = "/no/such/python"
     env["VIRTUAL_ENV"] = str(_fake_isaac(tmp_path / "active-venv", "6.2.0.0").parent.parent)
@@ -320,3 +321,48 @@ def test_a_claude_desktop_config_it_cannot_parse_is_left_alone_with_the_entry_to
     result = _install(root, env, "--no-sim", "--claude-desktop")
     assert result.returncode == 0 and "not changed" in result.stderr and '"isaac"' in result.stderr
     assert "Traceback" not in result.stderr and "my comment" in config.read_text()
+
+
+def _kit_config(home, app, version):
+    path = home / ".local/share/ov/data/Kit" / app / version / "user.config.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{}")
+    return path
+
+
+def _run_install_py(home, *args):
+    return subprocess.run([sys.executable, str(REPO / "scripts" / "install.py"), *args],
+                          env=os.environ | {"HOME": str(home)}, capture_output=True, text=True)
+
+
+def test_kit_registration_refuses_to_guess_between_configs(tmp_path):
+    old = _kit_config(tmp_path, "Isaac-Sim Full", "5.1")
+    new = _kit_config(tmp_path, "Isaac-Sim Full", "6.2")
+    result = _run_install_py(tmp_path, "status")
+    assert result.returncode != 0
+    assert "pass the one you mean with --config" in result.stderr
+    assert str(old) in result.stderr and str(new) in result.stderr
+    chosen = _run_install_py(tmp_path, "status", "--config", str(new))
+    assert chosen.returncode == 0 and str(new) in chosen.stdout
+
+
+def test_kit_registration_uses_a_lone_config(tmp_path):
+    only = _kit_config(tmp_path, "Isaac-Sim Full", "6.2")
+    result = _run_install_py(tmp_path, "status")
+    assert result.returncode == 0 and str(only) in result.stdout
+
+
+@pytest.mark.parametrize("flag", ["--help"])
+def test_run_help_does_not_present_a_missing_interpreter_as_chosen(tmp_path, flag):
+    missing = tmp_path / "no-such-python"
+    env = os.environ | {"ISAAC_MCP_PYTHON": str(missing)}
+    result = subprocess.run(["bash", str(REPO / "run.sh"), flag], env=env, capture_output=True, text=True)
+    assert result.returncode == 0
+    assert f"Interpreter: {missing} (not found;" in result.stdout
+
+
+def test_install_help_describes_the_project_not_one_robot():
+    result = subprocess.run(["bash", str(REPO / "install.sh"), "--help"], capture_output=True, text=True)
+    assert result.returncode == 0
+    assert "UR5e digital twin repository" not in result.stdout
+    assert "Never download or sync Isaac Sim" in result.stdout

@@ -141,7 +141,7 @@ def test_closure_result_has_the_shape_the_pack_tools_read(tmp_path):
     assert "UNSUPPORTED_FORMAT" in bad["error"]
 
 
-# ---------------------------------------------------------------- review round 1: compiler folders, includes, sub-models
+# ---------------------------------------------------------------- Compiler folders, includes and sub-models
 
 
 def codes(found):
