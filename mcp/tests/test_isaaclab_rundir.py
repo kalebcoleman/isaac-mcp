@@ -128,8 +128,8 @@ def test_unknown_job_is_an_error():
 
 
 def test_lab3_logs_only_the_timestamp_and_the_run_name_is_added_to_the_folder(tmp_path, _dirs):
-    """Seen in a real G1 smoke job: the log says 'experiment name ... 2026-11-09_12-51-31', the folder is '..._pr90_smoke'."""
-    run = make_run(_dirs, "g1", "2026-11-09_12-51-31", "pr90_smoke")
+    """Lab 3 logs only the timestamp as the experiment name; the run name is appended to the folder ('..._smoke')."""
+    run = make_run(_dirs, "g1", "2026-11-09_12-51-31", "smoke")
     (run / "model_1.pt").write_bytes(b"x")
     jid = "20261109-125128-T"
     write_job(jid, f"[INFO] Logging experiment in directory: {run.parent}\n"

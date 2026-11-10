@@ -835,7 +835,7 @@ def test_jenga_is_accepted_by_real_mcp_schema_and_forwarded(monkeypatch, name, a
         run(server, exercise)
 
 
-# ---- Lab 3 run 8: refresh_tools(wait_s) waited on the pinned port, not sim__launch's ----------
+# ---- refresh_tools(wait_s) waited on the pinned port, not sim__launch's ----------
 
 def dead_port():
     with socket.socket() as probe:
@@ -1056,7 +1056,7 @@ def test_launch_notes_no_longer_claim_refresh_cannot_switch(monkeypatch, tmp_pat
     assert "use_bridge(port=18766)" in status["next"] and "while that port answers" in status["next"]
 
 
-# ---- Lab 3 run 8: status reports what the MCP host process is running -------------------------
+# ---- status reports what the MCP host process is running -------------------------
 
 COMMIT_A, COMMIT_B = "a" * 40, "b" * 40
 
@@ -1162,7 +1162,7 @@ def test_status_with_no_bridge_still_reports_the_host(monkeypatch, tmp_path):
     assert "MCP host:" not in other
 
 
-# ---- Lab 3 run 8: help text must work on a stock python3 --------------------------------------
+# ---- help text must work on a stock python3 --------------------------------------
 
 def test_bridge_listing_help_is_one_working_form(monkeypatch, tmp_path):
     bare = "python -m isaac_mcp.client"    # fails on a python3 without the package

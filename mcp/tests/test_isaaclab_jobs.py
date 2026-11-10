@@ -355,7 +355,7 @@ def test_status_reconciles_an_orphaned_job_after_host_restart():
     assert jobs._read_job(jobs.jobs_dir() / jid)["note"] == "host restarted"
 
 
-# ---- cancel / id / guard regressions found by the 5080 guard test (2026-10-30) ----
+# ---- cancel / id / guard cases ----
 
 def _launch_sleeping(tmp_path, monkeypatch, **kw):
     fake_py = make_fake_python(tmp_path)

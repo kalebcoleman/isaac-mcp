@@ -5,7 +5,7 @@
 #   3. `ros2 daemon stop`, so the next `ros2 topic list` starts a daemon with THESE settings.
 #
 # A daemon started earlier with other DDS settings answers `ros2 topic list` / `node list` with
-# nothing while data flows (student run 4). Step 3 is what fixes that.
+# nothing while data flows. Step 3 is what fixes that.
 #
 #   source scripts/ros_env.sh                         # auto-detect (by OS: Humble on 22.04, Jazzy on 24.04)
 #   source scripts/ros_env.sh /opt/ros/jazzy          # an apt install

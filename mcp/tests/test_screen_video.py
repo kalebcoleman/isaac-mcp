@@ -1,4 +1,4 @@
-"""PR C: multi-window recording layout, recording defaults, frame-aware window placement and tiling,
+"""Multi-window recording layout, recording defaults, frame-aware window placement and tiling,
 raise_window on a locked screen, and join_videos (pure parts; no X display or ffmpeg run needed)."""
 import io
 import threading
@@ -175,7 +175,7 @@ def test_compose_cells_paints_each_window_and_survives_a_closed_one():
 
 
 def test_compose_cells_skips_a_zero_pixel_cell():
-    # Review of #65: extreme aspect ratios gave a 0-wide cell and image.resize((0, 0)) ended the recording.
+    # Extreme aspect ratios gave a 0-wide cell and image.resize((0, 0)) ended the recording.
     rec = screen.Recording(path=Path("x.mp4"), bbox={"width": 4, "height": 2}, fps=10, max_width=1920,
                            proc=MagicMock(), stop=threading.Event(),
                            windows=[{"id": 1, "title": "a"}], cells=[(0, 0, 0, 2)])

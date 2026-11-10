@@ -9,6 +9,7 @@ import pytest
 pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
 from sim_tools import physics, runtime
+from sim_tools.physics import body_path
 from isaac_mcp.project_assets import AssetError
 
 
@@ -91,3 +92,13 @@ def test_runtime_dynamics_units_and_nonfinite_refusal(monkeypatch):
     velocities[0, 0] = float("nan")
     with pytest.raises(AssetError, match="finite"):
         physics.body_state("/Body", 2, True, stage)
+
+
+def test_body_path_accepts_aliases_and_rejects_conflicting_targets():
+    for key in ("path", "prim", "prim_path"):
+        assert body_path({key: "/Robot/base"}) == "/Robot/base"
+    assert body_path({"path": "/Robot", "prim": "/Robot"}) == "/Robot"
+    for args in ({}, {"prim": ""}, {"path": "/A", "prim": "/B"}):
+        with pytest.raises(AssetError) as error:
+            body_path(args)
+        assert error.value.code == "INVALID_VALUE"

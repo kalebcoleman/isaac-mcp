@@ -1,6 +1,6 @@
 """sim.stage.open: open a USD file as the current stage (File > Open), returning the new target IDs.
 
-Every student run opened the lab's starter scene with run_python. ``check_path`` is pure and tested.
+Agents otherwise open a starter scene with run_python. ``check_path`` is pure and tested.
 """
 
 from __future__ import annotations

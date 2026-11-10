@@ -97,14 +97,14 @@ it would reuse references files that no longer exist, usually because it predate
 The verifier checks this before touching the scene (`scripts/check_checkpoint_refs.py`) and never changes the file. Inspect
 it, move it aside and re-run: `./verify.sh` exports a new one from your current assets. A clean clone is not affected.
 
-## Historical live checks
+## Live checks
 
-<a id="last-live-check"></a><a id="documentation-check-2026-11-03"></a>
+<a id="last-live-check"></a><a id="headless-physx-check"></a>
 On 2026-11-03, headless PhysX checks on Sim 6.2 passed `verify.sh`, the 20-check twin
 smoke, and generic scene checks with the stated test setup. They do not establish all tools,
 versions, windowed workflows, hardware or backends.
 
-<a id="lab-3-run-8-fixes-2026-11-03"></a> LiDAR save/reopen behavior and recovery are described in [scene tools](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
+LiDAR save/reopen behavior and recovery are described in [scene tools](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
 
 <a id="windowed-viewport-reset-comparison"></a> On 6.2, a windowed reset sequence logged
 `NoneType.GetCamera` while destroying the old stage. The tested sequence subsequently rendered

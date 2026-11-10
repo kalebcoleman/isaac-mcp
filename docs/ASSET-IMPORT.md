@@ -172,7 +172,7 @@ An import authors a valid robot; it does not make it stand or walk. What to expe
 
 On simultaneous headless Sim 5.1 and 6.2 processes, small USD, URDF, xacro, SDF, glTF, ROS map and Go2 MJCF imports passed. SO-101 and Panda also imported and moved; the Panda finger-coupling check is described above. These samples do not establish every asset variant or controller. The 5.1 adapter merges only unambiguous named defaults and gives colliding mesh stems unique names in a private copy; the source stays unchanged. It refuses ambiguous cases with a reason. URDF export is refused on 5.1 because that exporter wrote an empty robot. The remaining results below are the earlier 6.2 run.
 
-Run with a visible simulator window on Isaac Sim 6.2, from real downloads, not made-up files. Pictures and logs: `runs/universal-import-demo/` of the test workspace, summarised in the earlier project history.
+Run with a visible simulator window on Isaac Sim 6.2, from real downloads, not made-up files.
 
 | Format | Asset | Result |
 |---|---|---|

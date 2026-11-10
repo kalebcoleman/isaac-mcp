@@ -16,7 +16,7 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts" / "sim-tools"))
 
-from isaac_mcp.project_assets import AssetError  # noqa: E402
+from isaac_mcp.project_assets import AssetError, Broker  # noqa: E402
 from isaac_mcp.scene_contracts import REGISTRY  # noqa: E402
 from sim_tools import quick_start as qs  # noqa: E402
 from sim_tools.core import Scene  # noqa: E402
@@ -529,3 +529,132 @@ def test_public_robot_next_steps_never_name_a_link_for_joint_inspection(kit):
     root = out["robot"]["articulation_root"]
     inspect = [step for step in out["next_steps"] if "sim__joints__inspect" in step]
     assert inspect and f'path="{root}"' in inspect[0]
+
+
+class Calls:
+    """Stands in for server._dispatch: records what quick start asks for and answers as the bridge would."""
+
+    def __init__(self, imported=None, scene=None):
+        self.calls = []
+        self.imported = imported or dict(status="ok", articulation_root="/World/go2/Asset/base", articulation_roots=["/World/go2/Asset/base"], base="floating",
+                                         placement=dict(lifted_by=0.25))
+        self.scene = scene or {}
+
+    def __call__(self, name, params, state=None):
+        self.calls.append((name, params))
+        if name == "sim.quick_start":
+            return json.dumps(dict(status="ok", session_id="s", stage_id="t", playing=False, stopped=True, **self.scene))
+        if name == "assets.import_path":
+            return json.dumps(self.imported)
+        return json.dumps(dict(status="ok"))
+
+    def named(self, name):
+        return [p for n, p in self.calls if n == name]
+
+
+def quick_start(monkeypatch, calls, **params):
+    from isaac_mcp import server
+
+    monkeypatch.setattr(server, "_dispatch", calls)
+    return json.loads(server._quick_start_with_import({"robot": "/data/go2", **params}, None))
+
+
+def test_quick_start_with_a_file_that_fails_to_import_is_an_error_not_a_success(monkeypatch):
+    calls = Calls(imported=dict(status="error", code="UNITS_MISMATCH", message="They differ."))
+    result = quick_start(monkeypatch, calls, up_axis="Y")
+    assert result["status"] == "error" and result["code"] == "UNITS_MISMATCH" and "not imported" in result["message"] and "They differ" in result["message"]
+    assert result["scene_built"] is True and result["session_id"] == "s"
+
+
+def test_quick_start_with_a_file_plays_after_the_import_not_before(monkeypatch):
+    """The scene was playing when the import ran, so the import always refused with TIMELINE_ACTIVE."""
+    calls = Calls()
+    result = quick_start(monkeypatch, calls, play=True)
+    assert "play" not in calls.named("sim.quick_start")[0]
+    order = [n for n, _ in calls.calls]
+    assert order.index("assets.import_path") < order.index("sim.timeline.control")
+    assert result["playing"] is True and result["stopped"] is False
+
+
+def test_quick_start_with_a_file_leaves_the_base_to_the_file_unless_told(monkeypatch):
+    calls = Calls()
+    quick_start(monkeypatch, calls)
+    assert "fixed_base" not in calls.named("assets.import_path")[0]
+    calls = Calls()
+    quick_start(monkeypatch, calls, fixed_base=True)
+    assert calls.named("assets.import_path")[0]["fixed_base"] is True
+
+
+def test_the_quick_start_contract_does_not_invent_a_fixed_base():
+    """A default of true bolted a MuJoCo Go2 and a Gazebo Pioneer to the world through quick start, and not through the import."""
+    from isaac_mcp.scene_contracts import REGISTRY
+
+    fields = REGISTRY["sim.quick_start"]["parameters"]
+    assert "default" not in fields["fixed_base"] and "xacro_args" in fields and "sdf_model" in fields
+
+
+def test_quick_start_with_a_file_in_an_environment_replaces_its_robot_and_goes_to_its_start(monkeypatch):
+    """The environment's default robot was added too, and the file stood in the middle of the warehouse."""
+    calls = Calls(scene=dict(environment=dict(robot_start=[-10.5, -2.5, 0.0])))
+    result = quick_start(monkeypatch, calls, environment="warehouse")
+    assert calls.named("sim.quick_start")[0]["no_default_robot"] is True
+    moved = calls.named("sim.prim.set_transform")[0]
+    assert moved["path"] == "/World/go2" and moved["position"] == [-10.5, -2.5, 0.25]  # keeps the lift out of the ground
+    assert result["robot"]["articulation_root"] == "/World/go2/Asset/base" and result["robot"]["base"] == "floating"
+
+
+def test_quick_start_preserves_an_explicit_position_in_an_environment(monkeypatch):
+    calls = Calls(scene=dict(environment=dict(robot_start=[-10.5, -2.5, 0.0])))
+    quick_start(monkeypatch, calls, environment="warehouse", position=[1, 2, 3])
+    assert calls.named("assets.import_path")[0]["position"] == [1, 2, 3]
+    assert not calls.named("sim.prim.set_transform")
+
+
+def test_quick_start_reports_play_failure_after_import(monkeypatch):
+    class PlayFails(Calls):
+        def __call__(self, name, params, state=None):
+            if name == "sim.timeline.control":
+                return json.dumps(dict(status="error", code="NOT_READY", message="not initialized"))
+            return super().__call__(name, params, state)
+
+    result = quick_start(monkeypatch, PlayFails(), play=True)
+    assert result["playing"] is False and result["play_error"]["code"] == "NOT_READY"
+
+
+def test_quick_start_with_a_file_runs_ros_after_the_import(monkeypatch):
+    """ros=true was refused with "needs a robot" though one was given."""
+    calls = Calls()
+    result = quick_start(monkeypatch, calls, ros=True)
+    assert "ros" not in calls.named("sim.quick_start")[0]
+    assert calls.named("sim.ros2.tf_setup")[0]["robot"] == "/World/go2" and calls.named("sim.ros2.tf_setup")[0]["base"] == "mobile"
+    assert result["ros"]["status"] == "ok"
+
+
+def test_a_urdf_that_holds_xacro_goes_through_the_import_from_quick_start(tmp_path):
+    from isaac_mcp import server
+
+    real = tmp_path / "plain.urdf"
+    real.write_text('<robot name="r"/>')
+    xacro = tmp_path / "burger.urdf"
+    xacro.write_text('<robot name="r" xmlns:xacro="http://ros.org/wiki/xacro"/>')
+    project = tmp_path / "project"
+    project.mkdir()
+    real.rename(project / real.name)
+    xacro.rename(project / xacro.name)
+    staging = tmp_path / "staging"
+    staging.mkdir(mode=0o700)
+    approval = tmp_path / "approval.json"
+    approval.write_text(json.dumps(dict(version=1, profile="trusted_project", roots={"fixture": str(project)}, staging=str(staging))))
+    state = SimpleNamespace(asset_broker=Broker(str(approval)))
+    assert server._quick_start_wants_import(str(project / real.name), state) is False
+    assert server._quick_start_wants_import(str(project / xacro.name), state) is True
+    assert server._quick_start_wants_import(str(project / "missing.urdf"), state) is False
+    # Outside roots, symlinks and non-regular files are never read by the probe.
+    outside = tmp_path / "outside.urdf"
+    outside.write_text('<robot xmlns:xacro="http://ros.org/wiki/xacro"/>')
+    (project / "link.urdf").symlink_to(outside)
+    import os
+    os.mkfifo(project / "pipe.urdf")
+    assert server._quick_start_wants_import(str(outside), state) is False
+    assert server._quick_start_wants_import(str(project / "link.urdf"), state) is False
+    assert server._quick_start_wants_import(str(project / "pipe.urdf"), state) is False

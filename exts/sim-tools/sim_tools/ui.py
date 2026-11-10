@@ -1,6 +1,6 @@
 """Kit-native UI computer use: find Isaac Sim widgets by name and drive them through Kit's input.
 
-Why: on a lab PC that is used remotely, the X11 session is locked. The lock screen holds the X
+Why: on a machine that is used remotely, the X11 session is often locked. The lock screen holds the X
 keyboard and pointer grabs, so X11 input (window_click/window_type) would reach the lock screen,
 not Isaac Sim, and monitor screenshots are black. Kit's own input provider (``carb.input``, the
 path ``omni.kit.ui_test`` uses) feeds events straight into the app, so these tools keep working

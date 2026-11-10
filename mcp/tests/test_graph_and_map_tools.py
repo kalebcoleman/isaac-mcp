@@ -120,7 +120,7 @@ def test_find_ogn_ignores_an_empty_extension_path():
 
 
 def test_find_ogn_handles_ids_that_keep_the_ogn_prefix(tmp_path):
-    # Student run 2: "Scale To/From Stage Units" is isaacsim.core.nodes.OgnIsaacScaleToFromStageUnit,
+    # "Scale To/From Stage Units" is isaacsim.core.nodes.OgnIsaacScaleToFromStageUnit,
     # and the lookup searched for OgnOgnIsaacScaleToFromStageUnit.ogn, so it reported no ports.
     nodes = tmp_path / "python" / "nodes"
     nodes.mkdir(parents=True)

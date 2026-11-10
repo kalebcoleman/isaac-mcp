@@ -91,9 +91,8 @@ conservative destructive and open-world annotations. To enable the separate simu
   the same conservative hints; those processes may write files or contact external systems.
 - `isaaclab_jobs` can write: `runs_list` and `runs_status` replace stored metadata when reconciling orphaned jobs,
   and `runs_tail` can create the jobs directory. The first two have destructive hints; `runs_tail` has an additive hint.
-- Compatibility: `readonly` and `isaaclab_read` no longer include these five tools. To restore the previous local
-  selection, add `isaaclab_probe,isaaclab_jobs` (for example, `readonly,isaaclab_probe,isaaclab_jobs`). The default
-  `all` selection and the tools' behavior are unchanged.
+- `readonly` and `isaaclab_read` do not include these five tools. To add them, select `isaaclab_probe,isaaclab_jobs`
+  as well (for example, `readonly,isaaclab_probe,isaaclab_jobs`). The default `all` selection includes them.
 - The capture directories (`~/Pictures/screen-mcp`, `~/Videos/screen-mcp`) are created only when `screen_capture` is
   enabled, so a profile without that group creates neither. Importing the Isaac Lab job module can still reconcile
   orphaned job records in an existing jobs directory, whatever the groups. Thus even
@@ -144,11 +143,9 @@ X11 reuses window IDs after a window closes. On a shared desktop, list windows a
 afterwards with `join_videos` and `{"inputs":["intro.mp4","demo.mp4"],"output":"final.mp4"}`. Window capture reads the selected window's pixels, including when another window
 covers it. For a clean simulator viewport without desktop chrome, use the twin's `ur5e_dt__start_recording` instead.
 
-Recording defaults changed: `full_screen` now defaults to false and `max_width` to 1920. Previously a window
-recording was scaled and padded to the primary monitor by default (3440×1440 on an ultra-wide, or a 1440×900 window
-upscaled to 1920×1080), and `full_screen=false` capped at 1600. Now a window keeps its native size up to 1920 wide,
-and explicit `full_screen=true` letterboxes into the monitor's shape at most `max_width` wide; pass
-`max_width=3840` for the old full-resolution full-screen output.
+Recording defaults: `full_screen` is false and `max_width` is 1920. A window keeps its native size up to 1920 wide. Explicit
+`full_screen=true` letterboxes into the monitor's shape at most `max_width` wide; pass `max_width=3840` for
+full-resolution full-screen output.
 
 On a locked or remote PC (monitor captures black, X input refused): window screenshots and recordings,
 `window_ids` recordings and locked monitor recordings work from window pixels; `move_window` and `tile_windows`

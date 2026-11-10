@@ -70,7 +70,7 @@ def display(kind: str, topic: str, index: int) -> list[str]:
     lines = [f"  - Class: {cls}", f"{i}Enabled: true", f"{i}Name: {q(f'{label} {topic}')}", f"{i}Value: true"]
     if kind in ("scan", "cloud"):
         # Flat colour: Isaac's RTX 2D lidar publishes all-zero intensities, and with the Intensity
-        # transformer RViz drew the scan invisibly (student run 2).
+        # transformer RViz drew the scan invisibly.
         lines += [f"{i}Size (m): {0.05 if kind == 'scan' else 0.01}", f"{i}Style: Flat Squares",
                   f"{i}Color Transformer: FlatColor", f"{i}Color: 255; 0; 0", f"{i}Use Fixed Frame: true"]
     if kind == "odom":

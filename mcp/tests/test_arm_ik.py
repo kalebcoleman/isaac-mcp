@@ -261,7 +261,7 @@ def test_many_poses_built_from_known_joints_are_all_reached(arm):
     assert not misses, misses
 
 
-# ---- review round 1: harder conventions, and the tool paths a live run cannot cover --------------------------------
+# ---- Harder conventions, and the tool paths a live run cannot cover --------------------------------
 
 def _rx(a):
     c, s = math.cos(a), math.sin(a)
@@ -494,7 +494,7 @@ def test_solve_applies_the_wrap_around_to_what_it_returns(arm, monkeypatch):
     assert called
 
 
-# ---- review round 2 ---------------------------------------------------------------------------------------------
+# ---- Solver timeouts, candidate ranking and stage units ---------------------------------------------------------------------------------------------
 
 def _fake_descents(monkeypatch, outcomes):
     """Replace the descent with scripted results (q, ok), and make the clock jump past the deadline after the last one."""
@@ -545,7 +545,7 @@ def _scaled(chain, factor):
 
 
 def test_a_centimetre_stage_solves_to_the_same_poses(arm):
-    """The riskiest change of round 1: on a centimetre stage positions are 100x larger than radians. The same arm, built in
+    """The riskiest case: on a centimetre stage positions are 100x larger than radians. The same arm, built in
     centimetres, must reach the same poses within a millimetre (0.1 cm) and a hundredth of a radian."""
     stage, joints = arm
     metres = ik.build_chain(stage, joints, "/Arm/base", "/Arm/hand")

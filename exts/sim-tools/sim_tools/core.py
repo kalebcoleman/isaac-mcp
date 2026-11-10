@@ -1329,7 +1329,7 @@ class Scene:
 
     def save_directory(self, directory):
         """Where sim.stage.save writes: the configured output root, or an existing folder under the
-        user's home (students keep lab checkpoints in their own work folder)."""
+        user's home (lab checkpoints are kept in a work folder there)."""
         if directory in (None, ""):
             self.output.mkdir(mode=0o700, parents=True, exist_ok=True)
             return self.output

@@ -619,3 +619,41 @@ def test_inspect_finds_joints_in_a_sibling_physics_folder_of_the_link(advanced, 
     assert [j["path"].rsplit("/", 1)[-1] for j in out["joints"]] == [
         "root_joint", "shoulder_pan_joint", "elbow_joint"]
     assert out["scope"] == "articulation"
+
+
+def test_graph_show_playing_error_contains_a_complete_retry():
+    scene = SimpleNamespace(stage_id="t", timeline=SimpleNamespace(is_stopped=lambda: False))
+    tool = Advanced(scene, None)
+    args = dict(session_id="s", stage_id="t", path="/Robot/Graph", layout=True, width=850, height=450)
+    with pytest.raises(AssetError) as error:
+        tool.execute("sim.graph.show", None, args)
+    assert error.value.code == "TIMELINE_ACTIVE"
+    assert error.value.details["retry_with"] == {**args, "layout": False}
+    assert "layout=false" in str(error.value)
+
+
+def test_joints_inspect_flags_a_joint_with_no_drive(advanced):
+    """A joint with no authored drive ignores a position target, so the inspection flags it."""
+    stage = advanced.s.stage()
+    advanced.s.create(stage, "/World/Arm", "Xform")
+    for name, driven in (("finger1", True), ("finger2", False)):
+        joint = UsdPhysics.PrismaticJoint.Define(stage, f"/World/Arm/{name}")
+        if driven:
+            drive = UsdPhysics.DriveAPI.Apply(joint.GetPrim(), "linear")
+            drive.CreateStiffnessAttr(400.0)
+            drive.CreateDampingAttr(80.0)
+            drive.CreateMaxForceAttr(7.2)
+    result = advanced.execute("sim.joints.inspect", stage, dict(path="/World/Arm"))
+    flags = {j["path"]: j.get("no_drive", False) for j in result["joints"]}
+    assert flags == {"/World/Arm/finger1": False, "/World/Arm/finger2": True}
+    assert result["joints_without_drive"] == ["/World/Arm/finger2"]
+    assert "sim__joints__gains" in result["drive_note"]
+
+
+def test_joints_inspect_adds_nothing_when_every_joint_has_a_drive(advanced):
+    stage = advanced.s.stage()
+    advanced.s.create(stage, "/World/Arm", "Xform")
+    joint = UsdPhysics.RevoluteJoint.Define(stage, "/World/Arm/j1")
+    UsdPhysics.DriveAPI.Apply(joint.GetPrim(), "angular").CreateStiffnessAttr(10.0)
+    result = advanced.execute("sim.joints.inspect", stage, dict(path="/World/Arm"))
+    assert "joints_without_drive" not in result and "no_drive" not in result["joints"][0]
