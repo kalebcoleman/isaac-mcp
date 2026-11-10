@@ -1,4 +1,4 @@
-"""Pure M4 logic: DOF name resolution, clamping and the tensor-view adapters (no Kit)."""
+"""Pure logic: DOF name resolution, clamping and the tensor-view adapters (no Kit)."""
 
 import math
 import sys
@@ -25,7 +25,7 @@ NAMES = ["shoulder_pan", "shoulder_lift", "wrist"]
 
 
 class FakeView:
-    """The part of the PhysX/Newton tensor articulation view the M4 adapters use."""
+    """The part of the PhysX/Newton tensor articulation view the adapters use."""
 
     def __init__(self, values, limits=None, float64=False):
         self.values = np.array([values], dtype=np.float64 if float64 else np.float32)

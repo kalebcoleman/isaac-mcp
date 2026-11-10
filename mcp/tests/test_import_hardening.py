@@ -1,4 +1,4 @@
-"""What the branch review found: encoded references, an expansion that never ends, work bounded only by element count, raw errors, and SDF read wrong."""
+"""Asset import hardening: encoded references, bounded xacro expansion, and SDF poses and joints."""
 
 import math
 import os

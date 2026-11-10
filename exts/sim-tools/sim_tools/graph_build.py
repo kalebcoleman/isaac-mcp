@@ -1,7 +1,7 @@
 """sim.graph.build: create a whole OmniGraph (Action Graph) from one declarative spec.
 
-Every student run built the lab's graphs by hand in run_python with og.Controller and hit the same
-traps: short node names work only inside the CREATE_NODES edit, Make Array's second input must be
+Building graphs by hand in run_python with og.Controller hits the same
+traps every time: short node names work only inside the CREATE_NODES edit, Make Array's second input must be
 created by hand, prim targets are USD relationships, and a token such as Scale To/From Stage Units'
 "conversion" silently fails with its key ("toStage") instead of its value ("Convert to stage units").
 This tool takes node names, values, connections and prim targets, checks every port against the

@@ -1,8 +1,7 @@
 """The ROS 2 / DDS settings this Kit process runs with, and how a shell can match them.
 
-In student run 5 neither agent could see /clock from its own shell: the shell had not sourced the
-DDS profile the simulator uses (Cyclone, localhost only, its ROS_DOMAIN_ID), so discovery found
-nothing while Kit was publishing. ``describe`` is pure and unit-tested.
+A shell that has not sourced the DDS profile the simulator uses (Cyclone, localhost only, its ROS_DOMAIN_ID) finds
+nothing while Kit is publishing, so /clock is invisible to it. ``describe`` is pure and unit-tested.
 """
 
 from __future__ import annotations

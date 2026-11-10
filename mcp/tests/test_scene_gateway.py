@@ -1,10 +1,18 @@
 import asyncio
+import importlib.util
 import json
+from pathlib import Path
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 from isaac_mcp import server as gw
 from isaac_mcp.scene_contracts import REGISTRY
 from isaac_mcp.host_catalog import load_catalog
+
+_GRAPH_BUILD = Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/graph_build.py"
+_spec = importlib.util.spec_from_file_location("sim_tools_graph_build_gateway", _GRAPH_BUILD)
+gb = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(gb)
+TICK, PUB = "omni.graph.action.OnPlaybackTick", "isaacsim.ros2.bridge.ROS2PublishClock"
 
 
 def test_full_catalog_and_errors(monkeypatch):
@@ -61,7 +69,7 @@ def test_full_catalog_and_errors(monkeypatch):
                 and "tool acquisition" in camera_wait["description"]
             )
             assert "completed scan" in lidar_wait["description"]
-            # Student run 2: clear was typed list[float], so no [x, y, r] circle got through.
+            # clear was typed list[float], so no [x, y, r] circle got through.
             clear = listed["sim__map__occupancy"].inputSchema["properties"]["clear"]
             assert clear["maxItems"] == 16
             assert clear["items"]["type"] == "array" and clear["items"]["items"]["type"] == "number"
@@ -123,7 +131,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
     hidden = gw.build_server({"ISAAC_MCP_SCENE_TOOLS": "0"})
     visible = gw.build_server({})
-    # The 7 bridge built-ins are listed offline too (PR D), so offline == with a bridge.
+    # The 7 bridge built-ins are listed offline too, so offline == with a bridge.
     assert len(hidden._tool_manager._tools) == 60
     assert len(visible._tool_manager._tools) == 129
     assert "run_python" in visible._tool_manager._tools and "status" in hidden._tool_manager._tools
@@ -342,3 +350,135 @@ def test_a_newer_bridge_parameter_does_not_break_discovery():
     # Unknown arrays keep the bridge's plain list type: strings are not rejected as non-numbers.
     pydantic.TypeAdapter(fn.__annotations__["titles"]).validate_python(["Console"])
     pydantic.TypeAdapter(fn.__annotations__["brand_new"]).validate_python("x")
+
+
+def test_scene_tools_refuse_unknown_arguments():
+    # properties={...} was silently dropped by sim__graph__build and nothing was applied.
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+
+    async def run():
+        async with create_connected_server_and_client_session(server._mcp_server) as client:
+            await client.initialize()
+            bad = await client.call_tool("sim__graph__build", {"session_id": "s", "stage_id": "t", "path": "/G",
+                                                               "nodes": [["tick", TICK]], "properties": {"a": 1}})
+            assert bad.isError and "properties" in bad.content[0].text and "xtra" in bad.content[0].text
+            ok = await client.call_tool("sim__graph__build", {"session_id": "s", "stage_id": "t", "path": "/G",
+                                                              "nodes": [{"name": "tick", "type": TICK}]})
+            assert "xtra" not in ok.content[0].text   # reaches dispatch (fails offline, not on validation)
+            listed = {t.name: t for t in (await client.list_tools()).tools}
+            assert listed["sim__graph__build"].inputSchema.get("additionalProperties") is False
+
+    asyncio.run(run())
+
+
+def test_serialized_graph_payload_reaches_parser_through_mcp():
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    seen = []
+
+    class Bridge:
+        def call(self, name, args):
+            assert name == "sim.graph.build"
+            try:
+                seen.append(gb.parse_spec(args))
+                return {"status": "ok"}
+            except gb.SpecError as exc:
+                return {"status": "error", "code": exc.code, "message": str(exc)}
+        def close(self):
+            pass
+
+    gw._state_for(server).client = Bridge()
+
+    async def run():
+        async with create_connected_server_and_client_session(server._mcp_server) as client:
+            await client.initialize()
+            args = {"session_id": "s", "stage_id": "t", "path": "/G",
+                    "nodes": ['["tick", "omni.graph.action.OnPlaybackTick"]',
+                              '["clock", "isaacsim.ros2.bridge.ROS2PublishClock"]'],
+                    "connections": ['["tick.outputs:tick", "clock.inputs:execIn"]'],
+                    "values": '{"clock.inputs:topicName": "/clock", "clock.inputs:queueSize": 10}'}
+            result = await client.call_tool("sim__graph__build", args)
+            assert not result.isError
+            assert seen[-1]["nodes"] == [("tick", TICK), ("clock", PUB)]
+            assert ("clock", "inputs:queueSize", 10) in seen[-1]["values"]
+            args["nodes"] = '[invalid'
+            bad = await client.call_tool("sim__graph__build", args)
+            assert bad.isError and "nodes: expected" in bad.content[0].text
+            assert "validation errors" not in bad.content[0].text
+
+    asyncio.run(run())
+
+
+def test_graph_schema_and_serialization_errors_at_mcp_boundary():
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    seen = []
+
+    class Bridge:
+        def call(self, name, args):
+            assert name == "sim.graph.build"
+            seen.append(args)
+            try:
+                gb.parse_spec(args)
+                return {"status": "ok"}
+            except gb.SpecError as exc:
+                return {"status": "error", "code": exc.code, "message": str(exc)}
+        def close(self):
+            pass
+
+    gw._state_for(server).client = Bridge()
+
+    async def run():
+        async with create_connected_server_and_client_session(server._mcp_server) as client:
+            await client.initialize()
+            listed = {t.name: t for t in (await client.list_tools()).tools}
+            props = listed["sim__graph__build"].inputSchema["properties"]
+            for field, expected in (("nodes", "array"), ("connections", "array"),
+                                    ("values", "object"), ("targets", "object")):
+                schema = props[field]
+                assert schema.get("description")
+                assert {branch.get("type") for branch in schema["anyOf"]} >= {"string", expected}
+                assert all(branch.get("type") for branch in schema["anyOf"])
+            valid = {"session_id": "s", "stage_id": "t", "path": "/G",
+                     "nodes": [["clock", PUB]], "connections": [],
+                     "values": {"clock.inputs:topicName": "/clock"},
+                     "targets": {"clock.inputs:targetPrim": ["/World/Camera"]}}
+            result = await client.call_tool("sim__graph__build", valid)
+            assert not result.isError and seen[-1]["nodes"] == valid["nodes"]
+            deep = "[" * 2000 + "]" * 2000
+            cases = [
+                ("nodes", deep),
+                ("nodes", [deep]),
+                ("connections", deep),
+                ("values", '{"clock.inputs:value": NaN}'),
+                ("targets", {"clock.inputs:targetPrim": deep}),
+            ]
+            for field, value in cases:
+                args = dict(valid, **{field: value})
+                before = len(seen)
+                result = await client.call_tool("sim__graph__build", args)
+                assert len(seen) == before + 1  # bridge parser, not FastMCP pre-parsing
+                assert result.isError and field in result.content[0].text
+                assert "expected" in result.content[0].text
+                assert "recursion" not in result.content[0].text.lower()
+                assert len(result.content[0].text) < 500
+
+    asyncio.run(run())
+
+
+def test_body_path_aliases_reach_the_bridge():
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    seen = []
+    class Bridge:
+        def call(self, name, args):
+            seen.append((name, args))
+            return {"status": "ok"}
+        def close(self):
+            pass
+    gw._state_for(server).client = Bridge()
+
+    async def run():
+        async with create_connected_server_and_client_session(server._mcp_server) as client:
+            await client.initialize()
+            for key in ("path", "prim", "prim_path"):
+                result = await client.call_tool("sim__body__state", {"session_id": "s", "stage_id": "t", key: "/Robot"})
+                assert not result.isError and seen[-1][1][key] == "/Robot"
+    asyncio.run(run())

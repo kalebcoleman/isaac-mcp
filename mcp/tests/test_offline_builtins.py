@@ -1,7 +1,7 @@
-"""PR D: the bridge built-ins are listed before any bridge answers, and refresh_tools explains a
+"""The bridge built-ins are listed before any bridge answers, and refresh_tools explains a
 Kit that is still starting (optionally waiting for it).
 
-Student run 4 used OpenCode, which ignores tools/list_changed: after refresh_tools registered
+Clients such as OpenCode ignore tools/list_changed: after refresh_tools registered
 run_python and status, the client still said "Unknown tool". Listing them from the packaged
 catalog, like the twin and scene tools, makes them visible from the first tools/list.
 """
@@ -88,7 +88,7 @@ def test_builtins_are_listed_and_callable_through_an_mcp_client_before_discovery
         async def online():
             async with create_connected_server_and_client_session(server._mcp_server) as client:
                 await client.initialize()
-                # The offline proxy dials the selected bridge: no refresh needed (OpenCode case).
+                # The offline proxy dials the selected bridge: no refresh needed.
                 answer = await client.call_tool("status", {})
                 assert not answer.isError
                 assert json.loads(answer.content[0].text)["port"] == bridge.port
@@ -175,7 +175,7 @@ def test_refresh_tools_advertises_wait_s():
 
 
 def test_refresh_wait_rejects_nan_and_probes_off_the_event_loop(monkeypatch):
-    # Review of #66: wait_s=nan made the deadline nan (poll forever); the boot probe blocked the loop.
+    # wait_s=nan made the deadline nan (poll forever); the boot probe blocked the loop.
     import threading
 
     server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})

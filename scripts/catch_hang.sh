@@ -1,7 +1,6 @@
 #!/bin/bash
 # Loop "boot headless -> quick_start_with_workstation" until it hangs, then keep the evidence.
-# Known flake: quick_start occasionally never returns on the first call after boot (seen twice on
-# 2026-10-29; usually takes ~5 s). Run on a machine with an NVIDIA GPU and the 6.2 env (./install.sh).
+# Known flake: quick_start occasionally never returns on the first call after boot (usually takes ~5 s). Run on a machine with an NVIDIA GPU and the 6.2 env (./install.sh).
 #
 #   scripts/catch_hang.sh [iterations=20] [per-call timeout seconds=120]
 #

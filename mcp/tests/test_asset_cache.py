@@ -696,7 +696,7 @@ def test_resolve_info_points_fetch_group_members_at_the_fetch_script(monkeypatch
     assert "no public source" not in info["detail"]
 
 
-# --- review regressions (PR 51) -------------------------------------------------
+# --- Nested stores and pinned names -------------------------------------------------
 
 
 def test_nested_stores_use_the_pin_file_of_the_folder_that_holds_the_asset(monkeypatch, tmp_path):
@@ -884,10 +884,10 @@ def test_explicit_asset_path_beats_the_workspace(monkeypatch, tmp_path):
     assert module.user_stores() == [explicit.resolve()]
 
 
-# --- round-2 review regressions (PR 51) -------------------------------------------
+# --- Pin lookup in containing and symlinked folders -------------------------------------------
 
 
-def test_r3_verify_local_without_a_base_uses_the_pin_of_the_folder_the_lookup_chose(
+def test_verify_local_without_a_base_uses_the_pin_of_the_folder_the_lookup_chose(
     monkeypatch, tmp_path
 ):
     outer = tmp_path / "S"
@@ -903,7 +903,7 @@ def test_r3_verify_local_without_a_base_uses_the_pin_of_the_folder_the_lookup_ch
         module.verify_local("nested/custom.usd", module.find_local("nested/custom.usd"))
 
 
-def test_r3_ambiguous_containing_folders_must_all_agree(monkeypatch, tmp_path):
+def test_ambiguous_containing_folders_must_all_agree(monkeypatch, tmp_path):
     outer = tmp_path / "S"
     inner = outer / "nested"
     put(inner / "custom.usd", b"edited")
@@ -916,7 +916,7 @@ def test_r3_ambiguous_containing_folders_must_all_agree(monkeypatch, tmp_path):
         module.verify_local("something/else.usd", inner / "custom.usd")
 
 
-def test_r4_a_symlinked_pack_folder_resolves_and_reports_pinned(monkeypatch, tmp_path):
+def test_a_symlinked_pack_folder_resolves_and_reports_pinned(monkeypatch, tmp_path):
     actual = tmp_path / "actual-pack"
     put(actual / "custom.usd", b"mine")
     sums(actual, **{"custom.usd": b"mine"})
@@ -933,10 +933,10 @@ def test_r4_a_symlinked_pack_folder_resolves_and_reports_pinned(monkeypatch, tmp
         module.resolve_path("custom.usd")
 
 
-# --- review follow-ups (M5, M6, non-UTF-8 pin file) ----------------------------------
+# --- Symlinked files and pin-file parsing ----------------------------------
 
 
-def test_m5_a_symlinked_file_inside_a_pack_is_verified_by_its_own_name(monkeypatch, tmp_path):
+def test_a_symlinked_file_inside_a_pack_is_verified_by_its_own_name(monkeypatch, tmp_path):
     outside = tmp_path / "outside.usd"
     outside.write_bytes(b"real")
     store = tmp_path / "store"
@@ -954,7 +954,7 @@ def test_m5_a_symlinked_file_inside_a_pack_is_verified_by_its_own_name(monkeypat
         module.resolve_path("robots/b.usd")
 
 
-def test_m6_pin_files_are_parsed_once_until_they_change(monkeypatch, tmp_path):
+def test_pin_files_are_parsed_once_until_they_change(monkeypatch, tmp_path):
     module = load_module()
     sums(tmp_path, **{"a.usd": b"a"})
     calls = []

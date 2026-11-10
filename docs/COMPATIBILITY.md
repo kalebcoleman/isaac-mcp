@@ -12,7 +12,7 @@ not silently change the backend of an existing scene. Earlier narrow 6.2 Newton 
 MuJoCo Warp on CPU; earlier tests also produced native crashes, invalid state, rendering and contact failures.
 On 2026-11-06, a 6.2 headless Newton session reported the MuJoCo solver on `cuda:0` and a cube fell under
 gravity, but 20 exact steps at 0.002 s returned `STEP_TIMING_MISMATCH` (observed 0.020 s, expected 0.040 s).
-This does not qualify broader scene, contact, robot or Lab workflows. See the [Newton/Warp follow-up](CHECKLIST.md#newton-and-warp-gpu-physics-separate-follow-up-pr).
+This does not qualify broader scene, contact, robot or Lab workflows. See the [Newton and Warp checklist](CHECKLIST.md#newton-and-warp-gpu-physics).
 
 Isaac Sim 6.2 loaded its bundled Warp 1.17.0 even though the Python environment also contained a different
 `warp-lang` distribution. Inspect the version **loaded inside Kit**, not just `pip show`. NVIDIA notes that
@@ -28,7 +28,7 @@ camera reuse remain separate limits.
 ## Simulator builds
 
 The 6.0 and 6.1 probes used separately resolved environments, not this project's 6.2 lock.
-The PR 70 retest records additional short checks. The 20-check smoke is scoped: it does not exercise real
+Further short checks are recorded in [verification](VERIFICATION.md). The 20-check smoke is scoped: it does not exercise real
 hardware or establish that every viewport, ROS, desktop or Lab configuration works.
 A listed tool does not establish that a compatible bridge is running.
 

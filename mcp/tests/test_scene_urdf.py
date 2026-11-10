@@ -3,6 +3,7 @@
 import pytest
 import json
 import sys
+from xml.etree import ElementTree
 from types import SimpleNamespace
 from test_scene_usd import scene  # registers the extension package path
 from pxr import Gf, Usd, UsdGeom, UsdPhysics
@@ -10,6 +11,7 @@ from isaac_mcp import urdf_physics, urdf_refs
 from isaac_mcp.project_assets import AssetError, Broker
 from sim_tools.advanced import Advanced
 from sim_tools.urdf import (
+    _author_drives,
     ground_height,
     lowest_point,
     place_above_ground,
@@ -721,3 +723,18 @@ def test_a_continuous_joint_gets_no_holding_stiffness_only_when_its_limits_are_a
     authored, _, _ = _author_drives(stage.GetPrimAtPath("/Robot"), gains, False)
     assert authored["wheel"]["stiffness"] == 0.0 and authored["wheel"]["continuous"] is True and authored["wheel"]["damping"] > 0
     assert authored["hinge"]["stiffness"] > 0 and authored["limited"]["stiffness"] > 0
+
+
+def test_a_urdf_continuous_joint_is_free_even_when_the_importer_authors_no_limits():
+    """Sim 6.2's URDF importer writes no limit on a continuous joint, so the wheel kept a holding stiffness and stopped at about 0.6 rad."""
+    urdf = ('<robot name="r"><link name="a"><inertial><mass value="1"/><inertia ixx="1" iyy="1" izz="1" ixy="0" ixz="0" iyz="0"/></inertial></link>'
+            '<link name="b"><inertial><mass value="1"/><inertia ixx="1" iyy="1" izz="1" ixy="0" ixz="0" iyz="0"/></inertial></link>'
+            '<joint name="wheel" type="continuous"><parent link="a"/><child link="b"/><axis xyz="0 0 1"/></joint></robot>')
+    gains = urdf_physics.default_gains(urdf_physics.read_model(ElementTree.fromstring(urdf)))
+    assert gains["wheel"]["continuous"] is True
+    stage = Usd.Stage.CreateInMemory()
+    UsdPhysics.RevoluteJoint.Define(stage, "/Robot/wheel")  # no limits authored
+    authored, _, _ = _author_drives(stage.GetPrimAtPath("/Robot"), gains, False)
+    assert authored["wheel"]["stiffness"] == 0.0 and authored["wheel"]["damping"] > 0
+    drive = UsdPhysics.DriveAPI.Get(stage.GetPrimAtPath("/Robot/wheel"), "angular")
+    assert drive.GetStiffnessAttr().Get() == 0.0

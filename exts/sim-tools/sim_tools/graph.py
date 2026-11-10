@@ -79,8 +79,8 @@ def ogn_ports(ogn: dict, type_name: str) -> dict:
 
 def allowed_values(spec):
     """Values a token input accepts, from an .ogn port spec. The stored value is the *display* string:
-    Scale To/From Stage Units takes "Convert to stage units", not its key "toStage" (a student set the key
-    and the node silently output zeros)."""
+    Scale To/From Stage Units takes "Convert to stage units", not its key "toStage" (setting the key
+    makes the node silently output zeros)."""
     tokens = spec.get("allowedTokens") or (spec.get("metadata") or {}).get("allowedTokens")
     if isinstance(tokens, dict):
         return [str(v) for v in tokens.values()]

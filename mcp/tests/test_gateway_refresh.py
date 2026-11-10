@@ -5,6 +5,9 @@ bridge meta changed (the bridge-side reload_tools case); an unchanged registry
 is a no-op. Curated-view filtering still applies during rediscovery.
 """
 
+import asyncio
+import types
+
 import pytest
 
 pytest.importorskip("mcp")
@@ -201,3 +204,58 @@ def test_two_bridge_names_cannot_map_to_the_same_mcp_name(fresh_gateway, monkeyp
     with pytest.raises(RuntimeError, match="collid"):
         gw.discover_and_register_tools(server)
     assert not gw._NAME_MAP
+
+
+def test_refresh_tools_without_a_simulator_says_what_to_do(monkeypatch):
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+
+    def offline(_server):
+        raise ConnectionRefusedError("[Errno 111] Connection refused")
+
+    monkeypatch.setattr(gw, "discover_and_register_tools", offline)
+    message = asyncio.run(gw._refresh_tools(server))
+    assert "no Isaac Sim bridge is reachable" in message and "sim__launch" in message
+
+
+def test_host_run_asset_tools_are_not_reported_as_unconfirmed(monkeypatch):
+    offline = types.SimpleNamespace(names={"assets__roots": "assets.roots", "assets__scan": "assets.scan",
+                                           "assets__search": "assets.search"})
+    monkeypatch.setattr(gw, "_offline_for", lambda server: offline)
+    assert gw._offline_note(object()) == ""
+    offline.names["sim__stage__info"] = "sim.stage.info"
+    note = gw._offline_note(object())
+    assert "sim: 1" in note and "assets" not in note
+
+
+def test_refresh_tools_with_several_bridges_says_pick_one(monkeypatch):
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+
+    def several(_server):
+        raise RuntimeError("multiple bridges running: ports 8766, 8781.")
+
+    monkeypatch.setattr(gw, "discover_and_register_tools", several)
+    message = asyncio.run(gw._refresh_tools(server))
+    assert "use_bridge" in message and "do not start another" in message and "not reachable" not in message
+
+
+def test_refresh_tools_names_managed_simulators_on_other_ports(monkeypatch):
+    # The config pinned port 8766, sim__launch used 8771, and refresh_tools
+    # kept saying "no bridge" until the agent found use_bridge on its own.
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+
+    def offline(_server):
+        raise ConnectionRefusedError("[Errno 111] Connection refused")
+
+    monkeypatch.setattr(gw, "discover_and_register_tools", offline)
+    monkeypatch.setattr(gw, "_screen_port", lambda state=None: 8766)
+    import time
+    monkeypatch.setattr(gw, "live_sessions", lambda env=None: [
+        {"port": 8766, "pid": 10, "started_at": time.time() - 95},
+        {"port": 8771, "pid": 342055, "started_at": None}])
+    message = asyncio.run(gw._refresh_tools(server))
+    assert "port 8771 (PID 342055; call use_bridge(port) to select it)" in message
+    # The configured port's own session is named too, with how long it has been starting.
+    assert "port 8766 (PID 10, started 9" in message and "the configured port" in message
+    assert "still starting" in message and "refresh_tools(wait_s=" in message
+    monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])
+    assert "Managed simulators" not in asyncio.run(gw._refresh_tools(server))

@@ -312,7 +312,7 @@ def test_session_lock_reports_non_linux_support(tmp_path, monkeypatch):
             pass
 
 
-# ---- Lab 3 run 8: sim__launch refused a free port after sim__stop --------------------------------
+# ---- sim__launch refused a free port after sim__stop --------------------------------
 
 TIME_WAIT, FIN_WAIT2, LISTEN = "06", "05", "0A"
 

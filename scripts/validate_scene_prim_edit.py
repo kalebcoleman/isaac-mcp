@@ -1,4 +1,4 @@
-"""Live M5 validation: edit prims a pack did not create, then revert, on a USD file this run writes.
+"""Live validation: edit prims a pack did not create, then revert, on a USD file this run writes.
 
 It opens a small authored scene (a table, a visual-only object, a multi-op Xform and an instance), moves
 and gives physics to those prims, checks the object falls onto the table, proves the refusals, reverts,

@@ -17,6 +17,7 @@ package is importable (it ships with the ``isaaclab`` extra); tests that need
 the package are skipped when it is missing.
 """
 
+import asyncio
 import json
 import os
 import struct
@@ -629,3 +630,33 @@ def test_outside_roots_error_says_which_roots_and_what_to_do(tmp_path):
     res = metrics.checkpoints_list(run_dir="/etc")
     assert res["error"] == "path outside allowed roots" and isinstance(res["allowed_roots"], list)
     assert "ISAACLAB_LOGS_DIR" in res["hint"] and "runs_status" in res["hint"]
+
+
+def _tail_tool(tmp_path, monkeypatch, last_n):
+    from isaac_mcp.isaaclab import metrics
+    from isaac_mcp.server import build_server
+
+    seen = {}
+
+    def tail(run_dir, tag, last_n=50):
+        seen["last_n"] = last_n
+        return {"points": []}
+
+    monkeypatch.setattr(metrics, "tensorboard_tail", tail)
+    server = build_server({"ISAAC_MCP_LOCAL_TOOLS": "isaaclab_read"})
+    args = {"run_dir": str(tmp_path), "tag": "loss", "last_n": last_n}
+    return asyncio.run(server.call_tool("isaaclab__tensorboard_tail", args)), seen
+
+
+def test_tensorboard_tail_refuses_a_boolean_through_the_tool_layer(tmp_path, monkeypatch):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    for value in (True, False):
+        with pytest.raises(ToolError, match="not a boolean"):
+            _tail_tool(tmp_path, monkeypatch, value)
+
+
+@pytest.mark.parametrize("value, expected", [(None, None), (3, 3), (0, 0)])
+def test_tensorboard_tail_accepts_integers_and_null(tmp_path, monkeypatch, value, expected):
+    _, seen = _tail_tool(tmp_path, monkeypatch, value)
+    assert seen["last_n"] == expected

@@ -242,7 +242,7 @@ def test_selection_first_match_wins_and_version_only_filters(world):
 
 
 def test_a_workspace_env_is_not_overridden_by_a_newer_env_elsewhere(world, monkeypatch):
-    """Review of PR 52: a newer unrelated project venv must not beat the workspace env."""
+    """A newer unrelated project venv must not beat the workspace env."""
     ws = world.tmp / "workspace"
     mine = make_env(ws / "envs" / "sim-6.2", sim="6.2.0.0")
     make_env(world.home / "oldproj" / ".venv", sim="6.3.0.0")

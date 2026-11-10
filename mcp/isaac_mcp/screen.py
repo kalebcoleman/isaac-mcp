@@ -1066,8 +1066,8 @@ _LOCK_CACHE: list = [0.0, False]  # [monotonic time, value]: monitor captures ca
 def _screen_locked() -> bool:
     """True when the desktop session is locked or the screen saver is active (best effort, never raises).
 
-    Seen on a lab PC with nobody at the keyboard: every monitor capture was black while window
-    captures were fine. Cached for 5 s; each probe has a 1 s timeout."""
+    On a machine with nobody at the keyboard every monitor capture can be black while window
+    captures are fine. Cached for 5 s; each probe has a 1 s timeout."""
     now = time.monotonic()
     if now - _LOCK_CACHE[0] < 5.0:
         return _LOCK_CACHE[1]

@@ -36,8 +36,8 @@ STALE_RESCUE = (
 
 
 # A reference or payload to a prim path that does not exist contributes no specs, so it cannot hide a
-# render-handle dependency. Lab handouts ship with such dangling internal references (the TurtleBot3
-# scene has two), and refusing on them left students with no way to save at all.
+# render-handle dependency. Course scenes ship with such dangling internal references (the TurtleBot3
+# scene has two), and refusing on them would leave no way to save at all.
 HARMLESS_COMPOSITION_ERRORS = ("ErrorUnresolvedPrimPath",)
 
 

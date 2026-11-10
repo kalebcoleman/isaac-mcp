@@ -913,7 +913,7 @@ def _status(env: Mapping[str, str], session_id: str) -> dict:
                           "fork it, or the process recorded here is not the simulator.")
     if state in ("running", "readiness_unknown"):
         # The MCP server keeps dialling its configured port (UR5E_DT_PORT/ISAAC_MCP_PORT) while it
-        # answers, and refresh_tools then does not switch: a student run on a lab PC lost time here.
+        # answers, and refresh_tools then does not switch.
         result["next"] = (f"if this MCP server is not already using port {session['port']}, call "
                           f"use_bridge(port={session['port']}) so sim__* and run_python go to this simulator; "
                           "refresh_tools alone stays on the configured port while that port answers.")

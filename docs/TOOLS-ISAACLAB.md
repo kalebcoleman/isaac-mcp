@@ -439,7 +439,7 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
   | `limit` | integer | no | `25` | 1 to 500. |
 - Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, exit_code, log_dir, label?}], total, truncated, hint?}`, **newest first**.
   `total` counts every match before `limit`; `truncated` is true when `limit` cut some (then `hint` says how to narrow).
-  Changed from earlier versions, which returned every job oldest first: callers that need all jobs pass `limit=500` or narrow with `since`.
+  Callers that need every job pass `limit=500` or narrow with `since`.
   Dead pids are reconciled to `failed` ("host restarted") on read.
 - Example: `{"task": "g1", "state": "finished", "since": "1d", "limit": 10}`
 
@@ -522,7 +522,7 @@ and any other child it started. Output goes to the job's `stdout.log` and `stder
 - Example: `{"run_dir": "/abs/path/to/run", "tags": ["rewards/iter", "Episode/dist_m"]}`
 
 **Pass-count mode (`eval_json`).** Summarises a project's evaluation-result files instead of TensorBoard scalars, in the layout
-of the G1 recovery evaluators (`final_<name>_heldout_r1.json`, ...). It reads the files only. Give the repeat evaluations of one
+of an evaluator that writes `final_<name>_heldout_r1.json` files. It reads the files only. Give the repeat evaluations of one
 checkpoint on one pose set; the result is `{label, criteria, criteria_definition, split, pose_set, runs, pass_counts, mean_pass,
 min_pass, max_pass, n, pass_fraction_mean, by_direction_mean, baseline?, warnings?}`. Each run lists `pass_count`, `by_direction`
 (`side_a`, `prone`, `side_b`, `supine`), `direction_n`, `checkpoint`, `task` and `path`. With `baseline_json`, `baseline` has the
@@ -540,7 +540,7 @@ Where each figure comes from (the file's own keys, so a different layout fails r
 Refused with an `error` naming the file: the **TEST** split (unless `allow_test=true` is passed); a
 file with no `pose_set` or an unknown one; mixed splits or pose counts in one call, or a baseline on another split; a missing
 expected key. Paths should be absolute: a relative one resolves from the server's working directory, and the error says where it looked. `eval_json` cannot be combined with `run_dir`, `job_id`, `compare_jobs` or `tags`.
-Example: `{"eval_json": ["<run>/final_recC_heldout_r1.json", "<run>/final_recC_heldout_r2.json"], "label": "v3 before 3b", "baseline_json": ["<run>/final_base_heldout_r1.json"], "baseline_label": "R9hg_it1100"}`
+Example: `{"eval_json": ["<run>/final_recC_heldout_r1.json", "<run>/final_recC_heldout_r2.json"], "label": "candidate", "baseline_json": ["<run>/final_base_heldout_r1.json"], "baseline_label": "baseline"}`
 
 ### `isaaclab__checkpoint_register`
 
@@ -565,7 +565,7 @@ The only tool of the pack that writes next to your files, so it is annotated add
   `same_content_as` lists other registered paths with identical bytes (not an error).
 - Git: `*.pt` is usually ignored, so in a work tree `git` reports `ignored_by_git` and the command to use, `git add -f <checkpoint> <registry>`.
   The tool never runs git.
-- Example: `{"path": "<repo>/checkpoints/recC.pt", "role": "baseline", "provenance": "g4j1_b1p2_it1425; 174.7/256 HELDOUT, criteria v3 before 3b"}`
+- Example: `{"path": "<repo>/checkpoints/recC.pt", "role": "baseline", "provenance": "g4j1_b1p2_it1425; 174.7/256 HELDOUT, criteria v3"}`
 
 ### `isaaclab__tensorboard_tail`
 
@@ -802,10 +802,8 @@ retained `fsspec` and `urllib3` package-metadata conflicts. It does not qualify 
 Sim Newton behavior or a clean-machine/full-installer setup. See
 [reproducibility](REPRODUCIBILITY.md) for recording an environment.
 
-Historical verification includes:
+Verified with real jobs:
 
-- Host suite: 421 tests passed in GitHub Actions for `66e84b4` (2026-10-30). An isolated host wheel install and
-  npm launcher fetch also worked in the prior audit.
 - Isaac Lab 3.0.0 / Isaac Sim 6.2.0.0 on Ubuntu 24.04 (RTX 5080 16 GB) and Ubuntu 22.04
   (RTX PRO 6000 Blackwell): a real 2-epoch `Isaac-Reach-UR10` rl_games run through
   `isaaclab__train` succeeded; `runs_status`, checkpoint discovery and TensorBoard metrics
@@ -815,7 +813,7 @@ Historical verification includes:
   and a 40-frame recording were captured. Viewport is black until "Completed setting up the
   environment".
 - Job guards (job-vs-job, Kit-bridge, release after cancel) behaved as documented on the
-  RTX 5080 (2026-10-30); four bugs were fixed in that pass.
+  RTX 5080.
 - Isaac Lab 3 has no `--headless` flag. Ordinary headless jobs pass `--viz none`.
   With `extra_args=["--video", "--video_length=60"]`, headless jobs use `--viz kit`
   and child-only `HEADLESS=1` so the renderer can produce frames without a window.
@@ -844,8 +842,7 @@ Historical verification includes:
 
 Limitations and not verified:
 
-- The historical host/smoke audit did not run training; later native runs above did.
-  Long runs above ~15 min or above 1024 envs on the 5080 remain unverified.
+- Long runs above ~15 min or above 1024 envs on the 5080 remain unverified.
 - The host server requires Python >=3.10; the verified interpreter is Python 3.12. The Lab
   install is pinned to Isaac Lab 3.0.0 / Isaac Sim 6.2.0.0.
 - Other operating systems, GPUs, Isaac Sim versions and installation layouts are not

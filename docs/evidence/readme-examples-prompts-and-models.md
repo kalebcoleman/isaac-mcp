@@ -1,7 +1,7 @@
 # How the README examples were made: exact prompts and models
 
-Date: 2026-11-04. This page records, for every example in the README's "Things you can ask", **who or what produced it,
-which model, and the exact prompt where an agent was given one**. Home paths are replaced with `<home>`; nothing else in a
+This page records, for every example in the README's "Things you can ask", **who or what produced it,
+which model, and the exact prompt where an agent was given one**. Home paths are replaced with `<home>` and the sandbox folder name with `sandbox`; nothing else in a
 prompt was edited. Where a README prompt is only an example of what you could say, that is stated here.
 
 | README example | Produced by | Model | Prompt actually used |
@@ -22,25 +22,25 @@ agent chose to do.
 
 > I'm starting a robotics project and want to try an open-source robot from GitHub in Isaac Sim. Please pick one well-known robot repo (for example a Unitree robot, a Franka or UR arm, a Kinova or xArm arm, or a robot from MuJoCo Menagerie), clone it, get the robot into a simulated scene, make it move, and show me a picture. Then make the scene more interesting: some objects around it, a camera view, a LiDAR or other sensor if it fits, and see how it behaves when it moves or when something hits it. Try a second robot from a different repo if the first goes smoothly. I care a lot about what is hard, slow, confusing or impossible, so please keep notes as you go.
 >
-> How to work: the simulator tools are called with `<home>/.local/share/uv/tools/isaac-mcp/bin/python <home>/pr70-fleet/g1/call.py <tool name> '<json arguments>'`. `... call.py --list` lists every tool. An Isaac Sim is already running headless on the default port, so you don't need to start or stop one. Read the docs in <home>/pr70-fleet/g1/tree/docs only if the tool descriptions aren't enough.
+> How to work: the simulator tools are called with `<home>/.local/share/uv/tools/isaac-mcp/bin/python <home>/sandbox/g1/call.py <tool name> '<json arguments>'`. `... call.py --list` lists every tool. An Isaac Sim is already running headless on the default port, so you don't need to start or stop one. Read the docs in <home>/sandbox/g1/tree/docs only if the tool descriptions aren't enough.
 >
-> Rules: download only into <home>/pr70-fleet/g1/downloads, one new folder per repo, and only from public repos of well-known robotics organisations. Don't run any script or build from a downloaded repo, don't install anything, don't use sudo, and don't touch anything outside <home>/pr70-fleet/g1. The graphics card has 16 GB and one Isaac Sim is already using about 7, so don't start another simulator or any training job.
+> Rules: download only into <home>/sandbox/g1/downloads, one new folder per repo, and only from public repos of well-known robotics organisations. Don't run any script or build from a downloaded repo, don't install anything, don't use sudo, and don't touch anything outside <home>/sandbox/g1. The graphics card has 16 GB and one Isaac Sim is already using about 7, so don't start another simulator or any training job.
 >
-> Keep running notes in <home>/pr70-fleet/g1/notes.md (what you tried, what worked, what failed, with the exact error text for failures) and update it every few steps. When you finish, add a section called "Wishlist": the tools or options you wished existed for serious robotics and reinforcement-learning work, and for each, what you tried instead. Be honest about anything you couldn't do.
+> Keep running notes in <home>/sandbox/g1/notes.md (what you tried, what worked, what failed, with the exact error text for failures) and update it every few steps. When you finish, add a section called "Wishlist": the tools or options you wished existed for serious robotics and reinforcement-learning work, and for each, what you tried instead. Be honest about anything you couldn't do.
 
 The agent chose the Unitree G1 (`unitreerobotics/unitree_ros`) and Google Barkour (`google-deepmind/mujoco_menagerie`)
-on its own. The sandbox gave it a frozen copy of the code at the `feat/batch-build` branch, its own Isaac Sim 6.2 on a
+on its own. The sandbox gave it a frozen copy of the code, its own Isaac Sim 6.2 on a
 private port, its own empty asset folder, and an approved root for its `downloads` folder only.
 
 ## Brief 2: Isaac Lab research workflow (Gemini 3.8 Flash, thinking level high)
 
 > I'm planning a serious reinforcement learning project with a robot and I want to see how far Isaac Lab goes through these tools. Please get a feel for it the way a researcher would: see what tasks are available, pick a robot task that interests you (a manipulator reaching task, a legged robot, or anything else you find), train it for a short time, watch how the learning is going, then evaluate what it learned and give me a score. Try at least two different learning libraries on the same task and tell me how they compare. Then push on the things a real project needs: running the same training again with a different seed, trying a different setting such as number of environments or learning rate, picking up a run later, saving and finding checkpoints, recording a video of the policy, and comparing runs. See whether you can use a robot or task of my own instead of a built-in one. I care a lot about what is hard, slow, confusing or impossible, so please keep notes as you go.
 >
-> How to work: the tools are called with `<home>/.local/share/uv/tools/isaac-mcp/bin/python <home>/pr70-fleet/g2/call.py <tool name> '<json arguments>'`. `... call.py --list` lists every tool. Read the docs in <home>/pr70-fleet/g2/tree/docs only if the tool descriptions aren't enough.
+> How to work: the tools are called with `<home>/.local/share/uv/tools/isaac-mcp/bin/python <home>/sandbox/g2/call.py <tool name> '<json arguments>'`. `... call.py --list` lists every tool. Read the docs in <home>/sandbox/g2/tree/docs only if the tool descriptions aren't enough.
 >
-> Rules: the graphics card has 16 GB, so run only one training or evaluation job at a time, keep them short (a few minutes at most each, a small number of environments), and wait for a job to finish or cancel it before starting the next. Don't start an Isaac Sim by hand. Don't install anything, don't use sudo, and don't touch anything outside <home>/pr70-fleet/g2.
+> Rules: the graphics card has 16 GB, so run only one training or evaluation job at a time, keep them short (a few minutes at most each, a small number of environments), and wait for a job to finish or cancel it before starting the next. Don't start an Isaac Sim by hand. Don't install anything, don't use sudo, and don't touch anything outside <home>/sandbox/g2.
 >
-> Keep running notes in <home>/pr70-fleet/g2/notes.md (what you tried, what worked, what failed, with the exact error text for failures) and update it every few steps. When you finish, add a section called "Wishlist": the tools or options you wished existed for serious robotics and reinforcement-learning work, and for each, what you tried instead. Be honest about anything you couldn't do.
+> Keep running notes in <home>/sandbox/g2/notes.md (what you tried, what worked, what failed, with the exact error text for failures) and update it every few steps. When you finish, add a section called "Wishlist": the tools or options you wished existed for serious robotics and reinforcement-learning work, and for each, what you tried instead. Be honest about anything you couldn't do.
 
 It ran on Isaac Lab 2.3.2 with Isaac Sim 5.1.0. Its notes file ends with the "Wishlist" section it was asked for, and the
 checklist's Isaac Lab items come from that section and its final message.
