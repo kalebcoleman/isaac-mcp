@@ -54,7 +54,7 @@ _ExternalCallback = Annotated[str | None, Field(description="Dotted module.funct
 _TaskModules = Annotated[list[str] | None, Field(description="Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.")]
 _Cwd = Annotated[str | None, Field(description="Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.")]
 _Install = Annotated[str | None, Field(description="Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.")]
-_Label = Annotated[str | None, Field(description="Short name for the job, shown in runs_list and runs_status, e.g. 'v3 before 3b'.")]
+_Label = Annotated[str | None, Field(description="Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.")]
 _AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
 
 
@@ -476,15 +476,15 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         job_id: Annotated[str | None, Field(description="A job from isaaclab__train, instead of run_dir.")] = None,
         compare_jobs: Annotated[list[str] | None, Field(description="Several job_ids: returns their final scalars side by side, to compare seeds or settings.")] = None,
         eval_json: Annotated[list[str] | None, Field(description="ABSOLUTE paths of evaluation-result JSON files (repeat runs of one checkpoint on one pose set): returns pass counts instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.")] = None,
-        criteria: Annotated[str | None, Field(description="With eval_json: v3 (default, = v3_ground_only: v3 before 3b, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.")] = None,
-        label: Annotated[str | None, Field(description="With eval_json: your name for this result, e.g. 'v3 before 3b'; echoed back.")] = None,
+        criteria: Annotated[str | None, Field(description="With eval_json: v3 (default, = v3_ground_only: criteria v3, ground-only flight), v3_latest_substep, v3_a4, v21, v2 or strict.")] = None,
+        label: Annotated[str | None, Field(description="With eval_json: your name for this result, e.g. 'candidate run'; echoed back.")] = None,
         baseline_json: Annotated[list[str] | None, Field(description="With eval_json: absolute paths of the baseline's evaluation files on the same pose set, for the comparison.")] = None,
         baseline_label: Annotated[str | None, Field(description="With baseline_json: the baseline's name, e.g. recC.")] = None,
         allow_test: Annotated[bool, Field(description="With eval_json: permit the TEST pose set (refused by default). Set it only when the user asked to score TEST.")] = False,
     ) -> str:
         """Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or compare jobs' final values.
 
-        With eval_json it summarises evaluation-result files (G1 recovery `final_*.json`): pass count and mean per file
+        With eval_json it summarises evaluation-result files (`final_*.json` layout): pass count and mean per file
         set, count per fall direction, the pose set (DEV/HELDOUT/TEST), and the change against baseline_json. TEST,
         mixed splits, unknown pose sets and missing keys are refused with an `error`. Details: docs/TOOLS-ISAACLAB.md."""
         def summarise() -> dict:
