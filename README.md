@@ -10,7 +10,7 @@ It works with Claude Code, Codex, OpenCode or any [MCP](https://modelcontextprot
 [![Host Python 3.10+, Sim Python 3.12](docs/media/badges/python.svg)](docs/LINUX-SETUP.md#which-environment-does-what)
 [![License and asset notices](docs/media/badges/license.svg)](docs/VENDORING.md)
 
-**[Quick setup](#quick-setup)** · [Example prompts](#things-you-can-ask) · [All tools](#the-tools) · [Docs](docs/README.md) ·
+**[Quick setup](#quick-setup)** · [Example prompts](#things-you-can-ask) · [All tools](#the-tools) · [How it fits together](#how-it-fits-together) · [Docs](docs/README.md) ·
 [Tool arguments](docs/TOOLS-ARGUMENTS.md) · [For agents](AGENTS.md)
 
 [![Isaac Sim window showing a UR5e arm and RG2 gripper at a commanded target, with the stage hierarchy visible](docs/media/ur5e-target.png)](docs/media/README.md)
@@ -277,6 +277,10 @@ Headless runs are fine: `sim__camera__capture` takes pictures without a window.
 
 ## How it fits together
 
+[![Architecture: the MCP client, the isaac-mcp server and its tool groups, the bridge and tool packs inside Isaac Sim, Isaac Lab job processes, the desktop, ROS 2 clients, and the files they share](docs/media/architecture.svg)](docs/ARCHITECTURE.md)
+
+<sub>The whole system on one page. [How isaac-mcp works](docs/ARCHITECTURE.md) explains each part; the diagram is editable in [`docs/architecture.drawio`](docs/architecture.drawio).</sub>
+
 Three programs are involved, and it helps to know which does what.
 
 1. **Your AI agent** (Claude Code, Codex, OpenCode). It talks to this project using MCP, a standard way for an agent to
@@ -321,13 +325,6 @@ while your bridge is running unless you pass `allow_concurrent_gpu=true`.
 
 A call that needs the bridge when no simulator is running returns an error that says what to do, `status` says in one
 call what is running, and `refresh_tools` finds a simulator you have started.
-
-The whole system on one page, with the tool groups, the files and the data flows:
-
-[![Architecture: the MCP client, the isaac-mcp server and its tool groups, the bridge and tool packs inside Isaac Sim, Isaac Lab job processes, the desktop, ROS 2 clients, and the files they share](docs/media/architecture.svg)](docs/ARCHITECTURE.md)
-
-[How isaac-mcp works](docs/ARCHITECTURE.md) explains each part. The diagram is editable:
-[`docs/architecture.drawio`](docs/architecture.drawio).
 
 ### Words used in these docs
 
