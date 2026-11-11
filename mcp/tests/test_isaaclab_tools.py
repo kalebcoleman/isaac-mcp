@@ -13,8 +13,7 @@ EXPECTED = {
 
 
 def test_all_tools_registered_on_the_server():
-    names = {t.name for t in asyncio.run(server.mcp.list_tools())}
-    assert EXPECTED <= names
+    assert EXPECTED <= set(server.mcp._tool_manager._tools), "registered and callable, whether or not listed"
 
 
 def test_launch_without_install_returns_a_hint(monkeypatch):

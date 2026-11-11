@@ -44,6 +44,7 @@ def test_stalled_bridge_keeps_sdk_initialization_and_host_tools_available(monkey
     monkeypatch.setattr(gateway, "DISCOVERY_TIMEOUT_S", 0.15)
     env = {
         "ISAAC_MCP_LOCAL_TOOLS": "gateway,sim_launch",
+        "ISAAC_MCP_LEGACY_TOOLS": "1",
         "ISAAC_MCP_PORT": str(listener.getsockname()[1]),
     }
     monkeypatch.setenv("ISAAC_MCP_PORT", env["ISAAC_MCP_PORT"])

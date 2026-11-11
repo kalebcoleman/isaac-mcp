@@ -2,11 +2,15 @@
 outlives one tool call.
 
 A job is one coroutine scheduled on the loop the tool handlers run on. The call that starts it
-returns the job id at once; ``job_status`` reads it and ``job_cancel`` stops it. A job is NOT an
-admitted request: it holds no place in the doorway's queue, so it must only ``await`` (for example
-``next_update_async``) and never pump the app loop itself, and an exclusive call that pumps the
-loop beside it can end it. Either way the job then reads ``failed`` with the reason, never
-``running`` forever.
+returns the job id at once; ``job_status`` reads it and ``job_cancel`` stops it. A job holds no
+place among the bridge's requests, so it must only ``await`` (for example ``next_update_async``)
+and never pump the app loop itself, and an exclusive call that pumps the loop beside it can end
+it. Either way the job then reads ``failed`` with the reason, never ``running`` forever.
+
+With a record folder, every job also keeps a ``job.json`` in the same form the Isaac Lab job
+runner uses (``status``, ``pid``, ``started_at``, ``progress``, ...), in the same folder. So one
+listing covers simulator jobs and process jobs, and a finished job can still be read after Kit or
+the MCP server has restarted.
 
 Stdlib-only: importable off-Kit (tests, lint).
 """
@@ -14,6 +18,10 @@ Stdlib-only: importable off-Kit (tests, lint).
 import asyncio
 import itertools
 import json
+import os
+import re
+import tempfile
+import threading
 import time
 import traceback
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -23,6 +31,20 @@ MAX_KEPT = 32            # finished jobs remembered for job_status
 RESULT_LIMIT = 16384     # bytes of JSON a result may take in a status reply
 OUTPUT_TAIL = 2000       # characters of captured output a status reply carries
 STATES = ("running", "succeeded", "failed", "cancelled")
+RECORD_INTERVAL_S = 0.5  # at most this often for progress; a start and an end are always written
+
+
+def default_record_dir() -> str:
+    """The jobs folder the MCP host reads: the same rule as its Isaac Lab job runner."""
+    return os.path.expanduser(os.environ.get("ISAACLAB_JOBS_DIR") or "~/.local/share/isaac-mcp/jobs")
+
+
+def _process_start(pid: int) -> Optional[str]:
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8", errors="replace") as stream:
+            return stream.read().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return None
 
 
 class JobCancelled(Exception):
@@ -50,6 +72,9 @@ class Job:
         self.error_details: Dict[str, Any] = {}
         self.cancel_requested = False
         self.output: Optional[Callable[[], str]] = None   # live captured prints, when the job has any
+        self.ended = threading.Event()                    # set when the job reaches a final state
+        self.record: Optional[str] = None                 # its job.json, when records are kept
+        self._recorded_at = 0.0
         self._task: Any = None
 
     def report(self, fraction: Optional[float] = None, text: Optional[str] = None, **fields: Any) -> None:
@@ -63,6 +88,33 @@ class Job:
         progress.update(fields)
         progress["updated_s"] = round(time.time() - self.started_at, 3)
         self.progress = progress
+        if time.monotonic() - self._recorded_at >= RECORD_INTERVAL_S:
+            self.write_record()
+
+    def write_record(self, port: Optional[int] = None) -> None:
+        """Publish the job's state as one whole file, replacing the last. Never raises."""
+        if self.record is None:
+            return
+        self._recorded_at = time.monotonic()
+        if port is not None:
+            self._port = port
+        data = {"id": self.id, "job_id": self.id, "kind": self.kind, "task": self.label or self.kind, "label": self.label,
+                "status": self.state, "runner": "kit", "uses_gpu": False, "pid": os.getpid(),
+                "pid_start": _process_start(os.getpid()), "port": getattr(self, "_port", None),
+                "started_at": self.started_at, "finished_at": self.finished_at, "exit_code": None,
+                "progress": self.progress or None, "log_dir": os.path.dirname(self.record)}
+        if self.state == "succeeded":
+            data["result"] = _bounded(self.result)
+        if self.error:
+            data["error"] = self.error
+            data["error_details"] = {k: v for k, v in self.error_details.items() if k != "traceback"}
+        try:
+            with tempfile.NamedTemporaryFile("w", dir=os.path.dirname(self.record), prefix=".job-", suffix=".tmp",
+                                             delete=False, encoding="utf-8") as stream:
+                json.dump(data, stream, default=repr)
+            os.replace(stream.name, self.record)
+        except OSError:
+            pass
 
     def checkpoint(self) -> None:
         """Call between steps: raises JobCancelled once job_cancel was called."""
@@ -111,10 +163,18 @@ def _bounded(result: Any) -> Any:
 class JobStore:
     """The jobs of one bridge. ``schedule`` hops a coroutine onto the main loop and returns its task."""
 
-    def __init__(self, schedule: Callable[[Awaitable], Any]):
+    def __init__(self, schedule: Callable[[Awaitable], Any], record_dir: Optional[str] = None,
+                 port: Optional[Callable[[], Optional[int]]] = None):
         self._schedule = schedule
         self._jobs: Dict[str, Job] = {}
         self._ids = itertools.count(1)
+        self._record_dir = record_dir
+        self._port = port or (lambda: None)
+
+    def _new_id(self, kind: str) -> str:
+        """``<date>-<time>-<kind>-<n>``: the same shape as a process job's id, so one tool takes both."""
+        slug = re.sub(r"[^A-Za-z0-9_.-]", "-", kind).strip("-") or "job"
+        return f"{time.strftime('%Y%m%d-%H%M%S')}-{slug}-{next(self._ids)}"
 
     def start(self, kind: str, work: Callable[[Job], Awaitable[Any]], label: Optional[str] = None,
               cooperative: bool = True) -> Job:
@@ -125,9 +185,17 @@ class JobStore:
                            "(job_cancel) first: " + ", ".join(j.id for j in self.running()))
         if label is not None and (not isinstance(label, str) or len(label) > 80):
             raise JobError("label must be a string of at most 80 characters.")
-        job = Job(f"job-{next(self._ids)}-{int(time.time()) % 100000:05d}", kind, label or None, cooperative)
+        job = Job(self._new_id(kind), kind, label or None, cooperative)
         self._jobs[job.id] = job
         self._trim()
+        if self._record_dir:
+            try:
+                folder = os.path.join(self._record_dir, job.id)
+                os.makedirs(folder, exist_ok=True)
+                job.record = os.path.join(folder, "job.json")
+                job.write_record(self._port())
+            except OSError:
+                job.record = None
         try:
             job._task = self._schedule(self._run(job, work))
         except BaseException:
@@ -156,6 +224,8 @@ class JobStore:
             job.state = "failed"
             job.error = (f"{type(error).__name__}: {error}"[:1500] if error is not None
                          else "The job's task ended without finishing its work.")
+        job.write_record()
+        job.ended.set()
 
     async def _run(self, job: Job, work: Callable[[Job], Awaitable[Any]]) -> None:
         try:
@@ -177,6 +247,8 @@ class JobStore:
             job.finished_at = time.time()
             if job.progress.get("fraction") is not None and job.state == "succeeded":
                 job.report(1.0)
+            job.write_record()
+            job.ended.set()
 
     def _trim(self) -> None:
         finished = [j for j in self._jobs.values() if j.state != "running"]

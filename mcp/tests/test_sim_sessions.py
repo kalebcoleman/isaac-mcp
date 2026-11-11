@@ -406,7 +406,7 @@ def test_the_real_bridge_can_bind_a_port_in_time_wait():
     import threading
 
     from isaac_mcp.client import call
-    from test_bridge import make_bridge
+    from bridge_testing import make_bridge
 
     port = _time_wait_port()
     loop = asyncio.new_event_loop()

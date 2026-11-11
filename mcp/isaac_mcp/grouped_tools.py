@@ -1,0 +1,151 @@
+"""Build the grouped tools a client is shown from the single-purpose tools behind them.
+
+A grouped tool takes ``action`` and the arguments of the tool that action runs, checks that the
+arguments belong to that action, and calls it; the answer is that tool's own. Its schema is the
+union of its members' schemas, with one description per argument, so arguments most members share
+(``session_id``, ``path``) are described once instead of once per tool. ``action="help"`` returns
+the members' full descriptions for when the summary is not enough.
+
+Groups are rebuilt whenever the registered tools change (a bridge discovered, a switch of bridge),
+so a group only offers the actions whose tools are there.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+from typing import Any, Dict, List, Optional
+
+from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
+
+from . import tool_groups
+
+MAX_ARGUMENT_DESCRIPTION = 450
+# A member's own argument called "action" (sim__ui__act has one) is offered under this name.
+OWN_ACTION = "sub_action"
+_STATE = "_isaac_grouped_tools"
+_SENTENCE = re.compile(r"(?<![ (]e\.g)(?<![ (]i\.e)[.;:]\s+(?=[A-Z`'\"(])")
+
+
+def legacy_listed(env: Optional[Dict[str, str]] = None) -> bool:
+    """Whether to list the single-purpose tools as before, with no groups."""
+    value = (env or {}).get(tool_groups.LEGACY_ENV) or os.environ.get(tool_groups.LEGACY_ENV, "0")
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _brief(text: str, limit: int = 110) -> str:
+    """The first sentence of a description, cut at a word if it is long."""
+    first = _SENTENCE.split(" ".join((text or "").split()), 1)[0].rstrip(".:;")
+    return first if len(first) <= limit else first[:limit].rsplit(" ", 1)[0].rstrip(",;:") + " ..."
+
+
+def _argument(name: str, uses: Dict[str, Dict[str, Any]], actions: List[str]) -> Dict[str, Any]:
+    """One argument of a group: the schema of the first member that has it, and a description that
+    says which actions take it when not all do, and how its meaning differs when it does."""
+    first = next(iter(uses.values()))
+    schema = {key: value for key, value in first.items() if key not in ("description", "default")}
+    kinds = [kind for kind in schema.get("anyOf", []) if kind != {"type": "null"}]
+    if len(kinds) == 1 and len(schema.get("anyOf", [])) == 2:   # "this or null": every argument here is optional anyway
+        schema = {**{key: value for key, value in schema.items() if key != "anyOf"}, **kinds[0]}
+    texts: Dict[str, List[str]] = {}
+    for action, spec in uses.items():
+        texts.setdefault(" ".join(str(spec.get("description") or "").split()), []).append(action)
+    scope = "" if len(uses) == len(actions) else f"[{', '.join(uses)}] "
+    if len(texts) == 1:
+        description = scope + next(iter(texts))
+    else:
+        room = max(40, (MAX_ARGUMENT_DESCRIPTION - len(scope)) // len(texts) - 16)
+        description = scope + " ".join(f"{'/'.join(who)}: {text if len(text) <= room else text[:room].rsplit(' ', 1)[0] + '...'}"
+                                       for text, who in texts.items())
+    schema["description"] = description[:MAX_ARGUMENT_DESCRIPTION]
+    return schema
+
+
+def _annotations(tools: List[Any]) -> ToolAnnotations:
+    hints = [tool.annotations for tool in tools if tool.annotations is not None]
+    return ToolAnnotations(
+        readOnlyHint=bool(hints) and len(hints) == len(tools) and all(h.readOnlyHint for h in hints),
+        destructiveHint=any(h.destructiveHint for h in hints),
+        idempotentHint=bool(hints) and len(hints) == len(tools) and all(h.idempotentHint for h in hints),
+        openWorldHint=any(h.openWorldHint for h in hints))
+
+
+def _build(server: Any, group: str, summary: str, actions: Dict[str, str]) -> None:
+    """Register one grouped tool over the members that are registered now."""
+    registered = server._tool_manager._tools
+    present = {action: registered[tool] for action, tool in actions.items() if tool in registered}
+    names = list(present)
+    arguments: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    lines = []
+    for action, tool in present.items():
+        properties = tool.parameters.get("properties", {})
+        for name, spec in properties.items():
+            arguments.setdefault(OWN_ACTION if name == "action" else name, {})[action] = spec
+        needs = [OWN_ACTION if name == "action" else name for name in tool.parameters.get("required", [])
+                 if name not in ("session_id", "stage_id")]
+        brief = _brief(tool.description)
+        lines.append(f"- {action}: {brief}{'' if brief.endswith('...') else '.'}" + (f" Needs {', '.join(needs)}." if needs else ""))
+    takes = {action: {OWN_ACTION if name == "action" else name for name in tool.parameters.get("properties", {})}
+             for action, tool in present.items()}
+    signature = ", ".join(f"{name}=None" for name in arguments)
+    namespace: Dict[str, Any] = {}
+
+    async def run(action: str, given: Dict[str, Any]) -> Any:
+        if action == "help":
+            return json.dumps({name: {"tool": tool.name, "description": tool.description,
+                                      "arguments": tool.parameters.get("properties", {}),
+                                      "required": tool.parameters.get("required", [])}
+                               for name, tool in present.items()}, indent=1)
+        if action not in present:
+            raise ToolError(f"{group}: action must be one of {', '.join(names)} (or help), not {action!r}.")
+        given = {name: value for name, value in given.items() if value is not None}
+        stray = sorted(set(given) - takes[action])
+        if stray:
+            raise ToolError(f"{group}(action={action!r}) does not take {', '.join(stray)}. It takes: "
+                            f"{', '.join(sorted(takes[action])) or 'no arguments'}. Nothing ran.")
+        if OWN_ACTION in given:
+            given["action"] = given.pop(OWN_ACTION)
+        return await server._tool_manager.call_tool(present[action].name, given)
+
+    exec(f"async def {group}(action{', ' if signature else ''}{signature}):\n"
+         f"    given = dict(locals())\n    given.pop('action')\n    return await _run(action, given)\n",
+         {"_run": run}, namespace)
+    function = namespace[group]
+    function.__doc__ = f"{summary} action is one of:\n" + "\n".join(lines) + "\n- help: the full description of each action."
+    registered.pop(group, None)
+    server.tool(annotations=_annotations(list(present.values())))(function)
+    tool = registered[group]
+    tool.parameters = {
+        "type": "object",
+        "properties": {"action": {"type": "string", "enum": names + ["help"], "description": "What to do."},
+                       **{name: _argument(name, uses, names) for name, uses in arguments.items()}},
+        "required": ["action"],
+        "additionalProperties": False,
+    }
+    model = tool.fn_metadata.arg_model
+    model.model_config["extra"] = "forbid"
+    model.model_rebuild(force=True)
+
+
+def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
+    """Make the grouped tools and the listing match the tools registered now."""
+    manager = server._tool_manager
+    for group in tool_groups.GROUPS:
+        manager._tools.pop(group, None)
+    names = set(manager._tools)
+    legacy = legacy_listed(env)
+    for group, (summary, actions) in tool_groups.GROUPS.items():
+        if not legacy and names & set(actions.values()):
+            _build(server, group, summary, actions)
+    hide = set() if legacy else tool_groups.hidden(names)
+    if not hasattr(server, _STATE):
+        everything = manager.list_tools
+        setattr(server, _STATE, {"hide": hide})
+        manager.list_tools = lambda: [tool for tool in everything() if tool.name not in getattr(server, _STATE)["hide"]]
+    getattr(server, _STATE)["hide"] = hide
+
+
+def listed_names(server: Any) -> List[str]:
+    return [tool.name for tool in server._tool_manager.list_tools()]

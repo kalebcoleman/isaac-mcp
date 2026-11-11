@@ -12,16 +12,19 @@ from isaac_mcp.client import BridgeError
 
 
 @pytest.fixture(autouse=True)
+def single_purpose_tool_list(monkeypatch):
+    """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
+    monkeypatch.setenv("ISAAC_MCP_LEGACY_TOOLS", "1")
+
+
+@pytest.fixture(autouse=True)
 def isolated(monkeypatch):
     for name in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_PORT",
                  "UR5E_DT_PORT", "ISAAC_MCP_HOST"):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(gw, "_PRE_DISPATCH_HOOKS", [])
-    monkeypatch.setattr(gw, "_POST_DISPATCH_HOOKS", [])
-    monkeypatch.setattr(gw, "_META_CATEGORY_HOOKS", [])
 
 
-def invoke(*, value=None, error=None, annotate=False):
+def invoke(*, value=None, error=None):
     class Endpoint:
         port = 12345
 
@@ -38,8 +41,6 @@ def invoke(*, value=None, error=None, annotate=False):
     server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
     state = gw._state_for(server)
     state.client = Endpoint()
-    if annotate:
-        gw.register_post_dispatch_hook(lambda name, params, text: "[diagnostic] " + text)
 
     async def run():
         async with create_connected_server_and_client_session(server._mcp_server) as client:
@@ -62,9 +63,8 @@ def invoke(*, value=None, error=None, annotate=False):
     ConnectionRefusedError("bridge exited"),
     BridgeError("native command failed", {"effects": "may have partially applied"}),
 ])
-@pytest.mark.parametrize("annotate", [False, True])
-def test_transport_and_bridge_errors_keep_text_but_set_mcp_error(error, annotate):
-    result, tool = invoke(error=error, annotate=annotate)
+def test_transport_and_bridge_errors_keep_text_but_set_mcp_error(error):
+    result, tool = invoke(error=error)
     text = result.content[0].text
     assert result.isError
     assert str(error) in text
@@ -73,18 +73,14 @@ def test_transport_and_bridge_errors_keep_text_but_set_mcp_error(error, annotate
     assert tool.outputSchema["properties"]["result"]["type"] == "string"
     if isinstance(error, ConnectionRefusedError):
         assert "may have run" in text and "use_bridge" in text
-    if annotate:
-        assert text.startswith("[diagnostic] Error:")
 
 
-@pytest.mark.parametrize("annotate", [False, True])
-def test_explicit_legacy_application_failure_is_an_mcp_error(annotate):
+def test_explicit_legacy_application_failure_is_an_mcp_error():
     payload = {"status": "error", "message": "invalid quaternion",
                "effects": "no pose was written"}
-    result, _ = invoke(value=payload, annotate=annotate)
+    result, _ = invoke(value=payload)
     assert result.isError
-    text = result.content[0].text.removeprefix("[diagnostic] ")
-    assert json.loads(text) == payload
+    assert json.loads(result.content[0].text) == payload
     assert result.structuredContent == {"result": result.content[0].text}
 
 
@@ -102,7 +98,7 @@ def test_success_payloads_and_script_data_keep_their_previous_shape(payload):
 
 
 def test_real_tcp_bridge_application_and_builtin_error_envelopes(monkeypatch, tmp_path):
-    from test_bridge import LiveBridge, td
+    from bridge_testing import LiveBridge, td
 
     with LiveBridge() as live:
         live.bridge.register_owner("error_fixture", "error_fixture").add(

@@ -8,7 +8,7 @@ import omni.ext
 import omni.usd
 import omni.timeline
 from isaac_mcp_bridge import get_mcp_bridge, ToolDefinition
-from isaac_mcp.scene_contracts import HOST_ONLY, REGISTRY
+from isaac_mcp.scene_contracts import HOST_ONLY, READ_ONLY, REGISTRY
 from isaac_mcp.project_assets import AssetError
 from .core import STAGE_TOOLS, TIMELINE_TOOLS, Scene, attribute_change, bounded, facts, stop_call
 from .render_export import validate_native_binding
@@ -110,6 +110,7 @@ class Extension(omni.ext.IExt):
                                 description=meta["description"],
                                 parameters=meta["parameters"],
                                 handler=self.handler(canonical),
+                                read_only=canonical in READ_ONLY,
                             )
                         )
         except BaseException:

@@ -1,0 +1,352 @@
+"""The bridge: registering tools, the three rules for when a call runs, and what a client sees on the socket."""
+
+import asyncio
+import json
+import os
+import threading
+import time
+
+import pytest
+
+from bridge_testing import LiveBridge, dispatch, make_bridge, receive, roundtrip, send, td
+from isaac_mcp_bridge import protocol
+from isaac_mcp_bridge.bridge import ToolDefinition, is_portfile_name, runtime_dir, valid_portfile
+from isaac_mcp_bridge.protocol import ToolError
+from isaac_mcp_bridge.schema import field_specs
+
+
+# ---- registry ----
+
+def test_builtins_are_served_bare_named_and_the_listing_hides_internal_ones():
+    tools = make_bridge().get_registered_tools()
+    assert {"run_python", "status", "job_status", "job_cancel", "put_file", "get_file", "stat_file", "list_bridges",
+            "reload_tools"} == set(tools)
+    assert tools["status"]["namespace"] is None and tools["status"]["read_only"] is True
+    assert "list_tools" in make_bridge().get_registered_tools(include_internal=True)
+
+
+def test_an_owner_registers_tools_under_its_namespace():
+    bridge = make_bridge()
+    registrar = bridge.register_owner("pack", "demo", display_name="Demo pack")
+    assert registrar.add(td("ping", lambda message="pong": {"echo": message}, {"message": {"type": "string"}})) == "demo.ping"
+
+    @registrar.tool("Add two numbers", {"a": {"type": "number", "required": True}}, read_only=True)
+    def add(a, b=1):
+        return {"sum": a + b}
+
+    tools = bridge.get_registered_tools()
+    assert tools["demo.ping"]["owner_id"] == "pack" and tools["demo.add"]["read_only"] is True
+    assert tools["demo.ping"]["fields"] == field_specs({"message": {"type": "string"}})
+    assert dispatch(bridge, "demo.add", {"a": 2}) == {"status": "success", "result": {"sum": 3}}
+    assert bridge.get_owners()["pack"]["tools"] == ["demo.ping", "demo.add"]
+
+
+@pytest.mark.parametrize("register,problem", [
+    (lambda b: b.register_owner("pack", "other"), "already registered"),
+    (lambda b: b.register_owner("second", "demo"), "belongs to owner 'pack'"),
+    (lambda b: b.register_owner("third", "not a name"), "dotted identifier"),
+    (lambda b: b.register_owner("fourth", "fine").add(td("bad name", lambda: 1)), "dotted identifier"),
+    (lambda b: b.register_owner("fifth", "ok").add(ToolDefinition(name="nohandler")), "no handler"),
+])
+def test_names_are_unique_and_well_formed(register, problem):
+    bridge = make_bridge()
+    bridge.register_owner("pack", "demo").add(td("ping", lambda: 1))
+    with pytest.raises(ValueError, match=problem):
+        register(bridge)
+    with pytest.raises(ValueError, match="already registered"):
+        bridge._add_tool("pack", td("ping", lambda: 2))
+
+
+def test_unregistering_removes_only_that_owner_s_tools():
+    bridge = make_bridge()
+    bridge.register_owner("a", "one").add(td("x", lambda: 1))
+    bridge.register_owner("b", "two").add(td("y", lambda: 2))
+    assert bridge.unregister_owner("a") is True and bridge.unregister_owner("a") is False
+    assert "one.x" not in bridge.get_registered_tools() and "two.y" in bridge.get_registered_tools()
+    assert dispatch(bridge, "one.x")["code"] == "UNKNOWN_TOOL" and "two.y" in dispatch(bridge, "one.x")["known_tools"]
+    bridge.register_owner("a", "one")   # free again at once
+    assert bridge.unregister_owner("isaac.mcp.bridge") is False, "the built-ins cannot be removed"
+
+
+def test_an_owner_with_a_call_running_stays_reserved_until_the_call_ends():
+    bridge = make_bridge()
+    release = None
+
+    async def slow():
+        await release.wait()
+        return {"done": True}
+
+    bridge.register_owner("pack", "demo").add(td("slow", slow))
+
+    async def scenario():
+        nonlocal release
+        release = asyncio.Event()
+        call = asyncio.ensure_future(bridge.dispatch("demo.slow"))
+        await asyncio.sleep(0)
+        with pytest.raises(RuntimeError, match="1 call"):
+            bridge.unregister_owner("pack", require_idle=True)
+        assert "demo.slow" in bridge.get_registered_tools(), "a refused removal changed nothing"
+        bridge.unregister_owner("pack")
+        owner = bridge.get_owners()["pack"]
+        assert owner["draining"] is True and owner["tools"] == [] and owner["in_flight"] == 1
+        with pytest.raises(ValueError, match="still finishing"):
+            bridge.register_owner("pack", "demo")
+        assert (await bridge.dispatch("demo.slow"))["code"] == "UNKNOWN_TOOL", "no new call reaches the old tools"
+        release.set()
+        assert (await call)["result"] == {"done": True}
+        assert "pack" not in bridge.get_owners()
+        bridge.register_owner("pack", "demo")
+
+    asyncio.run(scenario())
+
+
+# ---- replies ----
+
+def test_a_tool_s_failures_are_replies_with_their_details():
+    bridge = make_bridge()
+    registrar = bridge.register_owner("pack", "demo")
+
+    def refuse():
+        raise ToolError("the stage changed", details={"current": "abc"}, code="STALE")
+
+    registrar.add(td("refuse", refuse))
+    registrar.add(td("crash", lambda: 1 / 0))
+    registrar.add(td("typed", lambda count: count, {"count": {"type": "integer", "required": True}}))
+    assert dispatch(bridge, "demo.refuse") == {"status": "error", "message": "the stage changed", "error_type": "ToolError",
+                                              "current": "abc", "code": "STALE"}
+    crashed = dispatch(bridge, "demo.crash")
+    assert crashed["error_type"] == "ZeroDivisionError" and "ZeroDivisionError" in crashed["traceback"]
+    wrong = dispatch(bridge, "demo.typed", {"cuont": 3})
+    assert wrong["error_type"] == "TypeError" and wrong["expected_parameters"] == ["count"]
+    assert dispatch(bridge, "demo.typed", {"count": 3})["result"] == 3
+    assert bridge.tool_activity()["demo.typed"] is False, "finished a moment ago"
+
+
+def test_frames_survive_values_json_cannot_hold():
+    encoded = json.loads(protocol.encode({"result": {"x": float("nan"), "y": [float("inf")], "z": object}}))
+    assert encoded["result"]["x"] == "nan" and encoded["result"]["y"] == ["inf"] and "object" in encoded["result"]["z"]
+    with pytest.raises(ValueError):
+        protocol.decode(b"[1, 2]")
+    assert protocol.success(None) == {"status": "success", "result": {}}
+    assert protocol.error("no", code="X", missing=None) == {"status": "error", "message": "no", "code": "X"}
+
+
+# ---- over the socket ----
+
+def test_a_client_lists_tools_and_calls_one():
+    with LiveBridge() as live:
+        live.bridge.register_owner("pack", "demo").add(td("ping", lambda message="pong": {"echo": message}))
+        with live.client() as sock:
+            listed = roundtrip(sock, {"type": "list_tools"})
+            assert "demo.ping" in listed["result"]["tools"] and "list_tools" not in listed["result"]["tools"]
+            assert roundtrip(sock, {"type": "demo.ping", "params": {"message": "hi"}}) == {"status": "success", "result": {"echo": "hi"}}
+            assert roundtrip(sock, {"type": "nope"})["code"] == "UNKNOWN_TOOL"
+            sock.sendall(b"this is not json\n")
+            assert receive(sock)[0]["code"] == "MALFORMED"
+            assert roundtrip(sock, {"type": "demo.ping"})["status"] == "success", "a bad line does not end the connection"
+
+
+def test_request_ids_are_echoed_and_let_calls_share_a_connection():
+    with LiveBridge() as live:
+        gate = threading.Event()
+
+        async def slow():
+            while not gate.is_set():
+                await asyncio.sleep(0.005)
+            return {"which": "slow"}
+
+        registrar = live.bridge.register_owner("pack", "demo")
+        registrar.add(td("slow", slow))
+        registrar.add(td("fast", lambda: {"which": "fast"}))
+        with live.client() as sock:
+            send(sock, {"id": "a", "type": "demo.slow"})
+            send(sock, {"id": "b", "type": "demo.fast"})
+            first, rest = receive(sock)
+            assert first == {"id": "b", "status": "success", "result": {"which": "fast"}}, "the fast call did not wait"
+            gate.set()
+            assert receive(sock, rest)[0] == {"id": "a", "status": "success", "result": {"which": "slow"}}
+            assert "id" not in roundtrip(sock, {"type": "demo.fast"}), "no id in, no id out"
+
+
+def test_an_inline_tool_answers_while_kit_is_busy():
+    with LiveBridge() as live:
+        blocked = threading.Event()
+        live.loop.call_soon_threadsafe(lambda: blocked.wait(2))   # the main loop is stuck in a long frame
+        with live.client() as sock:
+            started = time.monotonic()
+            answer = roundtrip(sock, {"type": "status"})
+            assert answer["status"] == "success" and time.monotonic() - started < 1
+            assert answer["result"]["busy"] == {"running": [], "waiting": 0, "exclusive": None}
+        blocked.set()
+
+
+def test_an_exclusive_call_runs_alone_and_others_wait_their_turn():
+    with LiveBridge() as live:
+        order, gate = [], threading.Event()
+
+        async def exclusive():
+            order.append("exclusive starts")
+            while not gate.is_set():
+                await asyncio.sleep(0.005)
+            order.append("exclusive ends")
+            return {}
+
+        registrar = live.bridge.register_owner("pack", "demo")
+        registrar.add(td("alone", exclusive, exclusive=True))
+        registrar.add(td("plain", lambda tag: order.append(tag) or {"tag": tag}, {"tag": {"type": "string"}}))
+        with live.client() as sock:
+            send(sock, {"id": 1, "type": "demo.alone"})
+            while "exclusive starts" not in order:
+                time.sleep(0.005)
+            send(sock, {"id": 2, "type": "demo.plain", "params": {"tag": "first"}})
+            send(sock, {"id": 3, "type": "demo.plain", "params": {"tag": "second"}})
+            time.sleep(0.05)
+            assert order == ["exclusive starts"] and live.bridge.busy() == {"running": ["demo.alone"], "waiting": 2, "exclusive": "demo.alone"}
+            assert dispatch(live.bridge, "demo.plain", {"tag": "local"})["code"] == "BUSY", "an in-process call never waits"
+            gate.set()
+            replies, rest = [], b""
+            for _ in range(3):
+                reply, rest = receive(sock, rest)
+                replies.append(reply["id"])
+            assert replies == [1, 2, 3] and order == ["exclusive starts", "exclusive ends", "first", "second"]
+
+
+def test_an_exclusive_call_waits_for_running_calls_and_keeps_its_place():
+    with LiveBridge() as live:
+        order, gate = [], threading.Event()
+
+        async def slow():
+            while not gate.is_set():
+                await asyncio.sleep(0.005)
+            order.append("slow")
+            return {}
+
+        registrar = live.bridge.register_owner("pack", "demo")
+        registrar.add(td("slow", slow))
+        registrar.add(td("alone", lambda: order.append("alone") or {}, exclusive=True))
+        registrar.add(td("plain", lambda: order.append("plain") or {}))
+        with live.client() as sock:
+            send(sock, {"id": 1, "type": "demo.slow"})
+            time.sleep(0.05)
+            send(sock, {"id": 2, "type": "demo.alone"})
+            send(sock, {"id": 3, "type": "demo.plain"})     # arrived after the exclusive one: runs after it
+            time.sleep(0.05)
+            assert order == []
+            gate.set()
+            rest = b""
+            for _ in range(3):
+                _, rest = receive(sock, rest)
+            assert order == ["slow", "alone", "plain"]
+
+
+def test_a_caller_that_hangs_up_does_not_leave_its_waiting_call_to_run():
+    with LiveBridge() as live:
+        ran, gate = [], threading.Event()
+
+        async def hold():
+            while not gate.is_set():
+                await asyncio.sleep(0.005)
+            return {}
+
+        registrar = live.bridge.register_owner("pack", "demo")
+        registrar.add(td("hold", hold, exclusive=True))
+        registrar.add(td("mark", lambda: ran.append(1) or {}))
+        with live.client() as holder:
+            send(holder, {"id": 1, "type": "demo.hold"})
+            time.sleep(0.05)
+            with live.client() as quitter:
+                send(quitter, {"id": 1, "type": "demo.mark"})
+                time.sleep(0.05)
+            time.sleep(0.05)
+            gate.set()
+            assert receive(holder)[0]["status"] == "success"
+            time.sleep(0.05)
+            assert ran == [] and live.bridge.busy()["waiting"] == 0
+
+
+# ---- the token ----
+
+def test_a_bridge_that_requires_its_token_refuses_a_connection_without_it(tmp_path):
+    with LiveBridge(auth=True) as live:
+        info = json.loads(next(p for p in (tmp_path / "xdg" / "isaac-mcp").iterdir() if p.suffix == ".json").read_text())
+        token_file = info["token_file"]
+        assert info["auth"] is True and os.stat(token_file).st_mode & 0o077 == 0, "only this account can read the token"
+        token = open(token_file).read()
+        with live.client() as sock:
+            refused = roundtrip(sock, {"id": 9, "type": "status"})
+            assert refused["code"] == "AUTH_REQUIRED" and refused["id"] == 9 and "ISAAC_MCP_TOKEN" in refused["message"]
+            assert sock.recv(10) == b"", "and the connection is closed"
+        with live.client() as sock:
+            assert roundtrip(sock, {"type": "status", "token": "wrong" * 8})["code"] == "AUTH_REQUIRED"
+        with live.client() as sock:
+            assert roundtrip(sock, {"type": "status", "token": token})["status"] == "success"
+            assert roundtrip(sock, {"type": "status"})["status"] == "success", "once per connection"
+        with live.client() as sock:
+            assert roundtrip(sock, {"type": "auth", "token": token})["result"] == {"authenticated": True}
+    assert not os.path.exists(token_file), "stopping removes the token and the advertisement"
+
+
+def test_the_client_finds_the_token_by_itself_and_an_explicit_one_wins(monkeypatch):
+    from isaac_mcp.client import BridgeClient, BridgeError, call, discover_bridges
+
+    with LiveBridge(auth=True) as live:
+        monkeypatch.delenv("ISAAC_MCP_TOKEN", raising=False)
+        assert call("status", port=live.port, timeout=5)["auth"] is True
+        (advertised,) = discover_bridges()
+        assert advertised["port"] == live.port and "token_file" not in advertised and "token" not in advertised
+        monkeypatch.setenv("ISAAC_MCP_TOKEN", "not-the-token-" * 4)
+        with pytest.raises(BridgeError, match="AUTH_REQUIRED"):
+            BridgeClient(port=live.port, timeout=5).call("status")
+
+
+# ---- read-only mode ----
+
+def test_read_only_mode_runs_only_tools_declared_read_only():
+    with LiveBridge(read_only=True) as live:
+        ran = []
+        registrar = live.bridge.register_owner("pack", "demo")
+        registrar.add(td("look", lambda: {"seen": True}, read_only=True))
+        registrar.add(td("change", lambda: ran.append(1) or {}))
+        with live.client() as sock:
+            assert roundtrip(sock, {"type": "demo.look"})["result"] == {"seen": True}
+            refused = roundtrip(sock, {"type": "demo.change"})
+            assert refused["code"] == "READ_ONLY" and refused["refused"] is True and "did not run" in refused["message"]
+            assert roundtrip(sock, {"type": "run_python", "params": {"code": "result = 1"}})["code"] == "READ_ONLY"
+            assert roundtrip(sock, {"type": "put_file", "params": {"path": "/tmp/x", "content_b64": ""}})["code"] == "READ_ONLY"
+            status = roundtrip(sock, {"type": "status"})["result"]
+            assert status["read_only"] is True and roundtrip(sock, {"type": "job_status"})["status"] == "success"
+        assert ran == [] and live.bridge.refused_read_only == 3
+        assert dispatch(live.bridge, "demo.change")["code"] == "READ_ONLY", "in-process callers are bound by it too"
+
+
+def test_read_only_comes_from_the_environment_at_launch(monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_READ_ONLY", "1")
+    assert make_bridge().read_only is True
+    monkeypatch.setenv("ISAAC_MCP_READ_ONLY", "0")
+    assert make_bridge().read_only is False
+
+
+# ---- advertising ----
+
+def test_a_listening_bridge_advertises_itself_and_cleans_up(tmp_path):
+    with LiveBridge() as live:
+        folder = tmp_path / "xdg" / "isaac-mcp"
+        assert runtime_dir() == str(folder) and oct(folder.stat().st_mode & 0o777) == "0o700"
+        (portfile,) = folder.iterdir()
+        info = json.loads(portfile.read_text())
+        assert is_portfile_name(portfile.name) and valid_portfile(portfile.name, info)
+        assert info["pid"] == os.getpid() and info["port"] == live.port and info["auth"] is False
+        (folder / "999999999-1234.json").write_text("{}")     # left by a process that is gone
+        with pytest.raises(RuntimeError, match="already listening"):
+            live.bridge.start(0)
+    assert list(folder.iterdir()) == [folder / "999999999-1234.json"]
+    with LiveBridge():
+        assert not (folder / "999999999-1234.json").exists(), "the next bridge sweeps stale advertisements"
+
+
+def test_a_port_that_is_taken_is_an_error_not_another_port():
+    with LiveBridge() as live:
+        other = make_bridge()
+        with pytest.raises(OSError):
+            other.start(live.port)
+        assert other.listening_port is None

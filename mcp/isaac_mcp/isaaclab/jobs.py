@@ -582,7 +582,8 @@ def _settle_orphan(job_dir: Path, data: dict) -> None:
             data.update(status="timeout", finished_at=data.get("finished_at") or _now())
             _write_job(job_dir, data)
             return
-        data.update(status="failed", finished_at=data.get("finished_at") or _now(), note=data.get("note") or "host restarted")
+        gone = "the simulator exited before this job finished" if data.get("runner") == "kit" else "host restarted"
+        data.update(status="failed", finished_at=data.get("finished_at") or _now(), note=data.get("note") or gone)
         _write_job(job_dir, data)
         return
     crash = _crashed_with_exit_zero(job_dir) if code == 0 else None
@@ -1788,6 +1789,7 @@ def runs_list(state: str | None = None, task: str | None = None, kind: str | Non
             "log_dir": data.get("log_dir"),
             "exit_code": data.get("exit_code"),
             **({"label": data["label"]} if data.get("label") else {}),
+            **({"runner": "kit"} if data.get("runner") == "kit" else {}),
         })
     runs.sort(key=lambda r: float(r["started_at"] or 0), reverse=True)
     total = len(runs)
@@ -1812,6 +1814,12 @@ def runs_status(job_id: str) -> dict[str, Any]:
     else:
         fin = data.get("finished_at")
         elapsed = (float(fin) - float(started)) if (fin and started) else 0.0
+    if data.get("runner") == "kit":
+        # A job inside Isaac Sim: its record is all there is (no log files, no exit code).
+        return {"job_id": job_id, "kind": data.get("kind"), "state": data.get("status"), "runner": "kit",
+                "pid_alive": _job_alive(data), "pid": data.get("pid"), "elapsed_s": round(elapsed, 3),
+                **{key: data[key] for key in ("label", "progress", "result", "error", "note", "port") if data.get(key) is not None},
+                **(data.get("error_details") or {})}
     last_lines = _tail_file(Path(data.get("log_dir", jd)) / "stdout.log", 20)
     # fallback if log_dir missing
     if not last_lines:
@@ -1945,6 +1953,9 @@ def runs_cancel(job_id: str, grace_s: int = 10) -> dict[str, Any]:
     if data.get("status") != "running":
         # already finished (succeeded/failed/cancelled/timeout): leave the record alone
         return {"cancelled": False, "state": data.get("status"), "note": f"job already {data.get('status')}"}
+    if data.get("runner") == "kit":
+        # Its process is the simulator itself: only the simulator can stop the job, and signalling it would stop everything.
+        raise ValueError(f"{job_id} runs inside Isaac Sim, not as its own process: stop it with job_cancel, which asks the simulator.")
     with _jobs_lock:
         _update_job(jd, status="cancelled", cancel_requested=True, finished_at=_now())
     pid = data.get("pid")

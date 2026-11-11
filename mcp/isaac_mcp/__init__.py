@@ -1,50 +1,19 @@
-"""isaac_mcp — the caller side of the isaac.mcp.bridge bridge.
+"""isaac-mcp: an MCP server for Isaac Sim and Isaac Lab.
 
-Two layers with different weights:
-
-- ``isaac_mcp.client`` — the reference NDJSON client + CLI. Stdlib-only; imports
-  anywhere. This is the layer scripts, tests, and doctors use. The bridge's
-  wire protocol is not MCP — this client needs no SDK.
-- ``isaac_mcp.server`` — the MCP gateway (FastMCP front-end that makes bridge
-  tools native for Claude/Cursor via .mcp.json). The only component in the
-  ecosystem that speaks the Model Context Protocol; requires the ``mcp`` SDK.
-
-The server import is lazy (PEP 562) so ``import isaac_mcp`` / ``isaac_mcp.client``
-work in environments without the SDK; touching a server attribute (or running
-the ``isaac-mcp`` command) is what requires it.
+``isaac_mcp.server`` is the server (it needs the MCP SDK); ``isaac_mcp.client`` talks to the bridge
+inside a running Isaac Sim and needs only the standard library. Both are imported on first use, so
+``import isaac_mcp`` and ``python -m isaac_mcp.client`` work without the SDK.
 """
 
-# Both layers resolve lazily (PEP 562): the package itself imports for free,
-# `python -m isaac_mcp.client` runs without the runpy double-import warning, and
-# the SDK is only demanded when a server attribute is actually touched.
-_CLIENT_ATTRS = {"client", "BridgeClient", "BridgeError", "call"}
-_SERVER_ATTRS = {
-    "server", "mcp", "main",
-    "register_pre_dispatch_hook", "register_meta_category_hook",
-}
+import importlib
+
+_LAZY = {"client": "client", "BridgeClient": "client", "BridgeError": "client", "call": "client",
+         "server": "server", "mcp": "server", "main": "server"}
+__all__ = sorted(_LAZY)
 
 
 def __getattr__(name):
-    # importlib, not `from . import x`: the `from` form checks the package
-    # attribute first, which re-enters this __getattr__ (infinite recursion
-    # when the SDK is missing and the submodule can't import).
-    import importlib
-    if name in _CLIENT_ATTRS:
-        client = importlib.import_module(".client", __name__)
-        return client if name == "client" else getattr(client, name)
-    if name in _SERVER_ATTRS:
-        server = importlib.import_module(".server", __name__)
-        return server if name == "server" else getattr(server, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-__all__ = [
-    "BridgeClient",
-    "BridgeError",
-    "call",
-    "server",
-    "mcp",
-    "main",
-    "register_pre_dispatch_hook",
-    "register_meta_category_hook",
-]
+    if name not in _LAZY:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module = importlib.import_module("." + _LAZY[name], __name__)
+    return module if name == _LAZY[name] else getattr(module, name)

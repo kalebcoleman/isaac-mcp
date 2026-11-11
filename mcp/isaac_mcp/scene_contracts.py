@@ -323,6 +323,21 @@ add(
         limit=field("integer", "Maximum results 1..100.", False, default=50),
     ),
 )
+# Tools that change nothing. The host marks them read-only for clients, and a Kit started read-only
+# (ISAAC_MCP_READ_ONLY=1) runs only these.
+READ_ONLY = {
+    "assets.roots", "assets.scan", "assets.search", "assets.info", "assets.packs", "assets.pack_doctor", "assets.dependencies",
+    "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.prim.bounds", "sim.prim.measure",
+    "sim.camera.list", "sim.physics.inspect", "sim.physics.raycast", "sim.physics.contacts", "sim.body.state",
+    "sim.joints.inspect", "sim.joints.state", "sim.arm.fk", "sim.logs.tail", "sim.logs.mark", "sim.logs.summary",
+    "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find",
+}
+# Tools that can remove or replace what the user made.
+DESTRUCTIVE = {
+    "sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.simulation.run",
+    "sim.ui.act", "sim.stage.open", "sim.quick_start", "sim.graph.build", "assets.pack_adopt", "assets.pack_pin",
+    "assets.pack_build",
+}
 # These run in the MCP host and work without Kit. Kit must not serve them.
 HOST_ONLY = {
     "assets.roots",

@@ -38,6 +38,12 @@ MUTATING = {"isaaclab__checkpoint_register", "isaaclab__train", "isaaclab__eval"
 
 
 @pytest.fixture(autouse=True)
+def single_purpose_tool_list(monkeypatch):
+    """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
+    monkeypatch.setenv("ISAAC_MCP_LEGACY_TOOLS", "1")
+
+
+@pytest.fixture(autouse=True)
 def capture_dirs(tmp_path, monkeypatch):
     """Point the capture directories at tmp_path so no test touches the real home directory."""
     shots, videos = tmp_path / "Pictures" / "screen-mcp", tmp_path / "Videos" / "screen-mcp"
@@ -51,7 +57,9 @@ def build(value=None):
 
 
 def local_names(server):
-    return set(server._tool_manager._tools) - OFFLINE
+    from isaac_mcp import tool_groups
+
+    return set(server._tool_manager._tools) - OFFLINE - set(tool_groups.GROUPS)
 
 
 def tools_of(server):

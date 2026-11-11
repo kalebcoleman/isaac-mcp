@@ -21,6 +21,12 @@ from isaac_mcp import host_catalog, local_tools as lt
 from isaac_mcp_bridge.schema import field_specs
 
 
+@pytest.fixture(autouse=True)
+def single_purpose_tool_list(monkeypatch):
+    """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
+    monkeypatch.setenv("ISAAC_MCP_LEGACY_TOOLS", "1")
+
+
 def _meta(description, namespace="demo"):
     return {"description": description, "parameters": {}, "fields": field_specs({}),
             "namespace": namespace, "owner_id": "A"}

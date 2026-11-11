@@ -24,6 +24,12 @@ from isaac_mcp.client import BridgeClient
 BUILTINS = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
 
 
+@pytest.fixture(autouse=True)
+def single_purpose_tool_list(monkeypatch):
+    """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
+    monkeypatch.setenv("ISAAC_MCP_LEGACY_TOOLS", "1")
+
+
 class _Offline:
     port = 1
 
@@ -57,7 +63,7 @@ def test_builtins_catalog_matches_the_bridge_registry():
 
 
 def test_builtins_are_listed_and_callable_through_an_mcp_client_before_discovery(monkeypatch):
-    from test_bridge import LiveBridge
+    from bridge_testing import LiveBridge
 
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)

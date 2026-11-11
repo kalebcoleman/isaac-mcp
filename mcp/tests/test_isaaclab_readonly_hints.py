@@ -104,10 +104,7 @@ def test_install_probe_runs_interpreter_startup_code(host, tmp_path, monkeypatch
 
 
 def test_effectful_inspection_tools_are_not_readonly_and_have_conservative_hints(host):
-    async def listed():
-        return {tool.name: tool for tool in await host.list_tools()}
-
-    tools = asyncio.run(listed())
+    tools = host._tool_manager._tools   # every registered tool, listed or grouped
     for name in local_tools.GROUPS["isaaclab_probe"]:
         ann = tools[name].annotations
         assert (ann.readOnlyHint, ann.destructiveHint, ann.idempotentHint, ann.openWorldHint) == (

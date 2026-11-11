@@ -8,7 +8,7 @@ import pytest
 
 from isaac_mcp_bridge.bridge import McpBridge, ToolDefinition
 from isaac_mcp.client import BridgeClient, BridgeError
-from test_bridge import LiveBridge
+from bridge_testing import LiveBridge
 
 
 ROOT = Path(__file__).resolve().parents[2]
