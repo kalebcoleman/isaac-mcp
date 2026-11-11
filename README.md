@@ -319,8 +319,15 @@ while your bridge is running unless you pass `allow_concurrent_gpu=true`.
 
 **The desktop tools** take screenshots and recordings of windows on your screen, so they need neither.
 
-A call that needs the bridge when no simulator is running returns an error that says what to do, and
-`refresh_tools` finds a simulator you have started. More detail: [Architecture](docs/ARCHITECTURE.md).
+A call that needs the bridge when no simulator is running returns an error that says what to do, `status` says in one
+call what is running, and `refresh_tools` finds a simulator you have started.
+
+The whole system on one page, with the tool groups, the files and the data flows:
+
+[![Architecture: the MCP client, the isaac-mcp server and its tool groups, the bridge and tool packs inside Isaac Sim, Isaac Lab job processes, the desktop, ROS 2 clients, and the files they share](docs/media/architecture.svg)](docs/ARCHITECTURE.md)
+
+[How isaac-mcp works](docs/ARCHITECTURE.md) explains each part. The diagram is editable:
+[`docs/architecture.drawio`](docs/architecture.drawio).
 
 ### Words used in these docs
 

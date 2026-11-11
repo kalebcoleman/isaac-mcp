@@ -4,7 +4,7 @@ The project provides a single host-side Model Context Protocol (MCP) server that
 
 The server package is located at `mcp/` (Python package `isaac_mcp`). The primary CLI executable is `isaac-mcp`. There is one command name and no aliases.
 
-For the system layer breakdown, port mapping, and routing rules, see [docs/ARCHITECTURE.md](ARCHITECTURE.md).
+For the whole system with a diagram (what MCP is, how the server reaches Isaac Sim, ports and routing), see [How isaac-mcp works](ARCHITECTURE.md).
 
 ```
 Kit Process (Isaac Sim 6.2.0.0)

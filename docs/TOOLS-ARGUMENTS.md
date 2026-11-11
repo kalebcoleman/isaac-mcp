@@ -500,20 +500,20 @@ Read a file from the bridge box's disk, returned base64-encoded (content_b64). P
 
 ### `job_cancel`
 
-Stop a background job (job_id from the call that started it). It ends at its next step and cleans up after itself; confirm with job_status.
+Stop a background job (job_id from the call that started it). It ends at its next step and cleans up after itself; confirm with job_status. Through the MCP server it also stops an Isaac Lab or script job.
 
 - `job_id` (string, required): job_id of a running job.
 
 ### `job_status`
 
-Status of background work in this Kit: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, newest first. Jobs are forgotten when Kit restarts.
+Status of background work in this Kit: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, newest first. Jobs are forgotten when Kit restarts. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed.
 
 - `job_id` (string, optional): job_id from the call that started the work. Omit to list jobs.
 - `wait_s` (number, optional): Wait up to this many seconds (0-60) for the job to end before answering, instead of polling. The MCP server does the waiting; a direct socket caller gets the current status at once.
 
 ### `list_bridges`
 
-List all isaac.mcp.bridge bridges advertised on this box (this Kit process and any siblings, e.g. a second instance on an ephemeral port).
+List all isaac.mcp.bridge bridges advertised on this box (this Kit process and any siblings, e.g. a second instance on an ephemeral port). status lists them too, and also answers when no bridge is running.
 
 No arguments.
 
@@ -1089,7 +1089,7 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 
 ### `sim__simulation__run`
 
-Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step. A stopped timeline is initialized; the run steps exactly and leaves it paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log that sim__trajectory__replay reads. A module:function controller is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.
+Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. A stopped timeline is initialized; the run steps exactly and ends paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -1101,8 +1101,13 @@ Run your own controller in the physics loop, as a job. Each step it gets the bod
 - `log` (array, optional): Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.
 - `log_every` (integer, default `1`): Log one row every this many physics steps, 1..10000.
 - `filename` (string, optional): New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.
-- `steps_per_frame` (integer, optional): Physics steps between app frames, 1..120. Default: about real time at 60 frames per second.
-- `label` (string, optional): Short name for the job, shown by job_status.
+- `steps_per_frame` (integer, optional): Physics steps between app frames, 1..120. Default: about real time at 60 frames per second. With camera, fps sets it.
+- `articulation` (string, optional): Articulation root of a jointed robot (often <robot>/root_joint). The state then has joints {names, positions, velocities}, and the controller may return joint_efforts, joint_targets or joint_velocity_targets as {joint name: value} (N m or N, rad or stage units).
+- `observe` (array, optional): Up to 8 more rigid bodies whose state the controller gets under observed[path]. It may push them too, with wrenches: {path: {force, torque}}.
+- `camera` (string, optional): Record this camera while it runs (from sim__camera__create): one frame per app frame, and job_status then gives video_path. Works headless and on a locked screen.
+- `adopt` (boolean, optional): Record a camera that came with an opened scene (see sim__camera__capture adopt).
+- `fps` (number, default `30`): With camera: video frames per simulated second, 1..60.
+- `label` (string, optional): Short name for the job, shown by job_status and drawn on the video (<=80 characters).
 
 ### `sim__simulation__step`
 

@@ -98,6 +98,7 @@ These must match in both processes:
 | Variable | Default | Meaning |
 |---|---|---|
 | `ISAAC_MCP_ASSET_CONFIG` | unset | The [trusted-project approval file](TOOLS-SCENE.md#one-time-approval). No file means no approved roots. |
+| `ISAAC_MCP_STAGING` | `~/.cache/isaac-mcp/staging` | With no approval file: the private folder the server copies import snapshots into and Kit reads them from. The server and Kit must be given the same value. |
 | `ISAAC_MCP_ASSET_PATH` | `isaac-mcp-assets` next to the checkout | Asset stores separated by `:`; the first receives writes. `UR5E_DT_ASSET_CACHE` is a deprecated alias. |
 | `ISAAC_MCP_ASSET_PACK` | `ur5e-dt` | Selects the [asset pack](ASSETS.md#named-packs); beats `"pack"` in `isaac-mcp.json`. An invalid name is an error. |
 | `ISAAC_MCP_USD_PYTHON` | unset | A Python with `usd-core` for USD dependency checks on the MCP host; without it they use the selected Kit. |

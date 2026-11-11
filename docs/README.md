@@ -43,7 +43,7 @@ over both.
 
 | Page | Use it for |
 |---|---|
-| [Architecture](ARCHITECTURE.md) | Layers, ports, tool routing, DDS rules, TF, drive gains |
+| [How it works](ARCHITECTURE.md) | The whole system with a diagram: what MCP is, how a client connects, how the server reaches Isaac Sim (bridge, ports, launch), Isaac Lab jobs, assets, recording, configuration, naming, ROS 2 rules |
 | [Host package guide](../mcp/README.md) | The gateway, permanent bridge registration, adding a tool project |
 | [Tool authoring](../mcp/docs/tool-authoring.md) | Handler contract, hot reload, control panel, Kit gotchas |
 | [Bridge protocol](../mcp/docs/protocol.md) · [Bridge configuration](../mcp/docs/configuration.md) · [Bridge in Isaac Lab](../mcp/docs/isaac-lab.md) | Wire protocol, knobs, standalone Lab scripts |

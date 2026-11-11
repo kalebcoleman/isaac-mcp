@@ -71,6 +71,9 @@ those facts do not change the workstation's separate terms.
 The small SVG badges in `badges/` are repository-authored navigation labels, not external
 certification marks or live test results. They load without a third-party badge service.
 
+`architecture.svg` is the repository's own diagram of the system, drawn from [`../architecture.drawio`](../architecture.drawio).
+After editing the draw.io file, export it again with File > Export as > SVG.
+
 ## README example captures
 
 `franka-public-robot.png`, `block-tower.png`, `nova-carter-room.png` and `so100-own-pack.png` are headless
