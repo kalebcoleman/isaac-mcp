@@ -63,7 +63,7 @@ For a real floor plan, a ROS Nav2 map becomes walls: see [importing any asset](d
 
 **A Jenga tower you can really knock over.** `sim__quick_start environment=jenga` builds 54 dynamic blocks and a Franka with a push rod; `sim__arm__ik move=true` moves the arm in one call. In live runs on Sim 6.2 and 5.1 it pushed a block 12 cm out and the top of the tower moved 0.3 mm. See [A Jenga tower in one call](docs/TOOLS-SCENE.md#a-jenga-tower-in-one-call).
 
-**Train a policy.** `isaaclab__train`, `eval` and `play` run on Isaac Lab, including tasks provided by a separate project: [your own task](docs/TOOLS-ISAACLAB.md#6-your-own-task). **BrickSim's LEGO simulator** runs next to these tools with no change to it: [BrickSim](docs/BRICKSIM.md).
+**Train a policy.** `isaaclab__train`, `eval` and `play` run on Isaac Lab, including tasks provided by a separate project: [your own task](docs/TOOLS-ISAACLAB.md#6-your-own-task). **BrickSim**, a contact-rich assembly simulator, runs next to these tools with no change to it: [BrickSim](docs/BRICKSIM.md).
 
 ### Import almost any robot or object file
 
