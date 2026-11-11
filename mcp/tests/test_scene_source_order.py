@@ -20,5 +20,5 @@ def test_quick_start_registers_what_it_built_after_stage_info_resets_ownership()
 
 
 def test_a_capture_is_never_visible_at_its_final_name_until_complete():
-    source = _source("exts/sim-tools/sim_tools/advanced.py")
+    source = _source("exts/sim-tools/sim_tools/sensor_tools.py")
     assert source.index('Image.fromarray(array).save(stream, format="PNG")') < source.index("os.link(temp, filename")

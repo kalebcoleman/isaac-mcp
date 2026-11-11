@@ -12,7 +12,7 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 from isaac_mcp.project_assets import AssetError
 from test_scene_advanced import advanced  # noqa: F401 - the fixtures
 from test_scene_usd import scene  # noqa: F401
-from sim_tools.advanced import attribute_kind, jsonable, typed_value
+from sim_tools.values import attribute_kind, jsonable, typed_value
 
 FOREIGN = """#usda 1.0
 (

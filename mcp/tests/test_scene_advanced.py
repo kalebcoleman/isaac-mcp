@@ -419,7 +419,7 @@ def test_target_at_a_float32_limit_is_accepted_and_put_on_the_limit(advanced):
 
 
 def test_limit_rounding_is_float32_sized_in_both_units():
-    from sim_tools.advanced import to_limit
+    from sim_tools.joint_tools import to_limit
 
     assert to_limit(0.5, -1.0, 1.0) == 0.5
     assert to_limit(1.0000001, -1.0, 1.0) == 1.0
@@ -546,7 +546,7 @@ def test_inspect_on_a_subtree_is_unchanged(arm):
 
 
 def test_joints_past_limits_names_only_joints_clearly_outside():
-    from sim_tools.advanced import joints_past_limits
+    from sim_tools.joint_tools import joints_past_limits
 
     names, limits = ["a", "b", "c"], [[-1, 1], [-1, 1], [0, float("inf")]]
     assert joints_past_limits(names, [0.0, 1.01, 5.0], limits) == []  # a drive can press slightly past one

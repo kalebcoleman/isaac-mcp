@@ -456,7 +456,7 @@ class Extension(omni.ext.IExt):
         if expected == "camera" and isinstance(args.get("filename"), str):
             import re
 
-            from .advanced import CAPTURE_NAME, CAPTURE_NAME_RULE
+            from .sensor_tools import CAPTURE_NAME, CAPTURE_NAME_RULE
 
             if not re.fullmatch(CAPTURE_NAME, args["filename"]):
                 refuse("INVALID_OUTPUT", CAPTURE_NAME_RULE)
@@ -911,7 +911,7 @@ class Extension(omni.ext.IExt):
                     found.append(str(p.GetPath()))
             return dict(paths=found, truncated=truncated, visited=min(count, 10000))
         if name == "sim.prim.create":
-            from .advanced import create_one
+            from .prim_tools import create_one
 
             created, warning = create_one(s, stage, a)
             return {**created, "warnings": [warning]} if warning else created

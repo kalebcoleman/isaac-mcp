@@ -68,7 +68,7 @@ def test_a_missing_material_creates_nothing(advanced):
 
 
 def test_create_with_a_material_binds_it_or_creates_nothing(advanced):
-    from sim_tools.advanced import create_one
+    from sim_tools.prim_tools import create_one
 
     stage = advanced.s.stage()
     wood = _wood(advanced, stage)
