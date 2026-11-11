@@ -37,8 +37,10 @@ per-tool reference lives in `docs/` ([index](docs/README.md), [every tool's argu
   `omni.hydratexture` `.pyi` files describe its API; do not tell users to pip-install stubs or `omni`
   as a separate fix. Kit modules normally become available inside the running app.
 - Client setup is in [MCP-SERVER.md](docs/MCP-SERVER.md#4-client-configuration). After connection,
-  use `refresh_tools`, select the intended bridge if needed, verify PID/port, and start scene work
-  with `sim__stage__info`. Offline tool listings do not prove a running or compatible simulator.
+  call `status` once, before the first simulator action: one reply names the selected bridge (PID,
+  port), every advertised bridge, what is running, and the stage's `session_id` and `stage_id`; with
+  nothing running it says so and names the next call. Do not repeat it before each call or after a
+  context reset: a scene tool that meets a changed stage answers `STALE_TARGET` with the new IDs. Offline tool listings do not prove a running or compatible simulator.
   `scripts/check_machine.sh` is a **6.2-specific** preflight and can run a real CUDA kernel; use the
   version-specific checks for earlier builds. `./verify.sh` changes the UR5e scene and is 6.2-specific.
 
@@ -69,12 +71,12 @@ configured filters.
 | Host gateway and desktop | 13 (`isaac_help`, `refresh_tools`, `use_bridge`, and 10 screen tools) | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), even with Kit down | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
 | Desktop input (optional) | 5 (`window_*`) | only when `screen_input` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-desktop-input) |
 | Simulator sessions (optional) | 4 (`sim__*`) | only when `sim_launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
-| Isaac Lab (`isaaclab__*`) | 17 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
-| Bridge built-ins (`run_python`, `status`, `list_bridges`, `reload_tools`, file tools) | 7 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
-| Generic scene and assets | 69 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
+| Isaac Lab (`isaaclab__*`, `run_script`) | 18 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
+| Bridge built-ins (`run_python`, `status`, `job_status`, `job_cancel`, `list_bridges`, `reload_tools`, file tools) | 9 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
+| Generic scene and assets | 71 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, controller runs, trajectory replay, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
 | UR5e twin (`ur5e_dt__*`) | 23 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, a client lists exactly 129 tools from startup:
+With default groups and no namespace filter, a client lists exactly 134 tools from startup:
 the host, Isaac Lab, bridge built-in, generic and UR5e catalog tiers, whether or not Kit is running.
 A listed tool does not prove that a bridge exists: catalogued tools dial the selected bridge when
 called and return an actionable error if none answers. Use `status` (or the CLI check below) to
@@ -82,14 +84,14 @@ find out. Fewer tools mean a filter:
 
 - `ISAAC_MCP_BUILTINS=0` hides the bridge built-ins, `ISAAC_MCP_NAMESPACE` hides namespaced
   bridge and catalog tools, and `ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack;
-- `ISAAC_MCP_LOCAL_TOOLS` is restricting the local tools (the default, `all`, registers 30 local tools),
+- `ISAAC_MCP_LOCAL_TOOLS` is restricting the local tools (the default, `all`, registers 31 local tools),
   so the listed host and Isaac Lab tools may be a subset. If its `gateway` group is excluded,
   `refresh_tools` and `use_bridge` are not listed: bridge tools are then discovered only when
   the server starts, so restart the MCP connection after starting Kit.
 
-The other 7 tools are the bridge built-ins, also listed from a snapshot. With the standard
-groups there are 129 tools in total; the optional desktop input and simulator session groups add 9 more.
-`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 60 tools with otherwise standard settings.
+The other 9 tools are the bridge built-ins, also listed from a snapshot. With the standard
+groups there are 134 tools in total; the optional desktop input and simulator session groups add 9 more.
+`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 63 tools with otherwise standard settings.
 These filters control discovery, not security.
 
 `ur5e_dt__quick_start*` leaves the timeline playing, and generic edits refuse with `TIMELINE_ACTIVE` until an
@@ -106,12 +108,13 @@ Cached pixels can predate Stop/reset or scene edits. See [TOOLS-SCENE.md](docs/T
 
 ## Getting the full surface
 
-1. Call `refresh_tools` first; a bridge may already be running. From the checkout,
+1. Call `status` first, once; it answers with or without a bridge. `refresh_tools` re-reads a
+   bridge's tools after Kit starts or changes. From the checkout,
    `python3 mcp/isaac_mcp/client.py --list-bridges` lists advertised PID, host and port even
    when built-ins are hidden. It exits 2 with `[]` if none is advertised. From elsewhere use
    `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client --list-bridges`.
-2. Confirm the intended bridge with `python3 mcp/isaac_mcp/client.py status --host <host> --port <port>`;
-   use `use_bridge` when needed. Pinned port variables override discovery, and an ambiguous
+2. Without the MCP tools, confirm the intended bridge with
+   `python3 mcp/isaac_mcp/client.py status --host <host> --port <port>`; use `use_bridge` when needed. Pinned port variables override discovery, and an ambiguous
    unpinned selection is refused. A listed tool alone does not prove a bridge is running.
 3. If none exists and the requested work needs one, `./run.sh --headless` starts a bridge and
    twin on port 8766 by default. Start additional instances only when explicitly requested and
@@ -137,8 +140,15 @@ client setup is in [MCP server](docs/MCP-SERVER.md).
   Workstation preparation does not load the scene or replace an existing cached asset; see
   [project USD setup and limitations](docs/TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation).
 - `run_python` executes Python inside Kit, and `put_file` / `get_file` / `stat_file` touch the
-  filesystem. Verify the target PID and port (`status`, or the CLI check above) before
-  scene-changing calls.
+  filesystem. Verify the target PID and port (`status`, or the CLI check above) once, before the
+  first scene-changing call, and again only after `use_bridge` or a simulator restart.
+- Long simulator work runs as a job: `run_python` with `background=true`, `sim__simulation__run`
+  (your controller's force and torque on a body every physics step) and `sim__trajectory__replay`
+  (a saved trajectory into a labelled video) return a `job_id`. Wait with `job_status` and `wait_s`
+  rather than polling, stop with `job_cancel`, and after a failed run call `sim__timeline__control`
+  with `action=reset`. A Python controller is code in Kit and needs `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`
+  at launch; a `tcp://127.0.0.1:<port>` controller is your own process and needs nothing. See the
+  [scene reference](docs/TOOLS-SCENE.md#controller-runs-jobs-and-replay).
 - `isaaclab__train`, `eval` and `play` start GPU jobs and are blocked by a running Kit bridge
   unless `allow_concurrent_gpu=true`; `isaaclab__runs_cancel` kills one.
 - Screen tools return window titles and pixels to the model, and save captures under

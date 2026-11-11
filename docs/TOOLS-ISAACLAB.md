@@ -1,6 +1,6 @@
 # Isaac Lab Host Tools (`isaaclab__*`)
 
-This document covers the 17 host-side tools registered by `mcp/isaac_mcp/isaaclab/tools.py`
+This document covers the 18 host-side tools registered by `mcp/isaac_mcp/isaaclab/tools.py`
 (`install.py`, `jobs.py`, `metrics.py`). It is the implementation reference; every argument is
 listed in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#isaac-lab).
 
@@ -143,7 +143,24 @@ return `{"error": "install the 'isaaclab' extra: pip install 'isaac-mcp[isaaclab
 Any job (train, eval, script, ...) may print `ISAAC_MCP_PROGRESS: <value> [text]` on stdout, where `<value>` is a fraction
 from 0 to 1 (`0.4`), a percentage (`40%`) or `done/total` (`3/10`). `isaaclab__runs_status` then returns
 `progress: {fraction, percent, done?, total?, text?}` from the newest such line in the last 256 KiB of the log; a
-malformed newest line is ignored. Jobs that print no marker have no `progress` field.
+malformed newest line is ignored. A job that prints no marker still gets `progress` when its training library prints
+its own count: `Learning iteration 12/1500` (rsl_rl), `epoch: 12/1500` (rl_games) or a progress bar (`12/1500 [...it/s]`,
+skrl); its `text` says it came from the training log. Otherwise there is no `progress` field.
+
+### Health of a running job
+
+A crashed Kit can stay alive after its traceback, and a hung one prints nothing: both read `running` with a live pid.
+So a running job's status also has `last_output_age_s` (seconds since it last wrote to either log) and `health`:
+
+| `health` | Meaning |
+|---|---|
+| `ok` | The process is alive and wrote output recently. |
+| `crashed` | `stderr.log` ends in an uncaught Python exception and nothing was written to `stdout.log` after it, but the process is still alive: it is probably hanging in shutdown. `health_note` quotes the exception; read `isaaclab__runs_tail` with `stream="stderr"`, then cancel. |
+| `stalled` | No output for more than 10 minutes. A long step or a quiet evaluation can do that; cancel it if `progress` and the log stay unchanged. |
+| `exited` | The process is gone; the next status call records the final state and exit code. |
+
+These are read from the logs and the process table, so they are hints, not proof: a job that prints nothing for a
+long time by design reads `stalled`.
 
 ### Checkpoint roots for train, eval and play
 
@@ -218,9 +235,10 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__env_check` | Build a task, step it with zero or random actions, and report problems (async) |
 | `isaaclab__record` | Record an MP4 with no window, from a checkpoint or from zero/random actions (async) |
 | `isaaclab__run_script` | Run your own bounded Python script as a managed job (async; executes arbitrary code) |
+| `run_script` | The same managed-job runner for any Python script: no Isaac Lab or GPU needed, and no GPU guards unless `uses_gpu=true` |
 | `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start`, a suggested `num_envs`, and optionally GPU-hours used |
 | `isaaclab__runs_list` | List jobs, newest first, filtered (task, kind, state, since) and limited (default 25) |
-| `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir (with its source), window; `wait_s` waits for the job to end; or a run folder by name under a log root |
+| `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir (with its source), window, and for a running job its `health` and `progress`; `wait_s` waits for the job to end; or a run folder by name under a log root |
 | `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
 | `isaaclab__runs_cancel` | Stop a job (SIGTERM then SIGKILL process group) |
 | `isaaclab__checkpoints_list` | List `*.pt`/`*.pth` checkpoints (newest first) |
@@ -450,6 +468,23 @@ report `progress` (see [progress](#progress-marker)). A script job's `run_dir` i
 `checkpoints_list` need the real run folder passed explicitly. A line `ISAAC_MCP_ARTIFACT: <path>` on stdout names an output file. When the job ends,
 `isaaclab__runs_status` returns `script_result`: `status`, `exit_code`, `wall_time_s`, `log_path`,
 `stderr_log_path` and `artifacts` (the printed paths, in order; they are not checked to exist).
+
+### `run_script`
+
+The same runner under a name that does not say Isaac Lab, for a script that needs neither Isaac Lab nor a
+simulator: a controller server for `sim__simulation__run`, a data conversion, a plot, one step of a sweep. It
+starts the same kind of job (`script`) in the same job folder, so `isaaclab__runs_status` (with `wait_s`),
+`isaaclab__runs_tail`, `isaaclab__runs_list` and `isaaclab__runs_cancel` follow and stop it, and the
+`ISAAC_MCP_PROGRESS` and `ISAAC_MCP_ARTIFACT` lines work the same way. It differs from `isaaclab__run_script` in
+two defaults:
+
+| Name | Default | Notes |
+|---|---|---|
+| `python` | `python3` on `PATH` | Any executable interpreter. `install` picks an Isaac Lab environment instead. |
+| `uses_gpu` | `false` | `false`: the script starts at once, beside a running Isaac Sim or another job, is not counted in the GPU-hour ledger and does not block GPU jobs. `true`: the GPU guards of `isaaclab__run_script` apply (one GPU job at a time, none beside a running Kit bridge, the GPU-hour budget). `min_free_vram_mb` needs `uses_gpu=true`. |
+
+`script`, `args`, `env`, `python_paths`, `cwd`, `label`, `timeout_s`, `single_instance_key`, `min_free_vram_mb` and
+`wait_for_vram_s` are as above. It executes arbitrary code with your rights, like `isaaclab__run_script`.
 
 ### `isaaclab__play`
 

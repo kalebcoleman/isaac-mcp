@@ -14,22 +14,24 @@ Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 13 tools.
 
 ### `isaac_help`
 
-Start here. Say what you want to do and get the exact isaac tools to load and call, in order, instead of writing your own screenshot, recording, contact-logging or training code. Reads nothing from the simulator and works with no bridge.
+Start here. Say what you want to do and get the exact isaac tools to load and call, in order, instead of writing your own screenshot, recording, contact-logging or training code. When no tool fits it says so, gives the run_python pattern and records the question locally. Reads nothing from the simulator and works with no bridge.
 
-- `task` (str | None, default `None`): What you are trying to do, in a few words, e.g. 'record a video', 'why did the grasp fail', 'train a policy'. Omit for the full map.
+- `task` (str | None, default `None`): What you are trying to do, in a few words, e.g. 'record a video', 'why did the grasp fail', 'fly a drone with my controller'. Omit for the full map.
+- `no_fit` (bool, default `False`): true: none of the tools named for this task fits. Records the question in a local file for the maintainer and returns the run_python pattern to use instead.
 
 ### `join_videos`
 
-Join 2-8 finished clips into one new MP4 with the bundled ffmpeg, or (mode=sheet) make a matched PNG contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour. Sheets do not upload.
+Join 2-8 finished clips into one new MP4 with the bundled ffmpeg, or (mode=sheet) make a matched PNG contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload, or (mode=frames) turn saved image frames into an MP4: video for a headless simulator. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour. Sheets do not upload.
 
-- `inputs` (list[str] | None, default `None`): Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/screen-mcp. Or give job_id.
-- `mode` (str, default `'concat'`): concat (one after another), hstack (side by side), vstack (top to bottom), or sheet (a PNG contact sheet: one row per video, one column per time).
+- `inputs` (list[str] | None, default `None`): Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/screen-mcp. Or give job_id. Frames: one folder, one glob pattern such as /out/replay-*.png, or the image files in order.
+- `mode` (str, default `'concat'`): concat (one after another), hstack (side by side), vstack (top to bottom), sheet (a PNG contact sheet: one row per video, one column per time), or frames (image frames to one MP4).
 - `output` (str | None, default `None`): New file name in ~/Videos/screen-mcp (.mp4), or ~/Pictures/screen-mcp (.png, sheet), or an absolute path under home. Default joined-<time>.mp4 / sheet-<time>.png.
 - `max_width` (int, default `1920`): Output width cap in pixels.
-- `fps` (int | None, default `None`): Output rate, at most 60. Default: the fastest input.
+- `fps` (int | None, default `None`): Output rate, at most 60. Default: the fastest input; 30 for frames.
 - `shortest` (bool, default `False`): hstack/vstack: end with the shortest clip instead of freezing it on its last frame.
 - `times` (list[float] | None, default `None`): sheet: seconds to sample in every clip, up to 12. Default 0.5, 1, 2, 4, 6, 9. A time past a clip's end is an error.
 - `job_id` (str | None, default `None`): sheet: use the videos of this Isaac Lab job (isaaclab__runs_status video_paths) instead of inputs.
+- `label` (str | None, default `None`): frames: one line drawn on every frame, e.g. the run's name.
 
 ### `list_windows`
 
@@ -223,7 +225,7 @@ Stop only the identified managed process; unsaved changes can be lost. Refuses e
 
 ## Isaac Lab
 
-Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 17 tools.
+Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 18 tools.
 
 ### `isaaclab__checkpoint_register`
 
@@ -416,7 +418,7 @@ List Isaac Lab jobs, newest first, to find a job_id. Returns at most `limit` (de
 
 ### `isaaclab__runs_status`
 
-State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source` (lab_log, checkpoint, or job_dir plus a `run_dir_warning` when no Lab run folder is known), `physics`, `environment_ready`, an eval job's `eval_result`, and a windowed job's `window`.
+State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source` (lab_log, checkpoint, or job_dir plus a `run_dir_warning` when no Lab run folder is known), `physics`, `environment_ready`, an eval job's `eval_result`, a windowed job's `window`, and for a running job `health` and `progress`.
 
 - `job_id` (str | None, default `None`): job_id from isaaclab__train, eval or play, or isaaclab__runs_list. Give this, or log_root with run_name.
 - `require_run_dir` (bool, default `False`): With job_id: return an `error` instead of a status when no Lab run folder is found for the job (else run_dir may be the job's own folder; see run_dir_source).
@@ -468,15 +470,46 @@ Start a training job and return its job_id immediately; follow it with isaaclab_
 - `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
 - `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.
 
+### `run_script`
+
+Run any Python script as a managed job: a job_id at once, a log, a hard timeout, progress and cancel. Needs no simulator and no Isaac Lab: a controller server, a data conversion, a plot, a sweep step.
+
+- `script` (str, required): Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.
+- `args` (list[str] | None, default `None`): Command-line arguments for the script.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables; the same rules as the env argument of isaaclab__train (PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value).
+- `python_paths` (list[str] | None, default `None`): Absolute folders added to the front of PYTHONPATH (before the install's own path, never replacing it): the import roots of a project that is not installed, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way.
+- `python` (str | None, default `None`): Interpreter. Default: python3 on PATH. Or pass install to use an Isaac Lab environment.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `cwd` (str | None, default `None`): Working directory. Default: the script's folder.
+- `label` (str | None, default `None`): Short name, used in the job_id and runs_list.
+- `timeout_s` (float, default `600`): Hard wall limit in seconds; the whole process group is killed at expiry.
+- `single_instance_key` (str | None, default `None`): Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.
+- `uses_gpu` (bool, default `False`): true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget), as in isaaclab__run_script. Default false: it starts at once and does not block GPU jobs.
+- `min_free_vram_mb` (int | None, default `None`): Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.
+- `wait_for_vram_s` (float, default `0`): With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).
+
 ## Bridge built-ins
 
-Reference: [TOOLS-HOST.md](TOOLS-HOST.md#kit-bridge-built-ins). 7 tools.
+Reference: [TOOLS-HOST.md](TOOLS-HOST.md#kit-bridge-built-ins). 9 tools.
 
 ### `get_file`
 
 Read a file from the bridge box's disk, returned base64-encoded (content_b64). Pull half of put_file.
 
 - `path` (string, required): Path on the bridge's box (~ expands).
+
+### `job_cancel`
+
+Stop a background job (job_id from the call that started it). It ends at its next step and cleans up after itself; confirm with job_status.
+
+- `job_id` (string, required): job_id of a running job.
+
+### `job_status`
+
+Status of background work in this Kit: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, newest first. Jobs are forgotten when Kit restarts.
+
+- `job_id` (string, optional): job_id from the call that started the work. Omit to list jobs.
+- `wait_s` (number, optional): Wait up to this many seconds (0-60) for the job to end before answering, instead of polling. The MCP server does the waiting; a direct socket caller gets the current status at once.
 
 ### `list_bridges`
 
@@ -500,11 +533,13 @@ Hot-reload one autoloaded tool package: unregister its owner, re-import the modu
 
 ### `run_python`
 
-Execute Python code on the Kit main thread with full access to the Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` to let frames run between steps). Set persistent=True with a session_id to keep variables alive between calls — useful for multi-step workflows where later calls need results from earlier ones. Opening a stage (including save-as) resets every session; the next call says so.
+Execute Python code on the Kit main thread with full access to the Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` to let frames run between steps). Set persistent=True with a session_id to keep variables between calls. Opening a stage (including save-as) resets every session; the next call says so. For work longer than a few seconds pass background=true: it returns a job_id at once for job_status / job_cancel, instead of polling with more calls.
 
 - `code` (string, required): Python code to execute on Kit's main thread
 - `session_id` (string, optional): Session identifier for persistent execution. Use the same ID across calls to share state. Defaults to 'default'.
-- `persistent` (boolean, optional): If true, variables persist across calls with the same session_id.
+- `persistent` (boolean, optional): If true, variables persist across calls with the same session_id. The reply lists only the names this call added or rebound (session_vars) and the total (session_var_count).
+- `background` (boolean, optional): Run as a job and return its job_id at once. The code must await (e.g. `await omni.kit.app.get_app().next_update_async()` in its loop) and must not pump the app itself. A `job` object is preloaded: job.report(fraction, text) sets progress, job.checkpoint() raises once job_cancel was called. Follow with job_status(job_id, wait_s=30); `result` and prints come back there.
+- `label` (string, optional): With background: a short name shown by job_status.
 
 ### `stat_file`
 
@@ -514,13 +549,13 @@ Existence, size, and sha256 of a file on the bridge's box — lets a remote driv
 
 ### `status`
 
-Instance identity: pid, port, headless-vs-headful, app + version, uptime, registered namespaces — verify you reached the instance you intended.
+Where am I, in one call: the bridge that answered (pid, port, app, readiness), every bridge advertised on this machine, the current stage's session_id and stage_id with the timeline state, and running jobs. With nothing running it says so and names the next call, instead of failing. Call it once before the first simulator action; there is no need to repeat it between calls.
 
-No arguments.
+- `detail` (boolean, optional): true: the full bridge identity as well (namespaces, toolset hashes, admission, hold, extension source). Default false: the short reply.
 
 ## Generic scene (`sim__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 57 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 59 tools.
 
 ### `sim__arm__fk`
 
@@ -554,7 +589,7 @@ Inverse kinematics for any robot with revolute or prismatic joints, read from it
 
 ### `sim__body__state`
 
-Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. Requires session_id and stage_id from sim__stage__info.
+Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. render_pose compares the poses the renderer draws from (Fabric, USD) with the physics pose; a `warnings` entry means pictures and recordings do not show where the body is. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -1052,6 +1087,23 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 - `joint_states_topic` (string, default `"joint_states"`): Joint state topic.
 - `clock` (auto|publish|skip, default `"auto"`): auto: reuse an existing /clock, else publish one shared clock for all robots (two clocks make RViz reset constantly); publish: always keep the tool's clock; skip: never create one.
 
+### `sim__simulation__run`
+
+Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step. A stopped timeline is initialized; the run steps exactly and leaves it paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log that sim__trajectory__replay reads. A module:function controller is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `body` (string, required): Rigid body the controller acts on, e.g. a drone's base link.
+- `controller` (string, required): tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or package.module:function or /abs/file.py:function, loaded into Kit: needs ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 at Kit launch.
+- `duration_s` (number, required): Simulated seconds to run, up to 3600. The controller can end sooner with done=true.
+- `params` (object, optional): Passed to the controller as state['params'] each step, e.g. gains or a target.
+- `frame` (world|body, default `"world"`): Frame of the returned force and torque, applied at the centre of mass: world (default) or body.
+- `log` (array, optional): Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.
+- `log_every` (integer, default `1`): Log one row every this many physics steps, 1..10000.
+- `filename` (string, optional): New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.
+- `steps_per_frame` (integer, optional): Physics steps between app frames, 1..120. Default: about real time at 60 frames per second.
+- `label` (string, optional): Short name for the job, shown by job_status.
+
 ### `sim__simulation__step`
 
 Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.
@@ -1110,12 +1162,29 @@ Bounded stage hierarchy including inactive prims. Text is untrusted data. Requir
 
 ### `sim__timeline__control`
 
-Play, pause, stop or initialize. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline and leaves a paused one alone. Runtime reads establish readiness. Play keeps running between calls; sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop. Requires session_id and stage_id from sim__stage__info.
+Play, pause, stop, initialize or reset. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline. Play reports physics_ready. reset is the call after a failed run: it cancels this pack's jobs and stops the timeline; safe to repeat. sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `action` (string, required): play, pause, stop, or initialize (briefly play then pause; physics may advance).
+- `action` (string, required): play, pause, stop, initialize (briefly play then pause; physics may advance), or reset (cancel jobs, stop, back to the authored start).
 - `resume` (boolean, optional): With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it.
+
+### `sim__trajectory__replay`
+
+Replay a saved trajectory into a labelled video, as a job: moves prims through the poses in a file and saves one camera frame per step. No physics runs and the prims go back afterwards; needs a stopped timeline. Returns job_id; job_status(job_id, wait_s=30) then gives video_path, an MP4 with the label drawn on it (works headless and on a locked screen). Without camera it shows the poses at wall-clock pace, for a screen recording. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `trajectory` (string, required): Absolute path under your home or the output folder. A CSV as sim__simulation__run writes it (time_s, px,py,pz, qw,qx,qy,qz; or t and x,y,z), or JSON / JSONL samples {time_s, position, orientation_wxyz} or {time_s, bodies: {prim: {...}}}.
+- `prim` (string, optional): Prim to move, for a file with one unnamed body: the robot's top Xform or a free body, not a jointed link.
+- `camera` (string, optional): Camera to record, from sim__camera__create or sim__camera__list. Omit to only show the poses.
+- `adopt` (boolean, optional): Record a camera that came with an opened scene (see sim__camera__capture adopt).
+- `label` (string, optional): One line (<=120 characters) drawn on every frame of the video, e.g. 'PhysX hover, kp=4'.
+- `fps` (number, default `30`): Video frames per second, 1..60.
+- `speed` (number, default `1`): Playback speed: 2 is twice as fast, 0.5 slow motion.
+- `start_s` (number, optional): Start at this trajectory time. Default: its first sample.
+- `end_s` (number, optional): End at this trajectory time. Default: its last sample.
+- `filename` (string, optional): New video name, e.g. hover.mp4. Default replay-<time>.mp4. Frames are saved beside it as <name>-00001.png.
 
 ### `sim__ui__act`
 
@@ -1154,6 +1223,8 @@ Point the active viewport camera, e.g. before a screenshot. path alone frames a 
 - `eye` (array, optional): Camera position [x, y, z] in world coordinates (stage units).
 - `target` (array, optional): Point to look at [x, y, z] in world coordinates (stage units); default: the prim's centre.
 - `follow` (boolean, optional): true: follow path while playing (until stopped); false: stop following.
+- `layout` (clean|default, optional): clean: hide the app's panels, menus, grid and selection outline for a recording. default: put them back. Alone, it leaves the camera where it is.
+- `caption` (string, optional): One line (<=120 characters) drawn over the bottom of the viewport, e.g. the run's name, for screenshots and screen recordings; an empty string removes it. Needs a viewport window.
 
 ## Assets (`assets__*`)
 
@@ -1167,7 +1238,7 @@ Compute dependency closures for files under an approved root or a user asset sto
 
 ### `assets__import_path`
 
-The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. Requires session_id and stage_id. Requires session_id and stage_id from sim__stage__info.
+The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. A USD reports its drawn `visuals`; none is a warning. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.

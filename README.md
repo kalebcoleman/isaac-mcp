@@ -171,14 +171,14 @@ Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
 
 ## The tools
 
-A client lists **129 tools** by default, or **138** with both optional groups. Most scene work uses the first row.
+A client lists **134 tools** by default, or **143** with both optional groups. Most scene work uses the first row.
 
 | Group | Tools | What they do |
 |---|--:|---|
-| Generic scene and assets | 69 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Import USD and URDF, and manage named asset packs. |
-| Isaac Lab | 17 | Find an install, list tasks, check an environment, train, evaluate, play and record, check GPU room, wait for a job and read its exit code and run folder, summarise evaluation pass counts, register baseline checkpoints, read metrics and checkpoints, cancel jobs. No simulator needed. |
+| Generic scene and assets | 71 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Run your own controller in the physics loop and replay a saved trajectory into a labelled video. Import USD and URDF, and manage named asset packs. |
+| Isaac Lab | 18 | Find an install, list tasks, check an environment, train, evaluate, play and record, check GPU room, wait for a job and read its exit code and run folder, summarise evaluation pass counts, register baseline checkpoints, read metrics and checkpoints, cancel jobs. `run_script` runs any Python script as a managed job. No simulator needed. |
 | Host gateway and desktop | 13 | `isaac_help`, `refresh_tools`, `use_bridge`, and screenshots, recordings and window tools. |
-| Bridge built-ins | 7 | `status`, `run_python`, and file transfer into and out of the running simulator. |
+| Bridge built-ins | 9 | `status` (where am I, in one call), `run_python`, `job_status` and `job_cancel` for long simulator work, and file transfer into and out of the running simulator. |
 | UR5e digital twin | 23 | The RISE lab's UR5e twin, Kaleb's work with that robot. Only needed for that twin. |
 | Optional: desktop input, managed sessions | 9 | `window_*` desktop input and `sim__launch` managed simulator sessions, when you switch them on. |
 
@@ -190,7 +190,8 @@ The ones you will meet first:
 | `sim__stage__info` | See what the current scene is and get the IDs the other tools need. |
 | `sim__prim__create` / `sim__prim__find` | Add shapes and robots, or search the scene. |
 | `sim__joints__state` / `sim__joints__command` | Read joints and drive them. |
-| `sim__simulation__step`, `sim__timeline__control` | Play, pause and step the physics. |
+| `sim__simulation__step`, `sim__timeline__control` | Play, pause and step the physics; `action=reset` gets back to a clean stop. |
+| `sim__simulation__run`, `sim__trajectory__replay` | Fly or drive a body with your own controller every physics step, then replay the logged trajectory into a labelled video. Both return a `job_id` for `job_status`. |
 | `sim__camera__capture`, `sim__lidar__read` | See through a camera or LiDAR. |
 | `sim__ros2__tf_setup`, `sim__map__occupancy` | Publish `/clock`, `/joint_states`, TF, and export a Nav2 map. |
 | `assets__import_path`, `assets__pack_build` | Bring in your own robots and props from one tool: USD, URDF, xacro, SDF, MuJoCo XML, meshes, ROS maps, or a folder that holds one. See [docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md). |

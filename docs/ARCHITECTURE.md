@@ -24,14 +24,14 @@ The project separates the host-side MCP interface, the generic Omniverse Kit bri
 | - Runs inside Omniverse Kit main loop                                         |
 | - Provides TCP NDJSON server, request queuing, admission control              |
 | - Dispatches tool calls onto Kit's main thread                                |
-| - Built-ins: run_python, list_tools, reload_tools, list_bridges, file access  |
+| - Built-ins: run_python, jobs, list_tools, reload_tools, list_bridges, files  |
 | - Optional UI inspector: isaac.mcp.panel                                   |
 +---------------------------------------+---------------------------------------+
                                         | Python registrar / event hook
 +---------------------------------------v---------------------------------------+
 | Layer 3: Tool packs on the shared bridge                                      |
 | Generic scene tools (exts/sim-tools/), Extension ID: sim-tools                |
-| - Registers 69 generic sim and assets tools, robot-agnostic                   |
+| - Registers 71 generic sim and assets tools, robot-agnostic                   |
 | UR5e Digital Twin (exts/ur5e-dt/), Package: ur5e_dt, Extension ID: ur5e-dt    |
 | - Registers ur5e_dt.* tools (23)                                              |
 | - Builds and manages the workstation scene (UR5e, RG2 gripper, QuickChanger)  |
