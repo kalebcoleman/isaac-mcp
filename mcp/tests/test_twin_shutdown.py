@@ -6,10 +6,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import twin_source
 
 
 def twin_methods(*names):
-    source = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.py"
+    source = twin_source.SOURCE
     tree = ast.parse(source.read_text())
     twin = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "DigitalTwin")
     shim = ast.ClassDef(name="Shim", bases=[], keywords=[],

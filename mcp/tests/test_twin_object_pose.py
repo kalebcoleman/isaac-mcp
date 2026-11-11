@@ -9,6 +9,7 @@ import pytest
 
 pytest.importorskip('pxr')
 from pxr import Gf, Usd, UsdGeom
+import twin_source
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('twin_object_pose', ROOT / 'exts/ur5e-dt/ur5e_dt/object_pose.py')
@@ -132,7 +133,7 @@ def _twin_method(name, namespace=None):
     from types import SimpleNamespace
     from typing import Any, Dict
 
-    source = ROOT / "exts/ur5e-dt/ur5e_dt/extension.py"
+    source = twin_source.SOURCE
     tree = ast.parse(source.read_text())
     method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
     module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))

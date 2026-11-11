@@ -5,6 +5,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import twin_source
 
 REPO = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("joint_state_guard_under_test", REPO / "exts/ur5e-dt/ur5e_dt/joint_state_guard.py")
@@ -40,7 +41,7 @@ def test_check_stage_raises_only_with_a_publisher(monkeypatch):
 
 
 def test_every_quick_start_checks_before_building_anything():
-    tree = ast.parse((REPO / "exts/ur5e-dt/ur5e_dt/extension.py").read_text())
+    tree = ast.parse(twin_source.SOURCE.read_text())
     method = next(n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == "quick_start")
     source = ast.unparse(method)
     assert source.index("check_joint_state_loop()") < source.index("load_scene")
@@ -52,7 +53,7 @@ def test_every_quick_start_checks_before_building_anything():
 def test_quick_start_descriptions_say_whose_work_this_is():
     from isaac_mcp import host_catalog  # noqa: F401 - the catalog is generated from these
 
-    tree = ast.parse((REPO / "exts/ur5e-dt/ur5e_dt/extension.py").read_text())
+    tree = ast.parse(twin_source.SOURCE.read_text())
     registry = next(n.value for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "MCP_TOOL_REGISTRY")
     tools = ast.literal_eval(registry)
     assert tools["quick_start"]["description"].startswith("RISE lab UR5e digital twin; for a generic start, see sim__quick_start.")

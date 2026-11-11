@@ -9,10 +9,11 @@ from types import SimpleNamespace
 from typing import Any, Dict
 
 import pytest
+import twin_source
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/launch_ur_fake.sh"
-SOURCE = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.py"
+SOURCE = twin_source.SOURCE
 
 
 def driver_handler():

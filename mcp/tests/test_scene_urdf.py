@@ -10,6 +10,7 @@ from pxr import Gf, Usd, UsdGeom, UsdPhysics
 from isaac_mcp import urdf_physics, urdf_refs
 from isaac_mcp.project_assets import AssetError, Broker
 from sim_tools.advanced import Advanced
+import twin_source
 from sim_tools.urdf import (
     _author_drives,
     ground_height,
@@ -624,7 +625,7 @@ def test_the_twin_puts_its_listener_back_unless_closing(monkeypatch):
     from pathlib import Path
     from types import ModuleType
 
-    source = (Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.py").read_text()
+    source = twin_source.SOURCE.read_text()
     method = next(node for node in ast.walk(ast.parse(source))
                   if isinstance(node, ast.FunctionDef) and node.name == "without_carb_log_capture")
     lines = source.splitlines()[method.decorator_list[0].lineno - 1:method.end_lineno]

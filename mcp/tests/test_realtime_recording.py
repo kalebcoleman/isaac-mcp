@@ -15,10 +15,11 @@ from typing import Any, Dict
 from unittest.mock import Mock
 
 import pytest
+import twin_source
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "exts/ur5e-dt/ur5e_dt/extension.py"
+SOURCE = twin_source.SOURCE
 spec = importlib.util.spec_from_file_location("twin_recording", ROOT / "exts/ur5e-dt/ur5e_dt/recording.py")
 recording = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(recording)
