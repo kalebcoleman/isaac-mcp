@@ -22,19 +22,19 @@ def bridge():
 
 def retire_with_call_in_flight(bridge, owner, namespace):
     bridge.register_owner(owner, namespace)
-    bridge._in_flight[owner] = 1
+    bridge._owners[owner].in_flight = 1     # as while one of its calls is running
     bridge.unregister_owner(owner)
 
 
 def finish_call(bridge, owner):
-    with bridge._lock:
-        bridge._in_flight[owner] = 0
-        bridge._finalize_owner_locked(owner)
+    with bridge._lock:                      # what the bridge does when that call returns
+        bridge._owners[owner].in_flight = 0
+        del bridge._owners[owner]
 
 
 def test_the_failure_this_replaces_is_real(bridge):
     retire_with_call_in_flight(bridge, "generic-sim", "sim")
-    with pytest.raises(ValueError, match="already registered"):
+    with pytest.raises(ValueError, match="still finishing its calls"):
         bridge.register_owner("generic-sim", "sim")
     assert reload.draining(bridge) == ["generic-sim"]
 

@@ -8,11 +8,12 @@ import pytest
 
 pytest.importorskip("pxr.Usd")
 from pxr import Usd, UsdGeom, Gf
+import twin_source
 
 
 @pytest.mark.parametrize("legacy", [False, True])
 def test_camera_ros_graph_frame_clock_and_source_preservation(tmp_path, monkeypatch, legacy):
-    source = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.py"
+    source = twin_source.SOURCE
     tree = ast.parse(source.read_text())
     method = next(n for n in ast.walk(tree)
                   if isinstance(n, ast.FunctionDef) and n.name == "setup_camera_action_graph")

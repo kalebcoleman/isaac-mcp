@@ -1,10 +1,14 @@
-"""sim.simulation.run: step physics with the caller's own controller in the loop, as a job.
+"""sim.simulation.run: the caller's own controller in the physics loop, as a job.
 
 Every physics step the controller gets the body's measured state and answers with the force and
 torque to apply for that step. The controller is either a Python callable loaded into Kit (opt-in,
 it is arbitrary code) or a process on this machine speaking one JSON line per step over TCP, which
-runs no code in Kit. The loop uses the same exact-step path as sim.simulation.step, a few steps per
-app frame, so Kit keeps rendering and answering other tools while it runs.
+runs no code in Kit.
+
+Two ways to advance physics. ``mode="step"`` (the default) steps it exactly, a few steps per app
+frame, from a paused timeline: repeatable, and as fast as the machine allows. ``mode="play"`` lets
+the timeline play and calls the controller from the engine's own pre-step callback, so everything
+else that runs on playback (ROS publishers, action graphs, other robots' controllers) runs too.
 """
 
 import csv
@@ -378,7 +382,12 @@ def validate(args):
     label = args.get("label")
     if label is not None and (not isinstance(label, str) or len(label) > 80 or "\n" in label):
         refuse("INVALID_VALUE", "label must be one line of at most 80 characters.")
-    return dict(duration=float(duration), per_frame=per_frame, every=every, frame=frame, params=params or {},
+    mode = args.get("mode", "step")
+    if mode not in ("step", "play"):
+        refuse("INVALID_VALUE", "mode must be step (exact stepping from a paused timeline) or play (the timeline plays freely).")
+    if mode == "play" and per_frame is not None:
+        refuse("INVALID_VALUE", "steps_per_frame applies to mode=step; with mode=play the timeline sets the pace.")
+    return dict(mode=mode, duration=float(duration), per_frame=per_frame, every=every, frame=frame, params=params or {},
                 fields=log_fields(args.get("log")), observe=list(dict.fromkeys(observe)), fps=float(fps), label=label or None)
 
 
@@ -409,6 +418,13 @@ class Run:
                        "duration_s, or run without camera and replay a part with sim__trajectory__replay.")
 
     def _step(self, index):
+        if self._control(index):
+            return True
+        physics.step(self.stage, 1)
+        return False
+
+    def _control(self, index):
+        """One control period: read, ask the controller, log, apply. True when the controller is done."""
         state = self.body.read()
         if self.others:
             state["observed"] = {path: other.read() for path, other in self.others.items()}
@@ -430,10 +446,68 @@ class Run:
             (self.body if path == self.body.path else self.others[path]).apply(force, torque, frame)
         if self.joints is not None:
             self.joints.apply(command["efforts"], command["targets"], command["velocity_targets"])
-        physics.step(self.stage, 1)
         return False
 
+    def on_physics_step(self, step_dt=None, context=None):
+        """mode=play: called by the engine before each physics step. It must not raise into the engine."""
+        if self._ended_by or self._callback_error is not None:
+            return
+        try:
+            if self._control(self._done):
+                self._ended_by = "controller"
+                return
+            self._done += 1
+            if self._done >= self.total:
+                self._ended_by = "duration"
+        except BaseException as exc:  # noqa: BLE001 - kept for the job to raise
+            self._callback_error = exc
+
+    async def work_playing(self, job):
+        """mode=play: the timeline advances physics; this waits, reports, records and watches for a stop."""
+        started = time.monotonic()
+        self._done, self._ended_by, self._callback_error = 0, None, None
+        callback = None
+        try:
+            callback = physics.on_physics_step(self.on_physics_step)
+            while not self._ended_by and self._callback_error is None:
+                job.checkpoint()
+                self.check_target()
+                if not self.timeline.is_playing():
+                    refuse("TIMELINE_INTERRUPTED", "The timeline was paused or stopped while the controller run was "
+                           f"following it (after {self._done} steps). The run ended; its log holds the steps so far.",
+                           steps=self._done)
+                job.report(self._done / self.total, f"step {self._done}/{self.total}", steps=self._done,
+                           sim_time_s=round(self._done * self.dt, 6))
+                await self._frame()
+            if self._callback_error is not None:
+                raise self._callback_error
+        except AssetError as exc:
+            exc.details.setdefault("steps", self._done)
+            exc.details.setdefault("log_file", str(self.log.path))
+            raise
+        finally:
+            if callback is not None:
+                physics.remove_physics_step(callback)
+            self.close()
+        return self.summary(self._done, self._ended_by, started)
+
+    async def _frame(self):
+        """Yield one app frame to Kit: by capturing the camera when recording, else by waiting for it."""
+        if self.capture is None or len(self.frames) >= MAX_VIDEO_FRAMES:
+            # mode=play renders as fast as the scene allows, so a slow scene can pass the limit the
+            # stepped mode checks up front: the run goes on, the video ends here.
+            await self.next_frame()
+            return
+        shot = await self.capture(f"{self.log.path.stem}-{len(self.frames) + 1:05d}.png")
+        if shot.get("status") != "ok":
+            raise AssetError(shot.get("code", "CAPTURE_FAILED"),
+                             f"Frame {len(self.frames) + 1} could not be captured: {shot.get('message')}",
+                             frames=len(self.frames))
+        self.frames.append(shot["file"])
+
     async def work(self, job):
+        if self.settings.get("mode") == "play":
+            return await self.work_playing(job)
         started = time.monotonic()
         done, ended_by = 0, "duration"
         try:
@@ -455,15 +529,7 @@ class Run:
                 if ended_by == "controller":
                     break
                 job.report(done / self.total, f"step {done}/{self.total}", steps=done, sim_time_s=round(done * self.dt, 6))
-                if self.capture is not None:  # waits for a fresh render, which is this frame's yield to Kit
-                    shot = await self.capture(f"{self.log.path.stem}-{len(self.frames) + 1:05d}.png")
-                    if shot.get("status") != "ok":
-                        raise AssetError(shot.get("code", "CAPTURE_FAILED"),
-                                         f"Frame {len(self.frames) + 1} could not be captured: {shot.get('message')}",
-                                         frames=len(self.frames))
-                    self.frames.append(shot["file"])
-                else:
-                    await self.next_frame()
+                await self._frame()
         except AssetError as exc:
             exc.details.setdefault("steps", done)
             exc.details.setdefault("log_file", str(self.log.path))
@@ -486,19 +552,24 @@ class Run:
         except AssetError as exc:
             final = dict(error=str(exc)[:300])
         video = {}
+        playing = self.settings.get("mode") == "play"
         if self.frames:
-            # The MCP host encodes these when it reads this result (job_status), as for a replay.
+            # The MCP host encodes these when it reads this result (job_status), as for a replay. While
+            # playing, frames come as fast as they render, so the rate is what makes the video last as long as the run.
+            rate = (len(self.frames) / max(done * self.dt, self.dt)) if playing else 1 / (self.per_frame * self.dt)
             video = dict(frames=len(self.frames), encode=dict(
                 folder=str(self.log.path.parent), pattern=f"{self.log.path.stem}-*.png", frames=len(self.frames),
-                fps=round(1 / (self.per_frame * self.dt), 3), label=self.settings.get("label"),
+                fps=round(min(60.0, max(1.0, rate)), 3), label=self.settings.get("label"),
                 output=f"{self.log.path.stem}.mp4"))
         return dict(steps=done, physics_dt=self.dt, sim_time_s=round(done * self.dt, 9), ended_by=ended_by,
                     wall_time_s=round(time.monotonic() - started, 3), steps_per_frame=self.per_frame,
                     log_file=str(self.log.path), log_rows=self.log.rows, final_state=final,
-                    backend=self.body.backend, **video,
-                    timeline="paused: read state with sim__body__state, replay the log with "
-                             "sim__trajectory__replay, or return to a clean stop with "
-                             "sim__timeline__control action=reset.")
+                    backend=self.body.backend, mode=self.settings.get("mode", "step"), **video,
+                    timeline=("still playing, without the controller: pause or stop it with sim__timeline__control."
+                              if playing else
+                              "paused: read state with sim__body__state, replay the log with "
+                              "sim__trajectory__replay, or return to a clean stop with "
+                              "sim__timeline__control action=reset."))
 
 
 def job_store(ext):
@@ -531,9 +602,13 @@ async def run(ext, args):
         refuse("INVALID_PHYSICS", f"{articulation} is not an articulation root. sim__physics__inspect lists them; "
                "it is often <robot>/root_joint.")
     camera = args.get("camera")
-    if s.timeline.is_playing():
+    playing_mode = settings["mode"] == "play"
+    if s.timeline.is_playing() and not playing_mode:
         refuse("TIMELINE_ACTIVE", "The timeline is playing. Pause it (sim__timeline__control action=pause) or stop "
-               "it first: the run steps physics itself, one exact step at a time.")
+               "it first: mode=step steps physics itself, one exact step at a time. mode=play follows a playing timeline.")
+    if playing_mode and not s.timeline.is_playing() and not s.timeline.is_stopped():
+        refuse("TIMELINE_ACTIVE", "The timeline is paused. mode=play follows a playing timeline: play it "
+               "(sim__timeline__control action=play resume=true), or use mode=step, which steps from a pause.")
     kind, first, second = parse_controller(args.get("controller"))
     controller = TcpController(first, second) if kind == "tcp" else load_python(first, second)
     next_frame = kit_app.get_app().next_update_async
@@ -541,7 +616,7 @@ async def run(ext, args):
     try:
         initialized = None
         if s.timeline.is_stopped():
-            initialized = await ext._timeline_control({**ids, "action": "initialize"})
+            initialized = await ext._timeline_control({**ids, "action": "play" if playing_mode else "initialize"})
         s.check_runtime_edit(stage)
         for _ in range(READY_FRAMES):  # the tensor view appears a few frames after the first Play
             if physics.physics_ready() is not False:
@@ -571,6 +646,11 @@ async def run(ext, args):
         close = getattr(controller, "close", None)
         if callable(close):
             close()
+        if playing_mode and initialized is not None:      # this call started the timeline: do not leave it playing
+            try:
+                await ext._timeline_control({**ids, "action": "stop"})
+            except Exception:  # noqa: BLE001 - the original refusal is what the caller needs
+                pass
         if isinstance(exc, JobError):
             refuse("JOB_LIMIT", str(exc))
         raise
@@ -579,6 +659,8 @@ async def run(ext, args):
                 backend=body.backend, mass=body.mass,
                 **({"joints": joints.names} if joints is not None else {}),
                 **({"camera": camera, "video": f"{log.path.stem}.mp4"} if camera is not None else {}),
-                **({"initialized": "The stopped timeline was played briefly and paused; physics may have advanced."}
+                mode=settings["mode"],
+                **({"initialized": ("The stopped timeline was started; it keeps playing after the run." if playing_mode else
+                                    "The stopped timeline was played briefly and paused; physics may have advanced.")}
                    if initialized else {}),
                 next=f"job_status(job_id=\"{job.id}\", wait_s=30) until state is not running; job_cancel stops it.")

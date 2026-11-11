@@ -1,191 +1,98 @@
-# Writing tools
+# Writing your own tools
 
-How a project's tools behave once registered. The short version of the contract is in the
-[README](../README.md#adding-a-project-the-contract).
+A tool is a Python function the bridge runs on Kit's main loop. Put yours in an ordinary Python
+package (not a Kit extension), and the bridge serves them beside its own: to MCP clients, to the
+tools panel, and to scripts using the client.
 
-## Declared toolsets
+## A tool package
 
-A package with NO `register()` is
-introspected instead: every public function (or exactly `__all__`) becomes a
-tool. The typed parameter schema derives from the signature — type hints map
-to JSON kinds, a default marks the parameter optional, pydantic-style models
-advertise their `model_json_schema()` — and the description from the
-docstring's first line. Sync and async functions alike (async handlers are
-awaited on Kit's loop). Adding a public function to the library IS publishing
-it. Programmatic form: `register_toolset(bridge, module)` (importable from
-`isaac_mcp_bridge`). `status` reports a per-namespace `source_hash` of the served
-code so a client can detect staleness; `reload_tools` re-derives the surface
-after an edit.
+```python
+# my_tools/__init__.py
+MCP_NAMESPACE = "robot_demo"            # default: the module's name
 
-## Handler contract
+def register(registrar):
+    @registrar.tool("Spawn a robot into the scene.", {"name": {"type": "string", "description": "Prim name."}})
+    def spawn_robot(name: str = "robot_1"):
+        import omni.usd                  # Kit imports go inside the function
+        ...
+        return {"path": f"/World/{name}"}
+```
 
-Handler contract: params arrive as kwargs; return a JSON-serializable payload
-(`None` → `{}`) or raise (`ToolError` attaches diagnostics like captured
-stdout). Sync or async. The bridge owns the envelope and the main-thread hop.
+This registers `robot_demo.spawn_robot`, which an MCP client sees as `robot_demo__spawn_robot`.
+Copy `mcp/templates/demo_tools/` for a working example.
 
-## Curated per-project agent views
+A package with no `register` function is read instead: every public function defined in it (or
+those named in `__all__`) becomes a tool, described by its docstring, with arguments taken from
+its signature and type hints.
 
-Same binary, same socket, different env:
+Load a package with `ISAAC_MCP_TOOL_PATHS=<folder holding it>` and `ISAAC_MCP_TOOL_MODULES=my_tools`
+at launch, or store that once with
+`python3 scripts/install.py add-project --path <folder> --module my_tools`. A package that fails
+to import stops the bridge from starting and says why, so a missing tool is never a silent one.
+
+## What a tool is given and returns
+
+- Arguments arrive by name. Declare each one in the parameters: `type` (`string`, `integer`,
+  `number`, `boolean`, `array`, `object`), `description`, and optionally `required`, `default`, `enum`.
+- Return anything JSON can hold. Do not build the reply message yourself.
+- To fail, raise. `isaac_mcp_bridge.ToolError(message, details={...})` sends the details to the
+  caller; any other exception is sent with its traceback.
+- A tool may be `async` and await Kit; the bridge awaits it.
+
+Three flags on `registrar.tool(...)` change how a tool is scheduled
+([when a call runs](protocol.md#when-a-call-runs)):
+
+| Flag | Meaning |
+|---|---|
+| `read_only=True` | Changes nothing. The only tools that run in read-only mode. |
+| `exclusive=True` | Advances the app itself (awaits frames, steps physics), so it must run alone. |
+| `inline=True` | Reads only plain Python state and never touches Kit: answered at once on the socket thread. |
+
+## Changing a tool without restarting Kit
+
+The `reload_tools` tool with `module="my_tools"` imports the package afresh and registers its
+tools again. It refuses while one of the package's calls is running. A submodule named exactly
+`_state` is not re-imported, so keep live objects there (a connection, an articulation handle).
+MCP clients see the change after `refresh_tools`.
+
+## Your project's state as tools
+
+Prefer a small tool over asking an agent to reach into your modules with `run_python`: the
+arguments are typed, the rules live in one place, and the tool still works when `run_python` is
+hidden (`ISAAC_MCP_BUILTINS=0`) or refused (read-only mode). The template's `project_state` and
+`set_threshold` show the shape.
+
+## A narrower server for one project
+
+One bridge can serve several MCP servers. To give an agent only your project's tools:
 
 ```json
-{
-  "robot-demo-agent": {
-    "command": "isaac-mcp",
-    "env": { "ISAAC_MCP_PORT": "8766",
-             "ISAAC_MCP_NAMESPACE": "robot_demo",
-             "ISAAC_MCP_BUILTINS": "0" }
-  }
-}
+{ "mcpServers": { "robot_demo": { "command": "isaac-mcp",
+    "env": { "ISAAC_MCP_NAMESPACE": "robot_demo", "ISAAC_MCP_BUILTINS": "0", "ISAAC_MCP_LOCAL_TOOLS": "gateway" } } } }
 ```
 
-exposes only `robot_demo.*` — no `run_python` — for agents that should stay on the
-stable API. `run_python` is the operator's escape hatch and how tools are
-prototyped; registered tools are what agents rely on.
+These settings choose what is listed. To stop changes for every client, start Kit read-only.
 
-## A project's own tools
+## Files on the simulator's machine
 
-Agents otherwise reach a project's state through `run_python`, which means guessing its internals and writing Python on
-each call. Give them tools instead: typed arguments, one place for the rules, and they keep working with
-`ISAAC_MCP_BUILTINS=0`. `mcp/templates/demo_tools` is a working example: `demo.project_state` reads a connection state and
-thresholds, and `demo.set_threshold` validates and sets one, refusing with `ToolError` outside its range.
+Tools run where Kit runs, so their code and assets must be on that machine. `put_file` writes a
+file there, `stat_file` reports its size and SHA-256, and `get_file` reads one back. A file
+travels in one message, so use them for code and small assets. `mcp/templates/remote_driver.py`
+copies a package by hash and reloads it.
 
-```python
-MCP_NAMESPACE = "demo"
-DOORWAY_ADMISSION = 1
-THRESHOLD_RANGES = {"grip_force_n": (0.0, 40.0), "contact_distance_m": (0.0, 0.05)}
+## The tools panel
 
-def register(registrar):
-    @registrar.tool("Read this demo project's connection state and thresholds.", {})
-    def project_state():
-        from . import _state
-        return {"connection": _state.connection, "thresholds": dict(_state.thresholds)}
-```
+`isaac.mcp.panel` adds an "MCP Tools" window: a section per namespace and a Run button per tool,
+with a field for each argument. It is drawn from the same listing clients get, so your tools
+appear on Refresh, and a click is queued exactly like a client's call.
 
-Live values go in the `_state.py` submodule, so they survive `reload_tools`. Load it when Kit starts:
+## Things Kit will surprise you with
 
-```bash
-ISAAC_MCP_TOOL_PATHS=<project> ISAAC_MCP_TOOL_MODULES=demo_tools ./run.sh --headless --port 18800
-```
-
-Then call `refresh_tools`. The tools appear as `demo__project_state` and `demo__set_threshold`, and `status` lists the
-`demo` namespace. For your project, change the namespace and keep the same shape.
-
-## Hot reload
-
-Edit tool code, then (via any client): `reload_tools {"module": "myproj_tools"}`
-→ if that owner's calls have finished, its module tree re-imports (stale bytecode
-purged) and its tools re-register. If a call is in flight, reload is refused before
-changing the owner; wait for the call to finish and retry. Live handles that must survive (articulation
-views, physics handles) belong in a submodule named exactly `_state` — that one
-module is preserved across reloads (the name is exact, not a suffix: a tool
-module merely ending in `_state`, e.g. `read_state`, reloads normally). Then
-`refresh_tools` on the MCP front-end picks
-up schema changes. No Kit restart.
-
-The bridge is shared by co-loaded packs. Give each owner a distinct owner ID and
-namespace, and unregister only your own owner on shutdown; the bridge extension
-owns the socket. `unregister_owner` removes tools from discovery immediately and
-holds the owner and namespace while in-flight handlers drain. A shutdown needing
-live state until those handlers finish can pass an `on_drained` cleanup callback;
-re-registration must wait for that callback to finish. The standard twin launcher
-uses the internal `ISAAC_MCP_DEFER_START` handshake to expose the socket only after
-its tools register; ordinary packs should not set that variable.
-
-An owner's `registrar.refuse_calls_with` policy applies to bridge dispatch across
-all namespaces while that owner is active, and is removed when that owner drains.
-Hooks registered directly on the bridge have a separate, global lifetime. While a
-policy-bearing module reloads, the bridge refuses ordinary calls until its new
-policy is installed. If the reload fails, that refusal remains until the module
-is repaired and reloaded. Diagnostic and file-repair built-ins remain
-available subject to other installed policies. This avoids serving calls during a
-missing policy; a full bridge restart is another recovery path.
-
-**Windows don't reload themselves.** An `omni.ui.Window` built by the previous
-module instance survives the reload with closures over the dead module's state
-— the bridge tools are new but the on-screen buttons still drive old code.
-Declare every window title the package builds in its `register()`:
-
-```python
-def register(registrar):
-    registrar.window("My Project Panel")     # destroyed on reload/teardown
-    ...
-```
-
-The bridge destroys declared windows when the owner unregisters (every reload)
-and adopts any stale same-titled window at declaration — so reloads are
-self-healing and the window-spawning tool just rebuilds fresh on its next
-call. (Without the declaration, do it manually at the top of the spawning
-tool: `w = ui.Workspace.get_window(title); w and (setattr(w, "visible", False), w.destroy())`.)
-
-## Remote files (put_file / get_file / stat_file)
-
-`run_python` executes on the **bridge's box**: imports and USD paths resolve
-against *its* disk, never the caller's. When the driver is remote (e.g. a Mac
-driving a GPU box), ship code and assets through the bridge instead of a
-side-channel rsync/scp: `put_file {"path", "content_b64", "mkdirs"}` writes a
-file on the box (pushing a `.py` purges the sibling `__pycache__` so the next
-import can't serve stale bytecode); `get_file {"path"}` reads one back;
-`stat_file {"path"}` reports existence/size/sha256 so a driver **ensures**
-instead of blindly pushing — skip unchanged files, and verify assets that
-arrived over any bulk channel. Content rides one NDJSON frame in memory —
-right for tool code and tool-sized assets; ship multi-GB scenes over a mount
-or rsync and still verify them with `stat_file`. After pushing a tool
-package's files, `reload_tools` picks them up without a restart.
-`templates/remote_driver.py` is the copyable template for the whole pattern
-(ensure → reload → dispatch → pull results).
-
-## Control panel
-
-`isaac.mcp.panel` renders the live registry: one section per namespace,
-parameter widgets generated from each tool's schema. Every button goes through
-`bridge.dispatch(...)` — the same entrance a socket request takes — so a human
-click and an agent call are the same code path by construction. Projects that
-want bespoke UI ship a thin widgets-only extension obeying the same rule.
-
-## Tool-author gotchas (Kit facts that cost real debugging time)
-
-- **`prim.SetActive(False)` does not stop an OmniGraph.** A loaded graph keeps
-  evaluating every tick with its prim deactivated (observed live: a
-  ROS2SubscribeJointState→ArticulationController graph kept stomping
-  articulation targets, making native commands appear dead). A tool that
-  "toggles" a graph must `stage.RemovePrim(graph_path)` and rebuild to
-  disable — never rely on SetActive.
-- **Never pump Kit's loop from a handler — `await` the frame instead.** A tool
-  handler runs as a coroutine ON Kit's main event loop (the bridge hops it there
-  via `run_coroutine` — USD/PhysX are main-thread only). A *synchronous* pump
-  from inside it re-enters the running loop, and asyncio forbids that: you get a
-  hard `RuntimeError: Cannot enter into task <UI task> while another task
-  <McpBridge._execute_and_reply> is being executed`, cascading over every pending
-  UI coroutine — under a live viewport (webrtc) it can take the process down. The
-  culprits are `omni.kit.app.get_app().update()`, `world.render()`, and
-  `world.step(render=True)` (which calls `app.update()` internally). The supported
-  pattern: make the handler `async def` and **await the app frame**, which yields
-  control back to the loop (no re-entry) AND — while the timeline is playing —
-  advances real sim time:
-    - advance one frame: `await omni.kit.app.get_app().next_update_async()`
-      (steps physics one dt when playing; this is THE async primitive)
-    - settle then read at-rest state:
-      ```python
-      if not world.is_playing():
-          await world.play_async()
-      for _ in range(n):
-          await omni.kit.app.get_app().next_update_async()
-      vel = art.get_joint_velocities()   # real: sim time actually advanced
-      ```
-  Do NOT reach for `world.step_async` — Isaac's `World.step_async` is a broken
-  override (sync `def`, takes `step_size` not `render`, runs only pre-step hooks,
-  returns `None`; its docstring's `await world.step_async()` is misleading). And
-  sync `world.step(render=False)` doesn't crash but freezes sim time inside the
-  blocked call — `next_update_async` is the honest fix for both.
-- **`time.sleep` inside `run_python` blocks Kit's main loop** — the sim can't
-  advance while the handler sleeps. Anything that must span sim time
-  (settling, motion, measurements) belongs in an `async` handler awaiting the
-  steps above (or, for a sync handler, across two bridge calls).
-- **Capturing a viewport headless: fire, then await frames — never await the
-  capture on the main thread.** `capture_viewport_to_file` awaited directly
-  deadlocks (it waits for a frame the blocked loop can't produce). Fire it, then
-  `await omni.kit.app.get_app().next_update_async()` in a loop until the output
-  file exists — the async yield lets the frame the write needs actually render.
-- **Name tool packages uniquely.** Every co-loaded project shares one
-  interpreter; `import scene_tools` resolves to whichever package of that name
-  got there first, silently shadowing yours.
+- Kit takes `--enable <extension>` with a space. `--enable=<extension>` is ignored without an error.
+- Inside a tool, `await omni.kit.app.get_app().next_update_async()` lets a frame pass. A tool that
+  does this must be `exclusive`, or other calls could start between its frames.
+- Opening a stage invalidates every prim and physics handle you hold. Fetch them again afterwards.
+- With a window, the timeline keeps playing while your tool is not running. Headless under a
+  script, nothing advances unless something updates the app.
+- Do not call `World.step()` or `app.update()` from a tool on a playing timeline: you would step
+  physics from inside a step. Await a frame instead, or use `sim.simulation.step`.

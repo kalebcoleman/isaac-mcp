@@ -4,7 +4,7 @@
 robot-agnostic. For a generic start with any robot, including a UR5e without the twin, use
 [`sim__quick_start`](TOOLS-SCENE.md#start-a-scene).
 
-This document covers the 23 tools registered by `exts/ur5e-dt/ur5e_dt/extension.py`
+This document covers the 23 tools registered by the twin extension (`exts/ur5e-dt/ur5e_dt/`: the registry is in `extension.py`, the handlers in `commands.py`)
 on the shared Kit bridge. It is the implementation reference. Generic tools are in
 [TOOLS-SCENE.md](TOOLS-SCENE.md), and every argument is listed in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#ur5e-twin-ur5e_dt__).
 
@@ -199,7 +199,7 @@ guarded graph. Read `force_publisher` and verify actual messages after warm-up.
 - Async: yes.
 - Purpose: import the Intel RealSense camera, attach it to `UR5e/wrist_3_link`, and build its ROS 2 action graph (camera image, `camera_info`, and the `/tf_cam` transform tree).
 - Camera resolution defaults to 1280 × 720. Set `UR5E_DT_CAMERA_CONFIG` to a YAML file containing
-  `camera_width` and `camera_height` to override it; the former project-specific location is no longer read implicitly.
+  `camera_width` and `camera_height` to override it; no other file is read.
 - Preconditions: UR5e must be loaded (e.g. after `quick_start_with_workstation`); otherwise returns an error.
 - Side effects: creates `/World/rsd455` (if absent) and `/Graph/ActionGraph_Camera`.
 - RGB and CameraInfo use the `camera_link` optical frame. The native TF publisher converts
@@ -441,7 +441,7 @@ stays in that state; a replacement stage or concurrent Stop is never resumed.
 
 ## Which colliders the workstation has
 
-Answered from `exts/ur5e-dt/ur5e_dt/extension.py` only; where the code does not say, this page says unknown.
+Answered from the extension's code (`exts/ur5e-dt/ur5e_dt/`) only; where the code does not say, this page says unknown.
 
 | Part | Colliders | Source |
 |---|---|---|
@@ -450,7 +450,7 @@ Answered from `exts/ur5e-dt/ur5e_dt/extension.py` only; where the code does not 
 | Simple Room (`/World/SimpleRoom`) | None. The asset ships 59 colliders; `_make_visual_only` disables every `CollisionAPI` collision and rigid body in the subtree, then the timeline is stopped and played to rebuild PhysX. The floor collider for objects is the ground plane at z=0. | `_load_simple_room`, `_make_visual_only` |
 | UR5e (`robot/ur5e.usd`) and the RG2 gripper | The code reads finger-pad collision meshes under `<link>/collisions` for the gripper gap measurement, and binds a physics material to the fingertip links and any collider children. Which other links have colliders, and their approximations: **unknown** (they come from the USD files, not from this code). | `robot/ur5e.usd` and `gripper` assets; gap measurement and material binding in `extension.py` |
 | Objects from `add_objects` (boards, blocks, sockets, pegs) | The baked USD collider is kept. Only if a prim has no authored `physics:approximation` does the extension author a default: `sdf` for all four categories (`sdfResolution` 256), with `convexDecomposition` as the only alternative the code names. Rest and contact offsets are not re-authored by that fallback (the code says they come from the USD or PhysX defaults), so their effective values are **unknown** here. | `extension.py` collision settings and the object restore path |
-| Quick Changer (`/World/QuickChanger`) | **Unknown**: referenced from `gripper/QuickChanger.usd`; the code authors nothing about its colliders. | `extension.py` |
+| Quick Changer (`/World/QuickChanger`) | **Unknown**: referenced from `gripper/QuickChanger.usd`; the code authors nothing about its colliders. | `robot.py` |
 
 Inspect the live scene instead of trusting this table: `sim__physics__inspect` and `sim__prim__get` report whether a
 prim has a collider, and `sim__physics__contacts` reports what touches what once the timeline plays.
@@ -489,7 +489,7 @@ preserved rather than removed from source layers.
 ## Arm drive gains
 
 Every arm joint is a position-driven spring: `J*q'' + kd*q' + kp*q = kp*q_cmd`. The extension writes
-`kp = _ur5e_stiffness` and `kd = _ur5e_damping` (`exts/ur5e-dt/ur5e_dt/extension.py`, `load_ur5e()`), in
+`kp = _ur5e_stiffness` and `kd = _ur5e_damping` (`exts/ur5e-dt/ur5e_dt/robot.py`, `load_ur5e()`), in
 **USD angular-drive units: N·m per degree and N·m·s per degree**. PhysX and the Python API work per radian,
 so the solver sees 57.2958x larger numbers; `_verify_drive_gains()` reads `get_gains()` back and prints a
 warning if the two ever disagree.

@@ -33,7 +33,7 @@ import isaac_mcp.server as gw
 from isaac_mcp import host_catalog, local_tools as lt, sim_sessions
 from isaac_mcp_bridge.bridge import ToolDefinition
 from isaac_mcp_bridge.schema import field_specs
-from test_bridge import LiveBridge
+from bridge_testing import LiveBridge
 from test_twin_shared_bridge import OWNER, attach, twin_registry
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +43,12 @@ _spec.loader.exec_module(generator)
 
 PROXIES = {gw._mcp_name(canonical): canonical for canonical in host_catalog.catalog_tool_names() if canonical.startswith("ur5e_dt.")}
 PLAY = "ur5e_dt__play_scene"
+
+
+@pytest.fixture(autouse=True)
+def single_purpose_tool_list(monkeypatch):
+    """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
+    monkeypatch.setenv("ISAAC_MCP_GROUP_TOOLS", "0")
 
 
 @pytest.fixture(autouse=True)
@@ -57,9 +63,6 @@ def isolated(monkeypatch, tmp_path):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(screen, "SHOT_DIR", tmp_path / "shots")
     monkeypatch.setattr(screen, "VIDEO_DIR", tmp_path / "videos")
-    monkeypatch.setattr(gw, "_PRE_DISPATCH_HOOKS", [])
-    monkeypatch.setattr(gw, "_POST_DISPATCH_HOOKS", [])
-    monkeypatch.setattr(gw, "_META_CATEGORY_HOOKS", [])
 
     def no_spawn(*args, **kwargs):
         raise AssertionError(f"the host started a process: {args!r}")
@@ -295,28 +298,6 @@ def test_a_failure_after_connecting_is_not_reported_as_not_run(monkeypatch):
         answer = gw._tool_implementation("ur5e_dt.play_scene", {}, gw._state_for(server))
         assert answer == f"Error: {error}", answer
 
-
-def test_refused_retry_does_not_claim_the_first_attempt_never_ran(monkeypatch):
-    """A request can be sent before a failed response causes a refused reconnect."""
-    client = gw.BridgeClient(port=8766)
-    attempts = []
-
-    def connect(timeout=None):
-        attempts.append("connect")
-        if len(attempts) > 1:
-            raise ConnectionRefusedError("bridge stopped after the first request")
-
-    def roundtrip(*args):
-        attempts.append("request_sent")
-        raise ConnectionResetError("response lost")
-
-    monkeypatch.setattr(client, "connect", connect)
-    monkeypatch.setattr(client, "_roundtrip", roundtrip)
-    server = build()
-    gw._state_for(server).client = client
-    answer = gw._tool_implementation("ur5e_dt.play_scene", {}, gw._state_for(server))
-    assert attempts == ["connect", "request_sent", "connect"]
-    assert "may have run" in answer and "was not run" not in answer
 
 
 def test_several_bridges_and_no_choice_points_at_use_bridge(monkeypatch, tmp_path):
@@ -653,92 +634,6 @@ def test_the_builtins_gate_does_not_hide_catalog_tools(monkeypatch):
         refreshed, listed = run(server, call("refresh_tools"), tools)
     assert "run_python" not in listed and set(PROXIES) <= set(listed)
 
-
-def test_pre_dispatch_hooks_police_offline_proxies(monkeypatch):
-    seen = []
-    gw.register_pre_dispatch_hook(lambda name, params: seen.append((name, dict(params))) or (
-        "refused by policy" if name == "ur5e_dt.stop_scene" else None))
-    server = build()
-    allowed, refused = run(server, call(PLAY), call("ur5e_dt__stop_scene"))
-    assert "not available" in allowed                    # the policy allowed it; no bridge answered
-    assert refused == "refused by policy"
-    assert [name for name, _ in seen] == ["ur5e_dt.play_scene", "ur5e_dt.stop_scene"]
-
-
-def test_post_dispatch_hooks_see_the_offline_error(monkeypatch):
-    seen = []
-    gw.register_post_dispatch_hook(lambda name, params, result: seen.append((name, result)) or "[annotated] " + result)
-    (answer,) = run(build(), call(PLAY))
-    assert answer.startswith("[annotated] Error: ur5e_dt.play_scene is not available")
-    assert seen[0][0] == "ur5e_dt.play_scene" and "no Isaac Sim bridge" in seen[0][1]
-
-
-def test_meta_category_hooks_label_proxies_including_hooks_added_after_build():
-    server = build()                                     # built before any policy exists
-    gw.register_meta_category_hook(lambda name: "twin" if name.startswith("ur5e_dt.") else None)
-    (listed,) = run(server, tools)                       # the session's startup syncs the proxies
-    assert listed[PLAY].meta == {"category": "twin"}
-    assert gw.build_server({})._tool_manager._tools[PLAY].meta == {"category": "twin"}
-
-
-def test_refresh_notifies_when_an_offline_proxy_category_changes(monkeypatch):
-    class EmptyBridge:
-        def call(self, tool, params=None, **kwargs):
-            return {"tools": {}}
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(gw, "BridgeClient", lambda **kwargs: EmptyBridge())
-    server, notes = build(), []
-
-    async def go():
-        async with session(server, notes) as client:
-            await client.initialize()
-            gw.register_meta_category_hook(lambda name: "twin" if name.startswith("ur5e_dt.") else None)
-            first = await call("refresh_tools")(client)
-            listed = await tools(client)
-            second = await call("refresh_tools")(client)
-            return first, listed, second
-
-    first, listed, second = asyncio.run(go())
-    assert "23 tool(s)" in first and "ur5e_dt.play_scene (updated)" in first
-    assert listed[PLAY].meta == {"category": "twin"}
-    assert "registry unchanged" in second and len(notes) == 1
-
-
-def test_refresh_notifies_when_category_changes_across_live_proxy_transitions(monkeypatch):
-    class Bridge:
-        live = False
-
-        def call(self, tool, params=None, **kwargs):
-            catalog = host_catalog.load_catalog()
-            return {"tools": {"ur5e_dt.play_scene": catalog["ur5e_dt.play_scene"]} if self.live else {}}
-
-        def close(self):
-            pass
-
-    bridge = Bridge()
-    monkeypatch.setattr(gw, "BridgeClient", lambda **kwargs: bridge)
-    server, notes = build(), []
-
-    async def go():
-        async with session(server, notes) as client:
-            await client.initialize()
-            gw.register_meta_category_hook(lambda name: "policy" if name == "ur5e_dt.play_scene" else None)
-            bridge.live = True
-            became_live = await call("refresh_tools")(client)
-            live_meta, live_notes = (await tools(client))[PLAY].meta, len(notes)
-            gw._META_CATEGORY_HOOKS.clear()
-            bridge.live = False
-            became_offline = await call("refresh_tools")(client)
-            offline_meta = (await tools(client))[PLAY].meta
-            return became_live, live_meta, live_notes, became_offline, offline_meta
-
-    became_live, live_meta, live_notes, became_offline, offline_meta = asyncio.run(go())
-    assert "ur5e_dt.play_scene (updated)" in became_live and live_meta == {"category": "policy"}
-    assert "ur5e_dt.play_scene (offline)" in became_offline and offline_meta is None
-    assert (live_notes, len(notes)) == (1, 2)
 
 
 def test_a_live_tool_may_not_take_an_offline_proxys_name_under_another_canonical(monkeypatch):
@@ -1150,7 +1045,7 @@ def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypa
     assert str(tmp_path) not in answer, "status must not publish the checkout path"
     brief = json.loads(short)
     assert brief["running"] is True and brief["pid"] == direct["pid"] and brief["port"] == live.port
-    assert not {"admission", "toolsets", "namespaces", "extension"} & set(brief), "the default reply is the short one"
+    assert not {"namespaces", "extension"} & set(brief), "the default reply is the short one"
     assert "warning" in brief["host"] and len(short) < len(answer)
 
 

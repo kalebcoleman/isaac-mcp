@@ -556,3 +556,121 @@ def test_bad_observe_fps_and_label_are_refused(args):
     with pytest.raises(AssetError) as error:
         control_run.validate({"duration_s": 1, **args})
     assert error.value.code == "INVALID_VALUE"
+
+
+# ---- mode=play: the timeline advances physics and the controller runs in the engine's pre-step callback ----
+
+@pytest.fixture
+def playing(world, monkeypatch):
+    """A timeline that plays: every app frame runs two physics steps, calling the registered callbacks first."""
+    world.mode = "play"
+    callbacks, removed = {}, []
+
+    def register(callback):
+        callbacks[len(callbacks) + 1] = callback
+        return len(callbacks)
+
+    def remove(callback_id):
+        removed.append(callback_id)
+        callbacks.pop(callback_id, None)
+
+    async def next_frame():
+        world.frames += 1
+        if world.mode == "play":
+            for _ in range(2):
+                for callback in list(callbacks.values()):
+                    callback(DT, None)
+                world.body.step()
+                world.steps += 1
+        await asyncio.sleep(0)
+
+    monkeypatch.setattr(physics, "on_physics_step", register)
+    monkeypatch.setattr(physics, "remove_physics_step", remove)
+    world.next_frame = next_frame
+    return SimpleNamespace(callbacks=callbacks, removed=removed)
+
+
+@pytest.mark.anyio
+async def test_in_play_mode_the_controller_runs_once_per_engine_step_and_the_timeline_keeps_playing(world, playing):
+    job, run = start(world, hover, duration=4.0, mode="play")
+    out = await finish(job)
+    assert out["state"] == "succeeded", out
+    result = out["result"]
+    assert result["mode"] == "play" and result["steps"] == 400 and result["ended_by"] == "duration" and result["log_rows"] == 400
+    assert result["final_state"]["position"][2] == pytest.approx(1.0, abs=0.02)
+    assert "still playing" in result["timeline"] and world.mode == "play"
+    assert playing.removed == [1] and not playing.callbacks, "the callback is removed when the run ends"
+    assert world.fabric == 0, "nothing was stepped by hand"
+
+
+@pytest.mark.anyio
+async def test_in_play_mode_a_controller_failure_ends_the_job_without_raising_into_the_engine(world, playing):
+    def controller(state):
+        if state["step"] == 7:
+            raise RuntimeError("lost the target")
+        return hover(state)
+
+    job, _ = start(world, controller, duration=4.0, mode="play")
+    out = await finish(job)
+    assert out["state"] == "failed" and out["code"] == "CONTROLLER_FAILED" and "lost the target" in out["error"]
+    assert out["step"] == 7 and playing.removed == [1]
+    assert world.mode == "play", "the timeline was not touched"
+
+
+@pytest.mark.anyio
+async def test_in_play_mode_a_pause_or_a_cancel_ends_the_run(world, playing):
+    store = jobs.JobStore(asyncio.ensure_future)
+    job, _ = start(world, hover, duration=100.0, mode="play", store=store)
+    for _ in range(20):
+        await asyncio.sleep(0)
+    world.mode = "pause"
+    out = await finish(job)
+    assert out["state"] == "failed" and out["code"] == "TIMELINE_INTERRUPTED" and out["steps"] > 0
+    world.mode = "play"
+    job, _ = start(world, hover, duration=100.0, mode="play", store=store, filename="again.csv")
+    for _ in range(20):
+        await asyncio.sleep(0)
+    store.cancel(job.id)
+    assert (await finish(job))["state"] == "cancelled" and len(playing.removed) == 2 and not playing.callbacks
+
+
+@pytest.mark.anyio
+async def test_a_video_of_a_playing_run_lasts_as_long_as_the_run(world, playing):
+    async def capture(name):
+        await world.next_frame()     # a capture takes a frame, during which the timeline advances
+        return {"status": "ok", "file": str(world.out / name)}
+
+    job, _ = start_full(world, hover, duration=1.0, capture=capture, mode="play", filename="live.csv")
+    out = await finish(job)
+    frames = out["result"]["frames"]
+    assert out["state"] == "succeeded" and frames == 50, "two steps per captured frame"
+    assert out["result"]["encode"]["fps"] == pytest.approx(frames / 1.0), "so the video's length is the run's"
+
+
+def test_play_mode_settings():
+    assert control_run.validate({"duration_s": 1})["mode"] == "step"
+    assert control_run.validate({"duration_s": 1, "mode": "play"})["mode"] == "play"
+    for args in ({"mode": "fast"}, {"mode": "play", "steps_per_frame": 4}):
+        with pytest.raises(AssetError) as error:
+            control_run.validate({"duration_s": 1, **args})
+        assert error.value.code == "INVALID_VALUE"
+
+
+@pytest.mark.anyio
+async def test_the_tool_starts_a_stopped_timeline_for_play_mode_and_refuses_a_paused_one(tool, ext, world, playing):  # noqa: F811
+    ext.scene.timeline.mode = "pause"
+    refused = await tool(**ext.ids, body="/World/Drone", controller="json:dumps", duration_s=1, mode="play")
+    assert refused["code"] == "TIMELINE_ACTIVE" and "resume=true" in refused["message"]
+    ext.scene.timeline.mode = "stop"
+
+    async def control(args):
+        ext.initialized.append(args["action"])
+        ext.scene.timeline.mode = args["action"]
+        return {"action": args["action"]}
+
+    ext._timeline_control = control
+    started = await tool(**ext.ids, body="/World/Drone", controller="json:dumps", duration_s=0.05, mode="play", filename="p.csv")
+    assert started["status"] == "ok" and started["mode"] == "play" and ext.initialized == ["play"]
+    assert "keeps playing" in started["initialized"]
+    ext.bridge.jobs.cancel(started["job_id"])
+    await asyncio.sleep(0)

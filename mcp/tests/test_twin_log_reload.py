@@ -6,10 +6,11 @@ import io
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+import twin_source
 
 
 def log_classes():
-    source = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.py"
+    source = twin_source.SOURCE
     tree = ast.parse(source.read_text())
     redirector = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "LogRedirector")
     twin = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "DigitalTwin")

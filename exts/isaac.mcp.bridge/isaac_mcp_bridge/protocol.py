@@ -1,118 +1,95 @@
-"""Wire protocol for the isaac.mcp.bridge bridge — NDJSON frames + response envelope.
+"""The wire format between a client and the bridge: one JSON object per line, each way.
 
-Framing (NDJSON): every message is exactly one JSON object serialized on a
-single line and terminated by ``\\n``. Message boundaries are therefore exact —
-no parse-until-valid guessing — and one malformed line yields one error
-response instead of poisoning the connection buffer.
+    request   {"id": 7, "type": "sim.stage.info", "params": {...}, "token": "..."}
+    reply     {"id": 7, "status": "success", "result": {...}}
+              {"id": 7, "status": "error", "message": "...", "code": "READ_ONLY", ...}
 
-Request : {"type": "<canonical tool name>", "params": {...}}
-Response: {"status": "success", "result": <payload>}
-        | {"status": "error",   "message": "...", ...extra diagnostic keys}
-
-Handlers never speak this envelope. A tool handler returns its payload (any
-JSON-serializable value; ``None`` becomes ``{}``) or raises. The bridge wraps
-exactly once. ``ToolError`` lets a handler attach structured diagnostics
-(e.g. run_python's captured stdout) to the error frame.
+``id`` is the caller's and is echoed back, so replies can be matched and several requests can share
+a connection; a request without one gets a reply without one. ``token`` is needed once per
+connection when the bridge requires authentication. Stdlib only.
 """
 
 import json
 import math
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Optional
+
+MAX_FRAME_BYTES = 64 * 1024 * 1024
+MAX_UNAUTHENTICATED_BYTES = 64 * 1024      # before a connection has shown its token
 
 
 class ToolError(Exception):
-    """Handler-raised failure with optional structured diagnostics.
+    """A tool's own failure, with details that travel to the caller beside the message."""
 
-    ``details`` keys are merged into the error frame alongside ``message``
-    (reserved keys ``status``/``message`` in details are ignored).
-    """
-
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None, code: Optional[str] = None):
         super().__init__(message)
-        self.details = details or {}
+        self.details = dict(details or {})
+        if code:
+            self.details.setdefault("code", code)
 
 
 def success(result: Any) -> Dict[str, Any]:
-    """Wrap a handler payload in the success envelope (single wrap, always)."""
     return {"status": "success", "result": {} if result is None else result}
 
 
 def error(message: str, **extra: Any) -> Dict[str, Any]:
-    """Build an error envelope; extra keys (traceback, output, ...) ride along."""
     frame = {"status": "error", "message": message}
-    for k, v in extra.items():
-        if k not in ("status", "message") and v is not None:
-            frame[k] = v
+    frame.update({key: value for key, value in extra.items() if key not in frame and value is not None})
     return frame
 
 
-def _finite(obj: Any) -> Any:
-    """Replace NaN and infinities with strings: they are not JSON, and strict parsers reject the whole frame."""
-    if isinstance(obj, float) and not math.isfinite(obj):
-        return str(obj)
-    if isinstance(obj, dict):
-        return {k: _finite(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_finite(v) for v in obj]
-    return obj
+def _plain(value: Any) -> Any:
+    """JSON has no NaN or infinity; send them as strings rather than a frame strict parsers reject."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    return value
 
 
-def encode_frame(obj: Any) -> bytes:
-    """One JSON object -> one NDJSON line (UTF-8, newline-terminated)."""
+class Base64(str):
+    """Base64 text. It needs no JSON escaping, so ``encode`` copies it into the frame as it is."""
+
+
+_SPLICE = "\x00base64\x00"
+
+
+def encode(frame: Any) -> bytes:
+    """One frame as a line of UTF-8 JSON. Values JSON cannot hold are sent as their repr.
+
+    A file's content can be tens of megabytes of base64. Escaping that is one long call holding
+    the interpreter, which the main loop would wait for, so ``Base64`` content is spliced in."""
+    result = frame.get("result") if isinstance(frame, dict) else None
+    content = result.get("content_b64") if isinstance(result, dict) else None
+    if isinstance(content, Base64):
+        head, _, tail = encode({**frame, "result": {**result, "content_b64": _SPLICE}}).partition(json.dumps(_SPLICE).encode())
+        return b"".join((head, b'"', content.encode("ascii"), b'"', tail))
     try:
-        text = json.dumps(obj, default=_json_fallback, allow_nan=False)
-    except ValueError:  # NaN or infinity somewhere; only this rare frame pays for the walk
-        text = json.dumps(_finite(obj), default=_json_fallback)
-    return text.encode("utf-8") + b"\n"
+        text = json.dumps(frame, allow_nan=False, default=repr)
+    except ValueError:
+        try:
+            text = json.dumps(_plain(frame), allow_nan=False, default=repr)
+        except (TypeError, ValueError, RecursionError) as exc:
+            text = _unsendable(frame, exc)
+    except (TypeError, RecursionError) as exc:
+        text = _unsendable(frame, exc)
+    return text.encode() + b"\n"
 
 
-def _json_fallback(obj: Any) -> str:
-    """Last-resort serializer so a handler returning e.g. a Gf.Vec3d or numpy
-    scalar degrades to its repr instead of killing the response frame."""
-    return repr(obj)
+def _unsendable(frame: Any, exc: BaseException) -> str:
+    """The error sent in place of a frame JSON cannot hold (a dict with tuple keys, a structure
+    that contains itself), so the caller gets an answer instead of waiting for its timeout."""
+    reply = error(f"the tool ran, but its result cannot be sent as JSON: {exc}. Return plain dicts with string "
+                  "keys, lists, strings and numbers.", code="RESULT_NOT_JSON")
+    if isinstance(frame, dict) and isinstance(frame.get("id"), (str, int, float)):
+        reply = {"id": frame["id"], **reply}
+    return json.dumps(reply)
 
 
-MAX_FRAME_BYTES = 256 * (1 << 20)  # a request is small; files go base64 in one frame, so this stays generous
-
-
-class FrameDecoder:
-    """Incremental NDJSON decoder: feed raw bytes, iterate complete frames.
-
-    Each yielded item is ``(obj, None)`` for a parsed frame or ``(None, err)``
-    for a line that wasn't valid JSON — the caller answers the bad line with an
-    error response and the connection stays healthy.
-    """
-
-    def __init__(self, max_frame: int = MAX_FRAME_BYTES) -> None:
-        self._buffer = bytearray()
-        self._max_frame = max_frame
-        self._skipping = False  # inside a frame already refused as too long: drop it up to its newline
-
-    def feed(self, data: bytes) -> Iterator[tuple]:
-        if self._skipping:
-            end = data.find(b"\n")
-            if end < 0:
-                return
-            data, self._skipping = data[end + 1:], False
-        scanned = len(self._buffer)  # search only new bytes, so a long frame costs linear time, not quadratic
-        self._buffer += data
-        while True:
-            end = self._buffer.find(b"\n", scanned)
-            if end < 0:
-                break
-            line = bytes(self._buffer[:end]).strip()
-            del self._buffer[:end + 1]
-            scanned = 0
-            if not line:
-                continue
-            if len(line) > self._max_frame:  # the whole frame can arrive in one chunk, before the check below
-                yield None, f"frame longer than the {self._max_frame // (1 << 20)} MiB limit was dropped"
-                continue
-            try:
-                yield json.loads(line.decode("utf-8")), None
-            except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as e:
-                yield None, f"invalid JSON frame: {e}"
-        if len(self._buffer) > self._max_frame:
-            self._buffer.clear()
-            self._skipping = True
-            yield None, f"frame longer than the {self._max_frame // (1 << 20)} MiB limit was dropped"
+def decode(line: bytes) -> Dict[str, Any]:
+    """A received line as a request or reply. Raises ValueError for anything but a JSON object."""
+    frame = json.loads(line.decode("utf-8"))
+    if not isinstance(frame, dict):
+        raise ValueError("a frame must be a JSON object")
+    return frame

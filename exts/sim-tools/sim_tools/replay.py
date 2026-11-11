@@ -327,7 +327,11 @@ async def run(ext, args):
             refuse("CONFLICT", f"Frames named {settings['filename'][:-4]}-*.png already exist in the output folder; "
                    "use another filename. No overwrite.")
     replay = Replay(s, ids, tracks, times, settings, capture, kit_app.get_app().next_update_async, ext._operation_lock)
-    replay.prepare(stage)
+    try:
+        replay.prepare(stage)
+    except BaseException:
+        replay.restore()        # a later prim was refused: put back the ones already moved
+        raise
     try:
         job = store.start("sim.trajectory.replay", replay.work, label=settings["label"] and settings["label"][:80])
     except JobError as exc:

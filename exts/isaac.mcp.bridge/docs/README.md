@@ -1,15 +1,15 @@
 # isaac.mcp.bridge
 
-Generic MCP socket bridge for Omniverse Kit. One bridge, one port, per Kit
-process: projects are plain tool packages (`MCP_NAMESPACE` + an optional
-`register(registrar)` — without one, the package's public functions register
-directly as a declared toolset) autoloaded by the bridge and advertised canonically as
-`<namespace>.<tool>` over an NDJSON-over-TCP protocol, with every handler
-dispatched on Kit's main thread. Builtins: `run_python` (the escape hatch),
-`list_tools` (discovery), `reload_tools` (hot reload), `list_bridges`
-(this box's advertised bridges), `put_file` / `get_file` / `stat_file` (remote file push/pull/verify),
-`status` (instance identity: pid, port, headless-vs-headful, app version — multi-instance verification),
-`job_status` / `job_cancel` (background jobs started by `run_python` with `background=true` or by a tool pack).
+The part of isaac-mcp that runs inside Kit. It keeps a registry of tools, listens on a local TCP
+port, and runs each requested tool on Kit's main loop. Tool packs (the scene tools, the UR5e twin,
+your own package) register under a namespace and are served as `<namespace>.<tool>`.
 
-See `mcp/README.md` at the repository root for setup and the project contract, and
-`mcp/docs/protocol.md` for the protocol.
+Its own tools: `status`, `run_python`, `job_status`, `job_cancel`, `list_tools`, `list_bridges`,
+`reload_tools`, `put_file`, `get_file` and `stat_file`.
+
+Connections must present a token (clients on the same account find it automatically), and
+`ISAAC_MCP_READ_ONLY=1` starts a bridge that runs only tools which change nothing.
+
+- Protocol, scheduling, token and read-only mode: `mcp/docs/protocol.md`
+- Settings: `docs/ENVIRONMENT.md`
+- Writing tools: `mcp/docs/tool-authoring.md`

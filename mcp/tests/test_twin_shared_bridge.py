@@ -8,7 +8,8 @@ import pytest
 
 from isaac_mcp_bridge.bridge import McpBridge, ToolDefinition
 from isaac_mcp.client import BridgeClient, BridgeError
-from test_bridge import LiveBridge
+from bridge_testing import LiveBridge
+import twin_source
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,7 +19,7 @@ OWNER = binding["OWNER_ID"]
 
 
 def twin_registry():
-    tree = ast.parse((ROOT / "exts/ur5e-dt/ur5e_dt/extension.py").read_text())
+    tree = ast.parse(twin_source.SOURCE.read_text())
     return next(ast.literal_eval(node.value) for node in tree.body
                 if isinstance(node, ast.Assign) and any(
                     isinstance(target, ast.Name) and target.id == "MCP_TOOL_REGISTRY"

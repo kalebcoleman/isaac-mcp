@@ -1,203 +1,58 @@
-"""Reference client for the isaac.mcp.bridge bridge — stdlib-only, single-file.
+"""Client for the bridge inside a Kit app: find it, connect, call a tool.
 
-The one implementation of the caller side of the wire protocol (NDJSON over
-TCP; see docs/protocol.md): framing, envelope decoding, connection health, and
-retry live here and nowhere else. Every consumer — the MCP gateway, tests,
-doctors, project scripts — either imports this module or copies this file
-(single-file, stdlib-only, no intra-package imports is part of its contract).
+    from isaac_mcp.client import BridgeClient, call
 
-Two lifetimes, one roundtrip:
+    call("status")                                   # one call on a fresh connection
+    with BridgeClient(port=8766) as bridge:          # many calls on one connection
+        bridge.call("sim.stage.info")
 
-    from isaac_mcp.client import call, BridgeClient, BridgeError
+A bridge advertises itself in a folder private to the account (a portfile, and a token file when it
+requires its token). With no port given, the client uses ``UR5E_DT_PORT`` or ``ISAAC_MCP_PORT``,
+else the one advertised bridge; with several advertised it refuses to guess. Every request carries
+an id and the reply is matched by it, so a reply that arrives after its call timed out cannot be
+mistaken for the next call's.
 
-    call("demo.ping", {"message": "hi"}, port=8766)   # one-shot: fresh socket,
-                                                      # fitted timeout, no shared
-                                                      # fate with other calls
-    with BridgeClient(port=8766) as c:                # persistent: one socket,
-        c.call("list_tools")                          # health-checked, reconnects
-        c.call("run_python", {"code": "result = 1"})  # + retries ONCE on stale
-                                                      #   connections (never on
-                                                      #   timeout — a timed-out
-                                                      #   tool may have executed)
-
-Errors: BridgeError = the bridge answered with an error envelope (its
-diagnostic keys — traceback, output, expected_parameters — ride on .details).
-OSError/TimeoutError = couldn't reach or lost the bridge. RuntimeError =
-endpoint resolution failed (no port given and discovery found zero or several
-bridges).
-
-CLI (replaces printf|nc recipes):
-
-    python3 -m isaac_mcp.client <tool> ['{"json":"params"}'] [--port N] [--host H] [--timeout S]
-    python3 -m isaac_mcp.client --list-bridges     # bridges advertised on this box
-
-`-m` needs a Python with the isaac_mcp package installed, which a stock python3 does not
-have. This file is stdlib-only, so from a checkout run it directly instead:
-
-    python3 mcp/isaac_mcp/client.py --list-bridges
-
-Endpoint resolution — host and port resolve together, from the same portfile
-when discovery is the source (a bridge bound to a tailnet IP advertises that
-IP; dialing loopback for its port would be wrong):
-
-    port: explicit --port/port= > $ISAAC_MCP_PORT > auto-discovery via the
-          runtime portfiles when exactly one bridge is running (loud error
-          when several are)
-    host: explicit --host/host= > $ISAAC_MCP_HOST > the discovered
-          portfile's advertised host (only when the port came from discovery)
-          > 127.0.0.1
-
-Exit codes: 0 = success · 1 = bridge answered with an error ·
-2 = bridge unreachable / usage error.
+Stdlib only, and runnable as a file: ``python3 mcp/isaac_mcp/client.py --list-bridges``.
 """
 
+import itertools
 import json
-import logging
 import os
-import stat
-import re
-import secrets
 import socket
+import stat
+import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-_log = logging.getLogger("isaac_mcp.client")
-_log.addHandler(logging.NullHandler())   # the CLI stays silent; the server's handlers still see it
-
-# The cross-process public names for the bridge endpoint. PORT_ENV is kept in
-# sync with the bridge-side knob table (isaac_mcp_bridge.knobs.PORT.env) by test,
-# not by import — this file must stay dependency-free and copyable. HOST_ENV
-# is the caller-side dial override (which host to connect to; distinct from
-# the bridge-side bind knob ISAAC_MCP_BIND).
 PORT_ENV = "ISAAC_MCP_PORT"
-# The twin registers on the shared bridge selected by this port. It is checked
-# first so one variable identifies the twin endpoint in launch scripts and MCP
-# client configs alike; ISAAC_MCP_PORT stays the generic fallback.
 TWIN_PORT_ENV = "UR5E_DT_PORT"
 HOST_ENV = "ISAAC_MCP_HOST"
+TOKEN_ENV = "ISAAC_MCP_TOKEN"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_TIMEOUT = 300.0
-MAX_REPLY_BYTES = 1 << 30
-
-
-#: THE QUEUE BUDGET. The bridge runs one frame-advancing verb at a time and keeps a request that
-#: arrives meanwhile in a queue — but only for as long as the request SAYS it may wait
-#: (`queue_s` on the frame). A request that states nothing starts at once or is refused at once
-#: with `DOORWAY_BUSY`. The budget is this caller's to state because only the caller knows its
-#: own patience: its timeout, less the time the verb needs to RUN once started (the execution
-#: reserve), less a margin for the refusal itself to arrive while the caller is still listening.
-REFUSAL_MARGIN_S = 1.0
-#: With no reserve stated, half of the timeout is kept for the verb to run.
-DEFAULT_RESERVE_FRACTION = 0.5
-#: `BridgeError.details["refusal"]` when the bridge is alive and occupied. NOT unreachable: a
-#: health probe that reads this as a dead cell tears down a healthy run.
-BUSY = "DOORWAY_BUSY"
-
-#: THE HOLD, caller side (the bridge's `HOLD_VERB`; names pinned to the bridge by test, never by
-#: import). While a hold stands, the bridge refuses every frame that does not carry its token as
-#: `HELD`. A process that is the holder's own work — the holder and every subprocess it starts —
-#: carries the token in this variable, and every frame this client sends from that process
-#: carries it at the frame's top level (`HOLD_FIELD`), never inside `params`.
-HOLD_TOKEN_ENV = "ISAAC_MCP_HOLD_TOKEN"
-#: A FILE holding the token, read on EVERY call, for a LONG-LIVED process started before any hold
-#: existed — a service whose environment was fixed at start-up and that the holder means to let
-#: through. The holder writes the file while it holds and removes it on release; absent, no token
-#: is sent, and that service is refused like any other caller under the hold.
-HOLD_TOKEN_FILE_ENV = "ISAAC_MCP_HOLD_TOKEN_FILE"
-HOLD_VERB = "doorway.hold"
-RELEASE_VERB = "doorway.release"
-HOLD_FIELD = "hold"
-HOLD_CAPABILITY = "hold-v1"
-HELD = "DOORWAY_HELD"
-
-
-def queue_budget(timeout: float, execution_reserve_s: Optional[float] = None) -> float:
-    """The `queue_s` a request states for a call with this timeout and execution reserve."""
-    timeout = float(timeout)
-    reserve = (timeout * DEFAULT_RESERVE_FRACTION if execution_reserve_s is None
-               else float(execution_reserve_s))
-    return max(0.0, timeout - reserve - REFUSAL_MARGIN_S)
-
-
-#: Tools that are safe to send twice: they only read, so a repeat after a lost connection cannot change anything. This is the one
-#: place that decides it; every other tool is never re-sent once its request has reached the bridge (it may have run).
-#: Names are the bridge's canonical tool names. `sim.logs.mark` (writes a marker) is deliberately not here.
-IDEMPOTENT_TOOLS = frozenset({
-    "list_tools", "status", "list_bridges", "stat_file", "get_file",
-    "assets.roots", "assets.scan", "assets.search", "assets.packs", "assets.pack_doctor", "assets.dependencies",
-    "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.prim.bounds", "sim.prim.measure",
-    "sim.camera.list", "sim.physics.inspect", "sim.physics.raycast", "sim.physics.contacts", "sim.body.state",
-    "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "sim.logs.summary",
-    "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find",
-})
-
-
-#: A kept connection idle this long is probed with the cheap read-only `status` before a tool that must not be re-sent, so a Kit
-#: that restarted in the meantime is noticed while nothing has been sent yet (and the connection is rebuilt) instead of
-#: after the request went into a dead socket.
-STALE_PROBE_IDLE_S = 1.0
-
-
-class BridgeDispatchUncertain(ConnectionError):
-    """The connection broke after the request had been sent, so the tool may already have run (or still be running) in Kit.
-    It is not retried: a repeat could run a non-idempotent tool twice."""
-
-
-class BridgeConnectTimeout(TimeoutError):
-    """The TCP connection to the bridge timed out before any request was sent, so no tool ran."""
+CONNECT_TIMEOUT = 5.0
 
 
 class BridgeError(Exception):
-    """The bridge answered with an error envelope.
-
-    ``details`` carries the envelope's diagnostic keys (traceback, output,
-    expected_parameters, known_tools, ...).
-    """
+    """The bridge answered, and the answer was an error. ``details`` holds what came with it."""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message)
         self.details = details or {}
 
 
-# ---- port discovery (runtime portfiles) ----
-# Bridges advertise themselves as <pid>-<port>.json in a per-user runtime dir
-# (written by isaac_mcp_bridge.bridge — the derivation below mirrors it; the pair
-# is a cross-process contract pinned by test, not by import).
+# ---- finding a bridge --------------------------------------------------------------------
 
 def _runtime_dir() -> str:
     base = os.getenv("XDG_RUNTIME_DIR")
     if base:
         return os.path.join(base, "isaac-mcp")
-    return os.path.join("/tmp" if os.name != "nt" else os.getenv("TEMP", "/tmp"),
-                        f"isaac-mcp-{os.getuid() if hasattr(os, 'getuid') else 'u'}")
-
-
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
-
-
-def _is_portfile_name(name: str) -> bool:
-    return re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*\.json", name) is not None
-
-
-def _valid_portfile(name: str, info) -> bool:
-    """Mirrors the bridge advertisement contract, not an authentication check."""
-    return (isinstance(info, dict) and _is_portfile_name(name)
-            and type(info.get("pid")) is int and info["pid"] > 0
-            and type(info.get("port")) is int and 1 <= info["port"] <= 65535
-            and name == f"{info['pid']}-{info['port']}.json"
-            and isinstance(info.get("host", "127.0.0.1"), str)
-            and bool(info.get("host", "127.0.0.1").strip())
-            and "\0" not in info.get("host", "127.0.0.1"))
+    return os.path.join("/tmp", f"isaac-mcp-{os.getuid() if hasattr(os, 'getuid') else 'u'}")
 
 
 def _runtime_dir_trusted(folder: str) -> bool:
-    """Only a folder this user owns and others can't write to: a local user could otherwise pre-create
-    the predictable /tmp/isaac-mcp-<uid> and point this client at a bridge of theirs."""
+    """Only a folder this account owns and nobody else can write to. Another local user could
+    otherwise create the predictable /tmp folder first and advertise a bridge of their own."""
     if not hasattr(os, "getuid"):
         return True
     try:
@@ -207,141 +62,116 @@ def _runtime_dir_trusted(folder: str) -> bool:
     return stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
 
 
-def _pid_is_ours(pid: int) -> bool:
-    """False for a live process of another user. No /proc: not knowable, so the liveness check stands."""
+def _alive_and_ours(pid: int) -> bool:
     try:
-        return os.stat(f"/proc/{pid}").st_uid == os.getuid()
-    except (AttributeError, OSError):
-        return True
-
-
-def discover_bridges() -> list:
-    """Live advertised bridges: [{pid, port, host, app, started}]. Stale
-    portfiles (dead pid or dead socket) are pruned best-effort."""
-    found = []
-    if not _runtime_dir_trusted(_runtime_dir()):
-        return found
-    try:
-        names = os.listdir(_runtime_dir())
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
     except OSError:
-        return found
-    for name in names:
-        if not _is_portfile_name(name):
+        return False        # alive, but another account's
+    return True
+
+
+def _advertisements() -> List[Tuple[str, Dict[str, Any]]]:
+    """(path, contents) of every well-formed portfile in the trusted runtime folder."""
+    folder = _runtime_dir()
+    if not _runtime_dir_trusted(folder):
+        return []
+    found = []
+    for name in sorted(os.listdir(folder)):
+        stem, extension = os.path.splitext(name)
+        pid, _, port = stem.partition("-")
+        if extension != ".json" or not (pid.isdigit() and port.isdigit()):
             continue
-        path = os.path.join(_runtime_dir(), name)
+        path = os.path.join(folder, name)
         try:
-            if not stat.S_ISREG(os.lstat(path).st_mode):  # opening a FIFO here would hang discovery
-                raise OSError("not a regular file")
-            with open(path) as f:
-                info = json.load(f)
-            if not _valid_portfile(name, info):
+            if not stat.S_ISREG(os.lstat(path).st_mode):     # opening a FIFO would hang
                 continue
-            if not _pid_alive(info["pid"]) or not _pid_is_ours(info["pid"]):
-                raise OSError("stale portfile: process gone")
-            probe = socket.create_connection(
-                (info.get("host", DEFAULT_HOST), int(info["port"])), timeout=0.5)
-            probe.close()
-            found.append(info)
-        except Exception:
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
+            with open(path) as stream:
+                info = json.load(stream)
+        except (OSError, ValueError):
+            continue
+        if isinstance(info, dict) and info.get("pid") == int(pid) and info.get("port") == int(port) \
+                and isinstance(info.get("host", DEFAULT_HOST), str):
+            found.append((path, info))
     return found
 
 
-def _resolve_endpoint(host, port) -> tuple:
-    """(host, port), resolved together so a discovered pair stays a pair.
+def discover_bridges() -> List[Dict[str, Any]]:
+    """Bridges advertised by live processes of this account that accept a connection. A portfile
+    whose process is gone is removed."""
+    live = []
+    for path, info in _advertisements():
+        reachable = _alive_and_ours(info["pid"])
+        if reachable:
+            try:
+                socket.create_connection((info.get("host") or DEFAULT_HOST, info["port"]), timeout=0.5).close()
+            except OSError:
+                reachable = False
+        if reachable:
+            live.append({key: value for key, value in info.items() if key != "token_file"})
+        else:
+            for stale in (path, path[:-5] + ".token"):
+                try:
+                    os.unlink(stale)
+                except OSError:
+                    pass
+    return live
 
-    port: explicit > $UR5E_DT_PORT > $ISAAC_MCP_PORT > discovery-if-unambiguous
-          > loud error.
-    host: explicit > $ISAAC_MCP_HOST > the SAME portfile's advertised host
-    (only when the port itself came from discovery) > 127.0.0.1.
-    """
+
+def _resolve_endpoint(host: Optional[str], port: Optional[int]) -> Tuple[str, int]:
+    """The (host, port) to dial. An advertised host is used only with its own advertised port."""
     host = host or os.getenv(HOST_ENV)
     if port:
-        return (host or DEFAULT_HOST, int(port))
-    env = os.getenv(TWIN_PORT_ENV) or os.getenv(PORT_ENV)
-    if env:
-        return (host or DEFAULT_HOST, int(env))
+        return host or DEFAULT_HOST, int(port)
+    configured = os.getenv(TWIN_PORT_ENV) or os.getenv(PORT_ENV)
+    if configured:
+        return host or DEFAULT_HOST, int(configured)
     bridges = discover_bridges()
     if len(bridges) == 1:
-        return (host or bridges[0].get("host") or DEFAULT_HOST,
-                int(bridges[0]["port"]))
-    if len(bridges) > 1:
-        listing = ", ".join(
-            f"{b.get('app', '?')} pid={b['pid']} port={b['port']}" for b in bridges)
-        raise RuntimeError(
-            f"multiple bridges running ({listing}) — pass port= or set {PORT_ENV}")
-    raise RuntimeError(
-        f"no bridge found: none advertised in {_runtime_dir()}, and no port "
-        f"given (pass port= or set {PORT_ENV})")
+        return host or bridges[0].get("host") or DEFAULT_HOST, int(bridges[0]["port"])
+    if bridges:
+        listing = ", ".join(f"{b.get('app', '?')} pid={b['pid']} port={b['port']}" for b in bridges)
+        raise RuntimeError(f"multiple bridges running ({listing}): pass port= or set {PORT_ENV}")
+    raise RuntimeError(f"no bridge found: none advertised in {_runtime_dir()}, and no port given "
+                       f"(pass port= or set {PORT_ENV})")
 
 
-def _decode(envelope: Dict[str, Any]) -> Any:
-    """Envelope -> payload, or raise BridgeError with the diagnostics."""
-    if envelope.get("status") == "success":
-        return envelope.get("result", {})
-    details = {k: v for k, v in envelope.items() if k not in ("status", "message")}
-    raise BridgeError(envelope.get("message", "bridge error"), details)
+_LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
 
-#: A declared token file that exists and cannot be used (empty, unreadable): raised, never read as
-#: "no hold" — a frame sent tokenless by mistake would be refused under the hold it meant to pass.
-HOLD_TOKEN_UNREADABLE = "DOORWAY_HOLD_TOKEN_UNREADABLE"
-
-
-class HoldTokenUnreadable(RuntimeError):
-    def __init__(self, detail: str) -> None:
-        self.code = HOLD_TOKEN_UNREADABLE
-        super().__init__(f"{HOLD_TOKEN_UNREADABLE}: {detail}")
-
-
-def hold_token(environ: Optional[Dict[str, str]] = None) -> Optional[str]:
-    """The hold token this process's frames carry, or None.
-
-    PRECEDENCE: `HOLD_TOKEN_ENV` (the holder's own process and its subprocesses) wins; else the
-    contents of the file `HOLD_TOKEN_FILE_ENV` names, read NOW, on every call — the route of a
-    long-lived platform service whose environment was fixed before any hold. An ABSENT file is no
-    token (no hold stands); a file that EXISTS and is empty or unreadable raises
-    `HoldTokenUnreadable`. A stale file from an earlier hold is harmless: the bridge ignores a token
-    when no hold stands and compares it with the current one when one does."""
-    environ = os.environ if environ is None else environ
-    token = environ.get(HOLD_TOKEN_ENV)
+def bridge_token(port: int, host: Optional[str] = None) -> Optional[str]:
+    """The token for the bridge on ``port``: ``ISAAC_MCP_TOKEN``, else the private token file a
+    bridge on this machine wrote beside its portfile. None when there is neither. A local
+    bridge's token is never offered to another machine that happens to use the same port."""
+    token = os.getenv(TOKEN_ENV)
     if token:
-        return token
-    path = environ.get(HOLD_TOKEN_FILE_ENV)
-    if not path:
-        return None
-    try:
-        with open(path, "r", encoding="ascii") as handle:
-            token = handle.read().strip()
-    except FileNotFoundError:
-        return None
-    except (OSError, UnicodeDecodeError) as error:
-        raise HoldTokenUnreadable(f"{path}: {type(error).__name__}: {error}") from None
-    if not token:
-        raise HoldTokenUnreadable(f"{path} is empty")
-    return token
+        return token.strip()
+    for path, info in _advertisements():
+        if host not in (None, *_LOOPBACK) and host != info.get("host"):
+            continue
+        if info["port"] == int(port) and _alive_and_ours(info["pid"]):
+            try:
+                with open(path[:-5] + ".token") as stream:
+                    return stream.read().strip() or None
+            except OSError:
+                return None
+    return None
 
+
+# ---- calling it --------------------------------------------------------------------------
 
 class BridgeClient:
-    """Persistent connection: one socket, health-checked, reconnecting.
+    """One connection to a bridge, opened on first use and reopened if it drops between calls."""
 
-    call() retries exactly once when the connection proves stale or breaks
-    around the send — never after a timeout, because a timed-out tool may have
-    executed (retrying would re-execute a possibly non-idempotent tool).
-    """
-
-    def __init__(self, host: Optional[str] = None, port: Optional[int] = None,
-                 timeout: float = DEFAULT_TIMEOUT):
-        self._host = host          # endpoint resolved lazily (per connect) so
-        self._port = port          # env-less import works and a restarted
-        self.timeout = timeout     # bridge can be re-discovered
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, timeout: float = DEFAULT_TIMEOUT):
+        self._host, self._port, self.timeout = host, port, timeout
         self._sock: Optional[socket.socket] = None
-        self._buffer = b""
-        self._request_sent = False
-        self._last_used = 0.0
+        self._buffer = bytearray()
+        self._scanned = 0                       # how much of the buffer is known to hold no newline
+        self._token: Optional[str] = None
+        self._ids = itertools.count(1)
+        self._lock = threading.Lock()
 
     @property
     def host(self) -> str:
@@ -351,266 +181,128 @@ class BridgeClient:
     def port(self) -> int:
         return _resolve_endpoint(self._host, self._port)[1]
 
-    # -- lifecycle --
-
     def connect(self, timeout: Optional[float] = None) -> None:
-        if self._sock is None:
-            endpoint = _resolve_endpoint(self._host, self._port)
-            wait = self.timeout if timeout is None else timeout
+        if self._sock is not None:
+            return
+        host, port = _resolve_endpoint(self._host, self._port)
+        sock = socket.create_connection((host, port), timeout=min(CONNECT_TIMEOUT, timeout or self.timeout))
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self._sock, self._buffer, self._scanned = sock, bytearray(), 0
+        self._token = bridge_token(port, host)
+        if self._token:
+            # Shown once per connection, in a request of its own: until then the bridge takes only
+            # small requests, so the first call may be as large as any other.
             try:
-                self._sock = socket.create_connection(endpoint, timeout=wait)
-            except ConnectionRefusedError as exc:
-                # Same class, so callers that match it keep working; the text now says where and what to do.
-                raise ConnectionRefusedError(
-                    exc.errno, f"bridge not reachable at {endpoint[0]}:{endpoint[1]} (connection refused): nothing is listening there. "
-                    f"Start Kit with `./run.sh --headless`, or find a running bridge with `python3 mcp/isaac_mcp/client.py --list-bridges`") from exc
-            except socket.timeout as exc:
-                raise BridgeConnectTimeout(
-                    f"bridge at {endpoint[0]}:{endpoint[1]} did not accept a connection within {wait}s: Kit may still be starting "
-                    "(2-3 minutes on a first start) or its main thread is busy. Nothing was sent, so no tool ran") from exc
-            self._buffer = b""
-            self._last_used = time.monotonic()  # a new connection is not stale
-            try:
-                _log.info("bridge connected: %s:%s", *self._sock.getpeername()[:2])
-            except OSError:
-                _log.info("bridge connected")
+                sock.settimeout(min(CONNECT_TIMEOUT, timeout or self.timeout))
+                sock.sendall(json.dumps({"id": 0, "type": "auth", "token": self._token}).encode() + b"\n")
+                reply = self._read_reply(0, time.monotonic() + CONNECT_TIMEOUT)
+            except (OSError, ValueError):
+                self.close()
+                raise
+            if reply.get("status") != "success":
+                self.close()
+                raise BridgeError(reply.get("message", "the bridge refused this client's token"),
+                                  {key: value for key, value in reply.items() if key not in ("status", "message", "id")})
 
     def close(self) -> None:
-        if self._sock is not None:
-            _log.info("bridge connection closed")
+        sock, self._sock = self._sock, None
+        if sock is not None:
             try:
-                self._sock.close()
-            finally:
-                self._sock = None
-                self._buffer = b""
+                sock.close()
+            except OSError:
+                pass
 
-    def __enter__(self):
-        self.connect()
+    def __enter__(self) -> "BridgeClient":
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: Any) -> None:
         self.close()
 
-    # -- health --
-
-    def _healthy(self) -> bool:
-        """Detect a remotely-closed socket (e.g. after a Kit restart)."""
-        if self._sock is None:
-            return False
+    def _dropped(self) -> bool:
+        """Whether the idle connection was closed by the other side since the last call."""
         try:
-            self._sock.getpeername()
-        except OSError:
-            return False
-        try:
-            import select
-            readable, _, errored = select.select([self._sock], [], [self._sock], 0)
-            if errored:
-                return False
-            if readable:
-                # Readable with no request in flight => close notification
-                # (0 bytes) or unexpected data; peek without consuming.
-                try:
-                    self._sock.setblocking(False)
-                    if self._sock.recv(1, socket.MSG_PEEK) == b"":
-                        return False
-                except BlockingIOError:
-                    pass
-                except OSError:
-                    return False
-                finally:
-                    self._sock.setblocking(True)
-            return True
-        except Exception:
-            return False
-
-    # -- the roundtrip (the only place framing/decoding happens) --
-
-    def _roundtrip(self, tool: str, params: Dict[str, Any], timeout: float,
-                   execution_reserve_s: Optional[float] = None) -> Any:
-        self._sock.settimeout(timeout)
-        self._request_sent = False
-        request = {"type": tool, "params": params}
-        token = hold_token()
-        if token:
-            request[HOLD_FIELD] = token
-        if timeout is not None:          # a caller with no timeout states no budget either
-            request["queue_s"] = queue_budget(timeout, execution_reserve_s)
-        frame = json.dumps(request).encode("utf-8") + b"\n"
-        self._sock.sendall(frame)
-        self._request_sent = True  # from here the bridge may be running the tool
-        buffer, scanned = bytearray(self._buffer), 0  # a growing array, searched only where new: large replies stay linear
-        while (end := buffer.find(b"\n", scanned)) < 0:
-            scanned = len(buffer)
-            chunk = self._sock.recv(65536)
-            if not chunk:
-                raise ConnectionError("bridge closed the connection mid-response")
-            buffer += chunk
-            if len(buffer) > MAX_REPLY_BYTES:
-                self.close()
-                raise BridgeError(f"the bridge sent over {MAX_REPLY_BYTES // (1 << 30)} GiB without ending its reply; disconnected")
-        self._buffer = bytes(buffer[end + 1:])
-        try:
-            reply = json.loads(buffer[:end].decode("utf-8"))
-        except (ValueError, RecursionError) as exc:  # the stream can't be trusted to line up with the next request
-            self.close()
-            raise BridgeError(f"the bridge sent an unreadable reply ({type(exc).__name__}); disconnected") from exc
-        self._last_used = time.monotonic()
-        return _decode(reply)
-
-    def _probe_if_idle(self, tool: str, timeout: float) -> None:
-        """Before a tool that is never re-sent: if the kept connection has been idle a while, prove it still works with `status`."""
-        if (self._sock is None or tool in IDEMPOTENT_TOOLS or time.monotonic() - self._last_used < STALE_PROBE_IDLE_S):
-            return
-        try:
-            self._roundtrip("status", {}, min(timeout, 5.0))
-        except BridgeError:
-            pass  # it answered (even "unknown tool"): the connection is alive
-        except (OSError, TimeoutError):
-            _log.warning("idle bridge connection did not answer a probe before %s; reconnecting", tool)
-            self.close()
-
-    def call(self, tool: str, params: Optional[Dict[str, Any]] = None, *,
-             timeout: Optional[float] = None,
-             execution_reserve_s: Optional[float] = None) -> Any:
-        """Call one tool; returns the payload or raises (see module docstring).
-
-        `execution_reserve_s` is how long the tool may run once started; the rest of the timeout
-        (less a margin) is what the request may spend queued behind another verb. Unstated, half
-        the timeout is reserved. A request that cannot start inside its queue budget raises
-        `BridgeError` whose ``details["refusal"]`` is ``"DOORWAY_BUSY"`` — the bridge is alive
-        and occupied, and the tool did NOT run."""
-        params = params or {}
-        t = self.timeout if timeout is None else timeout
-        if self._sock is not None and not self._healthy():
-            _log.warning("bridge connection lost (peer closed or reset); reconnecting for %s", tool)
-            self.close()
-        self._probe_if_idle(tool, t)
-        for attempt in (0, 1):
-            self._request_sent = False
+            self._sock.setblocking(False)
             try:
-                self.connect(timeout=t)
-                return self._roundtrip(tool, params, t, execution_reserve_s)
-            except BridgeConnectTimeout:
-                self.close()
-                raise  # nothing was sent: unlike a reply timeout, the tool did not run
+                return self._sock.recv(1, socket.MSG_PEEK) == b""
+            except (BlockingIOError, InterruptedError):
+                return False
+            finally:
+                self._sock.setblocking(True)
+        except OSError:
+            return True
+
+    def _read_reply(self, request_id: int, deadline: float) -> Dict[str, Any]:
+        while True:
+            while True:
+                end = self._buffer.find(b"\n", self._scanned)
+                if end < 0:
+                    self._scanned = len(self._buffer)      # a large reply is searched once, not once per chunk
+                    break
+                line = bytes(self._buffer[:end])
+                del self._buffer[:end + 1]
+                self._scanned = 0
+                if not line.strip():
+                    continue
+                reply = json.loads(line)
+                if reply.get("id") in (request_id, None):
+                    return reply     # None: a bridge that predates request ids, or a refusal before parsing
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("timed out waiting for the bridge's reply; the call may still be running")
+            self._sock.settimeout(remaining)
+            try:
+                chunk = self._sock.recv(1 << 18)
             except socket.timeout:
-                self.close()   # response may still arrive on the old socket
-                raise TimeoutError(
-                    f"no response for {tool!r} within {t}s (the tool may still "
-                    f"be executing on Kit's main thread)")
-            except (ConnectionError, BrokenPipeError, ConnectionResetError, OSError) as exc:
-                sent = self._request_sent
-                if sent and tool not in IDEMPOTENT_TOOLS:
-                    _log.warning("bridge call %s lost its connection after it was sent (%s); not retrying", tool, type(exc).__name__)
-                    self.close()
-                    raise BridgeDispatchUncertain(
-                        f"the connection to the bridge broke after {tool!r} was sent ({type(exc).__name__}: {exc}), so it may already have run "
-                        "in Kit, or still be running. It was NOT sent again. Check what happened before repeating it: sim__stage__info for a "
-                        "scene tool, isaaclab__runs_status or isaaclab__runs_list for a Lab job, and the Kit log (sim__logs__tail). "
-                        "If Kit restarted, select it again with use_bridge and call refresh_tools.") from exc
-                _log.warning("bridge call %s failed (%s)%s", tool, type(exc).__name__,
-                             "" if attempt else "; retrying once")
-                self.close()
-                if attempt:
-                    raise
+                raise TimeoutError("timed out waiting for the bridge's reply; the call may still be running") from None
+            if not chunk:
+                raise ConnectionError("the bridge closed the connection before replying; the call may have run")
+            self._buffer += chunk
+
+    def call(self, tool: str, params: Optional[Dict[str, Any]] = None, *, timeout: Optional[float] = None) -> Any:
+        """Call ``tool`` and return its result. Raises BridgeError for the bridge's own error reply,
+        TimeoutError when no reply came in time, and OSError when it could not be reached."""
+        limit = self.timeout if timeout is None else timeout
+        with self._lock:
+            if self._sock is not None and self._dropped():
+                self.close()                      # nothing was sent on it, so reconnecting is safe
+            self.connect(limit)
+            request_id = next(self._ids)
+            frame: Dict[str, Any] = {"id": request_id, "type": tool, "params": params or {}}
+            try:
+                self._sock.settimeout(limit)
+                self._sock.sendall(json.dumps(frame).encode() + b"\n")
+                reply = self._read_reply(request_id, time.monotonic() + limit)
+            except (OSError, ValueError):
+                self.close()                      # a reply may still be on its way: do not reuse the connection
+                raise
+        if reply.get("status") == "success":
+            return reply.get("result")
+        details = {key: value for key, value in reply.items() if key not in ("status", "message", "id")}
+        raise BridgeError(reply.get("message", "the bridge answered with an error"), details)
 
 
-class DoorwayHold:
-    """Hold the doorway for one piece of work; every other caller is refused `DOORWAY_HELD`.
-
-        with DoorwayHold("evaluate-planner", "evaluating ticket 3", port=8767) as hold:
-            env = {**os.environ, HOLD_TOKEN_ENV: hold.token}   # the work's own subprocesses
-            ...
-        hold.released   # the bridge's account: how long, and what it refused, by tool
-
-    ONE CONNECTION, KEPT OPEN FOR THE WHOLE HOLD, AND THE HOLD LIVES EXACTLY AS LONG AS IT: the
-    bridge releases a hold whose connection closes, so a holder that is killed cannot strand the
-    doorway. `release()` asks for the release explicitly (and returns the bridge's counts); the
-    socket is closed whatever that answer was.
-    """
-
-    def __init__(self, holder: str, reason: str, *, host: Optional[str] = None,
-                 port: Optional[int] = None, timeout: float = 30.0):
-        self.holder, self.reason = holder, reason
-        self.token = secrets.token_hex(32)
-        self.placed: Optional[Dict[str, Any]] = None
-        self.released: Optional[Dict[str, Any]] = None
-        #: Why the explicit release went unanswered, when it did. The hold is released anyway (its
-        #: connection is closed), so this is evidence lost, never a hold left standing.
-        self.release_error: Optional[str] = None
-        self._client = BridgeClient(host=host, port=port, timeout=timeout)
-        self._timeout = timeout
-
-    def place(self) -> Dict[str, Any]:
-        """Place the hold on a fresh connection; raises `BridgeError` when the bridge refuses."""
-        self._client.connect()
-        try:
-            self.placed = self._client._roundtrip(
-                HOLD_VERB, {"token": self.token, "holder": self.holder, "reason": self.reason},
-                self._timeout)
-        except BaseException:
-            self._client.close()
-            raise
-        return self.placed
-
-    def release(self) -> Optional[Dict[str, Any]]:
-        """Ask for the release, then close the connection — which releases it regardless."""
-        try:
-            if self._client._sock is not None and self.released is None:
-                self.released = self._client._roundtrip(
-                    RELEASE_VERB, {"token": self.token}, self._timeout)
-        finally:
-            self._client.close()
-        return self.released
-
-    def __enter__(self) -> "DoorwayHold":
-        self.place()
-        return self
-
-    def __exit__(self, *exc) -> None:
-        try:
-            self.release()
-        except Exception as error:                                            # noqa: BLE001
-            # THE CLOSE IN `release` RELEASED IT: an explicit release that could not be answered
-            # is not a hold that stands. Recorded by name, never raised over the work's own result.
-            self.release_error = f"{type(error).__name__}: {error}"
-
-
-def call(tool: str, params: Optional[Dict[str, Any]] = None, *,
-         host: Optional[str] = None, port: Optional[int] = None,
-         timeout: float = DEFAULT_TIMEOUT,
-         execution_reserve_s: Optional[float] = None) -> Any:
-    """One-shot call: fresh socket, fitted timeout, closed afterwards."""
+def call(tool: str, params: Optional[Dict[str, Any]] = None, *, host: Optional[str] = None,
+         port: Optional[int] = None, timeout: float = DEFAULT_TIMEOUT) -> Any:
+    """One call on its own connection."""
     with BridgeClient(host=host, port=port, timeout=timeout) as client:
-        return client.call(tool, params, timeout=timeout,
-                           execution_reserve_s=execution_reserve_s)
+        return client.call(tool, params)
 
 
-# ==================== CLI ====================
-
-def main(argv=None) -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     import argparse
     import sys
 
     parser = argparse.ArgumentParser(
-        # `__package__` is empty when this file is run directly, which needs no installed package.
         prog="python3 -m isaac_mcp.client" if __package__ else f"python3 {sys.argv[0]}",
-        description="Call one tool on the isaac.mcp.bridge bridge. "
-                    "Exit codes: 0 success, 1 bridge error, 2 unreachable/usage.")
-    parser.add_argument("tool", nargs="?",
-                        help="canonical tool name, e.g. list_tools or sim.stage.info")
-    parser.add_argument("--list-bridges", action="store_true",
-                        help="list running bridges advertised in the runtime dir")
-    parser.add_argument("params", nargs="?", default="{}",
-                        help='JSON object of parameters (default: {})')
-    parser.add_argument("--host", default=None,
-                        help=f"bridge host (default: ${HOST_ENV}, else the "
-                             "discovered bridge's advertised host)")
-    parser.add_argument("--port", type=int, default=None,
-                        help=f"bridge port (default: ${PORT_ENV})")
+        description="Call one tool on a running bridge. Exit codes: 0 success, 1 the bridge answered with an "
+                    "error, 2 unreachable or bad usage.")
+    parser.add_argument("tool", nargs="?", help="canonical tool name, e.g. status, list_tools or sim.stage.info")
+    parser.add_argument("params", nargs="?", default="{}", help="JSON object of parameters (default: {})")
+    parser.add_argument("--list-bridges", action="store_true", help="list the bridges advertised on this machine")
+    parser.add_argument("--host", default=None, help=f"bridge host (default: ${HOST_ENV}, else the advertised one)")
+    parser.add_argument("--port", type=int, default=None, help=f"bridge port (default: ${TWIN_PORT_ENV} or ${PORT_ENV})")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     args = parser.parse_args(argv)
-
     if args.list_bridges:
         bridges = discover_bridges()
         print(json.dumps(bridges, indent=2))
@@ -622,21 +314,20 @@ def main(argv=None) -> int:
         params = json.loads(args.params)
         if not isinstance(params, dict):
             raise ValueError("params must be a JSON object")
-    except ValueError as e:
-        print(f"params error: {e}", file=sys.stderr)
+    except ValueError as exc:
+        print(f"params error: {exc}", file=sys.stderr)
         return 2
     try:
-        payload = call(args.tool, params, host=args.host, port=args.port,
-                       timeout=args.timeout)
-    except BridgeError as e:
-        print(str(e), file=sys.stderr)
-        if e.details:
-            print(json.dumps(e.details, indent=2, default=repr), file=sys.stderr)
+        result = call(args.tool, params, host=args.host, port=args.port, timeout=args.timeout)
+    except BridgeError as exc:
+        print(str(exc), file=sys.stderr)
+        if exc.details:
+            print(json.dumps(exc.details, indent=2, default=repr), file=sys.stderr)
         return 1
-    except (OSError, TimeoutError, RuntimeError) as e:
-        print(str(e), file=sys.stderr)
+    except (OSError, RuntimeError) as exc:
+        print(str(exc), file=sys.stderr)
         return 2
-    print(json.dumps(payload, indent=2, default=repr))
+    print(json.dumps(result, indent=2, default=repr))
     return 0
 
 

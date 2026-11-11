@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import twin_source
 
 
 path = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/physics_compat.py"
@@ -411,7 +412,7 @@ def test_saved_twin_runtime_restores_only_uninitialized_process_configuration(
 def test_rebinding_saved_graphs_does_not_rebuild_or_author_usd(monkeypatch, engine):
     import ast
     from types import SimpleNamespace as NS
-    source = ast.parse((path.parent / "extension.py").read_text())
+    source = ast.parse(twin_source.SOURCE.read_text())
     cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == "DigitalTwin")
     fn = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "_resubscribe_physics_callbacks")
     events = []
@@ -436,7 +437,7 @@ def test_rebinding_saved_graphs_does_not_rebuild_or_author_usd(monkeypatch, engi
 def test_gate_cleanup_before_graph_creation_never_queries_missing_og_attribute():
     import ast
     from types import SimpleNamespace as NS
-    source = ast.parse((path.parent / "extension.py").read_text())
+    source = ast.parse(twin_source.SOURCE.read_text())
     cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == "DigitalTwin")
     fn = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "_set_force_gate")
     values, queried = [], []
@@ -466,7 +467,7 @@ def test_force_callback_restores_frame_and_time_before_publishing(
     import sys
     from types import SimpleNamespace as NS
 
-    source = ast.parse((path.parent / "extension.py").read_text())
+    source = ast.parse(twin_source.SOURCE.read_text())
     cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == "DigitalTwin")
     fn = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "_on_physics_step_force")
     values = {"inputs:header:frame_id": initial_frame}

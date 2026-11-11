@@ -87,7 +87,6 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
     monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
     monkeypatch.setenv("PYTHONPATH", "/unrelated/project")
-    monkeypatch.setenv("ISAAC_MCP_HOLD_TOKEN", "foreign")
     monkeypatch.setenv("ISAAC_MCP_BIND", "0.0.0.0")
     monkeypatch.setenv("UR5E_DT_SHOW_PANEL", "1")
     monkeypatch.setenv("ISAAC_MCP_SIM_SESSION_ID", "foreign")
@@ -107,7 +106,7 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     assert child["ISAAC_MCP_WORKSPACE"] == "/configured/workspace"
     assert child["ISAAC_MCP_PHYSICS_BACKEND"] == "physx"
     assert result["physics_backend"] == "physx"
-    assert "PYTHONPATH" not in child and "ISAAC_MCP_HOLD_TOKEN" not in child
+    assert "PYTHONPATH" not in child
     assert "UR5E_DT_SHOW_PANEL" not in child
     assert "--headless" in captured["args"] and captured["start_new_session"] is True
     assert "--ur5e-panel" not in captured["args"] and result["show_ur5e_panel_on_start"] is False
@@ -406,7 +405,7 @@ def test_the_real_bridge_can_bind_a_port_in_time_wait():
     import threading
 
     from isaac_mcp.client import call
-    from test_bridge import make_bridge
+    from bridge_testing import make_bridge
 
     port = _time_wait_port()
     loop = asyncio.new_event_loop()
@@ -707,11 +706,11 @@ def test_a_launch_inherits_the_servers_environment_and_scrubs_the_documented_key
     monkeypatch.setattr(sim.subprocess, "Popen", popen)
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 1))
     for key, value in {"ISAAC_MCP_ASSET_PATH": "/assets", "DISPLAY": ":7", "PYTHONPATH": "/x", "UR5E_DT_HEADLESS": "1",
-                       "UR5E_DT_SHOW_PANEL": "1", "ISAAC_MCP_HOLD_TOKEN": "t", "ISAAC_MCP_HOLD_TOKEN_FILE": "f"}.items():
+                       "UR5E_DT_SHOW_PANEL": "1"}.items():
         monkeypatch.setenv(key, value)
     sim._launch(setup, 18766, 9, True, False)
     assert seen["ISAAC_MCP_ASSET_PATH"] == "/assets" and seen["DISPLAY"] == ":7"
-    for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_SHOW_PANEL", "ISAAC_MCP_HOLD_TOKEN", "ISAAC_MCP_HOLD_TOKEN_FILE"):
+    for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_SHOW_PANEL"):
         assert key not in seen
     assert seen["ISAAC_MCP_PYTHON"] == setup["ISAAC_MCP_PYTHON"]  # scrubbed, then set from the server's settings
 

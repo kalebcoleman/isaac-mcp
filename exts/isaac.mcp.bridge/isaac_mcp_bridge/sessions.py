@@ -1,65 +1,42 @@
-"""Persistent run_python session namespaces — the store owns the policy.
+"""Variables that run_python keeps between calls of one ``session_id``.
 
-``run_python`` with ``persistent=True`` keeps user variables alive between
-calls under a client-chosen ``session_id``. This module is that store's one
-home: which names survive a call (the persist policy), what a session's saved
-namespace is, and when everything is dropped.
-
-Persist policy: names starting with ``_`` and the preloaded convenience
-symbols (see ``PRELOADED`` — the exact set run_python injects) never persist;
-everything else the executed code left in its globals does.
-
-Staleness: saved values are live in-process objects (prim references, physics
-handles, numpy arrays). Opening a new stage kills what they point at, so the
-bridge extension clears the store on every stage-open event — that guard is
-the reason ``clear()`` exists.
-
-Stdlib-only — importable off-Kit (tests, lint).
+Saved values are live objects in the Kit process (prim handles, arrays). Opening a stage makes
+them stale, so the extension clears every session then, and the next call is told why its
+variables are gone. Stdlib only.
 """
 
 from typing import Any, Dict, List
 
-# The convenience symbols run_python preloads into every exec namespace.
-# builtins.cmd_run_python builds its preload from this tuple, so the injected
-# set and the never-persist set cannot drift apart.
+# Names run_python preloads into every call; they are never saved.
 PRELOADED = ("omni", "carb", "Usd", "UsdGeom", "Sdf", "Gf")
 
 
 class SessionStore:
-    """In-memory session_id -> saved-namespace map with the persist policy."""
-
-    def __init__(self):
-        self._sessions: Dict[str, Dict[str, Any]] = {}
-        # Sessions dropped by clear(): the next call with that id is told why its
-        # variables are gone instead of failing with a bare NameError.
-        self._reset: Dict[str, str] = {}
-        # Bumped by every clear(): a call that saw it change while it ran (e.g. it awaited a
-        # stage open) must not save its namespace, which still points at the old stage.
-        self.generation = 0
+    def __init__(self) -> None:
+        self._saved: Dict[str, Dict[str, Any]] = {}
+        self._cleared: Dict[str, str] = {}
+        self.generation = 0   # changes whenever everything is cleared
 
     def namespace(self, session_id: str) -> Dict[str, Any]:
-        """The saved namespace for a session (a copy; {} when unknown)."""
-        return dict(self._sessions.get(session_id, {}))
+        """A copy of what the session holds ({} for a new one)."""
+        return dict(self._saved.get(session_id, {}))
 
-    def persist(self, session_id: str, exec_globals: Dict[str, Any]) -> List[str]:
-        """Save the surviving names from an exec namespace; returns them sorted."""
-        kept = {
-            k: v for k, v in exec_globals.items()
-            if not k.startswith("_") and k not in PRELOADED
-        }
-        self._sessions[session_id] = kept
+    def persist(self, session_id: str, variables: Dict[str, Any]) -> List[str]:
+        """Save a call's variables, leaving out private names and the preloaded ones. Returns the names."""
+        kept = {name: value for name, value in variables.items()
+                if not name.startswith("_") and name not in PRELOADED}
+        self._saved[session_id] = kept
         return sorted(kept)
 
     def clear(self, reason: str = "a stage was opened") -> None:
-        """Drop every session (stage-open staleness guard; see module doc)."""
-        for session_id in self._sessions:
-            self._reset[session_id] = reason
-        self._sessions.clear()
+        for session_id in self._saved:
+            self._cleared[session_id] = reason
+        self._saved.clear()
         self.generation += 1
 
     def take_reset(self, session_id: str) -> str:
-        """Why this session's variables were dropped since its last call ('' if they were not)."""
-        return self._reset.pop(session_id, "")
+        """Why this session was cleared since its last call, once; '' if it was not."""
+        return self._cleared.pop(session_id, "")
 
     def __len__(self) -> int:
-        return len(self._sessions)
+        return len(self._saved)

@@ -85,12 +85,12 @@
       "owner_id": "isaac.mcp.bridge"
     },
     "reload_tools": {
-      "description": "Hot-reload one autoloaded tool package: unregister its owner, re-import the module (the submodule named _state is preserved so live handles survive), and re-register its tools. Follow with the MCP front-end's refresh so new schemas are rediscovered.",
+      "description": "Hot-reload one of a project's own tool packages: unregister it, import it again and register its tools. Follow with refresh_tools so the new schemas are seen.",
       "parameters": {
         "module": {
           "type": "string",
           "required": true,
-          "description": "Tool-package module name as registered (see list_tools namespaces / owners)."
+          "description": "The package's module name, as given in ISAAC_MCP_TOOL_MODULES."
         }
       },
       "fields": [
@@ -101,14 +101,14 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Tool-package module name as registered (see list_tools namespaces / owners)."
+          "description": "The package's module name, as given in ISAAC_MCP_TOOL_MODULES."
         }
       ],
       "namespace": null,
       "owner_id": "isaac.mcp.bridge"
     },
     "put_file": {
-      "description": "Write a file on the bridge's box (content base64-encoded). run_python executes on the box, so code and assets must exist on ITS disk — this verb ships them from a remote driver without a side-channel rsync/scp. Writing a .py purges the sibling __pycache__ so the next import can't serve stale bytecode. Content rides one NDJSON frame in memory: right for code and tool-sized assets, not multi-GB payloads.",
+      "description": "Write a file on the bridge's box (content base64-encoded), so code and assets can be shipped without scp. Writing a .py clears the folder's bytecode cache. The content travels in one message: for code and tool-sized assets, not gigabytes.",
       "parameters": {
         "path": {
           "type": "string",
@@ -185,7 +185,7 @@
       "parameters": {
         "detail": {
           "type": "boolean",
-          "description": "true: the full bridge identity as well (namespaces, toolset hashes, admission, hold, extension source). Default false: the short reply."
+          "description": "true: the full bridge identity as well (namespaces, what is running and waiting, extension source). Default false: the short reply."
         }
       },
       "fields": [
@@ -196,14 +196,14 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "true: the full bridge identity as well (namespaces, toolset hashes, admission, hold, extension source). Default false: the short reply."
+          "description": "true: the full bridge identity as well (namespaces, what is running and waiting, extension source). Default false: the short reply."
         }
       ],
       "namespace": null,
       "owner_id": "isaac.mcp.bridge"
     },
     "job_status": {
-      "description": "Status of background work in this Kit: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, newest first. Jobs are forgotten when Kit restarts. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed.",
+      "description": "Status of background work in this Kit: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, newest first. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed.",
       "parameters": {
         "job_id": {
           "type": "string",
@@ -211,7 +211,7 @@
         },
         "wait_s": {
           "type": "number",
-          "description": "Wait up to this many seconds (0-60) for the job to end before answering, instead of polling. The MCP server does the waiting; a direct socket caller gets the current status at once."
+          "description": "Wait up to this many seconds (0-60) for the job to end before answering, instead of polling."
         }
       },
       "fields": [
@@ -231,7 +231,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Wait up to this many seconds (0-60) for the job to end before answering, instead of polling. The MCP server does the waiting; a direct socket caller gets the current status at once."
+          "description": "Wait up to this many seconds (0-60) for the job to end before answering, instead of polling."
         }
       ],
       "namespace": null,
@@ -261,7 +261,7 @@
       "owner_id": "isaac.mcp.bridge"
     },
     "stat_file": {
-      "description": "Existence, size, and sha256 of a file on the bridge's box — lets a remote driver skip unchanged pushes and verify assets instead of blindly re-syncing.",
+      "description": "Existence, size, and sha256 of a file on the bridge's box, to skip unchanged pushes and verify assets.",
       "parameters": {
         "path": {
           "type": "string",

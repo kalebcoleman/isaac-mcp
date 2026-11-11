@@ -9,8 +9,8 @@ Not published to PyPI or npm yet. Names `isaac-mcp` on both were unclaimed on 20
    Record the current count and commit.
    From the repo root also run `python3 scripts/check_docs.py` and review the latest CI result.
 2. Decide the version in `mcp/pyproject.toml` and `npm/package.json` (keep them equal).
-3. Check `docs/VENDORING.md` and the LICENSE files: the package contains Aldrin Inbaraj's MIT code. The upstream
-   `omni-kit-mcp` has no LICENSE file; consider asking `inbarajaldrin` to confirm before a public release.
+3. Check `docs/VENDORING.md` and the LICENSE files: the UR5e twin contains Aldrin Inbaraj's MIT code. The bridge,
+   client and panel, first built on his unlicensed `omni-kit-mcp`, were rewritten here.
 4. Verify the bundled-asset cleanup with `python3 scripts/check_assets.py`. The NVIDIA robot,
    sensor and material files, the Vention bench, the unused Kawasaki/RG2 scene and the Poliigon oak
    textures must not be in the public tree or its history. The Apache-2.0 and CC BY 4.0 notices are

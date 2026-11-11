@@ -570,7 +570,7 @@ def test_a_long_prismatic_joint_can_be_crossed_in_stage_units():
 
 def test_a_link_beyond_a_truncated_scan_is_named_as_such(arm_in_scene, monkeypatch):
     advanced, stage = arm_in_scene
-    from sim_tools import advanced as module
+    from sim_tools import arm_tools as module
 
     first = [stage.GetPrimAtPath("/Arm/j1")]
     monkeypatch.setattr(module, "articulation_joints", lambda stage_, root, limit: (first, True))

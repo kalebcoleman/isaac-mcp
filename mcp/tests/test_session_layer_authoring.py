@@ -187,7 +187,7 @@ def test_mass_with_no_collider_says_it_got_one(prop):
 
 
 def test_a_large_map_can_be_deleted_as_a_whole(scene, tmp_path):  # noqa: F811
-    from sim_tools.advanced import deletable
+    from sim_tools.prim_tools import deletable
 
     project = tmp_path / "project"
     project.mkdir()

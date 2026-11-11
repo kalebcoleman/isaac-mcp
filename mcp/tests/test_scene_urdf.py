@@ -10,6 +10,7 @@ from pxr import Gf, Usd, UsdGeom, UsdPhysics
 from isaac_mcp import urdf_physics, urdf_refs
 from isaac_mcp.project_assets import AssetError, Broker
 from sim_tools.advanced import Advanced
+import twin_source
 from sim_tools.urdf import (
     _author_drives,
     ground_height,
@@ -518,7 +519,7 @@ def test_warnings_reach_the_result(scene, tmp_path, monkeypatch):
 
 
 def test_a_pose_read_back_from_state_can_be_sent_again():
-    from sim_tools.advanced import command_target
+    from sim_tools.joint_tools import command_target
 
     assert command_target(-0.8378, -0.8, 1.0, -0.8378) == -0.8  # resting past a limit, echoed
     assert command_target(0.5, -0.8, 1.0, 0.0) == 0.5
@@ -527,7 +528,7 @@ def test_a_pose_read_back_from_state_can_be_sent_again():
 
 
 def test_a_runaway_joint_is_named():
-    from sim_tools.advanced import joints_too_fast
+    from sim_tools.joint_tools import joints_too_fast
 
     assert joints_too_fast(["a", "b", "c"], [3.0, -3000.0, 600.0]) == ["b", "c"]
     assert joints_too_fast(["a"], [100.0]) == []
@@ -624,7 +625,7 @@ def test_the_twin_puts_its_listener_back_unless_closing(monkeypatch):
     from pathlib import Path
     from types import ModuleType
 
-    source = (Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.py").read_text()
+    source = twin_source.SOURCE.read_text()
     method = next(node for node in ast.walk(ast.parse(source))
                   if isinstance(node, ast.FunctionDef) and node.name == "without_carb_log_capture")
     lines = source.splitlines()[method.decorator_list[0].lineno - 1:method.end_lineno]

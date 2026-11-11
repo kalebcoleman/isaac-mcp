@@ -171,7 +171,10 @@ Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
 
 ## The tools
 
-A client lists **134 tools** by default, or **143** with both optional groups. Most scene work uses the first row.
+A client is shown **45 tools** by default. Related tools are one tool with an `action` argument, for example
+`sim__prim(action="create")`; behind them are **134 single-purpose tools** (**143** with both optional groups), each
+still callable by its own name. The [table of groups](docs/TOOLS-HOST.md#grouped-tools) lists them all. Most scene work
+uses the first row.
 
 | Group | Tools | What they do |
 |---|--:|---|
@@ -187,16 +190,17 @@ The ones you will meet first:
 | Tool | Use it to |
 |---|---|
 | `sim__quick_start` | Build a ready scene (ground, physics, light, camera), optionally with a public robot. Start here. |
-| `sim__stage__info` | See what the current scene is and get the IDs the other tools need. |
-| `sim__prim__create` / `sim__prim__find` | Add shapes and robots, or search the scene. |
-| `sim__joints__state` / `sim__joints__command` | Read joints and drive them. |
-| `sim__simulation__step`, `sim__timeline__control` | Play, pause and step the physics; `action=reset` gets back to a clean stop. |
-| `sim__simulation__run`, `sim__trajectory__replay` | Fly or drive a body with your own controller every physics step, then replay the logged trajectory into a labelled video. Both return a `job_id` for `job_status`. |
-| `sim__camera__capture`, `sim__lidar__read` | See through a camera or LiDAR. |
+| `sim__stage` (`action="info"`) | See what the current scene is and get the IDs the other tools need. |
+| `sim__prim` (`create`, `find`, ...) | Add shapes and robots, or search the scene. |
+| `sim__joints` (`state`, `command`, ...) | Read joints and drive them. |
+| `sim__simulation` (`step`), `sim__timeline__control` | Play, pause and step the physics; `action=reset` gets back to a clean stop. |
+| `sim__simulation` (`run`, `replay`) | Fly or drive a body with your own controller every physics step, then replay the logged trajectory into a labelled video. Both return a `job_id` for `job_status`. |
+| `sim__camera` (`capture`), `sim__lidar` (`read`) | See through a camera or LiDAR. |
 | `sim__ros2__tf_setup`, `sim__map__occupancy` | Publish `/clock`, `/joint_states`, TF, and export a Nav2 map. |
-| `assets__import_path`, `assets__pack_build` | Bring in your own robots and props from one tool: USD, URDF, xacro, SDF, MuJoCo XML, meshes, ROS maps, or a folder that holds one. See [docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md). |
-| `screenshot`, `start_screen_recording` | Look at the real Isaac Sim window. |
-| `isaaclab__train`, `isaaclab__eval`, `isaaclab__metrics_summary` | Train a policy, score it, read the curves. |
+| `assets__import_path`, `assets__pack` (`build`) | Bring in your own robots and props from one tool: USD, URDF, xacro, SDF, MuJoCo XML, meshes, ROS maps, or a folder that holds one. See [docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md). |
+| `screenshot`, `screen_recording` (`start`, `stop`) | Look at the real Isaac Sim window. |
+| `isaaclab__launch` (`train`, `eval`), `isaaclab__metrics` (`summary`) | Train a policy, score it, read the curves. |
+| `jobs` (`status`, `list`, `cancel`) | Follow any job, in the simulator or an Isaac Lab process. |
 
 Every tool and argument is listed in [TOOLS-ARGUMENTS.md](docs/TOOLS-ARGUMENTS.md), generated from the code.
 How each group behaves: [scene and assets](docs/TOOLS-SCENE.md) · [Isaac Lab](docs/TOOLS-ISAACLAB.md) ·
@@ -257,7 +261,9 @@ That is it. From there, use any prompt above. Trouble connecting? See
 
 > [!WARNING]
 > `run_python`, the file tools and trusted asset loading run with your account's permissions and are not sandboxed.
-> Keep the bridge on loopback and approve only project folders you trust. See the
+> Keep the bridge on loopback and approve only project folders you trust. The bridge accepts only connections that
+> present its token, which your own account's clients find automatically, and `ISAAC_MCP_READ_ONLY=1` starts a
+> simulator that agents can inspect but not change. See the
 > [trust limits](docs/TOOLS-HOST.md#trust-and-operational-limits).
 
 ## Make your agent actually use it
@@ -350,7 +356,7 @@ call what is running, and `refresh_tools` finds a simulator you have started.
 | Use ROS 2, RViz 2 or Nav2 | [ROS 2 and RViz 2](docs/ROS2-RVIZ.md) |
 | Run the UR5e lab twin | [UR5e twin](docs/TOOLS-UR5E.md) · [lab files](docs/ASSETS.md#public-files-and-lab-files) |
 | Configure the server | [Client configuration](docs/MCP-SERVER.md#4-client-configuration) · [Environment variables](docs/ENVIRONMENT.md) |
-| Check results or report a problem | [Verification](docs/VERIFICATION.md) · [Reproducibility](docs/REPRODUCIBILITY.md) |
+| Check results or report a problem | [Verification](docs/VERIFICATION.md), which also says what to record |
 | Add my own tools | [Tool authoring](mcp/docs/tool-authoring.md) |
 | See everything | [Documentation index](docs/README.md) |
 
@@ -386,8 +392,9 @@ want the 20 GB simulator environment. See [AGENTS.md](AGENTS.md) for agent rules
 
 ## Credits and license
 
-MIT licensed. Built on Aldrin Inbaraj's [omni-kit-mcp](https://github.com/inbarajaldrin/omni-kit-mcp) and
-[isaac-sim-mcp](https://github.com/inbarajaldrin/isaac-sim-mcp). The latter carries an MIT license;
-the former has no upstream license file. Component and asset terms differ, so read
-[VENDORING](docs/VENDORING.md) and the [asset notices](docs/provenance/ASSETS.md) before redistributing.
+MIT licensed. This project grew out of work by Aldrin Inbaraj, a lab mate at the RISE lab: the UR5e twin began as a
+fork of his MIT-licensed [isaac-sim-mcp](https://github.com/inbarajaldrin/isaac-sim-mcp), and the bridge, client and
+panel were first built on his [omni-kit-mcp](https://github.com/inbarajaldrin/omni-kit-mcp) before being rewritten
+here. Thank you, Aldrin. Component and asset terms differ, so read [VENDORING](docs/VENDORING.md) and the
+[asset notices](docs/provenance/ASSETS.md) before redistributing.
 NVIDIA's installed runtime packages remain subject to their own terms.

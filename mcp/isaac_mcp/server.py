@@ -1,49 +1,28 @@
-"""Generic MCP server (front-end) for the isaac.mcp.bridge bridge.
+"""The MCP server an agent talks to: Isaac Sim and Isaac Lab as MCP tools.
 
-The LLM-facing half: a FastMCP server that is a TCP *client* to the Kit-side
-bridge. It connects, discovers the registry via ``list_tools``, and registers
-each canonical tool dynamically — hardcoding nothing about any project.
+It runs on the host, outside Kit, and reaches a simulator through the bridge extension's local
+socket (``client.py``). It serves three kinds of tool:
 
-One bridge socket serves N of these front-ends concurrently; a "per-project
-MCP server" is just this binary with a namespace filter, not a separate port:
+* its own (screen capture, Isaac Lab jobs, asset packs, simulator sessions), which need no bridge;
+* the tools of known extensions (scene tools, the UR5e twin, the bridge's built-ins), listed from
+  a packaged catalog (``host_catalog``) whether or not a simulator is running. Each dials the
+  selected bridge when called and says what to do if none answers;
+* whatever else the selected bridge reports in ``list_tools``, registered as it is discovered.
+  What a live bridge reports replaces the catalog entry; a tool it stops serving goes back to it.
 
-    ISAAC_MCP_PORT   bridge port. Optional: unset, the client discovers a
-                        lone running bridge via its runtime portfile (and
-                        errors loudly on ambiguity). Set it to pin a process.
-                        ISAAC_MCP_HOST optional dial override; unset, the
-                        discovered bridge's advertised host (else loopback).
-    ISAAC_MCP_NAMESPACE   comma-separated namespace allowlist; unset => all.
-    ISAAC_MCP_BUILTINS    "0" hides the bridge's bare builtins (run_python,
-                        reload_tools) — the curated-agent view.
-    ISAAC_MCP_LOCAL_TOOLS comma-separated groups of the host's own tools (screen, Isaac
-                        Lab, gateway) to register; unset => all. See local_tools.py. It does not
-                        affect bridge tools, and composes with the two filters above.
-    ISAAC_MCP_NAME / ISAAC_MCP_INSTRUCTIONS   cosmetic server identity.
+A client is shown related tools as one grouped tool with an ``action`` (``grouped_tools``). A
+bridge tool ``<namespace>.<tool>`` is ``<namespace>__<tool>`` to MCP, which allows no dots.
 
-Tools of known extensions (the UR5e twin) are listed from a packaged catalog snapshot
-(``isaac_mcp.host_catalog``) the moment a server is built, whether or not a bridge is running:
-each is a callable *offline proxy* that dials the selected bridge when called and answers with an
-actionable error if there is none or it lacks the extension. A live bridge's own ``list_tools``
-metadata replaces the proxy (it is authoritative); a tool the bridge does not serve reverts to
-its proxy. The namespace filter applies to proxies too. Nothing here ever starts a simulator.
+Environment:
 
-Canonical bridge names are ``<namespace>.<tool>``; MCP tool names cannot
-contain dots, so they are exposed as ``<namespace>__<tool>`` and mapped back
-on dispatch.
+    ISAAC_MCP_PORT, ISAAC_MCP_HOST   the bridge to use. Unset: the one advertised on this machine.
+    ISAAC_MCP_NAMESPACE              only these bridge namespaces (comma-separated).
+    ISAAC_MCP_BUILTINS=0             hide the bridge's built-ins (run_python, the file tools, ...).
+    ISAAC_MCP_LOCAL_TOOLS            which groups of the host's own tools to register (local_tools.py).
+    ISAAC_MCP_GROUP_TOOLS=0          list every tool singly instead of grouped.
+    ISAAC_MCP_NAME, ISAAC_MCP_INSTRUCTIONS   the server's name and instructions.
 
-Project-specific POLICY plugs in via three hook lists (it must not live here):
-  - register_pre_dispatch_hook(fn): fn(name, params) -> Optional[str]
-        May mutate params in place and/or return a refusal string to BLOCK.
-  - register_post_dispatch_hook(fn): fn(name, params, result) -> Optional[str]
-        Sees every outcome and may return a replacement result (e.g. the same
-        answer with a condition of the world annotated onto it), or None to
-        leave it. Runs on bridge answers, bridge errors, and pre-hook refusals
-        alike — a call that just failed is when a caller most needs telling.
-  - register_meta_category_hook(fn): fn(name) -> Optional[str]
-        Returns an MCP ``_meta`` category for a tool name, or None.
-
-``isaac_mcp.gate`` is the mechanism a policy hook can be written against: a pure
-deny-gate over a declared policy file. It, too, holds no policy.
+Nothing here starts a simulator unless the optional ``sim_launch`` group is selected.
 """
 
 import functools
@@ -53,14 +32,14 @@ import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional
+from typing import Annotated, Any, AsyncIterator, Dict, Iterable, List, Mapping, Optional
 
 from pydantic import Field
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.lowlevel.server import NotificationOptions
 
-from . import diagnostics, host_catalog
+from . import diagnostics, grouped_tools, host_catalog, tool_groups
 from .scene_contracts import HOST_ONLY
 from .tool_hints import CATALOG_HINTS
 from .client import BridgeClient, BridgeError
@@ -70,9 +49,8 @@ from .desktop_input import register_desktop_input_tools
 from .sim_sessions import live_sessions, register_sim_session_tools
 from .screen import register_screen_tools
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("KitMCPServer")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("isaac_mcp.server")
 
 # How to find running bridges. A stock python3 has no isaac_mcp package, so `python -m isaac_mcp.client`
 # alone fails there; the file itself is stdlib-only. list_bridges needs a bridge that already answers.
@@ -227,64 +205,31 @@ def _host_identity_text() -> str:
 
 
 def _namespace_filter() -> Optional[set]:
-    raw = os.getenv("ISAAC_MCP_NAMESPACE", "").strip()
-    if not raw:
-        return None
-    return {ns.strip() for ns in raw.split(",") if ns.strip()} or None
+    """The namespaces ISAAC_MCP_NAMESPACE allows, or None for all."""
+    wanted = {part.strip() for part in os.getenv("ISAAC_MCP_NAMESPACE", "").split(",")}
+    return wanted - {""} or None
 
 
 def _builtins_enabled() -> bool:
-    return os.getenv("ISAAC_MCP_BUILTINS", "1") not in ("0", "false", "no")
+    return os.getenv("ISAAC_MCP_BUILTINS", "1").strip().lower() not in ("0", "false", "no")
 
 
-# ---- Policy hooks (populated by the host project; empty => pure passthrough) ----
-_PRE_DISPATCH_HOOKS: List[Callable[[str, Dict[str, Any]], Optional[str]]] = []
-_POST_DISPATCH_HOOKS: List[Callable[[str, Dict[str, Any], str], Optional[str]]] = []
-_META_CATEGORY_HOOKS: List[Callable[[str], Optional[str]]] = []
-
-
-def register_pre_dispatch_hook(fn: Callable[[str, Dict[str, Any]], Optional[str]]) -> None:
-    """Register a pre-dispatch policy hook. fn(name, params) may mutate params
-    and return a refusal string to block, or None to proceed."""
-    _PRE_DISPATCH_HOOKS.append(fn)
-
-
-def register_post_dispatch_hook(
-        fn: Callable[[str, Dict[str, Any], str], Optional[str]]) -> None:
-    """Register a post-dispatch policy hook. fn(name, params, result) may return
-    a replacement result, or None to leave it as is.
-
-    It sees every outcome of the call — the bridge's answer, a bridge error, and
-    a refusal a pre-dispatch hook returned — because a caller most needs to be
-    told the state of the world on the calls that did not work. Hooks run in
-    registration order and each sees the previous one's result."""
-    _POST_DISPATCH_HOOKS.append(fn)
-
-
-def register_meta_category_hook(fn: Callable[[str], Optional[str]]) -> None:
-    """Register a hook mapping a tool name to an MCP _meta category (or None)."""
-    _META_CATEGORY_HOOKS.append(fn)
-
-
-# ==================== Bridge connection ====================
-# The wire protocol lives in isaac_mcp.client (the reference client): framing,
-# envelope decoding, health checks, and the reconnect-retry are its job. Each
-# server holds one persistent BridgeClient.
+# ---- the bridge connection ----
+# Each server keeps one BridgeClient open; client.py owns the socket and the message format.
 #
 # What a server knows about "its" bridge (the connection, which MCP names came from which
 # bridge tools, and the meta they were registered with) lives in a _BridgeState, one per server
 # built by build_server(), so two servers in one process do not share discovery state or a
 # socket. The default instance (`mcp`) uses the module-level names below (_client, _NAME_MAP,
 # _REGISTERED_META, get_client), which is what tests and scripts that predate build_server()
-# read and patch. The policy hook lists above are process-level policy, not per-server.
+# read and patch.
 
 _client: Optional[BridgeClient] = None
 
-# MCP-facing name -> canonical bridge name (dots are illegal in MCP tool names).
+# MCP name -> the bridge's name for the tool.
 _NAME_MAP: Dict[str, str] = {}
-# MCP-facing name -> the bridge meta it was registered with, so rediscovery can
-# detect schema/description changes (reload_tools on the bridge side) and
-# re-register instead of silently serving a stale schema.
+# MCP name -> what the bridge reported when the tool was registered. A later discovery compares
+# against it, so a tool whose arguments or description changed is registered again.
 _REGISTERED_META: Dict[str, Dict[str, Any]] = {}
 
 
@@ -292,9 +237,7 @@ def get_client() -> BridgeClient:
     """The default server's bridge client, connecting on first use."""
     global _client
     if _client is None:
-        # host/port unset -> the client resolves the endpoint ($ISAAC_MCP_HOST /
-        # $ISAAC_MCP_PORT, else portfile discovery) — one resolution path.
-        _client = BridgeClient(timeout=RESPONSE_TIMEOUT_S)
+        _client = BridgeClient(timeout=RESPONSE_TIMEOUT_S)   # no host or port: the client finds the bridge
     return _client
 
 
@@ -351,24 +294,20 @@ def _state_for(server: Any) -> _BridgeState:
     return getattr(server, _STATE_ATTR, None) or _DEFAULT_STATE
 
 
-# ==================== Dynamic tool registration ====================
+# ---- registering what a bridge serves ----
 
 
 def registered_tools(server: Any = None) -> List[str]:
-    """The canonical bridge names currently registered, sorted (default: the default server's).
-
-    The roster a policy's matchers can be checked against: a gate naming a tool this does not
-    list is gating nothing. It is the live bridge's tools only (see ``offline_tools``
-    for the catalog proxies). Empty before discovery has run, which is itself worth knowing —
-    checking a policy against a roster nobody has filled would clear every name in it."""
+    """The canonical names the selected bridge serves, sorted (default: the default server's).
+    The live bridge's tools only (see ``offline_tools`` for the catalog proxies); empty before discovery."""
     return sorted(_state_for(server).name_map.values())
 
 
 def offline_tools(server: Any = None) -> List[str]:
     """The canonical offline catalog proxy names, sorted (default: the default server's).
 
-    These are listed and callable (and cross the same policy hooks) but the selected bridge does
-    not serve them; ``registered_tools`` does not include them."""
+    These are listed and callable, but the selected bridge has not confirmed it serves them;
+    ``registered_tools`` does not include them."""
     offline = _offline_for(mcp if server is None else server)
     return sorted(offline.names.values()) if offline is not None else []
 
@@ -378,29 +317,25 @@ def _mcp_name(canonical: str) -> str:
 
 
 def _visible(canonical: str, meta: Dict[str, Any], state=None) -> bool:
-    """Apply the view filters: namespace allowlist + builtins gate."""
+    """Whether this server shows the tool, given the namespace, built-ins and scene-tool settings."""
     namespace = meta.get("namespace")
     if namespace in {"sim", "assets"} and not getattr(state, "scene_tools_enabled", True):
         return False
-    if namespace is None:  # bridge builtins (run_python, reload_tools)
+    if namespace is None:      # a bridge built-in
         return _builtins_enabled()
-    allow = _namespace_filter()
-    return allow is None or namespace in allow
+    allowed = _namespace_filter()
+    return allowed is None or namespace in allowed
 
 
 def _drop_tool(server: FastMCP, name: str) -> None:
-    """Remove one tool from FastMCP so it can be re-registered with a new
-    schema. FastMCP has no public remove; its ToolManager keeps a plain dict —
-    this is the one sanctioned private-attr touch, and it lives only here."""
+    """Unregister one tool. FastMCP offers no call for this, so its tool table is edited directly."""
     server._tool_manager._tools.pop(name, None)
 
 
 def discover_and_register_tools(server: FastMCP) -> List[str]:
-    """Query the bridge registry and register each visible tool.
-
-    New tools are added, changed schemas are re-registered, and tools no longer
-    in the selected bridge view are removed. A failed or malformed discovery
-    does not turn an unknown registry into an empty one."""
+    """Make this server's bridge tools match what the selected bridge serves now, and return what
+    changed. If the bridge cannot be read, or its answer is malformed, nothing is changed: an
+    unreadable bridge is not an empty one."""
     state = _state_for(server)
     offline = _offline_for(server)
     offline_names = offline.names if offline is not None else {}
@@ -471,7 +406,7 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
         else:
             changed.append(f"{canonical} (removed)")
     if changed:
-        logger.info(f"Registered/updated {len(changed)} bridge tools: {changed}")
+        logger.info("bridge tools changed (%d): %s", len(changed), changed)
     return changed
 
 
@@ -492,7 +427,6 @@ class _OfflineTools:
     def __init__(self, catalog: Dict[str, Dict[str, Any]]) -> None:
         self.catalog = catalog                    # canonical -> catalog meta (unfiltered)
         self.names: Dict[str, str] = {}           # MCP name -> canonical, while a proxy
-        self.categories: Dict[str, Optional[str]] = {}   # MCP name -> _meta category it carries
 
 
 def _offline_for(server: Any) -> Optional[_OfflineTools]:
@@ -523,26 +457,23 @@ def _sync_offline(server: Any, state: _BridgeState) -> Dict[str, str]:
     for name in list(offline.names):
         if name in state.name_map:                # the live copy took over this name
             offline.names.pop(name)
-            offline.categories.pop(name, None)
         elif name not in wanted:                  # hidden since it was installed
             _drop_tool(server, name)
             canonical = offline.names.pop(name)
-            offline.categories.pop(name, None)
             changed[canonical] = f"{canonical} (removed)"
     for name, (canonical, meta) in wanted.items():
         if name in state.name_map:
             continue                              # served live (authoritative)
-        category = _meta_category(canonical)
-        if offline.names.get(name) == canonical and offline.categories.get(name) == category:
+        if offline.names.get(name) == canonical:
             continue
         if name in server._tool_manager._tools and name not in offline.names:
             raise RuntimeError(f"offline catalog tool {canonical!r} collides with host tool {name!r}")
         was_proxy = name in offline.names
         _drop_tool(server, name)                  # FastMCP keeps the first tool of a name
-        register_dynamic_tool(server, name, canonical, meta, state=state, category=category)
+        register_dynamic_tool(server, name, canonical, meta, state=state)
         offline.names[name] = canonical
-        offline.categories[name] = category
         changed[canonical] = f"{canonical} (updated)" if was_proxy else canonical
+    grouped_tools.sync(server, getattr(state, "env", None))   # the groups follow whatever is registered now
     return changed
 
 
@@ -615,29 +546,24 @@ def _catalog_error(canonical: str, error: BaseException, state: Optional[_Bridge
             f"simulator state before retrying. {_BRIDGE_HELP}")
 
 
-_KIND_ANNOTATIONS = {"boolean": bool, "integer": int, "number": float,
-                     "array": list, "object": dict, "string": str}
+_WAITING_TOOLS = frozenset({"job_status"})      # may wait (wait_s) or encode a replay's frames
+_PYTHON_TYPE = {"string": str, "integer": int, "number": float, "boolean": bool, "array": list, "object": dict}
 
 
 def _build_tool_function(name: str, canonical: str, description: str,
                          fields: List[Dict[str, Any]], state: Optional[_BridgeState] = None):
-    """Build a function with a real signature/annotations for FastMCP schemas.
-
-    ``fields`` are the bridge-served field specs (the schema vocabulary is
-    interpreted once, bridge-side — schema.py); this only renders them.
-    Required fields without a declared default become required parameters;
-    optional fields default to their declared default, else None — and None
-    values are dropped before dispatch so bridge-side handler defaults apply.
-    """
+    """A Python function for one bridge tool, with the signature FastMCP derives the tool's schema
+    from. ``fields`` is the tool's argument list as the bridge reports it. An argument that is
+    required and has no default is required here; any other defaults to its declared default, or
+    to None, which is left out of the call so the tool's own default applies."""
     from typing import Literal
 
-    # def-order: required-without-default parameters must precede defaulted ones.
-    ordered = sorted(fields, key=lambda f: not (f["required"] and not f["has_default"]))
-    param_list = []
+    mandatory = [f for f in fields if f["required"] and not f["has_default"]]
+    signature = []
     annotations: Dict[str, Any] = {"return": str}
-    for f in ordered:
-        annotation = (Literal[tuple(f["enum"])] if f["kind"] == "enum"
-                      else _KIND_ANNOTATIONS.get(f["kind"], Any))  # an unknown kind must not break discovery
+    for f in mandatory + [f for f in fields if f not in mandatory]:    # Python wants defaults last
+        # A kind this host does not know is passed through untyped rather than failing discovery.
+        annotation = Literal[tuple(f["enum"])] if f["kind"] == "enum" else _PYTHON_TYPE.get(f["kind"], Any)
         # These versioned contracts also carry usable client-side descriptions and
         # typed vectors. Leave the legacy bridge/UR5e schema surface unchanged.
         from .scene_contracts import REGISTRY
@@ -704,54 +630,48 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 annotation = Annotated[annotation, Field(**bounds)]
         graph_field = canonical == "sim.graph.build" and f["name"] in (
             "nodes", "connections", "values", "targets")
-        if f["required"] and not f["has_default"]:
-            param_list.append(f["name"])
+        if f in mandatory:
+            signature.append(f["name"])
         else:
             default = f["default"] if f["has_default"] else None
             if default is None and not graph_field:
                 annotation = Optional[annotation]
-            param_list.append(f"{f['name']}={default!r}")
+            signature.append(f"{f['name']}={default!r}")
         # On the whole parameter, not inside Optional: clients read the top-level description, and
         # nested under anyOf many never show it.
         if f.get("description") and not graph_field:
             annotation = Annotated[annotation, Field(description=f["description"])]
         annotations[f["name"]] = annotation
 
-    params_str = ", ".join(param_list)
-    # No docstring in the exec'd source — descriptions are arbitrary text and
-    # embedding them invites quote/newline breakage; set __doc__ after.
-    func_code = (
-        f"def {name}({params_str}) -> str:\n"
-        f"    return _tool_impl({canonical!r}, locals())\n"
-    )
-    local_ns = {"_tool_impl": functools.partial(
-        _tool_implementation, state=state, mcp_result=True)}
-    exec(func_code, local_ns)
-    func = local_ns[name]
-    func.__doc__ = description
-    func.__annotations__.update(annotations)
-    return func
+    # The description is attached afterwards: it is free text and must not be compiled as source.
+    call = functools.partial(_tool_implementation, state=state, mcp_result=True)
+    if canonical in _WAITING_TOOLS:
+        # FastMCP runs a plain function on its event loop. A wait of up to a minute there would
+        # stop the server answering pings and cancellations, so these run on a worker thread.
+        import asyncio
+
+        async def waiting(canonical, params, _call=call):
+            return await asyncio.to_thread(_call, canonical, params)
+
+        scope = {"_call": waiting}
+        exec(f"async def {name}({', '.join(signature)}) -> str:\n    return await _call({canonical!r}, locals())\n", scope)
+    else:
+        scope = {"_call": call}
+        exec(f"def {name}({', '.join(signature)}) -> str:\n    return _call({canonical!r}, locals())\n", scope)
+    function = scope[name]
+    function.__doc__ = description
+    function.__annotations__.update(annotations)
+    return function
 
 
 def _tool_implementation(canonical: str, params: Dict[str, Any],
                          state: Optional[_BridgeState] = None, *,
                          mcp_result: bool = False) -> Any:
-    """Shared implementation for all dynamic tools.
-
-    Every dynamically registered bridge tool called through this host crosses both
-    policy hook lists. Direct bridge socket callers bypass these host hooks. The
-    result a post-dispatch hook sees is the one the caller would have received,
-    whatever produced it."""
-    # Drop unset optional params so bridge-side handler defaults apply — and so a
-    # policy hook judges the call the bridge will actually receive rather than the
-    # signature's placeholders.
+    """What every catalogued or discovered tool runs: forward the call, and mark a failure as one."""
+    # Unset optional arguments are left out so the tool's own defaults apply.
     params = {k: v for k, v in params.items() if v is not None}
-    dispatched = _dispatch(canonical, params, state)
-    result = _post_dispatch(canonical, params, dispatched)
-    # A post-dispatch annotation must not turn a known failed call into MCP
-    # success. Preserve the legacy text/structured payload and output schema;
-    # only the protocol error bit changes for registered legacy bridge tools.
-    failed = _failed_tool_result(dispatched) or _failed_tool_result(result)
+    result = _dispatch(canonical, params, state)
+    failed = _failed_tool_result(result)
     from .scene_contracts import REGISTRY
     if canonical in REGISTRY:
         from mcp.server.fastmcp.exceptions import ToolError
@@ -789,21 +709,7 @@ _PACK_TOOLS = {"assets.packs", "assets.pack_doctor", "assets.dependencies", "ass
 
 def _dispatch(canonical: str, params: Dict[str, Any],
               state: Optional[_BridgeState] = None) -> str:
-    """Run the pre-dispatch hooks and, if none refused, the bridge call."""
-    # Each hook may mutate params in place and/or return a refusal string to BLOCK
-    # the call. A buggy hook degrades to an error string rather than crashing the
-    # dispatch — and blocks, because a policy that did not run is not a policy that
-    # allowed anything.
-    for hook in _PRE_DISPATCH_HOOKS:
-        try:
-            blocked = hook(canonical, params)
-        except Exception as e:
-            hook_name = getattr(hook, "__name__", repr(hook))
-            logger.error(f"Pre-dispatch hook {hook_name} raised for {canonical}: {e}")
-            return f"Error: pre-dispatch hook {hook_name} failed: {e}"
-        if blocked:
-            return blocked
-
+    """Run one tool by its canonical name: on the host where it is a host tool, else on the bridge."""
     try:
         if canonical == "sim.quick_start" and _quick_start_wants_import(params.get("robot"), state):
             return _quick_start_with_import(params, state)
@@ -872,15 +778,13 @@ def _dispatch(canonical: str, params: Dict[str, Any],
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e, "code", "FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
         if canonical == "status":
-            return json.dumps(_where_am_i(params, active), indent=2, default=repr)
-        if canonical in ("job_status", "job_cancel") and _lab_job(params.get("job_id")):
-            return json.dumps(_lab_job_call(canonical, params), indent=2, default=repr)
-        if canonical == "job_status":
-            return json.dumps(_job_status(params, active), indent=2, default=repr)
+            return json.dumps(_where_am_i(params, active), default=repr)
+        if canonical in ("job_status", "job_cancel"):
+            return json.dumps(_job_call(canonical, params, active), default=repr)
         result = active.get_client().call(kit_canonical, params)
         if routed_info and isinstance(result, dict):
             result = {**result, "import": routed_info}
-        return json.dumps(result, indent=2, default=repr)
+        return json.dumps(result, default=repr)
     except BridgeError as e:
         if (str(e).startswith("unknown tool") and "known_tools" in e.details
                 and host_catalog.is_catalog_tool(canonical)):
@@ -925,9 +829,9 @@ def _surroundings(state: _BridgeState) -> Dict[str, Any]:
     try:
         from .isaaclab import jobs as lab_jobs
 
-        running = lab_jobs.runs_list(state="running", limit=5)
-        if running.get("total"):
-            found["lab_jobs_running"] = [j.get("job_id") for j in running.get("jobs", [])]
+        process_jobs = [j["job_id"] for j in lab_jobs.running_jobs() if j.get("runner") != "kit"][-5:]
+        if process_jobs:
+            found["lab_jobs_running"] = process_jobs
     except Exception:  # noqa: BLE001 - no Lab install, or an unreadable jobs folder
         pass
     return found
@@ -982,9 +886,11 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
     jobs = identity.get("jobs") or {}
     if jobs.get("running"):
         out["jobs_running"] = jobs.get("jobs", [])
-    hold = identity.get("hold") or {}
-    if hold.get("held"):
-        out["hold"] = hold
+    busy = identity.get("busy") or {}
+    if busy.get("exclusive") or busy.get("waiting"):
+        out["busy"] = busy
+    if identity.get("read_only"):
+        out["read_only"] = True
     around = _surroundings(state)
     if len(around["bridges"]) <= 1:
         around.pop("bridges")   # the only bridge is the one above
@@ -995,66 +901,105 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
     return out
 
 
-# ---- job_status: the host waits (wait_s) and turns a replay's frames into its video ----
+# ---- jobs: one answer for a job wherever it runs --------------------------------------------
+#
+# A job inside Isaac Sim and a job that is its own process (Isaac Lab, a script) keep the same kind
+# of record in the same folder. While a simulator job runs, its live state is asked of the bridge;
+# everything else is read from the record, so it still answers after Kit or this server restarts.
 
 JOB_WAIT_MAX_S = 60.0
 JOB_WAIT_POLL_S = 1.0
 
 
-def _lab_job(job_id: Any) -> bool:
-    """An Isaac Lab or script job id (``<date>-<time>-<name>``), which the host manages itself."""
+def _job_record(job_id: Any) -> Optional[Dict[str, Any]]:
     from .isaaclab import jobs as lab_jobs
 
-    return isinstance(job_id, str) and bool(lab_jobs._JOB_ID_RE.match(job_id))
-
-
-def _lab_job_call(canonical: str, params: Dict[str, Any]) -> Dict[str, Any]:
-    """job_status and job_cancel for a host-managed job, so one pair of tools follows every job.
-    Needs no bridge. The answer is what isaaclab__runs_status / runs_cancel give."""
-    import time
-
-    from .isaaclab import jobs as lab_jobs
-
+    if not isinstance(job_id, str) or not lab_jobs._JOB_ID_RE.match(job_id):
+        return None
     try:
-        if canonical == "job_cancel":
-            return lab_jobs.runs_cancel(params["job_id"])
-        wait = params.get("wait_s", 0) or 0
-        if isinstance(wait, bool) or not isinstance(wait, (int, float)) or not 0 <= wait <= JOB_WAIT_MAX_S:
-            return {"status": "error", "code": "INVALID_VALUE",
-                    "message": f"wait_s must be 0..{JOB_WAIT_MAX_S:g} seconds; call again to keep waiting."}
-        deadline = time.monotonic() + wait
-        while True:
-            result = lab_jobs.runs_status(params["job_id"])
-            if result.get("state") != "running" or time.monotonic() >= deadline:
-                break
-            time.sleep(min(JOB_WAIT_POLL_S, max(0.0, deadline - time.monotonic())))
-        if result.get("state") == "running" and wait:
-            result["wait_timed_out"] = True
-        return {**result, "job_id": params["job_id"], "managed_by": "host (Isaac Lab and script jobs)"}
-    except (ValueError, OSError) as error:
-        return {"status": "error", "code": "NOT_FOUND", "message": str(error)}
+        return lab_jobs._read_job(lab_jobs._jobs_path() / job_id)
+    except OSError:
+        return None
 
 
-def _job_status(params: Dict[str, Any], state: _BridgeState) -> Any:
+def _bridge_for(record: Optional[Dict[str, Any]], state: _BridgeState):
+    """The client for the simulator a job runs in: the selected bridge, or the record's own port."""
+    port = (record or {}).get("port")
+    if port and port != _screen_port(state):
+        return BridgeClient(port=int(port), timeout=JOB_WAIT_MAX_S + 30), True
+    return state.get_client(), False
+
+
+def _wait_seconds(params: Dict[str, Any]) -> float:
+    wait = params.get("wait_s", 0) or 0
+    if isinstance(wait, bool) or not isinstance(wait, (int, float)) or not 0 <= wait <= JOB_WAIT_MAX_S:
+        raise ValueError(f"wait_s must be 0..{JOB_WAIT_MAX_S:g} seconds; call again to keep waiting.")
+    return float(wait)
+
+
+def _job_call(canonical: str, params: Dict[str, Any], state: _BridgeState) -> Any:
+    """job_status and job_cancel for any job."""
     import time
 
-    params = dict(params)
-    wait = params.pop("wait_s", 0) or 0
-    if isinstance(wait, bool) or not isinstance(wait, (int, float)) or not 0 <= wait <= JOB_WAIT_MAX_S:
-        return {"status": "error", "code": "INVALID_VALUE",
-                "message": f"wait_s must be 0..{JOB_WAIT_MAX_S:g} seconds; call again to keep waiting."}
-    deadline = time.monotonic() + wait
-    while True:
-        result = state.get_client().call("job_status", params)
-        if (not isinstance(result, dict) or "job_id" not in params or result.get("state") != "running"
-                or time.monotonic() >= deadline):
-            break
-        time.sleep(min(JOB_WAIT_POLL_S, max(0.0, deadline - time.monotonic())))
-    if isinstance(result, dict) and result.get("state") == "running" and wait:
-        result = {**result, "wait_timed_out": True}
-    if isinstance(result, dict) and isinstance(result.get("result"), dict) and "encode" in result["result"]:
-        result = {**result, "result": _encode_replay(result["result"], state, params.get("job_id"))}
+    from .isaaclab import jobs as lab_jobs
+
+    job_id = params.get("job_id")
+    try:
+        wait = _wait_seconds(params) if canonical == "job_status" else 0.0
+        record = _job_record(job_id)
+        if job_id is None:
+            return _job_listing(state)
+        in_kit = record is None or (record.get("runner") == "kit" and record.get("status") == "running"
+                                    and lab_jobs._job_alive(record))
+        if in_kit:
+            client, temporary = _bridge_for(record, state)
+            try:
+                result = client.call(canonical, params, timeout=wait + 30)
+            finally:
+                if temporary:
+                    client.close()
+        elif canonical == "job_cancel":
+            if record.get("runner") == "kit":     # its simulator has gone: nothing is left to cancel
+                ended = lab_jobs.runs_status(job_id)      # settles the record of a job the simulator left running
+                result = {"cancelled": False, "state": ended.get("state"),
+                          "note": "The simulator this job ran in has exited; the job ended with it."}
+            else:
+                result = lab_jobs.runs_cancel(job_id)
+        else:
+            deadline = time.monotonic() + wait
+            while True:
+                result = lab_jobs.runs_status(job_id)
+                if result.get("state") != "running" or time.monotonic() >= deadline:
+                    break
+                time.sleep(min(JOB_WAIT_POLL_S, max(0.0, deadline - time.monotonic())))
+            result = {"job_id": job_id, **result}
+            if result.get("state") == "running" and wait:
+                result["wait_timed_out"] = True
+    except (ValueError, OSError) as error:
+        if isinstance(error, (ConnectionError, TimeoutError)) or not isinstance(error, (ValueError, FileNotFoundError)):
+            raise
+        return {"status": "error", "code": "INVALID_VALUE" if "wait_s" in str(error) else "NOT_FOUND", "message": str(error)}
+    spec = result.get("result", {}).get("encode") if isinstance(result, dict) and isinstance(result.get("result"), dict) else None
+    if isinstance(spec, dict) and {"folder", "pattern", "frames", "output", "fps"} <= set(spec):   # a replay's frames
+        result = {**result, "result": _encode_replay(result["result"], state, job_id)}
     return result
+
+
+def _job_listing(state: _BridgeState) -> Dict[str, Any]:
+    """Every job, newest first: the records, and whatever a reachable simulator knows beyond them."""
+    from .isaaclab import jobs as lab_jobs
+
+    listed = lab_jobs.runs_list(limit=25)
+    jobs = {run["job_id"]: run for run in listed["runs"]}
+    try:
+        for job in state.get_client().call("job_status", {}, timeout=DISCOVERY_TIMEOUT_S).get("jobs", []):
+            jobs.setdefault(job["job_id"], {**job, "runner": "kit"}).update(
+                {key: job[key] for key in ("state", "progress", "elapsed_s") if key in job})
+    except Exception:  # noqa: BLE001 - no simulator is running: the records are the answer
+        pass
+    ordered = sorted(jobs.values(), key=lambda job: job["job_id"], reverse=True)
+    return {"jobs": ordered, "running": sum(job.get("state") == "running" for job in ordered),
+            **({"truncated": True, "hint": listed["hint"]} if listed.get("truncated") else {})}
 
 
 def _encode_replay(result: Dict[str, Any], state: _BridgeState, job_id: Any) -> Dict[str, Any]:
@@ -1066,7 +1011,7 @@ def _encode_replay(result: Dict[str, Any], state: _BridgeState, job_id: Any) -> 
     done = state.__dict__.setdefault("encoded_replays", {})
     key = (_screen_port(state), job_id)
     if key in done:
-        return {**result, **done[key]}
+        return {**{name: value for name, value in result.items() if name not in ("encode", "note")}, **done[key]}
     spec = result["encode"]
     added: Dict[str, Any]
     try:
@@ -1085,7 +1030,8 @@ def _encode_replay(result: Dict[str, Any], state: _BridgeState, job_id: Any) -> 
                                 f"inputs=[\"{spec['folder']}/{spec['pattern']}\"]) encodes them."}
         return {**result, **added}
     done[key] = added
-    return {**result, **added}
+    # The frames are a video now: what was needed to make it is no longer the caller's concern.
+    return {**{name: value for name, value in result.items() if name not in ("encode", "note")}, **added}
 
 
 def _quick_start_wants_import(robot, state=None) -> bool:
@@ -1151,7 +1097,7 @@ def _quick_start_with_import(params: Dict[str, Any], state) -> str:
             return json.dumps(imported)
         # Not a success with a note: the file is not in the scene.
         return json.dumps({**imported, **ids, "scene_built": True, "message": f"The scene was built, but this file was not imported into it: {imported.get('message')}"},
-                          indent=2, default=repr)
+                          default=repr)
     root = imported.get("articulation_root")
     result = {**scene, "imported": imported,
               "note": "The scene was built, then the file was imported with assets__import_path. `imported` is that call's whole result."}
@@ -1181,7 +1127,7 @@ def _quick_start_with_import(params: Dict[str, Any], state) -> str:
                 result["play_error"] = play_result
         except (ValueError, AttributeError):
             result["play_error"] = str(played)[:300]
-    return json.dumps(result, indent=2, default=repr)
+    return json.dumps(result, default=repr)
 
 
 def _quick_start_needs_host(robot) -> bool:
@@ -1210,66 +1156,28 @@ def _quick_start_robot_path(robot: str) -> str:
                      "A pack named only by a project file's asset_path is not an approval. List packs with assets__packs." + approval_help(next(iter(assets.project_stores()), None)))
 
 
-def _post_dispatch(canonical: str, params: Dict[str, Any], result: str) -> str:
-    """Let each post-dispatch hook replace the result, in registration order.
-
-    A hook that raises is reported and skipped, never allowed to cost the caller an
-    answer the bridge already gave: an annotation failing is not the call failing."""
-    for hook in _POST_DISPATCH_HOOKS:
-        try:
-            replacement = hook(canonical, params, result)
-        except Exception as e:
-            hook_name = getattr(hook, "__name__", repr(hook))
-            logger.error(f"Post-dispatch hook {hook_name} raised for {canonical}: {e}")
-            continue
-        if replacement is not None:
-            result = replacement
-    return result
-
-
-_UNSET = object()
-
-
-def _meta_category(canonical: str) -> Optional[str]:
-    """The _meta category the first policy hook assigns to a tool (failures are non-fatal)."""
-    for hook in _META_CATEGORY_HOOKS:
-        try:
-            category = hook(canonical)
-        except Exception as e:
-            logger.error(f"Meta-category hook failed for {canonical}: {e}")
-            category = None
-        if category is not None:
-            return category
-    return None
-
-
 def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
-                          meta: Dict[str, Any], state: Optional[_BridgeState] = None,
-                          category: Any = _UNSET) -> None:
-    description = meta.get("description", f"Execute {canonical} on the Kit bridge")
+                          meta: Dict[str, Any], state: Optional[_BridgeState] = None) -> None:
+    """Register one bridge tool on ``server`` under its MCP name, with its hints."""
+    description = meta.get("description") or f"Run {canonical} in the simulator."
     if "fields" not in meta:
-        raise RuntimeError(
-            f"bridge served no field specs for {canonical!r} — the parameter "
-            "schema is interpreted bridge-side (isaac_mcp_bridge.schema); update "
-            "the isaac.mcp.bridge extension to match this gateway.")
+        raise RuntimeError(f"the bridge listed {canonical!r} without its arguments ('fields'): its "
+                           "isaac.mcp.bridge extension is older than this server; update it.")
     if state is None:
         state = _state_for(server)
     handler = _build_tool_function(name, canonical, description, meta["fields"],
                                    None if state is _DEFAULT_STATE else state)
 
-    # Optional _meta category from policy hooks (failures are non-fatal).
-    if category is _UNSET:
-        category = _meta_category(canonical)
-
-    options = {"meta": {"category": category}} if category is not None else {}
-    from .scene_contracts import REGISTRY
+    options: Dict[str, Any] = {}
+    from .scene_contracts import DESTRUCTIVE, READ_ONLY as SCENE_READ_ONLY, REGISTRY
     from mcp.types import ToolAnnotations
     if canonical in CATALOG_HINTS:
         options["annotations"] = ToolAnnotations(**CATALOG_HINTS[canonical])
     if canonical in REGISTRY:
-        read_only = canonical in {"assets.roots", "assets.scan", "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.prim.bounds", "sim.prim.measure", "sim.camera.list", "sim.physics.inspect", "sim.physics.raycast", "sim.physics.contacts", "sim.body.state", "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "sim.logs.mark", "sim.logs.summary", "assets.search", "assets.packs", "assets.pack_doctor", "assets.dependencies", "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find"}
-        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.simulation.run", "sim.ui.act", "sim.stage.open", "sim.quick_start", "sim.graph.build", "assets.pack_adopt", "assets.pack_pin", "assets.pack_build"},
-                                                 idempotentHint=read_only, openWorldHint=canonical.startswith(("assets.", "sim.controller.")) or canonical == "sim.simulation.run")
+        read_only = canonical in SCENE_READ_ONLY
+        options["annotations"] = ToolAnnotations(
+            readOnlyHint=read_only, destructiveHint=canonical in DESTRUCTIVE, idempotentHint=read_only,
+            openWorldHint=canonical.startswith(("assets.", "sim.controller.")) or canonical == "sim.simulation.run")
     server.tool(**options)(handler)
     if canonical in REGISTRY:
         _forbid_unknown_arguments(server, name)
@@ -1309,29 +1217,27 @@ def _forbid_unknown_arguments(server: FastMCP, name: str) -> None:
         tool.parameters["additionalProperties"] = False   # so clients can see the rule up front
 
 
-# ==================== Server ====================
+# ---- the server ----
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     state = _state_for(server)
     try:
-        logger.info(f"KitMCP server starting up: {len(server._tool_manager._tools)} tools listed")
+        logger.info("starting with %d tools registered", len(server._tool_manager._tools))
         try:
-            _sync_offline(server, state)   # policy hooks are registered by now
+            _sync_offline(server, state)
         except Exception as e:  # noqa: BLE001
             logger.error(f"Could not refresh the offline catalog tools: {e}")
         try:
             discover_and_register_tools(server)
         except Exception as e:
-            logger.warning(f"Could not reach the Kit bridge on startup: {e}")
-            logger.warning("Start Kit with isaac.mcp.bridge enabled, then call refresh_tools.")
+            logger.warning("no bridge answered at startup (%s); refresh_tools looks again once a simulator runs", e)
         yield {}
     finally:
         if state.client:
-            logger.info("Disconnecting from the Kit bridge")
             state.client.close()
             state.client = None
-        logger.info("KitMCP server shut down")
+        logger.info("stopped")
 
 
 def _advertise_tools_list_changed(server: FastMCP) -> None:
@@ -1708,13 +1614,15 @@ _HELP_TOPICS = (
      "screenshot(label=...) for a window; start_screen_recording / stop_screen_recording for video; "
      "join_videos to join clips, or join_videos(mode=\"sheet\", inputs=[...] or job_id=..., times=[...]) for a PNG contact sheet of the "
      "same moments of one or more clips with an upload-ready attachment descriptor (clips must be under your home folder); "
-     "sim__camera__create + sim__camera__capture when headless. Save absolute paths and show them to the user."),
+     "With no window (headless): sim__camera__create (position and target aim it) + sim__camera__capture for a picture, and "
+     "camera= on sim__simulation__run or sim__trajectory__replay for a video. Save absolute paths and show them to the user."),
     ("find out why something failed (contacts, forces, poses)", ("contact", "collision", "fail", "force", "grasp", "stuck", "why", "debug", "pose"),
      "sim__physics__contacts, sim__physics__inspect, sim__body__state, sim__joints__state, sim__prim__measure, "
      "sim__prim__bounds, sim__physics__raycast."),
     ("build or change a scene", ("scene", "build", "robot", "load", "spawn", "import", "asset", "stage", "usd", "urdf"),
-     "sim__quick_start (new scene), sim__stage__info (existing), sim__prim__create / create_many, assets__search, "
-     "assets__import_path. ur5e_dt__* only for the lab UR5e twin."),
+     "sim__quick_start (new scene; robot=franka, ur5e, unitree_g1, ... puts a robot in by name, also onto a scene it built "
+     "earlier), sim__stage__info (existing), sim__prim__create / create_many, assets__import_path (a robot or asset file "
+     "into the current scene), assets__search (files in your own folders). ur5e_dt__* only for the lab UR5e twin."),
     ("move a robot's joints or arm", ("move", "joint", "arm", "ik", "drive", "grip", "gripper", "manipulator"),
      "sim__joints__state, sim__joints__move, sim__joints__drive, sim__arm__ik, sim__arm__fk. These drive joints; "
      "for forces on a free body use sim__simulation__run."),
@@ -1881,7 +1789,7 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     Each server gets its own bridge connection and discovery state (``state``, fresh unless the
     caller passes one), so servers built in one process neither share a socket nor skip tools
     because another server already discovered them. Only the module-level default ``mcp`` is
-    wired to the module-level state. The policy hook lists are process-wide and shared."""
+    wired to the module-level state."""
     env = os.environ if env is None else env
     groups = local_tool_groups(env)
     instructions = SERVER_INSTRUCTIONS
@@ -1904,6 +1812,8 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     state.asset_broker = Broker(env.get("ISAAC_MCP_ASSET_CONFIG", ""))
     if state.asset_broker.requested_profile != "trusted_project":
         raise RuntimeError("PROFILE_UNAVAILABLE: isolated/unrecognized profiles cannot start this trusted MCP server. No restricted endpoint or OS sandbox is implemented; no fallback.")
+    if not grouped_tools.listed_singly(env):
+        instructions = tool_groups.listed_form(instructions)      # name the tools as the client is shown them
     server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
     setattr(server, _STATE_ATTR, state)
     _advertise_tools_list_changed(server)

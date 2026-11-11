@@ -8,7 +8,7 @@ import omni.ext
 import omni.usd
 import omni.timeline
 from isaac_mcp_bridge import get_mcp_bridge, ToolDefinition
-from isaac_mcp.scene_contracts import HOST_ONLY, REGISTRY
+from isaac_mcp.scene_contracts import HOST_ONLY, READ_ONLY, REGISTRY
 from isaac_mcp.project_assets import AssetError
 from .core import STAGE_TOOLS, TIMELINE_TOOLS, Scene, attribute_change, bounded, facts, stop_call
 from .render_export import validate_native_binding
@@ -110,6 +110,7 @@ class Extension(omni.ext.IExt):
                                 description=meta["description"],
                                 parameters=meta["parameters"],
                                 handler=self.handler(canonical),
+                                read_only=canonical in READ_ONLY,
                             )
                         )
         except BaseException:
@@ -455,7 +456,7 @@ class Extension(omni.ext.IExt):
         if expected == "camera" and isinstance(args.get("filename"), str):
             import re
 
-            from .advanced import CAPTURE_NAME, CAPTURE_NAME_RULE
+            from .sensor_tools import CAPTURE_NAME, CAPTURE_NAME_RULE
 
             if not re.fullmatch(CAPTURE_NAME, args["filename"]):
                 refuse("INVALID_OUTPUT", CAPTURE_NAME_RULE)
@@ -777,19 +778,31 @@ class Extension(omni.ext.IExt):
 
         return dict(results=split_runtime(closures(paths), Path(isaacsim.__file__).parent.resolve()))
 
-    @staticmethod
-    def _asset_environment():
-        """What this Kit's asset resolver uses, so the host can tell when it differs from its own."""
+    _ASSET_ENVIRONMENT_TTL_S = 2.0
+    _asset_environment_seen = (0.0, None)
+
+    @classmethod
+    def _asset_environment(cls):
+        """What this Kit's asset resolver uses, so the host can tell when it differs from its own.
+        Reading it walks the project and asset folders, and stage_info is called often, so one
+        reading serves for two seconds."""
+        import time
+
+        at, seen = cls._asset_environment_seen
+        if seen is not None and time.monotonic() - at < cls._ASSET_ENVIRONMENT_TTL_S:
+            return dict(seen)
         try:
             from isaac_mcp import assets
 
             resolver = assets.resolver()
             project = assets.project_file()
-            return dict(project_file=str(project) if project else None,
+            seen = dict(project_file=str(project) if project else None,
                         stores=[str(p) for p in resolver.stores()],
                         packs=list(resolver.packs()), strict=bool(resolver.offline()))
         except Exception as exc:  # noqa: BLE001 - reporting must never break stage_info
             return dict(error=str(exc)[:200])
+        cls._asset_environment_seen = (time.monotonic(), seen)
+        return dict(seen)
 
     def dispatch(self, name, a, *, camera_frame=None):
         s = self.scene
@@ -910,7 +923,7 @@ class Extension(omni.ext.IExt):
                     found.append(str(p.GetPath()))
             return dict(paths=found, truncated=truncated, visited=min(count, 10000))
         if name == "sim.prim.create":
-            from .advanced import create_one
+            from .prim_tools import create_one
 
             created, warning = create_one(s, stage, a)
             return {**created, "warnings": [warning]} if warning else created

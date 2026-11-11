@@ -314,10 +314,8 @@ Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOL
 - `ISAAC_MCP_LOCAL_TOOLS` selects groups of the host's own tools (30 standard screen, Isaac Lab, gateway tools, plus
   five opt-in desktop input and four opt-in simulator-session tools). `readonly`
   keeps only local tools annotated as read-only; `none` keeps none. The default is `all`. The Python probes and job
-  inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for groups and
-  migration. Importing the jobs module can still reconcile orphaned jobs at server startup,
-  regardless of the groups. The setting does **not** affect tools discovered from a Kit bridge, which are not
-  annotated, so `readonly` is a read-only *local tool selection*, not a read-only server: a client that can still see
+  inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for the groups. Importing the jobs module can still reconcile orphaned jobs at server startup,
+  regardless of the groups. The setting does **not** affect tools discovered from a Kit bridge, so `readonly` is a read-only *local tool selection*, not a read-only server: a client that can still see
   bridge tools can change the scene.
 - `ISAAC_MCP_NAMESPACE` limits the bridge tools to the named namespaces, and `ISAAC_MCP_BUILTINS=0` hides the bare
   bridge built-ins such as `run_python`. An empty `ISAAC_MCP_NAMESPACE` means no filter, not "no namespaces".
@@ -332,24 +330,18 @@ unused, `use_bridge` and `refresh_tools` (if the `gateway` group is on) re-run d
 anything that reaches the bridge socket directly (the `isaac_mcp.client` CLI, another process) is not affected by a
 host's filters at all.
 
-**A profile that cannot change the scene** needs local tools that could change the scene restricted, and bridge calls
-independently restricted by enforcement that does not depend on the client or on which tools the host lists. The bridge
-policy mechanisms below require code, not just configuration:
+**A simulator that cannot be changed.** Start Kit with `ISAAC_MCP_READ_ONLY=1`. The bridge then runs only the
+tools registered as read-only (stage and prim reads, joint and body state, logs, `status`, `job_status`, `get_file`,
+`stat_file`, and the twin's `get_recording_status`) and refuses every other with the code `READ_ONLY` before the tool
+is called: `run_python`, `put_file`, every scene edit and every other twin tool. Read-only protects the simulator, not
+the disk: `get_file` still reads any file your account can read. This is enforced inside Kit, so it does not
+depend on the client, on which tools a host lists, or on who dials the socket. `status` and the bridge listing report
+`read_only`. Pair it with `ISAAC_MCP_LOCAL_TOOLS=readonly` so the host's own tools cannot change things either.
 
-- `isaac_mcp/gate.py` is a deny-gate *mechanism*: it can read and validate a policy file (`load_hooks`) and decide a
-  call (`evaluate`). Nothing in the host or the bridge loads a policy file or calls it; there is no environment
-  variable or setting that turns it on, and this repository ships no policy.
-- On the host, `isaac_mcp.server.register_pre_dispatch_hook(fn)` runs `fn(name, params)` before each dynamically
-  registered bridge tool call through that host and can refuse it. It must be registered by Python in the host process;
-  the stock `isaac-mcp` command has no plugin loader, so that means your own launcher that imports
-  `isaac_mcp.server`, registers the hook (it may call `gate.evaluate`) and then calls `main()`. It covers only the
-  bridge tools called through that process: not the local tools, discovery and status calls made by the host itself,
-  or callers that dial the bridge directly.
-- On the bridge, a tool pack running in Kit can install policy with `registrar.refuse_calls_with(fn)` (see
-  [tool authoring](../mcp/docs/tool-authoring.md)). While installed, it applies at bridge dispatch across namespaces
-  and callers; it is removed when its owner drains. A rule that must hold regardless of the client needs a policy that
-  remains installed and covers every relevant call, including calls that could remove or bypass it. It, too, is code
-  in a Kit extension.
+**Who may connect.** The bridge requires a token on every connection. It writes a random one to a file only your
+account can read, and clients on that account (this server, the CLI, your scripts) read it from there, so nothing
+needs configuring on one machine. Another account on the machine, or a remote client, must be given the token as
+`ISAAC_MCP_TOKEN`. `ISAAC_MCP_AUTH=0` turns the requirement off. See the [protocol](../mcp/docs/protocol.md#the-token).
 
 Client side (these are client settings, not part of this server; check your client's documentation):
 
@@ -360,13 +352,15 @@ Client side (these are client settings, not part of this server; check your clie
   (an empty `{"mcpServers":{}}` for none).
 - Give subagents an explicit tool allowlist. A subagent without one can inherit the parent's MCP tools.
 - Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`), which clients can use for approval
-  prompts. Bridge tools do not. Annotations are hints, not an access control; the filters above decide what is
-  registered at all, and none of them replaces a policy enforced at the bridge.
+  prompts, and so do the scene, twin and built-in bridge tools. Annotations are hints, not an access control; the
+  filters above decide what is registered at all, and only read-only mode is enforced at the bridge.
 
 ### Tool counts depend on `ISAAC_MCP_LOCAL_TOOLS`
 
-A client lists **134 tools** with the default groups, **+5** (`window_*`) when `screen_input` is selected and **+4**
-(`sim__*` session tools) when `sim_launch` is selected: **143** with both. `ISAAC_MCP_NAMESPACE`,
+The server registers **134 tools** with the default groups, **+5** (`window_*`) when `screen_input` is selected and **+4**
+(`sim__*` session tools) when `sim_launch` is selected: **143** with both. A client is shown **45 tools**, because
+related tools are listed as one tool with an `action` argument (see [grouped tools](TOOLS-HOST.md#grouped-tools));
+`ISAAC_MCP_GROUP_TOOLS=0` lists all of them singly. `ISAAC_MCP_NAMESPACE`,
 `ISAAC_MCP_BUILTINS=0` and `ISAAC_MCP_SCENE_TOOLS=0` lower the count further. A client that shows a different number
 has a filter set in its server entry; the server logs its tool count and filters at startup (below).
 
@@ -382,7 +376,7 @@ A client discards the server's stderr, so the server also writes a durable log, 
 | Setting | Meaning |
 |---|---|
 | `~/.local/state/isaac-mcp/server-<pid>.log` | Default file. `$XDG_STATE_HOME` is honoured. The directory is created `0700`, the file `0600`. |
-| `ISAAC_MCP_LOG_DIR=<dir>` | Another directory. It is the same variable that sets where the Kit bridge writes `tool-failures-<pid>.log`. |
+| `ISAAC_MCP_LOG_DIR=<dir>` | Another directory. |
 | `ISAAC_MCP_LOG=0` | No file (stderr only). |
 
 Each file rotates at 1 MB and keeps two older copies; logs of ended processes beyond the newest 30 are deleted. Every

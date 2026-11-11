@@ -71,7 +71,7 @@ add(
 )
 add(
     "assets.import_path",
-    "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. A USD reports its drawn `visuals`; none is a warning.",
+    "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; sources never change. Robot formats take fixed_base and default_drives. A USD reports its drawn `visuals`; none is a warning.",
     dict(
         **TARGET,
         source_path=field(
@@ -111,7 +111,7 @@ add(
 )
 add(
     "sim.quick_start",
-    "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
+    "One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns session_id, stage_id, paths and next steps. For the RISE lab UR5e twin, use ur5e_dt__quick_start.",
     dict(
         robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.", False),
         fixed_base=field("boolean", "Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False),
@@ -323,6 +323,21 @@ add(
         limit=field("integer", "Maximum results 1..100.", False, default=50),
     ),
 )
+# Tools that change nothing. The host marks them read-only for clients, and a Kit started read-only
+# (ISAAC_MCP_READ_ONLY=1) runs only these.
+READ_ONLY = {
+    "assets.roots", "assets.scan", "assets.search", "assets.info", "assets.packs", "assets.pack_doctor", "assets.dependencies",
+    "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.prim.bounds", "sim.prim.measure",
+    "sim.camera.list", "sim.physics.inspect", "sim.physics.raycast", "sim.physics.contacts", "sim.body.state",
+    "sim.joints.inspect", "sim.joints.state", "sim.arm.fk", "sim.logs.tail", "sim.logs.mark", "sim.logs.summary",
+    "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find",
+}
+# Tools that can remove or replace what the user made.
+DESTRUCTIVE = {
+    "sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.simulation.run",
+    "sim.ui.act", "sim.stage.open", "sim.quick_start", "sim.graph.build", "assets.pack_adopt", "assets.pack_pin",
+    "assets.pack_build",
+}
 # These run in the MCP host and work without Kit. Kit must not serve them.
 HOST_ONLY = {
     "assets.roots",
@@ -539,17 +554,18 @@ add(
 )
 add(
     "sim.simulation.run",
-    "Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. A stopped timeline is initialized; the run steps exactly and ends paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none.",
+    "Run your own controller in the physics loop as a job. Each step gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. Steps exactly from a pause (mode=step), or follows a playing timeline (mode=play). Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none.",
     dict(
         **TARGET,
         body=field("string", "Rigid body the controller acts on, e.g. a drone's base link."),
-        controller=field("string", "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or package.module:function or /abs/file.py:function, loaded into Kit: needs ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 at Kit launch."),
+        controller=field("string", "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs."),
         duration_s=field("number", "Simulated seconds to run, up to 3600. The controller can end sooner with done=true."),
         params=field("object", "Passed to the controller as state['params'] each step, e.g. gains or a target.", False),
         frame=field("string", "Frame of the returned force and torque, applied at the centre of mass: world (default) or body.", False, default="world", enum=["world", "body"]),
         log=field("array", "Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.", False),
         log_every=field("integer", "Log one row every this many physics steps, 1..10000.", False, default=1),
         filename=field("string", "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.", False),
+        mode=field("string", "step (default): exact steps from a paused timeline, repeatable and as fast as the machine allows. play: the timeline plays and the controller runs in the engine's pre-step callback, so ROS publishers and action graphs tick too; it keeps playing afterwards.", False, default="step", enum=["step", "play"]),
         steps_per_frame=field("integer", "Physics steps between app frames, 1..120. Default: about real time at 60 frames per second. With camera, fps sets it.", False),
         articulation=field("string", "Articulation root of a jointed robot (often <robot>/root_joint). The state then has joints {names, positions, velocities}, and the controller may return joint_efforts, joint_targets or joint_velocity_targets as {joint name: value} (N m or N, rad or stage units).", False),
         observe=field("array", "Up to 8 more rigid bodies whose state the controller gets under observed[path]. It may push them too, with wrenches: {path: {force, torque}}.", False),
@@ -578,13 +594,14 @@ add(
 )
 add(
     "sim.camera.create",
-    "Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X), focal_length=18, clipping_range=[0.01,100]. USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper.",
+    "Create a persistent RTX camera on a stopped timeline. To watch something: path=/World/Cam, position=[3,-3,2], target=[0,0,0.5] aims it. On a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X). USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper.",
     dict(
         **TARGET,
         path=field("string", "New camera path; its parent prim (e.g. a robot link) must exist."),
         width=field("integer", "Image width 64..1024.", False, default=640),
         height=field("integer", "Image height 64..1024.", False, default=480),
         **POSE,
+        target=field("array", "World point [x, y, z] to aim the camera at, instead of orientation or rotate_xyz.", False),
         rotate_xyz=field("array", "Orientation as USD rotateXYZ Euler angles in degrees (X, then Y, then Z), instead of the orientation quaternion. With frame=local it is authored as translate + rotateXYZ ops.", False),
         focal_length=field("number", "Focal length in mm (0.1..1000); default USD 50.", False),
         horizontal_aperture=field("number", "Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height.", False),

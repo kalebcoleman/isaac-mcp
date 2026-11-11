@@ -23,7 +23,7 @@ def test_sim_status_tells_a_busy_bridge_from_a_dead_one(monkeypatch):
     from isaac_mcp import client, sim_sessions
 
     def busy(*args, **kwargs):
-        raise client.BridgeError("DOORWAY_BUSY")
+        raise client.BridgeError("AUTH_REQUIRED")
 
     monkeypatch.setattr(client, "call", busy)
     assert sim_sessions._bridge_state("127.0.0.1", 1, 1)[0] == "busy"
@@ -41,7 +41,8 @@ def test_a_garbled_bridge_reply_disconnects_instead_of_desynchronising():
 
     class Sock:
         def __init__(self):
-            self.chunks = [b'{"status":', b' \xff\n{"status": "success", "result": {}}\n']
+            self.chunks = [b'{"status":', b' \xff\n{"id": 1, "status": "success", "result": {}}\n']
+            self.closed = False
 
         def settimeout(self, _):
             pass
@@ -53,11 +54,12 @@ def test_a_garbled_bridge_reply_disconnects_instead_of_desynchronising():
             return self.chunks.pop(0)
 
         def close(self):
-            pass
+            self.closed = True
 
-    bridge = client.BridgeClient.__new__(client.BridgeClient)
-    bridge._sock, bridge._buffer, bridge._hold_token = Sock(), b"", None
-    bridge.close = lambda: setattr(bridge, "closed", True)
-    with pytest.raises(client.BridgeError, match="unreadable reply"):
-        bridge._roundtrip("status", {}, 1.0)
-    assert bridge.closed
+    sock = Sock()
+    bridge = client.BridgeClient(port=1, timeout=1.0)
+    bridge._sock = sock
+    bridge._dropped = lambda: False
+    with pytest.raises(ValueError):
+        bridge.call("status")
+    assert sock.closed and bridge._sock is None, "the next call starts on a fresh connection, not on the leftover line"

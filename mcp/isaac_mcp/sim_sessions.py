@@ -778,8 +778,7 @@ def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | N
         output.mkdir(mode=0o700)
         child_env = os.environ.copy()
         for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_PYTHON", "ISAAC_MCP_PYTHON",
-                    "ISAAC_MCP_WORKSPACE", "UR5E_DT_SHOW_PANEL", "ISAAC_MCP_HOLD_TOKEN",
-                    "ISAAC_MCP_HOLD_TOKEN_FILE"):
+                    "ISAAC_MCP_WORKSPACE", "UR5E_DT_SHOW_PANEL"):
             child_env.pop(key, None)
         child_env.update({"UR5E_DT_PORT": str(port), "ISAAC_MCP_PORT": str(port),
                           "ISAAC_MCP_BIND": "127.0.0.1", "ROS_DOMAIN_ID": str(ros_domain),
@@ -865,7 +864,7 @@ def _bridge_state(host: str | None, port: int, pid: int) -> tuple[str, dict]:
     """Readiness from the bridge's own ``status``, checked against the PID expected on that port."""
     try:
         response = client.call("status", host=host or "127.0.0.1", port=port, timeout=2)
-    except client.BridgeError:  # it answered, to say it is busy: an exclusive call holds Kit's main thread
+    except client.BridgeError:  # it answered, but would not serve this client (its token was refused)
         return "busy", {}
     except (OSError, RuntimeError):
         return "starting_or_unresponsive", {}
@@ -1041,12 +1040,28 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
         return _stop(settings, session_id, expected_pid, confirm_discard, force)
 
 
+_ENDED_SESSIONS: set = set()    # (folder, id) of sessions seen dead: a session's process never comes back
+
+
 def live_sessions(env: Mapping[str, str] | None = None) -> list[dict]:
-    """``{id, port, pid, started_at}`` of managed simulator sessions that are still alive (best effort)."""
+    """``{id, port, pid, started_at}`` of managed simulator sessions that are still alive (best effort).
+    Called on every status check-in, so a session seen dead is not read from disk again."""
     try:
-        return sorted(({"id": x.get("id"), "port": int(x["port"]), "pid": int(x["pid"]),
-                        "started_at": float(x["started_at"]) if x.get("started_at") is not None else None}
-                       for x in _sessions(_sessions_dir(os.environ if env is None else env)) if _alive(x)),
-                      key=lambda x: (x["port"], x["pid"]))
+        base = _sessions_dir(os.environ if env is None else env)
+        live = []
+        for path in (base.iterdir() if base.is_dir() else ()):
+            key = (str(base), path.name)
+            if key in _ENDED_SESSIONS or not _SESSION_ID.fullmatch(path.name) or not path.is_dir():
+                continue
+            try:
+                x = _read(base, path.name)
+            except ValueError:
+                continue
+            if _alive(x):
+                live.append({"id": x.get("id"), "port": int(x["port"]), "pid": int(x["pid"]),
+                             "started_at": float(x["started_at"]) if x.get("started_at") is not None else None})
+            else:
+                _ENDED_SESSIONS.add(key)
+        return sorted(live, key=lambda x: (x["port"], x["pid"]))
     except Exception:  # noqa: BLE001 - only used to enrich an error message
         return []

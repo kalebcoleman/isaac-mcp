@@ -1,32 +1,24 @@
 #!/usr/bin/env python3
-"""omni-kit-mcp installer — permanent, zero-launch-flag registration.
+"""Make a Kit app load the bridge on every launch, with no launch flags.
 
-Edits the Kit app's persistent user.config.json (the file the Extensions
-window's AUTOLOAD checkbox writes) so the bridge — and each project's tool
-package — loads on EVERY launch with no --ext-folder/--enable flags and no
-env vars. Idempotent; backs the config up first; --remove undoes exactly what
-it added. Stdlib only.
+A Kit app keeps what its Extensions window is told to autoload in ``user.config.json``. This
+script edits that file: it adds this repository's ``exts`` folder to the extension search path,
+enables the bridge and its panel, and stores the bridge's port. A tool package of your own is
+registered the same way, so the bridge imports it when it starts.
 
-  install (default)   register this repo's exts folder, auto-enable
-                      isaac.mcp.bridge + isaac.mcp.panel, set the autostart port
-  add-project         persistently register one tool package:
-                        install.py add-project --path <project>/isaac --module myproj_tools
-  remove-project      unregister one tool package by module name
-  status              print what is currently registered
-  install --remove    undo the base registration
+    python3 scripts/install.py                 # register the bridge and the panel
+    python3 scripts/install.py --remove        # undo that
+    python3 scripts/install.py add-project --path <dir holding the package> --module my_tools
+    python3 scripts/install.py remove-project --module my_tools [--path <dir>]
+    python3 scripts/install.py status
 
-Settings written (all under /persistent in user.config.json):
-  app/exts/userFolders            ext search paths (this repo's exts/, project dirs)
-  app/exts/enabled                auto-enabled ext ids (exact versioned ids)
-  exts/isaac.mcp.bridge/autostartPort bridge bind port (read by the ext at startup)
-  exts/isaac.mcp.bridge/autostartHost bridge bind address (default localhost; see --bind-host)
-  exts/isaac.mcp.bridge/toolModules   tool packages to autoload (owner per module)
-  exts/isaac.mcp.bridge/toolPaths     sys.path additions so those modules import
+Add ``--dry-run`` to see the changes without writing. The file is copied to
+``user.config.json.bak.<time>`` before it is written. Close the Kit app first: an app that is
+running writes its own settings back over the file when it exits.
 
-  python3 scripts/install.py                      # base install (dry-run: add --dry-run)
-  python3 scripts/install.py add-project --path <project>/isaac --module myproj_tools
-  python3 scripts/install.py status
+Stdlib only.
 """
+
 import argparse
 import glob
 import json
@@ -36,259 +28,174 @@ import shutil
 import sys
 import time
 
-HOME = os.path.expanduser("~")
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_FOLDER = os.path.join(REPO_ROOT, "exts")
-DEFAULT_EXTS = ["isaac.mcp.bridge", "isaac.mcp.panel"]
-# Matches the twin bridge default 8766 set by run.sh/install.sh. Override with --autostart-port.
-DEFAULT_AUTOSTART_PORT = 8766
-
-# Knob identities (settings leaf names, subtree) come from the same table the
-# extension reads — writer and readers cannot drift. Requires the repo layout
-# around this script (it registers REPO_ROOT/exts anyway).
-sys.path.insert(0, os.path.join(REPO_ROOT, "exts", "isaac.mcp.bridge"))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO, "exts", "isaac.mcp.bridge"))
 from isaac_mcp_bridge.knobs import BIND, PORT, SETTINGS_SUBTREE, TOOL_MODULES, TOOL_PATHS  # noqa: E402
 
-MCP_SETTINGS_KEY = SETTINGS_SUBTREE.split("/", 1)[1]  # subtree under persistent/exts/
+EXTENSIONS = ["isaac.mcp.bridge", "isaac.mcp.panel"]
+DEFAULT_PORT = 8766
+BRIDGE_KEY = SETTINGS_SUBTREE.rsplit("/", 1)[1]
 
 
-def find_config(explicit):
-    if explicit:
-        return explicit
-    # Never guess between apps or versions: the most recently used config can belong to another
-    # Isaac Sim than the one being set up, and this edits it.
-    cands = sorted(glob.glob(f"{HOME}/.local/share/ov/data/Kit/*/*/user.config.json"))
-    if len(cands) == 1:
-        return cands[0]
-    if cands:
-        listed = "\n".join(f"  {cand}" for cand in cands)
-        sys.exit(f"Several Kit configs found; pass the one you mean with --config:\n{listed}")
-    sys.exit("No Kit user.config.json found. Launch the app once, or pass --config.")
+def as_list(stored):
+    """Kit stores a list as {"0": a, "1": b}."""
+    if isinstance(stored, dict):
+        return [stored[key] for key in sorted(stored, key=lambda key: (not key.isdigit(), int(key) if key.isdigit() else 0, key))]
+    return list(stored) if isinstance(stored, list) else []
 
 
-def _idx_dict_values(d):
-    """user.config serializes lists as {'0': v, '1': v}. Return the value list."""
-    if isinstance(d, list):
-        return list(d)
-    if not isinstance(d, dict):
-        return []
-    return [d[k] for k in sorted(d, key=lambda x: int(x) if x.isdigit() else x)]
+def as_stored(values):
+    return {str(index): value for index, value in enumerate(values)}
 
 
-def _to_idx_dict(values):
-    return {str(i): v for i, v in enumerate(values)}
+def find_config(given):
+    if given:
+        return given
+    found = sorted(glob.glob(os.path.expanduser("~/.local/share/ov/data/Kit/*/*/user.config.json")))
+    if len(found) == 1:
+        return found[0]
+    if found:
+        sys.exit("Several Kit apps have a user.config.json; pass the one you mean with --config:\n  " + "\n  ".join(found))
+    sys.exit("No Kit user.config.json found. Start the app once so it writes one, or pass --config.")
 
 
-def _ext_version(ext_name, folders):
-    """Read the ext's [package] version from its extension.toml (first
-    standalone `version = "..."` line), or None."""
-    for fol in folders:
-        toml = os.path.join(fol, ext_name, "config", "extension.toml")
-        if os.path.isfile(toml):
-            with open(toml) as f:
-                for line in f:
-                    m = re.match(r'\s*version\s*=\s*"([^"]+)"', line)
-                    if m:
-                        return m.group(1)
-    return None
+def extension_id(name, folders):
+    """``name-version`` as Kit names an enabled extension, from the extension's own extension.toml."""
+    for folder in folders:
+        try:
+            with open(os.path.join(folder, name, "config", "extension.toml")) as stream:
+                version = re.search(r'^\s*version\s*=\s*"([^"]+)"', stream.read(), re.MULTILINE)
+        except OSError:
+            continue
+        if version:
+            return f"{name}-{version.group(1)}"
+    return name
 
 
-class Config:
-    """user.config.json with the list-as-index-dict quirk handled."""
+class Settings:
+    """The parts of user.config.json this script edits, and a log of what it changed."""
 
     def __init__(self, path):
         self.path = path
-        with open(path) as f:
-            self.cfg = json.load(f)
+        with open(path) as stream:
+            self.document = json.load(stream)
+        persistent = self.document.setdefault("persistent", {})
+        self.app = persistent.setdefault("app", {}).setdefault("exts", {})
+        self.extensions = persistent.setdefault("exts", {})
         self.changes = []
-        p = self.cfg.setdefault("persistent", {})
-        self._app_exts = p.setdefault("app", {}).setdefault("exts", {})
-        self._exts_tree = p.setdefault("exts", {})
 
-    # -- app/exts lists --
-    def get_list(self, key):
-        return _idx_dict_values(self._app_exts.get(key, {}))
+    def bridge(self):
+        return self.extensions.setdefault(BRIDGE_KEY, {})
 
-    def set_list(self, key, values):
-        self._app_exts[key] = _to_idx_dict(values)
-
-    # -- /persistent/exts/isaac.mcp.bridge/* --
-    def mcp_settings(self):
-        return self._exts_tree.setdefault(MCP_SETTINGS_KEY, {})
-
-    def mcp_get_list(self, key):
-        return _idx_dict_values(self.mcp_settings().get(key, {}))
-
-    def mcp_set_list(self, key, values):
-        s = self.mcp_settings()
-        if values:
-            s[key] = _to_idx_dict(values)
+    def edit(self, where, key, wanted):
+        """Make the list at ``where[key]`` equal ``wanted``, logging what was added and removed."""
+        before = as_list(where.get(key))
+        self.changes += [f"- {key}: {value}" for value in before if value not in wanted]
+        self.changes += [f"+ {key}: {value}" for value in wanted if value not in before]
+        if wanted:
+            where[key] = as_stored(wanted)
         else:
-            s.pop(key, None)
-        if not s:
-            self._exts_tree.pop(MCP_SETTINGS_KEY, None)
+            where.pop(key, None)
 
-    def write(self, dry_run):
+    def put(self, key, value):
+        """Set or (with None) remove one bridge setting."""
+        bridge = self.bridge()
+        if value is None and key in bridge:
+            del bridge[key]
+            self.changes.append(f"- {SETTINGS_SUBTREE}/{key}")
+        elif value is not None and bridge.get(key) != value:
+            bridge[key] = value
+            self.changes.append(f"+ {SETTINGS_SUBTREE}/{key} = {value}")
+
+    def save(self, dry_run):
+        if not self.extensions.get(BRIDGE_KEY):
+            self.extensions.pop(BRIDGE_KEY, None)
         if not self.changes:
-            print("Already in desired state — nothing to do.")
+            print("Nothing to change.")
             return
-        print("Changes:")
-        for c in self.changes:
-            print("  " + c)
+        print("\n".join(self.changes))
         if dry_run:
-            print("(dry-run — wrote nothing)")
+            print("Dry run: nothing was written.")
             return
         backup = f"{self.path}.bak.{int(time.time())}"
         shutil.copy2(self.path, backup)
-        print(f"backup: {backup}")
-        with open(self.path, "w") as f:
-            json.dump(self.cfg, f, indent=4)
-        print("WROTE config. Restart the Kit app — changes apply on next launch.")
-        print("NOTE: if the app is RUNNING right now, it will overwrite this file")
-        print("with its in-memory settings on exit — restart it promptly, or")
-        print("re-run this command after closing it. (The overwrite happens in")
-        print("the app's graceful-exit config flush; a hard kill -9 skips the")
-        print("flush and leaves this registration intact.)")
+        with open(self.path, "w") as stream:
+            json.dump(self.document, stream, indent=4)
+        print(f"Written (the previous file is {backup}). It takes effect the next time the app starts. "
+              "If the app is running now, close it and run this again: on exit it writes its own settings over the file.")
 
 
-# ==================== commands ====================
-
-def cmd_install(cfg: Config, args):
-    folders = args.folder or [DEFAULT_FOLDER]
-    exts = args.enable or DEFAULT_EXTS
-    user_folders = cfg.get_list("userFolders")
-    enabled = cfg.get_list("enabled")
-
+def install(settings, args):
+    folders = args.folder or [os.path.join(REPO, "exts")]
+    names = args.enable or EXTENSIONS
+    search = as_list(settings.app.get("userFolders"))
+    enabled = as_list(settings.app.get("enabled"))
+    others = [item for item in enabled if not any(item == name or item.startswith(name + "-") for name in names)]
     if args.remove:
-        for fol in folders:
-            if fol in user_folders:
-                user_folders.remove(fol); cfg.changes.append(f"- userFolders: {fol}")
-        for e in exts:
-            for v in [x for x in enabled if x == e or x.startswith(e + "-")]:
-                enabled.remove(v); cfg.changes.append(f"- enabled: {v}")
-        s = cfg.mcp_settings()
-        for key in (PORT.leaf, BIND.leaf):
-            if key in s:
-                del s[key]; cfg.changes.append(f"- /persistent/{SETTINGS_SUBTREE}/{key}")
-        if not s:
-            cfg._exts_tree.pop(MCP_SETTINGS_KEY, None)
-    else:
-        for fol in folders:
-            if not os.path.isdir(fol):
-                print(f"  WARN: folder does not exist: {fol}")
-            if fol not in user_folders:
-                user_folders.append(fol); cfg.changes.append(f"+ userFolders: {fol}")
-        for e in exts:
-            # Exact versioned id (e.g. isaac.mcp.bridge-0.2.0) — a bare name makes
-            # Kit log "no longer available". Re-run after a bump self-corrects.
-            ver = _ext_version(e, folders)
-            ext_id = f"{e}-{ver}" if ver else e
-            variants = [x for x in enabled if x == e or x.startswith(e + "-")]
-            if variants != [ext_id]:
-                enabled = [x for x in enabled if x not in variants]
-                enabled.append(ext_id)
-                stale = [v for v in variants if v != ext_id]
-                cfg.changes.append(f"+ enabled: {ext_id}"
-                                   + (f" (removed stale: {stale})" if stale else ""))
-        if args.autostart_port:
-            s = cfg.mcp_settings()
-            if s.get(PORT.leaf) != args.autostart_port:
-                s[PORT.leaf] = args.autostart_port
-                cfg.changes.append(
-                    f"+ /persistent/{SETTINGS_SUBTREE}/{PORT.leaf} = {args.autostart_port}")
-        if args.bind_host:
-            s = cfg.mcp_settings()
-            if s.get(BIND.leaf) != args.bind_host:
-                s[BIND.leaf] = args.bind_host
-                cfg.changes.append(
-                    f"+ /persistent/{SETTINGS_SUBTREE}/{BIND.leaf} = {args.bind_host}")
-
-    cfg.set_list("userFolders", user_folders)
-    cfg.set_list("enabled", enabled)
-
-
-def cmd_add_project(cfg: Config, args):
-    path = os.path.abspath(os.path.expanduser(args.path))
-    if not os.path.isdir(path):
-        print(f"  WARN: path does not exist: {path}")
-    if not os.path.isdir(os.path.join(path, args.module)) and \
-       not os.path.isfile(os.path.join(path, args.module + ".py")):
-        print(f"  WARN: {path} does not contain a module named {args.module!r}")
-
-    paths = cfg.mcp_get_list(TOOL_PATHS.leaf)
-    modules = cfg.mcp_get_list(TOOL_MODULES.leaf)
-    if path not in paths:
-        paths.append(path); cfg.changes.append(f"+ toolPaths: {path}")
-    if args.module not in modules:
-        modules.append(args.module); cfg.changes.append(f"+ toolModules: {args.module}")
-    cfg.mcp_set_list(TOOL_PATHS.leaf, paths)
-    cfg.mcp_set_list(TOOL_MODULES.leaf, modules)
-
-
-def cmd_remove_project(cfg: Config, args):
-    paths = cfg.mcp_get_list(TOOL_PATHS.leaf)
-    modules = cfg.mcp_get_list(TOOL_MODULES.leaf)
-    if args.module in modules:
-        modules.remove(args.module); cfg.changes.append(f"- toolModules: {args.module}")
-    if args.path:
-        path = os.path.abspath(os.path.expanduser(args.path))
-        if path in paths:
-            paths.remove(path); cfg.changes.append(f"- toolPaths: {path}")
-    cfg.mcp_set_list(TOOL_PATHS.leaf, paths)
-    cfg.mcp_set_list(TOOL_MODULES.leaf, modules)
-
-
-def cmd_status(cfg: Config, args):
-    print(f"userFolders : {cfg.get_list('userFolders')}")
-    print(f"enabled     : {cfg.get_list('enabled')}")
-    s = dict(cfg.mcp_settings())
-    print(f"autostartPort: {s.get(PORT.leaf)}")
-    print(f"toolModules : {cfg.mcp_get_list('toolModules')}")
-    print(f"toolPaths   : {cfg.mcp_get_list('toolPaths')}")
-
-
-def main():
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", nargs="?", default="install",
-                    choices=["install", "add-project", "remove-project", "status"])
-    ap.add_argument("--config", help="Path to user.config.json (default: auto-detect).")
-    ap.add_argument("--folder", action="append",
-                    help=f"Ext search folder(s) (default: {DEFAULT_FOLDER}).")
-    ap.add_argument("--enable", action="append",
-                    help=f"Ext name(s) to auto-enable (default: {DEFAULT_EXTS}).")
-    ap.add_argument("--autostart-port", type=int, default=DEFAULT_AUTOSTART_PORT,
-                    help="Bridge bind port (0 to skip).")
-    ap.add_argument("--bind-host", default=None,
-                    help="Bridge bind address (default localhost). SECURITY: the "
-                         "bridge serves run_python — bind a tailnet/LAN IP only on "
-                         "boxes/networks you trust; never 0.0.0.0 on a public host.")
-    ap.add_argument("--path", help="add/remove-project: dir containing the tool package.")
-    ap.add_argument("--module", help="add/remove-project: tool package module name.")
-    ap.add_argument("--remove", action="store_true",
-                    help="install: undo exactly what this script adds.")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Print intended changes; write nothing.")
-    args = ap.parse_args()
-
-    cfg = Config(find_config(args.config))
-    print(f"config: {cfg.path}")
-
-    if args.command == "install":
-        cmd_install(cfg, args)
-    elif args.command == "add-project":
-        if not (args.path and args.module):
-            sys.exit("add-project requires --path and --module")
-        cmd_add_project(cfg, args)
-    elif args.command == "remove-project":
-        if not args.module:
-            sys.exit("remove-project requires --module")
-        cmd_remove_project(cfg, args)
-    elif args.command == "status":
-        cmd_status(cfg, args)
+        settings.edit(settings.app, "userFolders", [folder for folder in search if folder not in folders])
+        settings.edit(settings.app, "enabled", others)
+        settings.put(PORT.leaf, None)
+        settings.put(BIND.leaf, None)
         return
+    for folder in folders:
+        if not os.path.isdir(folder):
+            print(f"warning: {folder} is not a folder")
+    settings.edit(settings.app, "userFolders", search + [folder for folder in folders if folder not in search])
+    settings.edit(settings.app, "enabled", others + [extension_id(name, folders) for name in names])
+    if args.autostart_port:
+        settings.put(PORT.leaf, args.autostart_port)
+    if args.bind_host:
+        settings.put(BIND.leaf, args.bind_host)
 
-    cfg.write(args.dry_run)
+
+def project(settings, args, add):
+    if not args.module or (add and not args.path):
+        sys.exit("add-project needs --path and --module; remove-project needs --module")
+    path = os.path.abspath(os.path.expanduser(args.path)) if args.path else None
+    paths = as_list(settings.bridge().get(TOOL_PATHS.leaf))
+    modules = as_list(settings.bridge().get(TOOL_MODULES.leaf))
+    if add:
+        if not (os.path.isdir(os.path.join(path, args.module)) or os.path.isfile(os.path.join(path, args.module + ".py"))):
+            print(f"warning: {path} has no module named {args.module}")
+        paths, modules = paths + [path] * (path not in paths), modules + [args.module] * (args.module not in modules)
+    else:
+        paths, modules = [item for item in paths if item != path], [item for item in modules if item != args.module]
+    settings.edit(settings.bridge(), TOOL_PATHS.leaf, paths)
+    settings.edit(settings.bridge(), TOOL_MODULES.leaf, modules)
+
+
+def status(settings):
+    bridge = settings.extensions.get(BRIDGE_KEY, {})
+    for label, value in (("extension folders", as_list(settings.app.get("userFolders"))),
+                         ("enabled", as_list(settings.app.get("enabled"))),
+                         ("bridge port", bridge.get(PORT.leaf)), ("bridge address", bridge.get(BIND.leaf)),
+                         ("tool modules", as_list(bridge.get(TOOL_MODULES.leaf))),
+                         ("tool paths", as_list(bridge.get(TOOL_PATHS.leaf)))):
+        print(f"{label}: {value}")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("command", nargs="?", default="install", choices=["install", "add-project", "remove-project", "status"])
+    parser.add_argument("--config", help="the app's user.config.json (default: the only one found)")
+    parser.add_argument("--folder", action="append", help="install: extension folder to register (default: this repository's exts)")
+    parser.add_argument("--enable", action="append", help=f"install: extension to enable (default: {', '.join(EXTENSIONS)})")
+    parser.add_argument("--autostart-port", type=int, default=DEFAULT_PORT, help=f"install: the bridge's port (default {DEFAULT_PORT})")
+    parser.add_argument("--bind-host", help="install: address the bridge listens on (default: localhost only)")
+    parser.add_argument("--path", help="add-project, remove-project: the folder that holds the tool package")
+    parser.add_argument("--module", help="add-project, remove-project: the tool package's module name")
+    parser.add_argument("--remove", action="store_true", help="install: undo the registration")
+    parser.add_argument("--dry-run", action="store_true", help="show the changes and write nothing")
+    args = parser.parse_args(argv)
+    settings = Settings(find_config(args.config))
+    print(f"config: {settings.path}")
+    if args.command == "status":
+        return status(settings)
+    if args.command == "install":
+        install(settings, args)
+    else:
+        project(settings, args, add=args.command == "add-project")
+    settings.save(args.dry_run)
 
 
 if __name__ == "__main__":

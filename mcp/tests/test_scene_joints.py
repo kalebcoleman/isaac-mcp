@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
 from isaac_mcp.project_assets import AssetError
-from sim_tools.advanced import allowed_targets, bounded_names, resolve_named
+from sim_tools.joint_tools import allowed_targets, bounded_names, resolve_named
 from sim_tools.physics import (
     dof_gains,
     dof_limits,

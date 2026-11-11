@@ -76,8 +76,15 @@ configured filters.
 | Generic scene and assets | 71 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, controller runs, trajectory replay, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
 | UR5e twin (`ur5e_dt__*`) | 23 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, a client lists exactly 134 tools from startup:
+With default groups and no namespace filter, the server registers exactly 134 tools from startup:
 the host, Isaac Lab, bridge built-in, generic and UR5e catalog tiers, whether or not Kit is running.
+A client is shown **45 tools**: related tools are listed as one grouped tool with an `action`
+argument (`sim__prim(action="create")`, `ur5e_dt__scene(action="quick_start")`, `jobs(action="status")`),
+and `action="help"` describes each action. The single-purpose names used in this guide and the
+docs (`sim__prim__create`, `sim__stage__save`) are the tools behind those actions: each is still
+callable by that name with the same arguments, deprecated, and no longer listed.
+`ISAAC_MCP_GROUP_TOOLS=0` lists them singly. The [table of groups](docs/TOOLS-HOST.md#grouped-tools)
+maps every action to its tool.
 A listed tool does not prove that a bridge exists: catalogued tools dial the selected bridge when
 called and return an actionable error if none answers. Use `status` (or the CLI check below) to
 find out. Fewer tools mean a filter:
@@ -92,7 +99,10 @@ find out. Fewer tools mean a filter:
 The other 9 tools are the bridge built-ins, also listed from a snapshot. With the standard
 groups there are 134 tools in total; the optional desktop input and simulator session groups add 9 more.
 `ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 63 tools with otherwise standard settings.
-These filters control discovery, not security.
+These filters control discovery, not security. Two things are enforced by the bridge itself: every
+connection must present the bridge's token (clients on the same account read it from a private
+file; `python3 mcp/isaac_mcp/client.py` does too), and a Kit started with `ISAAC_MCP_READ_ONLY=1`
+refuses every tool that changes something with the code `READ_ONLY`. Do not work around either.
 
 `ur5e_dt__quick_start*` leaves the timeline playing, and generic edits refuse with `TIMELINE_ACTIVE` until an
 explicit `sim__timeline__control` stop. Joint tools take the articulation root (for the twin, `/World/UR5e/root_joint`,
@@ -143,7 +153,8 @@ client setup is in [MCP server](docs/MCP-SERVER.md).
   filesystem. Verify the target PID and port (`status`, or the CLI check above) once, before the
   first scene-changing call, and again only after `use_bridge` or a simulator restart.
 - Long simulator work runs as a job: `run_python` with `background=true`, `sim__simulation__run`
-  (your controller's force and torque on a body every physics step) and `sim__trajectory__replay`
+  (your controller's force and torque on a body every physics step; `mode="play"` runs it on a
+  playing timeline beside ROS and action graphs) and `sim__trajectory__replay`
   (a saved trajectory into a labelled video) return a `job_id`. Wait with `job_status` and `wait_s`
   rather than polling, stop with `job_cancel`, and after a failed run call `sim__timeline__control`
   with `action=reset`. A Python controller is code in Kit and needs `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`
@@ -164,17 +175,19 @@ client setup is in [MCP server](docs/MCP-SERVER.md).
   tools only; the standard groups are registered by default). `ISAAC_MCP_LOCAL_TOOLS=readonly` leaves only the
   local tools that read state, but it does not touch bridge tools: with a bridge connected,
   `run_python` and `ur5e_dt__*` can still change the scene, so it is not a read-only server.
+  For a simulator that cannot be changed, start Kit with `ISAAC_MCP_READ_ONLY=1`.
   The three variables compose; see [TOOLS-HOST.md](docs/TOOLS-HOST.md) and, for what a
   scene-safe profile needs, [MCP-SERVER.md](docs/MCP-SERVER.md#limiting-what-a-client-can-reach).
 - Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). The job
   inspection and Python probe tools can have side effects and are not in `readonly`;
   `screenshot` writes files and returns desktop pixels. Annotations are hints, not enforcement.
   Generic scene/asset tools, bridge built-ins and the UR5e twin carry host annotations. Tools a project's own extension registers carry none.
+  A grouped tool carries the most cautious hints of its actions.
 
 ## Importing robots and assets
 
 One tool, `assets__import_path`, imports USD, URDF, xacro, SDF, MuJoCo XML, meshes, ROS maps and folders that hold them
-(`format=auto`); the three older import tools were folded into it. Read [docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md) for formats,
+(`format=auto`). Read [docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md) for formats,
 options, error codes and limits. A file is converted on the host and no code from it is ever run; every file it names must be inside an
 approved folder, and only the user can approve one (ask for the smallest folder). `sim__quick_start environment=warehouse` builds a
 warehouse with a robot in it. A new format is an option on that tool, not a new tool.

@@ -2,8 +2,9 @@
 
 import ast
 from pathlib import Path
+import twin_source
 
-SOURCE = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.py"
+SOURCE = twin_source.SOURCE
 
 
 def _source() -> str:

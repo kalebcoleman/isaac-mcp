@@ -15,6 +15,12 @@ _spec.loader.exec_module(gb)
 TICK, PUB = "omni.graph.action.OnPlaybackTick", "isaacsim.ros2.bridge.ROS2PublishClock"
 
 
+@pytest.fixture(autouse=True)
+def single_purpose_tool_list(monkeypatch):
+    """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
+    monkeypatch.setenv("ISAAC_MCP_GROUP_TOOLS", "0")
+
+
 def test_full_catalog_and_errors(monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     catalog = load_catalog()
@@ -125,7 +131,7 @@ def test_unavailable_profile_does_not_start_trusted_server(tmp_path):
 
 def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch):
     from isaac_mcp.client import BridgeClient
-    from test_bridge import LiveBridge, td
+    from bridge_testing import LiveBridge, td
 
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)

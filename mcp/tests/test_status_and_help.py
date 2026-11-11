@@ -14,8 +14,8 @@ from isaac_mcp.client import BridgeError
 IDENTITY = {
     "pid": 4242, "port": 8766, "app": "Isaac Sim", "app_version": "6.2.0", "headless": True, "app_ready": True,
     "uptime_s": 12.5, "hostname": "lab", "bind_host": "127.0.0.1", "python": "3.12.0", "namespaces": ["sim", "assets"],
-    "tools": 80, "toolsets": {"sim": "abc"}, "admission": {"queued": 0}, "hold": {"held": False},
-    "jobs": {"running": 0, "jobs": []}, "extension": {"commit": "unknown", "dirty": None},
+    "tools": 80, "busy": {"running": [], "waiting": 0, "exclusive": None},
+    "jobs": {"running": 0, "jobs": []}, "read_only": False, "auth": True, "extension": {"commit": "unknown", "dirty": None},
 }
 STAGE = {"session_id": "s1", "stage_id": "g1", "source": "anon:0x1:World.usd", "default_prim": "/World", "playing": False,
          "stopped": True, "runtime": {"physics_engine": "physx"}, "prim_count": 9}
@@ -38,8 +38,6 @@ def state(monkeypatch, tmp_path):
     monkeypatch.setattr(gw, "_advertised", lambda: [])
     monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])
     monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
-    monkeypatch.setattr(gw, "_PRE_DISPATCH_HOOKS", [])
-    monkeypatch.setattr(gw, "_POST_DISPATCH_HOOKS", [])
     return gw._BridgeState()
 
 
@@ -49,7 +47,7 @@ def test_status_is_one_short_answer_with_the_stage_ids(state):
     assert out["running"] is True and out["pid"] == 4242 and out["port"] == 8766 and out["app_ready"] is True
     assert out["stage"] == {"session_id": "s1", "stage_id": "g1", "source": "anon:0x1:World.usd", "default_prim": "/World",
                             "timeline": "stopped", "physics_engine": "physx"}
-    assert not {"admission", "toolsets", "namespaces", "extension", "hold", "bridges", "jobs_running"} & set(out)
+    assert not {"namespaces", "extension", "busy", "read_only", "bridges", "jobs_running"} & set(out)
     assert "no need to call this again" in out["note"]
     assert [tool for tool, _ in state.client.calls] == ["status", "sim.stage.info"], "one check-in is two cheap bridge reads"
     assert len(json.dumps(out)) < 900
@@ -64,13 +62,13 @@ def test_status_detail_is_the_full_identity_and_never_reaches_an_older_bridge_as
 
 
 def test_status_names_what_else_is_running(state, monkeypatch):
-    busy = dict(IDENTITY, namespaces=[], hold={"held": True, "holder": "eval"},
+    busy = dict(IDENTITY, namespaces=[], read_only=True, busy={"running": ["run_python"], "waiting": 2, "exclusive": "run_python"},
                 jobs={"running": 1, "jobs": [{"job_id": "job-1", "kind": "sim.simulation.run", "state": "running"}]})
     state.client = Bridge({"status": busy})
     monkeypatch.setattr(gw, "_advertised", lambda: [{"port": 8766, "pid": 4242}, {"port": 8770, "pid": 5151}])
     monkeypatch.setattr(gw, "live_sessions", lambda env=None: [{"id": "abc", "port": 8770, "pid": 5151, "physics_backend": "newton", "log": "x"}])
     out = json.loads(gw._dispatch("status", {}, state))
-    assert out["jobs_running"][0]["job_id"] == "job-1" and out["hold"]["holder"] == "eval"
+    assert out["jobs_running"][0]["job_id"] == "job-1" and out["busy"]["exclusive"] == "run_python" and out["read_only"] is True
     assert [b["port"] for b in out["bridges"]] == [8766, 8770]
     assert out["managed_sessions"] == [{"id": "abc", "port": 8770, "pid": 5151, "physics_backend": "newton"}]
     assert "sim-tools" in out["stage"]["note"], "a Kit without the scene pack says so instead of failing"
@@ -95,7 +93,7 @@ def test_nothing_running_is_an_answer_that_names_the_next_call(state, monkeypatc
 
 
 def test_a_bridge_that_answers_badly_is_still_an_error(state):
-    for failure in (TimeoutError("timed out"), BridgeError("DOORWAY_BUSY: run_python holds the loop")):
+    for failure in (TimeoutError("timed out"), BridgeError("AUTH_REQUIRED: this bridge needs its token")):
         state.client = Bridge({"status": failure})
         assert gw._dispatch("status", {}, state).startswith("Error:")
     state.client = Bridge({"status": IDENTITY, "sim.stage.info": BridgeError("APP_STARTING")})
@@ -104,28 +102,15 @@ def test_a_bridge_that_answers_badly_is_still_an_error(state):
 
 # ---- job_status through the host ----
 
-def test_job_status_waits_on_the_host_until_the_job_ends(state, monkeypatch):
-    monkeypatch.setattr(gw, "JOB_WAIT_POLL_S", 0.0)
-    replies = iter([{"job_id": "job-1", "state": "running"}] * 3 + [{"job_id": "job-1", "state": "succeeded", "result": {"steps": 5}}])
-    state.client = Bridge({"job_status": lambda params: next(replies)})
+def test_a_simulator_job_s_wait_is_served_by_the_simulator_in_one_call(state):
+    state.client = Bridge({"job_status": lambda params: {"job_id": "job-1", "state": "succeeded", "result": {"steps": 5}}})
     out = json.loads(gw._dispatch("job_status", {"job_id": "job-1", "wait_s": 30}, state))
-    assert out["state"] == "succeeded" and "wait_timed_out" not in out
-    assert state.client.calls == [("job_status", {"job_id": "job-1"})] * 4, "wait_s never reaches the bridge"
-
-
-def test_job_status_wait_gives_up_and_says_so_and_bad_waits_are_refused(state, monkeypatch):
-    monkeypatch.setattr(gw, "JOB_WAIT_POLL_S", 0.0)
-    state.client = Bridge({"job_status": {"job_id": "job-1", "state": "running"}})
-    out = json.loads(gw._dispatch("job_status", {"job_id": "job-1", "wait_s": 0.01}, state))
-    assert out["state"] == "running" and out["wait_timed_out"] is True
-    assert json.loads(gw._dispatch("job_status", {"job_id": "job-1"}, state)) == {"job_id": "job-1", "state": "running"}
+    assert out["state"] == "succeeded"
+    assert state.client.calls == [("job_status", {"job_id": "job-1", "wait_s": 30})], "one call: the bridge waits, not the host"
     for bad in (61, -1, True):
         refused = gw._dispatch("job_status", {"job_id": "job-1", "wait_s": bad}, state)
         assert gw._failed_tool_result(refused) and "wait_s" in refused
-    listing = Bridge({"job_status": {"jobs": [], "running": 0}})
-    state.client = listing
-    assert json.loads(gw._dispatch("job_status", {"wait_s": 5}, state)) == {"jobs": [], "running": 0}
-    assert len(listing.calls) == 1, "a listing has nothing to wait for"
+    assert len(state.client.calls) == 1, "a bad wait is refused before anything is asked"
 
 
 def replay_result(folder, frames=4):
@@ -209,9 +194,9 @@ def test_recording_can_be_turned_off_and_never_breaks_the_answer(tmp_path, monke
     assert gw._isaac_help("simulate cloth tearing").startswith("No isaac tool is known to fit")
 
 
-# ---- one pair of tools follows every job: simulator jobs and host-managed ones ----
+# ---- one pair of tools follows every job: simulator jobs and process jobs ----
 
-def test_job_status_and_cancel_also_take_a_lab_or_script_job_id_and_need_no_bridge(state, tmp_path, monkeypatch):
+def test_job_status_and_cancel_also_take_a_process_job_and_need_no_bridge(state, tmp_path, monkeypatch):
     import sys
     import time
 
@@ -228,10 +213,89 @@ def test_job_status_and_cancel_also_take_a_lab_or_script_job_id_and_need_no_brid
         if running.get("progress"):
             break
     assert running["state"] == "running" and running["wait_timed_out"] is True and running["progress"]["fraction"] == 0.25
-    assert running["health"] == "ok" and "host" in running["managed_by"] and state.client.calls == []
+    assert running["health"] == "ok" and running["job_id"] == started["job_id"] and state.client.calls == []
     cancelled = json.loads(gw._dispatch("job_cancel", {"job_id": started["job_id"]}, state))
     assert "error" not in cancelled
     final = json.loads(gw._dispatch("job_status", {"job_id": started["job_id"], "wait_s": 20}, state))
     assert final["state"] == "cancelled" and "wait_timed_out" not in final
+    state.client = Bridge({"job_status": BridgeError("unknown job '20260101-000000-nothing'")})
     missing = gw._dispatch("job_status", {"job_id": "20260101-000000-nothing"}, state)
-    assert gw._failed_tool_result(missing) and "unknown job" in missing
+    assert gw._failed_tool_result(missing) and "unknown job" in missing, "no record here: the simulator is asked, and says so"
+
+
+def kit_record(tmp_path, job_id, **fields):
+    import os
+
+    from isaac_mcp.isaaclab import jobs
+
+    folder = tmp_path / "jobs" / job_id
+    folder.mkdir(parents=True)
+    record = {"id": job_id, "job_id": job_id, "kind": "sim.simulation.run", "task": "hover", "label": "hover", "runner": "kit",
+              "uses_gpu": False, "status": "running", "pid": os.getpid(), "pid_start": jobs._process_start(os.getpid()),
+              "port": 8766, "started_at": 1000.0, "finished_at": None, "exit_code": None, "log_dir": str(folder), **fields}
+    (folder / "job.json").write_text(json.dumps(record))
+    return record
+
+
+def test_a_running_simulator_job_is_asked_of_its_simulator_and_a_finished_one_is_read_from_its_record(state, tmp_path, monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_PORT", "8766")
+    kit_record(tmp_path, "20261111-120000-sim.simulation.run-1", progress={"fraction": 0.1})
+    state.client = Bridge({"job_status": lambda params: {"job_id": params["job_id"], "state": "running", "output_tail": "live"},
+                           "job_cancel": lambda params: {"job_id": params["job_id"], "cancel_requested": True}})
+    live = json.loads(gw._dispatch("job_status", {"job_id": "20261111-120000-sim.simulation.run-1"}, state))
+    assert live["output_tail"] == "live", "while it runs, the simulator's own answer"
+    assert json.loads(gw._dispatch("job_cancel", {"job_id": "20261111-120000-sim.simulation.run-1"}, state))["cancel_requested"] is True
+    kit_record(tmp_path, "20261111-120500-sim.trajectory.replay-2", status="succeeded", finished_at=1012.5, result={"frames": 45})
+    calls = len(state.client.calls)
+    done = json.loads(gw._dispatch("job_status", {"job_id": "20261111-120500-sim.trajectory.replay-2"}, state))
+    assert done["state"] == "succeeded" and done["result"] == {"frames": 45} and done["elapsed_s"] == 12.5 and done["runner"] == "kit"
+    assert len(state.client.calls) == calls, "a finished job needs no simulator: its record answers"
+
+
+def test_a_simulator_job_whose_simulator_is_gone_reads_failed_and_cannot_signal_anything(state, tmp_path):
+    kit_record(tmp_path, "20261111-130000-run_python-3", pid=999999999, pid_start="1")
+    state.client = Bridge({})
+    gone = json.loads(gw._dispatch("job_status", {"job_id": "20261111-130000-run_python-3"}, state))
+    assert gone["state"] == "failed" and "simulator exited" in gone["note"] and gone["pid_alive"] is False
+    kit_record(tmp_path, "20261111-130100-run_python-4")     # this test process stands in for a live simulator
+    from isaac_mcp.isaaclab import jobs
+
+    with pytest.raises(ValueError, match="runs inside Isaac Sim"):
+        jobs.runs_cancel("20261111-130100-run_python-4")
+
+
+def test_the_job_list_holds_both_kinds_newest_first(state, tmp_path, monkeypatch):
+    import sys
+
+    from isaac_mcp.isaaclab import jobs
+
+    monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
+    kit_record(tmp_path, "20200101-000000-sim.simulation.run-1", status="succeeded", finished_at=1001.0)
+    script = tmp_path / "quick.py"
+    script.write_text("print('done')\n")
+    started = jobs.run_script(sys.executable, script, uses_gpu=False)
+    state.client = Bridge({"job_status": {"jobs": [{"job_id": "20991231-235959-run_python-9", "kind": "run_python", "state": "running"}], "running": 1}})
+    listing = json.loads(gw._dispatch("job_status", {}, state))
+    ids = [job["job_id"] for job in listing["jobs"]]
+    assert ids == ["20991231-235959-run_python-9", started["job_id"], "20200101-000000-sim.simulation.run-1"]
+    assert listing["jobs"][0]["runner"] == "kit" and listing["jobs"][2]["runner"] == "kit" and "runner" not in listing["jobs"][1]
+    assert listing["running"] >= 1
+    state.client = Bridge({"job_status": ConnectionRefusedError("no simulator")})
+    assert len(json.loads(gw._dispatch("job_status", {}, state))["jobs"]) == 2, "with no simulator the records are the list"
+
+
+def test_the_check_in_does_not_reread_jobs_and_sessions_that_have_ended(tmp_path, monkeypatch):
+    from isaac_mcp.isaaclab import jobs as lab_jobs
+
+    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path))
+    for name, status in (("a-done", "finished"), ("b-failed", "failed")):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "job.json").write_text(json.dumps({"id": name, "status": status, "pid": 1}))
+    read = []
+    original = lab_jobs._read_job
+    monkeypatch.setattr(lab_jobs, "_read_job", lambda folder: (read.append(folder.name), original(folder))[1])
+    assert lab_jobs.running_jobs() == [] and sorted(read) == ["a-done", "b-failed"]
+    (tmp_path / "c-new").mkdir()
+    (tmp_path / "c-new" / "job.json").write_text(json.dumps({"id": "c-new", "status": "finished"}))
+    del read[:]
+    assert lab_jobs.running_jobs() == [] and read == ["c-new"], "only the job not seen before is read"

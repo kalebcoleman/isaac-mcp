@@ -3,11 +3,12 @@
 import ast
 import os
 import sys
-from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+
+import twin_source
 
 
 class GraphReached(Exception):
@@ -16,8 +17,7 @@ class GraphReached(Exception):
 
 @pytest.mark.parametrize("configured", [False, True])
 def test_camera_config_is_only_read_when_explicit(tmp_path, monkeypatch, configured):
-    repo = Path(__file__).resolve().parents[2]
-    source = repo / "exts" / "ur5e-dt" / "ur5e_dt" / "extension.py"
+    source = twin_source.SOURCE
     tree = ast.parse(source.read_text())
     method = next(node for node in ast.walk(tree)
                   if isinstance(node, ast.FunctionDef) and node.name == "setup_camera_action_graph")

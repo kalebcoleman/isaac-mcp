@@ -19,9 +19,9 @@ starts `run.sh`. Set host variables in the client's `env` for the `isaac` server
 | `ISAAC_MCP_LOG` | `1` | `0` turns off the host server's durable log file (stderr logging stays). See [Diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log). |
 | `ISAAC_MCP_LOG_DIR` | `$XDG_STATE_HOME/isaac-mcp`, else `~/.local/state/isaac-mcp` | Directory of the host's `server-<pid>.log` (1 MB x 3, private). The bridge reads the same variable for its failure log. |
 | `DISPLAY` | `:0` | X11 display for the desktop tools. Match your session. |
-| `ISAAC_MCP_HOLD_TOKEN`, `ISAAC_MCP_HOLD_TOKEN_FILE` | unset | Token for a held bridge doorway. See [protocol](../mcp/docs/protocol.md). |
+| `ISAAC_MCP_GROUP_TOOLS` | `1` | `0` lists every tool singly instead of grouped. See [grouped tools](TOOLS-HOST.md#grouped-tools). |
 
-The filters are visibility preferences, not a security boundary. See
+The filters are visibility preferences, not a security boundary; the token and read-only mode are enforced by the bridge. See
 [limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach).
 
 ### Managed sessions (`sim__launch`, opt-in)
@@ -44,7 +44,7 @@ The filters are visibility preferences, not a security boundary. See
 | `ISAACLAB_PYTHON` | discovered | Lab interpreter. An invalid explicit path fails discovery instead of falling back. It takes priority over `isaaclab_python` in a named project's `isaac-mcp.json` ([project setting](TOOLS-ISAACLAB.md#setup-and-configuration)). |
 | `ISAAC_MCP_SIM_LAUNCHER` | unset | With `sim_launch`: [a project's own launcher](TOOLS-HOST.md#a-projects-own-launcher) for `sim__launch`. Only from here, never from a tool argument or project file. |
 | `ISAACLAB_ROOT` | discovered | Lab checkout. |
-| `ISAACLAB_JOBS_DIR` | `~/.local/share/isaac-mcp/jobs` | Job state. |
+| `ISAACLAB_JOBS_DIR` | `~/.local/share/isaac-mcp/jobs` | Job records, for Isaac Lab jobs and simulator jobs alike. |
 | `ISAACLAB_LOGS_DIR` | unset | Extra run directory for checkpoints and metrics. |
 | `ISAACLAB_GPU_BUDGET_HOURS` | unset | Optional GPU-hour cap for Lab jobs (off by default; see [preflight](TOOLS-ISAACLAB.md#optional-gpu-hours-used)). |
 | `ISAACLAB_GPU_LEDGER` | unset | Optional JSON file for that cap. |
@@ -81,15 +81,18 @@ Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).
 
 ### Bridge (`isaac.mcp.bridge`)
 
+Read by Kit. Each is also a stored Kit setting under `/persistent/exts/isaac.mcp.bridge/` (`autostartPort`,
+`autostartHost`, `toolModules`, `toolPaths`, `auth`, `token`, `readOnly`); `scripts/install.py` writes the first
+four, and the environment wins. The [protocol](../mcp/docs/protocol.md) page explains the token, read-only mode and remote access.
+
 | Variable | Default | Meaning |
 |---|---|---|
 | `ISAAC_MCP_PORT` | persisted setting | Bridge port. A taken port refuses at startup. |
 | `ISAAC_MCP_BIND` | `localhost` | Bind address. Beyond loopback needs a real trust boundary, because the bridge serves `run_python`. |
-| `ISAAC_MCP_TOOL_MODULES`, `ISAAC_MCP_TOOL_PATHS` | persisted setting | Per-launch tool packages and their search paths. |
-| `ISAAC_MCP_QUEUE_CAP_S` | `900` | Longest wait a request may state. |
-| `ISAAC_MCP_QUEUE_LIMIT` | `64` | Maximum waiting requests. |
-| `ISAAC_MCP_LOG_DIR` | bridge runtime directory | Where a failing call's frames are written (`tool-failures-<pid>.log`). The host server reads the same variable for its `server-<pid>.log`; see the host table above. |
-| `ISAAC_MCP_AUTHORING_TELEMETRY` | unset | File that receives a record of each completed tool call. See [protocol](../mcp/docs/protocol.md). |
+| `ISAAC_MCP_TOOL_MODULES`, `ISAAC_MCP_TOOL_PATHS` | persisted setting | Your own [tool packages](../mcp/docs/tool-authoring.md) and the folders they are in. |
+| `ISAAC_MCP_AUTH` | `1` | `0` starts a bridge that accepts connections without a token. |
+| `ISAAC_MCP_TOKEN` | a random one per launch | The token connections must present. Set it for Kit to choose it; set the same value for a client that cannot read the bridge's token file (another machine or account). See [protocol](../mcp/docs/protocol.md#the-token). |
+| `ISAAC_MCP_READ_ONLY` | `0` | `1` starts a bridge that runs only read-only tools. See [limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach). |
 
 ## Both host and Kit
 

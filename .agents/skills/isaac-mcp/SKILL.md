@@ -46,6 +46,13 @@ Pause before saving and check the exported scene after reopening in a fresh proc
 6. **One lab's UR5e digital twin (RISE lab):** `ur5e_dt__quick_start`, only when that twin is what was asked for.
 7. **See the result:** `screenshot`; for video, `start_screen_recording`.
 
+**Tool names.** The server lists related tools as one tool with an `action` argument: `sim__stage__info` is
+`sim__stage` with `action="info"`, and `ur5e_dt__quick_start` is `ur5e_dt__scene` with `action="quick_start"`.
+This guide writes the single-purpose name. When your tool list shows the grouped tool, call that: usually the
+last part of the name is the action, `action="help"` lists a group's actions, and the arguments are the same.
+The server's own messages already name tools the way your list shows them; the full mapping is the table in
+`docs/TOOLS-HOST.md` ("Grouped tools").
+
 `sim__*` and `assets__*` are universal. `ur5e_dt__*` is specific to that twin. If a tool answers that no
 bridge is reachable, go to [First calls in a session](#first-calls-in-a-session).
 
@@ -379,7 +386,7 @@ worked while locked on GNOME.
 | `window_*` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find`/`sim__ui__act`; other apps need the desktop unlocked |
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use the bridge CLI: `... list_tools --port <port>` |
 | Tools vanish, the client says the server "disconnected" and reconnected | Each client owns one server process; it ended (EOF, signal or crash) and a new one started | Read `~/.local/state/isaac-mcp/server-<pid>.log` (newest file first; the last lines say EOF, a signal, or a traceback). `status` shows `host.code_drift: true` when the checkout changed under a running server: reconnect |
-| Tool count differs from 134 | `ISAAC_MCP_LOCAL_TOOLS` etc. in the client entry: +5 `screen_input`, +4 `sim_launch` = 143 | Compare with the filters on the log's `process start` line |
+| Tool count differs from 134 | 45 are listed when tools are grouped (the default); `ISAAC_MCP_GROUP_TOOLS=0` lists all 134. Otherwise `ISAAC_MCP_LOCAL_TOOLS` etc. in the client entry: +5 `screen_input`, +4 `sim_launch` = 143 | Compare with the filters on the log's `process start` line |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed (Kit restarted, stage opened) | The message names the current `session_id` and `stage_id`: resend with those, never the old ones |

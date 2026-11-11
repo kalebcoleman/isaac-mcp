@@ -7,13 +7,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import twin_source
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _twin_function(name):
-    tree = ast.parse((ROOT / "exts/ur5e-dt/ur5e_dt/extension.py").read_text())
+    tree = ast.parse(twin_source.SOURCE.read_text())
     return next(n for n in ast.walk(tree)
                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name)
 

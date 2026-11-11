@@ -9,9 +9,10 @@ from typing import Any, Dict
 from unittest.mock import Mock
 
 import pytest
+import twin_source
 
 
-SOURCE = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/extension.py"
+SOURCE = twin_source.SOURCE
 
 
 def _method(name, namespace):

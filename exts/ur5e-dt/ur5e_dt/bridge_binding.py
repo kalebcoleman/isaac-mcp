@@ -3,6 +3,7 @@
 OWNER_ID = "ur5e-dt"
 NAMESPACE = "ur5e_dt"
 DEFAULT_PORT = 8766
+READ_ONLY = frozenset({"get_recording_status"})     # the twin tools a read-only bridge still runs
 
 
 def attach(bridge, registry, instance, tool_type, *, requested_port=None, configured_port=None, host="localhost"):
@@ -32,6 +33,10 @@ def attach(bridge, registry, instance, tool_type, *, requested_port=None, config
                 description=schema["description"],
                 parameters=schema.get("parameters", {}),
                 handler=getattr(instance, "_cmd_" + name),
+                # The twin's handlers await frames and share one scene: each runs alone, and
+                # calls that arrive meanwhile wait, whoever sent them.
+                exclusive=True,
+                read_only=name in READ_ONLY,
             ))
         if listening is None:
             port = requested_port if requested_port is not None else (configured_port or DEFAULT_PORT)

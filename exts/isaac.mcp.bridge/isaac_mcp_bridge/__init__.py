@@ -1,41 +1,15 @@
-"""isaac.mcp.bridge — generic MCP socket bridge for Omniverse Kit.
+"""isaac.mcp.bridge: tools registered by Kit extensions, served to MCP clients over a local socket.
 
-Public API:
-    get_mcp_bridge() -> McpBridge   # the process-global bridge singleton
-    McpBridge                       # owner registry + NDJSON socket server + main-thread dispatch
-    ToolDefinition                  # one tool (local name, description, parameters, handler)
-    OwnerRegistrar                  # owner-bound registration facade (what register() receives)
-    ToolError                       # handler-raised failure with structured diagnostics
-    load_tool_modules / reload_tool_module / prepend_tool_paths  # autoload machinery
-    register_toolset                # declared toolset: a module's public functions ARE the tools
+    from isaac_mcp_bridge import get_mcp_bridge, ToolDefinition
+
+    registrar = get_mcp_bridge().register_owner("my-ext", "my_ns")
+    registrar.add(ToolDefinition(name="hello", description="Say hello", handler=lambda: {"hi": True}))
 """
 
-import importlib.util as _ilu
-
-from .autoload import load_tool_modules, prepend_tool_paths, reload_tool_module
-from .bridge import McpBridge, OwnerRegistrar, ToolDefinition, get_mcp_bridge
+from . import knobs
+from .bridge import McpBridge, OwnerRegistrar, ToolDefinition, destroy_bridge, get_mcp_bridge
+from .packages import load_tool_modules, reload_tool_module
 from .protocol import ToolError
-from .toolset import register_toolset
 
-# extension.py is Kit-only (carb + omni.ext). Import it only when running inside
-# Kit, so the package's pure-stdlib surface stays importable off-Kit for lint /
-# standalone tests. Gate on carb's presence rather than try/except ImportError
-# so a *real* bug in extension.py still raises loudly inside Kit instead of
-# silently leaving the extension unregistered.
-if _ilu.find_spec("carb") is not None:
-    from .extension import McpBridgeExtension
-else:  # off-Kit: nobody instantiates the IExt, so None is safe
-    McpBridgeExtension = None
-
-__all__ = [
-    "McpBridge",
-    "OwnerRegistrar",
-    "ToolDefinition",
-    "ToolError",
-    "get_mcp_bridge",
-    "McpBridgeExtension",
-    "load_tool_modules",
-    "reload_tool_module",
-    "prepend_tool_paths",
-    "register_toolset",
-]
+__all__ = ["McpBridge", "OwnerRegistrar", "ToolDefinition", "ToolError", "destroy_bridge", "get_mcp_bridge", "knobs",
+           "load_tool_modules", "reload_tool_module"]

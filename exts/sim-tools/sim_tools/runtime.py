@@ -1,5 +1,6 @@
 """Read actual Kit identity and check native adapter capabilities at use."""
 
+import functools
 import importlib.metadata
 import inspect
 import os
@@ -7,6 +8,16 @@ from pathlib import Path
 
 from isaac_mcp.project_assets import refuse
 from isaac_mcp.sim_versions import reconcile_identity, sensor_stack_issues
+
+
+@functools.lru_cache(maxsize=None)
+def installed_version(distribution):
+    """An installed distribution's version, or None. Read once: it cannot change while Kit runs,
+    and reading it parses the package's metadata file."""
+    try:
+        return importlib.metadata.version(distribution)
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 def runtime_identity():
@@ -21,10 +32,8 @@ def runtime_identity():
         "isaacsim-sensor",
         "isaacsim-replicator",
     ):
-        try:
-            packages[name] = importlib.metadata.version(name)
-        except importlib.metadata.PackageNotFoundError:
-            pass
+        if installed_version(name) is not None:
+            packages[name] = installed_version(name)
     roots = {Path(isaacsim.__file__).parent}
     if os.getenv("ISAAC_PATH"):
         roots.add(Path(os.environ["ISAAC_PATH"]))
@@ -112,10 +121,7 @@ def runtime_identity():
         ("mujoco_warp", "mujoco-warp"),
     ):
         module = sys.modules.get(module_name)
-        try:
-            version = importlib.metadata.version(distribution)
-        except importlib.metadata.PackageNotFoundError:
-            version = None
+        version = installed_version(distribution)
         result["physics_packages"][module_name] = {
             "installed_version": version,
             "loaded": module is not None,

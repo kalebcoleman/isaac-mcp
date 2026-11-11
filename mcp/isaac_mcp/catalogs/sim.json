@@ -76,7 +76,7 @@
       "owner_id": "generic-sim"
     },
     "sim.quick_start": {
-      "description": "One call that builds a working scene for anyone, with nothing to supply and no IDs: a ground plane, physics scene, lights and a camera aimed at the scene, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.",
+      "description": "One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns session_id, stage_id, paths and next steps. For the RISE lab UR5e twin, use ur5e_dt__quick_start.",
       "parameters": {
         "robot": {
           "type": "string",
@@ -2697,7 +2697,7 @@
       "owner_id": "generic-sim"
     },
     "sim.simulation.run": {
-      "description": "Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. A stopped timeline is initialized; the run steps exactly and ends paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Run your own controller in the physics loop as a job. Each step gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. Steps exactly from a pause (mode=step), or follows a playing timeline (mode=play). Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2716,7 +2716,7 @@
         },
         "controller": {
           "type": "string",
-          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or package.module:function or /abs/file.py:function, loaded into Kit: needs ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 at Kit launch.",
+          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.",
           "required": true
         },
         "duration_s": {
@@ -2754,6 +2754,16 @@
           "type": "string",
           "description": "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.",
           "required": false
+        },
+        "mode": {
+          "type": "string",
+          "description": "step (default): exact steps from a paused timeline, repeatable and as fast as the machine allows. play: the timeline plays and the controller runs in the engine's pre-step callback, so ROS publishers and action graphs tick too; it keeps playing afterwards.",
+          "required": false,
+          "default": "step",
+          "enum": [
+            "step",
+            "play"
+          ]
         },
         "steps_per_frame": {
           "type": "integer",
@@ -2827,7 +2837,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or package.module:function or /abs/file.py:function, loaded into Kit: needs ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 at Kit launch."
+          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs."
         },
         {
           "name": "duration_s",
@@ -2885,6 +2895,18 @@
           "default": null,
           "has_default": false,
           "description": "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites."
+        },
+        {
+          "name": "mode",
+          "kind": "enum",
+          "enum": [
+            "step",
+            "play"
+          ],
+          "required": false,
+          "default": "step",
+          "has_default": true,
+          "description": "step (default): exact steps from a paused timeline, repeatable and as fast as the machine allows. play: the timeline plays and the controller runs in the engine's pre-step callback, so ROS publishers and action graphs tick too; it keeps playing afterwards."
         },
         {
           "name": "steps_per_frame",
@@ -3133,7 +3155,7 @@
       "owner_id": "generic-sim"
     },
     "sim.camera.create": {
-      "description": "Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X), focal_length=18, clipping_range=[0.01,100]. USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Create a persistent RTX camera on a stopped timeline. To watch something: path=/World/Cam, position=[3,-3,2], target=[0,0,0.5] aims it. On a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X). USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -3188,6 +3210,11 @@
           "description": "Pose frame: local or world.",
           "required": false,
           "default": "local"
+        },
+        "target": {
+          "type": "array",
+          "description": "World point [x, y, z] to aim the camera at, instead of orientation or rotate_xyz.",
+          "required": false
         },
         "rotate_xyz": {
           "type": "array",
@@ -3295,6 +3322,15 @@
           "default": "local",
           "has_default": true,
           "description": "Pose frame: local or world."
+        },
+        {
+          "name": "target",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "World point [x, y, z] to aim the camera at, instead of orientation or rotate_xyz."
         },
         {
           "name": "rotate_xyz",
