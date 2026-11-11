@@ -28,6 +28,8 @@ MAX_STEPS = 2_000_000
 MAX_STEPS_PER_FRAME = 120
 TCP_TIMEOUT_S = 5.0
 READY_FRAMES = 60
+MAX_OBSERVED = 8
+MAX_VIDEO_FRAMES = 3600
 LOG_NAME = r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}\.csv"
 LOG_COLUMNS = {
     "position": ("px", "py", "pz"),
@@ -129,10 +131,27 @@ def _vec3(value, label):
     return tuple(float(v) for v in value)
 
 
-def check_command(command, default_frame):
-    """(force, torque, frame, done, extra) from what a controller returned. None means no wrench."""
+def _numbers_by_name(value, label, names):
+    """{joint name: number} from a controller, checked against the articulation's own joint names."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or not all(type(v) in (int, float) and math.isfinite(v) for v in value.values()):
+        raise ValueError(f"{label} must map joint names to finite numbers")
+    if names is None:
+        raise ValueError(f"{label} needs the run's articulation argument")
+    unknown = [name for name in value if name not in names]
+    if unknown:
+        raise ValueError(f"{label} names unknown joint(s) {unknown[:4]}; this articulation has {names[:12]}")
+    return {names.index(name): float(v) for name, v in value.items()}
+
+
+def check_command(command, default_frame, bodies=(), joints=None):
+    """What a controller returned, checked: the wrench on the main body, wrenches on other bodies of
+    the run, joint efforts and targets, done and its own log numbers. None means nothing to apply."""
+    empty = dict(force=(0.0, 0.0, 0.0), torque=(0.0, 0.0, 0.0), frame=default_frame, done=False, extra={},
+                 wrenches={}, efforts=None, targets={}, velocity_targets={})
     if command is None:
-        return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), default_frame, False, {}
+        return empty
     if not isinstance(command, dict):
         raise ValueError(f"a controller returns a dict such as {{'force': [0, 0, 9.81]}} or None, not {type(command).__name__}")
     frame = command.get("frame", default_frame)
@@ -142,8 +161,24 @@ def check_command(command, default_frame):
     if not isinstance(extra, dict) or len(extra) > 16 or not all(
             isinstance(k, str) and type(v) in (int, float) for k, v in extra.items()):
         raise ValueError("log must be a dict of at most 16 numbers")
-    return (_vec3(command.get("force"), "force"), _vec3(command.get("torque"), "torque"), frame,
-            bool(command.get("done", False)), extra)
+    wrenches = {}
+    given = command.get("wrenches") or {}
+    if not isinstance(given, dict):
+        raise ValueError("wrenches must map body paths to {'force': [...], 'torque': [...]}")
+    for path, wrench in given.items():
+        if path not in bodies or not isinstance(wrench, dict):
+            raise ValueError(f"wrenches must map a body of this run ({', '.join(bodies) or 'none besides body'}) to "
+                             "{'force': [...], 'torque': [...]}")
+        local = wrench.get("frame", frame)
+        if local not in ("world", "body"):
+            raise ValueError("frame must be world or body")
+        wrenches[path] = (_vec3(wrench.get("force"), "force"), _vec3(wrench.get("torque"), "torque"), local)
+    efforts = command.get("joint_efforts")
+    return dict(force=_vec3(command.get("force"), "force"), torque=_vec3(command.get("torque"), "torque"), frame=frame,
+                done=bool(command.get("done", False)), extra=extra, wrenches=wrenches,
+                efforts=None if efforts is None else _numbers_by_name(efforts, "joint_efforts", joints),
+                targets=_numbers_by_name(command.get("joint_targets"), "joint_targets", joints),
+                velocity_targets=_numbers_by_name(command.get("joint_velocity_targets"), "joint_velocity_targets", joints))
 
 
 def log_fields(log):
@@ -235,10 +270,51 @@ class BodyIO:
               self._data([0], integer=True), frame == "world")
 
 
+class JointIO:
+    """Joint state of, and efforts and drive targets onto, one articulation through its tensor view."""
+
+    def __init__(self, path):
+        self.path = path
+        self.view = physics.view_for(path, articulation=True)
+        self.backend = physics.manager().get_active_physics_engine()
+        self.names = physics.dof_names(self.view)
+        self.wrote_efforts = False
+
+    def read(self):
+        positions = physics.array(self.view.get_dof_positions()).tolist()[0]
+        velocities = physics.array(self.view.get_dof_velocities()).tolist()[0]
+        for field, values in (("joint_positions", positions), ("joint_velocities", velocities)):
+            physics.runtime_vector(values, len(self.names), path=self.path, field=field, backend=self.backend)
+        return dict(names=self.names, positions=positions, velocities=velocities)
+
+    def apply(self, efforts, targets, velocity_targets):
+        if efforts is not None:
+            # The whole row every step: a joint the controller leaves out gets no effort, not last step's.
+            row = physics.dof_row(self.view, self.view.get_dof_positions()) * 0
+            for index, value in efforts.items():
+                row[0, index] = value
+            physics.dof_write(self.view, "set_dof_actuation_forces", row)
+            self.wrote_efforts = True
+        if targets:
+            physics.dof_set(self.view, "get_dof_position_targets", "set_dof_position_targets", targets)
+        if velocity_targets:
+            physics.dof_set(self.view, "get_dof_velocity_targets", "set_dof_velocity_targets", velocity_targets)
+
+    def release(self):
+        """Leave no effort behind when the run ends."""
+        if self.wrote_efforts:
+            try:
+                physics.dof_write(self.view, "set_dof_actuation_forces",
+                                  physics.dof_row(self.view, self.view.get_dof_positions()) * 0)
+            except Exception:  # noqa: BLE001 - the view may be gone with the stage
+                pass
+
+
 class CsvLog:
     """One row per sample, in a new file in the output folder; never overwrites."""
 
-    def __init__(self, folder, filename, fields):
+    def __init__(self, folder, filename, fields, joint_names=()):
+        self.joint_names = list(joint_names)
         if not isinstance(filename, str) or not re.fullmatch(LOG_NAME, filename):
             refuse("INVALID_OUTPUT", "filename: a new name of letters, digits, _ and -, ending .csv (<=64 characters).")
         folder.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -256,11 +332,14 @@ class CsvLog:
     def write(self, step, time_s, state, force, torque, extra):
         if self.extra is None:  # the controller's own columns are fixed by its first answer
             self.extra = sorted(extra)
-            self.writer.writerow(["step", "time_s", *(c for f in self.fields for c in LOG_COLUMNS[f]), *self.extra])
+            self.writer.writerow(["step", "time_s", *(c for f in self.fields for c in LOG_COLUMNS[f]),
+                                  *(f"q:{n}" for n in self.joint_names), *(f"dq:{n}" for n in self.joint_names), *self.extra])
         values = dict(position=state["position"], orientation=state["orientation_wxyz"],
                       linear_velocity=state["linear_velocity"], angular_velocity=state["angular_velocity"],
                       force=force, torque=torque)
+        joints = state.get("joints") or {}
         self.writer.writerow([step, f"{time_s:.9g}", *(f"{v:.9g}" for f in self.fields for v in values[f]),
+                              *(f"{v:.9g}" for key in ("positions", "velocities") if self.joint_names for v in joints[key]),
                               *(f"{extra.get(k, float('nan')):.9g}" for k in self.extra)])
         self.rows += 1
 
@@ -290,16 +369,28 @@ def validate(args):
         refuse("INVALID_VALUE", "params must be an object; it is passed to the controller as state['params'].")
     if params is not None and len(json.dumps(params)) > 16384:
         refuse("LIMIT", "params must be at most 16 KiB of JSON.")
+    observe = args.get("observe") or []
+    if not isinstance(observe, list) or len(observe) > MAX_OBSERVED or not all(isinstance(p, str) and p for p in observe):
+        refuse("INVALID_VALUE", f"observe must list at most {MAX_OBSERVED} rigid body paths.")
+    fps = args.get("fps", 30)
+    if type(fps) not in (int, float) or not 1 <= fps <= 60:
+        refuse("INVALID_VALUE", "fps must be 1..60 video frames per simulated second.")
+    label = args.get("label")
+    if label is not None and (not isinstance(label, str) or len(label) > 80 or "\n" in label):
+        refuse("INVALID_VALUE", "label must be one line of at most 80 characters.")
     return dict(duration=float(duration), per_frame=per_frame, every=every, frame=frame, params=params or {},
-                fields=log_fields(args.get("log")))
+                fields=log_fields(args.get("log")), observe=list(dict.fromkeys(observe)), fps=float(fps), label=label or None)
 
 
 class Run:
     """One controller run. Kit-specific pieces (the next app frame, the operation lock, the target
     check) are passed in, so the loop itself is plain Python."""
 
-    def __init__(self, body, controller, log, settings, stage, check_target, timeline, next_frame, lock):
+    def __init__(self, body, controller, log, settings, stage, check_target, timeline, next_frame, lock,
+                 others=None, joints=None, capture=None):
         self.body, self.controller, self.log = body, controller, log
+        self.others, self.joints, self.capture = others or {}, joints, capture
+        self.frames = []
         self.settings, self.stage = settings, stage
         self.check_target, self.timeline = check_target, timeline
         self.next_frame, self.lock = next_frame, lock
@@ -310,20 +401,35 @@ class Run:
             refuse("PHYSICS_CLOCK_INVALID", "The physics timestep must be finite and positive; nothing ran.")
         self.total = min(MAX_STEPS, max(1, round(settings["duration"] / self.dt)))
         self.per_frame = settings["per_frame"] or max(1, min(MAX_STEPS_PER_FRAME, round((1 / 60) / self.dt)))
+        if capture is not None:
+            # One camera frame per app frame, so the steps between app frames set the video's frame rate.
+            self.per_frame = max(1, min(MAX_STEPS_PER_FRAME, round(1 / (settings.get("fps", 30) * self.dt))))
+            if self.total / self.per_frame > MAX_VIDEO_FRAMES:
+                refuse("LIMIT", f"Recording this run would save more than {MAX_VIDEO_FRAMES} frames; lower fps or "
+                       "duration_s, or run without camera and replay a part with sim__trajectory__replay.")
 
     def _step(self, index):
         state = self.body.read()
+        if self.others:
+            state["observed"] = {path: other.read() for path, other in self.others.items()}
+        if self.joints is not None:
+            state["joints"] = self.joints.read()
         observed = dict(step=index, time_s=index * self.dt, dt=self.dt, **state, params=self.settings["params"])
         try:
-            force, torque, frame, done, extra = check_command(self.controller(observed), self.settings["frame"])
+            command = check_command(self.controller(observed), self.settings["frame"], (self.body.path, *self.others),
+                                    self.joints.names if self.joints is not None else None)
         except Exception as exc:  # noqa: BLE001 - the caller's controller: name it, with the step
             refuse("CONTROLLER_FAILED", f"The controller failed at step {index}: {type(exc).__name__}: {str(exc)[:600]}",
                    step=index, effects="The run stopped; the simulation stays paused where it was.")
         if index % self.settings["every"] == 0:
-            self.log.write(index, observed["time_s"], state, force, torque, extra)
-        if done:
+            self.log.write(index, observed["time_s"], state, command["force"], command["torque"], command["extra"])
+        if command["done"]:
             return True
-        self.body.apply(force, torque, frame)
+        self.body.apply(command["force"], command["torque"], command["frame"])
+        for path, (force, torque, frame) in command["wrenches"].items():
+            (self.body if path == self.body.path else self.others[path]).apply(force, torque, frame)
+        if self.joints is not None:
+            self.joints.apply(command["efforts"], command["targets"], command["velocity_targets"])
         physics.step(self.stage, 1)
         return False
 
@@ -349,7 +455,15 @@ class Run:
                 if ended_by == "controller":
                     break
                 job.report(done / self.total, f"step {done}/{self.total}", steps=done, sim_time_s=round(done * self.dt, 6))
-                await self.next_frame()
+                if self.capture is not None:  # waits for a fresh render, which is this frame's yield to Kit
+                    shot = await self.capture(f"{self.log.path.stem}-{len(self.frames) + 1:05d}.png")
+                    if shot.get("status") != "ok":
+                        raise AssetError(shot.get("code", "CAPTURE_FAILED"),
+                                         f"Frame {len(self.frames) + 1} could not be captured: {shot.get('message')}",
+                                         frames=len(self.frames))
+                    self.frames.append(shot["file"])
+                else:
+                    await self.next_frame()
         except AssetError as exc:
             exc.details.setdefault("steps", done)
             exc.details.setdefault("log_file", str(self.log.path))
@@ -360,6 +474,8 @@ class Run:
 
     def close(self):
         self.log.close()
+        if self.joints is not None:
+            self.joints.release()
         close = getattr(self.controller, "close", None)
         if callable(close):
             close()
@@ -369,10 +485,17 @@ class Run:
             final = self.body.read()
         except AssetError as exc:
             final = dict(error=str(exc)[:300])
+        video = {}
+        if self.frames:
+            # The MCP host encodes these when it reads this result (job_status), as for a replay.
+            video = dict(frames=len(self.frames), encode=dict(
+                folder=str(self.log.path.parent), pattern=f"{self.log.path.stem}-*.png", frames=len(self.frames),
+                fps=round(1 / (self.per_frame * self.dt), 3), label=self.settings.get("label"),
+                output=f"{self.log.path.stem}.mp4"))
         return dict(steps=done, physics_dt=self.dt, sim_time_s=round(done * self.dt, 9), ended_by=ended_by,
                     wall_time_s=round(time.monotonic() - started, 3), steps_per_frame=self.per_frame,
                     log_file=str(self.log.path), log_rows=self.log.rows, final_state=final,
-                    backend=self.body.backend,
+                    backend=self.body.backend, **video,
                     timeline="paused: read state with sim__body__state, replay the log with "
                              "sim__trajectory__replay, or return to a clean stop with "
                              "sim__timeline__control action=reset.")
@@ -398,10 +521,16 @@ async def run(ext, args):
     settings = validate(args)
     store = job_store(ext)
     path = args.get("body")
-    prim = s.prim(stage, path)
-    if not prim.IsActive() or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
-        refuse("INVALID_PHYSICS", f"{path} is not an active rigid body. Pass the body the controller pushes, "
-               "e.g. a drone's base link; find it with sim__physics__inspect.")
+    for body_path in (path, *settings["observe"]):
+        prim = s.prim(stage, body_path)
+        if not prim.IsActive() or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            refuse("INVALID_PHYSICS", f"{body_path} is not an active rigid body. Pass the body the controller pushes, "
+                   "e.g. a drone's base link; find it with sim__physics__inspect.")
+    articulation = args.get("articulation")
+    if articulation is not None and not s.prim(stage, articulation).HasAPI(UsdPhysics.ArticulationRootAPI):
+        refuse("INVALID_PHYSICS", f"{articulation} is not an articulation root. sim__physics__inspect lists them; "
+               "it is often <robot>/root_joint.")
+    camera = args.get("camera")
     if s.timeline.is_playing():
         refuse("TIMELINE_ACTIVE", "The timeline is playing. Pause it (sim__timeline__control action=pause) or stop "
                "it first: the run steps physics itself, one exact step at a time.")
@@ -418,12 +547,24 @@ async def run(ext, args):
             if physics.physics_ready() is not False:
                 break
             await next_frame()
-        body = physics_body(path)
+        body = BodyIO(path)
+        others = {other: BodyIO(other) for other in settings["observe"] if other != path}
+        joints = JointIO(articulation) if articulation is not None else None
         name = args.get("filename") or time.strftime("run-%Y%m%d-%H%M%S.csv")
-        log = CsvLog(s.output, name, settings["fields"])
+        capture = None
+        if camera is not None:
+            take = ext.handler("sim.camera.capture")
+            adopt = {"adopt": True} if args.get("adopt") else {}
+
+            async def capture(frame_name):
+                return await take(**ids, path=camera, filename=frame_name, **adopt)
+
+            if isinstance(name, str) and (s.output / f"{name[:-4]}-00001.png").exists():
+                refuse("CONFLICT", f"Frames named {name[:-4]}-*.png already exist in the output folder; use another filename.")
+        log = CsvLog(s.output, name, settings["fields"], joints.names if joints is not None else ())
         runner = Run(body, controller, log, settings, stage, lambda: s.target(**ids), s.timeline, next_frame,
-                     ext._operation_lock)
-        job = store.start("sim.simulation.run", runner.work, label=args.get("label"))
+                     ext._operation_lock, others=others, joints=joints, capture=capture)
+        job = store.start("sim.simulation.run", runner.work, label=settings["label"])
     except BaseException as exc:
         if log is not None:
             log.close()
@@ -436,10 +577,8 @@ async def run(ext, args):
     return dict(job_id=job.id, state=job.state, body=path, controller=kind, physics_dt=runner.dt,
                 steps=runner.total, steps_per_frame=runner.per_frame, log_file=str(log.path),
                 backend=body.backend, mass=body.mass,
+                **({"joints": joints.names} if joints is not None else {}),
+                **({"camera": camera, "video": f"{log.path.stem}.mp4"} if camera is not None else {}),
                 **({"initialized": "The stopped timeline was played briefly and paused; physics may have advanced."}
                    if initialized else {}),
                 next=f"job_status(job_id=\"{job.id}\", wait_s=30) until state is not running; job_cancel stops it.")
-
-
-def physics_body(path):
-    return BodyIO(path)

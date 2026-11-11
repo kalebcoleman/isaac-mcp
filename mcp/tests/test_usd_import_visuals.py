@@ -247,3 +247,31 @@ def test_an_asset_with_no_physics_and_no_geometry_is_not_warned_about(scene, pac
     (project / "robot" / "frames.usda").write_text(FRAMES)
     result = bring_in("robot/frames.usda", "/World/Rig")
     assert result["visuals"]["drawn_geometry"] == 0 and "warnings" not in result
+
+
+def test_the_simulator_s_own_material_is_recognised_through_a_symlinked_environment(scene, pack, tmp_path):  # noqa: F811
+    """An environment reached through a symlink reports its files by their real path."""
+    import hashlib
+
+    project, bring_in = pack
+    real = tmp_path / "env-real" / "mdl"
+    real.mkdir(parents=True)
+    (real / "OmniPBR.mdl").write_text("mdl 1.4;")
+    (tmp_path / "env-link").symlink_to(tmp_path / "env-real")
+    scene.runtime_assets["OmniPBR.mdl"] = {"path": str(tmp_path / "env-link" / "mdl" / "OmniPBR.mdl"),
+                                           "sha256": hashlib.sha256(b"mdl 1.4;").hexdigest(), "source": "test"}
+    (project / "robot" / "shaded.usda").write_text(HEADER + '''
+def Xform "robot"
+{
+    def Cube "body"
+    {
+    }
+    def Shader "look"
+    {
+        uniform token info:implementationSource = "sourceAsset"
+        asset info:mdl:sourceAsset = @@@''' + str(real / "OmniPBR.mdl") + '''@@@
+    }
+}
+''')
+    result = bring_in("robot/shaded.usda", "/World/Shaded")
+    assert list(result["runtime_dependencies"]) == ["OmniPBR.mdl"] and result["visuals"]["drawn_geometry"] == 1

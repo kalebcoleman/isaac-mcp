@@ -684,7 +684,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                               {"type": "string"}, {"type": "array"}, {"type": "object"}],
                 })]
             elif f["kind"] == "array":
-                strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames", "paths", "dofs", "log"}
+                strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames", "paths", "dofs", "log", "observe"}
                            or (canonical == "sim.ui.act" and f["name"] == "keys")
                            or canonical in _PACK_TOOLS)  # every array in these tools holds paths or names
                 annotation = list[str] if strings else list[float]
@@ -699,7 +699,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 if f["name"] in lengths:
                     bounds = {"min_length": lengths[f["name"]], "max_length": lengths[f["name"]]}
                 else:
-                    bounds = {"max_length": {"extra_frames": 16, "observe_prims": 16, "observe_joints": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256, "items": 200}.get(f["name"], 128)}
+                    bounds = {"max_length": {"extra_frames": 16, "observe_prims": 16, "observe_joints": 8, "observe": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256, "items": 200}.get(f["name"], 128)}
             if bounds and not graph_container:
                 annotation = Annotated[annotation, Field(**bounds)]
         graph_field = canonical == "sim.graph.build" and f["name"] in (
@@ -873,6 +873,8 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                 return json.dumps(dict(status="error", code=getattr(e, "code", "FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
         if canonical == "status":
             return json.dumps(_where_am_i(params, active), indent=2, default=repr)
+        if canonical in ("job_status", "job_cancel") and _lab_job(params.get("job_id")):
+            return json.dumps(_lab_job_call(canonical, params), indent=2, default=repr)
         if canonical == "job_status":
             return json.dumps(_job_status(params, active), indent=2, default=repr)
         result = active.get_client().call(kit_canonical, params)
@@ -997,6 +999,40 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
 
 JOB_WAIT_MAX_S = 60.0
 JOB_WAIT_POLL_S = 1.0
+
+
+def _lab_job(job_id: Any) -> bool:
+    """An Isaac Lab or script job id (``<date>-<time>-<name>``), which the host manages itself."""
+    from .isaaclab import jobs as lab_jobs
+
+    return isinstance(job_id, str) and bool(lab_jobs._JOB_ID_RE.match(job_id))
+
+
+def _lab_job_call(canonical: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """job_status and job_cancel for a host-managed job, so one pair of tools follows every job.
+    Needs no bridge. The answer is what isaaclab__runs_status / runs_cancel give."""
+    import time
+
+    from .isaaclab import jobs as lab_jobs
+
+    try:
+        if canonical == "job_cancel":
+            return lab_jobs.runs_cancel(params["job_id"])
+        wait = params.get("wait_s", 0) or 0
+        if isinstance(wait, bool) or not isinstance(wait, (int, float)) or not 0 <= wait <= JOB_WAIT_MAX_S:
+            return {"status": "error", "code": "INVALID_VALUE",
+                    "message": f"wait_s must be 0..{JOB_WAIT_MAX_S:g} seconds; call again to keep waiting."}
+        deadline = time.monotonic() + wait
+        while True:
+            result = lab_jobs.runs_status(params["job_id"])
+            if result.get("state") != "running" or time.monotonic() >= deadline:
+                break
+            time.sleep(min(JOB_WAIT_POLL_S, max(0.0, deadline - time.monotonic())))
+        if result.get("state") == "running" and wait:
+            result["wait_timed_out"] = True
+        return {**result, "job_id": params["job_id"], "managed_by": "host (Isaac Lab and script jobs)"}
+    except (ValueError, OSError) as error:
+        return {"status": "error", "code": "NOT_FOUND", "message": str(error)}
 
 
 def _job_status(params: Dict[str, Any], state: _BridgeState) -> Any:
@@ -1686,9 +1722,11 @@ _HELP_TOPICS = (
      ("controller", "control", "closed loop", "closed-loop", "thrust", "torque", "wrench", "drone", "quadrotor", "quadcopter",
       "fly", "flight", "hover", "pid", "own code", "my own", "custom", "per step", "every step", "apply force"),
      "sim__simulation__run(body, controller, duration_s): each physics step your controller gets the body's state and "
-     "returns {force, torque}. controller='tcp://127.0.0.1:<port>' is your own process (start it with run_script; "
-     "isaac_mcp.controller_server.serve is a ready-made server), or 'module:function' loaded into Kit. It returns a "
-     "job_id: job_status(job_id, wait_s=30), job_cancel. The CSV log replays with sim__trajectory__replay."),
+     "returns {force, torque}; with articulation= it also gets joint state and may return joint_efforts or joint_targets. "
+     "controller='tcp://127.0.0.1:<port>' is your own process (start it with run_script; "
+     "isaac_mcp.controller_server.serve is a ready-made server), or 'module:function' loaded into Kit. camera= records it "
+     "to a labelled video with no window. It returns a job_id: job_status(job_id, wait_s=30), job_cancel. The CSV log "
+     "replays with sim__trajectory__replay."),
     ("replay a saved trajectory or flight into a labelled video",
      ("replay", "trajectory", "flight", "playback", "saved", "labelled", "labeled", "label", "caption", "pose driver"),
      "sim__camera__create, then sim__trajectory__replay(trajectory, prim, camera, label): drives the poses from a CSV or "
@@ -1696,9 +1734,9 @@ _HELP_TOPICS = (
      "instead: sim__viewport__frame(layout='clean', caption=...) and start_screen_recording."),
     ("follow, wait for or stop long work",
      ("job", "wait", "progress", "cancel", "done", "finished", "background", "long", "poll", "is it done", "async"),
-     "In the simulator: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id; "
-     "job_status(job_id, wait_s=30) waits, job_cancel stops. Isaac Lab and script jobs: isaaclab__runs_status(job_id, "
-     "wait_s=45), isaaclab__runs_tail, isaaclab__runs_cancel."),
+     "job_status(job_id, wait_s=30) waits for any job and job_cancel stops it: simulator jobs (run_python(background=true), "
+     "sim__simulation__run, sim__trajectory__replay) and Isaac Lab or script jobs alike. isaaclab__runs_status(job_id, "
+     "wait_s=45) waits longer on a Lab job, and isaaclab__runs_tail reads its log."),
     ("run any script as a managed job (not only Isaac Lab)",
      ("script", "managed", "batch", "sweep", "subprocess", "evaluator", "any python", "outside isaac"),
      "run_script(script, args, python): your own Python script as a job with a log, timeout, progress and cancel; no "

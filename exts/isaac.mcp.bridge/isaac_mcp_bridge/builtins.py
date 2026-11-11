@@ -456,7 +456,8 @@ _JOB_STATUS_DESCRIPTION = (
     "Status of background work in this Kit: run_python(background=true), sim__simulation__run and "
     "sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), "
     "elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it "
-    "lists the jobs, newest first. Jobs are forgotten when Kit restarts."
+    "lists the jobs, newest first. Jobs are forgotten when Kit restarts. Through the MCP server it "
+    "also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed."
 )
 _JOB_STATUS_PARAMETERS = {
     "job_id": {"type": "string",
@@ -532,7 +533,8 @@ def builtin_tools(bridge) -> List:
             name="list_bridges",
             description="List all isaac.mcp.bridge bridges advertised on this box "
                         "(this Kit process and any siblings, e.g. a second "
-                        "instance on an ephemeral port).",
+                        "instance on an ephemeral port). status lists them too, "
+                        "and also answers when no bridge is running.",
             parameters={},
             handler=functools.partial(cmd_list_bridges, bridge),
         ),
@@ -579,7 +581,8 @@ def builtin_tools(bridge) -> List:
         ToolDefinition(
             name="job_cancel",
             description="Stop a background job (job_id from the call that started it). It ends at its "
-                        "next step and cleans up after itself; confirm with job_status.",
+                        "next step and cleans up after itself; confirm with job_status. Through the "
+                        "MCP server it also stops an Isaac Lab or script job.",
             parameters={"job_id": {"type": "string", "required": True,
                                    "description": "job_id of a running job."}},
             handler=functools.partial(cmd_job_cancel, bridge),

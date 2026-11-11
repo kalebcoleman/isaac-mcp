@@ -31,7 +31,8 @@ class Extension(omni.ext.IExt):
         import isaacsim
         import hashlib
 
-        mdl = Path(isaacsim.__file__).parent / "kit/mdl/core/Base/OmniPBR.mdl"
+        # Resolved: an environment reached through a symlink reports its files by their real path.
+        mdl = (Path(isaacsim.__file__).parent / "kit/mdl/core/Base/OmniPBR.mdl").resolve()
         if mdl.is_file():
             self.scene.runtime_assets["OmniPBR.mdl"] = {
                 "path": str(mdl),

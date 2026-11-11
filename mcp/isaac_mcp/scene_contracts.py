@@ -539,7 +539,7 @@ add(
 )
 add(
     "sim.simulation.run",
-    "Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step. A stopped timeline is initialized; the run steps exactly and leaves it paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log that sim__trajectory__replay reads. A module:function controller is OPT-IN CODE EXECUTION in Kit; tcp:// runs none.",
+    "Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. A stopped timeline is initialized; the run steps exactly and ends paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none.",
     dict(
         **TARGET,
         body=field("string", "Rigid body the controller acts on, e.g. a drone's base link."),
@@ -550,8 +550,13 @@ add(
         log=field("array", "Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.", False),
         log_every=field("integer", "Log one row every this many physics steps, 1..10000.", False, default=1),
         filename=field("string", "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.", False),
-        steps_per_frame=field("integer", "Physics steps between app frames, 1..120. Default: about real time at 60 frames per second.", False),
-        label=field("string", "Short name for the job, shown by job_status.", False),
+        steps_per_frame=field("integer", "Physics steps between app frames, 1..120. Default: about real time at 60 frames per second. With camera, fps sets it.", False),
+        articulation=field("string", "Articulation root of a jointed robot (often <robot>/root_joint). The state then has joints {names, positions, velocities}, and the controller may return joint_efforts, joint_targets or joint_velocity_targets as {joint name: value} (N m or N, rad or stage units).", False),
+        observe=field("array", "Up to 8 more rigid bodies whose state the controller gets under observed[path]. It may push them too, with wrenches: {path: {force, torque}}.", False),
+        camera=field("string", "Record this camera while it runs (from sim__camera__create): one frame per app frame, and job_status then gives video_path. Works headless and on a locked screen.", False),
+        adopt=field("boolean", "Record a camera that came with an opened scene (see sim__camera__capture adopt).", False),
+        fps=field("number", "With camera: video frames per simulated second, 1..60.", False, default=30),
+        label=field("string", "Short name for the job, shown by job_status and drawn on the video (<=80 characters).", False),
     ),
 )
 add(

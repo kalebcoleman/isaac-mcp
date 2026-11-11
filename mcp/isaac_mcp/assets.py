@@ -483,10 +483,6 @@ class Resolver:
                     best = base
         return best
 
-    def _from_cache(self, path: Path) -> bool:
-        """True when *path* lies inside one of the stores."""
-        return self._store_base(path) is not None
-
     def fetch_group(self, relpath: str) -> dict | None:
         """Return the manifest fetch group that contains *relpath*, if any."""
         for group in self.manifest().get("fetch", []):

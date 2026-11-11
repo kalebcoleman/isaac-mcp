@@ -1050,12 +1050,3 @@ def live_sessions(env: Mapping[str, str] | None = None) -> list[dict]:
                       key=lambda x: (x["port"], x["pid"]))
     except Exception:  # noqa: BLE001 - only used to enrich an error message
         return []
-
-
-def live_ports(env: Mapping[str, str] | None = None) -> list[tuple[int, int]]:
-    """``(port, pid)`` of managed simulator sessions that are still alive (best effort)."""
-    try:
-        return sorted((int(x["port"]), int(x["pid"])) for x in _sessions(_sessions_dir(os.environ if env is None else env))
-                      if _alive(x))
-    except Exception:  # noqa: BLE001 - only used to enrich an error message
-        return []

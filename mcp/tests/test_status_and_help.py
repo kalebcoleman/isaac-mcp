@@ -207,3 +207,31 @@ def test_recording_can_be_turned_off_and_never_breaks_the_answer(tmp_path, monke
     monkeypatch.setenv("ISAAC_MCP_LOG", "1")
     (tmp_path / "state").write_text("a file where the folder should be")
     assert gw._isaac_help("simulate cloth tearing").startswith("No isaac tool is known to fit")
+
+
+# ---- one pair of tools follows every job: simulator jobs and host-managed ones ----
+
+def test_job_status_and_cancel_also_take_a_lab_or_script_job_id_and_need_no_bridge(state, tmp_path, monkeypatch):
+    import sys
+    import time
+
+    from isaac_mcp.isaaclab import jobs
+
+    monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
+    script = tmp_path / "wait.py"
+    script.write_text("import time\nprint('ISAAC_MCP_PROGRESS: 1/4 started', flush=True)\ntime.sleep(60)\n")
+    started = jobs.run_script(sys.executable, script, uses_gpu=False, timeout_s=120)
+    state.client = Bridge({})   # any bridge call would raise KeyError: none is made
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        running = json.loads(gw._dispatch("job_status", {"job_id": started["job_id"], "wait_s": 0.2}, state))
+        if running.get("progress"):
+            break
+    assert running["state"] == "running" and running["wait_timed_out"] is True and running["progress"]["fraction"] == 0.25
+    assert running["health"] == "ok" and "host" in running["managed_by"] and state.client.calls == []
+    cancelled = json.loads(gw._dispatch("job_cancel", {"job_id": started["job_id"]}, state))
+    assert "error" not in cancelled
+    final = json.loads(gw._dispatch("job_status", {"job_id": started["job_id"], "wait_s": 20}, state))
+    assert final["state"] == "cancelled" and "wait_timed_out" not in final
+    missing = gw._dispatch("job_status", {"job_id": "20260101-000000-nothing"}, state)
+    assert gw._failed_tool_result(missing) and "unknown job" in missing

@@ -60,14 +60,6 @@ def _aligned_start(data, start):
     return data[newline + 1:], start + newline + 1
 
 
-def raw_lines(path, cap=READ_CAP):
-    """Raw decoded lines from the last *cap* bytes, oldest first."""
-    size = os.stat(path).st_size
-    start = max(0, size - cap)
-    data, _ = _aligned_start(_read(path, start, size - start), start)
-    return data.decode(errors="replace").splitlines()
-
-
 def default_lines(lines, limit):
     """The original sim.logs.tail filter, unchanged apart from the larger window."""
     picked = [line[:LINE_CAP] for line in lines

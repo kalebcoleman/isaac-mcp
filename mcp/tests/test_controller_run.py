@@ -396,3 +396,163 @@ async def test_too_many_jobs_is_a_refusal_that_leaves_no_log_behind(tool, ext, w
     for job in held:
         ext.bridge.jobs.cancel(job.id)
     await asyncio.sleep(0)
+
+
+# ---- joints, other bodies and a camera in the same loop ----
+
+class Arm:
+    """Two joints behind the methods of an articulation tensor view: an effort accelerates a joint for a step."""
+
+    def __init__(self):
+        self.shared_metatype = SimpleNamespace(dof_names=["shoulder", "elbow"])
+        self.positions = np.zeros((1, 2), dtype=np.float32)
+        self.velocities = np.zeros((1, 2), dtype=np.float32)
+        self.efforts = np.zeros((1, 2), dtype=np.float32)
+        self.position_targets = np.zeros((1, 2), dtype=np.float32)
+        self.velocity_targets = np.zeros((1, 2), dtype=np.float32)
+        self.effort_writes = []
+
+    get_dof_positions = lambda self: self.positions  # noqa: E731
+    get_dof_velocities = lambda self: self.velocities  # noqa: E731
+    get_dof_position_targets = lambda self: self.position_targets  # noqa: E731
+    get_dof_velocity_targets = lambda self: self.velocity_targets  # noqa: E731
+
+    def set_dof_actuation_forces(self, data, indices):
+        self.efforts = np.array(data, dtype=np.float32)
+        self.effort_writes.append(self.efforts[0].tolist())
+
+    def set_dof_position_targets(self, data, indices):
+        self.position_targets = np.array(data, dtype=np.float32)
+
+    def set_dof_velocity_targets(self, data, indices):
+        self.velocity_targets = np.array(data, dtype=np.float32)
+
+    def step(self):
+        self.velocities = self.velocities + self.efforts * DT
+        self.positions = self.positions + self.velocities * DT
+
+
+@pytest.fixture
+def robot(world, monkeypatch):
+    """The point mass, a second body and a two-joint arm, all stepped together."""
+    arm, second = Arm(), Body(mass=1.0)
+    views = {"/World/Body": world.body, "/World/Other": second, "/World/Arm/root_joint": arm}
+    monkeypatch.setattr(physics, "view_for", lambda path, articulation=False: views[path])
+    plain = physics.step
+
+    def step(stage, steps):
+        plain(stage, steps)
+        for _ in range(steps):
+            arm.step()
+            second.step()
+
+    monkeypatch.setattr(physics, "step", step)
+    return SimpleNamespace(arm=arm, second=second)
+
+
+def start_full(world, controller, duration=0.1, capture=None, observe=(), articulation=None, **settings):
+    cleaned = control_run.validate({"duration_s": duration, "observe": list(observe), **settings})
+    joints = control_run.JointIO(articulation) if articulation else None
+    log = control_run.CsvLog(world.out, settings.get("filename", "run.csv"), cleaned["fields"], joints.names if joints else ())
+    others = {path: control_run.BodyIO(path) for path in observe}
+    run = control_run.Run(control_run.BodyIO("/World/Body"), controller, log, cleaned, object(), lambda: None, world.timeline,
+                          world.next_frame, asyncio.Lock(), others=others, joints=joints, capture=capture)
+    return jobs.JobStore(asyncio.ensure_future).start("sim.simulation.run", run.work), run
+
+
+@pytest.mark.anyio
+async def test_joint_state_reaches_the_controller_and_its_efforts_and_targets_reach_the_joints(world, robot):
+    seen = []
+
+    def controller(state):
+        seen.append(state["joints"])
+        if state["step"] < 5:
+            return {"joint_efforts": {"elbow": 2.0}}
+        return {"joint_targets": {"shoulder": 0.5}, "joint_velocity_targets": {"elbow": 1.5}}
+
+    job, _ = start_full(world, controller, articulation="/World/Arm/root_joint", log=["position"])
+    out = await finish(job)
+    assert out["state"] == "succeeded", out
+    assert seen[0] == {"names": ["shoulder", "elbow"], "positions": [0.0, 0.0], "velocities": [0.0, 0.0]}
+    assert seen[5]["velocities"] == pytest.approx([0.0, 5 * 2.0 * DT]), "five steps of effort on the elbow only"
+    assert robot.arm.effort_writes[:5] == [[0.0, 2.0]] * 5, "the whole row each step: the shoulder gets none"
+    assert robot.arm.effort_writes[-1] == [0.0, 0.0], "no effort is left behind when the run ends"
+    assert robot.arm.position_targets[0].tolist() == [0.5, 0.0] and robot.arm.velocity_targets[0].tolist() == [0.0, 1.5]
+    header, first = list(csv.reader(Path(out["result"]["log_file"]).read_text().splitlines()))[:2]
+    assert header == ["step", "time_s", "px", "py", "pz", "q:shoulder", "q:elbow", "dq:shoulder", "dq:elbow"] and len(first) == 9
+
+
+@pytest.mark.anyio
+async def test_other_bodies_are_observed_and_can_be_pushed(world, robot):
+    seen = []
+
+    def controller(state):
+        seen.append(state["observed"]["/World/Other"]["position"][2])
+        return {"wrenches": {"/World/Other": {"force": [0, 0, 1.0 * GRAVITY]}, "/World/Body": {"force": [0, 0, 2.0 * GRAVITY]}}}
+
+    job, _ = start_full(world, controller, observe=["/World/Other"])
+    out = await finish(job)
+    assert out["state"] == "succeeded", out
+    assert seen == pytest.approx([0.0] * 10, abs=1e-5) and robot.second.applied == [True] * 10, "both held against gravity"
+    assert out["result"]["final_state"]["position"][2] == pytest.approx(0.0, abs=1e-5)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("answer,problem", [
+    ({"joint_efforts": {"wrist": 1.0}}, "unknown joint"),
+    ({"joint_targets": {"elbow": float("inf")}}, "finite numbers"),
+    ({"joint_efforts": [1, 2]}, "map joint names"),
+    ({"wrenches": {"/World/Stranger": {"force": [0, 0, 1]}}}, "a body of this run"),
+    ({"wrenches": [1]}, "map body paths"),
+])
+async def test_a_command_for_a_joint_or_body_the_run_does_not_have_fails_by_name(world, robot, answer, problem):
+    job, _ = start_full(world, lambda state: answer, articulation="/World/Arm/root_joint")
+    out = await finish(job)
+    assert out["state"] == "failed" and out["code"] == "CONTROLLER_FAILED" and problem in out["error"] and world.steps == 0
+
+
+@pytest.mark.anyio
+async def test_joint_commands_without_an_articulation_say_what_is_missing(world):
+    job, _ = start(world, lambda state: {"joint_efforts": {"elbow": 1.0}})
+    out = await finish(job)
+    assert out["code"] == "CONTROLLER_FAILED" and "articulation argument" in out["error"]
+
+
+@pytest.mark.anyio
+async def test_a_camera_records_one_frame_per_app_frame_and_the_result_asks_for_the_video(world):
+    shots = []
+
+    async def capture(name):
+        shots.append((name, world.steps))
+        return {"status": "ok", "file": str(world.out / name)}
+
+    job, run = start_full(world, hover, duration=1.0, capture=capture, fps=20, label="hover run", filename="hover.csv")
+    assert run.per_frame == 5, "0.05 s of simulation per video frame at dt 0.01"
+    out = await finish(job)
+    assert out["state"] == "succeeded", out
+    assert [name for name, _ in shots] == [f"hover-{i:05d}.png" for i in range(1, 21)]
+    assert [steps for _, steps in shots] == list(range(5, 101, 5)), "a frame after every five steps"
+    assert out["result"]["frames"] == 20 and out["result"]["encode"] == {
+        "folder": str(world.out), "pattern": "hover-*.png", "frames": 20, "fps": 20.0, "label": "hover run", "output": "hover.mp4"}
+    assert world.frames == 0, "the capture's own render wait is the frame's yield"
+
+
+@pytest.mark.anyio
+async def test_a_failed_capture_ends_the_run_and_too_many_frames_are_refused_first(world):
+    async def capture(name):
+        return {"status": "error", "code": "NOT_OWNED", "message": "no render resources"}
+
+    job, _ = start_full(world, hover, capture=capture)
+    out = await finish(job)
+    assert out["state"] == "failed" and out["code"] == "NOT_OWNED" and "Frame 1" in out["error"]
+    with pytest.raises(AssetError) as error:
+        start_full(world, hover, duration=3600, capture=capture, fps=60, filename="long.csv")
+    assert error.value.code == "LIMIT"
+
+
+@pytest.mark.parametrize("args", [{"observe": "/World/A"}, {"observe": ["/World/A"] * 0 + [5]}, {"observe": [f"/World/B{i}" for i in range(9)]},
+                                  {"fps": 0}, {"fps": 61}, {"label": "x" * 81}])
+def test_bad_observe_fps_and_label_are_refused(args):
+    with pytest.raises(AssetError) as error:
+        control_run.validate({"duration_s": 1, **args})
+    assert error.value.code == "INVALID_VALUE"

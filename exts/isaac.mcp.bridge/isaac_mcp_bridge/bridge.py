@@ -1220,11 +1220,6 @@ class McpBridge:
 
     # ---------------------------------------------------------------- the hold (`HOLD_VERB`)
 
-    def _held_refusal(self, name: str, command: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        """`_held_refusal_locked` under the admission lock, for a caller that holds no lock."""
-        with self._admit_lock:
-            return self._held_refusal_locked(name, command)
-
     @staticmethod
     def _carries(command: Optional[Dict[str, Any]], token: str) -> bool:
         presented = command.get(HOLD_FIELD) if command is not None else None

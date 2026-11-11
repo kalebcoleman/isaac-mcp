@@ -907,8 +907,9 @@ class Scene:
         outside = []
         runtime_resolved = []
         for dep in [str(layer.realPath) for layer in layers] + list(assets):
+            # Compared as real paths: an environment reached through a symlink resolves to its target.
             known = next(
-                (k for k, v in self.runtime_assets.items() if dep == v["path"]), None
+                (k for k, v in self.runtime_assets.items() if os.path.realpath(dep) == os.path.realpath(v["path"])), None
             )
             if known:
                 runtime_resolved.append(known)
@@ -940,7 +941,7 @@ class Scene:
             # selected (a robot's optional gripper). Every missing layer the selection does use is a
             # composition error, so an asset that composes cleanly is complete as it stands.
             asset = Usd.Stage.Open(str(filename))
-            if asset and asset.GetDefaultPrim() and not asset.GetCompositionErrors():
+            if asset and asset.GetDefaultPrim() and not composition_errors(asset):
                 unused, missing = [str(x) for x in missing], []
         if missing or outside:
             refuse(
@@ -1115,7 +1116,7 @@ class Scene:
         for dependency in dict.fromkeys(dependency_names):
             dep = Path(str(dependency))
             runtime = next(
-                (v for v in self.runtime_assets.values() if str(dep) == v["path"]),
+                (v for v in self.runtime_assets.values() if os.path.realpath(str(dep)) == os.path.realpath(v["path"])),
                 None,
             )
             if runtime is not None:
