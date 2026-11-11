@@ -83,7 +83,7 @@ The convenience installer:
   inspect installer output and use the [manual client guide](MCP-SERVER.md#4-client-configuration).
 - Does not install system ROS, Isaac Lab or private workstation assets.
 
-For recording an installation and locating earlier locked experiments, see [reproducibility](REPRODUCIBILITY.md).
+To record an installation, see [recording a run](VERIFICATION.md#recording-a-run-so-it-can-be-reproduced).
 The full installer has not been qualified from a clean machine. Its commands and parser have
 been inspected; the recorded fresh-venv experiment used a separate locked sync, not `install.sh`.
 
@@ -109,7 +109,7 @@ requires the NVIDIA runtime and can render sensors, but has no application windo
 capture/input. Windowed tools were exercised on X11/XWayland; native Wayland is not qualified.
 Keep the launch terminal available for startup errors. First startup can take minutes for shader
 and extension preparation; wait for bridge readiness and `app_ready=true`, not a fixed sleep.
-Record your setup and result using the [reproducibility guide](REPRODUCIBILITY.md).
+Record your setup and result as described in [recording a run](VERIFICATION.md#recording-a-run-so-it-can-be-reproduced).
 
 `scripts/check_machine.sh` is an optional **6.2-specific** preflight. If a Sim interpreter exists,
 it imports the runtime and may execute a Torch CUDA kernel. It is not a CPU-only check and should
@@ -350,7 +350,7 @@ not the Lab runtime. For the inspected Lab 3 video workflow, MoviePy
 Lab checkout's video extra in a dedicated compatible environment. Plain headless training
 does not require those video packages. Earlier video checks used a private overlay. A later self-contained Lab 3 / Sim 6.2
 environment exercised training and video without inherited `.pth` files, but retains two
-package-metadata conflicts. See [reproducibility guidance](REPRODUCIBILITY.md)
+package-metadata conflicts. See [recording a run](VERIFICATION.md#recording-a-run-so-it-can-be-reproduced)
 and [Lab versions, discovery and video modes](TOOLS-ISAACLAB.md); neither is a clean-machine
 or full-installer certification.
 A successful job launch is not a completed job: inspect status and logs. Jobs normally refuse

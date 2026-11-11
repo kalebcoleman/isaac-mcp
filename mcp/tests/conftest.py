@@ -10,8 +10,7 @@ for _p in (_REPO_ROOT, _EXT_ROOT):   # isaac_mcp · isaac_mcp_bridge
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# Tests that spawn `sys.executable -c ...` (e.g. the telemetry flush test) get
-# the same import roots through the environment.
+# Tests that start another Python process get the same import roots through the environment.
 _pythonpath = os.environ.get("PYTHONPATH", "")
 for _p in reversed((_REPO_ROOT, _EXT_ROOT)):
     if _p not in _pythonpath.split(os.pathsep):

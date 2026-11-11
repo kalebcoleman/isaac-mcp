@@ -148,10 +148,9 @@ python3 mcp/isaac_mcp/client.py <tool> ['{"json": "arguments"}'] [--port N]
 
 ## More
 
-- [docs/protocol.md](docs/protocol.md): messages, finding a bridge, the token, scheduling, read-only mode, jobs.
-- [docs/configuration.md](docs/configuration.md): settings, several simulators, access from another machine.
+- [docs/protocol.md](docs/protocol.md): messages, finding a bridge, the token, scheduling, read-only mode, jobs, several simulators, access from another machine.
 - [docs/tool-authoring.md](docs/tool-authoring.md): writing, reloading and narrowing tools; the panel.
-- [docs/isaac-lab.md](docs/isaac-lab.md): the bridge inside an Isaac Lab script.
+- [Environment variables](../docs/ENVIRONMENT.md): every setting. [The bridge inside an Isaac Lab script](../docs/TOOLS-ISAACLAB.md#the-bridge-inside-an-isaac-lab-script).
 
 ## Layout
 
@@ -159,7 +158,7 @@ python3 mcp/isaac_mcp/client.py <tool> ['{"json": "arguments"}'] [--port N]
 mcp/isaac_mcp/            the MCP server, the bridge client, Isaac Lab jobs, screen tools
 mcp/templates/            a tool package to copy, a remote driver, an Isaac Lab launch script
 mcp/tests/                host tests; the bridge is tested here too, outside Kit
-mcp/docs/                 the bridge: protocol, configuration, writing tools, Isaac Lab
+mcp/docs/                 the bridge: protocol, writing tools
 exts/isaac.mcp.bridge/    the bridge extension
 exts/isaac.mcp.panel/     the tools panel (optional)
 exts/sim-tools/           generic scene and asset tools

@@ -411,7 +411,8 @@ result = {"frames": 600}
 Examples: `run_python` with `{"code":"result = 1"}`; `stat_file` with
 `{"path":"/tmp/isaac-example.txt"}`; `put_file` with
 `{"path":"/tmp/isaac-example.txt","content_b64":"aGVsbG8="}` writes `hello`. File content is transmitted as
-a single message, so these tools are for reasonably sized files rather than bulk multi-gigabyte transfers.
+a single message of at most 64 MiB, so these tools are for reasonably sized files rather than bulk multi-gigabyte
+transfers. They run off Kit's main loop: a large file does not hold up a frame.
 
 ## Trust and operational limits
 

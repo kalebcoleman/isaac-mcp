@@ -1,6 +1,6 @@
 # Vendoring and Upstream Provenance
 
-This repository consolidates two previously submodule-managed codebases into a single unified repository. This document records the provenance, upstream source repositories, fork locations, pinned commit SHAs, license status, and patch histories for all vendored components.
+This document records the provenance, upstream source repositories, fork locations, pinned commit SHAs, license status, and patch histories for all vendored components.
 
 ---
 
@@ -8,7 +8,7 @@ This repository consolidates two previously submodule-managed codebases into a s
 
 | Component | Origin | License status | State here |
 |---|---|---|---|
-| **`exts/ur5e-dt`** | Fork of `https://github.com/inbarajaldrin/isaac-sim-mcp` at `27f6100` (`https://github.com/kalebcoleman/isaac-sim-mcp`) | MIT (`docs/provenance/isaac-sim-mcp-LICENSE`) | Developed further here; the extension is now one module per area under `exts/ur5e-dt/ur5e_dt/`. The first local change is kept in `docs/provenance/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`. |
+| **`exts/ur5e-dt`** | Fork of `https://github.com/inbarajaldrin/isaac-sim-mcp` at `27f6100` (`https://github.com/kalebcoleman/isaac-sim-mcp`) | MIT (`docs/provenance/isaac-sim-mcp-LICENSE`) | Developed further here; the extension is now one module per area under `exts/ur5e-dt/ur5e_dt/`. |
 | **`exts/isaac.mcp.bridge`**, **`exts/isaac.mcp.panel`**, the bridge client and server core in **`mcp/`** | First built on `https://github.com/inbarajaldrin/omni-kit-mcp` at `9d0366b`, used with its author's permission | Upstream has no LICENSE file | **Rewritten in this repository.** The bridge, its protocol, client, panel, the Kit registration script, the templates and their documentation and tests are this project's own implementation under the repository's MIT license. |
 
 > [!NOTE]
@@ -46,27 +46,6 @@ JSON-lines message shape and the portfile location, so existing tool packages an
   [`provenance/ASSETS.md`](provenance/ASSETS.md). The extension resolves them through
   `exts/ur5e-dt/ur5e_dt/asset_cache.py` and `exts/ur5e-dt/assets-manifest.json`;
   `scripts/fetch_ur5e_assets.py` populates the operator cache.
-
----
-
-## 4. Local Patch Summary
-
-Prior to consolidation, UR5e-specific additions to `ur5e-dt` were applied during setup via `patches/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`. During repository consolidation, this patch was permanently integrated into the extension (then one file, `extension.py`) and the original patch file was archived to `docs/provenance/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`.
-
-Key modifications incorporated from the patch:
-1. **Owner-Registrar Integration:** Added support for registering tools under an owner-bound namespace with `isaac.mcp.bridge`.
-2. **Force-Callback Guard:** Guarded force sensor callback registration to prevent null-pointer crashes during rapid stage reopenings.
-3. **Workstation Scene Fixes:** Hardened collider configurations for the Vention workstation, QuickChanger, and RG2 gripper; disabled gravity on the kinematic robot chain.
-4. **Fixed Person-View Camera:** Added automatic creation and configuration of `/World/person_view` for consistent third-person viewing.
-
----
-
-## 5. Single-Repo Consolidation Summary
-
-All components now live directly in this repository:
-- Git submodules (`.gitmodules` and `.git/modules/external`) have been eliminated entirely.
-- Clones are self-contained and require no recursive submodule flags or external git network operations.
-- Edits to host tools (`mcp/`) or Kit extensions (`exts/`) are tracked in the root repository history.
 
 ## Project scene implementation references
 

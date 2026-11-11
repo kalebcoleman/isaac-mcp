@@ -122,7 +122,7 @@ with its PID and port. The server picks the bridge to dial in this order:
 
 A configured port that is already taken refuses at startup rather than moving somewhere no client could predict.
 `ISAAC_MCP_BIND` can change the bind address; the bridge runs arbitrary Python by design, so beyond loopback use an
-SSH tunnel or a private network, and give the client the token ([bridge configuration](../mcp/docs/configuration.md)). The twin shares the bridge: it
+SSH tunnel or a private network, and give the client the token ([protocol](../mcp/docs/protocol.md#several-simulators-and-other-machines)). The twin shares the bridge: it
 unregisters its own namespace on shutdown and leaves the bridge and the other packs running.
 
 ## Isaac Lab jobs

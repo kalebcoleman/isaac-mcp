@@ -37,9 +37,6 @@ def test_sim_status_tells_a_busy_bridge_from_a_dead_one(monkeypatch):
 
 
 def test_a_garbled_bridge_reply_disconnects_instead_of_desynchronising():
-    import itertools
-    import threading
-
     from isaac_mcp import client
 
     class Sock:
@@ -60,9 +57,8 @@ def test_a_garbled_bridge_reply_disconnects_instead_of_desynchronising():
             self.closed = True
 
     sock = Sock()
-    bridge = client.BridgeClient.__new__(client.BridgeClient)
-    bridge._sock, bridge._buffer, bridge._token, bridge.timeout = sock, b"", None, 1.0
-    bridge._ids, bridge._lock = itertools.count(1), threading.Lock()
+    bridge = client.BridgeClient(port=1, timeout=1.0)
+    bridge._sock = sock
     bridge._dropped = lambda: False
     with pytest.raises(ValueError):
         bridge.call("status")

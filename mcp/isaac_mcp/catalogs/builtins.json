@@ -185,7 +185,7 @@
       "parameters": {
         "detail": {
           "type": "boolean",
-          "description": "true: the full bridge identity as well (namespaces, toolset hashes, what is running and waiting, extension source). Default false: the short reply."
+          "description": "true: the full bridge identity as well (namespaces, what is running and waiting, extension source). Default false: the short reply."
         }
       },
       "fields": [
@@ -196,7 +196,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "true: the full bridge identity as well (namespaces, toolset hashes, what is running and waiting, extension source). Default false: the short reply."
+          "description": "true: the full bridge identity as well (namespaces, what is running and waiting, extension source). Default false: the short reply."
         }
       ],
       "namespace": null,

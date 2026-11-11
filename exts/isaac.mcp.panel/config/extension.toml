@@ -8,7 +8,6 @@ readme = "docs/README.md"
 repository = ""
 category = "Internal"
 keywords = ["kit", "mcp", "bridge", "panel", "ui"]
-changelog = "docs/CHANGELOG.md"
 
 [dependencies]
 # The bridge whose tools this window lists and runs.

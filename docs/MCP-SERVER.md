@@ -314,8 +314,7 @@ Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOL
 - `ISAAC_MCP_LOCAL_TOOLS` selects groups of the host's own tools (30 standard screen, Isaac Lab, gateway tools, plus
   five opt-in desktop input and four opt-in simulator-session tools). `readonly`
   keeps only local tools annotated as read-only; `none` keeps none. The default is `all`. The Python probes and job
-  inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for groups and
-  migration. Importing the jobs module can still reconcile orphaned jobs at server startup,
+  inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for the groups. Importing the jobs module can still reconcile orphaned jobs at server startup,
   regardless of the groups. The setting does **not** affect tools discovered from a Kit bridge, which are not
   annotated, so `readonly` is a read-only *local tool selection*, not a read-only server: a client that can still see
   bridge tools can change the scene.
@@ -377,7 +376,7 @@ A client discards the server's stderr, so the server also writes a durable log, 
 | Setting | Meaning |
 |---|---|
 | `~/.local/state/isaac-mcp/server-<pid>.log` | Default file. `$XDG_STATE_HOME` is honoured. The directory is created `0700`, the file `0600`. |
-| `ISAAC_MCP_LOG_DIR=<dir>` | Another directory. It is the same variable that sets where the Kit bridge writes `tool-failures-<pid>.log`. |
+| `ISAAC_MCP_LOG_DIR=<dir>` | Another directory. |
 | `ISAAC_MCP_LOG=0` | No file (stderr only). |
 
 Each file rotates at 1 MB and keeps two older copies; logs of ended processes beyond the newest 30 are deleted. Every

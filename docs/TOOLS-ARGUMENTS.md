@@ -631,7 +631,7 @@ Existence, size, and sha256 of a file on the bridge's box, to skip unchanged pus
 
 Where am I, in one call: the bridge that answered (pid, port, app, readiness), every bridge advertised on this machine, the current stage's session_id and stage_id with the timeline state, and running jobs. With nothing running it says so and names the next call, instead of failing. Call it once before the first simulator action; there is no need to repeat it between calls.
 
-- `detail` (boolean, optional): true: the full bridge identity as well (namespaces, toolset hashes, what is running and waiting, extension source). Default false: the short reply.
+- `detail` (boolean, optional): true: the full bridge identity as well (namespaces, what is running and waiting, extension source). Default false: the short reply.
 
 ## Generic scene (`sim__*`)
 

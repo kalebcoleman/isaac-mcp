@@ -187,7 +187,7 @@ client setup is in [MCP server](docs/MCP-SERVER.md).
 ## Importing robots and assets
 
 One tool, `assets__import_path`, imports USD, URDF, xacro, SDF, MuJoCo XML, meshes, ROS maps and folders that hold them
-(`format=auto`); the three older import tools were folded into it. Read [docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md) for formats,
+(`format=auto`). Read [docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md) for formats,
 options, error codes and limits. A file is converted on the host and no code from it is ever run; every file it names must be inside an
 approved folder, and only the user can approve one (ask for the smallest folder). `sim__quick_start environment=warehouse` builds a
 warehouse with a robot in it. A new format is an option on that tool, not a new tool.

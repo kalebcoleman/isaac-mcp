@@ -11,5 +11,5 @@ Connections must present a token (clients on the same account find it automatica
 `ISAAC_MCP_READ_ONLY=1` starts a bridge that runs only tools which change nothing.
 
 - Protocol, scheduling, token and read-only mode: `mcp/docs/protocol.md`
-- Settings: `mcp/docs/configuration.md`
+- Settings: `docs/ENVIRONMENT.md`
 - Writing tools: `mcp/docs/tool-authoring.md`

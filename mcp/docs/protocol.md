@@ -54,15 +54,19 @@ simulator. It is not encryption: over an untrusted network, use an SSH tunnel.
 
 Tools run on Kit's main loop. Three rules decide when:
 
-- **Inline** tools only read the bridge's own state and are answered at once on the socket
-  thread, whatever Kit is doing: `status`, `job_status`, `list_tools`, `list_bridges`. So you can
-  always ask what is running, and wait for a job, while a long call holds the main loop.
+- **Inline** tools touch nothing in Kit and are answered at once on the socket thread, whatever
+  Kit is doing: `status`, `job_status`, `list_tools`, `list_bridges`, and the file tools
+  (`put_file`, `get_file`, `stat_file`), which only use the disk. So you can always ask what is
+  running, wait for a job, and move a large file, without waiting for a frame or holding one up.
 - **Exclusive** tools may advance the app from inside their own call; `run_python` is one. An
   exclusive call waits for running calls to finish, runs alone, and calls that arrive meanwhile
   wait behind it.
 - Every other tool starts in arrival order as soon as no exclusive call is running or waiting.
 
-A request whose connection closes before it starts is dropped. `status` reports what is running
+A call that needs the main loop starts on the next Kit frame, so it takes at least about one frame
+(a few milliseconds headless) however little it does. A request whose connection closes before it
+starts is dropped. Replies are never sent in a way that makes Kit wait for the client: a client
+that stops reading is disconnected once 256 MiB of replies are waiting for it. `status` reports what is running
 and how many wait (`busy`).
 
 ## Read-only mode
@@ -83,3 +87,18 @@ Each job also has a record on disk, `<jobs folder>/<job_id>/job.json`, in the sa
 Isaac Lab job with `"runner": "kit"`. The host reads it when the simulator has gone, and lists
 simulator and Lab jobs together. The jobs folder is `ISAACLAB_JOBS_DIR`, or
 `~/.local/share/isaac-mcp/jobs`.
+
+## Several simulators, and other machines
+
+Give each Kit process its own port. A port that is taken makes the bridge refuse to start and say
+so, rather than move to a port no client expects. Every bridge advertises itself, so
+`--list-bridges` shows them all, and a client that was given no port refuses to pick between them.
+
+The bridge listens on `localhost` only, because it runs code. From another machine the simplest
+way in is an SSH tunnel to the port. To listen on a private address instead, set `ISAAC_MCP_BIND`
+to that address (never `0.0.0.0` on a machine the internet can reach) and give the client the
+token as `ISAAC_MCP_TOKEN`, with `ISAAC_MCP_HOST` and `ISAAC_MCP_PORT`. A remote client cannot
+read the portfiles; the `list_bridges` tool, asked of any bridge it can reach, lists the others
+on that machine.
+
+Every setting is listed in [ENVIRONMENT.md](../../docs/ENVIRONMENT.md#bridge-isaacmcpbridge).

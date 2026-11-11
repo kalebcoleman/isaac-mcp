@@ -2,7 +2,7 @@
 
 This is the single list of proposed and unfinished work. Check an item only after verifying it
 against the current code and the relevant Sim/Lab build. Current behavior and tool arguments
-are in the [documentation index](README.md). Earlier plans and test records remain in Git history.
+are in the [documentation index](README.md).
 
 Keep the MCP focused on reusable capabilities. Small Jenga and warehouse quick starts remain;
 substantial tasks, policies, missions, checkpoints and run data belong in separate projects.

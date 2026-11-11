@@ -8,7 +8,6 @@ readme = "docs/README.md"
 repository = ""
 category = "Internal"
 keywords = ["kit", "mcp", "bridge", "socket"]
-changelog = "docs/CHANGELOG.md"
 
 [dependencies]
 # Schedules each tool call on the main loop.
@@ -17,4 +16,4 @@ changelog = "docs/CHANGELOG.md"
 [[python.module]]
 name = "isaac_mcp_bridge"
 
-# Settings are listed in isaac_mcp_bridge/knobs.py and mcp/docs/configuration.md.
+# Settings are listed in isaac_mcp_bridge/knobs.py and docs/ENVIRONMENT.md.

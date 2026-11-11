@@ -14,7 +14,7 @@ from isaac_mcp.client import BridgeError
 IDENTITY = {
     "pid": 4242, "port": 8766, "app": "Isaac Sim", "app_version": "6.2.0", "headless": True, "app_ready": True,
     "uptime_s": 12.5, "hostname": "lab", "bind_host": "127.0.0.1", "python": "3.12.0", "namespaces": ["sim", "assets"],
-    "tools": 80, "toolsets": {"sim": "abc"}, "busy": {"running": [], "waiting": 0, "exclusive": None},
+    "tools": 80, "busy": {"running": [], "waiting": 0, "exclusive": None},
     "jobs": {"running": 0, "jobs": []}, "read_only": False, "auth": True, "extension": {"commit": "unknown", "dirty": None},
 }
 STAGE = {"session_id": "s1", "stage_id": "g1", "source": "anon:0x1:World.usd", "default_prim": "/World", "playing": False,
@@ -47,7 +47,7 @@ def test_status_is_one_short_answer_with_the_stage_ids(state):
     assert out["running"] is True and out["pid"] == 4242 and out["port"] == 8766 and out["app_ready"] is True
     assert out["stage"] == {"session_id": "s1", "stage_id": "g1", "source": "anon:0x1:World.usd", "default_prim": "/World",
                             "timeline": "stopped", "physics_engine": "physx"}
-    assert not {"toolsets", "namespaces", "extension", "busy", "read_only", "bridges", "jobs_running"} & set(out)
+    assert not {"namespaces", "extension", "busy", "read_only", "bridges", "jobs_running"} & set(out)
     assert "no need to call this again" in out["note"]
     assert [tool for tool, _ in state.client.calls] == ["status", "sim.stage.info"], "one check-in is two cheap bridge reads"
     assert len(json.dumps(out)) < 900

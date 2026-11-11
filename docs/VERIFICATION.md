@@ -4,8 +4,8 @@ The automated host suite and live simulator checks cover different things. A pas
 that Isaac Sim, the renderer, ROS, or a particular robot work on a machine. Record the commit, machine, driver,
 versions, commands, and any warnings when reporting a result.
 
-For installation identities, lock-preserving commands and evidence-reporting fields, use the
-[reproducibility guide](REPRODUCIBILITY.md). For a non-destructive first connection, use the
+To record an installation and a result so that someone else can reproduce it, see
+[the last section](#recording-a-run-so-it-can-be-reproduced). For a non-destructive first connection, use the
 [setup check](LINUX-SETUP.md#connect-and-check-without-changing-the-scene). The suites below have
 different scopes; native verifiers can build scenes and move joints.
 
@@ -167,3 +167,52 @@ expectation printed the assertion and exited with status 1. This is one version 
 - Before a training run, obtain operator authorization and check GPU capacity. Use the
   [Isaac Lab guide](TOOLS-ISAACLAB.md) for status, metrics, and guard behavior.
 - See [working checklist](CHECKLIST.md) for remaining work.
+
+## Recording a run so it can be reproduced
+
+A useful report identifies **source, environment, execution and observed effects**. A lockfile or a passing
+host suite alone does not establish native simulation behavior.
+
+Keep logs and generated scenes outside Git. From the checkout root, these read-only commands
+record source and simulator package identity without importing Kit or running a CUDA kernel:
+
+```bash
+git rev-parse HEAD
+git rev-parse HEAD^{tree}
+git status --short
+sha256sum pyproject.toml uv.lock
+uv --version
+uname -srmo
+cat /etc/os-release
+nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
+printf 'DISPLAY=%s XDG_SESSION_TYPE=%s\n' "${DISPLAY:-unset}" "${XDG_SESSION_TYPE:-unset}"
+SIM_PYTHON="${ISAAC_MCP_PYTHON:-$PWD/.venv/bin/python}"
+"$SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.executable); print(sys.version); print({n:m.version(n) for n in ("isaacsim", "isaacsim-kernel", "numpy", "torch", "mcp")})'
+uv pip check --python "$SIM_PYTHON"
+uv tool list
+```
+
+For the host, retain `uv pip freeze --python <host-python>` and `uv pip check --python <host-python>`
+using the interpreter of the installed uv tool (located under `uv tool dir`). Record Lab and
+external ROS in their own interpreters/terminals. Do not use a system ROS Python environment
+to stand in for Sim's bundled bridge.
+
+| Record | Include |
+|---|---|
+| Source | Full commit/tree, dirty diff, input hashes, any diagnostic launcher deviation |
+| Setup | Exact commands, tool/interpreter versions, exit codes, cache use and fresh versus existing environment |
+| Runtime | Sim package and app/Kit build, backend, headless/windowed, GPU/driver/display, selected PID/port/session/stage |
+| Effects | Requested operation, tool result, independent state/pixel/physics observations, source preservation |
+| Outcome | Attempted/pass/fail/pending/unsupported; warning/error counts with the precise log interval |
+| Media | Original hashes, decoded frame count versus visually sampled frames, redaction and asset notices |
+| Recovery | Response/timeout, subsequent named health checks and observed process exit; cleanup is not recovery |
+
+A timeout or client disconnect does not prove native cancellation. A successful import does
+not prove physics readiness. A successful save is not a solver checkpoint: reopen in a fresh
+process and verify the properties and effects you need. The legacy exporter is a root-reference
+copy plus eligible local PhysicsScene settings, not a full session snapshot; see [save contracts](TOOLS-SCENE.md).
+
+Before sharing evidence, replace personal paths with neutral placeholders and visually inspect
+screenshots. Preserve original private records; publish a separate redacted summary with hashes.
+Keep USD/user assets, large logs and videos out of Git. See [media publication](media/README.md#video-access-and-publication)
+and [asset notices](provenance/ASSETS.md).

@@ -356,7 +356,7 @@ call what is running, and `refresh_tools` finds a simulator you have started.
 | Use ROS 2, RViz 2 or Nav2 | [ROS 2 and RViz 2](docs/ROS2-RVIZ.md) |
 | Run the UR5e lab twin | [UR5e twin](docs/TOOLS-UR5E.md) · [lab files](docs/ASSETS.md#public-files-and-lab-files) |
 | Configure the server | [Client configuration](docs/MCP-SERVER.md#4-client-configuration) · [Environment variables](docs/ENVIRONMENT.md) |
-| Check results or report a problem | [Verification](docs/VERIFICATION.md) · [Reproducibility](docs/REPRODUCIBILITY.md) |
+| Check results or report a problem | [Verification](docs/VERIFICATION.md), which also says what to record |
 | Add my own tools | [Tool authoring](mcp/docs/tool-authoring.md) |
 | See everything | [Documentation index](docs/README.md) |
 

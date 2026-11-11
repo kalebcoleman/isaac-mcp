@@ -1045,7 +1045,7 @@ def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypa
     assert str(tmp_path) not in answer, "status must not publish the checkout path"
     brief = json.loads(short)
     assert brief["running"] is True and brief["pid"] == direct["pid"] and brief["port"] == live.port
-    assert not {"admission", "toolsets", "namespaces", "extension"} & set(brief), "the default reply is the short one"
+    assert not {"namespaces", "extension"} & set(brief), "the default reply is the short one"
     assert "warning" in brief["host"] and len(short) < len(answer)
 
 

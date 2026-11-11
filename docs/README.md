@@ -36,17 +36,16 @@ over both.
 |---|---|
 | [ROS 2 and RViz 2](ROS2-RVIZ.md) | TF setup, RViz config, the TF doctor, Nav2 maps |
 | [Isaac Sim 6.2 notes](ISAAC-6.2-NOTES.md) | Adapting labs written for Isaac Sim 6.0 |
-| [Verification](VERIFICATION.md) | Host and live checks, expected values and limits |
-| [Reproducibility](REPRODUCIBILITY.md) | Record an environment and reproduce a result |
+| [Verification](VERIFICATION.md) | Host and live checks, expected values and limits; what to record so a result can be reproduced |
 
 **Understand and extend**
 
 | Page | Use it for |
 |---|---|
 | [How it works](ARCHITECTURE.md) | The whole system with a diagram: what MCP is, how a client connects, how the server reaches Isaac Sim (bridge, ports, launch), Isaac Lab jobs, assets, recording, configuration, naming, ROS 2 rules |
-| [Host package guide](../mcp/README.md) | The gateway, permanent bridge registration, adding a tool project |
-| [Tool authoring](../mcp/docs/tool-authoring.md) | Handler contract, hot reload, control panel, Kit gotchas |
-| [Bridge protocol](../mcp/docs/protocol.md) · [Bridge configuration](../mcp/docs/configuration.md) · [Bridge in Isaac Lab](../mcp/docs/isaac-lab.md) | Wire protocol, knobs, standalone Lab scripts |
+| [Host package guide](../mcp/README.md) | The server package: what a client is shown, loading the bridge in another Kit app, scripts without MCP |
+| [Tool authoring](../mcp/docs/tool-authoring.md) | Your own tool package: arguments, errors, flags, reloading, the panel, Kit surprises |
+| [Bridge protocol](../mcp/docs/protocol.md) | Messages, finding a bridge, the token, scheduling, read-only mode, jobs, access from another machine |
 | Extension notes: [bridge](../exts/isaac.mcp.bridge/docs/README.md) · [panel](../exts/isaac.mcp.panel/docs/README.md) · [sim-tools](../exts/sim-tools/README.md) · [ur5e-dt](../exts/ur5e-dt/docs/README.md) | What each Kit extension is |
 
 **Project**
@@ -66,7 +65,7 @@ and official Isaac Sim and Isaac Lab skills. Use the [working checklist](CHECKLI
 ## Evidence
 
 Use [compatibility](COMPATIBILITY.md) for tested builds and known limits, and
-[verification](VERIFICATION.md) for checks. The examples and navigation walkthrough keep their supporting material under `docs/evidence/`; earlier test ledgers are in Git history.
+[verification](VERIFICATION.md) for checks. The examples and navigation walkthrough keep their supporting material under `docs/evidence/`.
 
 ## Scripts
 

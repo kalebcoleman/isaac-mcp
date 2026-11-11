@@ -360,8 +360,6 @@ def cmd_status(bridge, detail: bool = True) -> Dict[str, Any]:
         "started": started, "uptime_s": round(time.time() - started, 1) if started else None,
         "namespaces": sorted(o["namespace"] for o in owners.values() if o["namespace"]),
         "tools": bridge.tool_count(),
-        "toolsets": {o["namespace"]: o["metadata"]["source_hash"] for o in owners.values()
-                     if o["metadata"].get("source_hash")},
         "busy": bridge.busy(),
         "jobs": bridge.jobs.summary(),
         "read_only": bridge.read_only,
@@ -458,8 +456,8 @@ def builtin_tools(bridge) -> List:
                         "next call, instead of failing. Call it once before the first simulator action; there "
                         "is no need to repeat it between calls.",
             parameters={"detail": {"type": "boolean",
-                                   "description": "true: the full bridge identity as well (namespaces, toolset "
-                                                  "hashes, what is running and waiting, extension source). "
+                                   "description": "true: the full bridge identity as well (namespaces, what "
+                                                  "is running and waiting, extension source). "
                                                   "Default false: the short reply."}},
             handler=bound(cmd_status), read_only=True, inline=True),
         ToolDefinition(
