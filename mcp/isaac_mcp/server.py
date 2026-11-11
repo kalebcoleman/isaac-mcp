@@ -94,14 +94,17 @@ SERVER_INSTRUCTIONS = os.getenv(
     "dial the selected bridge when called, and return an error that says what to do. If Kit is still "
     "starting, refresh_tools(wait_s=120) waits for its bridge. ISAAC_MCP_NAMESPACE and "
     "ISAAC_MCP_BUILTINS=0 can hide tools. Find advertised bridges with " + LIST_BRIDGES_HELP + ", and "
-    "confirm the chosen bridge's PID and port (status) before scene-changing calls. Start an additional "
+    "confirm the chosen bridge's PID and port with status, once, before the first scene-changing call: it also "
+    "gives the stage IDs and says when nothing is running. Start an additional "
     "Kit only when explicitly requested and resource checks permit. screenshot() and "
     "start_screen_recording() with no target pick the Isaac Sim or Isaac Lab window when one is open, "
     "even if it is covered. When a job or scene is running with a window (isaaclab__play, "
     "headless=false), look at it yourself: take screenshots or a short recording to check the result "
     "and decide the next step, without waiting to be asked. isaaclab__runs_status reports the job's "
-    "window for screenshot(window_id=...). Start with isaac_help(task): it names the tools for what you want to do. Prefer these tools over writing your own capture, recording, "
-    "contact-logging or training-launch code. For evidence call screenshot(label=...) or "
+    "window for screenshot(window_id=...). Start with isaac_help(task): it names the tools for what you want to do, and says when none fits. Prefer these tools over writing your own capture, recording, "
+    "contact-logging, control-loop or training-launch code: sim__simulation__run runs your controller every physics step, "
+    "sim__trajectory__replay turns a saved trajectory into a labelled video, and long simulator work returns a job_id for "
+    "job_status(job_id, wait_s=30) instead of repeated polling. For evidence call screenshot(label=...) or "
     "start_screen_recording; headless runs use sim__camera__capture. If you skip them, say why.")
 
 RESPONSE_TIMEOUT_S = 300.0
@@ -681,7 +684,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                               {"type": "string"}, {"type": "array"}, {"type": "object"}],
                 })]
             elif f["kind"] == "array":
-                strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames", "paths", "dofs"}
+                strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames", "paths", "dofs", "log"}
                            or (canonical == "sim.ui.act" and f["name"] == "keys")
                            or canonical in _PACK_TOOLS)  # every array in these tools holds paths or names
                 annotation = list[str] if strings else list[float]
@@ -868,11 +871,13 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                 params = {**params, "snapshot_id": snapshot["snapshot_id"], "manifest_sha256": snapshot["manifest_sha256"]}
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e, "code", "FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
+        if canonical == "status":
+            return json.dumps(_where_am_i(params, active), indent=2, default=repr)
+        if canonical == "job_status":
+            return json.dumps(_job_status(params, active), indent=2, default=repr)
         result = active.get_client().call(kit_canonical, params)
         if routed_info and isinstance(result, dict):
             result = {**result, "import": routed_info}
-        if canonical == "status" and isinstance(result, dict):
-            result = {**result, "host": _host_identity(result.get("extension", {}))}
         return json.dumps(result, indent=2, default=repr)
     except BridgeError as e:
         if (str(e).startswith("unknown tool") and "known_tools" in e.details
@@ -890,6 +895,161 @@ def _dispatch(canonical: str, params: Dict[str, Any],
         if _needs_bridge_guidance(e) and host_catalog.is_catalog_tool(canonical):
             return _catalog_error(canonical, e, state) + host
         return f"Error: {e}{host}"
+
+
+# ---- status: one "where am I" answer, from the host's view and the selected bridge's ----
+
+_STATUS_SHORT = ("pid", "port", "app", "app_version", "headless", "app_ready", "uptime_s", "hostname")
+
+
+def _advertised() -> List[Dict[str, Any]]:
+    from .client import discover_bridges
+
+    try:
+        return [{k: b.get(k) for k in ("port", "pid", "app") if b.get(k) is not None}
+                for b in sorted(discover_bridges(), key=lambda b: int(b["port"]))]
+    except Exception:  # noqa: BLE001 - discovery only enriches the answer
+        return []
+
+
+def _surroundings(state: _BridgeState) -> Dict[str, Any]:
+    """What runs on this machine besides the selected bridge: advertised bridges, simulators this
+    server manages, and running Isaac Lab jobs. Each part is left out when empty."""
+    found: Dict[str, Any] = {"bridges": _advertised()}
+    sessions = [{k: s.get(k) for k in ("id", "port", "pid", "physics_backend") if s.get(k) is not None}
+                for s in live_sessions(getattr(state, "env", None))]
+    if sessions:
+        found["managed_sessions"] = sessions
+    try:
+        from .isaaclab import jobs as lab_jobs
+
+        running = lab_jobs.runs_list(state="running", limit=5)
+        if running.get("total"):
+            found["lab_jobs_running"] = [j.get("job_id") for j in running.get("jobs", [])]
+    except Exception:  # noqa: BLE001 - no Lab install, or an unreadable jobs folder
+        pass
+    return found
+
+
+def _host_brief() -> Dict[str, Any]:
+    host = _host_identity()
+    return {k: host[k] for k in ("version", "commit", "stale", "warning", "code_drift", "code_drift_message")
+            if host.get(k) not in (None, False)}
+
+
+def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
+    """The ``status`` tool. Short by default: the selected bridge, what else runs here, and the
+    stage IDs every scene tool needs. With no bridge it is still an answer, not an error."""
+    detail = bool(params.get("detail"))
+    try:
+        identity = state.get_client().call("status")
+    except (OSError, RuntimeError) as error:
+        if isinstance(error, TimeoutError) or not _needs_bridge_guidance(error):
+            raise
+        around = _surroundings(state)
+        if str(error).startswith("multiple bridges running"):
+            message = ("Several Isaac Sim bridges are running and none is selected: pick one with "
+                       "use_bridge(port). Do not start another simulator.")
+        elif around["bridges"]:
+            message = (f"Nothing answers on the port this server is set to use ({error}), but other bridges are "
+                       f"advertised: call use_bridge(port={around['bridges'][0]['port']}) after confirming which "
+                       "simulator you mean.")
+        else:
+            message = ("Nothing is running: no Isaac Sim bridge answers. Start one with sim__launch (when simulator "
+                       "launch is enabled) or ./run.sh --headless, then refresh_tools(wait_s=120). isaaclab__* and the "
+                       "screen tools work without one.")
+        return {"running": False, "message": message, **around, "host": _host_brief()}
+    if not isinstance(identity, dict):
+        return identity
+    host = _host_identity(identity.get("extension", {}))
+    if detail:
+        return {**identity, "host": host}
+    out: Dict[str, Any] = {"running": True, **{k: identity[k] for k in _STATUS_SHORT if k in identity}}
+    if "sim" in (identity.get("namespaces") or []):
+        try:
+            info = state.get_client().call("sim.stage.info", timeout=DISCOVERY_TIMEOUT_S)
+            out["stage"] = {k: info.get(k) for k in ("session_id", "stage_id", "source", "default_prim") if k in info}
+            out["stage"]["timeline"] = ("playing" if info.get("playing") else "stopped" if info.get("stopped") else "paused")
+            engine = (info.get("runtime") or {}).get("physics_engine")
+            if engine:
+                out["stage"]["physics_engine"] = engine
+        except Exception as error:  # noqa: BLE001 - the identity above is still the answer
+            out["stage"] = {"error": str(error)[:200]}
+    else:
+        out["stage"] = {"note": "This Kit has not loaded sim-tools, so sim__* and assets__* will not run on it."}
+    jobs = identity.get("jobs") or {}
+    if jobs.get("running"):
+        out["jobs_running"] = jobs.get("jobs", [])
+    hold = identity.get("hold") or {}
+    if hold.get("held"):
+        out["hold"] = hold
+    around = _surroundings(state)
+    if len(around["bridges"]) <= 1:
+        around.pop("bridges")   # the only bridge is the one above
+    out.update(around)
+    out["host"] = {k: v for k, v in host.items() if k in ("version", "commit", "warning", "code_drift", "code_drift_message",
+                                                           "extension_mismatch") and v not in (None, False)}
+    out["note"] = "Checked: no need to call this again before each tool. detail=true adds the full bridge identity."
+    return out
+
+
+# ---- job_status: the host waits (wait_s) and turns a replay's frames into its video ----
+
+JOB_WAIT_MAX_S = 60.0
+JOB_WAIT_POLL_S = 1.0
+
+
+def _job_status(params: Dict[str, Any], state: _BridgeState) -> Any:
+    import time
+
+    params = dict(params)
+    wait = params.pop("wait_s", 0) or 0
+    if isinstance(wait, bool) or not isinstance(wait, (int, float)) or not 0 <= wait <= JOB_WAIT_MAX_S:
+        return {"status": "error", "code": "INVALID_VALUE",
+                "message": f"wait_s must be 0..{JOB_WAIT_MAX_S:g} seconds; call again to keep waiting."}
+    deadline = time.monotonic() + wait
+    while True:
+        result = state.get_client().call("job_status", params)
+        if (not isinstance(result, dict) or "job_id" not in params or result.get("state") != "running"
+                or time.monotonic() >= deadline):
+            break
+        time.sleep(min(JOB_WAIT_POLL_S, max(0.0, deadline - time.monotonic())))
+    if isinstance(result, dict) and result.get("state") == "running" and wait:
+        result = {**result, "wait_timed_out": True}
+    if isinstance(result, dict) and isinstance(result.get("result"), dict) and "encode" in result["result"]:
+        result = {**result, "result": _encode_replay(result["result"], state, params.get("job_id"))}
+    return result
+
+
+def _encode_replay(result: Dict[str, Any], state: _BridgeState, job_id: Any) -> Dict[str, Any]:
+    """Encode a finished replay's frames into its labelled MP4, once per job. The frames are on Kit's
+    machine: when this server cannot read them (a remote Kit) the result says so and keeps them."""
+    from . import frames_video
+    from .screen import VIDEO_DIR, _ffmpeg
+
+    done = state.__dict__.setdefault("encoded_replays", {})
+    key = (_screen_port(state), job_id)
+    if key in done:
+        return {**result, **done[key]}
+    spec = result["encode"]
+    added: Dict[str, Any]
+    try:
+        frames = frames_video.frame_files(Path(spec["folder"]) / spec["pattern"])
+        if len(frames) != spec["frames"]:
+            raise RuntimeError(f"{len(frames)} of {spec['frames']} frames are readable in {spec['folder']} from this "
+                               "server (Kit may run on another machine)")
+        VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+        out = VIDEO_DIR / Path(spec["output"]).name
+        if out.exists():
+            out = out.with_name(f"{out.stem}-{job_id}{out.suffix}")
+        video = frames_video.encode(frames, out, float(spec["fps"]), _ffmpeg(), spec.get("label"))
+        added = {"video_path": video["path"], "video": {k: v for k, v in video.items() if k != "path"}}
+    except Exception as error:  # noqa: BLE001 - the replay itself succeeded; say why there is no video
+        added = {"video_error": f"{str(error)[:300]}. The frames are kept: join_videos(mode=\"frames\", "
+                                f"inputs=[\"{spec['folder']}/{spec['pattern']}\"]) encodes them."}
+        return {**result, **added}
+    done[key] = added
+    return {**result, **added}
 
 
 def _quick_start_wants_import(robot, state=None) -> bool:
@@ -1072,8 +1232,8 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
         options["annotations"] = ToolAnnotations(**CATALOG_HINTS[canonical])
     if canonical in REGISTRY:
         read_only = canonical in {"assets.roots", "assets.scan", "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.prim.bounds", "sim.prim.measure", "sim.camera.list", "sim.physics.inspect", "sim.physics.raycast", "sim.physics.contacts", "sim.body.state", "sim.joints.inspect", "sim.joints.state", "sim.logs.tail", "sim.logs.mark", "sim.logs.summary", "assets.search", "assets.packs", "assets.pack_doctor", "assets.dependencies", "sim.graph.node_types", "sim.graph.inspect", "sim.ui.find"}
-        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.ui.act", "sim.stage.open", "sim.quick_start", "sim.graph.build", "assets.pack_adopt", "assets.pack_pin", "assets.pack_build"},
-                                                 idempotentHint=read_only, openWorldHint=canonical.startswith(("assets.", "sim.controller.")))
+        options["annotations"] = ToolAnnotations(readOnlyHint=read_only, destructiveHint=canonical in {"sim.prim.delete", "sim.stage.clear_owned", "sim.controller.create", "sim.controller.update", "sim.simulation.run", "sim.ui.act", "sim.stage.open", "sim.quick_start", "sim.graph.build", "assets.pack_adopt", "assets.pack_pin", "assets.pack_build"},
+                                                 idempotentHint=read_only, openWorldHint=canonical.startswith(("assets.", "sim.controller.")) or canonical == "sim.simulation.run")
     server.tool(**options)(handler)
     if canonical in REGISTRY:
         _forbid_unknown_arguments(server, name)
@@ -1519,28 +1679,109 @@ _HELP_TOPICS = (
     ("build or change a scene", ("scene", "build", "robot", "load", "spawn", "import", "asset", "stage", "usd", "urdf"),
      "sim__quick_start (new scene), sim__stage__info (existing), sim__prim__create / create_many, assets__search, "
      "assets__import_path. ur5e_dt__* only for the lab UR5e twin."),
-    ("move a robot", ("move", "joint", "arm", "ik", "controller", "drive", "grip"),
-     "sim__joints__state, sim__joints__move, sim__joints__drive, sim__arm__ik, sim__arm__fk, sim__controller__create."),
+    ("move a robot's joints or arm", ("move", "joint", "arm", "ik", "drive", "grip", "gripper", "manipulator"),
+     "sim__joints__state, sim__joints__move, sim__joints__drive, sim__arm__ik, sim__arm__fk. These drive joints; "
+     "for forces on a free body use sim__simulation__run."),
+    ("run your own controller on a body (drone, rover, any rigid body)",
+     ("controller", "control", "closed loop", "closed-loop", "thrust", "torque", "wrench", "drone", "quadrotor", "quadcopter",
+      "fly", "flight", "hover", "pid", "own code", "my own", "custom", "per step", "every step", "apply force"),
+     "sim__simulation__run(body, controller, duration_s): each physics step your controller gets the body's state and "
+     "returns {force, torque}. controller='tcp://127.0.0.1:<port>' is your own process (start it with run_script; "
+     "isaac_mcp.controller_server.serve is a ready-made server), or 'module:function' loaded into Kit. It returns a "
+     "job_id: job_status(job_id, wait_s=30), job_cancel. The CSV log replays with sim__trajectory__replay."),
+    ("replay a saved trajectory or flight into a labelled video",
+     ("replay", "trajectory", "flight", "playback", "saved", "labelled", "labeled", "label", "caption", "pose driver"),
+     "sim__camera__create, then sim__trajectory__replay(trajectory, prim, camera, label): drives the poses from a CSV or "
+     "JSON file and job_status gives video_path, an MP4 with the label on it. Works headless. For a screen recording "
+     "instead: sim__viewport__frame(layout='clean', caption=...) and start_screen_recording."),
+    ("follow, wait for or stop long work",
+     ("job", "wait", "progress", "cancel", "done", "finished", "background", "long", "poll", "is it done", "async"),
+     "In the simulator: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id; "
+     "job_status(job_id, wait_s=30) waits, job_cancel stops. Isaac Lab and script jobs: isaaclab__runs_status(job_id, "
+     "wait_s=45), isaaclab__runs_tail, isaaclab__runs_cancel."),
+    ("run any script as a managed job (not only Isaac Lab)",
+     ("script", "managed", "batch", "sweep", "subprocess", "evaluator", "any python", "outside isaac"),
+     "run_script(script, args, python): your own Python script as a job with a log, timeout, progress and cancel; no "
+     "simulator or Isaac Lab needed. Follow it with isaaclab__runs_status / runs_tail / runs_cancel, which manage every job."),
+    ("get back to a clean state after a failed run", ("reset", "recover", "clean", "left playing", "still playing", "restart"),
+     "sim__timeline__control action=reset: cancels running simulator jobs, stops the timeline and returns robots to "
+     "their start pose. Then sim__stage__info."),
     ("train or evaluate a policy", ("train", "rl", "policy", "reward", "eval", "isaac lab", "isaaclab", "play", "checkpoint", "job", "wait", "baseline", "register", "summar", "pass count", "run dir", "exit code"),
      "isaaclab__envs_list, isaaclab__train, isaaclab__runs_status, isaaclab__runs_tail, isaaclab__metrics_summary, "
      "isaaclab__eval, isaaclab__play, isaaclab__runs_cancel. Before a long run: isaaclab__preflight (GPU and jobs) and "
      "isaaclab__env_check (NaNs, resets, memory). isaaclab__runs_status(job_id, wait_s=45) waits for a job to end; "
      "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises your evaluation-result files against criteria you give; isaaclab__checkpoint_register protects a baseline; isaaclab__run_script runs your own script as a job. "
      "isaaclab__record gives an MP4 with no window. No bridge needed."),
-    ("start, check or recover a simulator", ("start", "launch", "bridge", "kit", "hang", "stuck kit", "status", "connect"),
-     "status, list_bridges, refresh_tools(wait_s=120), use_bridge, sim__launch, sim__status, sim__stop, sim__logs__tail."),
+    ("start, check or recover a simulator", ("start", "launch", "bridge", "kit", "hang", "stuck kit", "status", "connect", "where am i", "running"),
+     "status (one call: the bridge, what is running, the stage IDs; says so when nothing runs), refresh_tools(wait_s=120), "
+     "use_bridge, sim__launch, sim__status, sim__stop, sim__logs__tail."),
 )
 
+_RUN_PYTHON_PATTERN = (
+    "When no tool fits, say so and use run_python: put the whole loop in `code`, `await "
+    "omni.kit.app.get_app().next_update_async()` between steps, pass background=true, call job.report(fraction, text) "
+    "as it goes and assign `result`; then job_status(job_id, wait_s=30). One call that runs to the end, not one call per step.")
 
-def _isaac_help(task: Optional[str]) -> str:
-    words = (task or "").lower()
-    hits = [t for t in _HELP_TOPICS if any(re.search(rf"\b{re.escape(k)}", words) for k in t[1])] if words else []
+
+def _help_gap_file(env: Optional[Mapping[str, str]] = None) -> Path:
+    return diagnostics.log_dir(os.environ if env is None else env) / "help-gaps.jsonl"
+
+
+def _record_help_gap(task: str, reason: str) -> Optional[Path]:
+    """Append a question isaac_help could not answer to a local file the maintainer reads. Never
+    raises and never leaves this machine; ISAAC_MCP_LOG=0 turns it off with the server log."""
+    import time
+
+    if not diagnostics.log_enabled(os.environ):
+        return None
+    try:
+        path = _help_gap_file()
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > 1 << 20:
+            return path   # full: a review is overdue, and growing forever helps nobody
+        with open(path, "a", encoding="utf-8") as stream:
+            stream.write(json.dumps({"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "task": task[:500], "reason": reason,
+                                     "version": _HOST_VERSION}) + "\n")
+        os.chmod(path, 0o600)
+        return path
+    except OSError:
+        return None
+
+
+def _help_matches(task: str) -> list:
+    """Topics for a task, best first. A topic that only shares one common word with the task is
+    dropped when another matches clearly better, so a drone question does not get the arm tools."""
+    words = task.lower()
+    scored = [(sum(bool(re.search(rf"\b{re.escape(k)}", words)) for k in topic[1]), -index, topic)
+              for index, topic in enumerate(_HELP_TOPICS)]
+    best = max((score for score, _, _ in scored), default=0)
+    return [topic for score, _, topic in sorted(scored, reverse=True) if score and score * 2 >= best]
+
+
+def _isaac_help(task: Optional[str], no_fit: bool = False) -> str:
+    task = (task or "").strip()
+    hits = _help_matches(task) if task else []
+    lines = []
+    if task and (no_fit or not hits):
+        recorded = _record_help_gap(task, "no_fit" if no_fit else "no_match")
+        lines.append(f"No isaac tool is known to fit {task!r}." if not hits or no_fit else "")
+        lines.append(_RUN_PYTHON_PATTERN)
+        if recorded is not None:
+            lines.append(f"This question was recorded for the maintainer in {recorded} (local file, never sent anywhere).")
+        if hits:
+            lines.append("The closest topics, in case one was missed:")
+        elif task:
+            lines.append("The full map, in case a tool was missed:")
+    else:
+        lines.append("Use these isaac tools before writing your own code. If you skip them, say why.")
     chosen = hits or list(_HELP_TOPICS)
-    lines = ["Use these isaac tools before writing your own code. If you skip them, say why."]
-    if task and not hits:
-        lines.append(f"No topic matched {task!r}; the full map follows.")
     lines += [f"- {name}: {tools}" for name, _, tools in chosen]
-    lines.append("First calls: status and list_bridges. No bridge? sim__launch, or just use isaaclab__* and the screen tools.")
+    if task and hits and not no_fit:
+        lines.append("None of these fits? Do not bend a tool to the job: call isaac_help(task=..., no_fit=true), which "
+                     "records the gap and gives the run_python pattern.")
+    lines = [line for line in lines if line]
+    lines.append("First call: status, once (the bridge, what is running, the stage IDs). Nothing running? sim__launch, or just "
+                 "use isaaclab__*, run_script and the screen tools.")
     host = _host_identity()
     if host.get("code_drift"):
         lines.append(f"code_drift: true - {host['code_drift_message']}.")
@@ -1565,11 +1806,13 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
         return _reported(await _refresh_tools(server, ctx, wait_s))
 
     @mcp.tool(annotations=READ_ONLY)
-    def isaac_help(task: Annotated[str | None, Field(description="What you are trying to do, in a few words, e.g. 'record a video', 'why did the grasp fail', 'train a policy'. Omit for the full map.")] = None) -> str:
+    def isaac_help(task: Annotated[str | None, Field(description="What you are trying to do, in a few words, e.g. 'record a video', 'why did the grasp fail', 'fly a drone with my controller'. Omit for the full map.")] = None,
+                   no_fit: Annotated[bool, Field(description="true: none of the tools named for this task fits. Records the question in a local file for the maintainer and returns the run_python pattern to use instead.")] = False) -> str:
         """Start here. Say what you want to do and get the exact isaac tools to load and call, in order,
-        instead of writing your own screenshot, recording, contact-logging or training code. Reads
+        instead of writing your own screenshot, recording, contact-logging or training code. When no
+        tool fits it says so, gives the run_python pattern and records the question locally. Reads
         nothing from the simulator and works with no bridge."""
-        return _isaac_help(task)
+        return _isaac_help(task, no_fit)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE, description=(
         "Switch this MCP server to another running Kit bridge on this machine. Use it when several run "

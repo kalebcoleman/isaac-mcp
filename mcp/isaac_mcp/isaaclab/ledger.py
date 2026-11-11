@@ -73,8 +73,8 @@ def _intervals(since_ts: float | None, now: float) -> list[dict[str, Any]]:
         return out
     for jd in dirs:
         data = _jobs._read_job(jd) if jd.is_dir() else None
-        if not data or not data.get("started_at"):
-            continue
+        if not data or not data.get("started_at") or data.get("uses_gpu") is False:
+            continue  # a script that declared it uses no GPU spends no GPU-hours
         start = float(data["started_at"])
         end = data.get("finished_at")
         if end is None:  # still running, or the host died before recording the end

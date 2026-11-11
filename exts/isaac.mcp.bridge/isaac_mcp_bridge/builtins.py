@@ -28,8 +28,9 @@ _RUN_PYTHON_DESCRIPTION = (
     "Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a "
     "value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` "
     "to let frames run between steps). Set persistent=True with a session_id to keep variables "
-    "alive between calls — useful for multi-step workflows where later calls need results from "
-    "earlier ones. Opening a stage (including save-as) resets every session; the next call says so."
+    "between calls. Opening a stage (including save-as) resets every session; the next call says so. "
+    "For work longer than a few seconds pass background=true: it returns a job_id at once for "
+    "job_status / job_cancel, instead of polling with more calls."
 )
 _RUN_PYTHON_PARAMETERS = {
     "code": {"type": "string", "required": True,
@@ -41,7 +42,21 @@ _RUN_PYTHON_PARAMETERS = {
     },
     "persistent": {
         "type": "boolean",
-        "description": "If true, variables persist across calls with the same session_id.",
+        "description": "If true, variables persist across calls with the same session_id. The reply "
+                       "lists only the names this call added or rebound (session_vars) and the total "
+                       "(session_var_count).",
+    },
+    "background": {
+        "type": "boolean",
+        "description": "Run as a job and return its job_id at once. The code must await (e.g. "
+                       "`await omni.kit.app.get_app().next_update_async()` in its loop) and must not "
+                       "pump the app itself. A `job` object is preloaded: job.report(fraction, text) "
+                       "sets progress, job.checkpoint() raises once job_cancel was called. Follow "
+                       "with job_status(job_id, wait_s=30); `result` and prints come back there.",
+    },
+    "label": {
+        "type": "string",
+        "description": "With background: a short name shown by job_status.",
     },
 }
 
@@ -59,7 +74,8 @@ _RELOAD_TOOLS_PARAMETERS = {
 
 
 def cmd_run_python(bridge, code: str, session_id: str = "default",
-                   persistent: bool = False) -> Dict[str, Any]:
+                   persistent: bool = False, background: bool = False,
+                   label: str = None) -> Dict[str, Any]:
     """Execute Python on Kit's main thread; optionally persist the namespace.
 
     Since everything is in-process, persisted values (functions, prim
@@ -80,8 +96,8 @@ def cmd_run_python(bridge, code: str, session_id: str = "default",
                "Usd": Usd, "UsdGeom": UsdGeom, "Sdf": Sdf, "Gf": Gf}
     assert set(preload) == set(PRELOADED)
     exec_globals = {**preload, "__builtins__": __builtins__}
-    if persistent:
-        exec_globals.update(bridge.sessions.namespace(session_id))
+    prior = bridge.sessions.namespace(session_id) if persistent else {}
+    exec_globals.update(prior)
     generation = bridge.sessions.generation
 
     try:
@@ -123,10 +139,50 @@ def cmd_run_python(bridge, code: str, session_id: str = "default",
                     "variables from this and earlier calls are gone. Re-run your setup code.")
                 bridge.sessions.take_reset(session_id)
             else:
-                payload["session_vars"] = bridge.sessions.persist(session_id, exec_globals)
+                exec_globals.pop("job", None)   # the job handle of a background call is not a variable
+                names = bridge.sessions.persist(session_id, exec_globals)
+                # Only what this call added or rebound: a long session otherwise echoes every name each call.
+                payload["session_vars"] = [n for n in names if n not in prior or prior[n] is not exec_globals[n]]
+                payload["session_var_count"] = len(names)
                 if note:
                     payload["session_reset"] = note
         return payload
+
+    if background:
+        if not compiled.co_flags & inspect.CO_COROUTINE:
+            raise ToolError("background=true needs code that awaits, e.g. `await omni.kit.app.get_app()."
+                            "next_update_async()` inside its loop: code that never awaits blocks Kit until "
+                            "it returns, so there would be nothing to poll. Nothing ran.")
+        from .jobs import JobError
+
+        async def work(job):
+            capture = _Capture()
+            job.output = capture.buf.getvalue
+            token = _CAPTURE.set(capture)
+            _install_stdout_proxy()
+            exec_globals["job"] = job
+            try:
+                await eval(compiled, exec_globals)
+            except Exception as e:
+                try:
+                    fail(e, capture.buf.getvalue())
+                except ToolError as wrapped:
+                    wrapped.details.pop("output", None)   # job_status carries output_tail already
+                    raise wrapped from None
+            finally:
+                capture.open = False
+                _CAPTURE.reset(token)
+            payload = finish(capture.buf.getvalue())
+            payload.pop("output", None)
+            return payload
+
+        try:
+            job = bridge.jobs.start("run_python", work, label=label, cooperative=False)
+        except JobError as e:
+            raise ToolError(str(e))
+        return {"job_id": job.id, "state": job.state,
+                "next": f"job_status(job_id={job.id!r}, wait_s=30) until state is not running; "
+                        "job_cancel stops it."}
 
     if compiled.co_flags & inspect.CO_COROUTINE:
         async def run_async():
@@ -306,14 +362,17 @@ def _app_ready():
         return None
 
 
-def cmd_status(bridge) -> Dict[str, Any]:
+def cmd_status(bridge, detail: bool = True) -> Dict[str, Any]:
     """Instance identity over the wire — WHICH bridge answered this socket.
 
     On a multi-instance box (several bridged Kit processes on distinct ports)
     a client verifies it reached the instance it intended: pid + port +
     headless-vs-headful + app version, plus what's registered. The filesystem
     portfile advertises the same identity, but only same-box clients can read
-    it — status is the surface a REMOTE client gets."""
+    it — status is the surface a REMOTE client gets.
+
+    ``detail`` is read by the MCP host, which shortens the reply unless it is true; this verb always
+    answers in full, so socket clients see no change."""
     import os
     import platform
     import socket as _socket
@@ -351,6 +410,8 @@ def cmd_status(bridge) -> Dict[str, Any]:
         # by everyone while it stands. The capability string is absent on an older doorway.
         "hold": bridge.hold_report(),
         "doorway_hold": HOLD_CAPABILITY,
+        # Background work still running in this Kit (job_status has the detail).
+        "jobs": bridge.jobs.summary(),
     })
     # Which code this Kit runs: commit, uncommitted edits and in-place reloads. Never a process.
     try:
@@ -389,6 +450,47 @@ def cmd_list_bridges(bridge) -> Dict[str, Any]:
         except Exception:
             continue
     return {"bridges": found}
+
+
+_JOB_STATUS_DESCRIPTION = (
+    "Status of background work in this Kit: run_python(background=true), sim__simulation__run and "
+    "sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), "
+    "elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it "
+    "lists the jobs, newest first. Jobs are forgotten when Kit restarts."
+)
+_JOB_STATUS_PARAMETERS = {
+    "job_id": {"type": "string",
+               "description": "job_id from the call that started the work. Omit to list jobs."},
+    "wait_s": {"type": "number",
+               "description": "Wait up to this many seconds (0-60) for the job to end before answering, "
+                              "instead of polling. The MCP server does the waiting; a direct socket "
+                              "caller gets the current status at once."},
+}
+
+
+def cmd_job_status(bridge, job_id: str = None, wait_s: float = 0) -> Dict[str, Any]:
+    """One job, or the list. ``wait_s`` is served by the MCP host, which polls: waiting here would
+    hold a request slot and keep an exclusive call from starting."""
+    from .jobs import JobError
+
+    if job_id is None:
+        jobs = bridge.jobs.jobs()
+        return {"jobs": [j.describe(full=False) for j in jobs],
+                "running": sum(j.state == "running" for j in jobs)}
+    try:
+        return bridge.jobs.get(job_id).describe()
+    except JobError as e:
+        raise ToolError(str(e))
+
+
+def cmd_job_cancel(bridge, job_id: str) -> Dict[str, Any]:
+    """Ask a running job to stop."""
+    from .jobs import JobError
+
+    try:
+        return bridge.jobs.cancel(job_id)
+    except JobError as e:
+        raise ToolError(str(e))
 
 
 def cmd_list_tools(bridge) -> Dict[str, Any]:
@@ -456,11 +558,31 @@ def builtin_tools(bridge) -> List:
         ),
         ToolDefinition(
             name="status",
-            description="Instance identity: pid, port, headless-vs-headful, "
-                        "app + version, uptime, registered namespaces — verify "
-                        "you reached the instance you intended.",
-            parameters={},
+            description="Where am I, in one call: the bridge that answered (pid, port, app, "
+                        "readiness), every bridge advertised on this machine, the current "
+                        "stage's session_id and stage_id with the timeline state, and running "
+                        "jobs. With nothing running it says so and names the next call, "
+                        "instead of failing. Call it once before the first simulator action; "
+                        "there is no need to repeat it between calls.",
+            parameters={"detail": {"type": "boolean",
+                                   "description": "true: the full bridge identity as well (namespaces, "
+                                                  "toolset hashes, admission, hold, extension source). "
+                                                  "Default false: the short reply."}},
             handler=functools.partial(cmd_status, bridge),
+        ),
+        ToolDefinition(
+            name="job_status",
+            description=_JOB_STATUS_DESCRIPTION,
+            parameters=_JOB_STATUS_PARAMETERS,
+            handler=functools.partial(cmd_job_status, bridge),
+        ),
+        ToolDefinition(
+            name="job_cancel",
+            description="Stop a background job (job_id from the call that started it). It ends at its "
+                        "next step and cleans up after itself; confirm with job_status.",
+            parameters={"job_id": {"type": "string", "required": True,
+                                   "description": "job_id of a running job."}},
+            handler=functools.partial(cmd_job_cancel, bridge),
         ),
         ToolDefinition(
             name="stat_file",

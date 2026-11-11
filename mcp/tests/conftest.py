@@ -38,3 +38,9 @@ def no_kit_bridge_for_job_tests(monkeypatch):
     except ImportError:
         return
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
+
+
+@pytest.fixture(autouse=True)
+def isolate_state_dir(tmp_path, monkeypatch):
+    """Keep the host's local records (the server log, isaac_help's gap file) out of the real state folder."""
+    monkeypatch.setenv("ISAAC_MCP_LOG_DIR", str(tmp_path / "state"))

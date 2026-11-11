@@ -43,6 +43,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from . import knobs, protocol, schema
 from .protocol import ToolError
 from .sessions import SessionStore
+from .jobs import JobStore
 from . import telemetry
 
 
@@ -414,6 +415,8 @@ class McpBridge:
         # Persistent run_python sessions — the store owns the persist policy
         # and the staleness contract (see sessions.py).
         self.sessions = SessionStore()
+        # Background jobs (see jobs.py): work that outlives the call that started it.
+        self.jobs = JobStore(self._schedule)
 
         # Socket server state.
         self._socket: Optional[socket.socket] = None

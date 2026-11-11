@@ -1142,12 +1142,16 @@ def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypa
         monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
         direct = direct_call("status", port=live.port, timeout=5)
         assert "host" not in direct, "the bridge must not grow a field this would overwrite"
-        (answer,) = run(build(), call("status"))
+        answer, short = run(build(), call("status", {"detail": True}), call("status"))
     payload = json.loads(answer)
     host = payload.pop("host")
     assert set(payload) == set(direct) and payload["pid"] == direct["pid"] and payload["port"] == live.port
     assert host["stale"] is True and host["commit"] == COMMIT_B and "warning" in host
     assert str(tmp_path) not in answer, "status must not publish the checkout path"
+    brief = json.loads(short)
+    assert brief["running"] is True and brief["pid"] == direct["pid"] and brief["port"] == live.port
+    assert not {"admission", "toolsets", "namespaces", "extension"} & set(brief), "the default reply is the short one"
+    assert "warning" in brief["host"] and len(short) < len(answer) / 2
 
 
 def test_status_with_no_bridge_still_reports_the_host(monkeypatch, tmp_path):
@@ -1156,8 +1160,9 @@ def test_status_with_no_bridge_still_reports_the_host(monkeypatch, tmp_path):
     monkeypatch.setattr(gw, "_HOST_CHECKOUT", checkout)
     monkeypatch.setattr(gw, "_HOST_COMMIT", COMMIT_B)
     state = gw._state_for(build({"ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")}))
-    answer = gw._dispatch("status", {}, state)
-    assert answer.startswith("Error:") and "MCP host: version" in answer and "Restart the MCP connection" in answer
+    answer = json.loads(gw._dispatch("status", {}, state))
+    assert answer["running"] is False and "sim__launch" in answer["message"], "no bridge is an answer, not an error"
+    assert answer["bridges"] == [] and "Restart the MCP connection" in answer["host"]["warning"]
     other = gw._dispatch("ur5e_dt.play_scene", {}, state)
     assert "MCP host:" not in other
 

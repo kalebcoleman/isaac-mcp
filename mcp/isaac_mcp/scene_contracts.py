@@ -71,7 +71,7 @@ add(
 )
 add(
     "assets.import_path",
-    "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. Requires session_id and stage_id.",
+    "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. A USD reports its drawn `visuals`; none is a warning.",
     dict(
         **TARGET,
         source_path=field(
@@ -251,7 +251,7 @@ add(
 )
 add(
     "sim.body.state",
-    "Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input.",
+    "Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. render_pose compares the poses the renderer draws from (Fabric, USD) with the physics pose; a `warnings` entry means pictures and recordings do not show where the body is.",
     dict(
         **TARGET,
         path=field("string", "Absolute rigid body path; prim and prim_path are aliases. Supply one.", False),
@@ -268,8 +268,8 @@ add(
 )
 add(
     "sim.timeline.control",
-    "Play, pause, stop or initialize. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline and leaves a paused one alone. Runtime reads establish readiness. Play keeps running between calls; sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop.",
-    dict(**TARGET, action=field("string", "play, pause, stop, or initialize (briefly play then pause; physics may advance)."),
+    "Play, pause, stop, initialize or reset. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline. Play reports physics_ready. reset is the call after a failed run: it cancels this pack's jobs and stops the timeline; safe to repeat. sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop.",
+    dict(**TARGET, action=field("string", "play, pause, stop, initialize (briefly play then pause; physics may advance), or reset (cancel jobs, stop, back to the authored start)."),
          resume=field("boolean", "With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it.", False)),
 )
 add(
@@ -299,6 +299,8 @@ add(
         eye=field("array", "Camera position [x, y, z] in world coordinates (stage units).", False),
         target=field("array", "Point to look at [x, y, z] in world coordinates (stage units); default: the prim's centre.", False),
         follow=field("boolean", "true: follow path while playing (until stopped); false: stop following.", False),
+        layout=field("string", "clean: hide the app's panels, menus, grid and selection outline for a recording. default: put them back. Alone, it leaves the camera where it is.", False, enum=["clean", "default"]),
+        caption=field("string", "One line (<=120 characters) drawn over the bottom of the viewport, e.g. the run's name, for screenshots and screen recordings; an empty string removes it. Needs a viewport window.", False),
     ),
 )
 
@@ -533,6 +535,40 @@ add(
         steps=field("integer", "Number of physics steps 1..120."),
         observe_prims=field("array", "Up to 16 rigid body paths.", False, default=[]),
         observe_joints=field("array", "Up to 8 articulation paths.", False, default=[]),
+    ),
+)
+add(
+    "sim.simulation.run",
+    "Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step. A stopped timeline is initialized; the run steps exactly and leaves it paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log that sim__trajectory__replay reads. A module:function controller is OPT-IN CODE EXECUTION in Kit; tcp:// runs none.",
+    dict(
+        **TARGET,
+        body=field("string", "Rigid body the controller acts on, e.g. a drone's base link."),
+        controller=field("string", "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or package.module:function or /abs/file.py:function, loaded into Kit: needs ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 at Kit launch."),
+        duration_s=field("number", "Simulated seconds to run, up to 3600. The controller can end sooner with done=true."),
+        params=field("object", "Passed to the controller as state['params'] each step, e.g. gains or a target.", False),
+        frame=field("string", "Frame of the returned force and torque, applied at the centre of mass: world (default) or body.", False, default="world", enum=["world", "body"]),
+        log=field("array", "Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.", False),
+        log_every=field("integer", "Log one row every this many physics steps, 1..10000.", False, default=1),
+        filename=field("string", "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.", False),
+        steps_per_frame=field("integer", "Physics steps between app frames, 1..120. Default: about real time at 60 frames per second.", False),
+        label=field("string", "Short name for the job, shown by job_status.", False),
+    ),
+)
+add(
+    "sim.trajectory.replay",
+    "Replay a saved trajectory into a labelled video, as a job: moves prims through the poses in a file and saves one camera frame per step. No physics runs and the prims go back afterwards; needs a stopped timeline. Returns job_id; job_status(job_id, wait_s=30) then gives video_path, an MP4 with the label drawn on it (works headless and on a locked screen). Without camera it shows the poses at wall-clock pace, for a screen recording.",
+    dict(
+        **TARGET,
+        trajectory=field("string", "Absolute path under your home or the output folder. A CSV as sim__simulation__run writes it (time_s, px,py,pz, qw,qx,qy,qz; or t and x,y,z), or JSON / JSONL samples {time_s, position, orientation_wxyz} or {time_s, bodies: {prim: {...}}}."),
+        prim=field("string", "Prim to move, for a file with one unnamed body: the robot's top Xform or a free body, not a jointed link.", False),
+        camera=field("string", "Camera to record, from sim__camera__create or sim__camera__list. Omit to only show the poses.", False),
+        adopt=field("boolean", "Record a camera that came with an opened scene (see sim__camera__capture adopt).", False),
+        label=field("string", "One line (<=120 characters) drawn on every frame of the video, e.g. 'PhysX hover, kp=4'.", False),
+        fps=field("number", "Video frames per second, 1..60.", False, default=30),
+        speed=field("number", "Playback speed: 2 is twice as fast, 0.5 slow motion.", False, default=1),
+        start_s=field("number", "Start at this trajectory time. Default: its first sample.", False),
+        end_s=field("number", "End at this trajectory time. Default: its last sample.", False),
+        filename=field("string", "New video name, e.g. hover.mp4. Default replay-<time>.mp4. Frames are saved beside it as <name>-00001.png.", False),
     ),
 )
 add(

@@ -317,6 +317,95 @@ def body_state(path, time_s, include_dynamics=False, stage=None):
     return result
 
 
+RENDER_POSITION_TOLERANCE_M = 0.005
+RENDER_ANGLE_TOLERANCE_DEG = 2.0
+
+
+def pose_gap(position_a, wxyz_a, position_b, wxyz_b):
+    """(distance, angle in degrees) between two poses."""
+    import math
+
+    distance = math.sqrt(sum((a - b) ** 2 for a, b in zip(position_a, position_b)))
+    dot = abs(sum(a * b for a, b in zip(wxyz_a, wxyz_b)))
+    norm = math.sqrt(sum(a * a for a in wxyz_a) * sum(b * b for b in wxyz_b)) or 1.0
+    return distance, math.degrees(2 * math.acos(max(-1.0, min(1.0, dot / norm))))
+
+
+def _matrix_pose(rows):
+    from pxr import Gf
+
+    transform = Gf.Transform(Gf.Matrix4d(*[float(v) for row in rows for v in row]))
+    q = transform.GetRotation().GetQuat()
+    return list(transform.GetTranslation()), [q.GetReal(), *q.GetImaginary()]
+
+
+def _fabric_pose(path):
+    """The world pose Fabric holds for a prim (what the renderer draws when physics writes to Fabric
+    only), or None when this build or prim has none."""
+    try:
+        import omni.usd
+        import usdrt
+
+        prim = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id()).GetPrimAtPath(path)
+        attribute = prim.GetAttribute("omni:fabric:worldMatrix") if prim else None
+        value = attribute.Get() if attribute else None
+        if value is None:
+            return None
+        return _matrix_pose([[value[i][j] for j in range(4)] for i in range(4)])
+    except Exception:  # noqa: BLE001 - optional evidence; USD is checked instead
+        return None
+
+
+def render_check(stage, path, position, orientation_wxyz):
+    """Compare a body's physics pose with the poses the renderer can draw it from.
+
+    The renderer reads Fabric or USD, depending on how the engine publishes: PhysX usually writes
+    USD, Newton writes Fabric and leaves USD at the authored pose. So the picture is right when
+    either one holds the physics pose, and a warning means neither does: the viewport, camera
+    captures and recordings then do not show where the body is. Returns (report, warning or None);
+    the report is None when no pose could be read."""
+    from pxr import Usd, UsdGeom
+
+    poses = {}
+    fabric = _fabric_pose(path)
+    if fabric is not None:
+        poses["Fabric"] = fabric
+    prim = stage.GetPrimAtPath(path)
+    xformable = UsdGeom.Xformable(prim) if prim else None
+    if xformable:
+        matrix = xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        poses["USD"] = _matrix_pose([[matrix[i][j] for j in range(4)] for i in range(4)])
+    if not poses:
+        return None, None
+    tolerance = RENDER_POSITION_TOLERANCE_M / (UsdGeom.GetStageMetersPerUnit(stage) or 1.0)
+    gaps = {source: pose_gap(position, orientation_wxyz, *pose) for source, pose in poses.items()}
+    matching = [source for source, (distance, angle) in gaps.items()
+                if distance <= tolerance and angle <= RENDER_ANGLE_TOLERANCE_DEG]
+    source = matching[0] if matching else min(gaps, key=lambda name: gaps[name])
+    distance, angle = gaps[source]
+    report = dict(source=source, agrees=bool(matching), position_gap=round(distance, 6), angle_gap_deg=round(angle, 3),
+                  checked=sorted(poses))
+    if matching:
+        return report, None
+    return report, (
+        f"The rendered pose of {path} is {distance:.4g} stage units and {angle:.3g} degrees away from its physics "
+        f"pose (closest of {' and '.join(sorted(poses))}), so the viewport, camera captures and recordings do not show "
+        "where the body is. Physics is not publishing poses to the renderer: on Newton check that Fabric updates are "
+        "enabled and step with sim__simulation__step or sim__simulation__run (both publish each frame); instanced "
+        "visuals can also stay behind (import with assets__import_path, which expands them).")
+
+
+def physics_ready():
+    """True once the selected engine's tensor view exists (a few frames after the first Play), False
+    while it does not, None when this build cannot say (no simulation manager, an unqualified engine)."""
+    try:
+        return manager().get_physics_simulation_view() is not None
+    except AssetError:
+        return None
+    except Exception:  # noqa: BLE001 - a view that cannot be asked for yet is not ready
+        return False
+
+
 def newton_stage(stage):
     import omni.usd
     from isaacsim.physics.newton import acquire_stage

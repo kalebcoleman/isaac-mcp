@@ -23,6 +23,14 @@ if backend == 'newton':
     from isaacsim.core.simulation_manager import SimulationManager
     if SimulationManager.get_active_physics_engine() != 'newton':
         raise RuntimeError('Requested Newton engine is not active; no PhysX fallback')
+    # Releases after 6.0.0.0 ship Newton's tensor views as a separate extension that the base app
+    # leaves off. Without it the first Play has no body or joint state to read, so a Newton session
+    # is not ready until it is on. Enabled here, at launch, so that holds whoever presses Play.
+    manager = omni.kit.app.get_app().get_extension_manager()
+    tensors = 'isaacsim.physics.newton.tensors'
+    if any(entry.get('name') == tensors or str(entry.get('id', '')).startswith(tensors + '-') for entry in manager.get_extensions()):
+        if not manager.set_extension_enabled_immediate(tensors, True):
+            raise RuntimeError(f'{tensors} is installed but could not be enabled; no PhysX fallback')
 while app.is_running():
     app.update()
 app.close()

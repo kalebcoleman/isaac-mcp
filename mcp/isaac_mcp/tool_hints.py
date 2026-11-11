@@ -24,6 +24,8 @@ CATALOG_HINTS = {
     "list_bridges": _READ,
     "get_file": _READ,
     "stat_file": _READ,
+    "job_status": _READ,
+    "job_cancel": _hints(destructive=True, idempotent=True),  # ends work in progress
     # Arbitrary code in Kit: it can do anything this OS account can.
     "run_python": _hints(destructive=True, open_world=True),
     "put_file": _hints(destructive=True, idempotent=True),  # replaces a file at that path

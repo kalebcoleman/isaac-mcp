@@ -363,7 +363,10 @@ simulation, screenshot, recording or contact-logging code, try it:
 1. Load the tools: `ToolSearch` for `mcp__isaac`, then call `isaac_help` with
    what you want to do (for example "record a video" or "why did the grasp
    fail"). It names the exact tools. Do not start from `sim__quick_start`.
-2. Run `status` and `list_bridges`. If a simulator is up, work through it.
+2. Run `status` once, before your first simulator action. It names the
+   bridge, what is running and the stage IDs, and says so when nothing is
+   running. Do not repeat it before every call or after a context reset: a
+   tool that hits a changed stage tells you.
 3. If nothing is up, start one with `sim__launch` (or `isaaclab__play` /
    `isaaclab__train` for Isaac Lab tasks) before falling back to scripts.
 4. Use it for what it already does:
@@ -372,12 +375,18 @@ simulation, screenshot, recording or contact-logging code, try it:
    - `sim__physics__contacts`, `sim__physics__inspect`, `sim__joints__state`,
      `sim__body__state`, `sim__prim__measure` for diagnosis;
    - `isaaclab__train`, `isaaclab__eval`, `isaaclab__runs_tail`,
-     `isaaclab__metrics_summary` for training.
+     `isaaclab__metrics_summary` for training;
+   - `sim__simulation__run` to run your own controller every physics step,
+     and `sim__trajectory__replay` to turn a saved trajectory into a labelled
+     video, instead of a hand-written loop in `run_python`;
+   - `job_status` with `wait_s` (simulator jobs) and `isaaclab__runs_status`
+     with `wait_s` (Lab and script jobs) to wait, instead of polling.
 5. Headless is fine. Capture frames with `sim__camera__capture` instead of a
    window screenshot.
 
 If you do not use it, say why in your first status message: tools not
-connected, no bridge, wrong Isaac version, or a missing feature. Use plain
+connected, no bridge, wrong Isaac version, or a missing feature. For a missing
+feature call `isaac_help` with `no_fit=true`, which records the gap. Use plain
 scripts only after that. Do not skip it silently.
 
 ## Keep the user informed

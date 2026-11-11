@@ -251,6 +251,8 @@ class Extension(omni.ext.IExt):
         from .timeline import complete_requested_stop, settle_stop
 
         timeline_target = (args["session_id"], args["stage_id"])
+        if args.get("action") == "reset":
+            return await self._reset(args)
         if args.get("action") == "initialize":
             # Make the play/pause sequence explicit: it can advance the scene and
             # must not interrupt an already-running simulation.
@@ -316,6 +318,8 @@ class Extension(omni.ext.IExt):
         result["effects"] = (
             "Timeline state observed after an application update; physics readiness requires a runtime read."
         )
+        if args["action"] == "play" and result["playing"]:
+            result.update(await self._await_physics())
         expected = {
             "play": result["playing"],
             "stop": result["stopped"],
@@ -327,6 +331,55 @@ class Extension(omni.ext.IExt):
                 "Requested timeline state was not retained; inspect the returned state before retrying.",
                 observed_state=result,
             )
+        return result
+
+    async def _await_physics(self, frames=30):
+        """After Play, wait a bounded number of frames for the engine's tensor view, so the first
+        runtime read or step does not land before physics exists. Reports; never fails the Play."""
+        import omni.kit.app as kit_app
+
+        from .physics import physics_ready
+
+        waited = 0
+        while physics_ready() is False and waited < frames and self.scene.timeline.is_playing():
+            await kit_app.get_app().next_update_async()
+            waited += 1
+        ready = physics_ready()
+        if ready is None:
+            return dict(physics_ready=None, physics_ready_note="This build's physics engine could not be asked; "
+                        "a runtime read establishes readiness.")
+        return dict(physics_ready=ready, physics_ready_frames=waited,
+                    **({} if ready else {"physics_ready_note": "The engine's tensor view did not appear within "
+                                         f"{frames} frames; runtime reads may answer PHYSICS_NOT_READY for a moment."}))
+
+    async def _reset(self, args):
+        """A clean stopped state from wherever a failed run left things: cancel this pack's jobs, stop
+        the viewport follow, and stop the timeline through the guarded path. Safe to repeat."""
+        import omni.kit.app as kit_app
+        from isaac_mcp.project_assets import refuse
+
+        s = self.scene
+        ids = dict(session_id=args["session_id"], stage_id=args["stage_id"])
+        s.target(**ids)
+        if args.get("resume") is not None and args.get("resume") is not False:
+            refuse("INVALID_VALUE", "resume is only for action=play.")
+        was = "playing" if s.timeline.is_playing() else "stopped" if s.timeline.is_stopped() else "paused"
+        jobs = getattr(self.bridge, "jobs", None)
+        cancelled = jobs.cancel_all(("sim.",)) if jobs is not None else []
+        follow_stopped = self.follower.stop("timeline reset")
+        result = dict(time_s=s.timeline.get_current_time())
+        if not s.timeline.is_stopped():
+            result = await self._timeline_control({**ids, "action": "stop"})
+        for _ in range(30):  # cancelled jobs end at their next step, which needs a frame
+            if jobs is None or not any(j.id in cancelled for j in jobs.running()):
+                break
+            await kit_app.get_app().next_update_async()
+        result.update(action="reset", was=was, playing=False, paused=False, stopped=s.timeline.is_stopped(),
+                      cancelled_jobs=cancelled, viewport_follow_stopped=bool(follow_stopped),
+                      effects="Timeline stopped: physics is rewound and robots are at their authored start pose. "
+                              "Scene edits are accepted again.")
+        if not s.timeline.is_stopped():
+            refuse("TIMELINE_INTERRUPTED", "The timeline did not stay stopped; inspect its state.", observed_state=result)
         return result
 
     async def _occupancy_cycle(self, args):
@@ -638,6 +691,14 @@ class Extension(omni.ext.IExt):
                                                 kit_app.get_app().next_update_async)
                     elif name == "sim.timeline.control":
                         result = await self._timeline_control(args)
+                    elif name == "sim.simulation.run":
+                        from .control_run import run as controller_run
+
+                        result = await controller_run(self, args)
+                    elif name == "sim.trajectory.replay":
+                        from .replay import run as replay_run
+
+                        result = await replay_run(self, args)
                     elif name == "sim.map.occupancy":
                         result = await self._occupancy_cycle(args)
                     else:
@@ -917,7 +978,15 @@ class Extension(omni.ext.IExt):
                 if not prim.IsActive() or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
                     refuse("PHYSICS_NOT_READY", f"{path} is not an active rigid body (no RigidBodyAPI). Use a "
                            "link with physics, e.g. the robot's base link, or sim__prim__get for any prim's pose.")
-                return body_state(path, s.timeline.get_current_time(), a.get("include_dynamics", False), stage)
+                state = body_state(path, s.timeline.get_current_time(), a.get("include_dynamics", False), stage)
+                from .physics import render_check
+
+                report, warning = render_check(stage, path, state["world_position"], state["orientation_wxyz"])
+                if report is not None:
+                    state["render_pose"] = report
+                if warning:
+                    state["warnings"] = [warning]
+                return state
 
             if paths is not None:
                 return dict(bodies=[dict(read(p), path=p) for p in paths], time_s=s.timeline.get_current_time())
@@ -965,6 +1034,14 @@ class Extension(omni.ext.IExt):
             follow = a.get("follow")
             if follow is not None and type(follow) is not bool:
                 refuse("INVALID_VALUE", "follow must be true or false.")
+            recording = {}
+            layout, caption = a.pop("layout", None), a.pop("caption", None)
+            if layout is not None or caption is not None:
+                from .viewport import recording_view
+
+                recording = recording_view(layout, caption)
+                if not any(a.get(k) not in (None, "") for k in ("path", "margin", "eye", "target", "follow")):
+                    return recording  # only the layout or caption was asked for: the camera stays put
             if follow is False:
                 stopped = self.follower.stop("follow=false")
                 return dict(stopped=stopped, **self.follower.status())
@@ -975,16 +1052,16 @@ class Extension(omni.ext.IExt):
             self.follower.stop("replaced by a new sim.viewport.frame call")
             viewport = get_active_viewport()
             if plain:
-                return frame(
+                return {**frame(
                     s, stage, a["path"], omni.usd.get_context(), viewport,
                     frame_viewport_selection, disabled,
-                )
+                ), **recording}
             result, spec = place(s, stage, omni.usd.get_context(), viewport, a, disabled)
             if spec is not None:
                 self.follower.start(s, stage, viewport, s.timeline, spec, disabled)
                 result.update(following=True, note="The camera moves with the prim while the timeline runs; "
                               "call again with follow=false to stop. sim.stage.info reports viewport_follow.")
-            return result
+            return {**result, **recording}
         if name == "sim.graph.show":
             a.update(session_id=session_id, stage_id=stage_id)
         return self.advanced.execute(name, stage, a, camera_frame=camera_frame)

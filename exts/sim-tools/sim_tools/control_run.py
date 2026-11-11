@@ -1,0 +1,445 @@
+"""sim.simulation.run: step physics with the caller's own controller in the loop, as a job.
+
+Every physics step the controller gets the body's measured state and answers with the force and
+torque to apply for that step. The controller is either a Python callable loaded into Kit (opt-in,
+it is arbitrary code) or a process on this machine speaking one JSON line per step over TCP, which
+runs no code in Kit. The loop uses the same exact-step path as sim.simulation.step, a few steps per
+app frame, so Kit keeps rendering and answering other tools while it runs.
+"""
+
+import csv
+import importlib
+import importlib.util
+import json
+import math
+import os
+import re
+import socket
+import time
+from pathlib import Path
+
+from isaac_mcp.project_assets import AssetError, refuse
+from isaac_mcp_bridge.jobs import JobError
+
+from . import physics
+
+MAX_DURATION_S = 3600.0
+MAX_STEPS = 2_000_000
+MAX_STEPS_PER_FRAME = 120
+TCP_TIMEOUT_S = 5.0
+READY_FRAMES = 60
+LOG_NAME = r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}\.csv"
+LOG_COLUMNS = {
+    "position": ("px", "py", "pz"),
+    "orientation": ("qw", "qx", "qy", "qz"),
+    "linear_velocity": ("vx", "vy", "vz"),
+    "angular_velocity": ("wx", "wy", "wz"),
+    "force": ("fx", "fy", "fz"),
+    "torque": ("tx", "ty", "tz"),
+}
+DEFAULT_LOG = ("position", "orientation", "linear_velocity", "angular_velocity", "force", "torque")
+SCRIPTS_ENV = "ISAAC_MCP_ENABLE_SCENE_SCRIPTS"
+_PYTHON_SPEC = re.compile(r"(?P<source>[^:]+):(?P<name>[A-Za-z_][A-Za-z0-9_]*)")
+_TCP_SPEC = re.compile(r"tcp://(?P<host>[A-Za-z0-9_.-]+|\[[0-9A-Fa-f:]+\]):(?P<port>\d{1,5})")
+LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
+
+
+def parse_controller(spec):
+    """("tcp", host, port) or ("python", module-or-file, function); refuses anything else."""
+    if not isinstance(spec, str) or not spec or len(spec) > 1024:
+        refuse("INVALID_VALUE", "controller must be 'tcp://127.0.0.1:<port>', 'package.module:function' or "
+               "'/abs/path/file.py:function'.")
+    tcp = _TCP_SPEC.fullmatch(spec)
+    if tcp:
+        port = int(tcp["port"])
+        if not 1 <= port <= 65535:
+            refuse("INVALID_VALUE", "The controller port must be 1..65535.")
+        if tcp["host"] not in LOOPBACK and os.getenv(SCRIPTS_ENV) != "1":
+            refuse("CONTROLLER_NOT_ALLOWED", "A network controller must listen on this machine (tcp://127.0.0.1:<port>). "
+                   f"Another host needs {SCRIPTS_ENV}=1 in Kit's launch environment. Nothing ran.")
+        return "tcp", tcp["host"].strip("[]"), port
+    python = _PYTHON_SPEC.fullmatch(spec)
+    if not python:
+        refuse("INVALID_VALUE", "controller must be 'tcp://127.0.0.1:<port>', 'package.module:function' or "
+               "'/abs/path/file.py:function'.")
+    return "python", python["source"], python["name"]
+
+
+def load_python(source, name):
+    """Import the callable. Opt-in: this runs the caller's code inside Kit, like sim__controller__create."""
+    if os.getenv(SCRIPTS_ENV) != "1":
+        refuse("CONTROLLER_NOT_ALLOWED",
+               f"A Python controller runs your code inside Kit, which needs {SCRIPTS_ENV}=1 in Kit's launch "
+               "environment (the same opt-in as sim__controller__create). Without it, run the controller as its own "
+               "process and pass controller='tcp://127.0.0.1:<port>': isaac_mcp.controller_server.serve(fn, port) "
+               "is a ready-made server, and run_script starts it as a managed job. Nothing ran.")
+    try:
+        if source.endswith(".py"):
+            file = Path(os.path.expanduser(source))
+            if not file.is_absolute() or not file.is_file():
+                refuse("NOT_FOUND", f"{source} is not an existing absolute .py path on Kit's machine.")
+            spec = importlib.util.spec_from_file_location("isaac_mcp_controller_" + file.stem, str(file))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        else:
+            module = importlib.import_module(source)
+    except AssetError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - the caller's module failed to import
+        refuse("CONTROLLER_FAILED", f"Importing {source} failed: {type(exc).__name__}: {str(exc)[:600]}. Nothing ran.")
+    function = getattr(module, name, None)
+    if not callable(function):
+        refuse("NOT_FOUND", f"{source} has no callable named {name}.")
+    return function
+
+
+class TcpController:
+    """One JSON object per line each way: the state out, the command back."""
+
+    def __init__(self, host, port):
+        try:
+            self.sock = socket.create_connection((host, port), timeout=TCP_TIMEOUT_S)
+        except OSError as exc:
+            refuse("CONTROLLER_UNREACHABLE", f"No controller answers on {host}:{port} ({exc}). Start it first "
+                   "(isaac_mcp.controller_server.serve, e.g. through run_script), then call again. Nothing ran.")
+        self.sock.settimeout(TCP_TIMEOUT_S)
+        self.reader = self.sock.makefile("rb")
+
+    def __call__(self, state):
+        self.sock.sendall(json.dumps(state, separators=(",", ":")).encode() + b"\n")
+        line = self.reader.readline(65536)
+        if not line:
+            raise ConnectionError("the controller closed the connection")
+        return json.loads(line)
+
+    def close(self):
+        for closing in (self.reader, self.sock):
+            try:
+                closing.close()
+            except OSError:
+                pass
+
+
+def _vec3(value, label):
+    if value is None:
+        return (0.0, 0.0, 0.0)
+    if (not isinstance(value, (list, tuple)) or len(value) != 3
+            or not all(type(v) in (int, float) and math.isfinite(v) for v in value)):
+        raise ValueError(f"{label} must be three finite numbers, not {value!r}")
+    return tuple(float(v) for v in value)
+
+
+def check_command(command, default_frame):
+    """(force, torque, frame, done, extra) from what a controller returned. None means no wrench."""
+    if command is None:
+        return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), default_frame, False, {}
+    if not isinstance(command, dict):
+        raise ValueError(f"a controller returns a dict such as {{'force': [0, 0, 9.81]}} or None, not {type(command).__name__}")
+    frame = command.get("frame", default_frame)
+    if frame not in ("world", "body"):
+        raise ValueError("frame must be world or body")
+    extra = command.get("log") or {}
+    if not isinstance(extra, dict) or len(extra) > 16 or not all(
+            isinstance(k, str) and type(v) in (int, float) for k, v in extra.items()):
+        raise ValueError("log must be a dict of at most 16 numbers")
+    return (_vec3(command.get("force"), "force"), _vec3(command.get("torque"), "torque"), frame,
+            bool(command.get("done", False)), extra)
+
+
+def log_fields(log):
+    if log is None:
+        return list(DEFAULT_LOG)
+    if not isinstance(log, list) or not all(isinstance(f, str) for f in log):
+        refuse("INVALID_VALUE", "log must be a list of fields: " + ", ".join(LOG_COLUMNS) + ".")
+    unknown = [f for f in log if f not in LOG_COLUMNS]
+    if unknown:
+        refuse("INVALID_VALUE", f"Unknown log field(s) {unknown}; choose from " + ", ".join(LOG_COLUMNS) + ".")
+    return list(dict.fromkeys(log))
+
+
+def rotate(q_xyzw, v):
+    """Rotate vector v by the unit quaternion [x, y, z, w]."""
+    x, y, z, w = q_xyzw
+    tx, ty, tz = 2 * (y * v[2] - z * v[1]), 2 * (z * v[0] - x * v[2]), 2 * (x * v[1] - y * v[0])
+    return [v[0] + w * tx + (y * tz - z * ty), v[1] + w * ty + (z * tx - x * tz), v[2] + w * tz + (x * ty - y * tx)]
+
+
+class BodyIO:
+    """Measured state of, and wrench onto, one rigid body through the selected engine's tensor view."""
+
+    def __init__(self, path):
+        self.path = path
+        self.view = physics.view_for(path)
+        self.backend = physics.manager().get_active_physics_engine()
+        sample = self.view.get_transforms()
+        self._module = type(sample).__module__
+        self._device = getattr(sample, "device", None)
+        masses = physics.array(self.view.get_masses()).reshape(-1).tolist()
+        self.mass = float(masses[0]) if masses else None
+        # PhysX applies a force at the body's origin unless told where; Newton applies it at the
+        # centre of mass. So that "force" means the same thing on both, PhysX is given the centre of mass.
+        self.com = None
+        if self.backend == "physx":
+            try:
+                com = physics.array(self.view.get_coms()).tolist()[0][:3]
+                if len(com) == 3 and all(math.isfinite(v) for v in com) and any(abs(v) > 1e-9 for v in com):
+                    self.com = [float(v) for v in com]
+            except Exception:  # noqa: BLE001 - a view without it applies at the origin, as documented
+                self.com = None
+        self._pose = None
+
+    def read(self):
+        transform = physics.array(self.view.get_transforms()).tolist()[0]
+        velocity = physics.array(self.view.get_velocities()).tolist()[0]
+        if len(transform) != 7 or len(velocity) != 6:
+            refuse("PHYSICS_FORMAT", "Expected a 7-component transform and a 6-component velocity.")
+        position = physics.runtime_vector(transform[:3], 3, path=self.path, field="world_position", backend=self.backend)
+        q = physics.runtime_vector(transform[3:], 4, path=self.path, field="orientation_xyzw", backend=self.backend)
+        physics.runtime_vector(velocity, 6, path=self.path, field="velocities", backend=self.backend)
+        self._pose = (list(position), list(q))
+        return dict(position=list(position), orientation_wxyz=[q[3], q[0], q[1], q[2]],
+                    linear_velocity=velocity[:3], angular_velocity=velocity[3:], mass=self.mass)
+
+    def _data(self, row, integer=False):
+        import numpy as np
+
+        data = np.array(row, dtype=np.uint32 if integer else np.float32)
+        if self._module.startswith("warp"):
+            import warp as wp
+
+            return wp.array(data, dtype=wp.uint32 if integer else wp.float32, device=self._device)
+        if self._module.startswith("torch"):
+            import torch
+
+            data = data.astype(np.int32) if integer else data
+            return torch.from_numpy(data).to(device=self._device)
+        return data
+
+    def apply(self, force, torque, frame):
+        if not any(force) and not any(torque):
+            return
+        apply = getattr(self.view, "apply_forces_and_torques_at_position", None)
+        if not callable(apply):
+            refuse("WRENCH_UNSUPPORTED", f"The {self.backend} rigid-body view on this build cannot apply forces; "
+                   "no fallback was used.")
+        # For the next physics step only, at the centre of mass.
+        at = None
+        if self.com is not None and any(force):
+            at = list(self.com)  # in the body frame
+            if frame == "world":
+                if self._pose is None:
+                    self.read()
+                position, q = self._pose
+                at = [p + r for p, r in zip(position, rotate(q, self.com))]
+        apply(self._data([list(force)]), self._data([list(torque)]), None if at is None else self._data([at]),
+              self._data([0], integer=True), frame == "world")
+
+
+class CsvLog:
+    """One row per sample, in a new file in the output folder; never overwrites."""
+
+    def __init__(self, folder, filename, fields):
+        if not isinstance(filename, str) or not re.fullmatch(LOG_NAME, filename):
+            refuse("INVALID_OUTPUT", "filename: a new name of letters, digits, _ and -, ending .csv (<=64 characters).")
+        folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.path = folder / filename
+        try:
+            fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            refuse("CONFLICT", f"{filename} already exists in the output folder; use another filename. No overwrite.")
+        self.stream = os.fdopen(fd, "w", newline="")
+        self.fields = fields
+        self.extra = None
+        self.writer = csv.writer(self.stream)
+        self.rows = 0
+
+    def write(self, step, time_s, state, force, torque, extra):
+        if self.extra is None:  # the controller's own columns are fixed by its first answer
+            self.extra = sorted(extra)
+            self.writer.writerow(["step", "time_s", *(c for f in self.fields for c in LOG_COLUMNS[f]), *self.extra])
+        values = dict(position=state["position"], orientation=state["orientation_wxyz"],
+                      linear_velocity=state["linear_velocity"], angular_velocity=state["angular_velocity"],
+                      force=force, torque=torque)
+        self.writer.writerow([step, f"{time_s:.9g}", *(f"{v:.9g}" for f in self.fields for v in values[f]),
+                              *(f"{extra.get(k, float('nan')):.9g}" for k in self.extra)])
+        self.rows += 1
+
+    def close(self):
+        try:
+            self.stream.close()
+        except OSError:
+            pass
+
+
+def validate(args):
+    """Check the call's own values before anything is started. Returns the cleaned settings."""
+    duration = args.get("duration_s")
+    if type(duration) not in (int, float) or not math.isfinite(duration) or not 0 < duration <= MAX_DURATION_S:
+        refuse("INVALID_VALUE", f"duration_s must be a number of simulated seconds, more than 0 and at most {MAX_DURATION_S:g}.")
+    per_frame = args.get("steps_per_frame")
+    if per_frame is not None and (type(per_frame) is not int or not 1 <= per_frame <= MAX_STEPS_PER_FRAME):
+        refuse("INVALID_VALUE", f"steps_per_frame must be 1..{MAX_STEPS_PER_FRAME}.")
+    every = args.get("log_every", 1)
+    if type(every) is not int or not 1 <= every <= 10000:
+        refuse("INVALID_VALUE", "log_every must be 1..10000 physics steps.")
+    frame = args.get("frame", "world")
+    if frame not in ("world", "body"):
+        refuse("INVALID_VALUE", "frame must be world or body.")
+    params = args.get("params")
+    if params is not None and not isinstance(params, dict):
+        refuse("INVALID_VALUE", "params must be an object; it is passed to the controller as state['params'].")
+    if params is not None and len(json.dumps(params)) > 16384:
+        refuse("LIMIT", "params must be at most 16 KiB of JSON.")
+    return dict(duration=float(duration), per_frame=per_frame, every=every, frame=frame, params=params or {},
+                fields=log_fields(args.get("log")))
+
+
+class Run:
+    """One controller run. Kit-specific pieces (the next app frame, the operation lock, the target
+    check) are passed in, so the loop itself is plain Python."""
+
+    def __init__(self, body, controller, log, settings, stage, check_target, timeline, next_frame, lock):
+        self.body, self.controller, self.log = body, controller, log
+        self.settings, self.stage = settings, stage
+        self.check_target, self.timeline = check_target, timeline
+        self.next_frame, self.lock = next_frame, lock
+        sm = physics.manager()
+        self.sm = sm
+        self.dt = float(sm.get_physics_dt())
+        if not math.isfinite(self.dt) or self.dt <= 0:
+            refuse("PHYSICS_CLOCK_INVALID", "The physics timestep must be finite and positive; nothing ran.")
+        self.total = min(MAX_STEPS, max(1, round(settings["duration"] / self.dt)))
+        self.per_frame = settings["per_frame"] or max(1, min(MAX_STEPS_PER_FRAME, round((1 / 60) / self.dt)))
+
+    def _step(self, index):
+        state = self.body.read()
+        observed = dict(step=index, time_s=index * self.dt, dt=self.dt, **state, params=self.settings["params"])
+        try:
+            force, torque, frame, done, extra = check_command(self.controller(observed), self.settings["frame"])
+        except Exception as exc:  # noqa: BLE001 - the caller's controller: name it, with the step
+            refuse("CONTROLLER_FAILED", f"The controller failed at step {index}: {type(exc).__name__}: {str(exc)[:600]}",
+                   step=index, effects="The run stopped; the simulation stays paused where it was.")
+        if index % self.settings["every"] == 0:
+            self.log.write(index, observed["time_s"], state, force, torque, extra)
+        if done:
+            return True
+        self.body.apply(force, torque, frame)
+        physics.step(self.stage, 1)
+        return False
+
+    async def work(self, job):
+        started = time.monotonic()
+        done, ended_by = 0, "duration"
+        try:
+            while done < self.total:
+                job.checkpoint()
+                async with self.lock:
+                    job.checkpoint()  # a reset cancels while it holds this lock
+                    self.check_target()
+                    if self.timeline.is_stopped() or self.timeline.is_playing():
+                        refuse("TIMELINE_INTERRUPTED", "The timeline was played or stopped while the controller run "
+                               f"was stepping it (after {done} steps). The run ended; its log holds the steps so far.",
+                               steps=done)
+                    for _ in range(min(self.per_frame, self.total - done)):
+                        if self._step(done):
+                            ended_by = "controller"
+                            break
+                        done += 1
+                    physics.sync_fabric(self.stage)
+                if ended_by == "controller":
+                    break
+                job.report(done / self.total, f"step {done}/{self.total}", steps=done, sim_time_s=round(done * self.dt, 6))
+                await self.next_frame()
+        except AssetError as exc:
+            exc.details.setdefault("steps", done)
+            exc.details.setdefault("log_file", str(self.log.path))
+            raise
+        finally:
+            self.close()
+        return self.summary(done, ended_by, started)
+
+    def close(self):
+        self.log.close()
+        close = getattr(self.controller, "close", None)
+        if callable(close):
+            close()
+
+    def summary(self, done, ended_by, started):
+        try:
+            final = self.body.read()
+        except AssetError as exc:
+            final = dict(error=str(exc)[:300])
+        return dict(steps=done, physics_dt=self.dt, sim_time_s=round(done * self.dt, 9), ended_by=ended_by,
+                    wall_time_s=round(time.monotonic() - started, 3), steps_per_frame=self.per_frame,
+                    log_file=str(self.log.path), log_rows=self.log.rows, final_state=final,
+                    backend=self.body.backend,
+                    timeline="paused: read state with sim__body__state, replay the log with "
+                             "sim__trajectory__replay, or return to a clean stop with "
+                             "sim__timeline__control action=reset.")
+
+
+def job_store(ext):
+    store = getattr(ext.bridge, "jobs", None)
+    if store is None:
+        refuse("JOBS_UNAVAILABLE", "This Kit runs an isaac.mcp.bridge without background jobs; update the "
+               "extension (it ships in the same checkout as sim-tools) and restart Kit.")
+    return store
+
+
+async def run(ext, args):
+    """Validate, bring a stopped simulation to paused-and-initialized, and start the job."""
+    import omni.kit.app as kit_app
+    from pxr import UsdPhysics
+
+    s = ext.scene
+    ids = dict(session_id=args["session_id"], stage_id=args["stage_id"])
+    stage = s.target(**ids)
+    s.require_runtime()
+    settings = validate(args)
+    store = job_store(ext)
+    path = args.get("body")
+    prim = s.prim(stage, path)
+    if not prim.IsActive() or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+        refuse("INVALID_PHYSICS", f"{path} is not an active rigid body. Pass the body the controller pushes, "
+               "e.g. a drone's base link; find it with sim__physics__inspect.")
+    if s.timeline.is_playing():
+        refuse("TIMELINE_ACTIVE", "The timeline is playing. Pause it (sim__timeline__control action=pause) or stop "
+               "it first: the run steps physics itself, one exact step at a time.")
+    kind, first, second = parse_controller(args.get("controller"))
+    controller = TcpController(first, second) if kind == "tcp" else load_python(first, second)
+    next_frame = kit_app.get_app().next_update_async
+    log = None
+    try:
+        initialized = None
+        if s.timeline.is_stopped():
+            initialized = await ext._timeline_control({**ids, "action": "initialize"})
+        s.check_runtime_edit(stage)
+        for _ in range(READY_FRAMES):  # the tensor view appears a few frames after the first Play
+            if physics.physics_ready() is not False:
+                break
+            await next_frame()
+        body = physics_body(path)
+        name = args.get("filename") or time.strftime("run-%Y%m%d-%H%M%S.csv")
+        log = CsvLog(s.output, name, settings["fields"])
+        runner = Run(body, controller, log, settings, stage, lambda: s.target(**ids), s.timeline, next_frame,
+                     ext._operation_lock)
+        job = store.start("sim.simulation.run", runner.work, label=args.get("label"))
+    except BaseException as exc:
+        if log is not None:
+            log.close()
+        close = getattr(controller, "close", None)
+        if callable(close):
+            close()
+        if isinstance(exc, JobError):
+            refuse("JOB_LIMIT", str(exc))
+        raise
+    return dict(job_id=job.id, state=job.state, body=path, controller=kind, physics_dt=runner.dt,
+                steps=runner.total, steps_per_frame=runner.per_frame, log_file=str(log.path),
+                backend=body.backend, mass=body.mass,
+                **({"initialized": "The stopped timeline was played briefly and paused; physics may have advanced."}
+                   if initialized else {}),
+                next=f"job_status(job_id=\"{job.id}\", wait_s=30) until state is not running; job_cancel stops it.")
+
+
+def physics_body(path):
+    return BodyIO(path)
