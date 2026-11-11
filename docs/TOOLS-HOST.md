@@ -52,6 +52,55 @@ python3 mcp/isaac_mcp/client.py ur5e_dt.play_scene '{}' --port 8766
 The CLI uses canonical bridge names with dots; the MCP server exposes namespaced tools using double underscores,
 such as `ur5e_dt__play_scene`.
 
+## Grouped tools
+
+A client is shown one tool per subject, with an `action` argument, instead of one tool per operation:
+`sim__prim(action="create", ...)` rather than `sim__prim__create(...)`. A grouped tool takes the arguments of the
+action it runs and returns that tool's own answer. An argument that belongs to another action is refused, and nothing
+runs. `action="help"` returns the full description and arguments of every action in the group.
+
+The single-purpose names in brackets below still work when called, with the same arguments and answers, so existing
+prompts and scripts keep running. They are **deprecated**: they are no longer listed, and new work should use the
+grouped form. `ISAAC_MCP_LEGACY_TOOLS=1` lists them as before, with no grouped tools. Tools that belong to no group
+(`status`, `run_python`, `sim__quick_start`, `sim__timeline__control`, `assets__import_path`, `screenshot` and others)
+are listed under their own names either way. Where a tool has an argument of its own called `action`, the grouped
+tool takes it as `sub_action`.
+
+| Grouped tool | What it covers | Actions (single-purpose tool) |
+|---|---|---|
+| `sim__stage` | The open scene: identify it, list it, open, save, or clear what these tools made. | `info` (`sim__stage__info`), `tree` (`sim__stage__tree`), `open` (`sim__stage__open`), `save` (`sim__stage__save`), `clear_owned` (`sim__stage__clear_owned`) |
+| `sim__prim` | Prims: read, find, measure, create, move, edit, copy, delete and undo. | `get` (`sim__prim__get`), `find` (`sim__prim__find`), `bounds` (`sim__prim__bounds`), `measure` (`sim__prim__measure`), `create` (`sim__prim__create`), `create_many` (`sim__prim__create_many`), `set_transform` (`sim__prim__set_transform`), `set_attribute` (`sim__prim__set_attribute`), `clone` (`sim__prim__clone`), `delete` (`sim__prim__delete`), `revert` (`sim__prim__revert`) |
+| `sim__physics` | Physics: inspect, body state, contacts, raycasts, scene settings, colliders, mass and pushes. | `inspect` (`sim__physics__inspect`), `body_state` (`sim__body__state`), `contacts` (`sim__physics__contacts`), `raycast` (`sim__physics__raycast`), `configure` (`sim__physics__configure`), `apply` (`sim__physics__apply`) |
+| `sim__joints` | A robot's joints: read them, command targets, set drives and gains, move and teleport. | `inspect` (`sim__joints__inspect`), `state` (`sim__joints__state`), `command` (`sim__joints__command`), `move` (`sim__joints__move`), `drive` (`sim__joints__drive`), `gains` (`sim__joints__gains`), `teleport` (`sim__joints__teleport`) |
+| `sim__arm` | An arm's end effector: inverse and forward kinematics. | `ik` (`sim__arm__ik`), `fk` (`sim__arm__fk`) |
+| `sim__simulation` | Advance physics yourself: exact steps, a run with your own controller in the loop, or a saved trajectory replayed to video. | `step` (`sim__simulation__step`), `run` (`sim__simulation__run`), `replay` (`sim__trajectory__replay`) |
+| `sim__camera` | Cameras: list, create, capture a picture. | `list` (`sim__camera__list`), `create` (`sim__camera__create`), `capture` (`sim__camera__capture`) |
+| `sim__lidar` | LiDAR: create one, read a scan. | `create` (`sim__lidar__create`), `read` (`sim__lidar__read`) |
+| `sim__light` | Lights: create or change one. | `create` (`sim__light__create`), `modify` (`sim__light__modify`) |
+| `sim__material` | Materials: create one, bind it to geometry. | `create` (`sim__material__create`), `apply` (`sim__material__apply`) |
+| `sim__graph` | OmniGraph action graphs: node types, build, inspect, show in the editor. | `node_types` (`sim__graph__node_types`), `build` (`sim__graph__build`), `inspect` (`sim__graph__inspect`), `show` (`sim__graph__show`) |
+| `sim__controller` | OPT-IN CODE EXECUTION: a script-node controller that ticks while the timeline plays. | `create` (`sim__controller__create`), `update` (`sim__controller__update`) |
+| `sim__ui` | Isaac Sim's own windows: find a widget, act on it. | `find` (`sim__ui__find`), `act` (`sim__ui__act`) |
+| `sim__logs` | The simulator's log: tail it, mark a place, summarise. | `tail` (`sim__logs__tail`), `mark` (`sim__logs__mark`), `summary` (`sim__logs__summary`) |
+| `assets__library` | Your asset folders: approved roots, files in one, a search, one file's details. | `roots` (`assets__roots`), `scan` (`assets__scan`), `search` (`assets__search`), `info` (`assets__info`) |
+| `assets__pack` | Named asset packs: list, check, dependencies, adopt a folder, pin, build. | `list` (`assets__packs`), `doctor` (`assets__pack_doctor`), `dependencies` (`assets__dependencies`), `adopt` (`assets__pack_adopt`), `pin` (`assets__pack_pin`), `build` (`assets__pack_build`) |
+| `ur5e_dt__scene` | The RISE lab's UR5e twin: build its scene, load the bench or room, play, stop, save, restore. | `quick_start` (`ur5e_dt__quick_start`), `quick_start_with_workstation` (`ur5e_dt__quick_start_with_workstation`), `quick_start_with_workstation_and_room` (`ur5e_dt__quick_start_with_workstation_and_simple_room`), `new_stage` (`ur5e_dt__new_stage`), `load_workstation` (`ur5e_dt__load_workstation`), `load_room` (`ur5e_dt__load_simple_room`), `play` (`ur5e_dt__play_scene`), `stop` (`ur5e_dt__stop_scene`), `save_state` (`ur5e_dt__save_scene_state`), `restore_state` (`ur5e_dt__restore_scene_state`) |
+| `ur5e_dt__objects` | The twin's task objects: add, delete, assemble, randomize, place, sync from the real cell. | `add` (`ur5e_dt__add_objects`), `delete` (`ur5e_dt__delete_objects`), `assemble` (`ur5e_dt__assemble_objects`), `randomize` (`ur5e_dt__randomize_object_poses`), `randomize_one` (`ur5e_dt__randomize_single_object`), `set_pose` (`ur5e_dt__set_object_pose`), `sync_real_poses` (`ur5e_dt__sync_real_poses`) |
+| `ur5e_dt__ros` | The twin's ROS 2 side: camera TF graph, pose publisher, the UR driver. | `camera_tf_graph` (`ur5e_dt__setup_camera_tf_graph`), `pose_publisher` (`ur5e_dt__setup_pose_publisher`), `start_driver` (`ur5e_dt__start_ros_driver`) |
+| `ur5e_dt__recording` | The twin's viewport recorder: start, stop, status. | `start` (`ur5e_dt__start_recording`), `stop` (`ur5e_dt__stop_recording`), `status` (`ur5e_dt__get_recording_status`) |
+| `files` | Files on the simulator's machine: write, read, check size and hash. | `put` (`put_file`), `get` (`get_file`), `stat` (`stat_file`) |
+| `jobs` | Every job, simulator or process: list, status (with wait_s), log tail, cancel. | `status` (`job_status`), `cancel` (`job_cancel`), `list` (`isaaclab__runs_list`), `tail` (`isaaclab__runs_tail`), `lab_status` (`isaaclab__runs_status`) |
+| `isaaclab__launch` | Start an Isaac Lab job and get its job_id: train, evaluate, play, record or check a task. | `train` (`isaaclab__train`), `eval` (`isaaclab__eval`), `play` (`isaaclab__play`), `record` (`isaaclab__record`), `env_check` (`isaaclab__env_check`) |
+| `isaaclab__inspect` | Before launching: the Isaac Lab install, its tasks, GPU room, and checkpoints. | `install` (`isaaclab__install_info`), `envs` (`isaaclab__envs_list`), `preflight` (`isaaclab__preflight`), `checkpoints` (`isaaclab__checkpoints_list`) |
+| `isaaclab__metrics` | Training results: a summary of scalars or evaluation files, or one curve's last points. | `summary` (`isaaclab__metrics_summary`), `curve` (`isaaclab__tensorboard_tail`) |
+| `screen_recording` | Record the desktop or a window to MP4: start, stop, status. | `start` (`start_screen_recording`), `stop` (`stop_screen_recording`), `status` (`screen_recording_status`) |
+| `windows` | Desktop windows: list, raise, move, tile. | `list` (`list_windows`), `raise` (`raise_window`), `move` (`move_window`), `tile` (`tile_windows`) |
+| `window_input` | Mouse and keyboard into the focused window (opt-in group). | `click` (`window_click`), `drag` (`window_drag`), `scroll` (`window_scroll`), `type` (`window_type`), `key` (`window_key`) |
+| `sim__session` | Simulators this server manages (opt-in group): launch, list, status, stop. | `launch` (`sim__launch`), `list` (`sim__list`), `status` (`sim__status`), `stop` (`sim__stop`) |
+
+Three more tools are left out of the list because another does the same job, and still work when called:
+`list_bridges` (use `status`), `isaaclab__run_script` (use `run_script`), `isaaclab__runs_cancel` (use `jobs(action="cancel")`).
+
 ## Choosing which local tools a server exposes
 
 The 30 standard local tools (the thirteen host gateway and desktop tools and the seventeen `isaaclab__*` tools) are registered by
@@ -59,8 +108,8 @@ default. Five desktop input tools and four simulator-session tools are opt-in. `
 comma-separated list of group names and aliases; unset or empty means `all`. An unknown name stops the server at
 startup with a message listing the valid names; it never registers nothing silently.
 
-The count a client sees follows this setting: **134 tools** by default, **+5** with `screen_input` and **+4** with
-`sim_launch`, **143** with both. The server writes its tool count and filters to its log at startup; see
+The number registered follows this setting: **134 tools** by default, **+5** with `screen_input` and **+4** with
+`sim_launch`, **143** with both. A client is shown **45 tools** of them ([grouped tools](#grouped-tools)). The server writes its tool count and filters to its log at startup; see
 [diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log).
 
 | Group | Tools |
@@ -266,8 +315,7 @@ At server startup the operator may set these environment variables:
 | `ISAAC_MCP_SIM_MIN_FREE_RAM_MIB` | `4096` | Minimum available system RAM at launch. |
 
 A launched simulator inherits this server's environment, so `ISAAC_MCP_ASSET_PATH` and `DISPLAY` come from the `env` of your MCP
-client's server entry, not from a shell you opened later. It removes `PYTHONPATH`, `UR5E_DT_HEADLESS`, `UR5E_DT_SHOW_PANEL`,
-`ISAAC_MCP_HOLD_TOKEN` and `ISAAC_MCP_HOLD_TOKEN_FILE`, sets its own port, bind address, ROS domain, backend and output folder, and
+client's server entry, not from a shell you opened later. It removes `PYTHONPATH`, `UR5E_DT_HEADLESS` and `UR5E_DT_SHOW_PANEL`, sets its own port, bind address, ROS domain, backend and output folder, and
 passes `ISAAC_MCP_PYTHON`, `UR5E_DT_PYTHON` and `ISAAC_MCP_WORKSPACE` only from the server's own settings.
 
 The count includes advertised local bridges, managed sessions still starting, and running jobs in the configured
@@ -335,11 +383,15 @@ the simulator-side counterpart of the Isaac Lab job tools, which manage separate
 
 - A job is a coroutine on Kit's main loop. It must only `await`; it must not pump the app loop itself.
   At most 4 run at once, and the last 32 finished ones are remembered until Kit restarts.
+- Every job also has a record on disk, `<jobs folder>/<job_id>/job.json`, in the same format as an Isaac Lab job
+  (`"runner": "kit"`). So `job_status` still answers after the simulator has exited (a job that was running then reads
+  `failed`: the simulator exited before it finished), and `jobs(action="list")` shows simulator and Lab jobs together.
+  The jobs folder is `ISAACLAB_JOBS_DIR`, or `~/.local/share/isaac-mcp/jobs`.
 - A job is not a queued request. Another caller's `run_python` that pumps the app loop from inside its own
   call can end a job; the job then reads `failed` with the reason, never `running` forever.
 - A result larger than 16 KiB is cut and says so: write large data to a file and return its path.
-- `wait_s` is served by the MCP host, which polls once a second. A direct socket caller (`isaac_mcp.client`)
-  gets the current status at once.
+- `wait_s` is served inside Kit, off the main loop: the call returns when the job ends, with no polling and no
+  simulator time spent, for the MCP host and a direct socket caller (`isaac_mcp.client`) alike.
 - `job_status` and `job_cancel` are bridge built-ins, so `ISAAC_MCP_BUILTINS=0` hides them with `status` and
   `run_python`. A client set up that way can start `sim__simulation__run` and `sim__trajectory__replay` but cannot
   follow them; leave the built-ins listed for an agent that uses those tools.
@@ -363,11 +415,12 @@ a single message, so these tools are for reasonably sized files rather than bulk
 
 ## Trust and operational limits
 
-The default bridge binds to loopback. Loopback confines network reachability but is not a substitute for a trust
-boundary between local users: bridge built-ins can run Python and read or overwrite files with the Kit process's
-permissions. Do not expose the bridge to an untrusted network; evaluate authentication and access controls before
-using a non-loopback bind. `ISAAC_MCP_BUILTINS=0` hides built-ins from the host MCP surface; it is not a substitute for
-securing the underlying bridge socket.
+The bridge listens on loopback and requires a token on every connection. The token is in a file only your account
+can read, so your own clients connect without configuration and another local account cannot run Python in your
+simulator. The token is not encryption: do not expose the bridge to an untrusted network; use an SSH tunnel, or a
+private address with `ISAAC_MCP_TOKEN` given to the client. `ISAAC_MCP_READ_ONLY=1` starts a bridge that refuses every
+tool that changes something. `ISAAC_MCP_BUILTINS=0` only hides the built-ins from an MCP client's list. See
+[limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach).
 
 Desktop capture depends on the display session and permissions, and can contain sensitive information. Confirm the
 target window before capturing. See [server setup](MCP-SERVER.md), [architecture](ARCHITECTURE.md), and

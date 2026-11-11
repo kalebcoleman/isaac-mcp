@@ -51,7 +51,7 @@ def _argument(name: str, uses: Dict[str, Dict[str, Any]], actions: List[str]) ->
         schema = {**{key: value for key, value in schema.items() if key != "anyOf"}, **kinds[0]}
     texts: Dict[str, List[str]] = {}
     for action, spec in uses.items():
-        texts.setdefault(" ".join(str(spec.get("description") or "").split()), []).append(action)
+        texts.setdefault(tool_groups.listed_form(" ".join(str(spec.get("description") or "").split())), []).append(action)
     scope = "" if len(uses) == len(actions) else f"[{', '.join(uses)}] "
     if len(texts) == 1:
         description = scope + next(iter(texts))
@@ -85,7 +85,7 @@ def _build(server: Any, group: str, summary: str, actions: Dict[str, str]) -> No
             arguments.setdefault(OWN_ACTION if name == "action" else name, {})[action] = spec
         needs = [OWN_ACTION if name == "action" else name for name in tool.parameters.get("required", [])
                  if name not in ("session_id", "stage_id")]
-        brief = _brief(tool.description)
+        brief = _brief(tool_groups.listed_form(tool.description or ""))
         lines.append(f"- {action}: {brief}{'' if brief.endswith('...') else '.'}" + (f" Needs {', '.join(needs)}." if needs else ""))
     takes = {action: {OWN_ACTION if name == "action" else name for name in tool.parameters.get("properties", {})}
              for action, tool in present.items()}
@@ -94,7 +94,7 @@ def _build(server: Any, group: str, summary: str, actions: Dict[str, str]) -> No
 
     async def run(action: str, given: Dict[str, Any]) -> Any:
         if action == "help":
-            return json.dumps({name: {"tool": tool.name, "description": tool.description,
+            return json.dumps({name: {"description": tool.description,
                                       "arguments": tool.parameters.get("properties", {}),
                                       "required": tool.parameters.get("required", [])}
                                for name, tool in present.items()}, indent=1)
@@ -107,7 +107,10 @@ def _build(server: Any, group: str, summary: str, actions: Dict[str, str]) -> No
                             f"{', '.join(sorted(takes[action])) or 'no arguments'}. Nothing ran.")
         if OWN_ACTION in given:
             given["action"] = given.pop(OWN_ACTION)
-        return await server._tool_manager.call_tool(present[action].name, given)
+        try:
+            return await server._tool_manager.call_tool(present[action].name, given)
+        except ToolError as error:     # said once, under the grouped tool's name
+            raise ToolError(re.sub(r"^Error executing tool [^:]+: ", "", str(error), count=1)) from None
 
     exec(f"async def {group}(action{', ' if signature else ''}{signature}):\n"
          f"    given = dict(locals())\n    given.pop('action')\n    return await _run(action, given)\n",
@@ -129,8 +132,26 @@ def _build(server: Any, group: str, summary: str, actions: Dict[str, str]) -> No
     model.model_rebuild(force=True)
 
 
+def _in_listed_form(value: Any) -> Any:
+    """A tool's answer with the single-purpose tool names in it replaced by what the client can call."""
+    if isinstance(value, str):
+        return tool_groups.listed_form(value)
+    for item in getattr(value, "content", None) or []:
+        if isinstance(getattr(item, "text", None), str):
+            item.text = tool_groups.listed_form(item.text)
+    return value
+
+
+def _describe_in_listed_form(tool: Any) -> None:
+    tool.description = tool_groups.listed_form(tool.description or "")
+    for spec in (tool.parameters or {}).get("properties", {}).values():
+        if isinstance(spec.get("description"), str):
+            spec["description"] = tool_groups.listed_form(spec["description"])
+
+
 def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
-    """Make the grouped tools and the listing match the tools registered now."""
+    """Make the grouped tools and the listing match the tools registered now. With groups listed,
+    what the server says (descriptions, answers, errors) names tools in their listed form."""
     manager = server._tool_manager
     for group in tool_groups.GROUPS:
         manager._tools.pop(group, None)
@@ -141,10 +162,25 @@ def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
             _build(server, group, summary, actions)
     hide = set() if legacy else tool_groups.hidden(names)
     if not hasattr(server, _STATE):
-        everything = manager.list_tools
-        setattr(server, _STATE, {"hide": hide})
+        everything, call = manager.list_tools, manager.call_tool
+        setattr(server, _STATE, {"hide": hide, "legacy": legacy})
+
+        async def call_tool(name, arguments, *args, **kwargs):
+            if getattr(server, _STATE)["legacy"]:
+                return await call(name, arguments, *args, **kwargs)
+            try:
+                answer = await call(name, arguments, *args, **kwargs)
+                return answer if name in tool_groups.VERBATIM else _in_listed_form(answer)
+            except ToolError as error:
+                raise ToolError(tool_groups.listed_form(str(error))) from None
+
         manager.list_tools = lambda: [tool for tool in everything() if tool.name not in getattr(server, _STATE)["hide"]]
-    getattr(server, _STATE)["hide"] = hide
+        manager.call_tool = call_tool
+    getattr(server, _STATE).update(hide=hide, legacy=legacy)
+    if not legacy:
+        for name, tool in manager._tools.items():
+            if name not in hide:
+                _describe_in_listed_form(tool)
 
 
 def listed_names(server: Any) -> List[str]:

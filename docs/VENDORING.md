@@ -6,42 +6,38 @@ This repository consolidates two previously submodule-managed codebases into a s
 
 ## 1. Provenance Record
 
-| Component | Upstream Repository | Fork Repository | Pinned SHA | License Status | Local Delta / Patches |
-|---|---|---|---|---|---|
-| **`exts/ur5e-dt`** | `https://github.com/inbarajaldrin/isaac-sim-mcp` | `https://github.com/kalebcoleman/isaac-sim-mcp` | `27f6100` | MIT (`docs/provenance/isaac-sim-mcp-LICENSE`) | 1 file modified (`extension.py`); preserved in `docs/provenance/isaac-sim-mcp-ur5e-dt-owner-registrar.patch` |
-| **`mcp/`** & **`exts/isaac.mcp.bridge`** | `https://github.com/inbarajaldrin/omni-kit-mcp` | `https://github.com/kalebcoleman/ur5e-mcp` | `9d0366b` | **No LICENSE file upstream** | Clean at `9d0366b` (no local patch) |
+| Component | Origin | License status | State here |
+|---|---|---|---|
+| **`exts/ur5e-dt`** | Fork of `https://github.com/inbarajaldrin/isaac-sim-mcp` at `27f6100` (`https://github.com/kalebcoleman/isaac-sim-mcp`) | MIT (`docs/provenance/isaac-sim-mcp-LICENSE`) | Developed further here; the extension is now one module per area under `exts/ur5e-dt/ur5e_dt/`. The first local change is kept in `docs/provenance/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`. |
+| **`exts/isaac.mcp.bridge`**, **`exts/isaac.mcp.panel`**, the bridge client and server core in **`mcp/`** | First built on `https://github.com/inbarajaldrin/omni-kit-mcp` at `9d0366b`, used with its author's permission | Upstream has no LICENSE file | **Rewritten in this repository.** The bridge, its protocol, client, panel, the Kit registration script, the templates and their documentation and tests are this project's own implementation under the repository's MIT license. |
 
 > [!NOTE]
-> The `ur5e-dt` digital twin extension is this project's own work developed in a fork of Aldrin's upstream repository. The UR5e workstation digital twin, its scene definitions, controllers, checkpoints, and checks are **not** upstream's work.
+> Aldrin Inbaraj, a lab mate at the RISE lab, wrote both upstream projects. The UR5e workstation digital twin, its
+> scene definitions, controllers, checkpoints and checks are this project's own work, developed in a fork of his
+> repository.
 
 ---
 
-## 2. Upstream Details and Pinned Commits
+## 2. What was rewritten, and what stayed compatible
 
-### `isaac-sim-mcp` (Extension Source)
-- **Upstream:** `https://github.com/inbarajaldrin/isaac-sim-mcp`
-- **Fork:** `https://github.com/kalebcoleman/isaac-sim-mcp`
+`omni-kit-mcp` was published without a license file, so its code was replaced rather than kept. The replacement is a
+different design (request ids, a token, read-only mode, three scheduling rules, one job record format; see
+[the protocol](../mcp/docs/protocol.md)), not a paraphrase. What deliberately stayed the same is the interface other
+code depends on: the tool names (`run_python`, `list_tools`, `put_file`, ...), the tool-package contract
+(`MCP_NAMESPACE`, `register(registrar)`), the settings names (`ISAAC_MCP_PORT`, `ISAAC_MCP_TOOL_MODULES`, ...), the
+JSON-lines message shape and the portfile location, so existing tool packages and clients keep working.
+
+`isaac-sim-mcp` (the twin's origin):
 - **Pinned Commit:** `27f6100` (*"ur5e-dt: add valid convexHull collider to the Quick-Changer"*)
 - **Vendored Path:** `exts/ur5e-dt/` (extension code only; the robot, gripper, and scene assets are not in this tree).
-- **Dead code excluded:** `external/isaac-sim-mcp/isaac_mcp/` was not vendored because it was an obsolete host server implementation superseded by `omni-kit-mcp`.
 - **Tools preserved:** Asset conversion utilities for the Husarion RG2 gripper were preserved under `tools/` (`convert_husarion_rg2_urdf.py`, `rewire_husarion_rg2_usd.py`).
-
-### `omni-kit-mcp` (Bridge and Host Server)
-- **Upstream:** `https://github.com/inbarajaldrin/omni-kit-mcp`
-- **Fork:** `https://github.com/kalebcoleman/ur5e-mcp`
-- **Pinned Commit:** `9d0366b` (*"feat(screen): default captures to the Isaac window for this port"*)
-- **Vendored Paths:**
-  - `mcp/` (host-side Python package `isaac_mcp`, exposing CLI `isaac-mcp`)
-  - `exts/isaac.mcp.bridge/` (Kit bridge extension)
-  - `exts/isaac.mcp.panel/` (Kit bridge GUI inspector panel)
-- **Local modifications:** None at the time of consolidation. Fork commit `9d0366b` vendored clean.
 
 ---
 
 ## 3. License Status
 
 - **`isaac-sim-mcp`:** MIT License. A copy of the upstream license is archived at `docs/provenance/isaac-sim-mcp-LICENSE`.
-- **`omni-kit-mcp`:** **Upstream has no LICENSE file.** The repository was published publicly on GitHub without an explicit license file. Users and redistributors should note that upstream `inbarajaldrin/omni-kit-mcp` omits an explicit license grant.
+- **`omni-kit-mcp`:** no upstream license file. No file in this repository is a copy of it any longer.
 - **Assets:** the repository ships none (it is code-only; see `docs/ASSETS.md`). Earlier revisions
   carried `exts/ur5e-dt/assets/`, and not all of it could be redistributed. The NVIDIA robot,
   sensor and material files, the Vention bench and the Poliigon oak textures must stay out of a
@@ -55,7 +51,7 @@ This repository consolidates two previously submodule-managed codebases into a s
 
 ## 4. Local Patch Summary
 
-Prior to consolidation, UR5e-specific additions to `ur5e-dt` were applied during setup via `patches/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`. During repository consolidation, this patch was permanently integrated into `exts/ur5e-dt/ur5e_dt/extension.py` and the original patch file was archived to `docs/provenance/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`.
+Prior to consolidation, UR5e-specific additions to `ur5e-dt` were applied during setup via `patches/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`. During repository consolidation, this patch was permanently integrated into the extension (then one file, `extension.py`) and the original patch file was archived to `docs/provenance/isaac-sim-mcp-ur5e-dt-owner-registrar.patch`.
 
 Key modifications incorporated from the patch:
 1. **Owner-Registrar Integration:** Added support for registering tools under an owner-bound namespace with `isaac.mcp.bridge`.
@@ -82,7 +78,6 @@ Their public sources and licenses were inspected as references. The comparison i
 signatures and descriptions from whats2000; its notice is retained in `docs/provenance/whats2000-LICENSE`. Work-r-labs/robots
 (`ab6aa489855256de07ba46c7b45887fdbc42b607`, root MIT) was evaluated, but individual asset
 provenance was not sufficiently established for the candidate and it was not imported or redistributed.
-This does not resolve the separate omni-kit-mcp permission question above.
 
 The live non-UR5e fixture was Agilebot GBT-C5A at
 [`33281110dd75017fcb821ef4a7316960c0702e18`](https://github.com/sh-agilebot/agilebot_isaac_usd_assets/tree/33281110dd75017fcb821ef4a7316960c0702e18/gbt-c5a).

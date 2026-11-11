@@ -579,6 +579,12 @@ What the run does:
   as it is; a playing one is refused. The run steps physics itself through the same exact-step path as
   `sim__simulation__step`, `steps_per_frame` steps per app frame (default: about real time at 60 frames per second),
   so Kit keeps rendering and answering other tools. It ends **paused**, with the body where the run left it.
+- `mode="play"` follows a playing timeline instead. A stopped timeline is started, a playing one is used as it is,
+  and a paused one is refused (play it first); `steps_per_frame` does not apply. The controller runs
+  in the physics engine's pre-step callback, and ROS publishers, action graphs and everything else that ticks per
+  frame keep running. The run ends when its duration has passed and leaves the timeline **playing**; pausing or
+  stopping under it ends it with `TIMELINE_INTERRUPTED`. Use the default `mode="step"` when a run must be repeatable
+  or faster than real time, and `play` when the rest of the scene has to run with it.
 - The call returns `job_id`, `steps`, `physics_dt`, `mass`, `backend` and `log_file`. `job_status` reports
   `progress` while it runs and, at the end, `steps`, `sim_time_s`, `ended_by` (`duration` or `controller`),
   `log_file`, `log_rows` and `final_state`.

@@ -778,8 +778,7 @@ def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | N
         output.mkdir(mode=0o700)
         child_env = os.environ.copy()
         for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_PYTHON", "ISAAC_MCP_PYTHON",
-                    "ISAAC_MCP_WORKSPACE", "UR5E_DT_SHOW_PANEL", "ISAAC_MCP_HOLD_TOKEN",
-                    "ISAAC_MCP_HOLD_TOKEN_FILE"):
+                    "ISAAC_MCP_WORKSPACE", "UR5E_DT_SHOW_PANEL"):
             child_env.pop(key, None)
         child_env.update({"UR5E_DT_PORT": str(port), "ISAAC_MCP_PORT": str(port),
                           "ISAAC_MCP_BIND": "127.0.0.1", "ROS_DOMAIN_ID": str(ros_domain),

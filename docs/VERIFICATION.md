@@ -70,7 +70,7 @@ The motion check schedules a bounded Kit coroutine through the existing persiste
 it does not call nested `app.update()`. It requires the reopened stage to be stopped,
 waits for a previous native Stop to settle, and refuses stage/timeline changes,
 non-finite joints or a stalled clock. Use exclusive control of this disposable scene
-until the check finishes: the bridge's per-call admission lock does not cover the
+until the check finishes: the bridge runs one exclusive call at a time, but that does not cover the
 whole scheduled coroutine. A lost host connection does not automatically cancel a
 Kit task; the check also has its own 90-second and 12,000-frame bounds.
 

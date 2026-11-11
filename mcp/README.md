@@ -49,156 +49,122 @@ tool call with `window` or `window_id` reads that window's own pixels, so overla
 keep the window's native size, capped at 1920 wide (`max_width`); pass `full_screen=True` to letterbox into the monitor's
 shape, or `window_ids=[...]` to record several windows into one video. Monitor captures show the desktop as displayed.
 
-## The bridge
+## How it reaches a simulator
 
-**One bridge, one port, per Kit process.** Projects register tools under a
-namespace; name collisions between projects are impossible by construction
-(two projects can each ship a `play_scene` — they land as `arm.play_scene`
-and `rover.play_scene`), so co-loaded projects share the single socket.
+Inside Kit, the `isaac.mcp.bridge` extension keeps a registry of tools and listens on one local
+port per Kit process. Tool packs register under a namespace, so two projects can each have a
+`play_scene` (`arm.play_scene`, `rover.play_scene`). This server is a client of that socket; so
+are the tools panel inside Kit and any script using `isaac_mcp.client`.
 
 ```mermaid
-flowchart TB
-    subgraph kit["Kit process (Isaac Sim · Isaac Lab · any Kit app)"]
-        direction BT
-        BRIDGE["<b>isaac.mcp.bridge</b><br/>NDJSON TCP :8766 · owner/namespace registry<br/>main-thread dispatch<br/>builtins: run_python · list_tools · reload_tools · list_bridges · put_file · get_file · stat_file · status"]
-        ARM["arm_tools/<br/>MCP_NAMESPACE = 'arm'"] -->|register| BRIDGE
-        ROVER["rover_tools/<br/>MCP_NAMESPACE = 'rover'"] -->|register| BRIDGE
-        PANEL["isaac.mcp.panel<br/>registry-driven UI"] -->|"dispatch (click == agent call)"| BRIDGE
+flowchart LR
+    AGENT["MCP client"] -->|MCP| HOST["isaac-mcp server<br/>(this package)"]
+    SCRIPT["your script<br/>isaac_mcp.client"] --> BRIDGE
+    HOST -->|"JSON lines, token"| BRIDGE
+    subgraph kit["Kit process"]
+        BRIDGE["isaac.mcp.bridge<br/>registry, queue, jobs"]
+        PACKS["scene tools, UR5e twin,<br/>your tool package"] -->|register| BRIDGE
+        PANEL["tools panel"] --> BRIDGE
     end
-    GW["isaac-mcp gateway<br/>operator view: all tools + run_python"] -->|MCP ⇄ NDJSON| BRIDGE
-    GWF["isaac-mcp gateway (filtered)<br/>ISAAC_MCP_NAMESPACE=arm · ISAAC_MCP_BUILTINS=0"] -->|MCP ⇄ NDJSON| BRIDGE
-    CLI["isaac_mcp.client<br/>scripts · tests · doctors · CLI"] -->|NDJSON| BRIDGE
 ```
 
-## Register the bridge in your own Kit app (once per machine)
+The bridge requires a token, which clients on the same account find by themselves, and can be
+started read-only. The protocol, the scheduling rules and both switches are in
+[docs/protocol.md](docs/protocol.md).
 
-`./run.sh` already enables the bridge. Use this for another Kit app or a plain Isaac Sim install.
+## What a client is shown
 
-Register the bridge permanently (afterwards, launches need no flags or env
-vars):
+About 45 tools: related single-purpose tools are offered as one tool with an `action` argument
+(`sim__prim` with `action="create"`, `"get"`, `"delete"`, ...). `action="help"` returns the full
+description of each action. Every single-purpose name (`sim__prim__create`) still works when
+called, so older prompts and scripts keep running; those names are deprecated and are no longer
+listed. Set `ISAAC_MCP_LEGACY_TOOLS=1` to list them as before, with no groups. The groups are
+defined in `isaac_mcp/tool_groups.py`.
+
+## Loading the bridge in another Kit app
+
+`./run.sh` enables the bridge by itself. For another Kit app, or a plain Isaac Sim install:
 
 ```bash
-# From the repository root:
-python3 scripts/install.py            # add --dry-run to preview
+python3 scripts/install.py            # --dry-run to preview, --remove to undo
 ```
 
-This edits the Kit app's persistent `user.config.json` (the scriptable
-equivalent of the Extensions window's AUTOLOAD checkbox): adds `exts/` as a
-search path, auto-enables `isaac.mcp.bridge` + `isaac.mcp.panel`, and sets the
-bridge port (default **8766**). Restart the app; the bridge binds with the
-built-in tools. `--remove` undoes it.
+This edits the app's `user.config.json`, as the Extensions window's autoload checkbox does: it
+adds `exts/` to the search path, enables `isaac.mcp.bridge` and `isaac.mcp.panel`, and stores the
+port (8766). Close the app first; with several Kit apps installed, name one with `--config`.
 
-With more than one Kit config on the machine it refuses to guess and lists them; pass the one you mean with
-`--config <path/to/user.config.json>`. Run it while the app is **down**; a running app overwrites the file on exit
-([why](docs/configuration.md#register-while-the-app-is-down)).
-
-Connect an agent or IDE: install the host as above and add it to `.mcp.json` (Claude Code, Cursor, etc.):
+Then register the server with your client (Claude Code, Cursor and others read `.mcp.json`):
 
 ```json
-{
-  "mcpServers": {
-    "isaac": { "command": "isaac-mcp" }
-  }
-}
+{ "mcpServers": { "isaac": { "command": "isaac-mcp" } } }
 ```
 
-No port needed — the gateway discovers a lone running bridge. Pin one with
-`"env": { "ISAAC_MCP_PORT": "8766" }` when several Kit processes run.
+With one simulator running no port is needed. Pin one with `"env": {"ISAAC_MCP_PORT": "8766"}`
+when several run.
 
-That alone is fully usable: `run_python` executes arbitrary Python on Kit's
-main thread (persistent sessions supported; saved session vars auto-clear when
-a new stage opens — they hold prim/handle references the new stage kills),
-which reaches everything in the sim. Tools discovered from the bridge appear as native MCP tools
-(`robot_demo.spawn_robot` → `robot_demo__spawn_robot`; dots are illegal in MCP names).
+## Your own tools
 
-## Adding a project (the contract)
-
-A project is a **plain Python package** — not a Kit extension. It declares a
-namespace and either exposes one entrypoint (copy `mcp/templates/demo_tools/`) or
-none at all ([declared toolsets](docs/tool-authoring.md#declared-toolsets)):
+A tool package is an ordinary Python package that the bridge imports:
 
 ```python
-# <workspace>/projects/myproj/isaac/myproj_tools/__init__.py
-MCP_NAMESPACE = "robot_demo"                       # defaults to the module name
-DOORWAY_ADMISSION = 1                              # the admission contract, docs/protocol.md
+# my_tools/__init__.py
+MCP_NAMESPACE = "robot_demo"
 
-def register(registrar):                   # receives an owner-bound registrar
+def register(registrar):
     @registrar.tool("Spawn a robot into the scene.", {"name": {"type": "string"}})
     def spawn_robot(name: str = "robot_1"):
-        import omni.usd                    # Kit imports live inside handlers
+        import omni.usd                    # Kit imports go inside the function
         ...
-        return {"path": f"/World/{name}"}  # payload only — no envelope
+        return {"path": f"/World/{name}"}
 ```
-
-Register it persistently (once per project):
 
 ```bash
-python3 scripts/install.py add-project --path <workspace>/projects/myproj/isaac --module myproj_tools
+python3 scripts/install.py add-project --path <folder holding my_tools> --module my_tools
+# or, for one launch: ISAAC_MCP_TOOL_PATHS=<folder> ISAAC_MCP_TOOL_MODULES=my_tools
 ```
 
-Next launch, the bridge advertises `robot_demo.spawn_robot`; the panel grows a `robot_demo`
-section; agents see it after `refresh_tools`. Per-launch override instead of
-persistence: `ISAAC_MCP_TOOL_PATHS=<workspace>/projects/myproj/isaac ISAAC_MCP_TOOL_MODULES=myproj_tools`.
+Clients then have `robot_demo__spawn_robot`, the panel has a button for it, and scripts can call
+`robot_demo.spawn_robot`. Copy `mcp/templates/demo_tools/` to start, and see
+[docs/tool-authoring.md](docs/tool-authoring.md) for arguments, errors, reloading without a
+restart, and the flags that mark a tool read-only or exclusive.
 
-> **One registration, three surfaces.** A registered tool isn't just an agent
-> verb: the control panel renders it as a clickable widget automatically, and
-> the reference client/CLI can call it from scripts — all three go through the
-> same dispatch entrance. Write the tool once; button, agent call, and script
-> call come with it.
-
-A package with no `register()` is introspected instead: every public function
-becomes a tool, its schema derived from the signature. See
-[docs/tool-authoring.md](docs/tool-authoring.md) for declared toolsets, the handler
-contract and curated per-project agent views.
-
-## Scripting the bridge (no MCP needed)
-
-The bridge's wire protocol is not MCP — the gateway above is the only MCP
-speaker. For scripts, tests, and health checks, use the **reference client**
-(stdlib-only, single-file, also copyable as-is):
+## Scripts, without MCP
 
 ```python
-from isaac_mcp.client import call, BridgeClient, BridgeError
-call("demo.ping", {"message": "hi"})                 # one-shot; endpoint auto-discovered
-with BridgeClient() as c:                            # persistent + reconnect
-    c.call("run_python", {"code": "result = 1"})     # (pass host=/port= to pin)
+from isaac_mcp.client import BridgeClient, BridgeError, call
+
+call("status")                                       # one call
+with BridgeClient(port=8766) as bridge:              # many calls on one connection
+    bridge.call("run_python", {"code": "result = 1"})
 ```
 
 ```bash
-# From the repository root, with any Python (stdlib only):
-python3 mcp/isaac_mcp/client.py <tool> ['{"json":"params"}'] [--port N]
-python3 mcp/isaac_mcp/client.py --list-bridges      # what's running
-# Or `python -m isaac_mcp.client ...` from an environment with the package installed.
-# exit codes: 0 success · 1 bridge answered with an error · 2 unreachable or bad usage
+python3 mcp/isaac_mcp/client.py --list-bridges
+python3 mcp/isaac_mcp/client.py <tool> ['{"json": "arguments"}'] [--port N]
 ```
 
-With exactly one bridge running you need no port: the client discovers it
-([endpoint resolution](docs/protocol.md#endpoint-resolution)).
-`import isaac_mcp.client` works without the `mcp` SDK installed — only the
-gateway needs it.
+`client.py` uses only the standard library and can be copied on its own. Exit codes: 0 success,
+1 the bridge answered with an error, 2 unreachable or bad usage.
 
-## What else it does
+## More
 
-- **Hot reload** — edit a tool package and reload it without restarting Kit. [docs/tool-authoring.md](docs/tool-authoring.md#hot-reload)
-- **Remote files** — ship code and assets to a remote box through the bridge. [docs/tool-authoring.md](docs/tool-authoring.md#remote-files-put_file--get_file--stat_file)
-- **Control panel** — every registered tool becomes a clickable widget. [docs/tool-authoring.md](docs/tool-authoring.md#control-panel)
-- **Request admission and doorway hold** — one queue with typed refusals, and a way to reserve the bridge for one caller. [docs/protocol.md](docs/protocol.md)
-- **Multiple instances and remote access** — one port per Kit process, discovery, binding beyond localhost. [docs/configuration.md](docs/configuration.md)
-- **Isaac Lab** — the bridge inside standalone train/play scripts. [docs/isaac-lab.md](docs/isaac-lab.md)
-- **Tool-author gotchas** — Kit facts that cost real debugging time. [docs/tool-authoring.md](docs/tool-authoring.md#tool-author-gotchas-kit-facts-that-cost-real-debugging-time)
+- [docs/protocol.md](docs/protocol.md): messages, finding a bridge, the token, scheduling, read-only mode, jobs.
+- [docs/configuration.md](docs/configuration.md): settings, several simulators, access from another machine.
+- [docs/tool-authoring.md](docs/tool-authoring.md): writing, reloading and narrowing tools; the panel.
+- [docs/isaac-lab.md](docs/isaac-lab.md): the bridge inside an Isaac Lab script.
 
 ## Layout
 
 ```
-mcp/isaac_mcp/               the MCP front-end (FastMCP server, TCP client to the bridge)
-mcp/templates/demo_tools/     the template tool package; copy it to onboard a project
-mcp/tests/                   host, protocol, registry and live-socket tests (no Kit needed)
-mcp/docs/                    protocol, configuration, tool authoring, Isaac Lab
-exts/isaac.mcp.bridge/       the bridge extension (protocol, bridge, builtins, autoload)
-exts/isaac.mcp.panel/        registry-driven control panel (optional)
-exts/sim-tools/              generic scene and asset tools
-exts/ur5e-dt/                the UR5e digital twin tools
-scripts/install.py           permanent registration: base install + add-project
+mcp/isaac_mcp/            the MCP server, the bridge client, Isaac Lab jobs, screen tools
+mcp/templates/            a tool package to copy, a remote driver, an Isaac Lab launch script
+mcp/tests/                host tests; the bridge is tested here too, outside Kit
+mcp/docs/                 the bridge: protocol, configuration, writing tools, Isaac Lab
+exts/isaac.mcp.bridge/    the bridge extension
+exts/isaac.mcp.panel/     the tools panel (optional)
+exts/sim-tools/           generic scene and asset tools
+exts/ur5e-dt/             the UR5e digital twin
+scripts/install.py        load the bridge in a Kit app on every launch
 ```
 
 ## Development

@@ -1,9 +1,9 @@
 [package]
 # Semantic Versioning — https://semver.org/
-version = "0.1.0"
-authors = ["Aldrin Inbaraj"]
+version = "0.2.0"
+authors = ["Kaleb Coleman"]
 title = "isaac.mcp.bridge"
-description = "Generic MCP socket bridge: owner/namespace tool registry, NDJSON-over-TCP protocol, main-thread dispatch. One bridge, one port, per Kit process."
+description = "Serves tools registered by Kit extensions to MCP clients over a local socket, each run on the main loop."
 readme = "docs/README.md"
 repository = ""
 category = "Internal"
@@ -11,13 +11,10 @@ keywords = ["kit", "mcp", "bridge", "socket"]
 changelog = "docs/CHANGELOG.md"
 
 [dependencies]
-# REQUIRED — provides run_coroutine for the socket-thread -> main-thread hop.
+# Schedules each tool call on the main loop.
 "omni.kit.async_engine" = {}
 
-# Public python module: importable as `import isaac_mcp_bridge` (dots are illegal in module names).
 [[python.module]]
 name = "isaac_mcp_bridge"
 
-# Bridge settings: every knob's identity (env override + settings keys +
-# precedence) is defined once in isaac_mcp_bridge/knobs.py; scripts/install.py
-# writes the persistent forms. See docs/configuration.md in the repository.
+# Settings are listed in isaac_mcp_bridge/knobs.py and mcp/docs/configuration.md.

@@ -1,6 +1,6 @@
 [package]
 # Semantic Versioning — https://semver.org/
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Kaleb Coleman"]
 title = "isaac.mcp.panel"
 description = "A window listing every tool the isaac.mcp.bridge bridge has registered, with a Run button for each."

@@ -1,53 +1,41 @@
-# Configuration
+# Configuring the bridge
 
-## Register while the app is down
+Each setting is an environment variable for one launch, and a stored Kit setting under
+`/persistent/exts/isaac.mcp.bridge/` for every launch. The environment wins.
 
-Apply registrations while the app is **down**: a running app rewrites
-`user.config.json` from its in-memory settings during its graceful-exit flush,
-silently discarding edits made underneath it. (Corollary: a hard `kill -9`
-skips that flush, so a registration written while the app ran survives a hard
-kill — but don't lean on it; install-while-down is the reliable path.)
+| Setting | Environment | Stored as | Default |
+|---|---|---|---|
+| Port | `ISAAC_MCP_PORT` | `autostartPort` | none: the bridge does not start without one |
+| Address to listen on | `ISAAC_MCP_BIND` | `autostartHost` | `localhost` |
+| Tool packages to load | `ISAAC_MCP_TOOL_MODULES` | `toolModules` | none |
+| Folders they are in | `ISAAC_MCP_TOOL_PATHS` | `toolPaths` | none |
+| Require the token | `ISAAC_MCP_AUTH` | `auth` | `1` |
+| The token | `ISAAC_MCP_TOKEN` | `token` | a random one per launch |
+| Read-only | `ISAAC_MCP_READ_ONLY` | `readOnly` | `0` |
 
-## Knobs
+`./run.sh` sets the port for you. `scripts/install.py` writes the stored form into a Kit app's
+`user.config.json`, so that app loads the bridge on every launch with no flags; run it with the
+app closed, because a running app writes its own settings back over the file when it exits.
 
-| Knob | Persistent (carb setting under `/persistent/exts/isaac.mcp.bridge/`) | Per-launch env override |
-|---|---|---|
-| Bridge port | `autostartPort` | `ISAAC_MCP_PORT` |
-| Bind address | `autostartHost` | `ISAAC_MCP_BIND` |
-| Tool packages | `toolModules` | `ISAAC_MCP_TOOL_MODULES` |
-| Package paths | `toolPaths` | `ISAAC_MCP_TOOL_PATHS` |
-| Queue cap (s a request may state) | `queueCapSeconds` | `ISAAC_MCP_QUEUE_CAP_S` (default 900) |
-| Queue limit (waiting requests) | `queueLimit` | `ISAAC_MCP_QUEUE_LIMIT` (default 64) |
+## Several simulators on one machine
 
-**Remote access.** The bridge binds `localhost` by default — it serves
-`run_python` (remote code execution by design), so listening beyond loopback
-is an explicit per-box decision. Options: an SSH tunnel (zero config), or set
-the bind address to a private/tailnet IP (`install.py --bind-host <ip>`;
-never `0.0.0.0` on a public host). Remote callers can't read the box's
-portfiles, so the `list_bridges` builtin exists: ask any reachable bridge
-(typically the stable installed-app port) and it reports every bridge on its
-box.
+Give each Kit process its own port. A port that is taken makes the bridge refuse to start and say
+so, rather than move to a port no client expects. Every bridge advertises itself, so
+`--list-bridges` shows them all, and a client that was given no port refuses to pick between them.
+`status` answers with the PID, port, app and version, so you can confirm you reached the one you
+meant.
 
-Front-end (`isaac-mcp`) env: `ISAAC_MCP_PORT` (optional — auto-discovered
-when exactly one bridge runs; set it to pin a process), `ISAAC_MCP_HOST`,
-`ISAAC_MCP_NAMESPACE` (comma allowlist), `ISAAC_MCP_BUILTINS` (`0` hides
-`run_python`/`reload_tools`), `ISAAC_MCP_NAME` / `ISAAC_MCP_INSTRUCTIONS`.
+## From another machine
 
-## Multiple instances on one box
+The bridge listens on `localhost` only, because it runs code. The simplest way in is an SSH
+tunnel to the port. To listen on a private address instead, set `ISAAC_MCP_BIND` to that address
+(never `0.0.0.0` on a machine the internet can reach) and give the client the bridge's token as
+`ISAAC_MCP_TOKEN`, plus `ISAAC_MCP_HOST` and `ISAAC_MCP_PORT`. A remote client cannot read the
+portfiles; the `list_bridges` tool, asked of any bridge it can reach, lists the others on that
+machine.
 
-Ports are per-launch configuration, not global state: give each Kit process
-its own `ISAAC_MCP_PORT` (a persistent install writes one default; the env
-var overrides it per launch). A configured port that is already taken — a second
-instance of the same app on the same port — refuses at startup with the reason
-(`EADDRINUSE`) rather than moving somewhere no client could predict, so give each
-instance its own port. Every instance writes its own `{pid}-{port}.json`
-portfile in the runtime dir, so
-`--list-bridges` shows them all, and no-port discovery errors loudly (naming
-the candidates) rather than guessing when several run.
+## The server's own settings
 
-A client confirms it reached the instance it **intended** with the `status`
-builtin: pid, port, bind host, headless-vs-headful, app + version, uptime,
-and the registered namespaces. Same-box discovery reads the same identity
-from the portfile; a remote client — which cannot see another machine's
-portfiles — asks the socket itself. Headless (`--no-window`) and headful
-instances expose the identical tool surface.
+The `isaac-mcp` server reads `ISAAC_MCP_PORT` and `ISAAC_MCP_HOST` (which bridge),
+`ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_LOCAL_TOOLS` and `ISAAC_MCP_LEGACY_TOOLS`
+(what a client is shown). They are described in [ENVIRONMENT.md](../../docs/ENVIRONMENT.md).

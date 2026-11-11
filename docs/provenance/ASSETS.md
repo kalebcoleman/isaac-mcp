@@ -195,8 +195,8 @@ removes the dependency entirely.
 
 ## Open items
 
-- `omni-kit-mcp` still has no upstream `LICENSE` file; that is a separate permission question
-  already recorded in [VENDORING.md](../VENDORING.md).
+- `omni-kit-mcp` has no upstream `LICENSE` file; the code first built on it was rewritten, as recorded in
+  [VENDORING.md](../VENDORING.md).
 - This audit covers `exts/ur5e-dt/assets/`. It does not re-audit `docs/evidence/`, which is
   screenshots and logs, or the vendored Python code.
 - If the fresh public repository is created with `git filter-repo`, run this audit again on the

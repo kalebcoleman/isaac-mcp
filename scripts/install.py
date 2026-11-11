@@ -55,7 +55,7 @@ def find_config(given):
     if len(found) == 1:
         return found[0]
     if found:
-        sys.exit("Several Kit apps have a user.config.json; name one with --config:\n  " + "\n  ".join(found))
+        sys.exit("Several Kit apps have a user.config.json; pass the one you mean with --config:\n  " + "\n  ".join(found))
     sys.exit("No Kit user.config.json found. Start the app once so it writes one, or pass --config.")
 
 
@@ -188,6 +188,7 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="show the changes and write nothing")
     args = parser.parse_args(argv)
     settings = Settings(find_config(args.config))
+    print(f"config: {settings.path}")
     if args.command == "status":
         return status(settings)
     if args.command == "install":

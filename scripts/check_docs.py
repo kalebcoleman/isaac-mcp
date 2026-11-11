@@ -147,6 +147,11 @@ def check_skill_tool_names(errors, expected=None, files=None):
         } | scene["sim__"]
     if "assets__" in scene:
         registered["assets__"] = scene["assets__"]
+    import sys
+    sys.path.insert(0, str(ROOT / "mcp"))
+    from isaac_mcp.tool_groups import GROUPS       # a grouped tool is a name a client is shown
+    registered = {prefix: set(names) | {group for group in GROUPS if group.startswith(prefix)}
+                  for prefix, names in registered.items()}
     for path in files if files is not None else sorted(SKILLS_DIR.rglob("*.md")):
         text = path.read_text()
         for prefix, names in registered.items():
@@ -158,9 +163,9 @@ def check_skill_tool_names(errors, expected=None, files=None):
 
 
 README_COUNTS = (
-    # Default listing, then with both optional groups: the figures the project README promises.
-    (r"lists \*\*(\d+) tools\*\*", lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"]),
-    (r"or \*\*(\d+)\*\* with both optional groups",
+    # The single-purpose tools registered by default, then with both optional groups.
+    (r"\*\*(\d+) single-purpose tools\*\*", lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"]),
+    (r"\(\*\*(\d+)\*\* with both optional groups\)",
      lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic",
                                         "desktop_input", "sim_sessions"))),
 )
@@ -269,6 +274,48 @@ def check_readme_counts(errors, text=None, counts=None):
             errors.append(f"README.md: says {found[0]} tools, the code has {value(actual)}")
 
 
+SHOWN_PAGES = ("README.md", "AGENTS.md", "docs/TOOLS-HOST.md", "docs/MCP-SERVER.md")
+SHOWN_COUNT = re.compile(r"is shown \*\*(\d+) tools\*\*")
+
+
+def default_tool_names():
+    """Every tool the standard groups register, by MCP name."""
+    expected = expected_tools()
+    optional = (tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")
+                | tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py"))
+    return set().union(*expected.values()) - optional
+
+
+def check_grouped_tools(errors, pages=None, names=None):
+    """The number of tools a client is shown, wherever a page states it, and the table of groups:
+    every group, action and single-purpose tool must be in docs/TOOLS-HOST.md, and every tool a
+    group names must exist."""
+    import sys
+    sys.path.insert(0, str(ROOT / "mcp"))
+    from isaac_mcp import tool_groups
+
+    names = default_tool_names() if names is None else names
+    shown = len(tool_groups.listed(names))
+    pages = pages if pages is not None else {name: (ROOT / name).read_text(encoding="utf-8") for name in SHOWN_PAGES}
+    for name, text in pages.items():
+        found = SHOWN_COUNT.findall(text)
+        if found != [str(shown)]:
+            errors.append(f"{name}: 'is shown **N tools**' says {found or 'nothing'}, a client is shown {shown}")
+    every = set().union(*expected_tools().values())
+    unknown = sorted((set(tool_groups.members()) | set(tool_groups.SUPERSEDED)) - every)
+    if unknown:
+        errors.append(f"mcp/isaac_mcp/tool_groups.py: names tools that are not registered: {', '.join(unknown)}")
+    table = pages.get("docs/TOOLS-HOST.md", "")
+    for group, (_, actions) in tool_groups.GROUPS.items():
+        row = next((line for line in table.splitlines() if line.startswith(f"| `{group}` |")), None)
+        if row is None:
+            errors.append(f"docs/TOOLS-HOST.md: the grouped-tools table has no row for {group}")
+            continue
+        missing = [f"{action} ({tool})" for action, tool in actions.items() if f"`{action}` (`{tool}`)" not in row]
+        if missing:
+            errors.append(f"docs/TOOLS-HOST.md: the {group} row is missing {', '.join(missing)}")
+
+
 def check_tool_reference(errors):
     """docs/TOOLS-ARGUMENTS.md is generated; a hand edit or a changed tool must regenerate it."""
     from gen_tool_reference import OUTPUT, render
@@ -315,6 +362,7 @@ def main():
     check_generic_counts(errors)
     check_scene_opt_out(errors)
     check_prose_totals(errors)
+    check_grouped_tools(errors)
     check_vendoring_claims(errors)
     check_tool_reference(errors)
     for error in errors:
@@ -322,7 +370,7 @@ def main():
     if errors:
         return 1
     print(f"Documentation checks passed ({len(files)} files; links, JSON, registered tool names, "
-          "skill tool names, guide and README counts, generated tool arguments).")
+          "skill tool names, guide and README counts, grouped tools, generated tool arguments).")
     return 0
 
 

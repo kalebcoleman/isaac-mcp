@@ -199,8 +199,8 @@ def test_skill_scene_names_are_checked_when_catalogs_exist(tmp_path):
 
 def _with_stale_readme_total():
     text = (ROOT / "README.md").read_text()
-    match = re.search(r"lists \*\*(\d+) tools\*\*", text)
-    return text.replace(match.group(0), f"lists **{int(match.group(1)) + 1} tools**")
+    match = re.search(r"\*\*(\d+) single-purpose tools\*\*", text)
+    return text.replace(match.group(0), f"**{int(match.group(1)) + 1} single-purpose tools**")
 
 
 def test_readme_counts_match_the_code():
@@ -289,3 +289,20 @@ def test_vendoring_rejects_a_bundled_asset_claim():
     errors = []
     check_docs.check_vendoring_claims(errors, text="Vendored path only.\n")
     assert any("ships none" in error for error in errors)
+
+
+def test_the_shown_count_and_the_table_of_groups_match_the_code():
+    errors = []
+    check_docs.check_grouped_tools(errors)
+    assert errors == []
+
+
+def test_a_stale_shown_count_or_group_row_is_reported():
+    pages = {name: (ROOT / name).read_text() for name in check_docs.SHOWN_PAGES}
+    pages["README.md"] = re.sub(r"is shown \*\*\d+ tools\*\*", "is shown **7 tools**", pages["README.md"])
+    pages["docs/TOOLS-HOST.md"] = pages["docs/TOOLS-HOST.md"].replace("`create` (`sim__prim__create`)", "`create`")
+    errors = []
+    check_docs.check_grouped_tools(errors, pages=pages)
+    assert any("README.md: 'is shown **N tools**' says ['7']" in error for error in errors)
+    assert any("the sim__prim row is missing create (sim__prim__create)" in error for error in errors)
+

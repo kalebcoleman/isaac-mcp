@@ -7,8 +7,8 @@ requiring the `ros2` CLI. Run it with the sim's own interpreter:
 
 Then diff two captures to see exactly what a transform-tree change moved. Both
 topics come from `isaacsim.ros2.bridge.ROS2PublishTransformTree` nodes in
-`exts/ur5e-dt/ur5e_dt/extension.py`: `tf_cam` (camera graph, ~3886) and
-`objects_poses_sim` (objects-poses graph, ~5452). Neither graph sets
+the twin extension (`exts/ur5e-dt/ur5e_dt/`): `tf_cam` (camera graph, `cameras.py`) and
+`objects_poses_sim` (objects-poses graph, `objects.py`). Neither graph sets
 `inputs:qosProfile`, so the publishers keep the bridge default of keep_last
 depth 10 / reliable / volatile (Ros2QoS.hpp, Ros2QoSProfile default ctor). The
 subscriber below asks for best_effort, which a reliable publisher also matches.

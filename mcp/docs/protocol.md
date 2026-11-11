@@ -1,121 +1,85 @@
-# Wire protocol, admission and hold
+# The bridge protocol
 
-What the bridge speaks on its socket, and the rules it admits requests by. For scripts the
-[reference client](../README.md#scripting-the-bridge-no-mcp-needed) speaks all of this for you.
+How a client talks to the bridge inside Kit. MCP clients never see this: the `isaac-mcp` server
+speaks it for them. Read it to script the bridge directly or to write another client.
+`mcp/isaac_mcp/client.py` is the reference client: one file, standard library only.
 
-## Framing (NDJSON over TCP)
+## Messages
 
-One JSON object per `\n`-terminated line, each direction:
+A TCP connection carries one JSON object per line in each direction, UTF-8, at most 64 MiB a line.
 
 ```
-→ {"type": "robot_demo.spawn_robot", "params": {"name": "robot_1"}}
-← {"status": "success", "result": {"path": "/World/robot_1"}}
-← {"status": "error", "message": "...", "traceback": "...", ...}
-→ {"type": "list_tools", "params": {}}
-← {"status": "success", "result": {"tools": {"robot_demo.spawn_robot": {"description": ..., "parameters": ..., "namespace": "robot_demo", "owner_id": ...}}}}
+request   {"id": 7, "type": "sim.stage.info", "params": {...}, "token": "..."}
+reply     {"id": 7, "status": "success", "result": {...}}
+          {"id": 7, "status": "error", "message": "...", "code": "READ_ONLY", ...}
 ```
 
-A malformed line gets one error response; the connection stays healthy. Many
-clients may hold connections concurrently; each is isolated. Tool execution is
-serialized on Kit's main thread (USD/PhysX are not thread-safe).
+- `type` is the tool's name: `<namespace>.<tool>`, or a bare name for the bridge's own tools.
+- `id` is yours and comes back on the reply. Send one with every request: a reply that arrives
+  after you gave up on its call can then never be taken for the next call's. Several requests may
+  be in flight on one connection; replies come back as calls finish, not in the order sent.
+- `token` is needed on the first request of a connection when the bridge requires it (see below).
+- An error reply carries the message and whatever the tool attached: often a `code`, and for an
+  unexpected exception its `error_type` and `traceback`.
 
-## Endpoint resolution
+## Finding a bridge
 
-You usually don't specify one. Each running bridge
-advertises itself in a per-user runtime dir (`$XDG_RUNTIME_DIR/isaac-mcp/`).
-A client resolves its port as: explicit `port=`/`--port` → `ISAAC_MCP_PORT`
-→ **auto-discovered when exactly one bridge is running** → a loud error listing
-candidates when several are (e.g. the app on 8766 *and* a Lab run on 8767 — then
-name one). The host rides along: explicit `host=`/`--host` → `ISAAC_MCP_HOST`
-→ **the discovered portfile's advertised host** — so a bridge bound to a
-tailnet IP is dialed on that IP, not loopback. The single-process common case
-is zero-config; only genuinely ambiguous multi-process boxes ever need a port.
-(Agents via the gateway are even simpler — the gateway resolves once at
-startup and they just call tools.)
+A bridge writes `<pid>-<port>.json` into a folder only its account can read:
+`$XDG_RUNTIME_DIR/isaac-mcp`, or `/tmp/isaac-mcp-<uid>`. The file names the app, PID, port and
+address, and whether the bridge is read-only or needs a token. The reference client uses, in order:
+the port it was given, `UR5E_DT_PORT` or `ISAAC_MCP_PORT`, the one bridge advertised. With several
+advertised and none chosen it refuses and lists them.
 
-## Request admission
-
-A tool that advances the simulator from inside its own call (`app.update()`
-under the bridge's task) leaves no room for any other request: Kit steps its
-asyncio loop from the update tick, so a request started beside it is refused
-entry and destroyed, unanswered. The bridge therefore admits requests through
-one queue:
-
-- **Order.** One FIFO queue by arrival; only its head is ever considered. An
-  ordinary request starts when no exclusive request is running; an exclusive
-  one starts when nothing is. Neither class jumps the other.
-- **Exclusive tools.** A handler function carrying
-  `__isaac_mcp_bridge_exclusive__ = True` gets the main loop to itself.
-  `run_python` always does. `isaac_mcp.marks` derives, from a package's syntax
-  tree, which of its handlers must carry the mark; hold your roster to it in
-  a test.
-- **Queue budget.** A request states `"queue_s"`: the longest it may wait to
-  *start*. With none stated it starts at once or is refused at once. The
-  reference client states it for you: its timeout, less an execution reserve
-  (`execution_reserve_s`, default half the timeout), less one second. The
-  budget bounds the wait, not the tool: nothing interrupts a running tool.
-- **One request per connection.** There are no request ids, so a second frame
-  sent before the first is answered is refused, after that answer. An
-  optional top-level `"id"` is echoed on the reply.
-- **A caller that has gone is never served.** A queued request whose
-  connection closed is removed and does not run.
-
-Typed refusals, as `"refusal"` on the error envelope (`"refused": true`):
-
-| refusal | meaning |
-|---|---|
-| `DOORWAY_BUSY` | did not run: could not start inside its queue budget, or the queue is full. Names what is running and for how long. The bridge is alive. |
-| `DOORWAY_PIPELINED` | a second frame on a connection still owed an answer |
-| `DOORWAY_ADMISSION_UNDECLARED` | the tool's package declares no admission contract (`DOORWAY_ADMISSION = 1` at module level) |
-| `DOORWAY_REQUEST_CANCELLED` / `DOORWAY_REQUEST_LOST` / `DOORWAY_SCHEDULER_FAILED` | admitted, and its task was cancelled, destroyed before it ran, or could not be scheduled |
-| `DOORWAY_HELD` | did not run: another caller holds the doorway (below). Names the holder and its reason. |
-| `DOORWAY_HOLD_REFUSED` | a hold or release that cannot be granted: asked in-process (a hold belongs to a connection), a token shorter than 32 characters, no holder or reason, a hold already standing, or a release without the standing token |
-| `DOORWAY_HOLD_TOKEN_UNREADABLE` | (client side) a declared token file exists but is empty or unreadable |
-
-`status` reports `admission`: the contract, each tool module's declaration,
-what is running and waiting, counts, and `unmarked_pumps` — tools the bridge
-caught advancing the loop without the mark. In-process callers (a panel, a
-host extension) use `bridge.submit_local(name, params, on_reply, queue_s=)`,
-never `run_coroutine(bridge.dispatch(...))`.
-
-## Holding the doorway
-
-One caller can reserve the doorway for a piece of work, for example a
-benchmark episode that must not be disturbed. The holder's connection sends
-`{"type": "doorway.hold", "params": {"token", "holder", "reason"}}` and keeps
-the connection open. From then on every frame whose top-level `"hold"` field
-is not that token is refused `DOORWAY_HELD` without running; `status` stays
-answerable. The hold ends when its connection closes, whether by
-`doorway.release`, the holder exiting, or the holder being killed, so a
-crashed holder never strands the doorway. In-process callers carry no token
-and are refused while a hold stands.
-
-The reference client wraps this as `isaac_mcp.client.DoorwayHold`:
-
-```python
-with DoorwayHold("my-benchmark", "episode 3", port=8767) as hold:
-    env = {**os.environ, HOLD_TOKEN_ENV: hold.token}   # let the work's own processes through
-    ...
+```bash
+python3 mcp/isaac_mcp/client.py --list-bridges
+python3 mcp/isaac_mcp/client.py status --port 8766
+python3 mcp/isaac_mcp/client.py sim.stage.info
 ```
 
-A process started before the hold, whose environment cannot change, can name a
-token file with `ISAAC_MCP_HOLD_TOKEN_FILE`; the client reads it on every
-call.
+Exit codes: 0 success, 1 the bridge answered with an error, 2 unreachable or bad usage.
 
-## Boot refusal and caller liveness
+## The token
 
-A configured tool module that fails to import stops the app at startup rather
-than letting the doorway come up without it: the bridge raises
-`ToolModuleLoadRefusal` naming every failed module with its traceback, serves
-none of them, writes a `boot-refusal-<pid>-<ns>.json` record to the log
-directory for a launcher to read, and asks Kit to quit (exit code 78).
+A bridge requires a token unless it was started with `ISAAC_MCP_AUTH=0`. At start it makes a
+random one, or uses `ISAAC_MCP_TOKEN`, and writes it to `<pid>-<port>.token` beside its portfile,
+readable by its own account only. A client on the same account reads that file, so nothing needs
+configuring on one machine. From another machine, or another account, set `ISAAC_MCP_TOKEN` for
+the client to the same value. A connection whose first request has no valid token gets
+`AUTH_REQUIRED` and is closed.
 
-A long-running tool can call `isaac_mcp_bridge.bridge.request_caller_disconnected()`
-to learn that its caller has gone and stop early.
+The token stops other local accounts and stray network clients from running code in your
+simulator. It is not encryption: over an untrusted network, use an SSH tunnel.
 
-## Call telemetry (optional)
+## When a call runs
 
-Set `ISAAC_MCP_AUTHORING_TELEMETRY` to a file path and every completed tool
-call appends one fsynced JSON line: tool name, timing, ordinal, outcome and a
-digest of the arguments. Payloads are never written. Unset, telemetry costs
-nothing.
+Tools run on Kit's main loop. Three rules decide when:
+
+- **Inline** tools only read the bridge's own state and are answered at once on the socket
+  thread, whatever Kit is doing: `status`, `job_status`, `list_tools`, `list_bridges`. So you can
+  always ask what is running, and wait for a job, while a long call holds the main loop.
+- **Exclusive** tools may advance the app from inside their own call; `run_python` is one. An
+  exclusive call waits for running calls to finish, runs alone, and calls that arrive meanwhile
+  wait behind it.
+- Every other tool starts in arrival order as soon as no exclusive call is running or waiting.
+
+A request whose connection closes before it starts is dropped. `status` reports what is running
+and how many wait (`busy`).
+
+## Read-only mode
+
+Started with `ISAAC_MCP_READ_ONLY=1`, a bridge runs only the tools registered as read-only and
+answers every other with the code `READ_ONLY`, before the tool is called. `run_python` and
+`put_file` are refused. `list_tools` marks each tool's `read_only`, and `status` and the portfile
+say the bridge is read-only. This is enforced inside Kit, so it holds for every client.
+
+## Jobs
+
+Work that outlasts one call runs as a job: `run_python` with `background=true`, a controller run,
+a trajectory replay. Starting one returns a `job_id`. `job_status` reports its state, progress and
+result, and with `wait_s` returns when the job ends or the wait runs out; because it is inline, the
+wait costs no simulator time. `job_cancel` stops one.
+
+Each job also has a record on disk, `<jobs folder>/<job_id>/job.json`, in the same format as an
+Isaac Lab job with `"runner": "kit"`. The host reads it when the simulator has gone, and lists
+simulator and Lab jobs together. The jobs folder is `ISAACLAB_JOBS_DIR`, or
+`~/.local/share/isaac-mcp/jobs`.

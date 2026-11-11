@@ -59,34 +59,45 @@ which simulator answered, what else is running, and the IDs the scene tools need
 
 ## How a tool call travels
 
-1. The client sends `tools/call` with a name such as `sim__prim__create`.
+1. The client sends `tools/call` with a name such as `sim__prim` and `action="create"`. A grouped tool checks that
+   the arguments belong to that action and passes the call to the single-purpose tool behind it (`sim__prim__create`,
+   which can also be called by that name).
 2. The server checks the arguments against the tool's schema.
 3. It takes one of three routes:
    - **Host tool:** the server runs it and answers.
-   - **Simulator tool:** the server sends one JSON line to the bridge (`{"type": "sim.prim.create", "params": {...}}`)
-     and waits for one JSON line back. The bridge runs the handler on Kit's main thread. For an asset import the
+   - **Simulator tool:** the server sends one JSON line to the bridge
+     (`{"id": 7, "type": "sim.prim.create", "params": {...}}`) and waits for the line that echoes its `id`. The bridge
+     runs the handler on Kit's main thread. For an asset import the
      server first checks the file is in an approved folder, converts it if needed, and copies a snapshot into a staging
      folder that Kit reads.
    - **Job tool:** the server starts a process in its own process group, records it in the jobs folder, and returns a
-     `job_id` at once.
+     `job_id` at once. A job inside the simulator writes the same kind of record to the same folder.
 4. The answer goes back to the client as text (usually JSON), with MCP's error flag set when the tool failed.
 
 **Names.** Inside Kit a tool is `<namespace>.<tool>`: `sim.stage.info`, `ur5e_dt.play_scene`. MCP tool names cannot
-contain dots, so the server shows them as `sim__stage__info`, `ur5e_dt__play_scene`. Tools built into the bridge
+contain dots, so the server registers them as `sim__stage__info`, `ur5e_dt__play_scene`. A client is shown related
+tools as one grouped tool with an `action` (`sim__stage`, `ur5e_dt__scene`): about 45 names to read instead of 134.
+The [table of groups](TOOLS-HOST.md#grouped-tools) maps each action to its single-purpose tool. Tools built into the bridge
 (`status`, `run_python`, `job_status`, the file tools), the gateway tools (`use_bridge`, `refresh_tools`) and the desktop
 tools (`screenshot`, `list_windows`) have no prefix.
 
 **Long work.** A call that would take longer than a moment returns a `job_id` instead of blocking. Inside the
 simulator that is `run_python` with `background=true`, `sim__simulation__run` and `sim__trajectory__replay`; on the
 host it is every `isaaclab__*` launch and `run_script`. `job_status` (with `wait_s`) and `job_cancel` follow and stop
-either kind.
+either kind, and both kinds keep their record in one folder in one format, so a job can still be read after the
+simulator has exited.
 
 ## How the server reaches Isaac Sim
 
 **The bridge.** `isaac.mcp.bridge` listens on one TCP port per Kit process, on loopback by default. The protocol is
 one JSON object per line each way ([protocol](../mcp/docs/protocol.md)). Tool packs register their tools on it under a
-namespace. It runs one call at a time on Kit's main thread when a call needs the loop to itself, queues or refuses the
-rest by name, and keeps background jobs.
+namespace. Three rules decide when a call runs: tools that only read the bridge's own state (`status`, `job_status`)
+are answered at once, off the main thread; a tool that advances the app itself (`run_python`) runs alone; every other
+tool runs in arrival order. The bridge also keeps background jobs.
+
+**Who may connect, and what they may do.** Every connection presents a token. The bridge writes it to a file only
+your account can read, and clients on that account read it from there. Started with `ISAAC_MCP_READ_ONLY=1`, the
+bridge runs only tools that change nothing and refuses the rest, for every client.
 
 **Starting a simulator.** `./run.sh` (add `--headless` for no window) starts Isaac Sim with the bridge, the scene
 tools and the twin enabled, on port 8766 unless told otherwise. `sim__launch`, when that tool group is enabled, does the
@@ -110,8 +121,8 @@ with its PID and port. The server picks the bridge to dial in this order:
 | any | `./run.sh --port 0` asks the OS for a free port; `sim__launch` picks one in `ISAAC_MCP_PORT_RANGE`. |
 
 A configured port that is already taken refuses at startup rather than moving somewhere no client could predict.
-`ISAAC_MCP_BIND` can change the bind address; the bridge runs arbitrary Python by design, so listening beyond loopback
-needs a real trust boundary ([bridge configuration](../mcp/docs/configuration.md)). The twin shares the bridge: it
+`ISAAC_MCP_BIND` can change the bind address; the bridge runs arbitrary Python by design, so beyond loopback use an
+SSH tunnel or a private network, and give the client the token ([bridge configuration](../mcp/docs/configuration.md)). The twin shares the bridge: it
 unregisters its own namespace on shutdown and leaves the bridge and the other packs running.
 
 ## Isaac Lab jobs
@@ -158,7 +169,8 @@ Kit (set them where `run.sh` runs; `sim__launch` passes the server's on), or an 
 | `ISAAC_MCP_ASSET_PATH` | server, Kit | The asset folder. |
 | `ISAAC_MCP_SCENE_OUTPUT` | Kit | Where scene tools write captures, saves and logs. |
 | `ISAACLAB_PYTHON`, `ISAACLAB_ROOT` | server | The default Isaac Lab install. |
-| `ISAAC_MCP_LOCAL_TOOLS`, `ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_SCENE_TOOLS` | server | Which tools a client is shown. These control visibility, not security. |
+| `ISAAC_MCP_LOCAL_TOOLS`, `ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_SCENE_TOOLS`, `ISAAC_MCP_LEGACY_TOOLS` | server | Which tools a client is shown. These control visibility, not security. |
+| `ISAAC_MCP_READ_ONLY`, `ISAAC_MCP_AUTH`, `ISAAC_MCP_TOKEN` | Kit (the token also by clients) | Enforced by the bridge: read-only mode, and the token connections must present. |
 | `ISAAC_MCP_ENABLE_SCENE_SCRIPTS` | Kit | Opt in to tools that run the caller's Python inside Kit. |
 
 ## Naming rules

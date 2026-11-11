@@ -32,14 +32,14 @@ import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional
+from typing import Annotated, Any, AsyncIterator, Dict, Iterable, List, Mapping, Optional
 
 from pydantic import Field
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.lowlevel.server import NotificationOptions
 
-from . import diagnostics, grouped_tools, host_catalog
+from . import diagnostics, grouped_tools, host_catalog, tool_groups
 from .scene_contracts import HOST_ONLY
 from .tool_hints import CATALOG_HINTS
 from .client import BridgeClient, BridgeError
@@ -1791,6 +1791,8 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     state.asset_broker = Broker(env.get("ISAAC_MCP_ASSET_CONFIG", ""))
     if state.asset_broker.requested_profile != "trusted_project":
         raise RuntimeError("PROFILE_UNAVAILABLE: isolated/unrecognized profiles cannot start this trusted MCP server. No restricted endpoint or OS sandbox is implemented; no fallback.")
+    if not grouped_tools.legacy_listed(env):
+        instructions = tool_groups.listed_form(instructions)      # name the tools as the client is shown them
     server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
     setattr(server, _STATE_ATTR, state)
     _advertise_tools_list_changed(server)

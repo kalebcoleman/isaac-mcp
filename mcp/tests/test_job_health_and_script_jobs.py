@@ -184,7 +184,7 @@ def test_run_script_is_listed_beside_the_lab_tool_and_needs_no_install(tmp_path,
         monkeypatch.delenv(variable, raising=False)
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [{"host": "127.0.0.1", "port": 8766, "pid": 1}])
     general, lab = tool("run_script"), tool("isaaclab__run_script")
-    assert "no simulator and no Isaac Lab" in general.description and "isaaclab__runs_status" in general.description
+    assert "no simulator and no Isaac Lab" in general.description and "jobs action=lab_status" in general.description   # named as a client is shown it
     assert general.parameters["properties"]["uses_gpu"]["default"] is False
     assert "uses_gpu" not in lab.parameters["properties"], "the existing tool keeps its arguments"
     assert set(lab.parameters["properties"]) - set(general.parameters["properties"]) == {"python_path", "allow_concurrent", "allow_concurrent_gpu"}

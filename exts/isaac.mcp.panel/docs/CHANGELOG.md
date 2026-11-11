@@ -1,9 +1,9 @@
 # Changelog
 
-## [0.1.0] - 2026-07-04
+## 0.2.0
 
-- Initial release: registry-driven panel — namespace sections in
-  owner-registration order (builtins first, collapsed; projects append below),
-  schema-generated parameter widgets prefilled from each param's declared
-  `default`, `required`-param gating before dispatch, color-coded results,
-  every action through `bridge.dispatch` (click == agent call).
+- Rewritten for bridge 0.2.0: clicks are submitted to the bridge's queue and obey read-only mode.
+
+## 0.1.0
+
+- First version.

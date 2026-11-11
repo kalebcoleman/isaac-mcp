@@ -1,18 +1,22 @@
-# Isaac Lab
+# The bridge inside an Isaac Lab script
 
+The bridge needs only Kit, so it also runs in the Kit app an Isaac Lab standalone script starts.
+Start from `mcp/templates/isaaclab_bridge_launch.py`. Three things differ from the Isaac Sim app:
 
-The bridge's only Kit dependency (`omni.kit.async_engine`) ships in Kit's core
-extension set, so it runs in any Kit app — including Isaac Lab. Lab
-*standalone scripts* (train/play) differ from the Isaac Sim app in three ways:
-the script owns the Kit app (`AppLauncher` + Lab's own `isaaclab.python.*.kit`
-experiences), so persistent registration doesn't apply — enable the bridge
-per-script via `--kit_args`; the script owns the main loop, so bridge commands
-execute only while Kit updates, and a script blocked between updates stalls dispatch; and
-configuration is env-var only. In the Lab 3.0.0 source, `sim.step()` and `env.step()` update Kit
-only through a windowed Kit visualizer (`KitVisualizer.step` returns early when headless), so call
-`simulation_app.update()` in your loop, with `/app/player/playSimulations` off around it as Lab does
-so that Kit does not also advance physics. The template shows this. Headless without it, the port listens
-but `status` never answers (seen with `sim.step()`; `env.step()` was read from source, not run). Note the port: "one bridge, one port, *per Kit process*" —
-a Lab standalone run is its own Kit process, so when it runs alongside the
-installed app (which holds 8766) it needs its own port (8767 by convention).
-See `mcp/templates/isaaclab_bridge_launch.py` for the template.
+- The script enables the bridge itself, through `--kit_args`. What `scripts/install.py` stores
+  applies to the Isaac Sim app only.
+- Settings come from the environment, set before the app starts (`ISAAC_MCP_PORT`,
+  `ISAAC_MCP_TOOL_PATHS`, `ISAAC_MCP_TOOL_MODULES`).
+- The script owns the main loop, and the bridge answers only while Kit updates. In Isaac Lab
+  3.0.0, `sim.step()` and `env.step()` update Kit only with a windowed Kit visualizer. Headless,
+  the port accepts connections but calls that need the main loop never return (seen with
+  `sim.step()`; for `env.step()` this is read from the source, not run). So call
+  `simulation_app.update()` in your loop, with `/app/player/playSimulations` switched off around
+  it as Isaac Lab does, so that Kit does not advance physics a second time. `status` and
+  `job_status` answer regardless, because they do not need the main loop.
+
+A Lab script is its own Kit process and needs its own port: the template uses 8767, leaving 8766
+to the Isaac Sim app.
+
+The `isaaclab__*` tools are separate from all this: they start Lab scripts as jobs and need no
+bridge. See [TOOLS-ISAACLAB.md](../../docs/TOOLS-ISAACLAB.md).

@@ -211,3 +211,47 @@ def test_shared_arguments_are_described_once_and_scoped_ones_say_where_they_appl
     assert camera["filename"]["description"].startswith("[capture] ")
     assert camera["path"]["description"].startswith("[create, capture] create: ") and " capture: " in camera["path"]["description"]
     assert "anyOf" not in camera["focal_length"], "an optional argument is not also typed as null"
+
+
+def test_what_the_server_says_names_tools_as_the_client_is_shown_them(listed, monkeypatch, tmp_path):
+    assert tool_groups.listed_form("call sim__stage__info, then sim__prim__delete (not sim__prim__delete_all)") == \
+        "call sim__stage action=info, then sim__prim action=delete (not sim__prim__delete_all)"
+    assert tool_groups.listed_form("ur5e_dt__quick_start* and list_bridges") == "ur5e_dt__quick_start* and status"
+    hidden = set(tool_groups.members()) | set(tool_groups.SUPERSEDED)
+    pattern = __import__("re").compile(r"(?<![A-Za-z0-9_])(" + "|".join(sorted(hidden, key=len, reverse=True)) + r")(?![A-Za-z0-9_*])")
+    named = {t.name: sorted(set(pattern.findall(t.description + json.dumps(t.inputSchema)))) for t in listed}
+    assert not {name: found for name, found in named.items() if found}, "a listed tool names a tool the client cannot see"
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
+    assert "sim__stage action=info" in server.instructions and "sim__stage__info" not in server.instructions
+    assert "sim__stage__info" in gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none", "ISAAC_MCP_LEGACY_TOOLS": "1"}).instructions
+
+
+def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
+    class Endpoint:
+        port = 1
+
+        def call(self, name, params=None, **kwargs):
+            if name == "list_tools":
+                raise ConnectionRefusedError("offline")
+            if name == "run_python":
+                return {"output": "", "result": "I printed sim__stage__info myself"}
+            return {"status": "error", "code": "STALE_TARGET", "message": "Call sim__stage__info for the new IDs."}
+
+        def close(self):
+            pass
+
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
+    gw._state_for(server).client = Endpoint()
+
+    async def run():
+        async with create_connected_server_and_client_session(server._mcp_server) as client:
+            await client.initialize()
+            refused = await client.call_tool("sim__prim", {"action": "get", "session_id": "a", "stage_id": "b", "path": "/World"})
+            data = await client.call_tool("run_python", {"code": "result = 1"})
+            return refused, data
+
+    refused, data = asyncio.run(run())
+    text = refused.content[0].text
+    assert refused.isError and "Call sim__stage action=info for the new IDs." in text
+    assert text.count("Error executing tool") == 1, text
+    assert "I printed sim__stage__info myself" in data.content[0].text
