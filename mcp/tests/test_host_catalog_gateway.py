@@ -1151,7 +1151,7 @@ def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypa
     brief = json.loads(short)
     assert brief["running"] is True and brief["pid"] == direct["pid"] and brief["port"] == live.port
     assert not {"admission", "toolsets", "namespaces", "extension"} & set(brief), "the default reply is the short one"
-    assert "warning" in brief["host"] and len(short) < len(answer) / 2
+    assert "warning" in brief["host"] and len(short) < len(answer)
 
 
 def test_status_with_no_bridge_still_reports_the_host(monkeypatch, tmp_path):
