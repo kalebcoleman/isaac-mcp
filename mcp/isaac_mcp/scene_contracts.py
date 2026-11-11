@@ -554,7 +554,7 @@ add(
 )
 add(
     "sim.simulation.run",
-    "Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. A stopped timeline is initialized; the run steps exactly and ends paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none.",
+    "Run your own controller in the physics loop as a job. Each step gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. Steps exactly from a pause (mode=step), or follows a playing timeline (mode=play). Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none.",
     dict(
         **TARGET,
         body=field("string", "Rigid body the controller acts on, e.g. a drone's base link."),
@@ -565,6 +565,7 @@ add(
         log=field("array", "Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.", False),
         log_every=field("integer", "Log one row every this many physics steps, 1..10000.", False, default=1),
         filename=field("string", "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.", False),
+        mode=field("string", "step (default): exact steps from a paused timeline, repeatable and as fast as the machine allows. play: the timeline plays and the controller runs in the engine's pre-step callback, so ROS publishers and action graphs tick too; it keeps playing afterwards.", False, default="step", enum=["step", "play"]),
         steps_per_frame=field("integer", "Physics steps between app frames, 1..120. Default: about real time at 60 frames per second. With camera, fps sets it.", False),
         articulation=field("string", "Articulation root of a jointed robot (often <robot>/root_joint). The state then has joints {names, positions, velocities}, and the controller may return joint_efforts, joint_targets or joint_velocity_targets as {joint name: value} (N m or N, rad or stage units).", False),
         observe=field("array", "Up to 8 more rigid bodies whose state the controller gets under observed[path]. It may push them too, with wrenches: {path: {force, torque}}.", False),

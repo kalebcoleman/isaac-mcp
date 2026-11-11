@@ -406,6 +406,23 @@ def physics_ready():
         return False
 
 
+def on_physics_step(callback):
+    """Call ``callback(step_dt, context)`` before every physics step while the timeline plays.
+    Returns the id to pass to remove_physics_step."""
+    manager()  # refuses an engine these tools are not qualified for
+    import isaacsim.core.simulation_manager as simulation_manager
+
+    events = getattr(simulation_manager, "SimulationEvent", None)
+    event = events.PHYSICS_PRE_STEP if events is not None else simulation_manager.IsaacEvents.PRE_PHYSICS_STEP
+    return simulation_manager.SimulationManager.register_callback(callback, event=event)
+
+
+def remove_physics_step(callback_id):
+    from isaacsim.core.simulation_manager import SimulationManager
+
+    SimulationManager.deregister_callback(callback_id)
+
+
 def newton_stage(stage):
     import omni.usd
     from isaacsim.physics.newton import acquire_stage

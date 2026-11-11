@@ -506,10 +506,10 @@ Stop a background job (job_id from the call that started it). It ends at its nex
 
 ### `job_status`
 
-Status of background work in this Kit: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, newest first. Jobs are forgotten when Kit restarts. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed.
+Status of background work in this Kit: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, newest first. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed.
 
 - `job_id` (string, optional): job_id from the call that started the work. Omit to list jobs.
-- `wait_s` (number, optional): Wait up to this many seconds (0-60) for the job to end before answering, instead of polling. The MCP server does the waiting; a direct socket caller gets the current status at once.
+- `wait_s` (number, optional): Wait up to this many seconds (0-60) for the job to end before answering, instead of polling.
 
 ### `list_bridges`
 
@@ -519,7 +519,7 @@ No arguments.
 
 ### `put_file`
 
-Write a file on the bridge's box (content base64-encoded). run_python executes on the box, so code and assets must exist on ITS disk — this verb ships them from a remote driver without a side-channel rsync/scp. Writing a .py purges the sibling __pycache__ so the next import can't serve stale bytecode. Content rides one NDJSON frame in memory: right for code and tool-sized assets, not multi-GB payloads.
+Write a file on the bridge's box (content base64-encoded), so code and assets can be shipped without scp. Writing a .py clears the folder's bytecode cache. The content travels in one message: for code and tool-sized assets, not gigabytes.
 
 - `path` (string, required): Destination path on the bridge's box (~ expands).
 - `content_b64` (string, required): File content, base64-encoded.
@@ -527,9 +527,9 @@ Write a file on the bridge's box (content base64-encoded). run_python executes o
 
 ### `reload_tools`
 
-Hot-reload one autoloaded tool package: unregister its owner, re-import the module (the submodule named _state is preserved so live handles survive), and re-register its tools. Follow with the MCP front-end's refresh so new schemas are rediscovered.
+Hot-reload one of a project's own tool packages: unregister it, import it again and register its tools. Follow with refresh_tools so the new schemas are seen.
 
-- `module` (string, required): Tool-package module name as registered (see list_tools namespaces / owners).
+- `module` (string, required): The package's module name, as given in ISAAC_MCP_TOOL_MODULES.
 
 ### `run_python`
 
@@ -543,7 +543,7 @@ Execute Python code on the Kit main thread with full access to the Omniverse API
 
 ### `stat_file`
 
-Existence, size, and sha256 of a file on the bridge's box — lets a remote driver skip unchanged pushes and verify assets instead of blindly re-syncing.
+Existence, size, and sha256 of a file on the bridge's box, to skip unchanged pushes and verify assets.
 
 - `path` (string, required): Path on the bridge's box (~ expands).
 
@@ -551,7 +551,7 @@ Existence, size, and sha256 of a file on the bridge's box — lets a remote driv
 
 Where am I, in one call: the bridge that answered (pid, port, app, readiness), every bridge advertised on this machine, the current stage's session_id and stage_id with the timeline state, and running jobs. With nothing running it says so and names the next call, instead of failing. Call it once before the first simulator action; there is no need to repeat it between calls.
 
-- `detail` (boolean, optional): true: the full bridge identity as well (namespaces, toolset hashes, admission, hold, extension source). Default false: the short reply.
+- `detail` (boolean, optional): true: the full bridge identity as well (namespaces, toolset hashes, what is running and waiting, extension source). Default false: the short reply.
 
 ## Generic scene (`sim__*`)
 
@@ -1089,7 +1089,7 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 
 ### `sim__simulation__run`
 
-Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. A stopped timeline is initialized; the run steps exactly and ends paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.
+Run your own controller in the physics loop as a job. Each step gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. Steps exactly from a pause (mode=step), or follows a playing timeline (mode=play). Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -1101,6 +1101,7 @@ Run your own controller in the physics loop, as a job. Each step it gets the bod
 - `log` (array, optional): Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.
 - `log_every` (integer, default `1`): Log one row every this many physics steps, 1..10000.
 - `filename` (string, optional): New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.
+- `mode` (step|play, default `"step"`): step (default): exact steps from a paused timeline, repeatable and as fast as the machine allows. play: the timeline plays and the controller runs in the engine's pre-step callback, so ROS publishers and action graphs tick too; it keeps playing afterwards.
 - `steps_per_frame` (integer, optional): Physics steps between app frames, 1..120. Default: about real time at 60 frames per second. With camera, fps sets it.
 - `articulation` (string, optional): Articulation root of a jointed robot (often <robot>/root_joint). The state then has joints {names, positions, velocities}, and the controller may return joint_efforts, joint_targets or joint_velocity_targets as {joint name: value} (N m or N, rad or stage units).
 - `observe` (array, optional): Up to 8 more rigid bodies whose state the controller gets under observed[path]. It may push them too, with wrenches: {path: {force, torque}}.

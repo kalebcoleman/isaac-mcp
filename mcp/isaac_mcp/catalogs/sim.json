@@ -2697,7 +2697,7 @@
       "owner_id": "generic-sim"
     },
     "sim.simulation.run": {
-      "description": "Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. A stopped timeline is initialized; the run steps exactly and ends paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Run your own controller in the physics loop as a job. Each step gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. Steps exactly from a pause (mode=step), or follows a playing timeline (mode=play). Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2754,6 +2754,16 @@
           "type": "string",
           "description": "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.",
           "required": false
+        },
+        "mode": {
+          "type": "string",
+          "description": "step (default): exact steps from a paused timeline, repeatable and as fast as the machine allows. play: the timeline plays and the controller runs in the engine's pre-step callback, so ROS publishers and action graphs tick too; it keeps playing afterwards.",
+          "required": false,
+          "default": "step",
+          "enum": [
+            "step",
+            "play"
+          ]
         },
         "steps_per_frame": {
           "type": "integer",
@@ -2885,6 +2895,18 @@
           "default": null,
           "has_default": false,
           "description": "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites."
+        },
+        {
+          "name": "mode",
+          "kind": "enum",
+          "enum": [
+            "step",
+            "play"
+          ],
+          "required": false,
+          "default": "step",
+          "has_default": true,
+          "description": "step (default): exact steps from a paused timeline, repeatable and as fast as the machine allows. play: the timeline plays and the controller runs in the engine's pre-step callback, so ROS publishers and action graphs tick too; it keeps playing afterwards."
         },
         {
           "name": "steps_per_frame",
