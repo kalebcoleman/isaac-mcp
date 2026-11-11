@@ -1,144 +1,176 @@
-# System Architecture
+# How isaac-mcp works
 
-This document describes the runtime architecture, naming conventions, port mapping, tool routing, ROS 2 / DDS transport rules, and transform tree interfaces of isaac-mcp on Isaac Sim 6.2.
+This page explains the whole system: what an MCP server is, how a client connects to this one, how the server reaches
+Isaac Sim and Isaac Lab, where assets, recordings and settings live, and how the names and ports fit together.
+For setup steps see [Linux setup](LINUX-SETUP.md) and [MCP server](MCP-SERVER.md); for every tool see the
+[tool arguments](TOOLS-ARGUMENTS.md).
 
----
+![The MCP client talks to the isaac-mcp host server over stdio. The server answers some tools itself, forwards simulator tools over TCP to the bridge extension inside Isaac Sim, and runs Isaac Lab and script jobs as separate processes. Assets, staging, outputs and job logs are files on the same machine.](media/architecture.svg)
 
-## 1. Four-Layer Map
+The diagram source is [`architecture.drawio`](architecture.drawio) (open it at [diagrams.net](https://app.diagrams.net)).
 
-The project separates the host-side MCP interface, the generic Omniverse Kit bridge, the tool packs that register on it (generic scene tools and the UR5e digital twin), and the underlying Isaac Sim runtime into four distinct layers:
+## In one minute
 
-```
-+-------------------------------------------------------------------------------+
-| Layer 1: Host MCP Server (mcp/)                                               |
-| Package: isaac_mcp  |  CLI: isaac-mcp               |
-| - Runs in host Python environment (uv tool / isolated venv)                  |
-| - Speaks stdio MCP to AI agents (Claude Code, Claude Desktop, OpenCode)       |
-| - Provides desktop capture: screenshot, screen recording, window management  |
-| - Acts as TCP client to Omniverse Kit bridge                                  |
-+---------------------------------------+---------------------------------------+
-                                        | NDJSON over TCP (:8766)
-+---------------------------------------v---------------------------------------+
-| Layer 2: Generic Kit MCP Bridge (exts/isaac.mcp.bridge/)                          |
-| Package: isaac_mcp_bridge  |  Extension ID: isaac.mcp.bridge                          |
-| - Runs inside Omniverse Kit main loop                                         |
-| - Provides TCP NDJSON server, request queuing, admission control              |
-| - Dispatches tool calls onto Kit's main thread                                |
-| - Built-ins: run_python, list_tools, reload_tools, list_bridges, file access  |
-| - Optional UI inspector: isaac.mcp.panel                                   |
-+---------------------------------------+---------------------------------------+
-                                        | Python registrar / event hook
-+---------------------------------------v---------------------------------------+
-| Layer 3: Tool packs on the shared bridge                                      |
-| Generic scene tools (exts/sim-tools/), Extension ID: sim-tools                |
-| - Registers 69 generic sim and assets tools, robot-agnostic                   |
-| UR5e Digital Twin (exts/ur5e-dt/), Package: ur5e_dt, Extension ID: ur5e-dt    |
-| - Registers ur5e_dt.* tools (23)                                              |
-| - Builds and manages the workstation scene (UR5e, RG2 gripper, QuickChanger)  |
-| - Provides motion control, joint drives, scene save/restore, camera setup     |
-| - Owns the OmniGraph pipelines for ROS 2 transforms and joint mirroring       |
-+---------------------------------------+---------------------------------------+
-                                        | Native Kit / USD APIs
-+---------------------------------------v---------------------------------------+
-| Layer 4: Simulation Runtime (Isaac Sim 6.2.0.0 / Python 3.12)                 |
-| - NVIDIA Omniverse Kit core, PhysX 5 (TGS solver), RTX real-time renderer     |
-| - USD stage and articulation physics                                          |
-| - Bundled ROS 2 packages (isaacsim.ros2.bridge, isaacsim.ros2.nodes, core)    |
-+-------------------------------------------------------------------------------+
-```
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is how an AI agent's client (Claude Code, Codex,
+OpenCode and others) uses outside tools. The client starts an **MCP server** as a child process, asks it which tools it
+has, and calls them by name with JSON arguments. The server does the work and returns text or images.
 
-### Why Layers Are Kept Separate
+`isaac-mcp` is such a server. It is a small Python program that starts in about a second and needs no simulator to
+start. It offers three kinds of tool:
 
-- **`mcp/`** must start instantly on the host and must never require loading or syncing a 20+ GB Isaac Sim simulation environment just to run desktop screen capture or manage processes.
-- **`exts/isaac.mcp.bridge`** is a generic, robot-agnostic transport layer. It can connect to any Kit application and exposes a uniform registration API for any tool package.
-- **`exts/sim-tools`** holds the robot-agnostic scene, asset, sensor, graph and UI tools. Nothing in it references the UR5e.
-- **`exts/ur5e-dt`** encapsulates the robot setup, physics parameters and manipulation logic. Its USD assets are not in the repository; they live in the local [asset folder](ASSETS.md).
-- **`exts/isaac.mcp.panel`** is vendored alongside the bridge to provide an in-editor GUI inspector for registered tools.
-
-The host also packages snapshots of the bridge built-ins', generic tools' and twin's schemas. It lists those tools before Kit starts; calls still
-require a bridge serving the extension. Live bridge metadata replaces the snapshot after discovery. The supplied
-launcher enables the twin extension with its panel hidden unless `--ur5e-panel` is requested.
-
----
-
-## 2. Naming Rules
-
-Consistency across extensions, packages, and CLI commands is strictly maintained according to these rules:
-
-| Entity | Format | Rule | Examples |
-|---|---|---|---|
-| Kit Extension ID | Dotted / Hyphenated | Matches Omniverse extension identifier | `ur5e-dt`, `sim-tools`, `isaac.mcp.bridge`, `isaac.mcp.panel` |
-| Extension Folder | Exact Match | Directory under `exts/` matches Extension ID | `exts/ur5e-dt/`, `exts/isaac.mcp.bridge/` |
-| Python Package | Underscored | Standard valid Python import identifier | `ur5e_dt`, `sim_tools`, `isaac_mcp_bridge`, `isaac_mcp` |
-| CLI / Server Name | Hyphenated | User-facing executable installed by `uv tool` | `isaac-mcp` |
-
----
-
-## 3. Port Map and Endpoint Resolution
-
-### Port Allocations
-
-| Port | Owner | Purpose |
+| Kind | Examples | Where the work happens |
 |---|---|---|
-| **`8766`** | Shared bridge in a twin launch | Default primary twin bridge port. Used by `run.sh`, `verify.sh`, and MCP clients. |
-| **`8767`** | Optional secondary bridge | Convention for the Isaac Lab bridge example; can also be used for a second twin instance when explicitly configured. |
-| **`8799`** | Probe script | Dedicated port for `scripts/probe_62.sh` to run non-interfering diagnostic probes. |
-| Selected port | `isaac.mcp.bridge` | One process-wide bridge serves the twin, built-ins and any other registered packs. The twin launcher sets `ISAAC_MCP_PORT` to its selected port and defers binding until the twin's tools have registered. |
+| Host tools | `isaac_help`, `screenshot`, `join_videos`, `assets__search`, `sim__launch` | In the server process itself |
+| Simulator tools | `sim__*`, `assets__import_path`, `ur5e_dt__*`, `status`, `run_python`, `job_status` | Inside a running Isaac Sim, reached over a local TCP connection |
+| Job tools | `isaaclab__train`, `isaaclab__eval`, `run_script` | In a separate process the server starts and watches |
 
-### Endpoint Precedence Chain
+## The pieces
 
-When an MCP client or host utility connects to a running bridge, the target port resolves using the following priority order:
+| Piece | Where | What it is |
+|---|---|---|
+| Host server | `mcp/isaac_mcp/` (command `isaac-mcp`) | The MCP server. Speaks MCP to the client on stdio; is a TCP client of the bridge. |
+| Bridge | `exts/isaac.mcp.bridge/` | A Kit extension inside Isaac Sim: a TCP server that runs tool calls on Kit's main thread. Robot-agnostic. |
+| Scene tools | `exts/sim-tools/` | A Kit extension that registers the 71 generic sim and assets tools on the bridge. |
+| UR5e twin | `exts/ur5e-dt/` | One lab's digital twin: 23 `ur5e_dt.*` tools on the same bridge. Optional. |
+| Panel | `exts/isaac.mcp.panel/` | An optional in-app window listing the registered tools. |
+| Launch and checks | `run.sh`, `install.sh`, `verify.sh`, `scripts/` | Start Isaac Sim with the extensions, install the host, run checks. |
 
-1. **Explicit argument:** Parameter passed directly to a tool call (e.g., `use_bridge(8766)`) or CLI flag (`--port 8766`).
-2. **`UR5E_DT_PORT`:** Specific environment variable targeting the twin bridge.
-3. **`ISAAC_MCP_PORT`:** Generic environment variable fallback.
-4. **Portfile discovery:** Active portfiles under `$XDG_RUNTIME_DIR/isaac-mcp/`, or `/tmp/isaac-mcp-<uid>/` when
-   `XDG_RUNTIME_DIR` is unset. If multiple instances are running without an explicit pin, discovery refuses to guess
-   and lists available ports.
+They are separate on purpose. The host must start instantly and must never need the 20 GB simulator environment just
+to take a screenshot or manage a job. The bridge knows nothing about robots, so any Kit app and any tool pack can use
+it. The scene tools know nothing about the UR5e. The twin keeps its robot-specific logic to itself, and its USD assets
+are not in the repository; they live in the local [asset folder](ASSETS.md).
 
-`run.sh` sets the shared bridge port to the resolved twin port; it defaults to loopback. `ISAAC_MCP_BIND` can change
-the bridge bind address and requires an appropriate trust boundary. A direct Kit launch can join an already-running
-shared bridge, or start the unbound bridge on the configured twin/shared port (8766 by default). If an explicitly
-requested twin port conflicts with the shared bridge, registration fails rather than silently choosing another port.
-The twin unregisters its own namespace on shutdown; the bridge and other owners remain available. Existing in-flight
-twin calls drain before its state is cleaned up, so an immediate re-enable can be refused until they finish.
-`./run.sh --port 0` asks the OS for a free port, advertised in the bridge's portfile for client discovery. When a twin
-requesting port 0 rejoins an already-listening shared bridge, it adopts that bridge's port.
+## How a client connects
 
----
+The client's configuration names a command to run (see [client configuration](MCP-SERVER.md#4-client-configuration)):
 
-## 4. Tool Naming and Routing
-
-Communication between the host MCP server and the Kit bridge uses JSON lines over a raw TCP socket:
-
-```
-[MCP Client: Claude / OpenCode]
-       │
-       │ stdio JSON-RPC
-       ▼
-[Host MCP Server: isaac-mcp]
-       │
-       │ TCP NDJSON (:8766)
-       ▼
-[Kit Bridge: isaac.mcp.bridge (:8766)]
-       │
-       │ Main-thread dispatch
-       ▼
-[Twin Handler: ur5e_dt]
+```json
+{"mcpServers": {"isaac": {"command": "isaac-mcp", "env": {"ISAAC_MCP_PYTHON": "/path/to/isaac-sim/python"}}}}
 ```
 
-### Namespace Mapping (`.` vs `__`)
+The client starts `isaac-mcp`, and the two exchange JSON-RPC messages on the process's stdin and stdout: `initialize`,
+`tools/list`, then `tools/call` for each tool the agent uses. Each client gets its own server process, so two agents do
+not share a server, though they can talk to the same simulator.
 
-- Inside Kit, the twin registers tools under its canonical namespace with dots: `ur5e_dt.<tool_name>`.
-  Examples: `ur5e_dt.play_scene`, `ur5e_dt.quick_start_with_workstation`, `ur5e_dt.setup_camera_tf_graph`.
-- Because dots (`.`) are not valid characters in MCP tool names per the Model Context Protocol specification, the host server (`isaac_mcp/server.py`) translates dots to double underscores (`__`).
-- Consequently, MCP clients see and invoke tools as: `ur5e_dt__<tool_name>` (e.g., `ur5e_dt__play_scene`).
-- The generic pack follows the same rule: `sim.stage.info` becomes `sim__stage__info`.
-- Tools built into the bridge itself (such as `list_bridges`, `run_python`), the host gateway (`use_bridge`, `refresh_tools`) and host desktop tools (`screenshot`, `start_screen_recording`, `list_windows`) carry no prefix.
+The server lists its full tool set from the first `tools/list`, whether or not Isaac Sim is running. The simulator
+tools are listed from a snapshot packaged with the server (`mcp/isaac_mcp/catalogs/`); each one dials the selected
+bridge only when it is called, and answers with what to do if none is there. `status` is the one check-in call: it says
+which simulator answered, what else is running, and the IDs the scene tools need, or that nothing is running.
 
----
+## How a tool call travels
 
-## 5. ROS 2 and DDS Communication Rule
+1. The client sends `tools/call` with a name such as `sim__prim__create`.
+2. The server checks the arguments against the tool's schema.
+3. It takes one of three routes:
+   - **Host tool:** the server runs it and answers.
+   - **Simulator tool:** the server sends one JSON line to the bridge (`{"type": "sim.prim.create", "params": {...}}`)
+     and waits for one JSON line back. The bridge runs the handler on Kit's main thread. For an asset import the
+     server first checks the file is in an approved folder, converts it if needed, and copies a snapshot into a staging
+     folder that Kit reads.
+   - **Job tool:** the server starts a process in its own process group, records it in the jobs folder, and returns a
+     `job_id` at once.
+4. The answer goes back to the client as text (usually JSON), with MCP's error flag set when the tool failed.
+
+**Names.** Inside Kit a tool is `<namespace>.<tool>`: `sim.stage.info`, `ur5e_dt.play_scene`. MCP tool names cannot
+contain dots, so the server shows them as `sim__stage__info`, `ur5e_dt__play_scene`. Tools built into the bridge
+(`status`, `run_python`, `job_status`, the file tools), the gateway tools (`use_bridge`, `refresh_tools`) and the desktop
+tools (`screenshot`, `list_windows`) have no prefix.
+
+**Long work.** A call that would take longer than a moment returns a `job_id` instead of blocking. Inside the
+simulator that is `run_python` with `background=true`, `sim__simulation__run` and `sim__trajectory__replay`; on the
+host it is every `isaaclab__*` launch and `run_script`. `job_status` (with `wait_s`) and `job_cancel` follow and stop
+either kind.
+
+## How the server reaches Isaac Sim
+
+**The bridge.** `isaac.mcp.bridge` listens on one TCP port per Kit process, on loopback by default. The protocol is
+one JSON object per line each way ([protocol](../mcp/docs/protocol.md)). Tool packs register their tools on it under a
+namespace. It runs one call at a time on Kit's main thread when a call needs the loop to itself, queues or refuses the
+rest by name, and keeps background jobs.
+
+**Starting a simulator.** `./run.sh` (add `--headless` for no window) starts Isaac Sim with the bridge, the scene
+tools and the twin enabled, on port 8766 unless told otherwise. `sim__launch`, when that tool group is enabled, does the
+same for the agent, on a free port with its own ROS domain and output folder, after checking GPU and memory headroom.
+The server never starts a simulator on its own.
+
+**Finding it.** A running bridge writes a small portfile (`$XDG_RUNTIME_DIR/isaac-mcp/`, or `/tmp/isaac-mcp-<uid>/`)
+with its PID and port. The server picks the bridge to dial in this order:
+
+1. An explicit choice: `use_bridge(port)` in the session, or `--port` on the command-line client.
+2. `UR5E_DT_PORT`, the older name for the twin's port.
+3. `ISAAC_MCP_PORT`.
+4. Portfile discovery, when exactly one bridge is advertised. With several and no explicit choice it refuses to guess
+   and lists them.
+
+| Port | Used by |
+|---|---|
+| 8766 | The default bridge port of `run.sh`, `verify.sh` and client configurations. |
+| 8767 | Convention for a second bridge, such as the Isaac Lab bridge example. |
+| 8799 | `scripts/probe_62.sh`, so its probes do not disturb a running simulator. |
+| any | `./run.sh --port 0` asks the OS for a free port; `sim__launch` picks one in `ISAAC_MCP_PORT_RANGE`. |
+
+A configured port that is already taken refuses at startup rather than moving somewhere no client could predict.
+`ISAAC_MCP_BIND` can change the bind address; the bridge runs arbitrary Python by design, so listening beyond loopback
+needs a real trust boundary ([bridge configuration](../mcp/docs/configuration.md)). The twin shares the bridge: it
+unregisters its own namespace on shutdown and leaves the bridge and the other packs running.
+
+## Isaac Lab jobs
+
+The `isaaclab__*` tools never go through the bridge. They run Isaac Lab's own scripts (train, play, and this
+project's evaluation, check and record runners) with the interpreter of an Isaac Lab install, as separate processes.
+Each job gets a folder with its command, log, exit code and results; the server's job tools read that folder, so a job
+outlives the client and the server that started it. An install is chosen once by `ISAACLAB_PYTHON` and
+`ISAACLAB_ROOT`, or per call with `install=`. A job starts its own Kit and uses the GPU, so by default one runs at a
+time and none starts beside a running simulator. `run_script` uses the same job system for any Python script, with no
+GPU guards. See [Isaac Lab tools](TOOLS-ISAACLAB.md).
+
+## Assets
+
+Assets are not in the repository. They live in an **asset folder** of named packs (`ISAAC_MCP_ASSET_PATH`), and in
+project folders the user has approved. The server will only read a file inside one of those; only the user can approve
+a folder. `assets__import_path` picks the format, converts URDF, xacro, SDF and MuJoCo files on the host without running
+any code from them, and hands Kit a verified snapshot in a staging folder both processes can read. Kit then references
+the snapshot into the scene's session layer, so source files never change. See [Assets](ASSETS.md) and
+[importing](ASSET-IMPORT.md).
+
+## Seeing and recording
+
+| Source | Tools | Needs |
+|---|---|---|
+| A window on the desktop | `screenshot`, `start_screen_recording`, `stop_screen_recording` | An X11 display. A window is read by its id, so it works when covered or when the screen is locked. |
+| A camera in the scene | `sim__camera__create`, `sim__camera__capture`; `camera=` on `sim__simulation__run` and `sim__trajectory__replay` | A running simulator. Works headless. |
+| An Isaac Lab task | `isaaclab__record`, or `isaaclab__play` with `--video` | An Isaac Lab install. Works headless. |
+| Saved clips and frames | `join_videos` (join, contact sheet, frames to MP4) | Nothing but the files. |
+
+Screenshots and recordings go to `~/Pictures/screen-mcp` and `~/Videos/screen-mcp`. Camera captures, frames and
+controller logs go to the simulator's output folder (`ISAAC_MCP_SCENE_OUTPUT`).
+
+## Configuration
+
+Settings are environment variables, read by the process they concern: the server (set them in the client's entry),
+Kit (set them where `run.sh` runs; `sim__launch` passes the server's on), or an Isaac Lab job. The full list is in
+[Environment variables](ENVIRONMENT.md). The ones that shape the system:
+
+| Variable | Read by | Purpose |
+|---|---|---|
+| `ISAAC_MCP_PORT` | server, Kit | The bridge port to dial, and to listen on. |
+| `ISAAC_MCP_PYTHON` | `run.sh`, `sim__launch` | The Isaac Sim interpreter to start. |
+| `ISAAC_MCP_ASSET_PATH` | server, Kit | The asset folder. |
+| `ISAAC_MCP_SCENE_OUTPUT` | Kit | Where scene tools write captures, saves and logs. |
+| `ISAACLAB_PYTHON`, `ISAACLAB_ROOT` | server | The default Isaac Lab install. |
+| `ISAAC_MCP_LOCAL_TOOLS`, `ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_SCENE_TOOLS` | server | Which tools a client is shown. These control visibility, not security. |
+| `ISAAC_MCP_ENABLE_SCENE_SCRIPTS` | Kit | Opt in to tools that run the caller's Python inside Kit. |
+
+## Naming rules
+
+| Entity | Rule | Examples |
+|---|---|---|
+| Kit extension ID and folder | The folder under `exts/` is the extension ID | `ur5e-dt`, `sim-tools`, `isaac.mcp.bridge`, `isaac.mcp.panel` |
+| Python package | The ID with underscores | `ur5e_dt`, `sim_tools`, `isaac_mcp_bridge`, `isaac_mcp` |
+| Command and server name | One name, no aliases | `isaac-mcp` |
+| Tool | `<namespace>.<tool>` in Kit, `<namespace>__<tool>` in MCP | `sim.stage.info`, `sim__stage__info` |
+
+## ROS 2 and DDS
 
 The digital twin includes OmniGraph nodes for ROS 2 transform publishing and joint state mirroring.
 
@@ -160,7 +192,7 @@ source config/ros_dds.env
 
 ---
 
-## 6. Transform Tree Architecture and Intentional TF Changes
+## Transform tree
 
 In Isaac Sim 6.2, transform publication was modernized to use the standard OmniGraph nodes:
 
@@ -183,46 +215,3 @@ Frame naming rules in `IsaacComputeTransformTree` preserve existing ROS consumer
 - **Rationale:** USD native cameras look down the $-Z$ axis with $+Y$ up. ROS optical frames convention expects $+X$ forward, $+Y$ right, $+Z$ down (or $+Z$ forward for optical axes). NVIDIA corrected the camera transform evaluation in 6.2 to align with ROS standard conventions.
 - **Impact:** Transforms published on `/tf_cam` reflect this 180° X rotation compared to the old 5.1 output. Plain `UsdGeomXform` objects (such as those published on `/objects_poses_sim`) are unaffected.
 - **Instruction:** **Do not attempt to "fix" or revert this rotation.** The change reflects the official Isaac Sim ROS 2 node standard and represents the pipeline functioning correctly. Reference values are recorded in `docs/provenance/tf-baseline-6.2.json`.
-
----
-
-## 7. Arm Drive Gains (the ur5e-dt fidelity knob)
-
-Every arm joint is a position-driven spring: `J*q'' + kd*q' + kp*q = kp*q_cmd`. The extension writes
-`kp = _ur5e_stiffness` and `kd = _ur5e_damping` (`exts/ur5e-dt/ur5e_dt/extension.py`, `load_ur5e()`), in
-**USD angular-drive units: N·m per degree and N·m·s per degree**. PhysX and the Python API work per radian,
-so the solver sees 57.2958x larger numbers; `_verify_drive_gains()` reads `get_gains()` back and prints a
-warning if the two ever disagree.
-
-Two traps, both hit on 2026-10-30:
-
-1. **A same-value write never reaches PhysX.** Writing `100` into an attribute that already holds `100`
-   notifies nobody, so the articulation kept the asset's authored ~10230/4 per degree and the arm ran ~100x
-   stiffer than configured, silently. The extension now applies the configured values with `set_gains()`
-   and verifies them.
-2. **Stiffness alone is not the knob.** What governs the response is `tau = kd/kp` (the position loop's time
-   constant) and `zeta = kd / (2*sqrt(kp*J))` (whether it rings). Raising stiffness without raising damping
-   lowers `zeta`: the asset gains ran at `zeta ~ 0.15`, a ~120 Hz resonance sampled at 60 Hz.
-
-**Shipped default: 100/10 per degree (`tau = 0.10 s`), chosen 2026-10-30.** Measured on the UR5e twin
-(elbow_joint, 0.3 rad step, 100 Hz `/joint_states`):
-
-| stiffness/damping (per deg) | tau | rise (10-90 %) | settle (2 %) | overshoot | steady-state error |
-|---|---|---|---|---|---|
-| 50/5 | 0.10 s | 0.213 s | 0.505 s | 0.0 % | 1.9e-6 rad |
-| 100/10 | 0.10 s | 0.216 s | 0.524 s | 0.0 % | 2.1e-6 rad |
-| 100/20 | 0.20 s | 0.438 s | 0.918 s | 0.0 % | 5.1e-6 rad |
-| 200/10 | 0.05 s | 0.120 s | 0.347 s | 0.0 % | 9.1e-7 rad |
-| 400/10 | 0.025 s | 0.100 s | 0.289 s | 0.0 % | 4.2e-7 rad |
-
-`tau` alone predicts the shape: the two pairs with `tau = 0.10 s` (50/5 and 100/10) settle within 4 % of
-each other. 100/10 is heavily overdamped, so nothing rings at the 60 Hz sample rate and bench contact behaves
-like a 5.7 kN·m/rad spring.
-
-**To trade contact softness for mirroring fidelity**, keep `tau = damping/stiffness` in 0.02-0.05 s:
-- 200/10 per degree (`tau` 50 ms) - settle 0.347 s, measured lag at 0.5 Hz ~34 deg (vs 41 deg at 100/10)
-- 400/10 per degree (`tau` 25 ms) - settle 0.289 s, measured lag at 0.5 Hz ~30 deg
-
-Both are measured, both stay overdamped. Costs: contact forces scale with stiffness (a bench touch is 2-4x
-harder), and the `max_force = 200 N·m` cap starts to matter for fast moves. Raise stiffness *with* the
-damping tail, never alone. After changes, re-check the motion and drive baselines in [VERIFICATION.md](VERIFICATION.md).

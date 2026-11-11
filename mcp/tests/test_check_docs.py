@@ -251,7 +251,7 @@ def test_architecture_generic_wording_is_checked():
     assert "generic sim" in text
     errors = []
     check_docs.check_generic_counts(
-        errors, pages={"docs/ARCHITECTURE.md": text.replace("69 generic sim", "55 generic sim")})
+        errors, pages={"docs/ARCHITECTURE.md": text.replace("71 generic sim", "55 generic sim")})
     assert any("55 generic sim" in error for error in errors)
     ignored = []
     check_docs.check_generic_counts(

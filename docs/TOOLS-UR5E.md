@@ -22,7 +22,7 @@ Most of these tools serve one lab's digital twin. `ur5e_dt__quick_start` works f
 object tools need [your own lab files](ASSETS.md#public-files-and-lab-files), which cannot be hosted. `ur5e_dt__quick_start` builds no table; the bench comes from `ur5e_dt__load_workstation`. At its zero pose the arm reaches out low, with the wrist about 6 cm above the ground, which can look collapsed but is not a fault: check `sim__joints__state` and command a pose. `ur5e_dt__quick_start` refuses if this stage already publishes joint states on `/joint_states` (`sim__ros2__tf_setup`'s default topic), because the twin's graph drives the arm from that topic and the arm would oscillate; the error gives the fix. Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` before generic scene edits.
 
 The twin bridge listens on port `8766` by default (`UR5E_DT_PORT` /
-`ISAAC_SIM_PORT` override). See [ARCHITECTURE.md](ARCHITECTURE.md) §4 and
+`ISAAC_SIM_PORT` override). See [how the server reaches Isaac Sim](ARCHITECTURE.md#how-the-server-reaches-isaac-sim) and
 [MCP-SERVER.md](MCP-SERVER.md).
 
 Through the host MCP server, bridge connection failures, timeouts and explicit
@@ -485,3 +485,44 @@ These tools require a running compatible Kit process and, for the twin, the simu
 Repeated Quick Start reuses matching fixed gripper/force graphs, including graphs composed
 from another USD layer or a reopened stage. Conflicting graph contracts are refused and
 preserved rather than removed from source layers.
+
+## Arm drive gains
+
+Every arm joint is a position-driven spring: `J*q'' + kd*q' + kp*q = kp*q_cmd`. The extension writes
+`kp = _ur5e_stiffness` and `kd = _ur5e_damping` (`exts/ur5e-dt/ur5e_dt/extension.py`, `load_ur5e()`), in
+**USD angular-drive units: N·m per degree and N·m·s per degree**. PhysX and the Python API work per radian,
+so the solver sees 57.2958x larger numbers; `_verify_drive_gains()` reads `get_gains()` back and prints a
+warning if the two ever disagree.
+
+Two traps, both hit on 2026-10-30:
+
+1. **A same-value write never reaches PhysX.** Writing `100` into an attribute that already holds `100`
+   notifies nobody, so the articulation kept the asset's authored ~10230/4 per degree and the arm ran ~100x
+   stiffer than configured, silently. The extension now applies the configured values with `set_gains()`
+   and verifies them.
+2. **Stiffness alone is not the knob.** What governs the response is `tau = kd/kp` (the position loop's time
+   constant) and `zeta = kd / (2*sqrt(kp*J))` (whether it rings). Raising stiffness without raising damping
+   lowers `zeta`: the asset gains ran at `zeta ~ 0.15`, a ~120 Hz resonance sampled at 60 Hz.
+
+**Shipped default: 100/10 per degree (`tau = 0.10 s`), chosen 2026-10-30.** Measured on the UR5e twin
+(elbow_joint, 0.3 rad step, 100 Hz `/joint_states`):
+
+| stiffness/damping (per deg) | tau | rise (10-90 %) | settle (2 %) | overshoot | steady-state error |
+|---|---|---|---|---|---|
+| 50/5 | 0.10 s | 0.213 s | 0.505 s | 0.0 % | 1.9e-6 rad |
+| 100/10 | 0.10 s | 0.216 s | 0.524 s | 0.0 % | 2.1e-6 rad |
+| 100/20 | 0.20 s | 0.438 s | 0.918 s | 0.0 % | 5.1e-6 rad |
+| 200/10 | 0.05 s | 0.120 s | 0.347 s | 0.0 % | 9.1e-7 rad |
+| 400/10 | 0.025 s | 0.100 s | 0.289 s | 0.0 % | 4.2e-7 rad |
+
+`tau` alone predicts the shape: the two pairs with `tau = 0.10 s` (50/5 and 100/10) settle within 4 % of
+each other. 100/10 is heavily overdamped, so nothing rings at the 60 Hz sample rate and bench contact behaves
+like a 5.7 kN·m/rad spring.
+
+**To trade contact softness for mirroring fidelity**, keep `tau = damping/stiffness` in 0.02-0.05 s:
+- 200/10 per degree (`tau` 50 ms) - settle 0.347 s, measured lag at 0.5 Hz ~34 deg (vs 41 deg at 100/10)
+- 400/10 per degree (`tau` 25 ms) - settle 0.289 s, measured lag at 0.5 Hz ~30 deg
+
+Both are measured, both stay overdamped. Costs: contact forces scale with stiffness (a bench touch is 2-4x
+harder), and the `max_force = 200 N·m` cap starts to matter for fast moves. Raise stiffness *with* the
+damping tail, never alone. After changes, re-check the motion and drive baselines in [VERIFICATION.md](VERIFICATION.md).

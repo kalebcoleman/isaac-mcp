@@ -10,7 +10,7 @@ It works with Claude Code, Codex, OpenCode or any [MCP](https://modelcontextprot
 [![Host Python 3.10+, Sim Python 3.12](docs/media/badges/python.svg)](docs/LINUX-SETUP.md#which-environment-does-what)
 [![License and asset notices](docs/media/badges/license.svg)](docs/VENDORING.md)
 
-**[Quick setup](#quick-setup)** · [Example prompts](#things-you-can-ask) · [All tools](#the-tools) · [Docs](docs/README.md) ·
+**[Quick setup](#quick-setup)** · [Example prompts](#things-you-can-ask) · [All tools](#the-tools) · [How it fits together](#how-it-fits-together) · [Docs](docs/README.md) ·
 [Tool arguments](docs/TOOLS-ARGUMENTS.md) · [For agents](AGENTS.md)
 
 [![Isaac Sim window showing a UR5e arm and RG2 gripper at a commanded target, with the stage hierarchy visible](docs/media/ur5e-target.png)](docs/media/README.md)
@@ -171,14 +171,14 @@ Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
 
 ## The tools
 
-A client lists **129 tools** by default, or **138** with both optional groups. Most scene work uses the first row.
+A client lists **134 tools** by default, or **143** with both optional groups. Most scene work uses the first row.
 
 | Group | Tools | What they do |
 |---|--:|---|
-| Generic scene and assets | 69 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Import USD and URDF, and manage named asset packs. |
-| Isaac Lab | 17 | Find an install, list tasks, check an environment, train, evaluate, play and record, check GPU room, wait for a job and read its exit code and run folder, summarise evaluation pass counts, register baseline checkpoints, read metrics and checkpoints, cancel jobs. No simulator needed. |
+| Generic scene and assets | 71 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Run your own controller in the physics loop and replay a saved trajectory into a labelled video. Import USD and URDF, and manage named asset packs. |
+| Isaac Lab | 18 | Find an install, list tasks, check an environment, train, evaluate, play and record, check GPU room, wait for a job and read its exit code and run folder, summarise evaluation pass counts, register baseline checkpoints, read metrics and checkpoints, cancel jobs. `run_script` runs any Python script as a managed job. No simulator needed. |
 | Host gateway and desktop | 13 | `isaac_help`, `refresh_tools`, `use_bridge`, and screenshots, recordings and window tools. |
-| Bridge built-ins | 7 | `status`, `run_python`, and file transfer into and out of the running simulator. |
+| Bridge built-ins | 9 | `status` (where am I, in one call), `run_python`, `job_status` and `job_cancel` for long simulator work, and file transfer into and out of the running simulator. |
 | UR5e digital twin | 23 | The RISE lab's UR5e twin, Kaleb's work with that robot. Only needed for that twin. |
 | Optional: desktop input, managed sessions | 9 | `window_*` desktop input and `sim__launch` managed simulator sessions, when you switch them on. |
 
@@ -190,7 +190,8 @@ The ones you will meet first:
 | `sim__stage__info` | See what the current scene is and get the IDs the other tools need. |
 | `sim__prim__create` / `sim__prim__find` | Add shapes and robots, or search the scene. |
 | `sim__joints__state` / `sim__joints__command` | Read joints and drive them. |
-| `sim__simulation__step`, `sim__timeline__control` | Play, pause and step the physics. |
+| `sim__simulation__step`, `sim__timeline__control` | Play, pause and step the physics; `action=reset` gets back to a clean stop. |
+| `sim__simulation__run`, `sim__trajectory__replay` | Fly or drive a body with your own controller every physics step, then replay the logged trajectory into a labelled video. Both return a `job_id` for `job_status`. |
 | `sim__camera__capture`, `sim__lidar__read` | See through a camera or LiDAR. |
 | `sim__ros2__tf_setup`, `sim__map__occupancy` | Publish `/clock`, `/joint_states`, TF, and export a Nav2 map. |
 | `assets__import_path`, `assets__pack_build` | Bring in your own robots and props from one tool: USD, URDF, xacro, SDF, MuJoCo XML, meshes, ROS maps, or a folder that holds one. See [docs/ASSET-IMPORT.md](docs/ASSET-IMPORT.md). |
@@ -276,6 +277,10 @@ Headless runs are fine: `sim__camera__capture` takes pictures without a window.
 
 ## How it fits together
 
+[![Architecture: the MCP client, the isaac-mcp server and its tool groups, the bridge and tool packs inside Isaac Sim, Isaac Lab job processes, the desktop, ROS 2 clients, and the files they share](docs/media/architecture.svg)](docs/ARCHITECTURE.md)
+
+<sub>The whole system on one page. [How isaac-mcp works](docs/ARCHITECTURE.md) explains each part; the diagram is editable in [`docs/architecture.drawio`](docs/architecture.drawio).</sub>
+
 Three programs are involved, and it helps to know which does what.
 
 1. **Your AI agent** (Claude Code, Codex, OpenCode). It talks to this project using MCP, a standard way for an agent to
@@ -318,8 +323,8 @@ while your bridge is running unless you pass `allow_concurrent_gpu=true`.
 
 **The desktop tools** take screenshots and recordings of windows on your screen, so they need neither.
 
-A call that needs the bridge when no simulator is running returns an error that says what to do, and
-`refresh_tools` finds a simulator you have started. More detail: [Architecture](docs/ARCHITECTURE.md).
+A call that needs the bridge when no simulator is running returns an error that says what to do, `status` says in one
+call what is running, and `refresh_tools` finds a simulator you have started.
 
 ### Words used in these docs
 

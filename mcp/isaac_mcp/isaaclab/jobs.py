@@ -643,8 +643,8 @@ def _running_job() -> dict[str, Any] | None:
         if not jd.is_dir():
             continue
         data = _read_job(jd)
-        if not data or data.get("status") != "running":
-            continue
+        if not data or data.get("status") != "running" or data.get("uses_gpu") is False:
+            continue  # a script that uses no GPU does not contend for it
         proc = _active.get(jd.name)
         if proc is not None:
             if proc.poll() is None:
@@ -1484,6 +1484,68 @@ def _progress(log_path: Path) -> dict[str, Any] | None:
     return None
 
 
+_ITERATION_RES = (
+    re.compile(r"Learning iteration\s+(\d+)\s*/\s*(\d+)"),       # rsl_rl
+    re.compile(r"\bepoch:\s*(\d+)\s*/\s*(\d+)"),                 # rl_games
+    re.compile(r"\b(\d+)\s*/\s*(\d+)\s*\[[^\]]*(?:it/s|s/it)"),   # a tqdm bar (skrl)
+)
+
+
+def _iteration_progress(log_path: Path) -> dict[str, Any] | None:
+    """Progress read from what the training library itself prints (`Learning iteration 12/1500`), for a job
+    that prints no ISAAC_MCP_PROGRESS line. None when the log names no iteration count."""
+    try:
+        size = log_path.stat().st_size
+        with log_path.open("rb") as f:
+            f.seek(max(0, size - _PROGRESS_LOG_TAIL))
+            text = _ANSI_RE.sub("", f.read().decode(errors="replace"))
+    except OSError:
+        return None
+    best = None
+    for pattern in _ITERATION_RES:
+        for found in pattern.finditer(text):
+            if best is None or found.start() > best.start():
+                best = found
+    if best is None:
+        return None
+    done, total = int(best.group(1)), int(best.group(2))
+    if total <= 0 or done > total:
+        return None
+    return {"fraction": round(done / total, 4), "percent": round(done / total * 100, 1), "done": done, "total": total,
+            "text": "iterations, from the training log"}
+
+
+STALLED_AFTER_S = 600.0
+
+
+def _liveness(log_dir: Path, pid_alive: bool) -> dict[str, Any]:
+    """For a job still recorded as running: how long since it wrote anything, and whether it looks crashed
+    or hung. A crashed Kit can stay alive after its traceback, and a hung one prints nothing: both read
+    `running` with a live pid, so the log is the only signal."""
+    newest = max((_mtime(log_dir / name) for name in ("stdout.log", "stderr.log")), default=0.0)
+    out: dict[str, Any] = {}
+    if newest:
+        out["last_output_age_s"] = round(max(0.0, _now() - newest), 1)
+    exception = _uncaught_exception(log_dir / "stderr.log")
+    if exception and _mtime(log_dir / "stdout.log") > _mtime(log_dir / "stderr.log") + 5:
+        exception = None  # it kept working after that traceback: something recovered from it
+    if not pid_alive:
+        out["health"] = "exited"
+        out["health_note"] = "The process is gone; the next status call records its final state."
+    elif exception:
+        out["health"] = "crashed"
+        out["health_note"] = (f"stderr ends in an uncaught exception ({exception}) but the process is still alive, "
+                              "so it has probably crashed and is hanging in shutdown. Read isaaclab__runs_tail("
+                              "stream='stderr'), then isaaclab__runs_cancel.")
+    elif newest and out["last_output_age_s"] > STALLED_AFTER_S:
+        out["health"] = "stalled"
+        out["health_note"] = (f"No output for {int(out['last_output_age_s'])} s. A long simulation step or a quiet "
+                              "evaluation can do that; if progress and the log stay unchanged, cancel it.")
+    else:
+        out["health"] = "ok"
+    return out
+
+
 def _script_result(jd: Path, data: dict[str, Any], elapsed: float) -> dict[str, Any]:
     return {
         "status": data.get("status"),
@@ -1551,8 +1613,17 @@ def run_script(
     allow_concurrent: bool = False,
     allow_concurrent_gpu: bool = False,
     cancel: Any = None,
+    uses_gpu: bool = True,
 ) -> dict[str, Any]:
-    """Run a user's Python script as a job. It executes arbitrary code with this user's rights; nothing is sandboxed."""
+    """Run a user's Python script as a job. It executes arbitrary code with this user's rights; nothing is sandboxed.
+
+    ``uses_gpu=False`` is for a script that needs no GPU (a controller, a data conversion): the GPU guards
+    (one job at a time, no job beside a running Kit, the GPU-hour budget) do not apply to it and it does not
+    block GPU jobs."""
+    if type(uses_gpu) is not bool:
+        raise ValueError("uses_gpu must be true or false")
+    if not uses_gpu and min_free_vram_mb is not None:
+        raise ValueError("min_free_vram_mb is a GPU check; leave it out with uses_gpu=false")
     if not isinstance(script, (str, os.PathLike)) or not str(script):
         raise ValueError("script must be a path to a .py file")
     script_path = Path(script).expanduser()
@@ -1600,15 +1671,15 @@ def run_script(
                 return {"error": f"a job with single_instance_key {single_instance_key!r} is already running: {other.get('job_id')} (pid {other.get('pid')})",
                         "running_job_id": other.get("job_id"), "running_pid": other.get("pid"),
                         "hint": "wait for it, or cancel it with isaaclab__runs_cancel"}
-        if not allow_concurrent:
+        if uses_gpu and not allow_concurrent:
             blocked = _concurrency_guard()
             if blocked is not None:
                 return blocked
-        if not allow_concurrent_gpu:
+        if uses_gpu and not allow_concurrent_gpu:
             blocked = _kit_bridge_guard()
             if blocked is not None:
                 return blocked
-        blocked = _budget_guard()
+        blocked = _budget_guard() if uses_gpu else None
         if blocked is not None:
             return blocked
         job_id = _job_id(name)
@@ -1632,7 +1703,7 @@ def run_script(
             "id": job_id, "job_id": job_id, "kind": "script", "task": name, "label": label, "gpu": _gpu_index(child.get("CUDA_VISIBLE_DEVICES")),
             "script": str(script_path), "command": full_cmd, "cwd": str(workdir.resolve()),
             "pid": proc.pid, "pid_start": _process_start(proc.pid), "timeout_s": timeout_s,
-            "single_instance_key": single_instance_key,
+            "single_instance_key": single_instance_key, "uses_gpu": uses_gpu,
             "started_at": _now(), "finished_at": None, "status": "running", "exit_code": None,
             "log_dir": str(jd.resolve()), "run_dir": str(jd.resolve()),
             "stdout_log": str(stdout_path.resolve()), "stderr_log": str(stderr_path.resolve()),
@@ -1786,9 +1857,11 @@ def runs_status(job_id: str) -> dict[str, Any]:
     if data.get("timeout_s") is not None:
         out["timeout_s"] = data["timeout_s"]
     out.update(_log_facts(Path(data.get("log_dir", jd)) / "stdout.log"))
-    progress = _progress(Path(data.get("log_dir", jd)) / "stdout.log")
+    progress = _progress(Path(data.get("log_dir", jd)) / "stdout.log") or _iteration_progress(Path(data.get("log_dir", jd)) / "stdout.log")
     if progress is not None:
         out["progress"] = progress
+    if out["state"] == "running":
+        out.update(_liveness(Path(data.get("log_dir", jd)), bool(out["pid_alive"])))
     videos = _video_paths(run_dir, Path(data.get("log_dir", jd)) / "stdout.log")
     if videos and data.get("kind") in ("env_check", "record") and data.get("started_at"):
         # Lab's agent scripts reuse one video folder per task: keep only clips this job wrote.

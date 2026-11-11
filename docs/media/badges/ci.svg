@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="117" height="22" role="img" aria-label="CI: CPU workflow">
-  <title>CI: CPU workflow</title>
-  <rect width="117" height="22" rx="4" fill="#2563eb"/>
-  <path d="M4 0H26V22H4Q0 22 0 18V4Q0 0 4 0Z" fill="#343a40"/>
-  <g fill="white" text-anchor="middle" font-family="DejaVu Sans,Verdana,sans-serif" font-size="11">
-    <text x="13.0" y="15">CI</text>
-    <text x="71.5" y="15">CPU workflow</text>
-  </g>
-</svg>

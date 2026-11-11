@@ -895,6 +895,26 @@ def _external_status(session_id: str) -> dict:
     return result
 
 
+def _newton_readiness(port: int) -> dict:
+    """For a session launched with physics_backend=newton: is Newton the active engine, and is its tensor
+    extension on (releases after 6.0.0.0 need it for every runtime read)? Read from the running Kit."""
+    try:
+        runtime = client.call("sim.stage.info", host="127.0.0.1", port=port, timeout=5).get("runtime") or {}
+    except (client.BridgeError, OSError, RuntimeError) as exc:
+        return {"ready": None, "note": f"Could not read the engine from Kit yet ({str(exc)[:160]}); call sim__status again."}
+    engine = runtime.get("physics_engine")
+    extensions = runtime.get("extensions") or {}
+    tensors = (extensions.get("isaacsim.physics.newton.tensors") or {}).get("enabled")
+    needs_tensors = runtime.get("release") != "6.0.0.0"
+    ready = engine == "newton" and (bool(tensors) or not needs_tensors)
+    out = {"ready": ready, "engine": engine, "tensor_extension_enabled": bool(tensors)}
+    if not ready:
+        out["note"] = ("Newton is not ready in this session: " + ("the active engine is " + repr(engine) if engine != "newton"
+                       else "isaacsim.physics.newton.tensors is off, so body and joint reads will fail")
+                       + ". Do not start a campaign on it; stop it and launch again, and read sim__logs__tail for the cause.")
+    return out
+
+
 def _status(env: Mapping[str, str], session_id: str) -> dict:
     if isinstance(session_id, str) and _EXTERNAL_ID.fullmatch(session_id):
         return _external_status(session_id)
@@ -911,6 +931,8 @@ def _status(env: Mapping[str, str], session_id: str) -> dict:
     if state == "port_conflict" and session.get("launcher"):
         result["note"] = ("Another PID answers this session's port. A custom launcher must exec Kit rather than "
                           "fork it, or the process recorded here is not the simulator.")
+    if state == "running" and session.get("physics_backend") == "newton":
+        result["physics"] = _newton_readiness(session["port"])
     if state in ("running", "readiness_unknown"):
         # The MCP server keeps dialling its configured port (UR5E_DT_PORT/ISAAC_MCP_PORT) while it
         # answers, and refresh_tools then does not switch.
@@ -1026,14 +1048,5 @@ def live_sessions(env: Mapping[str, str] | None = None) -> list[dict]:
                         "started_at": float(x["started_at"]) if x.get("started_at") is not None else None}
                        for x in _sessions(_sessions_dir(os.environ if env is None else env)) if _alive(x)),
                       key=lambda x: (x["port"], x["pid"]))
-    except Exception:  # noqa: BLE001 - only used to enrich an error message
-        return []
-
-
-def live_ports(env: Mapping[str, str] | None = None) -> list[tuple[int, int]]:
-    """``(port, pid)`` of managed simulator sessions that are still alive (best effort)."""
-    try:
-        return sorted((int(x["port"]), int(x["pid"])) for x in _sessions(_sessions_dir(os.environ if env is None else env))
-                      if _alive(x))
     except Exception:  # noqa: BLE001 - only used to enrich an error message
         return []

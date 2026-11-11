@@ -1107,6 +1107,7 @@ def _probe_locked() -> bool | None:
 
 JOIN_MODES = ("concat", "hstack", "vstack")
 SHEET_MODE = "sheet"
+FRAMES_MODE = "frames"
 VIDEO_SUFFIXES = (".mp4", ".mov", ".mkv", ".webm")
 MAX_JOIN_INPUTS = 8
 MAX_JOIN_SECONDS = 3600
@@ -1335,6 +1336,50 @@ def _contact_sheet(inputs, job_id, times, output) -> str:
     result = {"path": str(out), "mode": SHEET_MODE, "width": info["width"], "height": info["height"], "rows": ", ".join(info["rows"]),
               "times_s": ", ".join(f"{t:g}" for t in info["times"]), "attachment": json.dumps(desc)}
     return "\n".join(f"{k}: {v}" for k, v in result.items())
+
+
+def _frame_roots() -> list[Path]:
+    """Where image frames may be read from: the usual roots, and the output folders of simulators on this machine."""
+    import tempfile
+
+    roots = _allowed_roots()
+    try:
+        roots += [p.resolve() for p in Path(tempfile.gettempdir()).glob("isaac-mcp-scenes-*") if p.is_dir() and p.owner() == Path.home().owner()]
+    except (OSError, KeyError):
+        pass
+    return roots
+
+
+def _frames_video(inputs, output, fps, label) -> str:
+    """mode=frames: saved image frames (a folder, a glob pattern, or the files) become one MP4 with an optional caption."""
+    from . import frames_video
+
+    if not isinstance(inputs, list) or not inputs or not all(isinstance(raw, str) and raw.strip() and "\0" not in raw for raw in inputs):
+        raise ValueError("frames: give inputs, a list holding one folder, one glob pattern such as /path/replay-*.png, or the image files in order")
+    roots = _frame_roots()
+    paths = [Path(raw).expanduser() for raw in inputs]
+    if any(not p.is_absolute() for p in paths):
+        raise ValueError("frames: inputs must be absolute paths")
+    for p in paths:
+        if not _under(p.parent.resolve() if not p.is_dir() else p.resolve(), roots):
+            raise ValueError(f"{p} is outside your home folder and the simulator output folders; only those are read")
+    if len(paths) == 1 and (paths[0].is_dir() or any(c in paths[0].name for c in "*?[")):
+        frames = frames_video.frame_files(paths[0])
+    else:
+        frames = [p for p in paths if p.is_file() and p.suffix.lower() in frames_video.FRAME_SUFFIXES]
+        if len(frames) != len(paths):
+            raise ValueError("frames: every input must be an existing .png or .jpg file")
+    if not frames:
+        raise ValueError(f"frames: no .png or .jpg frames found for {inputs[0]}")
+    out = safe_output_video(output)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        ffmpeg = _ffmpeg()
+    except RuntimeError as exc:
+        raise RuntimeError("ffmpeg is not available: install imageio-ffmpeg (a dependency of isaac-mcp) or put ffmpeg on PATH; no video was made") from exc
+    info = frames_video.encode(frames, out, float(fps or 30), ffmpeg, label)
+    os.chmod(out, 0o666 & ~_umask())
+    return "\n".join(f"{k}: {v}" for k, v in {**info, "mode": FRAMES_MODE}.items())
 
 
 def _umask() -> int:
@@ -1851,16 +1896,18 @@ def register_screen_tools(
             LOCKED_RECORD_NOTE if locked else "")
 
     @mcp.tool(annotations=ADDITIVE)
-    def join_videos(inputs: Annotated[list[str] | None, Field(description="Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/screen-mcp. Or give job_id.")] = None,
-                    mode: Annotated[str, Field(description="concat (one after another), hstack (side by side), vstack (top to bottom), or sheet (a PNG contact sheet: one row per video, one column per time).")] = "concat",
+    def join_videos(inputs: Annotated[list[str] | None, Field(description="Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/screen-mcp. Or give job_id. Frames: one folder, one glob pattern such as /out/replay-*.png, or the image files in order.")] = None,
+                    mode: Annotated[str, Field(description="concat (one after another), hstack (side by side), vstack (top to bottom), sheet (a PNG contact sheet: one row per video, one column per time), or frames (image frames to one MP4).")] = "concat",
                     output: Annotated[str | None, Field(description="New file name in ~/Videos/screen-mcp (.mp4), or ~/Pictures/screen-mcp (.png, sheet), or an absolute path under home. Default joined-<time>.mp4 / sheet-<time>.png.")] = None,
                     max_width: Annotated[int, Field(description="Output width cap in pixels.")] = DEFAULT_MAX_WIDTH,
-                    fps: Annotated[int | None, Field(description="Output rate, at most 60. Default: the fastest input.")] = None,
+                    fps: Annotated[int | None, Field(description="Output rate, at most 60. Default: the fastest input; 30 for frames.")] = None,
                     shortest: Annotated[bool, Field(description="hstack/vstack: end with the shortest clip instead of freezing it on its last frame.")] = False,
                     times: Annotated[list[float] | None, Field(description="sheet: seconds to sample in every clip, up to 12. Default 0.5, 1, 2, 4, 6, 9. A time past a clip's end is an error.")] = None,
-                    job_id: Annotated[str | None, Field(description="sheet: use the videos of this Isaac Lab job (isaaclab__runs_status video_paths) instead of inputs.")] = None) -> str:
+                    job_id: Annotated[str | None, Field(description="sheet: use the videos of this Isaac Lab job (isaaclab__runs_status video_paths) instead of inputs.")] = None,
+                    label: Annotated[str | None, Field(description="frames: one line drawn on every frame, e.g. the run's name.")] = None) -> str:
         """Join 2-8 finished clips into one new MP4 with the bundled ffmpeg, or (mode=sheet) make a matched PNG
-        contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload.
+        contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload,
+        or (mode=frames) turn saved image frames into an MP4: video for a headless simulator.
         Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...).
         Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour. Sheets do not upload.
 
@@ -1868,10 +1915,14 @@ def register_screen_tools(
         """
         if mode == SHEET_MODE:
             return _contact_sheet(inputs, job_id, times, output)
+        if mode == FRAMES_MODE:
+            return _frames_video(inputs, output, fps, label)
+        if label is not None:
+            raise ValueError("label applies only with mode=frames")
         if inputs is None or not isinstance(inputs, list) or not 2 <= len(inputs) <= MAX_JOIN_INPUTS:
             raise ValueError(f"inputs: 2..{MAX_JOIN_INPUTS} video paths")
         if mode not in JOIN_MODES:
-            raise ValueError(f"mode must be one of {', '.join(JOIN_MODES + (SHEET_MODE,))}")
+            raise ValueError(f"mode must be one of {', '.join(JOIN_MODES + (SHEET_MODE, FRAMES_MODE))}")
         max_width = max(320, min(int(max_width), 3840))
         if fps is not None and not 1 <= int(fps) <= 60:
             raise ValueError("fps must be 1..60")

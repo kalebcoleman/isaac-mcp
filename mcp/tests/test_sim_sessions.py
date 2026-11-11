@@ -200,11 +200,11 @@ def test_failed_identity_check_stops_child_instead_of_waiting_indefinitely(setup
     assert calls == ["terminate", ("wait", 5)]
 
 
-def _record(env, session_id="a" * 32):
+def _record(env, session_id="a" * 32, **extra):
     path = Path(env["ISAAC_MCP_SIM_SESSIONS_DIR"]) / session_id
     path.mkdir(parents=True)
     data = {"id": session_id, "pid": 510, "start_ticks": 12345, "boot_id": "test-boot",
-            "port": 18766, "ros_domain": 197}
+            "port": 18766, "ros_domain": 197, **extra}
     (path / "session.json").write_text(json.dumps(data))
     return data
 
@@ -1100,3 +1100,52 @@ def test_session_records_carry_the_argument_name_the_other_tools_take():
     assert record["session_id"] == "abc123" and record["id"] == "abc123"
     assert "boot_id" not in record and "start_ticks" not in record
     assert "session_id" not in sim._public({"pid": 5})
+
+
+# ---- a Newton session says whether Newton is ready, not just that Kit is up ----
+
+def _newton_kit(monkeypatch, engine="newton", tensors=True, release="6.2.0.0", stage_error=None):
+    def call(tool, *args, **kw):
+        if tool == "status":
+            return {"pid": 510, "app_ready": True}
+        if stage_error is not None:
+            raise stage_error
+        return {"runtime": {"physics_engine": engine, "release": release,
+                            "extensions": {"isaacsim.physics.newton.tensors": {"enabled": tensors}}}}
+
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
+    monkeypatch.setattr(sim.client, "call", call)
+
+
+def test_a_running_newton_session_reports_engine_and_tensor_readiness(setup, monkeypatch):
+    record = _record(setup, physics_backend="newton")
+    _newton_kit(monkeypatch)
+    status = sim._status(setup, record["id"])
+    assert status["state"] == "running" and status["physics"] == {"ready": True, "engine": "newton", "tensor_extension_enabled": True}
+
+
+@pytest.mark.parametrize("kit,problem", [
+    (dict(tensors=False), "isaacsim.physics.newton.tensors is off"),
+    (dict(engine="physx"), "the active engine is 'physx'"),
+])
+def test_a_newton_session_that_is_not_ready_says_why(setup, monkeypatch, kit, problem):
+    record = _record(setup, physics_backend="newton")
+    _newton_kit(monkeypatch, **kit)
+    physics = sim._status(setup, record["id"])["physics"]
+    assert physics["ready"] is False and problem in physics["note"] and "Do not start a campaign" in physics["note"]
+
+
+def test_the_first_newton_release_needs_no_separate_tensor_extension(setup, monkeypatch):
+    record = _record(setup, physics_backend="newton")
+    _newton_kit(monkeypatch, tensors=False, release="6.0.0.0")
+    assert sim._status(setup, record["id"])["physics"]["ready"] is True
+
+
+def test_newton_readiness_is_unknown_until_the_scene_tools_answer_and_physx_sessions_have_none(setup, monkeypatch):
+    record = _record(setup, physics_backend="newton")
+    _newton_kit(monkeypatch, stage_error=sim.client.BridgeError("unknown tool: 'sim.stage.info'"))
+    physics = sim._status(setup, record["id"])["physics"]
+    assert physics["ready"] is None and "call sim__status again" in physics["note"]
+    plain = _record(setup, session_id="b" * 32, port=18999)
+    _newton_kit(monkeypatch)
+    assert "physics" not in sim._status(setup, plain["id"])

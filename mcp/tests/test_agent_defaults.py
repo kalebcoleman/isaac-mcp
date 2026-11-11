@@ -29,7 +29,7 @@ def test_isaac_help_routes_by_task_and_falls_back():
     assert "sim__physics__contacts" in one and "isaaclab__train" not in one
     assert "isaaclab__train" in gw._isaac_help("train a policy")
     both = gw._isaac_help("something odd")
-    assert "No topic matched" in both and "screenshot" in both and "isaaclab__train" in both
+    assert "No isaac tool is known to fit" in both and "screenshot" in both and "isaaclab__train" in both
     assert "sim__launch" in gw._isaac_help(None)
 
 

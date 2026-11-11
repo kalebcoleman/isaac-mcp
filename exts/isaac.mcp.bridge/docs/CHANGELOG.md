@@ -6,6 +6,12 @@ All notable changes to this extension are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Background jobs (`jobs.py`): `run_python` with `background=true` returns a
+  `job_id` at once; `job_status` reads its state, progress, output and result,
+  and `job_cancel` stops it. Tool packs start their own long work through
+  `bridge.jobs`. `status` lists the running jobs.
+- `run_python` persistent replies list only the names a call added or rebound
+  (`session_vars`) with the total in `session_var_count`.
 - Declared toolsets: a tool package with no `register()` entrypoint is
   introspected — every public function (or exactly `__all__`) registers as a
   tool, schema from type hints/defaults, description from the docstring, sync

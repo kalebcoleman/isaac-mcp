@@ -10,8 +10,8 @@ MCP client ──stdio──► isaac-mcp (host process)
                         │  NDJSON over TCP (loopback by default)
                         ▼
                       isaac.mcp.bridge (extension inside Kit: Isaac Sim or Isaac Lab)
-                        ├── built-ins: status, list_bridges, run_python, reload_tools,
-                        │              put_file, get_file, stat_file
+                        ├── built-ins: status, list_bridges, run_python, job_status, job_cancel,
+                        │              reload_tools, put_file, get_file, stat_file
                         └── tool packs registered under a namespace, e.g. ur5e_dt.*, sim.*, assets.*
 ```
 

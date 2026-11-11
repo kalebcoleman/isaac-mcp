@@ -130,12 +130,49 @@ def facts(prim):
     )
 
 
+USD_LAYER_SUFFIXES = (".usd", ".usda", ".usdc", ".usdz")
+
+
+def visuals_report(stage, root):
+    """What of an imported asset will be drawn, and a warning when a physics asset has nothing to draw.
+
+    Instanced ``visuals`` prims are expanded (a session-layer override, never an edit to the asset):
+    on some Kit builds an instanced visual stays at its first pose while physics moves its link.
+    Returns (report, warning or None)."""
+    expanded = 0
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        for prim in Usd.PrimRange(root):
+            if prim.GetName() == "visuals" and prim.IsInstance() and prim.SetInstanceable(False):
+                expanded += 1
+    drawn = bodies = count = 0
+    for prim in Usd.PrimRange(root, Usd.TraverseInstanceProxies()):
+        count += 1
+        if count > CAP:
+            break
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI) or prim.HasAPI(UsdPhysics.CollisionAPI):
+            bodies += 1
+        if prim.IsA(UsdGeom.Gprim) and UsdGeom.Imageable(prim).ComputePurpose() != UsdGeom.Tokens.guide:
+            drawn += 1
+    report = dict(drawn_geometry=drawn, expanded_instances=expanded, truncated=count > CAP)
+    if drawn or not bodies:
+        return report, None
+    selections = {name: root_variant.GetVariantSelection()
+                  for name in root.GetVariantSets().GetNames()
+                  for root_variant in [root.GetVariantSets().GetVariantSet(name)]}
+    report["variant_selections"] = selections
+    return report, ("The asset has physics but nothing to draw: no visible geometry composed under "
+                    f"{root.GetPath()}, so the robot would be invisible. Its visual meshes are usually in a "
+                    "payload or variant that did not compose; check variant_selections and the asset's own "
+                    "sub-files with assets__dependencies, and import the top-level file rather than a "
+                    "physics-only layer.")
+
+
 # Tools which change the stage or timeline themselves, by event family. Anything else that may
 # run code (run_python, twin tools, Kit UI input) can only be reported as "was running".
 STAGE_TOOLS = {"sim.stage.open": "sim__stage__open", "sim.quick_start": "sim__quick_start"}
 TIMELINE_TOOLS = {"sim.timeline.control": "sim__timeline__control", "sim.map.occupancy": "sim__map__occupancy",
                   "sim.quick_start": "sim__quick_start"}
-INERT_TOOLS = {"status", "list_bridges", "list_tools", "reload_tools", "stat_file", "get_file", "put_file"}
+INERT_TOOLS = {"status", "list_bridges", "list_tools", "reload_tools", "stat_file", "get_file", "put_file", "job_status"}
 
 
 def attribute_change(activity, certain):
@@ -870,8 +907,9 @@ class Scene:
         outside = []
         runtime_resolved = []
         for dep in [str(layer.realPath) for layer in layers] + list(assets):
+            # Compared as real paths: an environment reached through a symlink resolves to its target.
             known = next(
-                (k for k, v in self.runtime_assets.items() if dep == v["path"]), None
+                (k for k, v in self.runtime_assets.items() if os.path.realpath(dep) == os.path.realpath(v["path"])), None
             )
             if known:
                 runtime_resolved.append(known)
@@ -896,13 +934,22 @@ class Scene:
             str(x) for x in missing if str(x) in self.runtime_assets
         ]
         missing = [x for x in missing if str(x) not in self.runtime_assets]
+        asset = None
+        unused = []
+        if missing and not outside and all(str(x).lower().endswith(USD_LAYER_SUFFIXES) for x in missing):
+            # A missing layer the composed asset never asks for: named only by a variant that is not
+            # selected (a robot's optional gripper). Every missing layer the selection does use is a
+            # composition error, so an asset that composes cleanly is complete as it stands.
+            asset = Usd.Stage.Open(str(filename))
+            if asset and asset.GetDefaultPrim() and not composition_errors(asset):
+                unused, missing = [str(x) for x in missing], []
         if missing or outside:
             refuse(
                 "DEPENDENCIES",
                 "Unresolved or outside-snapshot dependencies: "
                 + repr(dict(missing=list(missing)[:12], outside=outside[:12]))[:1500],
             )
-        asset = Usd.Stage.Open(str(filename))
+        asset = asset or Usd.Stage.Open(str(filename))
         if not asset or not asset.GetDefaultPrim():
             refuse("DEFAULT_PRIM", "Asset needs a valid defaultPrim. Set defaultPrim in the file, or import a USD that has one.")
         count = 0
@@ -943,6 +990,10 @@ class Scene:
                 ],
                 packages_truncated=len(manifest.get("packages", {})) > 12,
                 runtime_dependencies={k: self.runtime_assets[k] for k in runtime_used},
+                **({"unselected_variant_dependencies": dict(
+                    missing=[Path(x).name for x in unused[:12]],
+                    note="Named only by variants that are not selected; the asset composes without them. "
+                         "Selecting such a variant later needs these files.")} if unused else {}),
                 dependency_check="UsdUtils.ComputeAllDependencies; trusted, not a containment proof",
                 sandboxed=False,
             ),
@@ -983,11 +1034,14 @@ class Scene:
                 if errors:
                     refuse("COMPOSITION_ERROR", str(errors)[:1500])
             self.owned.add(str(p))
+            visuals, warning = visuals_report(stage, child)
             return dict(
                 **info,
                 prim=self.get(stage, str(p)),
                 asset_path=str(p.AppendChild("Asset")),
                 source_preserved=True,
+                visuals=visuals,
+                **({"warnings": [warning]} if warning else {}),
             )
         except Exception:
             with Usd.EditContext(stage, stage.GetSessionLayer()):
@@ -1062,7 +1116,7 @@ class Scene:
         for dependency in dict.fromkeys(dependency_names):
             dep = Path(str(dependency))
             runtime = next(
-                (v for v in self.runtime_assets.values() if str(dep) == v["path"]),
+                (v for v in self.runtime_assets.values() if os.path.realpath(str(dep)) == os.path.realpath(v["path"])),
                 None,
             )
             if runtime is not None:

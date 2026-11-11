@@ -71,7 +71,7 @@ Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).
 | `ISAAC_MCP_CRASH_UPLOAD` | unset | `1` keeps Kit's default of uploading a crash's minidump to NVIDIA. Otherwise `run.sh` and Isaac Lab jobs keep dumps on this machine, in Kit's data folder, because a minidump can contain process memory. |
 | `ISAAC_MCP_PRINT_PYTHON` | unset | `1` makes `run.sh` print its chosen interpreter and exit. |
 | `ISAAC_MCP_SCENE_OUTPUT` | a per-process temp directory | Output root for `sim__stage__save`, `sim__camera__capture`, `sim__map__occupancy` and, in a `videos` folder, `ur5e_dt__start_recording`. **Set it to keep results across restarts.** |
-| `ISAAC_MCP_ENABLE_SCENE_SCRIPTS` | unset | `1` enables `sim__controller__*`, which run arbitrary Python. |
+| `ISAAC_MCP_ENABLE_SCENE_SCRIPTS` | unset | `1` enables `sim__controller__*` and a Python (`module:function`) controller in `sim__simulation__run`, which run arbitrary Python in Kit. A `tcp://127.0.0.1:<port>` controller needs no setting. |
 | `UR5E_DT_CAMERA_CONFIG` | unset | YAML file overriding the twin's camera settings. |
 | `ROS_DOMAIN_ID` | `0` | ROS domain. External ROS clients must match. |
 | `ROS_SETUP`, `ROS_DISTRO` | `/opt/ros/<distro>` | Fake-driver launcher. `ROS_SETUP` names any setup file (another install, a RoboStack prefix); with it, the distribution comes from what that file sets, not from the OS. Without it, and with no `/opt/ros/<distro>`, an environment already activated (`ROS_DISTRO` set, `ros2` on `PATH`) is used as it is. |
@@ -98,6 +98,7 @@ These must match in both processes:
 | Variable | Default | Meaning |
 |---|---|---|
 | `ISAAC_MCP_ASSET_CONFIG` | unset | The [trusted-project approval file](TOOLS-SCENE.md#one-time-approval). No file means no approved roots. |
+| `ISAAC_MCP_STAGING` | `~/.cache/isaac-mcp/staging` | With no approval file: the private folder the server copies import snapshots into and Kit reads them from. The server and Kit must be given the same value. |
 | `ISAAC_MCP_ASSET_PATH` | `isaac-mcp-assets` next to the checkout | Asset stores separated by `:`; the first receives writes. `UR5E_DT_ASSET_CACHE` is a deprecated alias. |
 | `ISAAC_MCP_ASSET_PACK` | `ur5e-dt` | Selects the [asset pack](ASSETS.md#named-packs); beats `"pack"` in `isaac-mcp.json`. An invalid name is an error. |
 | `ISAAC_MCP_USD_PYTHON` | unset | A Python with `usd-core` for USD dependency checks on the MCP host; without it they use the selected Kit. |

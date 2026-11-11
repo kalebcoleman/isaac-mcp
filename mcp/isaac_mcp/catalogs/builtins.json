@@ -3,7 +3,7 @@
   "namespace": null,
   "tools": {
     "run_python": {
-      "description": "Execute Python code on the Kit main thread with full access to the Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` to let frames run between steps). Set persistent=True with a session_id to keep variables alive between calls — useful for multi-step workflows where later calls need results from earlier ones. Opening a stage (including save-as) resets every session; the next call says so.",
+      "description": "Execute Python code on the Kit main thread with full access to the Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` to let frames run between steps). Set persistent=True with a session_id to keep variables between calls. Opening a stage (including save-as) resets every session; the next call says so. For work longer than a few seconds pass background=true: it returns a job_id at once for job_status / job_cancel, instead of polling with more calls.",
       "parameters": {
         "code": {
           "type": "string",
@@ -16,7 +16,15 @@
         },
         "persistent": {
           "type": "boolean",
-          "description": "If true, variables persist across calls with the same session_id."
+          "description": "If true, variables persist across calls with the same session_id. The reply lists only the names this call added or rebound (session_vars) and the total (session_var_count)."
+        },
+        "background": {
+          "type": "boolean",
+          "description": "Run as a job and return its job_id at once. The code must await (e.g. `await omni.kit.app.get_app().next_update_async()` in its loop) and must not pump the app itself. A `job` object is preloaded: job.report(fraction, text) sets progress, job.checkpoint() raises once job_cancel was called. Follow with job_status(job_id, wait_s=30); `result` and prints come back there."
+        },
+        "label": {
+          "type": "string",
+          "description": "With background: a short name shown by job_status."
         }
       },
       "fields": [
@@ -45,14 +53,32 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "If true, variables persist across calls with the same session_id."
+          "description": "If true, variables persist across calls with the same session_id. The reply lists only the names this call added or rebound (session_vars) and the total (session_var_count)."
+        },
+        {
+          "name": "background",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Run as a job and return its job_id at once. The code must await (e.g. `await omni.kit.app.get_app().next_update_async()` in its loop) and must not pump the app itself. A `job` object is preloaded: job.report(fraction, text) sets progress, job.checkpoint() raises once job_cancel was called. Follow with job_status(job_id, wait_s=30); `result` and prints come back there."
+        },
+        {
+          "name": "label",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With background: a short name shown by job_status."
         }
       ],
       "namespace": null,
       "owner_id": "isaac.mcp.bridge"
     },
     "list_bridges": {
-      "description": "List all isaac.mcp.bridge bridges advertised on this box (this Kit process and any siblings, e.g. a second instance on an ephemeral port).",
+      "description": "List all isaac.mcp.bridge bridges advertised on this box (this Kit process and any siblings, e.g. a second instance on an ephemeral port). status lists them too, and also answers when no bridge is running.",
       "parameters": {},
       "fields": [],
       "namespace": null,
@@ -155,9 +181,82 @@
       "owner_id": "isaac.mcp.bridge"
     },
     "status": {
-      "description": "Instance identity: pid, port, headless-vs-headful, app + version, uptime, registered namespaces — verify you reached the instance you intended.",
-      "parameters": {},
-      "fields": [],
+      "description": "Where am I, in one call: the bridge that answered (pid, port, app, readiness), every bridge advertised on this machine, the current stage's session_id and stage_id with the timeline state, and running jobs. With nothing running it says so and names the next call, instead of failing. Call it once before the first simulator action; there is no need to repeat it between calls.",
+      "parameters": {
+        "detail": {
+          "type": "boolean",
+          "description": "true: the full bridge identity as well (namespaces, toolset hashes, admission, hold, extension source). Default false: the short reply."
+        }
+      },
+      "fields": [
+        {
+          "name": "detail",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "true: the full bridge identity as well (namespaces, toolset hashes, admission, hold, extension source). Default false: the short reply."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "isaac.mcp.bridge"
+    },
+    "job_status": {
+      "description": "Status of background work in this Kit: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, newest first. Jobs are forgotten when Kit restarts. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed.",
+      "parameters": {
+        "job_id": {
+          "type": "string",
+          "description": "job_id from the call that started the work. Omit to list jobs."
+        },
+        "wait_s": {
+          "type": "number",
+          "description": "Wait up to this many seconds (0-60) for the job to end before answering, instead of polling. The MCP server does the waiting; a direct socket caller gets the current status at once."
+        }
+      },
+      "fields": [
+        {
+          "name": "job_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "job_id from the call that started the work. Omit to list jobs."
+        },
+        {
+          "name": "wait_s",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Wait up to this many seconds (0-60) for the job to end before answering, instead of polling. The MCP server does the waiting; a direct socket caller gets the current status at once."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "isaac.mcp.bridge"
+    },
+    "job_cancel": {
+      "description": "Stop a background job (job_id from the call that started it). It ends at its next step and cleans up after itself; confirm with job_status. Through the MCP server it also stops an Isaac Lab or script job.",
+      "parameters": {
+        "job_id": {
+          "type": "string",
+          "required": true,
+          "description": "job_id of a running job."
+        }
+      },
+      "fields": [
+        {
+          "name": "job_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "job_id of a running job."
+        }
+      ],
       "namespace": null,
       "owner_id": "isaac.mcp.bridge"
     },

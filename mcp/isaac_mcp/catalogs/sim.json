@@ -1245,7 +1245,7 @@
       "owner_id": "generic-sim"
     },
     "sim.body.state": {
-      "description": "Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. render_pose compares the poses the renderer draws from (Fabric, USD) with the physics pose; a `warnings` entry means pictures and recordings do not show where the body is. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -1353,7 +1353,7 @@
       "owner_id": "generic-sim"
     },
     "sim.timeline.control": {
-      "description": "Play, pause, stop or initialize. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline and leaves a paused one alone. Runtime reads establish readiness. Play keeps running between calls; sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Play, pause, stop, initialize or reset. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline. Play reports physics_ready. reset is the call after a failed run: it cancels this pack's jobs and stops the timeline; safe to repeat. sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -1367,7 +1367,7 @@
         },
         "action": {
           "type": "string",
-          "description": "play, pause, stop, or initialize (briefly play then pause; physics may advance).",
+          "description": "play, pause, stop, initialize (briefly play then pause; physics may advance), or reset (cancel jobs, stop, back to the authored start).",
           "required": true
         },
         "resume": {
@@ -1402,7 +1402,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "play, pause, stop, or initialize (briefly play then pause; physics may advance)."
+          "description": "play, pause, stop, initialize (briefly play then pause; physics may advance), or reset (cancel jobs, stop, back to the authored start)."
         },
         {
           "name": "resume",
@@ -1571,6 +1571,20 @@
           "type": "boolean",
           "description": "true: follow path while playing (until stopped); false: stop following.",
           "required": false
+        },
+        "layout": {
+          "type": "string",
+          "description": "clean: hide the app's panels, menus, grid and selection outline for a recording. default: put them back. Alone, it leaves the camera where it is.",
+          "required": false,
+          "enum": [
+            "clean",
+            "default"
+          ]
+        },
+        "caption": {
+          "type": "string",
+          "description": "One line (<=120 characters) drawn over the bottom of the viewport, e.g. the run's name, for screenshots and screen recordings; an empty string removes it. Needs a viewport window.",
+          "required": false
         }
       },
       "fields": [
@@ -1636,6 +1650,27 @@
           "default": null,
           "has_default": false,
           "description": "true: follow path while playing (until stopped); false: stop following."
+        },
+        {
+          "name": "layout",
+          "kind": "enum",
+          "enum": [
+            "clean",
+            "default"
+          ],
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "clean: hide the app's panels, menus, grid and selection outline for a recording. default: put them back. Alone, it leaves the camera where it is."
+        },
+        {
+          "name": "caption",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "One line (<=120 characters) drawn over the bottom of the viewport, e.g. the run's name, for screenshots and screen recordings; an empty string removes it. Needs a viewport window."
         }
       ],
       "namespace": "sim",
@@ -2656,6 +2691,442 @@
           "default": [],
           "has_default": true,
           "description": "Up to 8 articulation paths."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.simulation.run": {
+      "description": "Run your own controller in the physics loop, as a job. Each step it gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. A stopped timeline is initialized; the run steps exactly and ends paused. Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "body": {
+          "type": "string",
+          "description": "Rigid body the controller acts on, e.g. a drone's base link.",
+          "required": true
+        },
+        "controller": {
+          "type": "string",
+          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or package.module:function or /abs/file.py:function, loaded into Kit: needs ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 at Kit launch.",
+          "required": true
+        },
+        "duration_s": {
+          "type": "number",
+          "description": "Simulated seconds to run, up to 3600. The controller can end sooner with done=true.",
+          "required": true
+        },
+        "params": {
+          "type": "object",
+          "description": "Passed to the controller as state['params'] each step, e.g. gains or a target.",
+          "required": false
+        },
+        "frame": {
+          "type": "string",
+          "description": "Frame of the returned force and torque, applied at the centre of mass: world (default) or body.",
+          "required": false,
+          "default": "world",
+          "enum": [
+            "world",
+            "body"
+          ]
+        },
+        "log": {
+          "type": "array",
+          "description": "Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.",
+          "required": false
+        },
+        "log_every": {
+          "type": "integer",
+          "description": "Log one row every this many physics steps, 1..10000.",
+          "required": false,
+          "default": 1
+        },
+        "filename": {
+          "type": "string",
+          "description": "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.",
+          "required": false
+        },
+        "steps_per_frame": {
+          "type": "integer",
+          "description": "Physics steps between app frames, 1..120. Default: about real time at 60 frames per second. With camera, fps sets it.",
+          "required": false
+        },
+        "articulation": {
+          "type": "string",
+          "description": "Articulation root of a jointed robot (often <robot>/root_joint). The state then has joints {names, positions, velocities}, and the controller may return joint_efforts, joint_targets or joint_velocity_targets as {joint name: value} (N m or N, rad or stage units).",
+          "required": false
+        },
+        "observe": {
+          "type": "array",
+          "description": "Up to 8 more rigid bodies whose state the controller gets under observed[path]. It may push them too, with wrenches: {path: {force, torque}}.",
+          "required": false
+        },
+        "camera": {
+          "type": "string",
+          "description": "Record this camera while it runs (from sim__camera__create): one frame per app frame, and job_status then gives video_path. Works headless and on a locked screen.",
+          "required": false
+        },
+        "adopt": {
+          "type": "boolean",
+          "description": "Record a camera that came with an opened scene (see sim__camera__capture adopt).",
+          "required": false
+        },
+        "fps": {
+          "type": "number",
+          "description": "With camera: video frames per simulated second, 1..60.",
+          "required": false,
+          "default": 30
+        },
+        "label": {
+          "type": "string",
+          "description": "Short name for the job, shown by job_status and drawn on the video (<=80 characters).",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "body",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Rigid body the controller acts on, e.g. a drone's base link."
+        },
+        {
+          "name": "controller",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or package.module:function or /abs/file.py:function, loaded into Kit: needs ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 at Kit launch."
+        },
+        {
+          "name": "duration_s",
+          "kind": "number",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Simulated seconds to run, up to 3600. The controller can end sooner with done=true."
+        },
+        {
+          "name": "params",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Passed to the controller as state['params'] each step, e.g. gains or a target."
+        },
+        {
+          "name": "frame",
+          "kind": "enum",
+          "enum": [
+            "world",
+            "body"
+          ],
+          "required": false,
+          "default": "world",
+          "has_default": true,
+          "description": "Frame of the returned force and torque, applied at the centre of mass: world (default) or body."
+        },
+        {
+          "name": "log",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too."
+        },
+        {
+          "name": "log_every",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 1,
+          "has_default": true,
+          "description": "Log one row every this many physics steps, 1..10000."
+        },
+        {
+          "name": "filename",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites."
+        },
+        {
+          "name": "steps_per_frame",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Physics steps between app frames, 1..120. Default: about real time at 60 frames per second. With camera, fps sets it."
+        },
+        {
+          "name": "articulation",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Articulation root of a jointed robot (often <robot>/root_joint). The state then has joints {names, positions, velocities}, and the controller may return joint_efforts, joint_targets or joint_velocity_targets as {joint name: value} (N m or N, rad or stage units)."
+        },
+        {
+          "name": "observe",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Up to 8 more rigid bodies whose state the controller gets under observed[path]. It may push them too, with wrenches: {path: {force, torque}}."
+        },
+        {
+          "name": "camera",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Record this camera while it runs (from sim__camera__create): one frame per app frame, and job_status then gives video_path. Works headless and on a locked screen."
+        },
+        {
+          "name": "adopt",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Record a camera that came with an opened scene (see sim__camera__capture adopt)."
+        },
+        {
+          "name": "fps",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 30,
+          "has_default": true,
+          "description": "With camera: video frames per simulated second, 1..60."
+        },
+        {
+          "name": "label",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Short name for the job, shown by job_status and drawn on the video (<=80 characters)."
+        }
+      ],
+      "namespace": "sim",
+      "owner_id": "generic-sim"
+    },
+    "sim.trajectory.replay": {
+      "description": "Replay a saved trajectory into a labelled video, as a job: moves prims through the poses in a file and saves one camera frame per step. No physics runs and the prims go back afterwards; needs a stopped timeline. Returns job_id; job_status(job_id, wait_s=30) then gives video_path, an MP4 with the label drawn on it (works headless and on a locked screen). Without camera it shows the poses at wall-clock pace, for a screen recording. Requires session_id and stage_id from sim__stage__info.",
+      "parameters": {
+        "session_id": {
+          "type": "string",
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
+          "required": true
+        },
+        "stage_id": {
+          "type": "string",
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
+          "required": true
+        },
+        "trajectory": {
+          "type": "string",
+          "description": "Absolute path under your home or the output folder. A CSV as sim__simulation__run writes it (time_s, px,py,pz, qw,qx,qy,qz; or t and x,y,z), or JSON / JSONL samples {time_s, position, orientation_wxyz} or {time_s, bodies: {prim: {...}}}.",
+          "required": true
+        },
+        "prim": {
+          "type": "string",
+          "description": "Prim to move, for a file with one unnamed body: the robot's top Xform or a free body, not a jointed link.",
+          "required": false
+        },
+        "camera": {
+          "type": "string",
+          "description": "Camera to record, from sim__camera__create or sim__camera__list. Omit to only show the poses.",
+          "required": false
+        },
+        "adopt": {
+          "type": "boolean",
+          "description": "Record a camera that came with an opened scene (see sim__camera__capture adopt).",
+          "required": false
+        },
+        "label": {
+          "type": "string",
+          "description": "One line (<=120 characters) drawn on every frame of the video, e.g. 'PhysX hover, kp=4'.",
+          "required": false
+        },
+        "fps": {
+          "type": "number",
+          "description": "Video frames per second, 1..60.",
+          "required": false,
+          "default": 30
+        },
+        "speed": {
+          "type": "number",
+          "description": "Playback speed: 2 is twice as fast, 0.5 slow motion.",
+          "required": false,
+          "default": 1
+        },
+        "start_s": {
+          "type": "number",
+          "description": "Start at this trajectory time. Default: its first sample.",
+          "required": false
+        },
+        "end_s": {
+          "type": "number",
+          "description": "End at this trajectory time. Default: its last sample.",
+          "required": false
+        },
+        "filename": {
+          "type": "string",
+          "description": "New video name, e.g. hover.mp4. Default replay-<time>.mp4. Frames are saved beside it as <name>-00001.png.",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
+        },
+        {
+          "name": "stage_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
+        },
+        {
+          "name": "trajectory",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute path under your home or the output folder. A CSV as sim__simulation__run writes it (time_s, px,py,pz, qw,qx,qy,qz; or t and x,y,z), or JSON / JSONL samples {time_s, position, orientation_wxyz} or {time_s, bodies: {prim: {...}}}."
+        },
+        {
+          "name": "prim",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Prim to move, for a file with one unnamed body: the robot's top Xform or a free body, not a jointed link."
+        },
+        {
+          "name": "camera",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Camera to record, from sim__camera__create or sim__camera__list. Omit to only show the poses."
+        },
+        {
+          "name": "adopt",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Record a camera that came with an opened scene (see sim__camera__capture adopt)."
+        },
+        {
+          "name": "label",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "One line (<=120 characters) drawn on every frame of the video, e.g. 'PhysX hover, kp=4'."
+        },
+        {
+          "name": "fps",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 30,
+          "has_default": true,
+          "description": "Video frames per second, 1..60."
+        },
+        {
+          "name": "speed",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 1,
+          "has_default": true,
+          "description": "Playback speed: 2 is twice as fast, 0.5 slow motion."
+        },
+        {
+          "name": "start_s",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Start at this trajectory time. Default: its first sample."
+        },
+        {
+          "name": "end_s",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "End at this trajectory time. Default: its last sample."
+        },
+        {
+          "name": "filename",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "New video name, e.g. hover.mp4. Default replay-<time>.mp4. Frames are saved beside it as <name>-00001.png."
         }
       ],
       "namespace": "sim",

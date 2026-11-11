@@ -56,6 +56,15 @@ _Cwd = Annotated[str | None, Field(description="Working directory of the job, fo
 _Install = Annotated[str | None, Field(description="Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.")]
 _Label = Annotated[str | None, Field(description="Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.")]
 _AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
+_ScriptEnv = Annotated[dict[str, str] | None, Field(description="Extra environment variables; the same rules as the env argument of isaaclab__train (PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value).")]
+_Script = Annotated[str, Field(description="Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.")]
+_ScriptArgs = Annotated[list[str] | None, Field(description="Command-line arguments for the script.")]
+_ScriptCwd = Annotated[str | None, Field(description="Working directory. Default: the script's folder.")]
+_ScriptLabel = Annotated[str | None, Field(description="Short name, used in the job_id and runs_list.")]
+_ScriptTimeout = Annotated[float, Field(description="Hard wall limit in seconds; the whole process group is killed at expiry.")]
+_MinVram = Annotated[int | None, Field(description="Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.")]
+_VramWait = Annotated[float, Field(description="With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).")]
+_SingleKey = Annotated[str | None, Field(description="Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.")]
 
 
 _MAX_WAIT_S = 3600.0
@@ -317,21 +326,47 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
                        timeout_s=timeout_s, allow_concurrent=allow_concurrent,
                        allow_concurrent_gpu=allow_concurrent_gpu, install=install, **_task_kw(python_path, env, external_callback, task_modules, cwd, python_paths))
 
+    async def start_script(default_python: Callable[[], Any], **kwargs: Any) -> str:
+        """Both script tools: resolve the interpreter, then start the job off the event loop."""
+        cancel = threading.Event()
+        python, install = kwargs.pop("python"), kwargs.pop("install")
+        paths = _install.merge_python_paths(kwargs.pop("python_path"), kwargs.pop("python_paths"))
+
+        def start() -> dict:
+            py = python
+            if not py and install is None:
+                py = default_python()
+            if not py:
+                inst, why = _install.resolve_install(install)
+                if why and install is not None:
+                    return {"error": why}
+                if not inst:
+                    return dict(_NO_INSTALL)
+                py = inst["python"]
+            return _jobs.run_script(py, kwargs.pop("script"), python_path=paths, cancel=cancel, **kwargs)
+
+        # wait_for_vram_s can sleep for minutes: keep it off the event loop so the server keeps answering.
+        try:
+            return await asyncio.to_thread(_guard, start)
+        except asyncio.CancelledError:
+            cancel.set()  # the client gave up: stop waiting for GPU memory instead of launching later
+            raise
+
     @mcp.tool(name="isaaclab__run_script", annotations=PYTHON_EXECUTION)
     async def isaaclab_run_script(
-        script: Annotated[str, Field(description="Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.")],
-        args: Annotated[list[str] | None, Field(description="Command-line arguments for the script.")] = None,
-        env: Annotated[dict[str, str] | None, Field(description="Extra environment variables; the same rules as the env argument of isaaclab__train (PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value).")] = None,
+        script: _Script,
+        args: _ScriptArgs = None,
+        env: _ScriptEnv = None,
         python_paths: _PythonPaths = None,
         python_path: _PythonPath = None,
         python: Annotated[str | None, Field(description="Interpreter. Default: the configured ISAACLAB_PYTHON.")] = None,
         install: _Install = None,
-        cwd: Annotated[str | None, Field(description="Working directory. Default: the script's folder.")] = None,
-        label: Annotated[str | None, Field(description="Short name, used in the job_id and runs_list.")] = None,
-        timeout_s: Annotated[float, Field(description="Hard wall limit in seconds; the whole process group is killed at expiry.")] = 600,
-        min_free_vram_mb: Annotated[int | None, Field(description="Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.")] = None,
-        wait_for_vram_s: Annotated[float, Field(description="With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).")] = 0,
-        single_instance_key: Annotated[str | None, Field(description="Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.")] = None,
+        cwd: _ScriptCwd = None,
+        label: _ScriptLabel = None,
+        timeout_s: _ScriptTimeout = 600,
+        min_free_vram_mb: _MinVram = None,
+        wait_for_vram_s: _VramWait = 0,
+        single_instance_key: _SingleKey = None,
         allow_concurrent: _AllowConcurrent = False,
         allow_concurrent_gpu: _AllowGpu = False,
     ) -> str:
@@ -344,29 +379,44 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         Also the route for a project's own evaluator. Print `ISAAC_MCP_PROGRESS: <0-1|N%|a/b> [text]` for runs_status `progress`.
 
         Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true."""
-        cancel = threading.Event()
+        return await start_script(
+            lambda: None, script=script, args=args, env=env, python_paths=python_paths, python_path=python_path,
+            python=python, install=install, cwd=cwd, label=label, timeout_s=timeout_s,
+            min_free_vram_mb=min_free_vram_mb, wait_for_vram_s=wait_for_vram_s,
+            single_instance_key=single_instance_key, allow_concurrent=allow_concurrent,
+            allow_concurrent_gpu=allow_concurrent_gpu)
 
-        def start() -> dict:
-            py = python
-            if not py:
-                inst, why = _install.resolve_install(install)
-                if why and install is not None:
-                    return {"error": why}
-                if not inst:
-                    return dict(_NO_INSTALL)
-                py = inst["python"]
-            return _jobs.run_script(
-                py, script, args=args, env=env, python_path=_install.merge_python_paths(python_path, python_paths), cwd=cwd, label=label,
-                timeout_s=timeout_s, min_free_vram_mb=min_free_vram_mb, wait_for_vram_s=wait_for_vram_s,
-                single_instance_key=single_instance_key, allow_concurrent=allow_concurrent,
-                allow_concurrent_gpu=allow_concurrent_gpu, cancel=cancel)
+    @mcp.tool(name="run_script", annotations=PYTHON_EXECUTION)
+    async def run_script(
+        script: _Script,
+        args: _ScriptArgs = None,
+        env: _ScriptEnv = None,
+        python_paths: _PythonPaths = None,
+        python: Annotated[str | None, Field(description="Interpreter. Default: python3 on PATH. Or pass install to use an Isaac Lab environment.")] = None,
+        install: _Install = None,
+        cwd: _ScriptCwd = None,
+        label: _ScriptLabel = None,
+        timeout_s: _ScriptTimeout = 600,
+        single_instance_key: _SingleKey = None,
+        uses_gpu: Annotated[bool, Field(description="true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget), as in isaaclab__run_script. Default false: it starts at once and does not block GPU jobs.")] = False,
+        min_free_vram_mb: _MinVram = None,
+        wait_for_vram_s: _VramWait = 0,
+    ) -> str:
+        """Run any Python script as a managed job: a job_id at once, a log, a hard timeout, progress and cancel.
+        Needs no simulator and no Isaac Lab: a controller server, a data conversion, a plot, a sweep step.
 
-        # wait_for_vram_s can sleep for minutes: keep it off the event loop so the server keeps answering.
-        try:
-            return await asyncio.to_thread(_guard, start)
-        except asyncio.CancelledError:
-            cancel.set()  # the client gave up: stop waiting for GPU memory instead of launching later
-            raise
+        WARNING: executes arbitrary code with your rights; not sandboxed, not idempotent. The same job
+        system as isaaclab__run_script (kind "script"): follow it with isaaclab__runs_status(job_id, wait_s=45),
+        isaaclab__runs_tail and isaaclab__runs_cancel. Print `ISAAC_MCP_ARTIFACT: <path>` to list outputs and
+        `ISAAC_MCP_PROGRESS: <0-1|N%|a/b> [text]` for progress."""
+        import shutil
+        import sys
+
+        return await start_script(
+            lambda: shutil.which("python3") or sys.executable, script=script, args=args, env=env,
+            python_paths=python_paths, python_path=None, python=python, install=install, cwd=cwd, label=label,
+            timeout_s=timeout_s, min_free_vram_mb=min_free_vram_mb, wait_for_vram_s=wait_for_vram_s,
+            single_instance_key=single_instance_key, uses_gpu=uses_gpu)
 
     @mcp.tool(name="isaaclab__preflight", annotations=READ_ONLY)
     def isaaclab_preflight(
@@ -407,11 +457,11 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
     ) -> str:
         """State, exit code, elapsed time, last log lines, newest checkpoint, `run_dir` with `run_dir_source`
         (lab_log, checkpoint, or job_dir plus a `run_dir_warning` when no Lab run folder is known), `physics`,
-        `environment_ready`, an eval job's `eval_result`, and a windowed job's `window`.
+        `environment_ready`, an eval job's `eval_result`, a windowed job's `window`, and for a running job
+        `health` and `progress`.
 
         wait_s blocks until the job ends (or returns `running` with `wait_timed_out`) and holds no lock.
-        log_root + run_name instead of job_id resolves a run folder by name; no match, several (unless
-        latest=true) or an empty name is an `error`.
+        log_root + run_name instead of job_id resolves a run folder by name; no match or several is an `error`.
 
         Reconciles orphaned jobs by updating their stored metadata."""
         def status() -> dict:

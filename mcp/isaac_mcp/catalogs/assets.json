@@ -179,7 +179,7 @@
       "owner_id": "generic-assets"
     },
     "assets.import_path": {
-      "description": "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. Requires session_id and stage_id. Requires session_id and stage_id from sim__stage__info.",
+      "description": "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. Robot formats take fixed_base and default_drives. A USD reports its drawn `visuals`; none is a warning. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",

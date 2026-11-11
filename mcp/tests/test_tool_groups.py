@@ -182,7 +182,7 @@ def test_every_local_tool_is_annotated_and_read_only_matches_the_groups():
         assert ann is not None, f"{name} has no annotations"
         python_tools = lt.GROUPS["isaaclab_probe"] | lt.GROUPS["screen_input"] | lt.GROUPS["sim_launch"] | {
             "isaaclab__train", "isaaclab__eval", "isaaclab__play", "isaaclab__env_check", "isaaclab__record",
-                "isaaclab__run_script"}
+                "isaaclab__run_script", "run_script"}
         assert ann.openWorldHint is (name in python_tools), name
         if name in lt.READ_ONLY_TOOLS:
             assert ann.readOnlyHint is True and ann.idempotentHint is True, name
@@ -293,7 +293,7 @@ def test_startup_discovery_still_runs_when_gateway_is_excluded(bridge):
     assert set(listed) - {"demo__ping", "other__pong", "run_python"} == set(lt.READ_ONLY_TOOLS)
 
 
-BUILTINS = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file"}
+BUILTINS = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
 
 
 def test_builtins_are_listed_offline_and_follow_the_builtins_switch(monkeypatch):

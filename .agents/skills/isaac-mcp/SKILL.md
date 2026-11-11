@@ -62,9 +62,11 @@ bridge is reachable, go to [First calls in a session](#first-calls-in-a-session)
    at a time on a single card (16 GB fits a small `num_envs`, not a large sweep).
 2. **Discover before launching Kit.** Reuse the intended reachable bridge. Start an additional
    isolated session only when the user requested one and its resource checks pass.
-3. **Verify the target before changing a scene.** Confirm the bridge's PID and port with `status`
-   before `run_python`, file writes or any `ur5e_dt__*`, `sim__*` or `assets__*` call that changes
-   the stage.
+3. **Verify the target once.** Call `status` before the first `run_python`, file write or
+   `ur5e_dt__*`, `sim__*` or `assets__*` call that changes the stage: it gives the bridge's PID and
+   port, what is running, and the stage IDs, and says so when nothing is running. Repeat it only
+   after `use_bridge` or a simulator restart, not before each call or after a context reset.
+   Long simulator work returns a `job_id`: wait with `job_status(job_id, wait_s=30)`.
 4. **Look, don't ask.** When a window is open (play, a GUI Sim), take a `screenshot` or a short
    recording yourself and decide the next step from it. Use `list_windows` to find windows:
    `wmctrl`/`xdotool` from a shell may see nothing on a locked or remote session, which does not
@@ -118,7 +120,7 @@ The bridge CLI is `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client` fr
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__quick_start` for a new scene, or
    `sim__stage__info` on an existing one, and `assets__roots` for your own files. The
-   69-tool pack (57 `sim`, 12 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   71-tool pack (59 `sim`, 12 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
    `assets__roots`, `assets__scan`, `assets__search` and `assets__packs` / `assets__pack_*` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
@@ -274,6 +276,16 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
 - **Code execution is opt-in:** `sim__controller__create/update` run inline Python in a
   ScriptNode. Use them only when the user asked and Kit was launched with
   `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`; this is not a sandbox.
+- **Your own controller on a body:** `sim__simulation__run` (`body`, `controller`, `duration_s`) calls the
+  controller every physics step with the body's state and applies the force and torque it returns. Prefer
+  `controller="tcp://127.0.0.1:<port>"`: a script of yours using `isaac_mcp.controller_server.serve`, started
+  with `run_script`, so no code runs in Kit. `module:function` needs the opt-in above. It returns a `job_id`:
+  wait with `job_status(job_id, wait_s=30)`, do not poll with `run_python`.
+- **A saved trajectory as a video:** `sim__trajectory__replay` (`trajectory`, `prim`, `camera`, `label`) on a
+  stopped timeline; `job_status` then gives `video_path`. It works headless and on a locked screen.
+- **After a failed run:** `sim__timeline__control` with `action="reset"` cancels simulator jobs and stops the
+  timeline. If `sim__body__state` returns a `warnings` entry about `render_pose`, pictures do not show where
+  physics has the body; fix that before recording.
 
 ### Action Graphs and maps
 
@@ -367,7 +379,7 @@ worked while locked on GNOME.
 | `window_*` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find`/`sim__ui__act`; other apps need the desktop unlocked |
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use the bridge CLI: `... list_tools --port <port>` |
 | Tools vanish, the client says the server "disconnected" and reconnected | Each client owns one server process; it ended (EOF, signal or crash) and a new one started | Read `~/.local/state/isaac-mcp/server-<pid>.log` (newest file first; the last lines say EOF, a signal, or a traceback). `status` shows `host.code_drift: true` when the checkout changed under a running server: reconnect |
-| Tool count differs from 129 | `ISAAC_MCP_LOCAL_TOOLS` etc. in the client entry: +5 `screen_input`, +4 `sim_launch` = 138 | Compare with the filters on the log's `process start` line |
+| Tool count differs from 134 | `ISAAC_MCP_LOCAL_TOOLS` etc. in the client entry: +5 `screen_input`, +4 `sim_launch` = 143 | Compare with the filters on the log's `process start` line |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed (Kit restarted, stage opened) | The message names the current `session_id` and `stage_id`: resend with those, never the old ones |
@@ -387,5 +399,5 @@ worked while locked on GNOME.
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 69 generic tools: 57 `sim` and 12 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 71 generic tools: 59 `sim` and 12 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.

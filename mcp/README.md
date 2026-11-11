@@ -34,10 +34,10 @@ a bridge, and return an error with connection guidance when none is available. S
 | Group | Reference |
 |---|---|
 | `refresh_tools`, `use_bridge`, screenshots, recording, window placement, `join_videos` | [Host tools](../docs/TOOLS-HOST.md) |
-| `status`, `run_python`, `list_bridges`, `reload_tools`, file tools (bridge built-ins) | [Bridge built-ins](../docs/TOOLS-HOST.md#kit-bridge-built-ins) |
+| `status`, `run_python`, `job_status`, `job_cancel`, `list_bridges`, `reload_tools`, file tools (bridge built-ins) | [Bridge built-ins](../docs/TOOLS-HOST.md#kit-bridge-built-ins) |
 | `sim__*`, `assets__*` | [Scene tools](../docs/TOOLS-SCENE.md) |
 | `ur5e_dt__*` | [UR5e tools](../docs/TOOLS-UR5E.md) |
-| `isaaclab__*` | [Isaac Lab tools](../docs/TOOLS-ISAACLAB.md) |
+| `isaaclab__*`, `run_script` | [Isaac Lab and script-job tools](../docs/TOOLS-ISAACLAB.md) |
 | `window_*`, `sim__launch` and friends (opt-in) | [Optional desktop input and sessions](../docs/TOOLS-HOST.md#optional-desktop-input) |
 
 Set `UR5E_DT_PORT` to pin a bridge (`ISAAC_MCP_PORT` is the generic fallback). With several running and no pin, discovery

@@ -73,7 +73,7 @@ at the robot with `sim__camera__create`: `path="/World/Camera2", frame="world", 
 
 ## A typical session
 
-Most tools take the `session_id` and `stage_id` from `sim__stage__info`; `sim__graph__node_types`, `sim__logs__tail`, `sim__logs__mark`, `sim__logs__summary` and the `sim__ui__*` tools do not. Call it first, and again after
+Most tools take the `session_id` and `stage_id` from `sim__stage__info`; `sim__graph__node_types`, `sim__logs__tail`, `sim__logs__mark`, `sim__logs__summary` and the `sim__ui__*` tools do not. Call it first (or take the same IDs from `status`), and again after
 anything that replaces the stage. The calls below ran against a live 6.2.0.0 headless PhysX session
 ([record](VERIFICATION.md#headless-physx-check)).
 
@@ -84,11 +84,13 @@ anything that replaces the stage. The calls below ran against a live 6.2.0.0 hea
    defaults to a per-process temp directory; set it at Kit launch to keep results.
 4. **Initialize:** `sim__timeline__control` with `action="initialize"` briefly plays a stopped
    timeline and pauses it in one call; physics may advance. A runtime read confirms readiness.
-   `sim__simulation__step` advances exact steps only while paused.
+   `sim__simulation__step` advances exact steps only while paused; `sim__simulation__run` runs a
+   whole closed loop with your controller as a [job](#controller-runs-jobs-and-replay).
 5. **Read joints:** pass the **articulation root**, not the robot's parent Xform. On the twin that is
    `/World/UR5e/root_joint`; `/World/UR5e` returns `PHYSICS_NOT_READY`. `sim__ros2__tf_setup` reports the root as
    `articulation_root`.
 6. **Stop before editing again:** `action="stop"`. Authored edits refuse with `TIMELINE_ACTIVE` while playing or paused.
+   After a run that failed part-way, `action="reset"` cancels its jobs and stops in one call.
 7. **Keep it:** `sim__stage__save` with `filename`, and optionally a `directory` under your home. `sim__stage__open`
    opens files under your home only.
 
@@ -164,7 +166,7 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `assets__pack_build` | Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, and the result says `importable: false` with `import_blockers`. Files that differ need force=true. Checks the new pack afterwards. |
 | `assets__info` | Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. |
 | `assets__prepare_workstation` | Take an absolute USD path under an already approved trusted root, validate its bounded snapshot in the selected Kit, and prepare a private workstation cache without overwriting. Returns `loaded:false`; call `ur5e_dt__load_workstation` and inspect `/World/Vention` to verify. |
-| `assets__import_path` | The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF, or a folder that holds one. `format=auto` picks it from the name; xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. See [ASSET-IMPORT.md](ASSET-IMPORT.md). |
+| `assets__import_path` | The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF, or a folder that holds one. `format=auto` picks it from the name; xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. A USD composes with its own variant selections and payloads, and the result's `visuals` counts the geometry that will be drawn: a robot with physics but nothing to draw comes back with a warning instead of looking fine until you render it. See [ASSET-IMPORT.md](ASSET-IMPORT.md). |
 | `sim__stage__info` | Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations. Also returns `ros`: the simulator's ROS_DISTRO, ROS_DOMAIN_ID, RMW, localhost and Cyclone settings, plus the shell line that matches them. |
 | `sim__quick_start` | Build a ground plane, physics scene, lights and an aimed camera with no IDs, optionally with a robot and ROS 2. See [Start a scene](#start-a-scene). |
 | `sim__stage__open` | Open a .usd/.usda/.usdc/.usdz file under your home, or in this simulator's own output folder (where `sim__stage__save` writes by default), as the current stage (File > Open), timeline stopped; refuses to drop unsaved edits unless `discard_changes=true` (a fresh Kit's empty stage counts as nothing to lose). Returns the new `session_id`/`stage_id`, prim count and composition-error count; run_python sessions reset. |
@@ -182,10 +184,10 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__physics__inspect` | Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. |
 | `sim__physics__raycast` | Cast one ray into the PhysX scene: hits with position, normal, distance, collider and rigid-body paths. `all=false` returns the closest; `all=true` returns up to 32 sorted by distance. `max_distance` is 0..100 stage units and `direction` is normalised. `scene_ready=false` before physics initialises. Newton refuses with `RAYCAST_UNSUPPORTED`. |
 | `sim__physics__contacts` | Read current PhysX contact pairs and impulses for up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with `PhysxContactReportAPI` report; paths without it are listed, and a call where none report refuses `CONTACT_REPORT_DISABLED` with the fix. Needs a playing or paused initialized timeline. Newton refuses with `CONTACT_QUERY_UNSUPPORTED`. |
-| `sim__body__state` | Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Supply `path` (or its aliases `prim` or `prim_path`). Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. |
-| `sim__timeline__control` | Explicit play, pause, stop, or initialize. Initialize briefly plays a stopped timeline and pauses it, reporting that physics may advance; an already-paused timeline is left alone and an already-playing timeline is refused. A runtime read confirms readiness. Stop rewinds physics and awaits pending native render/writer completion. The timeout is cooperative. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. Exact stepping uses sim.simulation.step. |
+| `sim__body__state` | Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Supply `path` (or its aliases `prim` or `prim_path`). Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. `render_pose` compares that physics pose with the poses the renderer can draw the body from, Fabric and USD (PhysX usually writes USD; Newton writes Fabric and leaves USD at the authored pose): `source`, `agrees`, `position_gap`, `angle_gap_deg` and `checked`. When neither is within 5 mm and 2 degrees, a `warnings` entry says the viewport, camera captures and recordings do not show where the body is. It cannot see an instanced visual that stayed behind its link; `assets__import_path` expands those at import. |
+| `sim__timeline__control` | Explicit play, pause, stop, initialize or reset. Initialize briefly plays a stopped timeline and pauses it, reporting that physics may advance; an already-paused timeline is left alone and an already-playing timeline is refused. Play waits up to 30 frames for the engine's tensor view and reports `physics_ready` (with a note when it did not appear), so the first read or step after it does not land before physics exists; a runtime read still confirms readiness. `reset` is the call after a failed run: it cancels this pack's running jobs, stops the viewport follow and stops the timeline, from playing, paused or already stopped, and is safe to repeat; the result has `was` and `cancelled_jobs`. Stop rewinds physics and awaits pending native render/writer completion. The timeout is cooperative. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. Exact stepping uses sim.simulation.step. |
 | `sim__stage__save` | Export a flattened copy, including session edits, to a new basename ending .usda in configured output root. Never overwrite or switch the current stage. A result over 100 MB has a `size_note` saying why: flattening copies every referenced USD file's data into this one file. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. ROS camera render handles require the explicit export option described below. `directory` writes into an existing folder under your home instead of the output root (never overwrites). Dangling internal references (a reference to a prim path that does not exist) no longer block camera render-handle saves. |
-| `sim__viewport__frame` | Point the active viewport camera. `path` alone: Kit's native select-and-frame; `framed_path` is the prim this call framed, and the Stage selection is restored afterwards (`selection`: framed for this call; Stage selection unchanged), so the Stage and Property panels keep their own selection. `path` + `margin` (metres): frame the prim's current bounding sphere plus the margin, keeping the view direction. `eye` + `target` (world, stage units): place the camera exactly (with `path`, `target` defaults to the prim's centre); the orbit pivot is set on the target. `follow=true` (with `path`): one Kit update subscription moves the camera with the prim at a fixed offset while the timeline runs (PhysX writes link poses to USD, so a robot whose links move under a fixed root is followed); `follow=false`, any new call, stage close, a viewport camera switch or an error stops it, and `sim__stage__info.viewport_follow` reports it and the last stop reason. All variants edit the active camera in session-layer edits; source layers and the previous edit target are preserved. No Kit undo entry. Refuses mismatched viewport contexts, look-through targets, unsafe session-sublayer camera opinions, empty bounds and subtrees above 10,000 composed prims. Reports the camera transform and `render_complete=false`: allow ordinary rendering, then capture the verified application window. Framing a smaller subtree can avoid surrounding occluders. Native failures can leave selection/session-camera changes; inspect before retrying. |
+| `sim__viewport__frame` | Point the active viewport camera. `path` alone: Kit's native select-and-frame; `framed_path` is the prim this call framed, and the Stage selection is restored afterwards (`selection`: framed for this call; Stage selection unchanged), so the Stage and Property panels keep their own selection. `path` + `margin` (metres): frame the prim's current bounding sphere plus the margin, keeping the view direction. `eye` + `target` (world, stage units): place the camera exactly (with `path`, `target` defaults to the prim's centre); the orbit pivot is set on the target. `follow=true` (with `path`): one Kit update subscription moves the camera with the prim at a fixed offset while the timeline runs (PhysX writes link poses to USD, so a robot whose links move under a fixed root is followed); `follow=false`, any new call, stage close, a viewport camera switch or an error stops it, and `sim__stage__info.viewport_follow` reports it and the last stop reason. All variants edit the active camera in session-layer edits; source layers and the previous edit target are preserved. No Kit undo entry. Refuses mismatched viewport contexts, look-through targets, unsafe session-sublayer camera opinions, empty bounds and subtrees above 10,000 composed prims. Reports the camera transform and `render_complete=false`: allow ordinary rendering, then capture the verified application window. Framing a smaller subtree can avoid surrounding occluders. Native failures can leave selection/session-camera changes; inspect before retrying. For a clean recording, `layout="clean"` hides the app's panels, menus, grid and selection outline (process-wide UI settings, not saved with the stage) and `layout="default"` puts back what was there; `caption` draws one line (up to 120 characters) over the bottom of the viewport and an empty string removes it. Given alone, they leave the camera where it is. A caption needs a viewport window: an app that has none refuses it, and a headless app draws it where nobody sees it, so label headless video with `sim__trajectory__replay` or `sim__simulation__run` instead. |
 | `assets__search` | Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. A folder deeper than eight levels is skipped and named in `skipped_deep`, with `depth_limit`, instead of failing the whole search. |
 | `sim__prim__delete` | Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused. |
 | `sim__prim__clone` | Clone a pack-created simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations. |
@@ -199,6 +201,8 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__joints__drive` | Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. A target that is past an authored limit only by float32 rounding is put on the limit, and the result says so: a limit authored from 1.0 rad is stored as 57.2957764 degrees, one step below the exact conversion. `sim__joints__command` does the same with runtime limits. |
 | `sim__joints__state` | Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. |
 | `sim__simulation__step` | Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. |
+| `sim__simulation__run` | Run your own controller in the physics loop, as a job: every step it gets one rigid body's measured state and returns the force and torque for that step. A `tcp://127.0.0.1:<port>` controller is your own process; a `module:function` controller is code in Kit and needs `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`. Writes a CSV log. See [controller runs](#controller-runs-jobs-and-replay). |
+| `sim__trajectory__replay` | Replay a saved trajectory (that CSV, or JSON samples) into a labelled MP4, as a job: moves prims through the poses on a stopped timeline and saves one camera frame per step. Works headless. See [controller runs](#controller-runs-jobs-and-replay). |
 | `sim__camera__list` | List `Camera` prims under `root` with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by `limit` and a 10,000-prim visit cap. Headless or no viewport reports `viewport_available=false`; a listed camera is not proof of render resources. |
 | `sim__camera__create` | Create a persistent RTX camera on a stopped timeline, under any existing parent prim (e.g. a robot link). Orientation as a `[w,x,y,z]` quaternion or as `rotate_xyz` Euler degrees (USD rotateXYZ; with `frame=local` authored as translate + rotateXYZ ops, as in the Property panel). Optional `focal_length` and `horizontal_aperture` (mm) and `clipping_range` (metres, default 0.01..1000, converted to stage units). Returns optics, horizontal FOV, local and world pose. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate: set a ROS rate on the camera helper (`frameSkipCount`). |
 | `sim__camera__capture` | Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for the first render completion, four further frames AND a matching renderer CPU transfer; no stale annotator fallback. Frame-number baseline is the first completion observed after the request, so an immediately created camera needs no caller-side warm-up. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. |
@@ -523,6 +527,110 @@ velocity limit. A graph that only publishes is not reported.
 
 `sim__stage__open` accepts files under your home and in this simulator's own output folder, so a default `sim__stage__save`
 can be reopened as is. A symlink out of that folder, or a sibling folder, still refuses with `OUTSIDE_HOME`.
+
+## Controller runs, jobs and replay
+
+`sim__simulation__step` advances at most 120 steps and applies no forces. To fly or drive a body with your own
+control law, `sim__simulation__run` runs the loop for you, per physics step, and `sim__trajectory__replay` turns the
+log into a video. Both return a `job_id` at once; wait with `job_status(job_id, wait_s=30)` and stop with
+`job_cancel` ([background jobs](TOOLS-HOST.md#background-jobs)).
+
+### `sim__simulation__run`
+
+Each step the controller is called with the body's measured state and answers with the wrench for that step:
+
+```text
+state    {"step", "time_s", "dt", "position", "orientation_wxyz", "linear_velocity",
+          "angular_velocity", "mass", "params"}            world frame, stage units, radians
+command  {"force": [x, y, z], "torque": [x, y, z], "frame": "world" | "body",
+          "done": false, "log": {"name": number}}          every key optional; null means no wrench
+```
+
+The wrench acts at the body's centre of mass for one physics step, in the world frame unless `frame` says `body`.
+(PhysX applies a force at the body's origin by default, so the run passes it the centre of mass; Newton applies it there itself.)
+`done: true` ends the run early. Numbers under `log` become extra CSV columns (fixed by the first answer).
+
+`controller` is one of:
+
+- **`tcp://127.0.0.1:<port>`**: your own process. The simulator connects, then sends one JSON line per step and
+  reads one back. Nothing of yours runs inside Kit, so this needs no setting, and the controller can be any language.
+  `isaac_mcp.controller_server.serve(fn, port)` is a ready-made server (one stdlib file); start it as a managed job
+  with `run_script`. Only loopback is accepted unless `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`.
+- **`package.module:function`** or **`/abs/path/file.py:function`**: a Python callable loaded into Kit. This is
+  arbitrary code in the simulator process, so it needs `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1` in Kit's launch
+  environment, the same opt-in as `sim__controller__*`. It is not a sandbox.
+
+```python
+# hover.py, started with run_script(script="/abs/hover.py"), then
+# sim__simulation__run(body="/World/Drone/base", controller="tcp://127.0.0.1:9123", duration_s=10)
+from isaac_mcp.controller_server import serve
+
+def hover(state):
+    error = 1.0 - state["position"][2]
+    lift = state["mass"] * (9.81 + 4.0 * error - 3.0 * state["linear_velocity"][2])
+    return {"force": [0, 0, lift], "log": {"error": error}}
+
+serve(hover, port=9123)
+```
+
+What the run does:
+
+- A stopped timeline is initialized first (played briefly, then paused, so physics may advance); a paused one is used
+  as it is; a playing one is refused. The run steps physics itself through the same exact-step path as
+  `sim__simulation__step`, `steps_per_frame` steps per app frame (default: about real time at 60 frames per second),
+  so Kit keeps rendering and answering other tools. It ends **paused**, with the body where the run left it.
+- The call returns `job_id`, `steps`, `physics_dt`, `mass`, `backend` and `log_file`. `job_status` reports
+  `progress` while it runs and, at the end, `steps`, `sim_time_s`, `ended_by` (`duration` or `controller`),
+  `log_file`, `log_rows` and `final_state`.
+- The CSV goes to a new file in the output folder (`filename`, default `run-<time>.csv`; never overwritten):
+  `step, time_s`, then `px,py,pz`, `qw,qx,qy,qz`, `vx,vy,vz`, `wx,wy,wz`, `fx,fy,fz`, `tx,ty,tz` for the fields in
+  `log`, then the controller's own columns. `log_every` thins it.
+- A controller that raises, answers with something other than a wrench, or goes silent for 5 seconds ends the job as
+  `failed` with `CONTROLLER_FAILED` and the step; the log holds the steps so far. Playing or stopping the timeline
+  under a run ends it with `TIMELINE_INTERRUPTED`. `sim__timeline__control` with `action=reset` cancels it cleanly.
+- Forces go through the selected engine's rigid-body tensor view, on PhysX and on Newton. A view that cannot apply
+  forces refuses with `WRENCH_UNSUPPORTED`, with no fallback to another engine.
+
+More than one body, and joints:
+
+- `articulation` (the articulation root, often `<robot>/root_joint`) adds `joints: {names, positions, velocities}`
+  to the state. The controller may then return `joint_targets` or `joint_velocity_targets` (drive targets, radians or
+  stage units, kept until changed) and `joint_efforts` (N m or N, for that step only: a joint left out gets none),
+  each as `{joint name: value}`. A stiff position drive resists an effort; lower its gains with `sim__joints__gains`
+  to control by effort. `body` is still required: pass the link whose pose the controller watches.
+- `observe` lists up to 8 more rigid bodies. Their states arrive under `observed[path]`, and the controller can push
+  them with `wrenches: {path: {"force": [...], "torque": [...]}}`.
+- The CSV gains `q:<joint>` and `dq:<joint>` columns for the articulation.
+
+Recording the run:
+
+- `camera` (from `sim__camera__create`) saves one frame per app frame, `<log name>-00001.png` and so on, and
+  `job_status` then gives `video_path`, as for a replay. `fps` is video frames per simulated second, so the video plays
+  in simulated time; `label` is drawn on it. It needs no window, so it works headless and on a locked screen. At most
+  3600 frames per run.
+
+### `sim__trajectory__replay`
+
+A replay is a picture of a run, not a simulation: the timeline stays stopped, no physics runs, the poses are
+session-layer overrides, and the prims go back to where they were when the job ends.
+
+- `trajectory` is an absolute path under your home or the output folder (at most 64 MiB). A **CSV** needs a header
+  with a time column (`time_s`, `t` or `time`) and a position (`px,py,pz` or `x,y,z`); `qw,qx,qy,qz` are optional,
+  and without them the prim keeps its orientation. That is the layout `sim__simulation__run` writes. **JSON** or
+  **JSONL** holds samples `{"time_s", "position", "orientation_wxyz"}`, or `{"time_s", "bodies": {"/World/A": {...}}}`
+  to move up to 16 prims at once.
+- `prim` names what to move for a single-body file: the robot's top Xform or a free body. A jointed link is refused
+  with the Xform to pass instead, as for `sim__prim__set_transform`.
+- Poses are interpolated to `fps` frames per second of video; `speed` plays faster or slower, and `start_s`/`end_s`
+  cut a part. At most 3600 frames per job.
+- With `camera` (from `sim__camera__create`; `adopt=true` for a camera that came with an opened scene) each frame is
+  saved as `<name>-00001.png` in the output folder through `sim__camera__capture`, so it works headless and on a
+  locked screen. When the job has ended, `job_status` adds `video_path`: the MCP server encodes the frames with the
+  bundled ffmpeg and draws `label` on every frame. The MP4 goes to `~/Videos/screen-mcp/<filename>`. If the server
+  cannot read Kit's output folder (Kit on another machine) the result says so and keeps the frames;
+  `join_videos(mode="frames")` encodes frames from any folder.
+- Without `camera` nothing is saved: the poses are shown at wall-clock pace, for `start_screen_recording`. Use
+  `sim__viewport__frame` with `layout="clean"` and `caption` first for a tidy picture.
 
 ## Sensors, physics and trusted controllers
 

@@ -399,3 +399,64 @@ class Follower:
             spec["updates"] += 1
         except Exception as exc:  # never raise inside Kit's update loop
             self.stop(f"stopped: {str(exc)[:300]}")
+
+
+# ---- A clean picture for a recording: no panels, no grid, an optional caption ----
+
+CLEAN_LAYOUT = {  # carb setting -> its value in the clean layout
+    "/app/window/hideUi": True,             # menus, toolbars and docked panels (Kit's F7)
+    "/app/viewport/grid/enabled": False,
+    "/app/viewport/outline/enabled": False,  # the selection outline
+}
+CAPTION_FRAME = "isaac_mcp.caption"
+MAX_CAPTION_CHARS = 120
+_previous_layout = {}
+
+
+def recording_view(layout, caption):
+    """Switch the app between its usual layout and a clean one for recording, and set or clear a
+    caption drawn over the active viewport. Process-wide UI state, not saved with the stage."""
+    result = {}
+    if layout is not None:
+        if layout not in ("clean", "default"):
+            refuse("INVALID_VALUE", "layout must be clean or default.")
+        import carb.settings
+
+        settings = carb.settings.get_settings()
+        if layout == "clean":
+            for key, value in CLEAN_LAYOUT.items():
+                _previous_layout.setdefault(key, settings.get(key))
+                settings.set(key, value)
+        else:
+            for key, value in _previous_layout.items():
+                if value is not None:
+                    settings.set(key, value)
+            _previous_layout.clear()
+        result["layout"] = layout
+        result["layout_note"] = ("Panels, menus, the grid and the selection outline are hidden until layout=default."
+                                 if layout == "clean" else "The layout from before layout=clean is back.")
+    if caption is not None:
+        if not isinstance(caption, str) or len(caption) > MAX_CAPTION_CHARS or "\n" in caption:
+            refuse("INVALID_VALUE", f"caption must be one line of at most {MAX_CAPTION_CHARS} characters; an empty string removes it.")
+        import omni.ui as ui
+        from omni.kit.viewport.utility import get_active_viewport_window
+
+        window = get_active_viewport_window()
+        if window is None:
+            refuse("NO_VIEWPORT", "No viewport window to caption in this Kit (a headless app has none). "
+                   "sim__trajectory__replay draws its label into the video itself.")
+        frame = window.get_frame(CAPTION_FRAME)
+        frame.clear()
+        if caption:
+            with frame:
+                with ui.VStack():
+                    ui.Spacer()
+                    with ui.HStack(height=0):
+                        ui.Spacer(width=16)
+                        with ui.ZStack(width=0, height=0):
+                            ui.Rectangle(style={"background_color": 0xCC000000, "border_radius": 4})
+                            ui.Label(caption, style={"font_size": 26, "color": 0xFFFFFFFF, "margin": 8})
+                        ui.Spacer()
+                    ui.Spacer(height=16)
+        result["caption"] = caption
+    return result

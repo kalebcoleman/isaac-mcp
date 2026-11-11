@@ -52,6 +52,17 @@ joint targets or address a file with `root_id` and `relative_path`, use `assets_
 | **A ROS / Nav2 map** (`.yaml` + `.pgm` or `.png`) | `map` | Occupied cells become wall boxes with static colliders | See [Maps](#ros-maps) |
 | A folder | `auto` | The folder names its own entry file (see [Folders](#folders-and-bundles)) | |
 
+A USD robot is usually several files: a top-level file whose variants and payloads pull in a physics layer and a base
+layer that holds the visual meshes. Import the **top-level** file, so they compose together; importing the physics layer
+alone gives a robot that simulates and cannot be seen. The result says what composed:
+
+- `visuals.drawn_geometry` counts the geometry that will be rendered, and `visuals.expanded_instances` the instanced
+  `visuals` prims that were expanded (a session-layer override) so each link's mesh follows physics. A result with
+  physics and nothing to draw carries a `warnings` entry and the asset's `variant_selections`.
+- A layer named only by a variant that is **not selected** (an optional gripper the pack does not ship) does not block
+  the import: it is listed under `unselected_variant_dependencies`. A missing layer the selected variants do use, and
+  any missing texture or material, is still refused with `DEPENDENCIES`.
+
 Not importable yet: CAD (STEP, IGES, JT), Gaussian splats, heightmap terrain and Collada (`.dae`) as a prop of its own (Collada works as
 the meshes of a URDF robot; as a prop it is refused with a message that says to convert it to glTF or OBJ). Isaac Sim ships converters for
 CAD and splats; they are on the plan in [working checklist](CHECKLIST.md#assets-and-workspace).

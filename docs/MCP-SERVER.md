@@ -4,7 +4,7 @@ The project provides a single host-side Model Context Protocol (MCP) server that
 
 The server package is located at `mcp/` (Python package `isaac_mcp`). The primary CLI executable is `isaac-mcp`. There is one command name and no aliases.
 
-For the system layer breakdown, port mapping, and routing rules, see [docs/ARCHITECTURE.md](ARCHITECTURE.md).
+For the whole system with a diagram (what MCP is, how the server reaches Isaac Sim, ports and routing), see [How isaac-mcp works](ARCHITECTURE.md).
 
 ```
 Kit Process (Isaac Sim 6.2.0.0)
@@ -95,7 +95,7 @@ are not registered by this pack.
 
 Captures are written to `~/Pictures/screen-mcp/` and `~/Videos/screen-mcp/`. Screen recordings do not contain audio.
 See the [host and bridge reference](TOOLS-HOST.md) for the complete list and arguments. The separate
-[Isaac Lab reference](TOOLS-ISAACLAB.md) covers the 17 host-side Lab tools.
+[Isaac Lab reference](TOOLS-ISAACLAB.md) covers the 18 host-side Lab and script-job tools.
 
 ### Agent workflow
 
@@ -365,8 +365,8 @@ Client side (these are client settings, not part of this server; check your clie
 
 ### Tool counts depend on `ISAAC_MCP_LOCAL_TOOLS`
 
-A client lists **129 tools** with the default groups, **+5** (`window_*`) when `screen_input` is selected and **+4**
-(`sim__*` session tools) when `sim_launch` is selected: **138** with both. `ISAAC_MCP_NAMESPACE`,
+A client lists **134 tools** with the default groups, **+5** (`window_*`) when `screen_input` is selected and **+4**
+(`sim__*` session tools) when `sim_launch` is selected: **143** with both. `ISAAC_MCP_NAMESPACE`,
 `ISAAC_MCP_BUILTINS=0` and `ISAAC_MCP_SCENE_TOOLS=0` lower the count further. A client that shows a different number
 has a filter set in its server entry; the server logs its tool count and filters at startup (below).
 
