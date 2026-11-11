@@ -1011,7 +1011,7 @@ def _encode_replay(result: Dict[str, Any], state: _BridgeState, job_id: Any) -> 
     done = state.__dict__.setdefault("encoded_replays", {})
     key = (_screen_port(state), job_id)
     if key in done:
-        return {**result, **done[key]}
+        return {**{name: value for name, value in result.items() if name not in ("encode", "note")}, **done[key]}
     spec = result["encode"]
     added: Dict[str, Any]
     try:
@@ -1030,7 +1030,8 @@ def _encode_replay(result: Dict[str, Any], state: _BridgeState, job_id: Any) -> 
                                 f"inputs=[\"{spec['folder']}/{spec['pattern']}\"]) encodes them."}
         return {**result, **added}
     done[key] = added
-    return {**result, **added}
+    # The frames are a video now: what was needed to make it is no longer the caller's concern.
+    return {**{name: value for name, value in result.items() if name not in ("encode", "note")}, **added}
 
 
 def _quick_start_wants_import(robot, state=None) -> bool:
@@ -1613,13 +1614,15 @@ _HELP_TOPICS = (
      "screenshot(label=...) for a window; start_screen_recording / stop_screen_recording for video; "
      "join_videos to join clips, or join_videos(mode=\"sheet\", inputs=[...] or job_id=..., times=[...]) for a PNG contact sheet of the "
      "same moments of one or more clips with an upload-ready attachment descriptor (clips must be under your home folder); "
-     "sim__camera__create + sim__camera__capture when headless. Save absolute paths and show them to the user."),
+     "With no window (headless): sim__camera__create (position and target aim it) + sim__camera__capture for a picture, and "
+     "camera= on sim__simulation__run or sim__trajectory__replay for a video. Save absolute paths and show them to the user."),
     ("find out why something failed (contacts, forces, poses)", ("contact", "collision", "fail", "force", "grasp", "stuck", "why", "debug", "pose"),
      "sim__physics__contacts, sim__physics__inspect, sim__body__state, sim__joints__state, sim__prim__measure, "
      "sim__prim__bounds, sim__physics__raycast."),
     ("build or change a scene", ("scene", "build", "robot", "load", "spawn", "import", "asset", "stage", "usd", "urdf"),
-     "sim__quick_start (new scene), sim__stage__info (existing), sim__prim__create / create_many, assets__search, "
-     "assets__import_path. ur5e_dt__* only for the lab UR5e twin."),
+     "sim__quick_start (new scene; robot=franka, ur5e, unitree_g1, ... puts a robot in by name, also onto a scene it built "
+     "earlier), sim__stage__info (existing), sim__prim__create / create_many, assets__import_path (a robot or asset file "
+     "into the current scene), assets__search (files in your own folders). ur5e_dt__* only for the lab UR5e twin."),
     ("move a robot's joints or arm", ("move", "joint", "arm", "ik", "drive", "grip", "gripper", "manipulator"),
      "sim__joints__state, sim__joints__move, sim__joints__drive, sim__arm__ik, sim__arm__fk. These drive joints; "
      "for forces on a free body use sim__simulation__run."),

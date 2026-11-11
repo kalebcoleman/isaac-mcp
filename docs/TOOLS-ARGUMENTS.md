@@ -702,7 +702,7 @@ Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured outp
 
 Listed as `sim__camera(action="create")`.
 
-Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X), focal_length=18, clipping_range=[0.01,100]. USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper. Requires session_id and stage_id from sim__stage__info.
+Create a persistent RTX camera on a stopped timeline. To watch something: path=/World/Cam, position=[3,-3,2], target=[0,0,0.5] aims it. On a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X). USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -712,6 +712,7 @@ Create a persistent RTX camera on a stopped timeline, e.g. on a robot link: path
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
+- `target` (array, optional): World point [x, y, z] to aim the camera at, instead of orientation or rotate_xyz.
 - `rotate_xyz` (array, optional): Orientation as USD rotateXYZ Euler angles in degrees (X, then Y, then Z), instead of the orientation quaternion. With frame=local it is authored as translate + rotateXYZ ops.
 - `focal_length` (number, optional): Focal length in mm (0.1..1000); default USD 50.
 - `horizontal_aperture` (number, optional): Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height.
@@ -1224,7 +1225,7 @@ Set a static local or world pose on any Xformable prim in the session layer, and
 
 ### `sim__quick_start`
 
-One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns new session_id and stage_id, paths, asset sources and next steps; a wheeled robot adds robot.cmd_vel_graph. For the RISE lab UR5e digital twin, use ur5e_dt__quick_start.
+One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns session_id, stage_id, paths and next steps. For the RISE lab UR5e twin, use ur5e_dt__quick_start.
 
 - `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.
 - `fixed_base` (boolean, optional): Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
@@ -1264,7 +1265,7 @@ Run your own controller in the physics loop as a job. Each step gets the body's 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `body` (string, required): Rigid body the controller acts on, e.g. a drone's base link.
-- `controller` (string, required): tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or package.module:function or /abs/file.py:function, loaded into Kit: needs ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 at Kit launch.
+- `controller` (string, required): tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.
 - `duration_s` (number, required): Simulated seconds to run, up to 3600. The controller can end sooner with done=true.
 - `params` (object, optional): Passed to the controller as state['params'] each step, e.g. gains or a target.
 - `frame` (world|body, default `"world"`): Frame of the returned force and torque, applied at the centre of mass: world (default) or body.

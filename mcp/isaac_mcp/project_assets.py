@@ -681,6 +681,8 @@ class Broker:
             depth_limit=MAX_DEPTH,
             skipped_deep=skipped,
             refresh="Fresh scan on every call; no fixed robot count or kind claim.",
+            **({} if found else {"hint": "No file in your approved folders matches. This searches your own files only: a "
+                                         "well-known robot comes by name from sim__quick_start (robot=franka, ur5e, ...)."}),
         )
 
     def _quota_message(self):

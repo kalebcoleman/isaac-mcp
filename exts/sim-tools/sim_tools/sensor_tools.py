@@ -92,11 +92,11 @@ class SensorTools:
             refuse("SENSOR_API_UNAVAILABLE", "Config LiDARs need isaacsim.sensors.rtx: " + str(e))
         pose = s.pose(stage, parent, a.get("position", [0, 0, 0]), orientation, frame)
         if name == "sim.camera.create" and a.get("target") is not None:
-            if frame != "world":
-                refuse("INVALID_FRAME", "Camera target requires frame=world.")
             if rotate_xyz is not None:
                 refuse("INVALID_POSE", "target overrides the orientation; omit rotate_xyz.")
             eye = Gf.Vec3d(*vector(a.get("position", [0, 0, 0]), 3))
+            if frame != "world":      # the target is a world point; a local position is taken to the world first
+                eye = UsdGeom.XformCache().GetLocalToWorldTransform(parent).Transform(eye)
             target = Gf.Vec3d(*vector(a["target"], 3))
             up = (
                 Gf.Vec3d(0, 0, 1)

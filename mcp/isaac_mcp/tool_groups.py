@@ -155,8 +155,9 @@ def _names(tools) -> str:
 # where prose names a tool: after a space, a backtick or a bracket, and not inside a path or a key.
 _NAMESPACED = re.compile(r"(?<![A-Za-z0-9_/.\-])(" + _names(t for t in list(members()) + list(SUPERSEDED) if "__" in t)
                          + r")(?![A-Za-z0-9_*-])")
-_BARE = re.compile(r"(?:(?<=[ `(])|^)(" + _names(t for t in list(members()) + list(SUPERSEDED) if "__" not in t)
-                   + r")(?=[ `().,;:]|$)(?!\.[A-Za-z0-9])")
+_BARE_NAMES = _names(t for t in list(members()) + list(SUPERSEDED) if "__" not in t)
+# ... or where a JSON value starts with a call, as in "next": "job_status(job_id=...)".
+_BARE = re.compile(r"(?:(?:(?<=[ `(])|^)(" + _BARE_NAMES + r")(?=[ `().,;:]|$)(?!\.[A-Za-z0-9])|(?<=\")(" + _BARE_NAMES + r")(?=\())")
 
 
 def listed_form(text: str) -> str:
@@ -164,5 +165,5 @@ def listed_form(text: str) -> str:
     runs it, so instructions, descriptions and error messages name what the client can call. A
     family such as ``ur5e_dt__quick_start*`` is left as written, and so is a name that is part of
     a path, a file name or a JSON key. Uses no quote characters, so JSON text stays valid."""
-    spoken = lambda match: _spoken(match.group(1))  # noqa: E731
+    spoken = lambda match: _spoken(match.group(1) or match.group(2))  # noqa: E731
     return _BARE.sub(spoken, _NAMESPACED.sub(spoken, text))

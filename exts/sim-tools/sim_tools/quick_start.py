@@ -327,6 +327,12 @@ async def run(ext, args):
     if ros and not robot:
         refuse("INVALID_VALUE", "ros=true needs a robot to publish. Nothing was changed.")
     up_axis, meters_per_unit = check_units(args.get("up_axis", "Z"), args.get("meters_per_unit", 1.0))
+    # A robot asked for on a scene this tool built earlier is added to it: what was made since stays.
+    current = omni.usd.get_context().get_stage()
+    add_to_scene = bool(robot and not environment and not discard and current and current.GetRootLayer().anonymous
+                        and WORLD in scene.owned and current.GetPrimAtPath(GROUND).IsValid())
+    if add_to_scene:
+        up_axis, meters_per_unit = str(UsdGeom.GetStageUpAxis(current)), float(UsdGeom.GetStageMetersPerUnit(current))
     if environment and (up_axis, meters_per_unit) != ("Z", 1.0):
         refuse("INVALID_VALUE", f"The {environment} is built Z up in metres: leave up_axis and meters_per_unit at their defaults. Nothing was changed.")
     if not scene.timeline.is_stopped():
@@ -356,7 +362,11 @@ async def run(ext, args):
     reuse = bool(stage) and stage.GetRootLayer().anonymous and all(
         p.GetName() in KIT_DEFAULT_ROOTS for p in stage.GetPseudoRoot().GetChildren())
     discarded = False
-    if not reuse:
+    if add_to_scene:
+        if stage.GetPrimAtPath(f"{WORLD}/{wanted['name']}").IsValid():
+            refuse("CONFLICT", f"This scene already has {WORLD}/{wanted['name']}. Nothing was changed. For a second copy "
+                   "use sim__prim__clone; to start over pass discard_changes=true.")
+    elif not reuse:
         discarded = bool(stage) and stage_has_unsaved_work(stage)
         if discarded and not discard:
             refuse("UNSAVED_CHANGES", "The current stage has edits this file does not hold. sim__stage__save writes them to a new "
@@ -374,8 +384,11 @@ async def run(ext, args):
     if UsdGeom.GetStageMetersPerUnit(stage) != meters_per_unit:
         UsdGeom.SetStageMetersPerUnit(stage, meters_per_unit)
 
-    paths = author_scene(stage)
-    stage.GetRootLayer().defaultPrim = WORLD.lstrip("/")
+    if add_to_scene:
+        paths = dict(world=WORLD, ground=GROUND, physics_scene=PHYSICS_SCENE, lights=[DOME, SUN], camera=CAMERA)
+    else:
+        paths = author_scene(stage)
+        stage.GetRootLayer().defaultPrim = WORLD.lstrip("/")
     environment_report = None
     if environment == "warehouse":
         from . import warehouse
@@ -386,7 +399,9 @@ async def run(ext, args):
 
         environment_report = jenga.build(stage)
     result = dict(
-        **paths, up_axis=up_axis, meters_per_unit=meters_per_unit, stage_switched=not reuse, discarded_changes=discarded,
+        **paths, up_axis=up_axis, meters_per_unit=meters_per_unit, stage_switched=not (reuse or add_to_scene),
+        discarded_changes=discarded, **({"kept_scene": "The robot was added to the scene you had; nothing else changed."}
+                                        if add_to_scene else {}),
         layer="session; sim__stage__save flattens it into the saved file",
         wiring="none: no mirror graph, gripper or /joint_states subscriber. For the RISE lab UR5e twin see ur5e_dt__quick_start.",
     )
@@ -433,7 +448,8 @@ async def run(ext, args):
             _set_translation(stage, robot_path, jenga.ROBOT_BASE)
             environment_report["robot_pose"] = jenga.pose_robot(stage, robot_path)
             await app.next_update_async()
-        frame_camera_on(stage, robot_path)
+        if not add_to_scene:        # a scene someone is working in keeps its view
+            frame_camera_on(stage, robot_path)
         root = roots[0] if roots else None
         wheels = wanted.get("wheels")
         result["robot"] = dict(prim=robot_path, articulation_root=root, articulation_roots=roots,
