@@ -133,12 +133,23 @@ def _build(server: Any, group: str, summary: str, actions: Dict[str, str]) -> No
 
 
 def _in_listed_form(value: Any) -> Any:
-    """A tool's answer with the single-purpose tool names in it replaced by what the client can call."""
+    """A tool's answer, in any of the shapes FastMCP hands back, with the single-purpose tool names
+    in its text replaced by what the client can call."""
     if isinstance(value, str):
         return tool_groups.listed_form(value)
-    for item in getattr(value, "content", None) or []:
-        if isinstance(getattr(item, "text", None), str):
-            item.text = tool_groups.listed_form(item.text)
+    if isinstance(value, tuple):
+        return tuple(_in_listed_form(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _in_listed_form(item) if isinstance(item, str) else item for key, item in value.items()}
+    if isinstance(value, list):
+        blocks = value
+    else:
+        blocks = getattr(value, "content", None) or []
+        if isinstance(getattr(value, "structuredContent", None), dict):
+            value.structuredContent = _in_listed_form(value.structuredContent)
+    for block in blocks:
+        if isinstance(getattr(block, "text", None), str):
+            block.text = tool_groups.listed_form(block.text)
     return value
 
 

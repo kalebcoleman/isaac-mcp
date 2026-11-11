@@ -235,6 +235,8 @@ def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
                 raise ConnectionRefusedError("offline")
             if name == "run_python":
                 return {"output": "", "result": "I printed sim__stage__info myself"}
+            if name == "sim.stage.info":
+                return {"status": "ok", "next": "create something with sim__prim__create"}
             return {"status": "error", "code": "STALE_TARGET", "message": "Call sim__stage__info for the new IDs."}
 
         def close(self):
@@ -248,9 +250,10 @@ def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
             await client.initialize()
             refused = await client.call_tool("sim__prim", {"action": "get", "session_id": "a", "stage_id": "b", "path": "/World"})
             data = await client.call_tool("run_python", {"code": "result = 1"})
-            return refused, data
+            return refused, data, await client.call_tool("sim__stage", {"action": "info"})
 
-    refused, data = asyncio.run(run())
+    refused, data, answered = asyncio.run(run())
+    assert not answered.isError and "create something with sim__prim action=create" in answered.content[0].text
     text = refused.content[0].text
     assert refused.isError and "Call sim__stage action=info for the new IDs." in text
     assert text.count("Error executing tool") == 1, text
