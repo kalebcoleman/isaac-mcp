@@ -104,10 +104,11 @@ SUPERSEDED: Dict[str, str] = {
 
 GROUP_ENV = "ISAAC_MCP_GROUP_TOOLS"      # "0": list every tool singly, with no grouped tools
 
-# Tools whose successful answer is the caller's own data or a log, returned exactly as it is.
-# Every other answer, and every error, has tool names put in their listed form (listed_form).
+# Tools whose answer, or whose error, quotes the caller's own data, code or a log: returned exactly
+# as it is. Every other answer and error has tool names put in their listed form (listed_form).
 VERBATIM = frozenset({"run_python", "run_script", "get_file", "put_file", "stat_file", "job_status", "files", "jobs",
-                      "isaaclab__runs_tail", "sim__logs", "sim__logs__tail", "sim__logs__summary", "sim__logs__mark"})
+                      "isaaclab__runs_tail", "isaaclab__runs_status", "sim__logs", "sim__logs__tail",
+                      "sim__logs__summary", "sim__logs__mark"})
 
 
 def members() -> Dict[str, tuple]:
@@ -140,17 +141,28 @@ def replacement(tool: str) -> Optional[str]:
 def _spoken(tool: str) -> str:
     """A hidden tool as plain text names it: ``sim__prim action=create``."""
     found = members().get(tool)
-    return f"{found[0]} action={found[1]}" if found else SUPERSEDED[tool].split("(")[0]
+    if found:
+        return f"{found[0]} action={found[1]}"
+    return SUPERSEDED[tool].replace('(action="', " action=").replace('")', "")
 
 
-_HIDDEN_NAME = re.compile(r"(?<![A-Za-z0-9_])(" + "|".join(
-    sorted(map(re.escape, list(members()) + list(SUPERSEDED)), key=len, reverse=True)) + r")(?![A-Za-z0-9_*])")
+def _names(tools) -> str:
+    return "|".join(sorted(map(re.escape, tools), key=len, reverse=True))
+
+
+# A name with a namespace (sim__prim__get) is only ever a tool. A bare one (get_file, job_status,
+# window_type) is also an ordinary word for a file, a prim or a JSON key, so it is rewritten only
+# where prose names a tool: after a space, a backtick or a bracket, and not inside a path or a key.
+_NAMESPACED = re.compile(r"(?<![A-Za-z0-9_/.\-])(" + _names(t for t in list(members()) + list(SUPERSEDED) if "__" in t)
+                         + r")(?![A-Za-z0-9_*-])")
+_BARE = re.compile(r"(?:(?<=[ `(])|^)(" + _names(t for t in list(members()) + list(SUPERSEDED) if "__" not in t)
+                   + r")(?=[ `().,;:]|$)(?!\.[A-Za-z0-9])")
 
 
 def listed_form(text: str) -> str:
     """``text`` with every single-purpose tool name replaced by the listed tool and action that
     runs it, so instructions, descriptions and error messages name what the client can call. A
-    family such as ``ur5e_dt__quick_start*`` is left as written. Uses no quote characters, so JSON
-    text stays valid."""
-    return _HIDDEN_NAME.sub(lambda match: _spoken(match.group(1)), text)
-
+    family such as ``ur5e_dt__quick_start*`` is left as written, and so is a name that is part of
+    a path, a file name or a JSON key. Uses no quote characters, so JSON text stays valid."""
+    spoken = lambda match: _spoken(match.group(1))  # noqa: E731
+    return _BARE.sub(spoken, _NAMESPACED.sub(spoken, text))

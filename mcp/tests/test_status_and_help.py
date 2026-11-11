@@ -93,7 +93,7 @@ def test_nothing_running_is_an_answer_that_names_the_next_call(state, monkeypatc
 
 
 def test_a_bridge_that_answers_badly_is_still_an_error(state):
-    for failure in (TimeoutError("timed out"), BridgeError("DOORWAY_BUSY: run_python holds the loop")):
+    for failure in (TimeoutError("timed out"), BridgeError("AUTH_REQUIRED: this bridge needs its token")):
         state.client = Bridge({"status": failure})
         assert gw._dispatch("status", {}, state).startswith("Error:")
     state.client = Bridge({"status": IDENTITY, "sim.stage.info": BridgeError("APP_STARTING")})

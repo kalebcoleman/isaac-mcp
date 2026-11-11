@@ -546,6 +546,7 @@ def _catalog_error(canonical: str, error: BaseException, state: Optional[_Bridge
             f"simulator state before retrying. {_BRIDGE_HELP}")
 
 
+_WAITING_TOOLS = frozenset({"job_status"})      # may wait (wait_s) or encode a replay's frames
 _PYTHON_TYPE = {"string": str, "integer": int, "number": float, "boolean": bool, "array": list, "object": dict}
 
 
@@ -643,8 +644,20 @@ def _build_tool_function(name: str, canonical: str, description: str,
         annotations[f["name"]] = annotation
 
     # The description is attached afterwards: it is free text and must not be compiled as source.
-    scope = {"_call": functools.partial(_tool_implementation, state=state, mcp_result=True)}
-    exec(f"def {name}({', '.join(signature)}) -> str:\n    return _call({canonical!r}, locals())\n", scope)
+    call = functools.partial(_tool_implementation, state=state, mcp_result=True)
+    if canonical in _WAITING_TOOLS:
+        # FastMCP runs a plain function on its event loop. A wait of up to a minute there would
+        # stop the server answering pings and cancellations, so these run on a worker thread.
+        import asyncio
+
+        async def waiting(canonical, params, _call=call):
+            return await asyncio.to_thread(_call, canonical, params)
+
+        scope = {"_call": waiting}
+        exec(f"async def {name}({', '.join(signature)}) -> str:\n    return await _call({canonical!r}, locals())\n", scope)
+    else:
+        scope = {"_call": call}
+        exec(f"def {name}({', '.join(signature)}) -> str:\n    return _call({canonical!r}, locals())\n", scope)
     function = scope[name]
     function.__doc__ = description
     function.__annotations__.update(annotations)
@@ -946,7 +959,12 @@ def _job_call(canonical: str, params: Dict[str, Any], state: _BridgeState) -> An
                 if temporary:
                     client.close()
         elif canonical == "job_cancel":
-            result = lab_jobs.runs_cancel(job_id)
+            if record.get("runner") == "kit":     # its simulator has gone: nothing is left to cancel
+                ended = lab_jobs.runs_status(job_id)      # settles the record of a job the simulator left running
+                result = {"cancelled": False, "state": ended.get("state"),
+                          "note": "The simulator this job ran in has exited; the job ended with it."}
+            else:
+                result = lab_jobs.runs_cancel(job_id)
         else:
             deadline = time.monotonic() + wait
             while True:
@@ -961,7 +979,8 @@ def _job_call(canonical: str, params: Dict[str, Any], state: _BridgeState) -> An
         if isinstance(error, (ConnectionError, TimeoutError)) or not isinstance(error, (ValueError, FileNotFoundError)):
             raise
         return {"status": "error", "code": "INVALID_VALUE" if "wait_s" in str(error) else "NOT_FOUND", "message": str(error)}
-    if isinstance(result, dict) and isinstance(result.get("result"), dict) and "encode" in result["result"]:
+    spec = result.get("result", {}).get("encode") if isinstance(result, dict) and isinstance(result.get("result"), dict) else None
+    if isinstance(spec, dict) and {"folder", "pattern", "frames", "output", "fps"} <= set(spec):   # a replay's frames
         result = {**result, "result": _encode_replay(result["result"], state, job_id)}
     return result
 

@@ -1,6 +1,6 @@
 """What code this bridge's tree holds, and how often its extensions reloaded in place.
 
-``status`` calls this on Kit's main thread, so it never starts a process. It reads git's own files:
+``status`` calls this while answering, so it never starts a process. It reads git's own files:
 HEAD for the commit, and the index to stat the tracked extension files, hashing only those whose
 stat differs. Anything it cannot read (no .git in an exported tree, an index format it does not
 parse, a SHA-256 repository) reports unknown rather than an error. Untracked new files are not seen.

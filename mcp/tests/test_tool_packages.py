@@ -106,3 +106,15 @@ def test_the_template_package_loads_and_its_tools_run(monkeypatch):
     assert dispatch(bridge, "demo.set_threshold", {"name": "grip_force_n", "value": 12.0})["result"] == {"name": "grip_force_n", "value": 12.0}
     refused = dispatch(bridge, "demo.set_threshold", {"name": "grip_force_n", "value": 99.0})
     assert refused["status"] == "error" and refused["range"] == [0.0, 40.0]
+
+
+def test_a_reload_that_fails_keeps_the_package_as_it_was(folder):
+    (folder / "lab_tools.py").write_text(EXPLICIT.format(version=1))
+    bridge = make_bridge()
+    packages.load_tool_modules(bridge, ["lab_tools"])
+    (folder / "lab_tools.py").write_text("def broken(:\n")
+    with pytest.raises(SyntaxError):
+        packages.reload_tool_module(bridge, "lab_tools")
+    assert "lab.hello" in bridge.get_registered_tools(), "the tools loaded before still answer"
+    (folder / "lab_tools.py").write_text(EXPLICIT.format(version=2))
+    assert "lab.hello" in packages.reload_tool_module(bridge, "lab_tools")["tools"]

@@ -82,8 +82,8 @@ Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).
 ### Bridge (`isaac.mcp.bridge`)
 
 Read by Kit. Each is also a stored Kit setting under `/persistent/exts/isaac.mcp.bridge/` (`autostartPort`,
-`autostartHost`, `toolModules`, `toolPaths`, `auth`, `token`, `readOnly`), which `scripts/install.py` writes; the
-environment wins. The [protocol](../mcp/docs/protocol.md) page explains the token, read-only mode and remote access.
+`autostartHost`, `toolModules`, `toolPaths`, `auth`, `token`, `readOnly`); `scripts/install.py` writes the first
+four, and the environment wins. The [protocol](../mcp/docs/protocol.md) page explains the token, read-only mode and remote access.
 
 | Variable | Default | Meaning |
 |---|---|---|

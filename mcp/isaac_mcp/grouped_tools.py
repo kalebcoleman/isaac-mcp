@@ -42,13 +42,15 @@ def _brief(text: str, limit: int = 110) -> str:
 
 
 def _argument(name: str, uses: Dict[str, Dict[str, Any]], actions: List[str]) -> Dict[str, Any]:
-    """One argument of a group: the schema of the first member that has it, and a description that
-    says which actions take it when not all do, and how its meaning differs when it does."""
-    first = next(iter(uses.values()))
-    schema = {key: value for key, value in first.items() if key not in ("description", "default")}
-    kinds = [kind for kind in schema.get("anyOf", []) if kind != {"type": "null"}]
-    if len(kinds) == 1 and len(schema.get("anyOf", [])) == 2:   # "this or null": every argument here is optional anyway
-        schema = {**{key: value for key, value in schema.items() if key != "anyOf"}, **kinds[0]}
+    """One argument of a group: the schema its members give it (either of them, where two actions
+    take different kinds of value under one name), and a description that says which actions take
+    it when not all do, and how its meaning differs when it does."""
+    kinds_seen: List[Dict[str, Any]] = []
+    for spec in uses.values():
+        kind = _kind(spec)
+        if kind not in kinds_seen:
+            kinds_seen.append(kind)
+    schema = dict(kinds_seen[0]) if len(kinds_seen) == 1 else {"anyOf": kinds_seen}
     texts: Dict[str, List[str]] = {}
     for action, spec in uses.items():
         texts.setdefault(tool_groups.listed_form(" ".join(str(spec.get("description") or "").split())), []).append(action)
@@ -60,6 +62,16 @@ def _argument(name: str, uses: Dict[str, Dict[str, Any]], actions: List[str]) ->
         description = scope + " ".join(f"{'/'.join(who)}: {text if len(text) <= room else text[:room].rsplit(' ', 1)[0] + '...'}"
                                        for text, who in texts.items())
     schema["description"] = description[:MAX_ARGUMENT_DESCRIPTION]
+    return schema
+
+
+def _kind(spec: Dict[str, Any]) -> Dict[str, Any]:
+    """An argument's schema without its description and default, and without "or null": every
+    argument of a grouped tool is optional anyway."""
+    schema = {key: value for key, value in spec.items() if key not in ("description", "default")}
+    kinds = [kind for kind in schema.get("anyOf", []) if kind != {"type": "null"}]
+    if len(kinds) == 1 and len(schema.get("anyOf", [])) == 2:
+        schema = {**{key: value for key, value in schema.items() if key != "anyOf"}, **kinds[0]}
     return schema
 
 
@@ -116,6 +128,11 @@ def _build(server: Any, group: str, summary: str, actions: Dict[str, str]) -> No
          f"    given = dict(locals())\n    given.pop('action')\n    return await _run(action, given)\n",
          {"_run": run}, namespace)
     function = namespace[group]
+    # Text arguments are typed as text, as on the single-purpose tools: FastMCP would otherwise
+    # read a string that looks like JSON ('{"a": 1}', 'null') as JSON before the tool sees it.
+    function.__annotations__ = {"action": str, **{
+        name: str for name, uses in arguments.items()     # exactly str: FastMCP parses anything else
+        if all(_kind(spec).get("type") == "string" and "enum" not in _kind(spec) for spec in uses.values())}}
     function.__doc__ = f"{summary} action is one of:\n" + "\n".join(lines) + "\n- help: the full description of each action."
     registered.pop(group, None)
     server.tool(annotations=_annotations(list(present.values())))(function)
@@ -179,9 +196,10 @@ def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
         async def call_tool(name, arguments, *args, **kwargs):
             if getattr(server, _STATE)["singly"]:
                 return await call(name, arguments, *args, **kwargs)
+            if name in tool_groups.VERBATIM:      # the caller's own data, code or log, in answers and errors alike
+                return await call(name, arguments, *args, **kwargs)
             try:
-                answer = await call(name, arguments, *args, **kwargs)
-                return answer if name in tool_groups.VERBATIM else _in_listed_form(answer)
+                return _in_listed_form(await call(name, arguments, *args, **kwargs))
             except ToolError as error:
                 raise ToolError(tool_groups.listed_form(str(error))) from None
 

@@ -435,4 +435,128 @@ def test_the_client_offers_its_token_once_per_connection(monkeypatch):
             client.call("status")
             client.close()
             client.call("status")           # a new connection: offered again
-    assert ["token" in frame for frame in seen] == [True, False, True]
+    assert [(frame["type"], "token" in frame) for frame in seen] == [
+        ("auth", True), ("status", False), ("status", False), ("auth", True), ("status", False)]
+
+
+# ---- findings of the independent review -------------------------------------------------
+
+def test_an_owner_is_told_when_its_last_call_has_ended():
+    """The twin releases its state in this callback: at once when idle, else when its calls are done."""
+    release = threading.Event()
+
+    async def slow():
+        await asyncio.get_running_loop().run_in_executor(None, release.wait, 5)
+
+    with LiveBridge() as live:
+        drained = []
+        live.bridge.register_owner("idle", "idle")
+        assert live.bridge.unregister_owner("idle", on_drained=lambda: drained.append("idle")) and drained == ["idle"]
+        live.bridge.register_owner("busy", "busy").add(td("slow", slow))
+        client = live.client()
+        send(client, {"id": 1, "type": "busy.slow"})
+        deadline = time.monotonic() + 2
+        while not live.bridge.get_owners()["busy"]["in_flight"] and time.monotonic() < deadline:
+            time.sleep(0.01)
+        live.bridge.unregister_owner("busy", on_drained=lambda: drained.append("busy"))
+        assert drained == ["idle"] and live.bridge.get_owners()["busy"]["draining"]
+        release.set()
+        receive(client)
+        deadline = time.monotonic() + 2
+        while "busy" in live.bridge.get_owners() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert drained == ["idle", "busy"]
+
+
+def test_the_token_is_written_only_into_a_folder_that_is_this_account_s(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    folder = tmp_path / "isaac-mcp"
+    folder.mkdir(mode=0o777)
+    os.chmod(folder, 0o777)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("untouched")
+    with LiveBridge(auth=True) as live:
+        assert (os.stat(folder).st_mode & 0o777) == 0o700, "a folder others could write to is closed"
+        token = folder / f"{os.getpid()}-{live.port}.token"
+        assert (os.stat(token).st_mode & 0o777) == 0o600
+    planted = folder / f"{os.getpid()}-1.token"
+
+    class Fixed(type(live.bridge)):
+        pass
+
+    os.symlink(outside, planted)                # someone left a link where the token will go
+    bridge = make_bridge(auth=True, token="s" * 32)
+    bridge._port, bridge._bind_host = 1, "localhost"
+    bridge._advertise()
+    assert outside.read_text() == "untouched" and not os.path.islink(planted) and planted.read_text() == "s" * 32
+    os.unlink(planted)
+    (folder / f"{os.getpid()}-1.json").unlink()
+    folder.rmdir()
+    os.symlink(tmp_path, folder)                # the folder itself is a link: nothing is written
+    bridge._advertised = []
+    bridge._advertise()
+    assert bridge._advertised == []
+
+
+def test_a_result_json_cannot_hold_is_an_error_not_silence():
+    with LiveBridge() as live:
+        live.bridge.register_owner("x", "x").add(td("keys", lambda: {(1, 2): 3}))
+        loop = {}
+        loop["me"] = loop
+        live.bridge.register_owner("y", "y").add(td("loop", lambda: loop))
+        client = live.client()
+        for name in ("x.keys", "y.loop"):
+            reply = roundtrip(client, {"id": 9, "type": name})
+            assert reply["id"] == 9 and reply["status"] == "error" and reply["code"] == "RESULT_NOT_JSON", reply
+        assert roundtrip(client, {"id": 10, "type": "status"})["status"] == "success"
+
+
+def test_a_token_that_is_not_ascii_is_refused_like_any_wrong_one():
+    with LiveBridge(auth=True, token="t" * 32) as live:
+        reply = roundtrip(live.client(), {"id": 1, "type": "status", "token": "é"})
+        assert reply["code"] == "AUTH_REQUIRED"
+
+
+def test_before_its_token_a_connection_may_send_only_a_small_request():
+    with LiveBridge(auth=True, token="t" * 32) as live:
+        client = live.client()
+        client.sendall(b'{"type": "status", "pad": "' + b"x" * (protocol.MAX_UNAUTHENTICATED_BYTES + 10))
+        assert receive(client)[0]["code"] == "AUTH_REQUIRED"
+        ok = live.client()
+        assert roundtrip(ok, {"id": 1, "type": "auth", "token": "t" * 32})["result"] == {"authenticated": True}
+        big = roundtrip(ok, {"id": 2, "type": "status", "params": {}, "pad": "x" * (protocol.MAX_UNAUTHENTICATED_BYTES * 2)})
+        assert big["status"] == "success"
+
+
+def test_get_file_refuses_what_is_not_a_file_and_what_is_too_large(tmp_path, monkeypatch):
+    from isaac_mcp_bridge import builtins as bridge_builtins
+
+    bridge = make_bridge()
+    assert dispatch(bridge, "get_file", {"path": "/dev/zero"})["code"] == "NOT_FOUND"
+    (tmp_path / "big").write_bytes(b"x" * 100)
+    monkeypatch.setattr(bridge_builtins, "MAX_GET_FILE_BYTES", 10)
+    assert dispatch(bridge, "get_file", {"path": str(tmp_path / "big")})["code"] == "TOO_LARGE"
+
+
+def test_a_job_wait_from_the_main_loop_does_not_freeze_it():
+    """A panel click runs on Kit's main loop, which the job needs: waiting there could only time out."""
+    with LiveBridge() as live:
+        async def forever(job):
+            await asyncio.sleep(30)
+
+        async def ask():
+            job = live.bridge.jobs.start("test", forever)
+            import threading as real
+
+            original = real.main_thread
+            real.main_thread = real.current_thread        # this loop thread stands in for Kit's main thread
+            try:
+                started = time.monotonic()
+                reply = (await live.bridge.dispatch("job_status", {"job_id": job.id, "wait_s": 5}))["result"]
+            finally:
+                real.main_thread = original
+            live.bridge.jobs.cancel(job.id)
+            return reply, time.monotonic() - started
+
+        reply, took = asyncio.run_coroutine_threadsafe(ask(), live.loop).result(10)
+        assert took < 1 and reply["wait_timed_out"] and "main loop" in reply["note"]

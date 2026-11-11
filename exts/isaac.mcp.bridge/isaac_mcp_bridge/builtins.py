@@ -16,6 +16,7 @@ import os
 import platform
 import socket
 import sys
+import threading
 import time
 import traceback
 from typing import Any, Dict, List, Optional
@@ -247,11 +248,14 @@ def cmd_job_status(bridge, job_id: Optional[str] = None, wait_s: float = 0) -> D
         job = bridge.jobs.get(job_id)
     except JobError as exc:
         raise ToolError(str(exc), code="NOT_FOUND")
-    if wait_s and job.state == "running":
+    on_main_loop = threading.current_thread() is threading.main_thread()   # a panel click, or bridge.dispatch
+    if wait_s and job.state == "running" and not on_main_loop:
         job.ended.wait(wait_s)
     reply = job.describe()
     if wait_s and job.state == "running":
         reply["wait_timed_out"] = True
+        if on_main_loop:      # the job needs the loop this caller is on: waiting here could only time out
+            reply["note"] = "Not waited for: this call is on Kit's main loop, which the job needs. Ask again."
     return reply
 
 
@@ -289,8 +293,17 @@ def cmd_put_file(bridge, path: str, content_b64: str, mkdirs: bool = True) -> Di
     return {"path": target, "bytes": len(data)}
 
 
+MAX_GET_FILE_BYTES = 45 * 1024 * 1024      # base64 of this still fits one 64 MiB message
+
+
 def cmd_get_file(bridge, path: str) -> Dict[str, Any]:
     target = _path(path)
+    if not os.path.isfile(target):       # not a device or a pipe, which would never end
+        raise ToolError(f"cannot read {target}: it is not a file" if os.path.exists(target) else f"cannot read {target}: no such file",
+                        code="NOT_FOUND")
+    if os.path.getsize(target) > MAX_GET_FILE_BYTES:
+        raise ToolError(f"{target} is {os.path.getsize(target)} bytes; get_file sends at most {MAX_GET_FILE_BYTES} "
+                        "in one message. Copy large files another way.", code="TOO_LARGE")
     try:
         with open(target, "rb") as stream:
             data = stream.read()
@@ -399,8 +412,8 @@ def cmd_reload_tools(bridge, module: str) -> Dict[str, Any]:
 
     try:
         return reload_tool_module(bridge, module)
-    except (ImportError, ValueError, RuntimeError) as exc:
-        raise ToolError(f"cannot reload {module}: {exc}. reload_tools takes a project's own tool package "
+    except (Exception, SyntaxError) as exc:  # noqa: BLE001 - whatever the package's own code raises on import
+        raise ToolError(f"cannot reload {module}: {type(exc).__name__}: {exc}. reload_tools takes a project's own tool package "
                         "(ISAAC_MCP_TOOL_MODULES). The bundled sim_tools and ur5e_dt reload through Kit's file "
                         "watcher when their files change; see `status`.")
 

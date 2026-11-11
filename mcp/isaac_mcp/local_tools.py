@@ -8,11 +8,11 @@ which *groups* of those local tools a process registers. Desktop input and simul
                             Unset or empty => "all". An unknown name is a startup error.
 
 This limits only the host's own local tools. It does NOT limit the tools discovered from a Kit
-bridge (``run_python``, ``ur5e_dt__*``, ...), which are not annotated and can change the scene, so
+bridge (``run_python``, ``ur5e_dt__*``, ...), which can change the scene, so
 ``readonly`` is a read-only *local* profile, not a read-only server. ``ISAAC_MCP_NAMESPACE`` and
 ``ISAAC_MCP_BUILTINS`` filter the bridge tools and compose with this variable; they never affect
-the local tools. Restricting the bridge's tools so they cannot change the scene takes a pre-dispatch
-policy (see docs/MCP-SERVER.md, "Limiting what a client can reach"), which is code today.
+the local tools. To stop bridge tools changing the scene, start Kit with ISAAC_MCP_READ_ONLY=1
+(see docs/MCP-SERVER.md, "Limiting what a client can reach").
 
 This module is the single place that says which tool belongs to which group, so a tool that is
 registered without being listed here (or without annotations) fails loudly at registration

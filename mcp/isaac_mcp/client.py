@@ -137,13 +137,19 @@ def _resolve_endpoint(host: Optional[str], port: Optional[int]) -> Tuple[str, in
                        f"(pass port= or set {PORT_ENV})")
 
 
-def bridge_token(port: int) -> Optional[str]:
+_LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
+def bridge_token(port: int, host: Optional[str] = None) -> Optional[str]:
     """The token for the bridge on ``port``: ``ISAAC_MCP_TOKEN``, else the private token file a
-    bridge on this machine wrote beside its portfile. None when there is neither."""
+    bridge on this machine wrote beside its portfile. None when there is neither. A local
+    bridge's token is never offered to another machine that happens to use the same port."""
     token = os.getenv(TOKEN_ENV)
     if token:
         return token.strip()
     for path, info in _advertisements():
+        if host not in (None, *_LOOPBACK) and host != info.get("host"):
+            continue
         if info["port"] == int(port) and _alive_and_ours(info["pid"]):
             try:
                 with open(path[:-5] + ".token") as stream:
@@ -164,7 +170,6 @@ class BridgeClient:
         self._buffer = bytearray()
         self._scanned = 0                       # how much of the buffer is known to hold no newline
         self._token: Optional[str] = None
-        self._offer_token = False               # the bridge wants it once, on a connection's first request
         self._ids = itertools.count(1)
         self._lock = threading.Lock()
 
@@ -183,8 +188,21 @@ class BridgeClient:
         sock = socket.create_connection((host, port), timeout=min(CONNECT_TIMEOUT, timeout or self.timeout))
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._sock, self._buffer, self._scanned = sock, bytearray(), 0
-        self._token = bridge_token(port)
-        self._offer_token = bool(self._token)
+        self._token = bridge_token(port, host)
+        if self._token:
+            # Shown once per connection, in a request of its own: until then the bridge takes only
+            # small requests, so the first call may be as large as any other.
+            try:
+                sock.settimeout(min(CONNECT_TIMEOUT, timeout or self.timeout))
+                sock.sendall(json.dumps({"id": 0, "type": "auth", "token": self._token}).encode() + b"\n")
+                reply = self._read_reply(0, time.monotonic() + CONNECT_TIMEOUT)
+            except (OSError, ValueError):
+                self.close()
+                raise
+            if reply.get("status") != "success":
+                self.close()
+                raise BridgeError(reply.get("message", "the bridge refused this client's token"),
+                                  {key: value for key, value in reply.items() if key not in ("status", "message", "id")})
 
     def close(self) -> None:
         sock, self._sock = self._sock, None
@@ -250,13 +268,10 @@ class BridgeClient:
             self.connect(limit)
             request_id = next(self._ids)
             frame: Dict[str, Any] = {"id": request_id, "type": tool, "params": params or {}}
-            if self._offer_token:
-                frame["token"] = self._token
             try:
                 self._sock.settimeout(limit)
                 self._sock.sendall(json.dumps(frame).encode() + b"\n")
                 reply = self._read_reply(request_id, time.monotonic() + limit)
-                self._offer_token = False
             except (OSError, ValueError):
                 self.close()                      # a reply may still be on its way: do not reuse the connection
                 raise

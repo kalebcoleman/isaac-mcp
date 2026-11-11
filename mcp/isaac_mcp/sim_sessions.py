@@ -864,7 +864,7 @@ def _bridge_state(host: str | None, port: int, pid: int) -> tuple[str, dict]:
     """Readiness from the bridge's own ``status``, checked against the PID expected on that port."""
     try:
         response = client.call("status", host=host or "127.0.0.1", port=port, timeout=2)
-    except client.BridgeError:  # it answered, to say it is busy: an exclusive call holds Kit's main thread
+    except client.BridgeError:  # it answered, but would not serve this client (its token was refused)
         return "busy", {}
     except (OSError, RuntimeError):
         return "starting_or_unresponsive", {}

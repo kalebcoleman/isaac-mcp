@@ -466,8 +466,9 @@ class Run:
         """mode=play: the timeline advances physics; this waits, reports, records and watches for a stop."""
         started = time.monotonic()
         self._done, self._ended_by, self._callback_error = 0, None, None
-        callback = physics.on_physics_step(self.on_physics_step)
+        callback = None
         try:
+            callback = physics.on_physics_step(self.on_physics_step)
             while not self._ended_by and self._callback_error is None:
                 job.checkpoint()
                 self.check_target()
@@ -485,13 +486,16 @@ class Run:
             exc.details.setdefault("log_file", str(self.log.path))
             raise
         finally:
-            physics.remove_physics_step(callback)
+            if callback is not None:
+                physics.remove_physics_step(callback)
             self.close()
         return self.summary(self._done, self._ended_by, started)
 
     async def _frame(self):
         """Yield one app frame to Kit: by capturing the camera when recording, else by waiting for it."""
-        if self.capture is None:
+        if self.capture is None or len(self.frames) >= MAX_VIDEO_FRAMES:
+            # mode=play renders as fast as the scene allows, so a slow scene can pass the limit the
+            # stepped mode checks up front: the run goes on, the video ends here.
             await self.next_frame()
             return
         shot = await self.capture(f"{self.log.path.stem}-{len(self.frames) + 1:05d}.png")
@@ -642,6 +646,11 @@ async def run(ext, args):
         close = getattr(controller, "close", None)
         if callable(close):
             close()
+        if playing_mode and initialized is not None:      # this call started the timeline: do not leave it playing
+            try:
+                await ext._timeline_control({**ids, "action": "stop"})
+            except Exception:  # noqa: BLE001 - the original refusal is what the caller needs
+                pass
         if isinstance(exc, JobError):
             refuse("JOB_LIMIT", str(exc))
         raise

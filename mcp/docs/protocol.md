@@ -18,7 +18,7 @@ reply     {"id": 7, "status": "success", "result": {...}}
 - `id` is yours and comes back on the reply. Send one with every request: a reply that arrives
   after you gave up on its call can then never be taken for the next call's. Several requests may
   be in flight on one connection; replies come back as calls finish, not in the order sent.
-- `token` is needed on the first request of a connection when the bridge requires it (see below).
+- `token` is needed once per connection when the bridge requires it (see below).
 - An error reply carries the message and whatever the tool attached: often a `code`, and for an
   unexpected exception its `error_type` and `traceback`.
 
@@ -44,8 +44,9 @@ A bridge requires a token unless it was started with `ISAAC_MCP_AUTH=0`. At star
 random one, or uses `ISAAC_MCP_TOKEN`, and writes it to `<pid>-<port>.token` beside its portfile,
 readable by its own account only. A client on the same account reads that file, so nothing needs
 configuring on one machine. From another machine, or another account, set `ISAAC_MCP_TOKEN` for
-the client to the same value. A connection whose first request has no valid token gets
-`AUTH_REQUIRED` and is closed.
+the client to the same value. A connection shows its token in its first request: either a small one of its own,
+`{"type": "auth", "token": "..."}`, as the reference client sends, or the first call itself if that is
+under 64 KiB. Without a valid token it gets `AUTH_REQUIRED` and is closed.
 
 The token stops other local accounts and stray network clients from running code in your
 simulator. It is not encryption: over an untrusted network, use an SSH tunnel.
@@ -54,7 +55,7 @@ simulator. It is not encryption: over an untrusted network, use an SSH tunnel.
 
 Tools run on Kit's main loop. Three rules decide when:
 
-- **Inline** tools touch nothing in Kit and are answered at once on the socket thread, whatever
+- **Inline** tools change nothing in Kit and need nothing from its main loop, so they are answered at once on the socket thread, whatever
   Kit is doing: `status`, `job_status`, `list_tools`, `list_bridges`, and the file tools
   (`put_file`, `get_file`, `stat_file`), which only use the disk. So you can always ask what is
   running, wait for a job, and move a large file, without waiting for a frame or holding one up.

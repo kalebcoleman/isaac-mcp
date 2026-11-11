@@ -14,6 +14,7 @@ import math
 from typing import Any, Dict, Optional
 
 MAX_FRAME_BYTES = 64 * 1024 * 1024
+MAX_UNAUTHENTICATED_BYTES = 64 * 1024      # before a connection has shown its token
 
 
 class ToolError(Exception):
@@ -67,8 +68,23 @@ def encode(frame: Any) -> bytes:
     try:
         text = json.dumps(frame, allow_nan=False, default=repr)
     except ValueError:
-        text = json.dumps(_plain(frame), allow_nan=False, default=repr)
+        try:
+            text = json.dumps(_plain(frame), allow_nan=False, default=repr)
+        except (TypeError, ValueError, RecursionError) as exc:
+            text = _unsendable(frame, exc)
+    except (TypeError, RecursionError) as exc:
+        text = _unsendable(frame, exc)
     return text.encode() + b"\n"
+
+
+def _unsendable(frame: Any, exc: BaseException) -> str:
+    """The error sent in place of a frame JSON cannot hold (a dict with tuple keys, a structure
+    that contains itself), so the caller gets an answer instead of waiting for its timeout."""
+    reply = error(f"the tool ran, but its result cannot be sent as JSON: {exc}. Return plain dicts with string "
+                  "keys, lists, strings and numbers.", code="RESULT_NOT_JSON")
+    if isinstance(frame, dict) and isinstance(frame.get("id"), (str, int, float)):
+        reply = {"id": frame["id"], **reply}
+    return json.dumps(reply)
 
 
 def decode(line: bytes) -> Dict[str, Any]:

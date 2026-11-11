@@ -258,3 +258,28 @@ def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
     assert refused.isError and "Call sim__stage action=info for the new IDs." in text
     assert text.count("Error executing tool") == 1, text
     assert "I printed sim__stage__info myself" in data.content[0].text
+
+
+def test_names_in_paths_keys_and_file_names_are_left_alone():
+    same = ["/out/20261111-job_status.png", '"/World/get_file"', '{"window_type": 1}', "a/sim__prim__get/b", "x get_file.txt"]
+    assert [tool_groups.listed_form(text) for text in same] == same
+    assert tool_groups.listed_form("stop it with job_cancel, or isaaclab__runs_cancel.") == \
+        "stop it with jobs action=cancel, or jobs action=cancel."
+
+
+def test_a_grouped_argument_takes_every_kind_its_actions_take_and_text_stays_text(listed):
+    joints = next(t for t in listed if t.name == "sim__joints").inputSchema["properties"]
+    kinds = {kind.get("type") for kind in joints["positions"]["anyOf"]}
+    assert kinds == {"array", "object"}, "command takes a list, teleport a mapping"
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": ALL_GROUPS})
+    seen = []
+    server._tool_manager._tools["window_type"].fn = lambda **given: seen.append(given) or "typed"
+
+    async def run():
+        async with create_connected_server_and_client_session(server._mcp_server) as client:
+            await client.initialize()
+            return [await client.call_tool("window_input", {"action": "type", "text": text, "window_id": 1, "expected_pid": 1}) for text in ('{"a": 1}', "null")]
+
+    results = asyncio.run(run())
+    assert [r.isError for r in results] == [False, False], results[0].content[0].text
+    assert [given["text"] for given in seen] == ['{"a": 1}', "null"]

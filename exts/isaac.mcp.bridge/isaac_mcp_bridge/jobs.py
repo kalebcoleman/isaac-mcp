@@ -75,6 +75,7 @@ class Job:
         self.ended = threading.Event()                    # set when the job reaches a final state
         self.record: Optional[str] = None                 # its job.json, when records are kept
         self._recorded_at = 0.0
+        self._port: Optional[int] = None
         self._task: Any = None
 
     def report(self, fraction: Optional[float] = None, text: Optional[str] = None, **fields: Any) -> None:
@@ -100,7 +101,7 @@ class Job:
             self._port = port
         data = {"id": self.id, "job_id": self.id, "kind": self.kind, "task": self.label or self.kind, "label": self.label,
                 "status": self.state, "runner": "kit", "uses_gpu": False, "pid": os.getpid(),
-                "pid_start": _process_start(os.getpid()), "port": getattr(self, "_port", None),
+                "pid_start": _process_start(os.getpid()), "port": self._port,
                 "started_at": self.started_at, "finished_at": self.finished_at, "exit_code": None,
                 "progress": self.progress or None, "log_dir": os.path.dirname(self.record)}
         if self.state == "succeeded":
@@ -113,8 +114,11 @@ class Job:
                                              delete=False, encoding="utf-8") as stream:
                 json.dump(data, stream, default=repr)
             os.replace(stream.name, self.record)
-        except OSError:
-            pass
+        except (OSError, TypeError, ValueError):     # a full disk, or a result JSON cannot hold
+            try:
+                os.unlink(stream.name)
+            except (OSError, NameError):
+                pass
 
     def checkpoint(self) -> None:
         """Call between steps: raises JobCancelled once job_cancel was called."""
@@ -265,10 +269,11 @@ class JobStore:
 
     def jobs(self) -> List[Job]:
         """Newest first."""
-        return sorted(self._jobs.values(), key=lambda j: j.started_at, reverse=True)
+        return sorted(list(self._jobs.values()), key=lambda j: j.started_at, reverse=True)
 
     def running(self) -> List[Job]:
-        return [j for j in self._jobs.values() if j.state == "running"]
+        # status asks from a socket thread while the main loop adds and forgets jobs: read a copy.
+        return [j for j in list(self._jobs.values()) if j.state == "running"]
 
     def cancel(self, job_id: Any) -> Dict[str, Any]:
         job = self.get(job_id)

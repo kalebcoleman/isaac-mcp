@@ -26,6 +26,7 @@ import os
 import re
 import secrets
 import socket
+import stat
 import sys
 import threading
 import time
@@ -77,6 +78,7 @@ class _Owner:
     tools: List[str] = field(default_factory=list)
     in_flight: int = 0
     draining: bool = False
+    on_drained: Optional[Callable[[], None]] = None
 
 
 class OwnerRegistrar:
@@ -247,10 +249,13 @@ class McpBridge:
             self._listing.clear()
         return canonical
 
-    def unregister_owner(self, owner_id: str, *, require_idle: bool = False) -> bool:
+    def unregister_owner(self, owner_id: str, *, require_idle: bool = False,
+                         on_drained: Optional[Callable[[], None]] = None) -> bool:
         """Remove an owner's tools. New calls to them fail at once; with calls still running the id
         and namespace stay reserved (``draining``) until they finish. ``require_idle`` refuses
-        instead, changing nothing. Returns whether the owner existed."""
+        instead, changing nothing. ``on_drained`` is called once the owner has no call running:
+        now, or when its last call ends; an owner releases the state its tools use there.
+        Returns whether the owner existed."""
         with self._lock:
             owner = self._owners.get(owner_id)
             if owner is None or owner_id == BUILTIN_OWNER_ID:
@@ -263,9 +268,11 @@ class McpBridge:
             owner.tools = []
             self._listing.clear()
             if owner.in_flight:
-                owner.draining = True
-            else:
-                del self._owners[owner_id]
+                owner.draining, owner.on_drained = True, on_drained
+                return True
+            del self._owners[owner_id]
+        if on_drained is not None:
+            on_drained()
         return True
 
     def get_owners(self) -> Dict[str, Dict[str, Any]]:
@@ -347,11 +354,18 @@ class McpBridge:
             _log("error", f"[isaac.mcp.bridge] {name} failed: {type(exc).__name__}: {exc}\n{traceback.format_exc()}")
             return protocol.error(str(exc), error_type=type(exc).__name__, traceback=traceback.format_exc())
         finally:
+            drained = None
             with self._lock:
                 self._finished[name] = time.monotonic()
                 owner.in_flight -= 1
                 if owner.draining and owner.in_flight <= 0:
                     self._owners.pop(owner.owner_id, None)
+                    drained, owner.on_drained = owner.on_drained, None
+            if drained is not None:
+                try:
+                    drained()
+                except Exception:  # noqa: BLE001 - an owner's cleanup must not fail the call that ended
+                    _log("error", f"[isaac.mcp.bridge] cleanup of {owner.owner_id} failed:\n{traceback.format_exc()}")
 
     def _execute_inline(self, name: str, tool: ToolDefinition, params: Dict[str, Any]) -> Dict[str, Any]:
         try:
@@ -488,9 +502,10 @@ class McpBridge:
             except OSError:
                 pass
             listener.close()
-        for connection in list(self._connections):
+        with self._lock:
+            connections, self._connections = self._connections, []
+        for connection in connections:
             connection.close()
-        self._connections.clear()
         for path in self._advertised:
             try:
                 os.unlink(path)
@@ -504,10 +519,18 @@ class McpBridge:
                 sock, address = listener.accept()
             except OSError:
                 return
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            connection = _Connection(sock, f"{address[0]}:{address[1]}", authenticated=not self._auth)
-            self._connections.append(connection)
-            threading.Thread(target=self._serve, args=(connection,), name="isaac-mcp-bridge-client", daemon=True).start()
+            try:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                connection = _Connection(sock, f"{address[0]}:{address[1]}", authenticated=not self._auth)
+                with self._lock:
+                    self._connections.append(connection)
+                threading.Thread(target=self._serve, args=(connection,), name="isaac-mcp-bridge-client", daemon=True).start()
+            except Exception as exc:  # noqa: BLE001 - one client that cannot be served must not end the accept loop
+                _log("warn", f"[isaac.mcp.bridge] could not serve a connection: {exc}")
+                try:
+                    sock.close()
+                except OSError:
+                    pass
 
     def _serve(self, connection: _Connection) -> None:
         buffer = bytearray()
@@ -527,16 +550,19 @@ class McpBridge:
                     scanned = 0
                     if line.strip():
                         self._frame(connection, line)
-                if len(buffer) > protocol.MAX_FRAME_BYTES:
-                    connection.send(protocol.error("the request is larger than 64 MiB", code="TOO_LARGE"))
+                if len(buffer) > (protocol.MAX_FRAME_BYTES if connection.authenticated else protocol.MAX_UNAUTHENTICATED_BYTES):
+                    connection.send(protocol.error(
+                        "the request is larger than 64 MiB" if connection.authenticated else
+                        "AUTH_REQUIRED: authenticate first with a small {\"type\": \"auth\", \"token\": ...} request",
+                        code="TOO_LARGE" if connection.authenticated else "AUTH_REQUIRED"))
                     break
         except OSError:
             pass
         finally:
             connection.close()
-            if connection in self._connections:
-                self._connections.remove(connection)
             with self._lock:
+                if connection in self._connections:
+                    self._connections.remove(connection)
                 starting = self._admit()      # drops what this caller left waiting
             self._start(starting)
 
@@ -565,29 +591,57 @@ class McpBridge:
         self.submit(name, frame.get("params"), lambda answer: connection.send(tagged(answer)), connection)
 
     def _token_matches(self, offered: Any) -> bool:
-        return isinstance(offered, str) and bool(self._token) and hmac.compare_digest(offered, self._token)
+        return isinstance(offered, str) and bool(self._token) and hmac.compare_digest(
+            offered.encode("utf-8", "surrogatepass"), self._token.encode("utf-8", "surrogatepass"))
 
     # ---- advertising this bridge to clients on the same account ---------------------------
 
     def _advertise(self) -> None:
+        """Write the portfile and, when a token is required, the token file. Only into a folder
+        this account owns and nobody else can write to, and never through a link someone left
+        there: the token lets its holder run code as this account."""
         folder = runtime_dir()
         try:
-            os.makedirs(folder, mode=0o700, exist_ok=True)
+            private_folder(folder)
             sweep_stale_portfiles(folder)
             base = os.path.join(folder, f"{os.getpid()}-{self._port}")
             info = {**app_identity(), "pid": os.getpid(), "port": self._port, "host": self._bind_host,
                     "started": self._started_at, "auth": bool(self._auth), "read_only": self.read_only}
             if self._auth:
-                descriptor = os.open(base + ".token", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(descriptor, "w") as stream:
-                    stream.write(self._token)
+                _write_private(base + ".token", self._token)
                 self._advertised.append(base + ".token")
                 info["token_file"] = base + ".token"
-            with open(base + ".json", "w") as stream:
-                json.dump(info, stream)
+            _write_private(base + ".json", json.dumps(info), mode=0o644)
             self._advertised.append(base + ".json")
         except OSError as exc:
-            _log("warn", f"[isaac.mcp.bridge] could not advertise the bridge in {folder}: {exc}")
+            _log("warn", f"[isaac.mcp.bridge] could not advertise the bridge in {folder}: {exc}. Clients on this "
+                         "machine will not find it or its token; give them ISAAC_MCP_PORT and ISAAC_MCP_TOKEN.")
+
+
+def private_folder(folder: str) -> None:
+    """Create ``folder`` for this account alone, or raise OSError if what is there is not that:
+    a link, another account's folder, or one others can write to and that cannot be closed."""
+    os.makedirs(os.path.dirname(folder) or ".", exist_ok=True)
+    try:
+        os.mkdir(folder, 0o700)
+    except FileExistsError:
+        pass
+    found = os.lstat(folder)
+    if not stat.S_ISDIR(found.st_mode) or (hasattr(os, "getuid") and found.st_uid != os.getuid()):
+        raise PermissionError(f"{folder} is not a folder owned by this account")
+    if found.st_mode & 0o077:
+        os.chmod(folder, 0o700)
+
+
+def _write_private(path: str, text: str, mode: int = 0o600) -> None:
+    """Write a new file, replacing whatever has that name without following it."""
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), mode)
+    with os.fdopen(descriptor, "w") as stream:
+        stream.write(text)
 
 
 def runtime_dir() -> str:

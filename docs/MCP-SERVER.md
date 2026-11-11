@@ -315,8 +315,7 @@ Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOL
   five opt-in desktop input and four opt-in simulator-session tools). `readonly`
   keeps only local tools annotated as read-only; `none` keeps none. The default is `all`. The Python probes and job
   inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for the groups. Importing the jobs module can still reconcile orphaned jobs at server startup,
-  regardless of the groups. The setting does **not** affect tools discovered from a Kit bridge, which are not
-  annotated, so `readonly` is a read-only *local tool selection*, not a read-only server: a client that can still see
+  regardless of the groups. The setting does **not** affect tools discovered from a Kit bridge, so `readonly` is a read-only *local tool selection*, not a read-only server: a client that can still see
   bridge tools can change the scene.
 - `ISAAC_MCP_NAMESPACE` limits the bridge tools to the named namespaces, and `ISAAC_MCP_BUILTINS=0` hides the bare
   bridge built-ins such as `run_python`. An empty `ISAAC_MCP_NAMESPACE` means no filter, not "no namespaces".
@@ -333,8 +332,9 @@ host's filters at all.
 
 **A simulator that cannot be changed.** Start Kit with `ISAAC_MCP_READ_ONLY=1`. The bridge then runs only the
 tools registered as read-only (stage and prim reads, joint and body state, logs, `status`, `job_status`, `get_file`,
-`stat_file`) and refuses every other with the code `READ_ONLY` before the tool is called: `run_python`, `put_file`,
-every scene edit and every twin tool that builds or moves something. This is enforced inside Kit, so it does not
+`stat_file`, and the twin's `get_recording_status`) and refuses every other with the code `READ_ONLY` before the tool
+is called: `run_python`, `put_file`, every scene edit and every other twin tool. Read-only protects the simulator, not
+the disk: `get_file` still reads any file your account can read. This is enforced inside Kit, so it does not
 depend on the client, on which tools a host lists, or on who dials the socket. `status` and the bridge listing report
 `read_only`. Pair it with `ISAAC_MCP_LOCAL_TOOLS=readonly` so the host's own tools cannot change things either.
 

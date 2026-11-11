@@ -23,7 +23,7 @@ def test_sim_status_tells_a_busy_bridge_from_a_dead_one(monkeypatch):
     from isaac_mcp import client, sim_sessions
 
     def busy(*args, **kwargs):
-        raise client.BridgeError("DOORWAY_BUSY")
+        raise client.BridgeError("AUTH_REQUIRED")
 
     monkeypatch.setattr(client, "call", busy)
     assert sim_sessions._bridge_state("127.0.0.1", 1, 1)[0] == "busy"

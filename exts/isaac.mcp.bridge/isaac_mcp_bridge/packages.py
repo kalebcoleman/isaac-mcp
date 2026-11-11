@@ -90,15 +90,28 @@ def load_tool_modules(bridge: Any, names: List[str], paths: List[str] = ()) -> D
 
 def reload_tool_module(bridge: Any, name: str) -> Dict[str, Any]:
     """Unregister a loaded package, import it afresh, and register it again. Refuses while one of
-    its calls is running. A submodule named ``_state`` is kept, so live handles survive."""
+    its calls is running. A submodule named ``_state`` is kept, so live handles survive. If the new
+    code does not import or register, the package as it was loaded before is put back and the
+    error is raised: a typo costs one failed reload, not a restart of Kit."""
     if name not in bridge.get_owners():
         raise ValueError(f"{name!r} is not a loaded tool package")
     bridge.unregister_owner(name, require_idle=True)
+    previous = {}
     for loaded in [m for m in sys.modules if m == name or m.startswith(name + ".")]:
         if loaded == name + "._state":
             continue
-        module = sys.modules.pop(loaded)
+        previous[loaded] = module = sys.modules.pop(loaded)
         if getattr(module, "__file__", None):
             forget_bytecode(os.path.dirname(module.__file__))
     importlib.invalidate_caches()
-    return load_tool_module(bridge, name)
+    try:
+        return load_tool_module(bridge, name)
+    except BaseException:
+        for loaded in [m for m in sys.modules if (m == name or m.startswith(name + ".")) and m != name + "._state"]:
+            del sys.modules[loaded]
+        sys.modules.update(previous)
+        try:
+            load_tool_module(bridge, name)
+        except Exception:  # noqa: BLE001 - the old code no longer registers either; the original error says why
+            pass
+        raise
