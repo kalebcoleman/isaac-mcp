@@ -17,7 +17,7 @@ def folder(tmp_path, monkeypatch):
 
 
 EXPLICIT = '''
-NAMESPACE = "lab"
+MCP_NAMESPACE = "lab"
 VERSION = {version}
 
 def register(registrar):
@@ -89,3 +89,20 @@ def test_settings_come_from_the_environment_then_the_default(monkeypatch):
     assert knobs.AUTH.flag() is False
     monkeypatch.delenv("ISAAC_MCP_AUTH")
     assert knobs.AUTH.flag() is True and knobs.READ_ONLY.flag() is False
+
+
+def test_the_template_package_loads_and_its_tools_run(monkeypatch):
+    from pathlib import Path
+
+    from isaac_mcp_bridge import load_tool_modules
+
+    bridge = make_bridge()
+    templates = str(Path(__file__).resolve().parents[1] / "templates")
+    monkeypatch.syspath_prepend(templates)
+    loaded = load_tool_modules(bridge, ["demo_tools"])
+    tools = bridge.get_registered_tools()
+    assert {"demo.ping", "demo.add_cube", "demo.project_state", "demo.set_threshold"} <= set(tools), loaded
+    assert tools["demo.ping"]["read_only"] and not tools["demo.add_cube"]["read_only"]
+    assert dispatch(bridge, "demo.set_threshold", {"name": "grip_force_n", "value": 12.0})["result"] == {"name": "grip_force_n", "value": 12.0}
+    refused = dispatch(bridge, "demo.set_threshold", {"name": "grip_force_n", "value": 99.0})
+    assert refused["status"] == "error" and refused["range"] == [0.0, 40.0]

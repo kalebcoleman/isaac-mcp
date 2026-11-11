@@ -1,9 +1,9 @@
 [package]
 # Semantic Versioning — https://semver.org/
 version = "0.1.0"
-authors = ["Aldrin Inbaraj"]
+authors = ["Kaleb Coleman"]
 title = "isaac.mcp.panel"
-description = "Registry-driven control panel for the isaac.mcp.bridge bridge: one button per registered tool, generated from the same registry agents discover — click == agent call, by construction."
+description = "A window listing every tool the isaac.mcp.bridge bridge has registered, with a Run button for each."
 readme = "docs/README.md"
 repository = ""
 category = "Internal"
@@ -11,11 +11,9 @@ keywords = ["kit", "mcp", "bridge", "panel", "ui"]
 changelog = "docs/CHANGELOG.md"
 
 [dependencies]
-# The bridge whose registry this panel renders and dispatches through.
+# The bridge whose tools this window lists and runs.
 "isaac.mcp.bridge" = {}
-# UI toolkit + the main-thread hop for dispatching from button callbacks.
 "omni.ui" = {}
-"omni.kit.async_engine" = {}
 
 [[python.module]]
 name = "isaac_mcp_panel"

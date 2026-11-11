@@ -9,7 +9,7 @@ It registers its tools in one of two ways:
             return {"greeting": f"hello {name}"}
 
 or, with no ``register`` function, every public function it defines becomes a tool: the docstring is
-the description and the signature gives the parameters. The namespace is ``NAMESPACE`` if the
+the description and the signature gives the parameters. The namespace is ``MCP_NAMESPACE`` if the
 package sets it, else the last part of its module name. Stdlib only.
 """
 
@@ -68,7 +68,7 @@ def register_functions(registrar: Any, module: Any) -> List[str]:
 def load_tool_module(bridge: Any, name: str) -> Dict[str, Any]:
     """Import one package and register its tools under an owner named after it."""
     module = importlib.import_module(name)
-    namespace = getattr(module, "NAMESPACE", name.rsplit(".", 1)[-1])
+    namespace = getattr(module, "MCP_NAMESPACE", name.rsplit(".", 1)[-1])
     registrar = bridge.register_owner(name, namespace, display_name=name, metadata={"module": name})
     try:
         if callable(getattr(module, "register", None)):
