@@ -1,67 +1,42 @@
-"""The doorway's own interpreter can run the doorway.
+"""The package's declared dependencies are ones this code runs with."""
 
-mcp 2 removed `mcp.server.fastmcp`, which `isaac_mcp.server` imports, so the dependency
-is bounded below 2; and the test extra must bring pytest, so the doorway's tests run
-under the doorway's own interpreter rather than one where the server tests skip.
-"""
+from pathlib import Path
 
-import importlib
-import os
-
-import pytest
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_PYPROJECT = os.path.join(_REPO_ROOT, "pyproject.toml")
+try:
+    import tomllib
+except ModuleNotFoundError:      # Python 3.10
+    import tomli as tomllib
+
+MCP_DIR = Path(__file__).resolve().parents[1]
+PROJECT = tomllib.loads((MCP_DIR / "pyproject.toml").read_text())["project"]
 
 
-def _load_toml(path):
-    try:
-        import tomllib
-    except ModuleNotFoundError:  # Python 3.10 (requires-python >=3.10)
-        try:
-            import tomli as tomllib
-        except ModuleNotFoundError:
-            pytest.fail(
-                "this interpreter has neither tomllib (3.11+) nor tomli; "
-                "pyproject.toml cannot be parsed here"
-            )
-    with open(path, "rb") as handle:
-        return tomllib.load(handle)
+def requirement(specs, name):
+    (found,) = [Requirement(spec) for spec in specs if Requirement(spec).name == name]
+    return found
 
 
-def _requirement(requirements, name):
-    found = [Requirement(spec) for spec in requirements if Requirement(spec).name == name]
-    assert len(found) == 1, f"expected one {name!r} requirement, found {found}"
-    return found[0]
-
-
-def test_server_imports_in_the_running_interpreter():
-    server = importlib.import_module("isaac_mcp.server")
-    # The module under test is this checkout's, not an installed copy elsewhere.
-    assert os.path.realpath(server.__file__).startswith(os.path.realpath(_REPO_ROOT) + os.sep)
+def test_the_server_under_test_is_this_checkout_s():
+    import isaac_mcp.server as server
     from mcp.server.fastmcp import FastMCP
+
+    assert Path(server.__file__).resolve().is_relative_to(MCP_DIR)
     assert isinstance(server.mcp, FastMCP)
 
 
-def test_mcp_requirement_excludes_the_fastmcp_rename():
-    project = _load_toml(_PYPROJECT)["project"]
-    mcp = _requirement(project["dependencies"], "mcp")
+def test_the_mcp_sdk_range_is_the_tested_one():
+    """1.22 is the oldest SDK that works with current Pydantic; 2.x has no mcp.server.fastmcp."""
+    mcp = requirement(PROJECT["dependencies"], "mcp")
     assert "cli" in mcp.extras
-    # mcp 2 renamed FastMCP to MCPServer; every 2.x must be outside the specifier.
-    assert not mcp.specifier.contains(Version("2.0.0"), prereleases=True)
-    assert not mcp.specifier.contains(Version("2.1.1"))
-    # Older SDKs fail with current Pydantic; 1.22 is the lowest tested version.
-    assert mcp.specifier.contains(Version("1.22.0"))
-    assert not mcp.specifier.contains(Version("1.21.0"))
-    httpx = _requirement(project["dependencies"], "httpx")
-    assert httpx.specifier.contains(Version("0.28.1"))
+    assert mcp.specifier.contains(Version("1.22.0")) and not mcp.specifier.contains(Version("1.21.0"))
+    assert not mcp.specifier.contains(Version("2.0.0"), prereleases=True) and not mcp.specifier.contains(Version("2.1.1"))
+    httpx = requirement(PROJECT["dependencies"], "httpx")
+    assert httpx.specifier.contains(Version("0.28.1")) and not httpx.specifier.contains(Version("1.0.0"))
     assert not httpx.specifier.contains(Version("1.0.dev6"), prereleases=True)
-    assert not httpx.specifier.contains(Version("1.0.0"))
 
 
-def test_test_extra_carries_pytest():
-    project = _load_toml(_PYPROJECT)["project"]
-    test_extra = project.get("optional-dependencies", {}).get("test", [])
-    assert _requirement(test_extra, "pytest")
+def test_the_test_extra_installs_pytest():
+    assert requirement(PROJECT["optional-dependencies"]["test"], "pytest")
