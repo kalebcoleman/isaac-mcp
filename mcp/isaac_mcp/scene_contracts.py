@@ -558,7 +558,7 @@ add(
     dict(
         **TARGET,
         body=field("string", "Rigid body the controller acts on, e.g. a drone's base link."),
-        controller=field("string", "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs."),
+        controller=field("string", "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs."),
         duration_s=field("number", "Simulated seconds to run, up to 3600. The controller can end sooner with done=true."),
         params=field("object", "Passed to the controller as state['params'] each step, e.g. gains or a target.", False),
         frame=field("string", "Frame of the returned force and torque, applied at the centre of mass: world (default) or body.", False, default="world", enum=["world", "body"]),

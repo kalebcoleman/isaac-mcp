@@ -283,3 +283,30 @@ def test_a_grouped_argument_takes_every_kind_its_actions_take_and_text_stays_tex
     results = asyncio.run(run())
     assert [r.isError for r in results] == [False, False], results[0].content[0].text
     assert [given["text"] for given in seen] == ['{"a": 1}', "null"]
+
+
+def test_advice_beside_the_caller_s_data_names_listed_tools(monkeypatch):
+    class Endpoint:
+        port = 1
+
+        def call(self, name, params=None, **kwargs):
+            if name == "list_tools":
+                raise ConnectionRefusedError("offline")
+            return {"job_id": "j", "state": "succeeded", "result": {
+                "output": "my code printed sim__trajectory__replay", "timeline": "paused: replay the log with sim__trajectory__replay"}}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(gw, "_job_record", lambda job_id: None)
+    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "isaaclab_jobs"})
+    gw._state_for(server).client = Endpoint()
+
+    async def run():
+        async with create_connected_server_and_client_session(server._mcp_server) as client:
+            await client.initialize()
+            return await client.call_tool("jobs", {"action": "status", "job_id": "j"})
+
+    answer = json.loads(asyncio.run(run()).content[0].text)["result"]
+    assert answer["timeline"] == "paused: replay the log with sim__simulation action=replay"
+    assert answer["output"] == "my code printed sim__trajectory__replay"

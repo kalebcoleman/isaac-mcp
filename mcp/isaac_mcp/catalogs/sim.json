@@ -2716,7 +2716,7 @@
         },
         "controller": {
           "type": "string",
-          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.",
+          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.",
           "required": true
         },
         "duration_s": {
@@ -2837,7 +2837,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs."
+          "description": "tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs."
         },
         {
           "name": "duration_s",

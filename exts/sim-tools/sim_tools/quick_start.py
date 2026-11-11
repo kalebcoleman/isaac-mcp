@@ -254,6 +254,24 @@ def _set_translation(stage, path, xyz):
         xform.SetXformOpOrder([op, *ops])  # outermost, so a rotation stays about the robot's own origin
 
 
+def move_clear(stage, robot_path, others):
+    """Slide a robot just added to a scene along +X until it no longer overlaps what was there.
+    Returns the distance moved in stage units (0.0 when it was already clear)."""
+    cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_, UsdGeom.Tokens.render])
+    robot = cache.ComputeWorldBound(stage.GetPrimAtPath(robot_path)).ComputeAlignedRange()
+    taken = Gf.Range3d()
+    for path in others:
+        taken.UnionWith(cache.ComputeWorldBound(stage.GetPrimAtPath(path)).ComputeAlignedRange())
+    if robot.IsEmpty() or taken.IsEmpty() or robot.IntersectWith(taken).IsEmpty():
+        return 0.0
+    _, units = _stage_layout(stage)
+    shift = taken.GetMax()[0] - robot.GetMin()[0] + 0.3 * units
+    xform = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
+    here = Gf.Transform(xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default())).GetTranslation()
+    _set_translation(stage, robot_path, (here[0] + shift, here[1], here[2]))
+    return float(shift)
+
+
 def expand_visuals(stage, root_path):
     """Instanced robot visuals stayed at their first pose in the renderer on some Kit builds after physics
     moved the links. Expanding them is a session-layer override, never an edit to the asset. Returns the count."""
@@ -386,6 +404,8 @@ async def run(ext, args):
 
     if add_to_scene:
         paths = dict(world=WORLD, ground=GROUND, physics_scene=PHYSICS_SCENE, lights=[DOME, SUN], camera=CAMERA)
+        already_there = [str(child.GetPath()) for child in stage.GetPrimAtPath(WORLD).GetChildren()
+                         if str(child.GetPath()) not in (GROUND, PHYSICS_SCENE, DOME, SUN, CAMERA) and child.IsA(UsdGeom.Imageable)]
     else:
         paths = author_scene(stage)
         stage.GetRootLayer().defaultPrim = WORLD.lstrip("/")
@@ -429,6 +449,11 @@ async def run(ext, args):
             placement = place_above_ground(stage, robot_path, False, max_lift=MAX_AUTO_LIFT_M)
             if placement["lifted_by"]:
                 await app.next_update_async()
+        moved = 0.0
+        if add_to_scene:        # the robot arrives at the origin, where a scene's first objects usually are
+            moved = move_clear(stage, robot_path, already_there)
+            if moved:
+                await app.next_update_async()
         roots = _articulation_roots(stage.GetPrimAtPath(robot_path))
         errors = composition_errors(stage)
         if not stage.GetPrimAtPath(robot_path).GetChildren():
@@ -456,6 +481,9 @@ async def run(ext, args):
                                expanded_visuals=expanded, composition_errors=len(errors),
                                **({"composition_error_samples": [str(e)[:200] for e in errors[:3]]} if errors else {}),
                                **({} if root else {"note": "No articulation root found, so the joint tools will not work on it."}))
+        if moved:
+            result["robot"]["moved_clear"] = (f"Placed {round(moved, 3)} along +X of the origin, beside the objects already in the "
+                                             "scene. Move it with sim__prim__set_transform while the timeline is stopped.")
         if placement and (placement["lifted_by"] or placement.get("warning")):
             result["robot"]["placement"] = placement
         if is_urdf:

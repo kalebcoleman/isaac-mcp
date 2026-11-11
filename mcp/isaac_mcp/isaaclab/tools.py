@@ -406,8 +406,8 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         Needs no simulator and no Isaac Lab: a controller server, a data conversion, a plot, a sweep step.
 
         WARNING: executes arbitrary code with your rights; not sandboxed, not idempotent. The same job
-        system as isaaclab__run_script (kind "script"): follow it with isaaclab__runs_status(job_id, wait_s=45),
-        isaaclab__runs_tail and isaaclab__runs_cancel. Print `ISAAC_MCP_ARTIFACT: <path>` to list outputs and
+        system as isaaclab__run_script (kind "script"): follow it with job_status(job_id, wait_s=45),
+        isaaclab__runs_tail and job_cancel. Print `ISAAC_MCP_ARTIFACT: <path>` to list outputs and
         `ISAAC_MCP_PROGRESS: <0-1|N%|a/b> [text]` for progress."""
         import shutil
         import sys

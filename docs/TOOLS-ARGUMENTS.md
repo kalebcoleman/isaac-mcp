@@ -1265,7 +1265,7 @@ Run your own controller in the physics loop as a job. Each step gets the body's 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `body` (string, required): Rigid body the controller acts on, e.g. a drone's base link.
-- `controller` (string, required): tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.
+- `controller` (string, required): tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.
 - `duration_s` (number, required): Simulated seconds to run, up to 3600. The controller can end sooner with done=true.
 - `params` (object, optional): Passed to the controller as state['params'] each step, e.g. gains or a target.
 - `frame` (world|body, default `"world"`): Frame of the returned force and torque, applied at the centre of mass: world (default) or body.

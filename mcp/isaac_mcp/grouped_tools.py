@@ -170,6 +170,31 @@ def _in_listed_form(value: Any) -> Any:
     return value
 
 
+_HINT_KEYS = ("next", "note", "hint", "timeline")
+
+
+def _hints(value: Any, depth: int = 0) -> Any:
+    """A JSON answer with only its advice fields rewritten: the data beside them is the caller's."""
+    if isinstance(value, dict) and depth < 3:
+        return {key: tool_groups.listed_form(item) if key in _HINT_KEYS and isinstance(item, str) else _hints(item, depth + 1)
+                for key, item in value.items()}
+    return value
+
+
+def _hints_in_listed_form(answer: Any) -> Any:
+    """For a tool whose answer is the caller's data: leave the data, but name tools in the advice
+    the server itself put beside it ("next", "note", ...) the way the client is shown them."""
+    blocks = answer[0] if isinstance(answer, tuple) and answer else answer
+    for block in blocks if isinstance(blocks, list) else getattr(blocks, "content", None) or []:
+        text = getattr(block, "text", None)
+        if isinstance(text, str) and text.startswith("{"):
+            try:
+                block.text = json.dumps(_hints(json.loads(text)), default=repr)
+            except ValueError:
+                pass
+    return answer
+
+
 def _describe_in_listed_form(tool: Any) -> None:
     tool.description = tool_groups.listed_form(tool.description or "")
     for spec in (tool.parameters or {}).get("properties", {}).values():
@@ -197,7 +222,7 @@ def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
             if getattr(server, _STATE)["singly"]:
                 return await call(name, arguments, *args, **kwargs)
             if name in tool_groups.VERBATIM:      # the caller's own data, code or log, in answers and errors alike
-                return await call(name, arguments, *args, **kwargs)
+                return _hints_in_listed_form(await call(name, arguments, *args, **kwargs))
             try:
                 return _in_listed_form(await call(name, arguments, *args, **kwargs))
             except ToolError as error:
