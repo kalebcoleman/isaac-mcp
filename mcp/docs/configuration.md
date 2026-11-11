@@ -37,5 +37,5 @@ machine.
 ## The server's own settings
 
 The `isaac-mcp` server reads `ISAAC_MCP_PORT` and `ISAAC_MCP_HOST` (which bridge),
-`ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_LOCAL_TOOLS` and `ISAAC_MCP_LEGACY_TOOLS`
+`ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_LOCAL_TOOLS` and `ISAAC_MCP_GROUP_TOOLS`
 (what a client is shown). They are described in [ENVIRONMENT.md](../../docs/ENVIRONMENT.md).

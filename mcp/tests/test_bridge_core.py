@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import socket
 import threading
 import time
 
@@ -350,3 +351,88 @@ def test_a_port_that_is_taken_is_an_error_not_another_port():
         with pytest.raises(OSError):
             other.start(live.port)
         assert other.listening_port is None
+
+
+# ---- speed and robustness of the socket -------------------------------------------------
+
+def test_a_client_that_stops_reading_does_not_stop_the_others(tmp_path):
+    """A tool's answer is sent from the main loop: a client that never reads a large one must not hold it."""
+    import time
+
+    from isaac_mcp.client import BridgeClient
+
+    big = tmp_path / "big.bin"
+    big.write_bytes(b"x" * (24 << 20))
+    with LiveBridge() as live:
+        live.bridge.register_owner("slow", "slow").add(td("big", lambda: {"text": "y" * (24 << 20)}))
+        live.bridge.register_owner("fast", "fast").add(td("ping", lambda: "pong"))
+        stalled = live.client()
+        stalled.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+        send(stalled, {"id": 1, "type": "slow.big"})          # answered on the loop, never read
+        send(stalled, {"id": 2, "type": "get_file", "params": {"path": str(big)}})
+        time.sleep(0.3)
+        with BridgeClient(port=live.port, timeout=3) as other:
+            started = time.monotonic()
+            assert other.call("fast.ping") == "pong" and other.call("status")["port"] == live.port
+            assert time.monotonic() - started < 1.0
+        stalled.close()
+
+
+def test_a_large_file_goes_out_and_comes_back_whole(tmp_path):
+    import base64
+    import os as _os
+
+    from isaac_mcp.client import BridgeClient
+
+    data = _os.urandom(5 << 20)
+    with LiveBridge() as live, BridgeClient(port=live.port, timeout=20) as client:
+        written = client.call("put_file", {"path": str(tmp_path / "a" / "blob.bin"), "content_b64": base64.b64encode(data).decode()})
+        assert written["bytes"] == len(data)
+        assert base64.b64decode(client.call("get_file", {"path": written["path"]})["content_b64"]) == data
+        assert client.call("stat_file", {"path": written["path"]})["bytes"] == len(data)
+
+
+def test_the_file_tools_answer_while_a_call_has_the_loop_to_itself(tmp_path):
+    """They touch only the disk, so they do not wait for Kit's main loop, or make it wait."""
+    release = threading.Event()
+    (tmp_path / "note.txt").write_text("hello")
+
+    async def hold():
+        await asyncio.get_running_loop().run_in_executor(None, release.wait, 5)
+        return "released"
+
+    with LiveBridge() as live:
+        live.bridge.register_owner("x", "x").add(td("hold", hold, exclusive=True))
+        busy, quick = live.client(), live.client()
+        send(busy, {"id": 1, "type": "x.hold"})
+        assert roundtrip(quick, {"id": 2, "type": "stat_file", "params": {"path": str(tmp_path / "note.txt")}})["result"]["bytes"] == 5
+        release.set()
+        assert receive(busy)[0]["result"] == "released"
+
+
+def test_the_tool_listing_is_built_once_per_change_of_the_registry():
+    bridge = make_bridge()
+    first = bridge.get_registered_tools()
+    assert bridge.get_registered_tools() is first
+    registrar = bridge.register_owner("x", "x")
+    registrar.add(td("ping", lambda: 1))
+    assert "x.ping" in bridge.get_registered_tools() and "x.ping" not in first
+    bridge.unregister_owner("x")
+    assert "x.ping" not in bridge.get_registered_tools()
+    assert bridge.tool_count() == len(bridge.get_registered_tools(include_internal=True))
+
+
+def test_the_client_offers_its_token_once_per_connection(monkeypatch):
+    from isaac_mcp import client as bridge_client
+
+    seen = []
+    with LiveBridge(auth=True, token="t" * 32) as live:
+        original = live.bridge._frame
+        monkeypatch.setattr(live.bridge, "_frame", lambda connection, line: (seen.append(json.loads(line)), original(connection, line))[1])
+        monkeypatch.setenv("ISAAC_MCP_TOKEN", "t" * 32)
+        with bridge_client.BridgeClient(port=live.port, timeout=5) as client:
+            client.call("status")
+            client.call("status")
+            client.close()
+            client.call("status")           # a new connection: offered again
+    assert ["token" in frame for frame in seen] == [True, False, True]

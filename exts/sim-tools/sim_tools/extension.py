@@ -778,19 +778,31 @@ class Extension(omni.ext.IExt):
 
         return dict(results=split_runtime(closures(paths), Path(isaacsim.__file__).parent.resolve()))
 
-    @staticmethod
-    def _asset_environment():
-        """What this Kit's asset resolver uses, so the host can tell when it differs from its own."""
+    _ASSET_ENVIRONMENT_TTL_S = 2.0
+    _asset_environment_seen = (0.0, None)
+
+    @classmethod
+    def _asset_environment(cls):
+        """What this Kit's asset resolver uses, so the host can tell when it differs from its own.
+        Reading it walks the project and asset folders, and stage_info is called often, so one
+        reading serves for two seconds."""
+        import time
+
+        at, seen = cls._asset_environment_seen
+        if seen is not None and time.monotonic() - at < cls._ASSET_ENVIRONMENT_TTL_S:
+            return dict(seen)
         try:
             from isaac_mcp import assets
 
             resolver = assets.resolver()
             project = assets.project_file()
-            return dict(project_file=str(project) if project else None,
+            seen = dict(project_file=str(project) if project else None,
                         stores=[str(p) for p in resolver.stores()],
                         packs=list(resolver.packs()), strict=bool(resolver.offline()))
         except Exception as exc:  # noqa: BLE001 - reporting must never break stage_info
             return dict(error=str(exc)[:200])
+        cls._asset_environment_seen = (time.monotonic(), seen)
+        return dict(seen)
 
     def dispatch(self, name, a, *, camera_frame=None):
         s = self.scene

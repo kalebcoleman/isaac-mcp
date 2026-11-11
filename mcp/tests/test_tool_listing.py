@@ -26,10 +26,10 @@ ALL_GROUPS = "all,screen_input,sim_launch"
 
 def _listing(monkeypatch, tmp_path, single_purpose):
     for name in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_SCENE_TOOLS", "ISAAC_MCP_LOCAL_TOOLS",
-                 "ISAAC_MCP_LEGACY_TOOLS"):
+                 "ISAAC_MCP_GROUP_TOOLS"):
         monkeypatch.delenv(name, raising=False)
     server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": ALL_GROUPS, "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path),
-                              "ISAAC_MCP_LEGACY_TOOLS": "1" if single_purpose else "0"})
+                              "ISAAC_MCP_GROUP_TOOLS": "0" if single_purpose else "1"})
 
     async def run():
         async with create_connected_server_and_client_session(server._mcp_server) as client:
@@ -47,7 +47,7 @@ def listed(monkeypatch, tmp_path):
 
 @pytest.fixture
 def single(monkeypatch, tmp_path):
-    """The single-purpose tools, listed as with ISAAC_MCP_LEGACY_TOOLS=1."""
+    """The single-purpose tools, listed as with ISAAC_MCP_GROUP_TOOLS=0."""
     return _listing(monkeypatch, tmp_path, single_purpose=True)
 
 
@@ -223,7 +223,7 @@ def test_what_the_server_says_names_tools_as_the_client_is_shown_them(listed, mo
     assert not {name: found for name, found in named.items() if found}, "a listed tool names a tool the client cannot see"
     server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
     assert "sim__stage action=info" in server.instructions and "sim__stage__info" not in server.instructions
-    assert "sim__stage__info" in gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none", "ISAAC_MCP_LEGACY_TOOLS": "1"}).instructions
+    assert "sim__stage__info" in gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none", "ISAAC_MCP_GROUP_TOOLS": "0"}).instructions
 
 
 def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):

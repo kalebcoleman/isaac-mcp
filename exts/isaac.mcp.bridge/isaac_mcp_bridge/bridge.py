@@ -98,21 +98,66 @@ class OwnerRegistrar:
         return register
 
 
+MAX_UNSENT_BYTES = 256 * 1024 * 1024
+_DONTWAIT = getattr(socket, "MSG_DONTWAIT", 0)
+
+
 class _Connection:
+    """One client. ``send`` never waits for the client to read: a tool's answer is sent from the
+    main loop, and a client that asked for a large reply and stopped reading must not stop Kit.
+    What the socket will not take at once is handed to a writer thread; a client that lets more
+    than MAX_UNSENT_BYTES pile up is disconnected."""
+
     def __init__(self, sock: socket.socket, peer: str, authenticated: bool):
         self.sock, self.peer, self.authenticated = sock, peer, authenticated
         self.open = True
         self._send_lock = threading.Lock()
+        self._unsent: "collections.deque[bytes]" = collections.deque()
+        self._unsent_bytes = 0
+        self._writing = False
 
     def send(self, frame: Dict[str, Any]) -> None:
         data = protocol.encode(frame)
         with self._send_lock:
             if not self.open:
                 return
+            if not self._writing and _DONTWAIT:
+                try:
+                    sent = self.sock.send(data, _DONTWAIT)
+                except (BlockingIOError, InterruptedError):
+                    sent = 0
+                except OSError:
+                    self.open = False
+                    return
+                if sent == len(data):
+                    return
+                data = data[sent:]
+            if self._unsent_bytes + len(data) > MAX_UNSENT_BYTES:
+                self.open = False
+            else:
+                self._unsent.append(data)
+                self._unsent_bytes += len(data)
+                if not self._writing:
+                    self._writing = True
+                    threading.Thread(target=self._write, name="isaac-mcp-bridge-writer", daemon=True).start()
+        if not self.open:
+            self.close()
+
+    def _write(self) -> None:
+        while True:
+            with self._send_lock:
+                if not self._unsent or not self.open:
+                    self._writing = False
+                    self._unsent.clear()
+                    self._unsent_bytes = 0
+                    return
+                data = self._unsent.popleft()
             try:
                 self.sock.sendall(data)
             except OSError:
                 self.open = False
+            with self._send_lock:
+                self._unsent_bytes -= len(data)
 
     def close(self) -> None:
         self.open = False
@@ -144,6 +189,7 @@ class McpBridge:
         self._owners: Dict[str, _Owner] = {}
         self._tools: Dict[str, ToolDefinition] = {}
         self._tool_owner: Dict[str, str] = {}
+        self._listing: Dict[bool, Dict[str, Dict[str, Any]]] = {}   # get_registered_tools, until the registry changes
         self._running: List[_Request] = []
         self._waiting: "collections.deque[_Request]" = collections.deque()
         self._finished: Dict[str, float] = {}           # tool name -> when its last call ended
@@ -198,6 +244,7 @@ class McpBridge:
             self._tools[canonical] = tool
             self._tool_owner[canonical] = owner_id
             owner.tools.append(canonical)
+            self._listing.clear()
         return canonical
 
     def unregister_owner(self, owner_id: str, *, require_idle: bool = False) -> bool:
@@ -214,6 +261,7 @@ class McpBridge:
                 self._tools.pop(canonical, None)
                 self._tool_owner.pop(canonical, None)
             owner.tools = []
+            self._listing.clear()
             if owner.in_flight:
                 owner.draining = True
             else:
@@ -227,15 +275,23 @@ class McpBridge:
                     for o in self._owners.values()}
 
     def get_registered_tools(self, include_internal: bool = False) -> Dict[str, Dict[str, Any]]:
-        """What list_tools serves: every tool's description and parameters, by canonical name."""
+        """What list_tools serves: every tool's description and parameters, by canonical name.
+        Built once per change of the registry; treat it as read-only."""
         with self._lock:
-            items = [(name, tool, self._tool_owner[name]) for name, tool in self._tools.items()
-                     if include_internal or not tool.internal]
-            namespaces = {o.owner_id: o.namespace for o in self._owners.values()}
-        return {name: {"description": tool.description, "parameters": tool.parameters,
-                       "fields": schema.field_specs(tool.parameters), "namespace": namespaces.get(owner),
-                       "owner_id": owner, "read_only": tool.read_only}
-                for name, tool, owner in items}
+            listing = self._listing.get(include_internal)
+            if listing is None:
+                namespaces = {o.owner_id: o.namespace for o in self._owners.values()}
+                listing = self._listing[include_internal] = {
+                    name: {"description": tool.description, "parameters": tool.parameters,
+                           "fields": schema.field_specs(tool.parameters),
+                           "namespace": namespaces.get(self._tool_owner[name]),
+                           "owner_id": self._tool_owner[name], "read_only": tool.read_only}
+                    for name, tool in self._tools.items() if include_internal or not tool.internal}
+            return listing
+
+    def tool_count(self) -> int:
+        with self._lock:
+            return len(self._tools)
 
     def clear_sessions(self) -> None:
         self.sessions.clear()
@@ -454,20 +510,26 @@ class McpBridge:
             threading.Thread(target=self._serve, args=(connection,), name="isaac-mcp-bridge-client", daemon=True).start()
 
     def _serve(self, connection: _Connection) -> None:
-        buffer = b""
+        buffer = bytearray()
         try:
             while connection.open:
-                chunk = connection.sock.recv(65536)
+                chunk = connection.sock.recv(1 << 18)
                 if not chunk:
                     break
+                scanned = len(buffer)          # a newline can only be in what just arrived
                 buffer += chunk
+                while True:
+                    end = buffer.find(b"\n", scanned)
+                    if end < 0:
+                        break
+                    line = bytes(buffer[:end])
+                    del buffer[:end + 1]
+                    scanned = 0
+                    if line.strip():
+                        self._frame(connection, line)
                 if len(buffer) > protocol.MAX_FRAME_BYTES:
                     connection.send(protocol.error("the request is larger than 64 MiB", code="TOO_LARGE"))
                     break
-                while b"\n" in buffer:
-                    line, buffer = buffer.split(b"\n", 1)
-                    if line.strip():
-                        self._frame(connection, line)
         except OSError:
             pass
         finally:
@@ -575,8 +637,15 @@ def sweep_stale_portfiles(folder: str) -> None:
                 pass
 
 
+_identity: Optional[Dict[str, Any]] = None
+
+
 def app_identity() -> Dict[str, Any]:
-    """Which app this is: name, version, and whether it has a window. Unknowns stay None."""
+    """Which app this is: name, version, and whether it has a window. Unknowns stay None. Read once
+    Kit can say: none of it changes while the process runs."""
+    global _identity
+    if _identity is not None:
+        return dict(_identity)
     app = version = headless = None
     try:
         import carb.settings
@@ -589,7 +658,10 @@ def app_identity() -> Dict[str, Any]:
         pass
     if headless is None and any(arg in ("--no-window", "--headless") for arg in sys.argv):
         headless = True
-    return {"app": app or os.path.basename(sys.argv[0] or "python"), "app_version": version, "headless": headless}
+    identity = {"app": app or os.path.basename(sys.argv[0] or "python"), "app_version": version, "headless": headless}
+    if app and version is not None:
+        _identity = identity
+    return dict(identity)
 
 
 _bridge: Optional[McpBridge] = None

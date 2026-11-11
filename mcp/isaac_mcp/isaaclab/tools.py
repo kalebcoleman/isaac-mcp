@@ -72,7 +72,7 @@ _WAIT_POLL_S = 2.0  # patched by tests
 
 
 def _dump(obj: Any) -> str:
-    return json.dumps(obj, indent=2, default=str)
+    return json.dumps(obj, default=str)      # one line: indentation is characters the client pays for
 
 
 def _guard(fn: Callable[[], Any]) -> str:

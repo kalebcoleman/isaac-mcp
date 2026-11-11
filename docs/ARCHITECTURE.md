@@ -169,7 +169,7 @@ Kit (set them where `run.sh` runs; `sim__launch` passes the server's on), or an 
 | `ISAAC_MCP_ASSET_PATH` | server, Kit | The asset folder. |
 | `ISAAC_MCP_SCENE_OUTPUT` | Kit | Where scene tools write captures, saves and logs. |
 | `ISAACLAB_PYTHON`, `ISAACLAB_ROOT` | server | The default Isaac Lab install. |
-| `ISAAC_MCP_LOCAL_TOOLS`, `ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_SCENE_TOOLS`, `ISAAC_MCP_LEGACY_TOOLS` | server | Which tools a client is shown. These control visibility, not security. |
+| `ISAAC_MCP_LOCAL_TOOLS`, `ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_SCENE_TOOLS`, `ISAAC_MCP_GROUP_TOOLS` | server | Which tools a client is shown. These control visibility, not security. |
 | `ISAAC_MCP_READ_ONLY`, `ISAAC_MCP_AUTH`, `ISAAC_MCP_TOKEN` | Kit (the token also by clients) | Enforced by the bridge: read-only mode, and the token connections must present. |
 | `ISAAC_MCP_ENABLE_SCENE_SCRIPTS` | Kit | Opt in to tools that run the caller's Python inside Kit. |
 

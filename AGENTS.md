@@ -83,7 +83,7 @@ argument (`sim__prim(action="create")`, `ur5e_dt__scene(action="quick_start")`, 
 and `action="help"` describes each action. The single-purpose names used in this guide and the
 docs (`sim__prim__create`, `sim__stage__save`) are the tools behind those actions: each is still
 callable by that name with the same arguments, deprecated, and no longer listed.
-`ISAAC_MCP_LEGACY_TOOLS=1` lists them singly. The [table of groups](docs/TOOLS-HOST.md#grouped-tools)
+`ISAAC_MCP_GROUP_TOOLS=0` lists them singly. The [table of groups](docs/TOOLS-HOST.md#grouped-tools)
 maps every action to its tool.
 A listed tool does not prove that a bridge exists: catalogued tools dial the selected bridge when
 called and return an actionable error if none answers. Use `status` (or the CLI check below) to

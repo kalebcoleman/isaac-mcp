@@ -361,7 +361,7 @@ Client side (these are client settings, not part of this server; check your clie
 The server registers **134 tools** with the default groups, **+5** (`window_*`) when `screen_input` is selected and **+4**
 (`sim__*` session tools) when `sim_launch` is selected: **143** with both. A client is shown **45 tools**, because
 related tools are listed as one tool with an `action` argument (see [grouped tools](TOOLS-HOST.md#grouped-tools));
-`ISAAC_MCP_LEGACY_TOOLS=1` lists all of them singly. `ISAAC_MCP_NAMESPACE`,
+`ISAAC_MCP_GROUP_TOOLS=0` lists all of them singly. `ISAAC_MCP_NAMESPACE`,
 `ISAAC_MCP_BUILTINS=0` and `ISAAC_MCP_SCENE_TOOLS=0` lower the count further. A client that shows a different number
 has a filter set in its server entry; the server logs its tool count and filters at startup (below).
 

@@ -19,7 +19,7 @@ Environment:
     ISAAC_MCP_NAMESPACE              only these bridge namespaces (comma-separated).
     ISAAC_MCP_BUILTINS=0             hide the bridge's built-ins (run_python, the file tools, ...).
     ISAAC_MCP_LOCAL_TOOLS            which groups of the host's own tools to register (local_tools.py).
-    ISAAC_MCP_LEGACY_TOOLS=1         list every single-purpose tool instead of the grouped ones.
+    ISAAC_MCP_GROUP_TOOLS=0          list every tool singly instead of grouped.
     ISAAC_MCP_NAME, ISAAC_MCP_INSTRUCTIONS   the server's name and instructions.
 
 Nothing here starts a simulator unless the optional ``sim_launch`` group is selected.
@@ -765,13 +765,13 @@ def _dispatch(canonical: str, params: Dict[str, Any],
             except (AssetError, OSError) as e:
                 return json.dumps(dict(status="error", code=getattr(e, "code", "FILESYSTEM"), message=str(e), **getattr(e, "details", {})))
         if canonical == "status":
-            return json.dumps(_where_am_i(params, active), indent=2, default=repr)
+            return json.dumps(_where_am_i(params, active), default=repr)
         if canonical in ("job_status", "job_cancel"):
-            return json.dumps(_job_call(canonical, params, active), indent=2, default=repr)
+            return json.dumps(_job_call(canonical, params, active), default=repr)
         result = active.get_client().call(kit_canonical, params)
         if routed_info and isinstance(result, dict):
             result = {**result, "import": routed_info}
-        return json.dumps(result, indent=2, default=repr)
+        return json.dumps(result, default=repr)
     except BridgeError as e:
         if (str(e).startswith("unknown tool") and "known_tools" in e.details
                 and host_catalog.is_catalog_tool(canonical)):
@@ -816,8 +816,7 @@ def _surroundings(state: _BridgeState) -> Dict[str, Any]:
     try:
         from .isaaclab import jobs as lab_jobs
 
-        running = lab_jobs.runs_list(state="running", limit=5)
-        process_jobs = [j.get("job_id") for j in running.get("runs", []) if j.get("runner") != "kit"]
+        process_jobs = [j["job_id"] for j in lab_jobs.running_jobs() if j.get("runner") != "kit"][-5:]
         if process_jobs:
             found["lab_jobs_running"] = process_jobs
     except Exception:  # noqa: BLE001 - no Lab install, or an unreadable jobs folder
@@ -1078,7 +1077,7 @@ def _quick_start_with_import(params: Dict[str, Any], state) -> str:
             return json.dumps(imported)
         # Not a success with a note: the file is not in the scene.
         return json.dumps({**imported, **ids, "scene_built": True, "message": f"The scene was built, but this file was not imported into it: {imported.get('message')}"},
-                          indent=2, default=repr)
+                          default=repr)
     root = imported.get("articulation_root")
     result = {**scene, "imported": imported,
               "note": "The scene was built, then the file was imported with assets__import_path. `imported` is that call's whole result."}
@@ -1108,7 +1107,7 @@ def _quick_start_with_import(params: Dict[str, Any], state) -> str:
                 result["play_error"] = play_result
         except (ValueError, AttributeError):
             result["play_error"] = str(played)[:300]
-    return json.dumps(result, indent=2, default=repr)
+    return json.dumps(result, default=repr)
 
 
 def _quick_start_needs_host(robot) -> bool:
@@ -1791,7 +1790,7 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     state.asset_broker = Broker(env.get("ISAAC_MCP_ASSET_CONFIG", ""))
     if state.asset_broker.requested_profile != "trusted_project":
         raise RuntimeError("PROFILE_UNAVAILABLE: isolated/unrecognized profiles cannot start this trusted MCP server. No restricted endpoint or OS sandbox is implemented; no fallback.")
-    if not grouped_tools.legacy_listed(env):
+    if not grouped_tools.listed_singly(env):
         instructions = tool_groups.listed_form(instructions)      # name the tools as the client is shown them
     server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
     setattr(server, _STATE_ATTR, state)

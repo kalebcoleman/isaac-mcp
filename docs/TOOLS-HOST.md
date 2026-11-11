@@ -61,7 +61,7 @@ runs. `action="help"` returns the full description and arguments of every action
 
 The single-purpose names in brackets below still work when called, with the same arguments and answers, so existing
 prompts and scripts keep running. They are **deprecated**: they are no longer listed, and new work should use the
-grouped form. `ISAAC_MCP_LEGACY_TOOLS=1` lists them as before, with no grouped tools. Tools that belong to no group
+grouped form. `ISAAC_MCP_GROUP_TOOLS=0` lists every tool singly, with no grouped tools. Tools that belong to no group
 (`status`, `run_python`, `sim__quick_start`, `sim__timeline__control`, `assets__import_path`, `screenshot` and others)
 are listed under their own names either way. Where a tool has an argument of its own called `action`, the grouped
 tool takes it as `sub_action`.

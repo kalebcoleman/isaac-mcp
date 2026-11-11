@@ -78,7 +78,7 @@ About 45 tools: related single-purpose tools are offered as one tool with an `ac
 (`sim__prim` with `action="create"`, `"get"`, `"delete"`, ...). `action="help"` returns the full
 description of each action. Every single-purpose name (`sim__prim__create`) still works when
 called, so older prompts and scripts keep running; those names are deprecated and are no longer
-listed. Set `ISAAC_MCP_LEGACY_TOOLS=1` to list them as before, with no groups. The groups are
+listed. Set `ISAAC_MCP_GROUP_TOOLS=0` to list every tool singly, with no groups. The groups are
 defined in `isaac_mcp/tool_groups.py`.
 
 ## Loading the bridge in another Kit app

@@ -29,10 +29,10 @@ _STATE = "_isaac_grouped_tools"
 _SENTENCE = re.compile(r"(?<![ (]e\.g)(?<![ (]i\.e)[.;:]\s+(?=[A-Z`'\"(])")
 
 
-def legacy_listed(env: Optional[Dict[str, str]] = None) -> bool:
-    """Whether to list the single-purpose tools as before, with no groups."""
-    value = (env or {}).get(tool_groups.LEGACY_ENV) or os.environ.get(tool_groups.LEGACY_ENV, "0")
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
+def listed_singly(env: Optional[Dict[str, str]] = None) -> bool:
+    """Whether ISAAC_MCP_GROUP_TOOLS=0 asks for every tool to be listed singly, with no groups."""
+    value = (env or {}).get(tool_groups.GROUP_ENV) or os.environ.get(tool_groups.GROUP_ENV, "1")
+    return str(value).strip().lower() in ("0", "false", "no", "off")
 
 
 def _brief(text: str, limit: int = 110) -> str:
@@ -167,17 +167,17 @@ def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
     for group in tool_groups.GROUPS:
         manager._tools.pop(group, None)
     names = set(manager._tools)
-    legacy = legacy_listed(env)
+    singly = listed_singly(env)
     for group, (summary, actions) in tool_groups.GROUPS.items():
-        if not legacy and names & set(actions.values()):
+        if not singly and names & set(actions.values()):
             _build(server, group, summary, actions)
-    hide = set() if legacy else tool_groups.hidden(names)
+    hide = set() if singly else tool_groups.hidden(names)
     if not hasattr(server, _STATE):
         everything, call = manager.list_tools, manager.call_tool
-        setattr(server, _STATE, {"hide": hide, "legacy": legacy})
+        setattr(server, _STATE, {"hide": hide, "singly": singly})
 
         async def call_tool(name, arguments, *args, **kwargs):
-            if getattr(server, _STATE)["legacy"]:
+            if getattr(server, _STATE)["singly"]:
                 return await call(name, arguments, *args, **kwargs)
             try:
                 answer = await call(name, arguments, *args, **kwargs)
@@ -187,8 +187,8 @@ def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
 
         manager.list_tools = lambda: [tool for tool in everything() if tool.name not in getattr(server, _STATE)["hide"]]
         manager.call_tool = call_tool
-    getattr(server, _STATE).update(hide=hide, legacy=legacy)
-    if not legacy:
+    getattr(server, _STATE).update(hide=hide, singly=singly)
+    if not singly:
         for name, tool in manager._tools.items():
             if name not in hide:
                 _describe_in_listed_form(tool)

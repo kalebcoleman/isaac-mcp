@@ -1739,6 +1739,32 @@ def _parse_since(since: Any) -> float:
         raise ValueError(f"cannot read since={since!r}: use an ISO time such as 2026-05-01T12:00 or a relative age such as 2h, 1d") from None
 
 
+_ENDED_JOBS: set = set()    # (jobs folder, job id) seen with an ended record: an ended job never runs again
+
+
+def running_jobs() -> list[dict[str, Any]]:
+    """The records of the jobs still running, reconciled like ``runs_list``. For callers that ask
+    often (the status check-in): a job seen ended is not read from disk again."""
+    base = jobs_dir()
+    running = []
+    for entry in sorted(os.scandir(base), key=lambda e: e.name):
+        key = (str(base), entry.name)
+        if key in _ENDED_JOBS or not entry.is_dir():
+            continue
+        jd = Path(entry.path)
+        data = _read_job(jd)
+        if not data:
+            continue
+        _enforce_orphan_timeout(jd.name, jd, data)
+        if _orphaned(jd.name, data):
+            _settle_orphan(jd, data)
+        if data.get("status") == "running":
+            running.append({**data, "job_id": data.get("job_id") or data.get("id") or jd.name})
+        else:
+            _ENDED_JOBS.add(key)
+    return running
+
+
 def runs_list(state: str | None = None, task: str | None = None, kind: str | None = None,
               since: str | None = None, limit: int | None = RUNS_LIST_DEFAULT_LIMIT) -> dict[str, Any]:
     """Jobs, newest first, filtered and bounded. ``total`` counts every match, ``truncated`` says ``limit`` cut some."""

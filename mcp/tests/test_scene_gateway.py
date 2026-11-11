@@ -18,7 +18,7 @@ TICK, PUB = "omni.graph.action.OnPlaybackTick", "isaacsim.ros2.bridge.ROS2Publis
 @pytest.fixture(autouse=True)
 def single_purpose_tool_list(monkeypatch):
     """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
-    monkeypatch.setenv("ISAAC_MCP_LEGACY_TOOLS", "1")
+    monkeypatch.setenv("ISAAC_MCP_GROUP_TOOLS", "0")
 
 
 def test_full_catalog_and_errors(monkeypatch):

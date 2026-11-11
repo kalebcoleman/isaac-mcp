@@ -19,7 +19,7 @@ starts `run.sh`. Set host variables in the client's `env` for the `isaac` server
 | `ISAAC_MCP_LOG` | `1` | `0` turns off the host server's durable log file (stderr logging stays). See [Diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log). |
 | `ISAAC_MCP_LOG_DIR` | `$XDG_STATE_HOME/isaac-mcp`, else `~/.local/state/isaac-mcp` | Directory of the host's `server-<pid>.log` (1 MB x 3, private). The bridge reads the same variable for its failure log. |
 | `DISPLAY` | `:0` | X11 display for the desktop tools. Match your session. |
-| `ISAAC_MCP_LEGACY_TOOLS` | `0` | `1` lists every single-purpose tool instead of the grouped ones. See [grouped tools](TOOLS-HOST.md#grouped-tools). |
+| `ISAAC_MCP_GROUP_TOOLS` | `1` | `0` lists every tool singly instead of grouped. See [grouped tools](TOOLS-HOST.md#grouped-tools). |
 | `ISAAC_MCP_TOKEN` | unset | The bridge's token, for a client that cannot read the bridge's token file (another machine or account). Set for Kit, it is the token the bridge requires. See [protocol](../mcp/docs/protocol.md#the-token). |
 | `ISAAC_MCP_AUTH` | `1` | Read by Kit. `0` starts a bridge that accepts connections without a token. |
 | `ISAAC_MCP_READ_ONLY` | `0` | Read by Kit. `1` starts a bridge that runs only read-only tools. See [limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach). |

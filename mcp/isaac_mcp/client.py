@@ -161,8 +161,10 @@ class BridgeClient:
     def __init__(self, host: Optional[str] = None, port: Optional[int] = None, timeout: float = DEFAULT_TIMEOUT):
         self._host, self._port, self.timeout = host, port, timeout
         self._sock: Optional[socket.socket] = None
-        self._buffer = b""
+        self._buffer = bytearray()
+        self._scanned = 0                       # how much of the buffer is known to hold no newline
         self._token: Optional[str] = None
+        self._offer_token = False               # the bridge wants it once, on a connection's first request
         self._ids = itertools.count(1)
         self._lock = threading.Lock()
 
@@ -180,7 +182,9 @@ class BridgeClient:
         host, port = _resolve_endpoint(self._host, self._port)
         sock = socket.create_connection((host, port), timeout=min(CONNECT_TIMEOUT, timeout or self.timeout))
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self._sock, self._buffer, self._token = sock, b"", bridge_token(port)
+        self._sock, self._buffer, self._scanned = sock, bytearray(), 0
+        self._token = bridge_token(port)
+        self._offer_token = bool(self._token)
 
     def close(self) -> None:
         sock, self._sock = self._sock, None
@@ -211,11 +215,17 @@ class BridgeClient:
 
     def _read_reply(self, request_id: int, deadline: float) -> Dict[str, Any]:
         while True:
-            while b"\n" in self._buffer:
-                line, self._buffer = self._buffer.split(b"\n", 1)
+            while True:
+                end = self._buffer.find(b"\n", self._scanned)
+                if end < 0:
+                    self._scanned = len(self._buffer)      # a large reply is searched once, not once per chunk
+                    break
+                line = bytes(self._buffer[:end])
+                del self._buffer[:end + 1]
+                self._scanned = 0
                 if not line.strip():
                     continue
-                reply = json.loads(line.decode("utf-8"))
+                reply = json.loads(line)
                 if reply.get("id") in (request_id, None):
                     return reply     # None: a bridge that predates request ids, or a refusal before parsing
             remaining = deadline - time.monotonic()
@@ -223,7 +233,7 @@ class BridgeClient:
                 raise TimeoutError("timed out waiting for the bridge's reply; the call may still be running")
             self._sock.settimeout(remaining)
             try:
-                chunk = self._sock.recv(1 << 16)
+                chunk = self._sock.recv(1 << 18)
             except socket.timeout:
                 raise TimeoutError("timed out waiting for the bridge's reply; the call may still be running") from None
             if not chunk:
@@ -240,12 +250,13 @@ class BridgeClient:
             self.connect(limit)
             request_id = next(self._ids)
             frame: Dict[str, Any] = {"id": request_id, "type": tool, "params": params or {}}
-            if self._token:
+            if self._offer_token:
                 frame["token"] = self._token
             try:
                 self._sock.settimeout(limit)
                 self._sock.sendall(json.dumps(frame).encode() + b"\n")
                 reply = self._read_reply(request_id, time.monotonic() + limit)
+                self._offer_token = False
             except (OSError, ValueError):
                 self.close()                      # a reply may still be on its way: do not reuse the connection
                 raise

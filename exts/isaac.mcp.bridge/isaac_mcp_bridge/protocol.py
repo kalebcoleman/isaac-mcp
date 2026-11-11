@@ -47,8 +47,23 @@ def _plain(value: Any) -> Any:
     return value
 
 
+class Base64(str):
+    """Base64 text. It needs no JSON escaping, so ``encode`` copies it into the frame as it is."""
+
+
+_SPLICE = "\x00base64\x00"
+
+
 def encode(frame: Any) -> bytes:
-    """One frame as a line of UTF-8 JSON. Values JSON cannot hold are sent as their repr."""
+    """One frame as a line of UTF-8 JSON. Values JSON cannot hold are sent as their repr.
+
+    A file's content can be tens of megabytes of base64. Escaping that is one long call holding
+    the interpreter, which the main loop would wait for, so ``Base64`` content is spliced in."""
+    result = frame.get("result") if isinstance(frame, dict) else None
+    content = result.get("content_b64") if isinstance(result, dict) else None
+    if isinstance(content, Base64):
+        head, _, tail = encode({**frame, "result": {**result, "content_b64": _SPLICE}}).partition(json.dumps(_SPLICE).encode())
+        return b"".join((head, b'"', content.encode("ascii"), b'"', tail))
     try:
         text = json.dumps(frame, allow_nan=False, default=repr)
     except ValueError:

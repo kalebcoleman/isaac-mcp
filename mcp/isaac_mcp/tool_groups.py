@@ -2,7 +2,7 @@
 
 A group lists the single-purpose tools behind it. Those keep their names and stay callable, so a
 script or an older prompt that names one still works, but they are left out of the tool list: a
-client reads about 45 tools instead of about 140. ``ISAAC_MCP_LEGACY_TOOLS=1`` lists the
+client reads about 45 tools instead of about 140. ``ISAAC_MCP_GROUP_TOOLS=0`` lists the
 single-purpose tools as before, with no groups. Tools named in no group are always listed.
 
 Pure data and stdlib only: the server builds the grouped tools from this (grouped_tools.py), and
@@ -102,7 +102,7 @@ SUPERSEDED: Dict[str, str] = {
     "isaaclab__runs_cancel": 'jobs(action="cancel")',   # job_cancel stops a process job too
 }
 
-LEGACY_ENV = "ISAAC_MCP_LEGACY_TOOLS"
+GROUP_ENV = "ISAAC_MCP_GROUP_TOOLS"      # "0": list every tool singly, with no grouped tools
 
 # Tools whose successful answer is the caller's own data or a log, returned exactly as it is.
 # Every other answer, and every error, has tool names put in their listed form (listed_form).
@@ -120,10 +120,10 @@ def hidden(registered: Set[str]) -> Set[str]:
     return (set(members()) | set(SUPERSEDED)) & set(registered)
 
 
-def listed(registered: Set[str], legacy: bool = False) -> List[str]:
+def listed(registered: Set[str], grouped: bool = True) -> List[str]:
     """What a client is shown: groups with at least one registered member, and every ungrouped tool."""
     registered = set(registered)
-    if legacy:
+    if not grouped:
         return sorted(registered)
     groups = {group for group, (_, actions) in GROUPS.items() if registered & set(actions.values())}
     return sorted((registered - hidden(registered)) | groups)

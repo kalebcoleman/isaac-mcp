@@ -27,7 +27,7 @@ BUILTINS = {"run_python", "status", "list_bridges", "reload_tools", "put_file", 
 @pytest.fixture(autouse=True)
 def single_purpose_tool_list(monkeypatch):
     """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
-    monkeypatch.setenv("ISAAC_MCP_LEGACY_TOOLS", "1")
+    monkeypatch.setenv("ISAAC_MCP_GROUP_TOOLS", "0")
 
 
 class _Offline:

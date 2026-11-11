@@ -6,7 +6,7 @@ required. For behavior, refusals and limits, read the page linked in each sectio
 
 A client is shown most of these as an action of a [grouped tool](TOOLS-HOST.md#grouped-tools): each
 such entry says "Listed as", and takes the same arguments either way. The single-purpose name still
-works when called, and `ISAAC_MCP_LEGACY_TOOLS=1` lists it.
+works when called, and `ISAAC_MCP_GROUP_TOOLS=0` lists it.
 
 Arguments are shown as `name` (type, required) or `name` (type, default). Generic scene tools refuse
 arguments they do not declare, so a misspelled name is an error rather than being ignored. A live

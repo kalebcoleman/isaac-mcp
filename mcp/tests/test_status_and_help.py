@@ -282,3 +282,20 @@ def test_the_job_list_holds_both_kinds_newest_first(state, tmp_path, monkeypatch
     assert listing["running"] >= 1
     state.client = Bridge({"job_status": ConnectionRefusedError("no simulator")})
     assert len(json.loads(gw._dispatch("job_status", {}, state))["jobs"]) == 2, "with no simulator the records are the list"
+
+
+def test_the_check_in_does_not_reread_jobs_and_sessions_that_have_ended(tmp_path, monkeypatch):
+    from isaac_mcp.isaaclab import jobs as lab_jobs
+
+    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path))
+    for name, status in (("a-done", "finished"), ("b-failed", "failed")):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "job.json").write_text(json.dumps({"id": name, "status": status, "pid": 1}))
+    read = []
+    original = lab_jobs._read_job
+    monkeypatch.setattr(lab_jobs, "_read_job", lambda folder: (read.append(folder.name), original(folder))[1])
+    assert lab_jobs.running_jobs() == [] and sorted(read) == ["a-done", "b-failed"]
+    (tmp_path / "c-new").mkdir()
+    (tmp_path / "c-new" / "job.json").write_text(json.dumps({"id": "c-new", "status": "finished"}))
+    del read[:]
+    assert lab_jobs.running_jobs() == [] and read == ["c-new"], "only the job not seen before is read"

@@ -21,7 +21,7 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 from .jobs import JobError
-from .protocol import ToolError
+from .protocol import Base64, ToolError
 from .sessions import PRELOADED
 
 # ---- run_python --------------------------------------------------------------------------
@@ -296,7 +296,10 @@ def cmd_get_file(bridge, path: str) -> Dict[str, Any]:
             data = stream.read()
     except OSError as exc:
         raise ToolError(f"cannot read {target}: {exc}")
-    return {"path": target, "bytes": len(data), "content_b64": base64.b64encode(data).decode("ascii")}
+    # Encoded a piece at a time, so a large file never keeps the main loop waiting for the interpreter.
+    step = 3 << 18
+    encoded = "".join(base64.b64encode(data[start:start + step]).decode("ascii") for start in range(0, len(data), step))
+    return {"path": target, "bytes": len(data), "content_b64": Base64(encoded)}
 
 
 def cmd_stat_file(bridge, path: str) -> Dict[str, Any]:
@@ -324,6 +327,7 @@ def _app_ready() -> Optional[bool]:
         return None
 
 
+_HOSTNAME = socket.gethostname()
 _SOURCE_TTL_S = 5.0
 _source_cache: Dict[str, Any] = {"at": 0.0, "report": None}
 
@@ -351,11 +355,11 @@ def cmd_status(bridge, detail: bool = True) -> Dict[str, Any]:
     started = bridge._started_at
     return {
         **app_identity(),
-        "pid": os.getpid(), "port": bridge._port, "bind_host": bridge._bind_host, "hostname": socket.gethostname(),
+        "pid": os.getpid(), "port": bridge._port, "bind_host": bridge._bind_host, "hostname": _HOSTNAME,
         "python": platform.python_version(), "app_ready": _app_ready(),
         "started": started, "uptime_s": round(time.time() - started, 1) if started else None,
         "namespaces": sorted(o["namespace"] for o in owners.values() if o["namespace"]),
-        "tools": len(bridge.get_registered_tools(include_internal=True)),
+        "tools": bridge.tool_count(),
         "toolsets": {o["namespace"]: o["metadata"]["source_hash"] for o in owners.values()
                      if o["metadata"].get("source_hash")},
         "busy": bridge.busy(),
@@ -438,12 +442,14 @@ def builtin_tools(bridge) -> List:
                                  "description": "Destination path on the bridge's box (~ expands)."},
                         "content_b64": {"type": "string", "required": True, "description": "File content, base64-encoded."},
                         "mkdirs": {"type": "boolean", "description": "Create missing parent directories (default true)."}},
-            handler=bound(cmd_put_file)),
+            handler=bound(cmd_put_file), inline=True),
         ToolDefinition(
             name="get_file",
             description="Read a file from the bridge box's disk, returned base64-encoded (content_b64). Pull "
                         "half of put_file.",
-            parameters=path, handler=bound(cmd_get_file), read_only=True),
+            # The file tools touch only the disk, so they run on the caller's socket thread: a large
+            # file is read, hashed or written without holding up a frame.
+            parameters=path, handler=bound(cmd_get_file), read_only=True, inline=True),
         ToolDefinition(
             name="status",
             description="Where am I, in one call: the bridge that answered (pid, port, app, readiness), every "
@@ -470,7 +476,7 @@ def builtin_tools(bridge) -> List:
             name="stat_file",
             description="Existence, size, and sha256 of a file on the bridge's box, to skip unchanged pushes "
                         "and verify assets.",
-            parameters=path, handler=bound(cmd_stat_file), read_only=True),
+            parameters=path, handler=bound(cmd_stat_file), read_only=True, inline=True),
         ToolDefinition(name="list_tools", description="List all tools registered on this bridge.",
                        handler=bound(cmd_list_tools), internal=True, read_only=True, inline=True),
     ]
