@@ -374,10 +374,14 @@ def _step_key(window_id: int, pid: int, key: str, modifiers: list[str] | None = 
 
 def _after(window_id: int, text: str, screenshot_after: bool):
     """The action's answer, and with screenshot_after the window as it looks now (taken after every lock
-    and server grab is released, with the same capture as the screenshot tool)."""
+    and server grab is released, with the same capture as the screenshot tool). A capture that fails
+    leaves a note beside the answer instead."""
     if not screenshot_after:
         return f"{text}; verify the resulting UI"
-    return [text, *screen.capture(window_id=window_id)]
+    try:
+        return [text, *screen.capture(window_id=window_id)]
+    except Exception as error:  # noqa: BLE001 - the input was sent; its answer must not be lost
+        return f"{text}; screenshot: not taken ({error or type(error).__name__}); verify the resulting UI"
 
 
 def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None = None) -> None:
