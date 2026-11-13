@@ -1,0 +1,626 @@
+{
+  "schema": 1,
+  "description": "Single source of truth for the UR5e Jenga work cell. Every leaf is {value, status, source}. status: confirmed (measured or stated by Kaleb / a datasheet), unconfirmed (best guess, must be measured), conflict (sources disagree; the chosen value is the default), placeholder (stand-in geometry), to_buy (item not yet in the lab; value is a design choice). Lengths in metres, masses in kg, angles in degrees unless the key says otherwise. World frame: robot base at the origin, tabletop top surface at z=0, +X away from the robot toward the Jenga tower. No fiducials of any kind (AprilTag, ArUco): calibration is markerless.",
+  "world": {
+    "tabletop_z_m": {
+      "value": 0.0,
+      "status": "confirmed",
+      "source": "Design rule: world z=0 is the tabletop top surface (scene.py contract)."
+    },
+    "bench_height_m": {
+      "value": 0.885,
+      "status": "conflict",
+      "source": "Aldrin comments in scene.py say 0.885 m; projects/jenga-rl layout.py says BENCH_TABLE_TOP_Z=0.801 m. Unmeasured: measure floor-to-tabletop in the lab. Only affects the placeholder bench legs; z=0 stays at the tabletop."
+    },
+    "bench_height_alternatives_m": {
+      "value": [
+        0.885,
+        0.801
+      ],
+      "status": "conflict",
+      "source": "Aldrin scene.py comment; jenga-rl layout.py."
+    },
+    "bench_top_size_xy_m": {
+      "value": [
+        1.4,
+        0.9
+      ],
+      "status": "unconfirmed",
+      "source": "Placeholder bench in scene.py; the real Vention top size is in the Vention CAD (vention.usd) and not measured."
+    },
+    "workstation_xy_m": {
+      "value": [
+        0.2252,
+        -0.11364
+      ],
+      "status": "confirmed",
+      "source": "WORKSTATION_XY in settings.py: Vention offset relative to the robot at the origin, from Aldrin's source scene."
+    }
+  },
+  "robot": {
+    "model": {
+      "value": "UR5e",
+      "status": "confirmed",
+      "source": "Kaleb."
+    },
+    "reach_m": {
+      "value": 0.85,
+      "status": "confirmed",
+      "source": "UR5e datasheet (850 mm)."
+    },
+    "mounting": {
+      "value": "Vention bench / base plate",
+      "status": "confirmed",
+      "source": "Kaleb."
+    },
+    "base_plate_thickness_m": {
+      "value": 0.0,
+      "status": "unconfirmed",
+      "source": "Not measured; robot base placed at z=0 (ROBOT_BASE_Z in settings.py)."
+    },
+    "initial_joint_deg": {
+      "value": [
+        0,
+        -80,
+        100,
+        -110,
+        -90,
+        0
+      ],
+      "status": "unconfirmed",
+      "source": "Presentation pose; not a measured lab home pose."
+    }
+  },
+  "stack": {
+    "order": {
+      "value": [
+        "bota",
+        "quick_changer",
+        "rg2"
+      ],
+      "status": "unconfirmed",
+      "source": "Kaleb: likely flange -> Bota -> Quick Changer -> RG2. Configurable: any permutation of bota, quick_changer, rg2 with rg2 last. Verify against the real build."
+    },
+    "tool_axis": {
+      "value": "flange +X (asset convention); tool0 +Z in ROS",
+      "status": "confirmed",
+      "source": "robot.py attach_rg2_to_ur5e (flange-identity mount)."
+    }
+  },
+  "bota": {
+    "model": {
+      "value": "Bota Systems Rokubi BFT-ROKS-SER-M8",
+      "status": "confirmed",
+      "source": "RISL_assembly_workspace auxiliary/bota_socket.json (product_name)."
+    },
+    "serial": {
+      "value": "SN000540",
+      "status": "confirmed",
+      "source": "bota_socket.json."
+    },
+    "diameter_m": {
+      "value": 0.048,
+      "status": "unconfirmed",
+      "source": "Kaleb's approximate figure (~48 mm); datasheet/caliper not checked."
+    },
+    "length_m": {
+      "value": 0.032,
+      "status": "unconfirmed",
+      "source": "Kaleb's approximate figure (~32 mm); the real stack height depends on the adapter plates used, not measured."
+    },
+    "mass_kg": {
+      "value": 0.12,
+      "status": "unconfirmed",
+      "source": "Kaleb's approximate figure (~0.12 kg); weigh it."
+    },
+    "sensor_origin_along_axis_m": {
+      "value": 0.016,
+      "status": "unconfirmed",
+      "source": "Assumed measurement frame at the mid-height of the body; Bota datasheet shows the true origin."
+    },
+    "frame_id": {
+      "value": "bota_ft_sensor",
+      "status": "confirmed",
+      "source": "Max's command notes: bota_driver_node -p bota_ft_sensor_link_name:=bota_ft_sensor."
+    },
+    "rate_hz": {
+      "value": 60.0,
+      "status": "unconfirmed",
+      "source": "Simulation physics sampling rate, not a claimed real Bota output rate."
+    },
+    "wrench_topic": {
+      "value": "/force_torque_sensor_broadcaster/wrench_sim",
+      "status": "unconfirmed",
+      "source": "Preserves existing twin topic. Bota driver topic not pinned in Max sources; remap/configure after lab topic inventory."
+    },
+    "wrench_type": {
+      "value": "geometry_msgs/msg/WrenchStamped",
+      "status": "confirmed",
+      "source": "Existing twin publisher; wrench_utils.py in RISL_ur."
+    }
+  },
+  "quick_changer": {
+    "model": {
+      "value": "OnRobot Quick Changer (robot side + tool side)",
+      "status": "confirmed",
+      "source": "Kaleb."
+    },
+    "standoff_m": {
+      "value": 0.01592,
+      "status": "confirmed",
+      "source": "Aldrin CAD value (robot.py STANDOFF_M); supersedes the URDF's 15.0 mm."
+    },
+    "mass_kg": {
+      "value": 0.41,
+      "status": "unconfirmed",
+      "source": "Value in a robot.py comment; not weighed."
+    }
+  },
+  "rg2": {
+    "model": {
+      "value": "OnRobot RG2 (standard, NOT RG2-FT)",
+      "status": "confirmed",
+      "source": "Kaleb; no fingertip sensors."
+    },
+    "max_opening_m": {
+      "value": 0.11,
+      "status": "confirmed",
+      "source": "Kaleb / OnRobot RG2 datasheet (110 mm)."
+    },
+    "control": {
+      "value": "Modbus via UR tool I/O",
+      "status": "confirmed",
+      "source": "Kaleb."
+    },
+    "sim_asset": {
+      "value": "gripper/husarion_rg2/rg2_gripper_fixed.usd",
+      "status": "confirmed",
+      "source": "Existing local Husarion linkage asset; authored mass is reported by workcell inspection."
+    },
+    "datasheet_mass_kg": {
+      "value": 0.78,
+      "status": "unconfirmed",
+      "source": "Kaleb's figure for the official onrobot/onrobot-isaacsim RG2 (~0.78 kg); confirm on the OnRobot datasheet."
+    },
+    "husarion_mass_kg": {
+      "value": 2.3,
+      "status": "unconfirmed",
+      "source": "Kaleb's figure for the Husarion asset; the smoke test reports the mass actually authored in the USD."
+    },
+    "width_command_units_per_mm": {
+      "value": 10,
+      "status": "conflict",
+      "source": "Max's rg_gripper.py sends the integer string straight to move_gripper in 0.1 mm units (0..1100); his README says millimetres. Code wins."
+    },
+    "command_rate_hz": {
+      "value": 5.0,
+      "status": "confirmed",
+      "source": "Max RISL_onrobot_ros rg_gripper.py feedback_rate default."
+    }
+  },
+  "finger_pads": {
+    "present": {
+      "value": true,
+      "status": "confirmed",
+      "source": "Kaleb: small add-on black finger pads."
+    },
+    "size_m": {
+      "value": [
+        0.03,
+        0.018,
+        0.008
+      ],
+      "status": "placeholder",
+      "source": "Sensor carrier concept envelope; matching parametric SCAD is generated from this config."
+    },
+    "static_friction": {
+      "value": 0.8,
+      "status": "unconfirmed",
+      "source": "Placeholder for black rubber-like pad on wood."
+    },
+    "dynamic_friction": {
+      "value": 0.7,
+      "status": "unconfirmed",
+      "source": "Placeholder."
+    },
+    "local_centres_m": {
+      "value": [
+        [
+          0.0379,
+          -0.01898,
+          0
+        ],
+        [
+          0.0379,
+          0.01898,
+          0
+        ]
+      ],
+      "status": "unconfirmed",
+      "source": "Existing Husarion finger contact-centre convention in robot.py; verify on lab fingers."
+    }
+  },
+  "finger_force_sensors": {
+    "fitted": {
+      "value": true,
+      "status": "to_buy",
+      "source": "Planned demo configuration: two TAL221 cells in printable pads. Not present on the real standard RG2 today."
+    },
+    "range_n": {
+      "value": 4.903325,
+      "status": "to_buy",
+      "source": "500 g nominal cell range. RG2 can exceed this: mechanical overload stops and force limiting required."
+    },
+    "topic": {
+      "value": "/gripper/fingertip_force",
+      "status": "to_buy",
+      "source": "Proposed name, std_msgs/Float32MultiArray [left_N, right_N]; does not exist on the real robot until the Arduino node is written."
+    },
+    "printed_tip_geometry_source": {
+      "value": "workcell/fingertip_pad.scad",
+      "status": "placeholder",
+      "source": "Parametric concept with cell pocket; not a manufacturing-qualified fingertip."
+    },
+    "model": {
+      "value": "TAL221 500 g miniature load cell",
+      "status": "to_buy",
+      "source": "Proposed bridge-output sensor; HX711-compatible. Confirm overload margin before buying."
+    },
+    "cell_size_m": {
+      "value": [
+        0.022,
+        0.012,
+        0.004
+      ],
+      "status": "unconfirmed",
+      "source": "Packaging envelope only; vendor drawing and hole pattern required before fabrication."
+    }
+  },
+  "wrist_camera": {
+    "model": {
+      "value": "Intel RealSense D415",
+      "status": "confirmed",
+      "source": "Kaleb (label confirmed)."
+    },
+    "body_size_m": {
+      "value": [
+        0.099,
+        0.02,
+        0.023
+      ],
+      "status": "unconfirmed",
+      "source": "Intel D415 datasheet (99 x 20 x 23 mm) as recalled; verify on the datasheet."
+    },
+    "color_fov_deg": {
+      "value": [
+        69.4,
+        42.5
+      ],
+      "status": "confirmed",
+      "source": "D415 RGB FOV used by Max (camera_model.py) and by the twin's workspace camera."
+    },
+    "resolution": {
+      "value": [
+        1280,
+        720
+      ],
+      "status": "unconfirmed",
+      "source": "Placeholder: RGB and aligned depth at 1280x720. Set to the profile the real pipeline uses."
+    },
+    "offset_in_tool0_m": {
+      "value": [
+        -0.012,
+        -0.038,
+        -0.005
+      ],
+      "status": "conflict",
+      "source": "Default = Max's localizer_bridge.py. Max's camera_model.py has z=-0.010. Aldrin hard-codes a D455 at wrist_3 (0.045,-0.05,0.07) rotZYX(-90,-180,270) (cameras.py), a different camera and mount."
+    },
+    "offset_in_tool0_alternatives_m": {
+      "value": {
+        "max_localizer_bridge": [
+          -0.012,
+          -0.038,
+          -0.005
+        ],
+        "max_camera_model": [
+          -0.012,
+          -0.038,
+          -0.01
+        ],
+        "aldrin_d455_wrist3": [
+          0.045,
+          -0.05,
+          0.07
+        ]
+      },
+      "status": "conflict",
+      "source": "As listed."
+    },
+    "rotation_in_tool0_deg": {
+      "value": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "status": "unconfirmed",
+      "source": "Identity in Max's code: the camera OPTICAL frame (z forward, y down) equals tool0. The USD camera looks along -Z, so workcell.py adds Rx(180) internally."
+    },
+    "mount_position": {
+      "value": "under the arm",
+      "status": "unconfirmed",
+      "source": "Kaleb says it is now mounted UNDER the arm. Neither Max's tool0 offset (y=-38 mm) nor Aldrin's wrist_3 pose is documented as under-arm: the bracket CAD from Max is pending. Re-measure offset and rotation after the move."
+    },
+    "bracket_size_m": {
+      "value": [
+        0.03,
+        0.06,
+        0.012
+      ],
+      "status": "placeholder",
+      "source": "Printed bracket stand-in until Max's CAD arrives."
+    },
+    "bracket_mass_kg": {
+      "value": 0.02,
+      "status": "placeholder",
+      "source": "Guess for a printed bracket."
+    },
+    "camera_mass_kg": {
+      "value": 0.072,
+      "status": "unconfirmed",
+      "source": "D415 datasheet mass as recalled (72 g)."
+    },
+    "ros_namespace": {
+      "value": "wrist_camera",
+      "status": "unconfirmed",
+      "source": "Proposed: realsense2_camera with camera_namespace and camera_name both set to this. Max's localizer reads the camera through pyrealsense2, not ROS topics."
+    },
+    "calibration": {
+      "value": "configurable extrinsics; markerless hand-eye calibration pending",
+      "status": "unconfirmed",
+      "source": "No calibration algorithm or measured extrinsics claimed."
+    }
+  },
+  "overhead_camera": {
+    "model": {
+      "value": "Intel RealSense D415",
+      "status": "to_buy",
+      "source": "Kaleb; ~$325 estimate."
+    },
+    "position_m": {
+      "value": [
+        0.7,
+        -0.1333,
+        1.02
+      ],
+      "status": "unconfirmed",
+      "source": "Proposed overhead D415 optical origin; outside 850 mm spherical reach."
+    },
+    "look_at_m": {
+      "value": [
+        0.7,
+        -0.1333,
+        0.0
+      ],
+      "status": "unconfirmed",
+      "source": "Placeholder: straight down at the tower base."
+    },
+    "up_hint": {
+      "value": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "status": "placeholder",
+      "source": "Image up = +X (away from the robot)."
+    },
+    "color_fov_deg": {
+      "value": [
+        69.4,
+        42.5
+      ],
+      "status": "confirmed",
+      "source": "Same D415 as the wrist camera."
+    },
+    "resolution": {
+      "value": [
+        1280,
+        720
+      ],
+      "status": "unconfirmed",
+      "source": "Placeholder."
+    },
+    "ros_namespace": {
+      "value": "overhead_camera",
+      "status": "unconfirmed",
+      "source": "Proposed realsense2_camera namespace/name."
+    },
+    "calibration": {
+      "value": "configurable extrinsics; markerless calibration pending",
+      "status": "unconfirmed",
+      "source": "No calibration algorithm or measured extrinsics claimed."
+    }
+  },
+  "overhead_mount": {
+    "type": {
+      "value": "gantry",
+      "status": "to_buy",
+      "source": "80/20 1515 gantry is the selected concept; Vention clamp remains a BOM alternative, not implemented."
+    },
+    "extrusion_size_m": {
+      "value": 0.0381,
+      "status": "to_buy",
+      "source": "80/20 1515 series is 1.5 in x 1.5 in = 38.1 mm."
+    },
+    "post_xy_m": {
+      "value": [
+        [
+          1.05,
+          -0.55
+        ],
+        [
+          1.05,
+          0.55
+        ]
+      ],
+      "status": "unconfirmed",
+      "source": "Proposed gantry posts, outside 850 mm radial reach."
+    },
+    "removable": {
+      "value": true,
+      "status": "to_buy",
+      "source": "Mounted on a quick-release base (Thorlabs KB3X3 or SmallRig Arca plate)."
+    },
+    "quick_release_base": {
+      "value": "Thorlabs KB3X3",
+      "status": "to_buy",
+      "source": "Selected camera-only detachable kinematic mount; not a load-bearing gantry base. SmallRig is an alternative."
+    },
+    "printed_shelf_size_m": {
+      "value": [
+        0.1,
+        0.06,
+        0.008
+      ],
+      "status": "placeholder",
+      "source": "Printed camera shelf / tilt arm stand-in."
+    },
+    "height_m": {
+      "value": 1.1,
+      "status": "unconfirmed",
+      "source": "Design clearance; all overhead rails above 850 mm spherical reach."
+    }
+  },
+  "jenga": {
+    "block_size_m": {
+      "value": [
+        0.072,
+        0.024,
+        0.014
+      ],
+      "status": "unconfirmed",
+      "source": "FMB4 / Aldrin assets (72x24x14 mm). Retail Jenga is often quoted 75x25x15 mm: caliper the actual blocks."
+    },
+    "block_mass_kg": {
+      "value": 0.015,
+      "status": "unconfirmed",
+      "source": "Kaleb (~15 g); the fmb4 USDs author no mass (density default would give 24 g). Weigh a block."
+    },
+    "layers": {
+      "value": 18,
+      "status": "unconfirmed",
+      "source": "Standard 54-block tower = 18 layers x 3; the phase-1 cell builds a short stack (see tower_layers_built)."
+    },
+    "tower_layers_built": {
+      "value": 18,
+      "status": "confirmed",
+      "source": "Complete 54-block Jenga tower, Kaleb phase-1 scope."
+    },
+    "tower_xy_m": {
+      "value": [
+        0.7,
+        -0.1333
+      ],
+      "status": "unconfirmed",
+      "source": "projects/jenga-rl layout.py (TOWER_XY, tower y)."
+    },
+    "static_friction": {
+      "value": 0.3,
+      "status": "unconfirmed",
+      "source": "jenga-rl block material (0.30 static / 0.25 dynamic); calibration pending."
+    },
+    "dynamic_friction": {
+      "value": 0.25,
+      "status": "unconfirmed",
+      "source": "As above."
+    },
+    "franka_demo_note": {
+      "value": "sim_tools/jenga.py (Franka demo) uses double-size blocks; left unchanged.",
+      "status": "confirmed",
+      "source": "Kaleb instruction."
+    }
+  },
+  "gravity": {
+    "mode": {
+      "value": "physics",
+      "status": "confirmed",
+      "source": "Kaleb: physics enables gravity; mirror_real disables gravity on the robot chain only."
+    },
+    "modes": {
+      "value": [
+        "physics",
+        "mirror_real"
+      ],
+      "status": "confirmed",
+      "source": "Work-cell quick_start mode parameter."
+    }
+  },
+  "lighting": {
+    "key_intensity": {
+      "value": 2500.0,
+      "status": "placeholder",
+      "source": "Demo lighting preset."
+    },
+    "dome_intensity": {
+      "value": 600.0,
+      "status": "placeholder",
+      "source": "Demo lighting preset."
+    }
+  },
+  "interfaces": {
+    "joint_states": {
+      "value": {
+        "topic": "/joint_states",
+        "type": "sensor_msgs/msg/JointState"
+      },
+      "status": "confirmed",
+      "source": "RISL_simulation simulation_node.py params; real UR driver."
+    },
+    "trajectory_action": {
+      "value": {
+        "topic": "/scaled_joint_trajectory_controller/follow_joint_trajectory",
+        "type": "control_msgs/action/FollowJointTrajectory"
+      },
+      "status": "confirmed",
+      "source": "RISL_ur scripts (controller_name scaled_joint_trajectory_controller). Sim side: not implemented in phase 1 (joint states only)."
+    },
+    "gripper_command": {
+      "value": {
+        "topic": "/gripper_command",
+        "type": "std_msgs/msg/String",
+        "grammar": "open | close | query | <integer width in 0.1 mm, 0..1100>"
+      },
+      "status": "confirmed",
+      "source": "RISL_onrobot_ros rg_gripper.py command_callback."
+    },
+    "gripper_width": {
+      "value": {
+        "topic": "/gripper_queried_width",
+        "type": "std_msgs/msg/Float64",
+        "unit": "mm"
+      },
+      "status": "confirmed",
+      "source": "RISL_onrobot_ros rg_gripper.py publish_width."
+    },
+    "wrist_camera_topics": {
+      "value": [
+        "/wrist_camera/wrist_camera/color/image_raw",
+        "/wrist_camera/wrist_camera/color/camera_info",
+        "/wrist_camera/wrist_camera/aligned_depth_to_color/image_raw",
+        "/wrist_camera/wrist_camera/aligned_depth_to_color/camera_info"
+      ],
+      "status": "unconfirmed",
+      "source": "Standard realsense2_camera (4.x) names for camera_namespace=camera_name=wrist_camera."
+    },
+    "overhead_camera_topics": {
+      "value": [
+        "/overhead_camera/overhead_camera/color/image_raw",
+        "/overhead_camera/overhead_camera/color/camera_info",
+        "/overhead_camera/overhead_camera/aligned_depth_to_color/image_raw",
+        "/overhead_camera/overhead_camera/aligned_depth_to_color/camera_info"
+      ],
+      "status": "unconfirmed",
+      "source": "As above."
+    }
+  }
+}
