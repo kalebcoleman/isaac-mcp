@@ -110,7 +110,7 @@ def test_live_visibility_uses_same_selection():
         toolsets.owner("sim.unknown", "sim")
 
 
-@pytest.mark.parametrize("profile,budget", [("minimal", 4000), ("default", 22000), ("all", 35000)])
+@pytest.mark.parametrize("profile,budget", [("minimal", 1670), ("default", 15900), ("all", 23350)])   # measured 1,590 / 15,134 / 22,201, plus about 5 percent
 def test_listing_size(profile, budget):
     instance = build(profile)
     tools = asyncio.run(instance.list_tools())

@@ -1152,6 +1152,7 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
     if canonical in REGISTRY:
         _forbid_unknown_arguments(server, name)
     strip_schema_titles(server, name)
+    grouped_tools.shorten_listed(server._tool_manager._tools[name])
 
 
 def _explain_missing_target(model) -> None:
@@ -1209,6 +1210,7 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
         tool = server._tool_manager._tools["robosim"]
         tool.description = inspect.cleandoc(tool.description)
         strip_schema_titles(server, "robosim")
+        grouped_tools.shorten_listed(tool)
 
 
 def _drop_unselected(server: FastMCP, state: _BridgeState) -> None:
@@ -1838,6 +1840,31 @@ def _isaac_help(task: Optional[str], no_fit: bool = False, enabled=toolsets.DEFA
     return "\n".join(lines)
 
 
+def _tool_help(server: FastMCP, name: str) -> str:
+    """The full description and arguments of one tool, as written before the tool list shortened them."""
+    registered = server._tool_manager._tools
+    name = name.strip().replace(".", "__")
+    if name in tool_groups.GROUPS and name in registered:
+        return f"{name} is a grouped tool: call {name}(action=\"help\") for every action's full description and arguments."
+    if name not in registered:
+        return f"No listed tool is called {name!r}. Listed tools: {', '.join(sorted(grouped_tools.listed_names(server)))}."
+    tool = registered[name]
+    full = grouped_tools.FULL.get(name)
+    if full is None or full["listed"] != tool.description:     # not shortened: what is registered is the full text
+        full = {"description": tool.description, "arguments": tool.parameters.get("properties", {}),
+                "required": tool.parameters.get("required", [])}
+
+    def listed(value):                  # the names a client can call, in the text but not in the keys
+        if isinstance(value, str):
+            return tool_groups.listed_form(value)
+        if isinstance(value, dict):
+            return {key: listed(item) if key == "description" or isinstance(item, (dict, list)) else item
+                    for key, item in value.items()}
+        return [listed(item) for item in value] if isinstance(value, list) else value
+
+    return json.dumps({name: listed({key: full[key] for key in ("description", "arguments", "required")})}, indent=1)
+
+
 def _register_gateway_tools(server: FastMCP, groups: Iterable[str], state: Optional[_BridgeState] = None) -> None:
     """Register ``refresh_tools`` and ``use_bridge`` (the ``gateway`` group) and ``isaac_help`` on ``server``.
 
@@ -1856,13 +1883,15 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str], state: Optio
         return _reported(await _refresh_tools(server, ctx, wait_s))
 
     @mcp.tool(annotations=READ_ONLY)
-    def isaac_help(task: Annotated[str | None, Field(description="What you are trying to do, in a few words, e.g. 'record a video', 'why did the grasp fail', 'fly a drone with my controller'. Omit for the full map.")] = None,
-                   no_fit: Annotated[bool, Field(description="true: none of the tools named for this task fits. Records the question in a local file for the maintainer and returns the run_python pattern to use instead.")] = False) -> str:
-        """Start here. Say what you want to do and get the exact isaac tools to load and call, in order,
-        instead of writing your own screenshot, recording, contact-logging or training code. When no
-        tool fits it says so, gives the run_python pattern and records the question locally. Reads
-        nothing from the simulator and works with no bridge."""
+    def isaac_help(task: Annotated[str | None, Field(description="What you want to do, in a few words, e.g. 'record a video'. Omit for the full map.")] = None,
+                   no_fit: Annotated[bool, Field(description="true: no tool named for this task fits; records the question locally and returns the run_python pattern.")] = False,
+                   tool: Annotated[str | None, Field(description="A listed tool's name: returns its full description and arguments, which the tool list shortens.")] = None) -> str:
+        """Start here. Say what you want to do and get the isaac tools to call, in order, instead of
+        writing your own screenshot, recording, contact-logging or training code. With tool=name, the
+        full text of one tool. Reads nothing from the simulator; works with no bridge."""
         live = state or _state_for(server)       # the selection can change at run time
+        if tool:
+            return _tool_help(server, tool)
         return _isaac_help(task, no_fit, live.toolsets, live.runtime_enable)
 
     @mcp.tool(name="toolsets", annotations=IDEMPOTENT_WRITE)
@@ -1874,9 +1903,9 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str], state: Optio
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE, description=(
         "Switch this MCP server to another running Kit bridge on this machine. Use it when several run "
-        f"or the wrong one answers.\n\nFind candidates with {LIST_BRIDGES_HELP}. Replaces the bridge tools "
-        "with that Kit's, within the enabled toolsets. Host tools are unaffected. "
-        "Lasts until this server restarts."))
+        "or the wrong one answers. Find candidates with status. Replaces the bridge tools with that Kit's, "
+        "within the enabled toolsets. Host tools are unaffected. Lasts until this server restarts."
+        f"\n\nOther ways to list bridges: {LIST_BRIDGES_HELP}."))
     async def use_bridge(port: Annotated[int, Field(description="Bridge TCP port from --list-bridges or status.")], ctx: Context = None) -> Any:  # type: ignore[assignment]
         """Switch this MCP server to another running Kit bridge on this machine."""
         return _reported(await _use_bridge(server, port, ctx))

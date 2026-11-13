@@ -70,7 +70,7 @@ GROUPS: Dict[str, tuple] = {
     "jobs": ("Every job, simulator or process: list, status (with wait_s), log tail, cancel.", {
         "status": "job_status", "cancel": "job_cancel", "list": "isaaclab__runs_list", "tail": "isaaclab__runs_tail",
         "lab_status": "isaaclab__runs_status"}),
-    "isaaclab__launch": ("Start an Isaac Lab job and get its job_id: train, evaluate, play, record or check a task.", {
+    "isaaclab__launch": ("Start an Isaac Lab job (uses the GPU) and get its job_id: train, evaluate, play, record or check a task.", {
         "train": "isaaclab__train", "eval": "isaaclab__eval", "play": "isaaclab__play",
         "record": "isaaclab__record", "env_check": "isaaclab__env_check"}),
     "isaaclab__inspect": ("Before launching: the Isaac Lab install, its tasks, GPU room, and checkpoints.", {

@@ -1071,7 +1071,9 @@ def test_bridge_listing_help_is_one_working_form(monkeypatch, tmp_path):
     state = gw._state_for(server)
     listed = {tool.name: tool for tool in asyncio.run(server.list_tools())}
     refused = ConnectionRefusedError("[Errno 111] Connection refused")
-    messages = [gw._BRIDGE_HELP, listed["use_bridge"].description,
+    full_use_bridge = json.loads(gw._tool_help(server, "use_bridge"))["use_bridge"]["description"]   # the listing is short
+    assert "Find candidates with status" in listed["use_bridge"].description
+    messages = [gw._BRIDGE_HELP, full_use_bridge,
                 gw._catalog_error("status", refused, state), gw._catalog_error("ur5e_dt.workcell_status", refused, state),
                 gw._starting_hint(server, refused)]
     for message in messages:
