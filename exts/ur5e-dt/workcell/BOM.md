@@ -29,8 +29,9 @@ Price provenance is retained in the CSV's `price_source` fields for the D415 and
 A stock-profile rate is not a price for the assembled overhead gantry; its cut list and
 fasteners remain unresolved. No purchase or financial action is performed here.
 
-The lead owns pending CSV corrections for the provisional 5 mm plate and the distinction
-between the confirmed Quick Changer CAD standoff and unconfirmed installed size. This
-table reflects those stated facts without changing the CSV or claiming new measurements.
+The CSV records the provisional 5 mm plate and distinguishes the confirmed Quick Changer
+CAD standoff from its unconfirmed installed size. Neither record claims new measurements.
 The private pack remains a candidate: no runtime, render or lab-fidelity qualification
-is implied by this inventory. The new variation schema is pending lead integration.
+is implied by this inventory. Seeded per-block variation is configured in
+`lab_hardware.json` and exposed through the Jenga build action; its distributions remain
+unconfirmed until measured.
