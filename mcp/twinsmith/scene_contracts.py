@@ -713,7 +713,7 @@ add(
     "sim.ui.act",
     "Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (the X11 computer tool does not). screenshot_after=true returns the window after the action; or check with sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
     dict(
-        action=field("string", "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab).", enum=["click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "tab", "close", "wait"]),
+        action=field("string", "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab). Omit it with actions.", False, enum=["click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "tab", "close", "wait"]),
         ref=field("string", "Widget ref from sim__ui__find (its centre is used). For type/keypress it is clicked first to focus it.", False),
         x=field("integer", "X in Isaac Sim window pixels (when no ref).", False),
         y=field("integer", "Y in Isaac Sim window pixels (when no ref).", False),
