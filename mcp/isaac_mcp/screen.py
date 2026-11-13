@@ -1410,12 +1410,12 @@ def register_screen_tools(
     port_provider: Callable[[], int | None] | None = None,
     groups: Iterable[str] | None = None,
 ) -> None:
-    """Register the screen tools whose group is in ``groups`` (default: all of them).
+    """Register screen tools when the screen toolset is enabled.
 
-    The capture directories are created only when ``screen_capture`` is enabled, so a profile
+    The capture directories are created only when ``screen`` is enabled, so a profile
     without it leaves the filesystem alone."""
     mcp = ScopedTools(server, groups)
-    if mcp.enabled("screen_capture"):
+    if mcp.enabled("screen"):
         SHOT_DIR.mkdir(parents=True, exist_ok=True)
         VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 

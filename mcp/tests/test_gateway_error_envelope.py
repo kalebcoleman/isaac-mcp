@@ -12,9 +12,9 @@ from isaac_mcp.client import BridgeError
 
 
 @pytest.fixture(autouse=True)
-def single_purpose_tool_list(monkeypatch):
+def single_purpose_tool_list(member_listing):
     """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
-    monkeypatch.setenv("ISAAC_MCP_GROUP_TOOLS", "0")
+    pass
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +38,7 @@ def invoke(*, value=None, error=None):
         def close(self):
             pass
 
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     state = gw._state_for(server)
     state.client = Endpoint()
 
@@ -104,7 +104,7 @@ def test_real_tcp_bridge_application_and_builtin_error_envelopes(monkeypatch, tm
         live.bridge.register_owner("error_fixture", "error_fixture").add(
             td("refuse", lambda: {"status": "error", "message": "fixture refusal"}))
         monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
-        server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
+        server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
 
         async def run():
             async with create_connected_server_and_client_session(server._mcp_server) as client:

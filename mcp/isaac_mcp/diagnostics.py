@@ -34,8 +34,7 @@ KEEP_LOG_FILES = 30             # older logs of ended processes are pruned
 HEARTBEAT_S = 300.0
 DRIFT_TTL_S = 30.0
 #: Environment switches whose values are safe to record (they select tools; none is a secret).
-LOGGED_ENV = ("ISAAC_MCP_LOCAL_TOOLS", "ISAAC_MCP_SCENE_TOOLS", "ISAAC_MCP_NAMESPACE",
-              "ISAAC_MCP_BUILTINS", "ISAAC_MCP_NAME", "UR5E_DT_PORT", "ISAAC_MCP_PORT")
+LOGGED_ENV = ("ISAAC_MCP_TOOLSETS", "ISAAC_MCP_PHYSICS_BACKEND", "ISAAC_MCP_NAME", "UR5E_DT_PORT", "ISAAC_MCP_PORT")
 
 log = logging.getLogger("isaac_mcp.diagnostics")
 

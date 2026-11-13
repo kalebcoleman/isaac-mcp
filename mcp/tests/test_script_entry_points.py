@@ -18,14 +18,14 @@ def _script(name):
 
 def test_scene_client_keeps_exported_tool_groups_and_still_pins_the_port(monkeypatch):
     client = _script("scene_mcp_client")
-    monkeypatch.delenv("ISAAC_MCP_LOCAL_TOOLS", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_TOOLSETS", raising=False)
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
     monkeypatch.setenv("UR5E_DT_PORT", "1")
     env = client.parameters(18781).env
-    assert env["ISAAC_MCP_LOCAL_TOOLS"] == "gateway,screen_read,screen_capture,screen_control"
-    assert env["ISAAC_MCP_BUILTINS"] == "0" and env["UR5E_DT_PORT"] == "18781"
-    monkeypatch.setenv("ISAAC_MCP_LOCAL_TOOLS", "all,screen_input")
-    assert client.parameters(18781).env["ISAAC_MCP_LOCAL_TOOLS"] == "all,screen_input"
+    assert env["ISAAC_MCP_TOOLSETS"] == "default,-code"
+    assert env["UR5E_DT_PORT"] == "18781"
+    monkeypatch.setenv("ISAAC_MCP_TOOLSETS", "default,+input")
+    assert client.parameters(18781).env["ISAAC_MCP_TOOLSETS"] == "default,+input"
 
 
 @pytest.mark.parametrize("argv, code", [(["--help"], 0), (["-h"], 0), (["live"], 2), (["typo"], 2)])

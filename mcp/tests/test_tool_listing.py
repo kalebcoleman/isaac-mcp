@@ -21,15 +21,19 @@ MAX_PARAMETER_DESCRIPTION = 450
 # Tool or "tool.parameter": a limit that must be exceeded for a safety rule to stay in the listing.
 # Keep this small, and say why next to each entry.
 EXCEPTIONS: dict[str, int] = {}
-ALL_GROUPS = "all,screen_input,sim_launch"
+ALL_GROUPS = "all,+input,+launch"
 
 
 def _listing(monkeypatch, tmp_path, single_purpose):
     for name in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_SCENE_TOOLS", "ISAAC_MCP_LOCAL_TOOLS",
                  "ISAAC_MCP_GROUP_TOOLS"):
         monkeypatch.delenv(name, raising=False)
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": ALL_GROUPS, "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path),
-                              "ISAAC_MCP_GROUP_TOOLS": "0" if single_purpose else "1"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": ALL_GROUPS, "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path)})
+
+    if single_purpose:
+        from mcp.types import Tool
+        return [Tool(name=tool.name, description=tool.description, inputSchema=tool.parameters, annotations=tool.annotations)
+                for name, tool in server._tool_manager._tools.items() if name not in tool_groups.GROUPS]
 
     async def run():
         async with create_connected_server_and_client_session(server._mcp_server) as client:
@@ -47,7 +51,7 @@ def listed(monkeypatch, tmp_path):
 
 @pytest.fixture
 def single(monkeypatch, tmp_path):
-    """The single-purpose tools, listed as with ISAAC_MCP_GROUP_TOOLS=0."""
+    """The single-purpose tools, inspected through the internal registry."""
     return _listing(monkeypatch, tmp_path, single_purpose=True)
 
 
@@ -221,9 +225,8 @@ def test_what_the_server_says_names_tools_as_the_client_is_shown_them(listed, mo
     pattern = __import__("re").compile(r"(?<![A-Za-z0-9_])(" + "|".join(sorted(hidden, key=len, reverse=True)) + r")(?![A-Za-z0-9_*])")
     named = {t.name: sorted(set(pattern.findall(t.description + json.dumps(t.inputSchema)))) for t in listed}
     assert not {name: found for name, found in named.items() if found}, "a listed tool names a tool the client cannot see"
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     assert "sim__stage action=info" in server.instructions and "sim__stage__info" not in server.instructions
-    assert "sim__stage__info" in gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none", "ISAAC_MCP_GROUP_TOOLS": "0"}).instructions
 
 
 def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
@@ -242,7 +245,7 @@ def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
         def close(self):
             pass
 
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     gw._state_for(server).client = Endpoint()
 
     async def run():
@@ -271,7 +274,7 @@ def test_a_grouped_argument_takes_every_kind_its_actions_take_and_text_stays_tex
     joints = next(t for t in listed if t.name == "sim__joints").inputSchema["properties"]
     kinds = {kind.get("type") for kind in joints["positions"]["anyOf"]}
     assert kinds == {"array", "object"}, "command takes a list, teleport a mapping"
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": ALL_GROUPS})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": ALL_GROUPS})
     seen = []
     server._tool_manager._tools["window_type"].fn = lambda **given: seen.append(given) or "typed"
 
@@ -299,7 +302,7 @@ def test_advice_beside_the_caller_s_data_names_listed_tools(monkeypatch):
             pass
 
     monkeypatch.setattr(gw, "_job_record", lambda job_id: None)
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "isaaclab_jobs"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "minimal"})
     gw._state_for(server).client = Endpoint()
 
     async def run():

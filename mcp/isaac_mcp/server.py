@@ -39,12 +39,12 @@ from pydantic import Field
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.lowlevel.server import NotificationOptions
 
-from . import diagnostics, grouped_tools, host_catalog, tool_groups
+from . import config, diagnostics, grouped_tools, host_catalog, tool_groups, toolsets
 from .scene_contracts import HOST_ONLY
 from .tool_hints import CATALOG_HINTS
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
-from .local_tools import DEFAULT_GROUPS, IDEMPOTENT_WRITE, READ_ONLY, ScopedTools, local_tool_groups, strip_schema_titles
+from .local_tools import IDEMPOTENT_WRITE, READ_ONLY, ScopedTools, strip_schema_titles
 from .desktop_input import register_desktop_input_tools
 from .sim_sessions import live_sessions, register_sim_session_tools
 from .screen import register_screen_tools
@@ -204,16 +204,6 @@ def _host_identity_text() -> str:
     return f" MCP host: version {identity['version']}{commit}, PID {identity['pid']}.{warning}{drift}"
 
 
-def _namespace_filter() -> Optional[set]:
-    """The namespaces ISAAC_MCP_NAMESPACE allows, or None for all."""
-    wanted = {part.strip() for part in os.getenv("ISAAC_MCP_NAMESPACE", "").split(",")}
-    return wanted - {""} or None
-
-
-def _builtins_enabled() -> bool:
-    return os.getenv("ISAAC_MCP_BUILTINS", "1").strip().lower() not in ("0", "false", "no")
-
-
 # ---- the bridge connection ----
 # Each server keeps one BridgeClient open; client.py owns the socket and the message format.
 #
@@ -278,7 +268,8 @@ class _DefaultBridgeState(_BridgeState):
         return _REGISTERED_META
 
     def __init__(self) -> None:  # the base class would assign the properties above
-        pass
+        self.toolsets = toolsets.DEFAULT
+        self.env = None
 
     def get_client(self) -> BridgeClient:
         return get_client()
@@ -308,7 +299,7 @@ def offline_tools(server: Any = None) -> List[str]:
 
     These are listed and callable, but the selected bridge has not confirmed it serves them;
     ``registered_tools`` does not include them."""
-    offline = _offline_for(mcp if server is None else server)
+    offline = _offline_for((globals().get("mcp") or __getattr__("mcp")) if server is None else server)
     return sorted(offline.names.values()) if offline is not None else []
 
 
@@ -317,14 +308,10 @@ def _mcp_name(canonical: str) -> str:
 
 
 def _visible(canonical: str, meta: Dict[str, Any], state=None) -> bool:
-    """Whether this server shows the tool, given the namespace, built-ins and scene-tool settings."""
-    namespace = meta.get("namespace")
-    if namespace in {"sim", "assets"} and not getattr(state, "scene_tools_enabled", True):
-        return False
-    if namespace is None:      # a bridge built-in
-        return _builtins_enabled()
-    allowed = _namespace_filter()
-    return allowed is None or namespace in allowed
+    """Visibility is fixed by this server's startup toolset selection."""
+    selected = getattr(state, "toolsets", toolsets.DEFAULT)
+    namespaces = {meta.get("namespace") for meta in host_catalog.load_catalog().values()}
+    return toolsets.owner(canonical, meta.get("namespace"), namespaces) in selected
 
 
 def _drop_tool(server: FastMCP, name: str) -> None:
@@ -345,7 +332,10 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
     if any(not isinstance(name, str) or not isinstance(meta, dict)
            for name, meta in result["tools"].items()):
         raise RuntimeError("bridge list_tools contains an invalid tool entry")
-    tools = {name: meta for name, meta in result["tools"].items() if _visible(name, meta, state)}
+    try:
+        tools = {name: meta for name, meta in result["tools"].items() if _visible(name, meta, state)}
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
     names = {}
     for canonical, meta in tools.items():
         if "fields" not in meta:
@@ -1770,50 +1760,22 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
         return _reported(await _use_bridge(server, port, ctx))
 
 
-_RESTRICTED_NOTE = (
-    " This server runs with a restricted set of its own local tools (ISAAC_MCP_LOCAL_TOOLS): rely "
-    "on the tools it lists, and ignore guidance above about local tools that are not listed. The "
-    "restriction does not apply to bridge tools: those discovered from a Kit bridge, or listed from "
-    "the packaged catalog.")
-
-
 def build_server(env: Optional[Mapping[str, str]] = None,
-                 state: Optional[_BridgeState] = None) -> FastMCP:
-    """Build a host server whose local tools are chosen by ``ISAAC_MCP_LOCAL_TOOLS`` in ``env``.
-
-    ``env`` defaults to ``os.environ``. The groups are parsed once, here; an unknown group
-    raises :class:`LocalToolsError` before anything is registered. The module-level ``mcp`` is
-    ``build_server()``, so importing ``isaac_mcp.server`` with the variable unset registers the
-    standard local tools. Desktop input requires the explicitly selected ``screen_input`` group.
-
-    Each server gets its own bridge connection and discovery state (``state``, fresh unless the
-    caller passes one), so servers built in one process neither share a socket nor skip tools
-    because another server already discovered them. Only the module-level default ``mcp`` is
-    wired to the module-level state."""
-    env = os.environ if env is None else env
-    groups = local_tool_groups(env)
-    instructions = SERVER_INSTRUCTIONS
-    if not DEFAULT_GROUPS <= groups and "ISAAC_MCP_INSTRUCTIONS" not in env:
-        instructions += _RESTRICTED_NOTE
-    if "screen_input" in groups and "ISAAC_MCP_INSTRUCTIONS" not in env:
-        instructions += (" Desktop input is enabled on a shared X11 desktop. List the target "
-                         "window and inspect a fresh screenshot before acting; use its window ID, "
-                         "PID and original pixel size. Input can trigger arbitrary app actions.")
-    if "sim_launch" in groups and "ISAAC_MCP_INSTRUCTIONS" not in env:
-        instructions += (" Managed simulator launch is enabled. Use separate bridge ports and ROS "
-                         "domains, confirm readiness and PID with sim__status, and treat resource "
-                         "checks as snapshots rather than reservations.")
+                 state: Optional[_BridgeState] = None,
+                 cli_toolsets: str | None = None) -> FastMCP:
+    """Build an isolated server with a fixed, resolved toolset selection."""
+    env = dict(os.environ if env is None else env)
+    settings = config.resolve(env, cli_toolsets)
+    groups = settings.toolsets
+    instructions = env.get("ISAAC_MCP_INSTRUCTIONS", SERVER_INSTRUCTIONS)
     state = _BridgeState() if state is None else state
-    scene_option = env.get("ISAAC_MCP_SCENE_TOOLS", "1").strip().lower()
-    if scene_option not in {"0", "false", "no", "1", "true", "yes"}:
-        raise ValueError("ISAAC_MCP_SCENE_TOOLS must be 1/true/yes or 0/false/no")
-    state.scene_tools_enabled = scene_option in {"1", "true", "yes"}
+    state.toolsets = groups
+    state.config = settings
     from .project_assets import Broker
     state.asset_broker = Broker(env.get("ISAAC_MCP_ASSET_CONFIG", ""))
     if state.asset_broker.requested_profile != "trusted_project":
         raise RuntimeError("PROFILE_UNAVAILABLE: isolated/unrecognized profiles cannot start this trusted MCP server. No restricted endpoint or OS sandbox is implemented; no fallback.")
-    if not grouped_tools.listed_singly(env):
-        instructions = tool_groups.listed_form(instructions)      # name the tools as the client is shown them
+    instructions = tool_groups.listed_form(instructions)
     server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
     setattr(server, _STATE_ATTR, state)
     _advertise_tools_list_changed(server)
@@ -1830,12 +1792,22 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     return server
 
 
-mcp = build_server(state=_DEFAULT_STATE)
+def __getattr__(name):
+    if name == "mcp":
+        instance = build_server(state=_DEFAULT_STATE)
+        globals()[name] = instance
+        return instance
+    raise AttributeError(name)
 
-# Direct-call entry points bound to the default server (scripts and tests call these as plain
-# coroutines; the registered tools above are thin wrappers over the same functions).
-refresh_tools = functools.partial(_refresh_tools, mcp)
-use_bridge = functools.partial(_use_bridge, mcp)
+
+async def refresh_tools(*args, **kwargs):
+    instance = globals().get("mcp") or __getattr__("mcp")
+    return await _refresh_tools(instance, *args, **kwargs)
+
+
+async def use_bridge(*args, **kwargs):
+    instance = globals().get("mcp") or __getattr__("mcp")
+    return await _use_bridge(instance, *args, **kwargs)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -1849,17 +1821,31 @@ def main(argv: list[str] | None = None) -> None:
         "Environment: UR5E_DT_PORT (bridge port, default 8766), DISPLAY (screen tools).",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {_package_version()}")
-    parser.parse_args(argv)
+    parser.add_argument("--toolsets", help="Profile and adjustments, e.g. default,+lab,-screen")
+    parser.add_argument("command", nargs="?", choices=["toolsets"])
+    args = parser.parse_args(argv)
+    instance = build_server(cli_toolsets=args.toolsets)
+    selected = _state_for(instance).toolsets
+    if args.command == "toolsets":
+        inventory = build_server(env={**os.environ, "ISAAC_MCP_TOOLSETS": "all,+input,+launch"})
+        listed = inventory._tool_manager.list_tools()
+        print("Toolset       State Tools Summary / enable")
+        for name, spec in toolsets.TOOLSETS.items():
+            count = sum(toolsets.owner(tool.name) == name for tool in listed)
+            print(f"{name:13} {'on' if name in selected else 'off':5} {count:5} {spec.summary}; +{name}")
+        return
     log_path = diagnostics.setup_server_log(os.environ)
     if log_path is not None:
         diagnostics.install_handlers()
         diagnostics.install_crash_hooks()
         diagnostics.start_heartbeat()
-    diagnostics.log_startup(_HOST_VERSION, _HOST_COMMIT, len(mcp._tool_manager._tools), os.environ)
+    diagnostics.log_startup(_HOST_VERSION, _HOST_COMMIT, len(instance._tool_manager._tools), os.environ)
+    logger.info("toolsets on=%s off=%s", ",".join(name for name in toolsets.TOOLSETS if name in selected),
+                ",".join(name for name in toolsets.TOOLSETS if name not in selected))
     if log_path is not None:
         logger.info(f"server log: {log_path}")
     try:
-        diagnostics.run_logged(mcp.run)
+        diagnostics.run_logged(instance.run)
     finally:
         diagnostics.teardown_server_log()
 
