@@ -49,9 +49,8 @@ def test_help_matches_word_starts_not_substrings():
 
 def test_screenshot_label_is_not_shadowed_by_the_window_caption():
     import inspect
-    src = inspect.getsource(screen.register_screen_tools)
-    body = src[src.index("def screenshot("):src.index("def start_screen_recording(")]
-    assert "_label_tag(label)" in body and "\n            label = " not in body and "target_label = f" in body
+    body = inspect.getsource(screen.capture)  # the screenshot tool's body
+    assert "_label_tag(label)" in body and "\n        label = " not in body and "target_label = f" in body
 
 
 def test_help_finds_contact_sheets_and_job_workflow_tools():

@@ -503,7 +503,7 @@ def test_ui_act_contract_matches_the_kit_actions():
 
 def test_close_refusals_report_that_no_input_was_sent():
     source = (Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/extension.py").read_text()
-    block = source[source.index('effects="No input was sent."'):][:400]
+    block = source[source.index('"No input was sent."'):][:400]
     assert '"INVALID_VALUE"' in block and '"NO_WINDOW"' in block
 
 
