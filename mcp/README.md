@@ -10,9 +10,11 @@ Install it as an editable tool shared by every MCP client (Linux x86_64):
 
 ```bash
 ./install.sh --no-sim        # from the repository root; links ~/.local/bin/isaac-mcp
+# The same host environment, without client registration or the ffmpeg shim:
+uv sync --project mcp --locked --extra isaaclab --no-dev
 ```
 
-The installer uses `mcp/uv.lock` (`uv tool install` does not read the lock, so it is not a reproducible checkout install). To
+Both use `mcp/uv.lock` (`uv tool install` does not read the lock, so it is not a reproducible checkout install). To
 register a client, see [client configuration](../docs/MCP-SERVER.md#4-client-configuration). Setup details are in
 [Linux setup](../docs/LINUX-SETUP.md).
 

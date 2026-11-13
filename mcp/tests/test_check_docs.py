@@ -160,3 +160,23 @@ def test_vendoring_rejects_a_bundled_asset_claim():
     errors = []
     check_docs.check_vendoring_claims(errors, text="Vendored path only.\n")
     assert any("ships none" in error for error in errors)
+
+
+@pytest.mark.parametrize("name,block", [("README.md", "toolsets-compact"), ("AGENTS.md", "toolsets-compact"),
+                                        ("docs/TOOLSETS.md", "toolsets-full"), ("docs/TOOLSETS.md", "profiles"),
+                                        (".agents/skills/isaac-mcp/SKILL.md", "profiles")])
+def test_the_pages_that_show_counts_carry_their_generated_block(name, block):
+    """A page that lost its marker would stop being checked, so the markers themselves are checked."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+    assert f"<!-- generated:{block} -->" in text and "<!-- /generated -->" in text
+    assert gen_tool_reference.BLOCKS[block]() in text
+
+
+def test_every_toolset_row_in_the_generated_table_matches_the_registry():
+    from isaac_mcp import toolsets
+    table = gen_tool_reference.render_toolsets_compact()
+    listed = gen_tool_reference.listed_by_toolset()
+    for name in toolsets.TOOLSETS:
+        assert f"| `{name}` |" in table
+    assert sum(len(tools) for tools in listed.values()) == len(
+        {tool for tools in listed.values() for tool in tools})
