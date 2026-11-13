@@ -24,12 +24,45 @@ def kit_window(state: Any) -> Optional[dict]:
     return screen.window_for_pid(screen._bridge_pid(_screen_port(state)))
 
 
+_POINTS = (("x", "y"), ("end_x", "end_y"))
+
+
 def map_coords(params: Dict[str, Any], coord_space: str, state: Any) -> Dict[str, Any]:
-    """``params`` with x/y/end_x/end_y (top level and in each ``actions`` step) in Isaac Sim window
-    pixels. Item 3 (scale mapping) implements image-space tokens through screen.map_point."""
+    """``params`` with x/y and end_x/end_y, top level and in every ``actions`` step, converted from
+    the coord_space token's image to Isaac Sim window pixels by ``screen.map_point``, against the
+    window's current size. New dicts; the caller's are left alone. A ref target needs no mapping."""
+    from . import screen
+
     if coord_space in (None, "", "window"):
         return params
-    raise ValueError("coord_space must be 'window' or a coord_space token printed by screenshot")
+    steps = params.get("actions")
+    if steps is not None and not (isinstance(steps, list) and all(isinstance(s, dict) for s in steps)):
+        raise ValueError("actions must be a list of action objects")
+    if any("coord_space" in step for step in steps or ()):
+        raise ValueError("coord_space applies to the whole call; pass it once, not inside actions")
+    window: Optional[dict] = None
+
+    def mapped(step: Dict[str, Any]) -> Dict[str, Any]:
+        nonlocal window
+        step = dict(step)
+        for kx, ky in _POINTS:
+            given = (step.get(kx) is not None, step.get(ky) is not None)   # null is unset, as in Kit
+            if not any(given):
+                continue
+            if not all(given):
+                raise ValueError(f"{kx} and {ky} go together")
+            if window is None:
+                window = kit_window(state)
+                if window is None:
+                    raise ValueError("a coord_space token needs the selected bridge's Isaac Sim window, and it "
+                                     "has none on this desktop; use a ref from sim__ui__find instead")
+            step[kx], step[ky] = screen.map_point(coord_space, step[kx], step[ky], window["width"], window["height"])
+        return step
+
+    params = mapped(params)
+    if steps is not None:
+        params["actions"] = [mapped(step) for step in steps]
+    return params
 
 
 def badge_args(params: Dict[str, Any], state: Any) -> Dict[str, Any]:
