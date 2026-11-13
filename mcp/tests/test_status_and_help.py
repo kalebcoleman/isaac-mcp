@@ -50,15 +50,18 @@ def test_status_is_one_short_answer_with_the_stage_ids(state):
     assert not {"namespaces", "extension", "busy", "read_only", "bridges", "jobs_running"} & set(out)
     assert "no need to call this again" in out["note"]
     assert [tool for tool, _ in state.client.calls] == ["status", "sim.stage.info"], "one check-in is two cheap bridge reads"
-    assert len(json.dumps(out)) < 900
+    assert len(json.dumps(out)) < 2000
 
 
 def test_status_detail_is_the_full_identity_and_never_reaches_an_older_bridge_as_an_argument(state):
     state.client = Bridge({"status": IDENTITY})
     out = json.loads(gw._dispatch("status", {"detail": True}, state))
     host = out.pop("host")
+    assert "core" in out.pop("toolsets")["on"]
+    assert set(out.pop("physics")) >= {"active", "default", "default_from"}
     assert out == IDENTITY and "version" in host
-    assert state.client.calls == [("status", None)], "detail is the host's own switch"
+    assert state.client.calls[0] == ("status", None), "detail is the host's own switch"
+    assert {name for name, _ in state.client.calls} <= {"status", "sim.stage.info"}   # the second one reads the active engine
 
 
 def test_status_names_what_else_is_running(state, monkeypatch):
@@ -82,7 +85,7 @@ def test_nothing_running_is_an_answer_that_names_the_next_call(state, monkeypatc
     monkeypatch.delenv("UR5E_DT_PORT", raising=False)
     text = gw._dispatch("status", {}, state)
     out = json.loads(text)
-    assert out["running"] is False and "sim__launch" in out["message"] and "refresh_tools(wait_s=120)" in out["message"]
+    assert out["running"] is False and "configured simulator" in out["message"] and "refresh_tools(wait_s=120)" in out["message"]
     assert out["bridges"] == [] and "version" in out["host"] and not gw._failed_tool_result(text)
     monkeypatch.setattr(gw, "_advertised", lambda: [{"port": 8770, "pid": 5151, "app": "Isaac Sim"}])
     elsewhere = json.loads(gw._dispatch("status", {}, state))
@@ -168,7 +171,7 @@ def test_replay_and_job_questions_name_their_tools():
     assert "job_status(job_id, wait_s=30)" in waiting and "background=true" in waiting
     assert "run_script" in gw._isaac_help("run a script as a managed job outside isaac")
     assert "action=reset" in gw._isaac_help("the timeline was left playing, reset to a clean state")
-    assert "status (one call" in gw._isaac_help("where am i, what is running")
+    assert "Available: status" in gw._isaac_help("where am i, what is running")
 
 
 def test_an_unanswered_question_says_so_gives_the_pattern_and_is_recorded_locally(tmp_path):

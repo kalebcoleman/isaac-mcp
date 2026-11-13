@@ -82,7 +82,7 @@ rollback and the Poliigon oak textures takes the bundled assets from **110.0 MB 
   `onrobot_rg2_description/meshes/` of that repository. The three URDF/xacro files and
   `package.xml` are also byte-identical. The repository root `LICENSE` is Apache-2.0.
 - `gripper/husarion_rg2/` and `gripper/QuickChanger.usd` are USD conversions of those files,
-  produced by `tools/convert_husarion_rg2_urdf.py` and `tools/rewire_husarion_rg2_usd.py`.
+  produced by the legacy Husarion RG2 conversion and USD rewiring utilities (no longer shipped).
   Apache-2.0 permits redistribution of modified versions provided the licence and notices are
   retained; mark the converted files as changed.
 - `gripper/husarion_rg2/husarion_rg2_fixed.usd` is the old rollback build. It is not referenced

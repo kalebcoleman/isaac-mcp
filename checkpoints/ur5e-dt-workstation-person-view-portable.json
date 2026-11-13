@@ -1,8 +1,0 @@
-{
-  "checkpoint": "ur5e-dt-workstation-person-view-portable-20261029T004117Z.usda",
-  "sha256": "54a30ceaea7dba5884c19978b9bad6f1d79bef1a4e2f8fddb340761ef28c8eda",
-  "isaac_sim": "5.1.0.0",
-  "scene": "Vention workstation with one UR5e, RG2 gripper, QuickChanger, and fixed person view camera at /World/person_view",
-  "assets": "Relative references to configured local source/cache locations after regeneration; not a self-contained asset bundle.",
-  "note": "Checkpoint USDA files are git-ignored. Regenerate with scripts/checks/export_reference.py after quick_start. The recorded checksum/version identify the historical reference; regeneration uses the current installed simulator and local assets."
-}

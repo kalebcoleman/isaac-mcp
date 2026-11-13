@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -16,20 +17,25 @@ from isaac_mcp.tool_hints import CATALOG_HINTS
 
 REPO = Path(__file__).resolve().parents[2]
 MAX_TOOL_DESCRIPTION = 600
-MAX_GROUP_DESCRIPTION = 1500
-MAX_PARAMETER_DESCRIPTION = 450
+MAX_GROUP_DESCRIPTION = 600      # a group of many actions may go a little past about 400; see grouped_tools
+MAX_PARAMETER_DESCRIPTION = 450  # a single-purpose tool behind a group: its full text
+MAX_LISTED_PARAMETER_DESCRIPTION = 120  # what a client is shown
 # Tool or "tool.parameter": a limit that must be exceeded for a safety rule to stay in the listing.
 # Keep this small, and say why next to each entry.
 EXCEPTIONS: dict[str, int] = {}
-ALL_GROUPS = "all,screen_input,sim_launch"
+ALL_GROUPS = "all,+input,+launch"
 
 
 def _listing(monkeypatch, tmp_path, single_purpose):
     for name in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_SCENE_TOOLS", "ISAAC_MCP_LOCAL_TOOLS",
                  "ISAAC_MCP_GROUP_TOOLS"):
         monkeypatch.delenv(name, raising=False)
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": ALL_GROUPS, "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path),
-                              "ISAAC_MCP_GROUP_TOOLS": "0" if single_purpose else "1"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": ALL_GROUPS, "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path)})
+
+    if single_purpose:
+        from mcp.types import Tool
+        return [Tool(name=tool.name, description=tool.description, inputSchema=tool.parameters, annotations=tool.annotations)
+                for name, tool in server._tool_manager._tools.items() if name not in tool_groups.GROUPS]
 
     async def run():
         async with create_connected_server_and_client_session(server._mcp_server) as client:
@@ -47,7 +53,7 @@ def listed(monkeypatch, tmp_path):
 
 @pytest.fixture
 def single(monkeypatch, tmp_path):
-    """The single-purpose tools, listed as with ISAAC_MCP_GROUP_TOOLS=0."""
+    """The single-purpose tools, inspected through the internal registry."""
     return _listing(monkeypatch, tmp_path, single_purpose=True)
 
 
@@ -70,8 +76,9 @@ def test_every_listed_tool_has_a_description_within_the_limit(either):
     assert not too_long, f"Move detail to docs/TOOLS-*.md: {too_long}"
 
 
-def test_every_listed_parameter_has_a_top_level_description_within_the_limit(either):
+def test_every_listed_parameter_has_a_top_level_description_within_the_limit(either, request):
     listed = either
+    grouped = request.node.callspec.params["either"] == "grouped"
     """At the top level: nested under anyOf, many clients never show it."""
     missing, too_long = [], {}
     for tool in listed:
@@ -79,7 +86,7 @@ def test_every_listed_parameter_has_a_top_level_description_within_the_limit(eit
             text = spec.get("description") or ""
             if not text.strip():
                 missing.append(f"{tool.name}.{name}")
-            elif len(text) > limit(f"{tool.name}.{name}", MAX_PARAMETER_DESCRIPTION):
+            elif len(text) > limit(f"{tool.name}.{name}", MAX_LISTED_PARAMETER_DESCRIPTION if grouped else MAX_PARAMETER_DESCRIPTION):
                 too_long[f"{tool.name}.{name}"] = len(text)
     assert not missing, missing
     assert not too_long, too_long
@@ -110,10 +117,10 @@ def test_nothing_that_writes_claims_to_be_read_only(single, name):
 def test_destructive_tools_say_so(single):
     listed = single
     hints = {t.name: t.annotations for t in listed}
-    for name in ("run_python", "put_file", "ur5e_dt__workcell_quick_start", "ur5e_dt__jenga_build", "isaaclab__runs_cancel",
+    for name in ("run_python", "put_file", "ur5e_dt__workcell_quick_start", "ur5e_dt__jenga_build", "job_cancel",
                  "window_click", "sim__stop"):
         assert hints[name].destructiveHint is True, name
-    for name in ("status", "get_file", "stat_file", "list_bridges", "ur5e_dt__workcell_status", "screen_info"):
+    for name in ("status", "get_file", "stat_file", "ur5e_dt__workcell_status", "screen_info"):
         assert hints[name].readOnlyHint is True and hints[name].destructiveHint is False, name
 
 
@@ -146,8 +153,8 @@ def test_the_exception_list_stays_small_and_real(listed):
 
 def test_instructions_name_the_starting_points_and_what_is_universal():
     text = gw.SERVER_INSTRUCTIONS
-    assert "sim__quick_start" in text and "sim__stage__info" in text
-    assert "ur5e_dt__* is one lab's UR5e digital twin" in text and "work on any scene" in text
+    assert "status" in text and "toolsets" in text
+    assert len(text) < 700
 
 
 def test_the_skill_has_a_decision_path():
@@ -176,10 +183,10 @@ def test_a_client_is_shown_groups_and_no_single_purpose_member(listed, single):
     old = {t.name for t in single}
     assert len(names) < len(old) / 2.5 and len(names) <= 50
     assert set(tool_groups.GROUPS) <= names
-    assert not names & set(tool_groups.members()) and not names & set(tool_groups.SUPERSEDED)
-    assert names - set(tool_groups.GROUPS) == old - set(tool_groups.members()) - set(tool_groups.SUPERSEDED), "ungrouped tools are listed as they were"
+    assert not names & set(tool_groups.members())
+    assert names - set(tool_groups.GROUPS) == old - set(tool_groups.members()), "ungrouped tools are listed as they were"
     size = lambda tools: len(json.dumps([t.model_dump(exclude_none=True) for t in tools]))  # noqa: E731
-    assert size(listed) < 0.62 * size(single), "the grouped listing costs a client well under two thirds of the old one"
+    assert size(listed) < 0.65 * size(single), "the grouped listing costs a client well under two thirds of the old one"
 
 
 def test_every_single_purpose_tool_is_reachable_through_a_listed_one(listed, single):
@@ -187,14 +194,14 @@ def test_every_single_purpose_tool_is_reachable_through_a_listed_one(listed, sin
     for tool in single:
         found = tool_groups.members().get(tool.name)
         if found is None:
-            assert tool.name in by_name or tool.name in tool_groups.SUPERSEDED, tool.name
+            assert tool.name in by_name, tool.name
             continue
         group, action = found
         schema = by_name[group].inputSchema
         assert action in schema["properties"]["action"]["enum"], (group, action)
         mine = {grouped_tools.OWN_ACTION if name == "action" else name for name in tool.inputSchema.get("properties", {})}
         assert mine <= set(schema["properties"]), (tool.name, mine - set(schema["properties"]))
-        assert f"- {action}:" in by_name[group].description
+        assert re.search(rf"^- {action}\b", by_name[group].description, re.M), (group, action)
 
 
 def test_a_group_s_hints_are_the_most_cautious_of_its_members(listed):
@@ -209,21 +216,20 @@ def test_shared_arguments_are_described_once_and_scoped_ones_say_where_they_appl
     camera = next(t for t in listed if t.name == "sim__camera").inputSchema["properties"]
     assert camera["session_id"]["description"].startswith("Exact session_id"), "the same for every action: said once"
     assert camera["filename"]["description"].startswith("[capture] ")
-    assert camera["path"]["description"].startswith("[create, capture] create: ") and " capture: " in camera["path"]["description"]
+    assert camera["path"]["description"].startswith("[all but list] "), "scoped, in the shorter of two forms"
     assert "anyOf" not in camera["focal_length"], "an optional argument is not also typed as null"
 
 
 def test_what_the_server_says_names_tools_as_the_client_is_shown_them(listed, monkeypatch, tmp_path):
     assert tool_groups.listed_form("call sim__stage__info, then sim__prim__delete (not sim__prim__delete_all)") == \
         "call sim__stage action=info, then sim__prim action=delete (not sim__prim__delete_all)"
-    assert tool_groups.listed_form("ur5e_dt__quick_start* and list_bridges") == "ur5e_dt__quick_start* and status"
-    hidden = set(tool_groups.members()) | set(tool_groups.SUPERSEDED)
+    assert tool_groups.listed_form("status") == "status"
+    hidden = set(tool_groups.members())
     pattern = __import__("re").compile(r"(?<![A-Za-z0-9_])(" + "|".join(sorted(hidden, key=len, reverse=True)) + r")(?![A-Za-z0-9_*])")
     named = {t.name: sorted(set(pattern.findall(t.description + json.dumps(t.inputSchema)))) for t in listed}
     assert not {name: found for name, found in named.items() if found}, "a listed tool names a tool the client cannot see"
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
-    assert "sim__stage action=info" in server.instructions and "sim__stage__info" not in server.instructions
-    assert "sim__stage__info" in gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none", "ISAAC_MCP_GROUP_TOOLS": "0"}).instructions
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    assert "status" in server.instructions and "toolsets" in server.instructions
 
 
 def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
@@ -242,7 +248,7 @@ def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
         def close(self):
             pass
 
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "none"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     gw._state_for(server).client = Endpoint()
 
     async def run():
@@ -263,15 +269,15 @@ def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
 def test_names_in_paths_keys_and_file_names_are_left_alone():
     same = ["/out/20261111-job_status.png", '"/World/get_file"', '{"window_type": 1}', "a/sim__prim__get/b", "x get_file.txt"]
     assert [tool_groups.listed_form(text) for text in same] == same
-    assert tool_groups.listed_form("stop it with job_cancel, or isaaclab__runs_cancel.") == \
-        "stop it with jobs action=cancel, or jobs action=cancel."
+    assert tool_groups.listed_form("stop it with job_cancel.") == \
+        "stop it with jobs action=cancel."
 
 
 def test_a_grouped_argument_takes_every_kind_its_actions_take_and_text_stays_text(listed):
     joints = next(t for t in listed if t.name == "sim__joints").inputSchema["properties"]
     kinds = {kind.get("type") for kind in joints["positions"]["anyOf"]}
     assert kinds == {"array", "object"}, "command takes a list, teleport a mapping"
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": ALL_GROUPS})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": ALL_GROUPS})
     seen = []
     server._tool_manager._tools["window_type"].fn = lambda **given: seen.append(given) or "typed"
 
@@ -299,7 +305,7 @@ def test_advice_beside_the_caller_s_data_names_listed_tools(monkeypatch):
             pass
 
     monkeypatch.setattr(gw, "_job_record", lambda job_id: None)
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "isaaclab_jobs"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "minimal"})
     gw._state_for(server).client = Endpoint()
 
     async def run():

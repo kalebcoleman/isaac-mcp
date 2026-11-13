@@ -59,6 +59,7 @@ def expected_tools():
         "docs/TOOLS-SCENE.md": {name.replace(".","__") for name in REGISTRY},
         "docs/TOOLS-UR5E.md": {"ur5e_dt__" + name for name in registry},
         "docs/TOOLS-ISAACLAB.md": tool_decorators(ROOT / "mcp/isaac_mcp/isaaclab/tools.py"),
+        "docs/ROBOSIM.md": tool_decorators(ROOT / "mcp/isaac_mcp/robosim/tools.py"),
         "docs/TOOLS-HOST.md": host,
     }
 
@@ -73,10 +74,11 @@ def tier_counts():
             "desktop_input": len(tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")),
             "sim_sessions": len(tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py")),
             "isaaclab": len(expected["docs/TOOLS-ISAACLAB.md"]),
+            "robosim": len(expected["docs/ROBOSIM.md"]),
             "builtins": len(builtins), "ur5e": len(expected["docs/TOOLS-UR5E.md"])}
 
 
-TIER_ROWS = {"host": "Host gateway", "desktop_input": "Desktop input (optional)",
+TIER_ROWS = {"robosim": "RoboSimStudio (`robosim`", "host": "Host gateway", "desktop_input": "Desktop input (optional)",
              "sim_sessions": "Simulator sessions (optional)", "isaaclab": "Isaac Lab", "builtins": "Bridge built-ins",
              "ur5e": "UR5e twin", "generic": "Generic scene and assets"}
 
@@ -101,12 +103,12 @@ def check_agent_guide(errors, text=None, counts=None):
         # Everything the standard groups list from startup: the bridge built-ins are catalogued too.
         "exactly N tools (standard groups listed offline)":
             (r"exactly (\d+) tools",
-             actual["host"] + actual["isaaclab"] + actual["builtins"] + actual["ur5e"] + actual["generic"]),
+             actual["host"] + actual["isaaclab"] + actual["builtins"] + actual["ur5e"] + actual["generic"] + actual["robosim"]),
         "The other N tools (bridge built-ins subtotal)":
             (r"The other (\d+) tools", actual["builtins"]),
         "there are N tools in total":
             (r"there are (\d+) tools in total",
-             sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic"))),
+             sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic", "robosim"))),
         "groups add N more (optional subtotal)":
             (r"groups add (\d+) more", actual["desktop_input"] + actual["sim_sessions"]),
     }
@@ -164,9 +166,9 @@ def check_skill_tool_names(errors, expected=None, files=None):
 
 README_COUNTS = (
     # The single-purpose tools registered by default, then with both optional groups.
-    (r"\*\*(\d+) single-purpose tools\*\*", lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"]),
+    (r"\*\*(\d+) single-purpose tools\*\*", lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"] + c["robosim"]),
     (r"\(\*\*(\d+)\*\* with both optional groups\)",
-     lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic",
+     lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic", "robosim",
                                         "desktop_input", "sim_sessions"))),
 )
 
@@ -191,32 +193,6 @@ def check_generic_counts(errors, pages=None, generic=None):
                 errors.append(f"{name}: says {match.group(0)!r}, but the generic pack has {generic} tools")
 
 
-OPT_OUT_PAGES = ("AGENTS.md", "docs/TOOLS-HOST.md")
-OPT_OUT_COUNT = re.compile(r"leaving (\d+) tools")
-
-
-def standard_without_generic(counts=None):
-    """Tools still listed when the generic pack is hidden and the optional groups are off."""
-    counts = tier_counts() if counts is None else counts
-    return counts["host"] + counts["isaaclab"] + counts["builtins"] + counts["ur5e"]
-
-
-def check_scene_opt_out(errors, pages=None, counts=None):
-    """The 'leaving N tools' figure is the standard total minus the generic pack.
-
-    A parenthetical such as 'tools (55)' does not match the generic-pack regex, so this
-    sentence is checked on its own. Each page must state the figure exactly once.
-    """
-    expected = standard_without_generic(counts)
-    pages = pages if pages is not None else {
-        name: (ROOT / name).read_text(encoding="utf-8") for name in OPT_OUT_PAGES}
-    for name, text in pages.items():
-        found = OPT_OUT_COUNT.findall(text)
-        if found != [str(expected)]:
-            errors.append(f"{name}: 'leaving N tools' says {found or 'nothing'}, "
-                          f"the standard groups without the generic pack list {expected}")
-
-
 TOTAL_PAGES = ("docs/TOOLS-HOST.md", "docs/MCP-SERVER.md")
 DEFAULT_TOTAL = re.compile(r"\*\*(\d+) tools\*\*(?: by default| with the default)")
 BOTH_TOTAL = re.compile(r"\*\*(\d+)\*\* with both")
@@ -227,8 +203,8 @@ LAB_COUNT = re.compile(r"covers the (\d+) host-side")
 def check_prose_totals(errors, pages=None, skill=None, counts=None):
     """The default and with-both-optional-groups totals, and the Lab tool count, wherever prose states them."""
     counts = tier_counts() if counts is None else counts
-    default = standard_without_generic(counts) + counts["generic"]
-    both = default + counts["desktop_input"] + counts["sim_sessions"]
+    default = len(default_tool_names())
+    both = sum(counts.values())
     read = lambda names: {n: (ROOT / n).read_text(encoding="utf-8") for n in names}
     for name, text in (pages if pages is not None else read(TOTAL_PAGES)).items():
         for label, pattern, value in (("default total", DEFAULT_TOTAL, default), ("with-both total", BOTH_TOTAL, both)):
@@ -283,7 +259,8 @@ def default_tool_names():
     expected = expected_tools()
     optional = (tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")
                 | tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py"))
-    return set().union(*expected.values()) - optional
+    from isaac_mcp.toolsets import DEFAULT, owner
+    return {name for name in set().union(*expected.values()) - optional if owner(name) in DEFAULT}
 
 
 def check_grouped_tools(errors, pages=None, names=None):
@@ -302,7 +279,7 @@ def check_grouped_tools(errors, pages=None, names=None):
         if found != [str(shown)]:
             errors.append(f"{name}: 'is shown **N tools**' says {found or 'nothing'}, a client is shown {shown}")
     every = set().union(*expected_tools().values())
-    unknown = sorted((set(tool_groups.members()) | set(tool_groups.SUPERSEDED)) - every)
+    unknown = sorted(set(tool_groups.members()) - every)
     if unknown:
         errors.append(f"mcp/isaac_mcp/tool_groups.py: names tools that are not registered: {', '.join(unknown)}")
     table = pages.get("docs/TOOLS-HOST.md", "")
@@ -328,7 +305,7 @@ def main():
 
     errors = check_tracked(ROOT)
     files = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md")),
-             ROOT / "mcp/README.md", ROOT / "npm/README.md", *sorted((ROOT / "mcp/docs").glob("*.md")),
+             ROOT / "mcp/README.md", *sorted((ROOT / "mcp/docs").glob("*.md")),
              *sorted((ROOT / "exts").glob("*/README.md")), *sorted((ROOT / "exts").glob("*/docs/*.md")),
              *sorted(SKILLS_DIR.rglob("*.md"))]
     for path in files:
@@ -360,7 +337,6 @@ def main():
     check_agent_guide(errors)
     check_readme_counts(errors)
     check_generic_counts(errors)
-    check_scene_opt_out(errors)
     check_prose_totals(errors)
     check_grouped_tools(errors)
     check_vendoring_claims(errors)

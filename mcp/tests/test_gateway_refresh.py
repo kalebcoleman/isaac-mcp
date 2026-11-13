@@ -20,6 +20,7 @@ def _meta(description, parameters, namespace, owner_id):
 def fresh_gateway(monkeypatch):
     monkeypatch.setattr(gw, "_NAME_MAP", {})
     monkeypatch.setattr(gw, "_REGISTERED_META", {})
+    monkeypatch.setattr(gw._DEFAULT_STATE, "toolsets", gw.toolsets.PROFILES["all"])
     return FastMCP("test")
 
 
@@ -50,7 +51,7 @@ def test_required_optional_and_defaulted_arguments_reach_the_schema(fresh_gatewa
     gw.discover_and_register_tools(fresh_gateway)
     schema = _served(fresh_gateway, "demo__run").parameters
     assert schema["required"] == ["code"]
-    assert schema["properties"]["steps"]["default"] == 4 and schema["properties"]["note"]["default"] is None
+    assert schema["properties"]["steps"]["default"] == 4 and "default" not in schema["properties"]["note"]  # a null default is not listed
 
 
 def test_a_listing_without_argument_lists_is_refused(fresh_gateway, monkeypatch):
@@ -60,42 +61,41 @@ def test_a_listing_without_argument_lists_is_refused(fresh_gateway, monkeypatch)
 
 
 def test_the_namespace_and_builtin_filters_apply_to_rediscovery(fresh_gateway, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "pm")
-    monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
+    gw._state_for(fresh_gateway).toolsets = frozenset({"core", "extensions"})
     _fake_registry(monkeypatch, {"pm.read_state": _meta("d", {}, "pm", "P"), "demo.ping": _meta("d", {}, "demo", "A"),
                                  "run_python": _meta("d", {}, None, "isaac.mcp.bridge")})
-    assert gw.discover_and_register_tools(fresh_gateway) == ["pm.read_state"]
-    assert set(fresh_gateway._tool_manager._tools) == {"pm__read_state"}
+    assert gw.discover_and_register_tools(fresh_gateway) == ["demo.ping", "pm.read_state"]
+    assert set(fresh_gateway._tool_manager._tools) == {"pm__read_state", "demo__ping"}
 
 
 def test_refresh_removes_departed_owner_without_touching_other_tools(fresh_gateway, monkeypatch):
     server = fresh_gateway
     tools = {
         "arm.move": _meta("arm", {}, "arm", "arm-owner"),
-        "sim.inspect": _meta("sim", {}, "sim", "sim-owner"),
+        "sim.stage.info": _meta("sim", {}, "sim", "sim-owner"),
     }
     _fake_registry(monkeypatch, tools)
     gw.discover_and_register_tools(server)
-    del tools["sim.inspect"]
+    del tools["sim.stage.info"]
 
-    assert "sim.inspect (removed)" in gw.discover_and_register_tools(server)
+    assert "sim.stage.info (removed)" in gw.discover_and_register_tools(server)
     assert _served(server, "arm__move") is not None
-    assert _served(server, "sim__inspect") is None
-    assert "sim__inspect" not in gw._NAME_MAP
-    assert "sim__inspect" not in gw._REGISTERED_META
+    assert _served(server, "sim__stage__info") is None
+    assert "sim__stage__info" not in gw._NAME_MAP
+    assert "sim__stage__info" not in gw._REGISTERED_META
 
 
 def test_refresh_removes_tools_that_no_longer_match_view_filter(fresh_gateway, monkeypatch):
     server = fresh_gateway
     tools = {"arm.move": _meta("arm", {}, "arm", "arm-owner"),
-             "sim.inspect": _meta("sim", {}, "sim", "sim-owner")}
+             "sim.stage.info": _meta("sim", {}, "sim", "sim-owner")}
     _fake_registry(monkeypatch, tools)
     gw.discover_and_register_tools(server)
-    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "arm")
+    gw._state_for(server).toolsets = frozenset({"core", "extensions"})
 
-    assert "sim.inspect (removed)" in gw.discover_and_register_tools(server)
+    assert "sim.stage.info (removed)" in gw.discover_and_register_tools(server)
     assert _served(server, "arm__move") is not None
-    assert _served(server, "sim__inspect") is None
+    assert _served(server, "sim__stage__info") is None
 
 
 def test_failed_refresh_keeps_existing_registry(fresh_gateway, monkeypatch):
@@ -116,10 +116,10 @@ def test_failed_refresh_keeps_existing_registry(fresh_gateway, monkeypatch):
 @pytest.mark.parametrize("response", [
     {},
     {"tools": None},
-    {"tools": {"sim.inspect": {"namespace": "sim"}}},
-    {"tools": {"sim.inspect": None}},
+    {"tools": {"sim.stage.info": {"namespace": "sim"}}},
+    {"tools": {"sim.stage.info": None}},
     {"tools": {
-        "sim.good": _meta("good", {}, "sim", "sim-owner"),
+        "sim.stage.info": _meta("good", {}, "sim", "sim-owner"),
         "sim.bad": {"namespace": "sim", "fields": [{"name": "x"}]},
     }},
 ])
@@ -162,7 +162,7 @@ def test_two_bridge_names_cannot_map_to_the_same_mcp_name(fresh_gateway, monkeyp
 
 
 def test_refresh_tools_without_a_simulator_says_what_to_do(monkeypatch):
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
 
     def offline(_server):
         raise ConnectionRefusedError("[Errno 111] Connection refused")
@@ -183,7 +183,7 @@ def test_host_run_asset_tools_are_not_reported_as_unconfirmed(monkeypatch):
 
 
 def test_refresh_tools_with_several_bridges_says_pick_one(monkeypatch):
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
 
     def several(_server):
         raise RuntimeError("multiple bridges running: ports 8766, 8781.")
@@ -196,7 +196,7 @@ def test_refresh_tools_with_several_bridges_says_pick_one(monkeypatch):
 def test_refresh_tools_names_managed_simulators_on_other_ports(monkeypatch):
     # The config pinned port 8766, sim__launch used 8771, and refresh_tools
     # kept saying "no bridge" until the agent found use_bridge on its own.
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
 
     def offline(_server):
         raise ConnectionRefusedError("[Errno 111] Connection refused")

@@ -22,6 +22,9 @@ TOWER_XY = (0.7, 0.0)
 BLOCK = (0.15, 0.05, 0.03)  # length, width, height
 BLOCK_MASS = 0.12
 LAYERS = 18
+# MuJoCo-Warp's contact softness does not hold a stack of 18 layers at PhysX's 120 Hz: measured on Sim 6.2 with Newton 1.6.1, the tower
+# flew apart within 0.13 s at 120 Hz (non-finite by 0.6 s), jittered at 240 Hz, and held for 10 s at 360 Hz (1.2 mm) and 500 Hz (1.7 mm).
+NEWTON_HZ = 500  # the quick scene's rate too, so a Newton session has one timestep
 SIDE_GAP = 0.0005  # between the blocks of a layer: a real tower's blocks are not jammed together
 LOOSE = 0.0004  # the middle block of an odd layer is this much thinner, so the layer above rests on its sides. Blocks of one height leave the
 # split of the load to the solver: on Sim 5.1 it put it on the middle block, and pushing that carried the whole upper tower with it.
@@ -69,8 +72,29 @@ def poke_targets(layer: int = 9):
                 ik=dict(link=HAND_LINK, offset=[0.0, 0.0, ROD_TIP], orientation=HAND_LEVEL))
 
 
-def build(stage) -> dict:
-    """Author the table and the tower; returns what was built."""
+def build(stage, backend="physx", timeline=None) -> dict:
+    """Author the table and the tower; returns what was built.
+
+    The PhysX solver settings are always authored. On ``backend="newton"`` the Newton equivalents are added beside them: contact
+    gap and margin on every collider, the scene's rate, friction cone and iteration limit, and contact buffers sized for the 54
+    blocks (``newton_settings``, ``newton_buffers``). A Newton setting that cannot be authored is reported as ``newton_error``;
+    the tower itself is still built."""
+    newton = {}
+    newton_ok = backend == "newton"
+
+    def newton_collider(prim):
+        nonlocal newton_ok
+        if not newton_ok:
+            return
+        from isaac_mcp.project_assets import AssetError
+        from .newton_support import collision_settings
+
+        try:
+            collision_settings(prim)
+        except AssetError as exc:
+            newton_ok = False
+            newton["newton_error"] = dict(code=exc.code, message=str(exc)[:300])
+
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         UsdGeom.Xform.Define(stage, ROOT)
         material = UsdShade.Material.Define(stage, f"{ROOT}/BlockMaterial")
@@ -85,6 +109,7 @@ def build(stage) -> dict:
         xform.AddScaleOp().Set(Gf.Vec3f(TABLE_SIZE[0], TABLE_SIZE[1], TABLE_TOP))
         table.CreateDisplayColorAttr([Gf.Vec3f(0.3, 0.32, 0.36)])
         UsdPhysics.CollisionAPI.Apply(table.GetPrim())
+        newton_collider(table.GetPrim())
         UsdShade.MaterialBindingAPI.Apply(table.GetPrim()).Bind(material, UsdShade.Tokens.weakerThanDescendants, "physics")
         UsdGeom.Xform.Define(stage, f"{ROOT}/Tower")
         for layer, index, along_x, x, y, z in block_centers():
@@ -107,13 +132,30 @@ def build(stage) -> dict:
             collision = PhysxSchema.PhysxCollisionAPI.Apply(prim)
             collision.CreateContactOffsetAttr(0.004)
             collision.CreateRestOffsetAttr(0.0)
+            newton_collider(prim)
         scene = stage.GetPrimAtPath("/World/PhysicsScene")
         if scene:
             PhysxSchema.PhysxSceneAPI.Apply(scene).CreateTimeStepsPerSecondAttr(120)
+        if newton_ok and not scene:
+            newton_ok = False
+            newton["newton_error"] = dict(code="NOT_FOUND", message="No /World/PhysicsScene: no Newton scene settings or buffers were authored.")
+        if newton_ok:
+            from isaac_mcp.project_assets import AssetError
+            from .newton_support import apply_buffers, prepare_buffers, scene_settings
+
+            try:
+                newton["newton_settings"] = scene_settings(scene, NEWTON_HZ, tower=True)
+                config, newton["newton_buffers"] = prepare_buffers(stage, scene, timeline)
+                apply_buffers(config)
+            except AssetError as exc:
+                newton["newton_error"] = dict(code=exc.code, message=str(exc)[:300])
     top = TABLE_TOP + LAYERS * BLOCK[2]
     return dict(prim=ROOT, blocks=LAYERS * 3, layers=LAYERS, block_size_m=list(BLOCK), block_mass_kg=BLOCK_MASS, table_top_z=TABLE_TOP,
                 tower_xy=list(TOWER_XY), tower_top_z=round(top, 4), top_block=block_path(LAYERS - 1, 1), robot_base=list(ROBOT_BASE),
-                hand_link=HAND_LINK, poke_example=poke_targets(), physics_hz=120, note="Blocks are twice real size so a fingertip fits one layer.")
+                hand_link=HAND_LINK, poke_example=poke_targets(), physics_hz=NEWTON_HZ if backend == "newton" else 120, **newton,
+                note="Blocks are twice real size so a fingertip fits one layer." + (
+                    " The Newton settings come from the live tower check (scripts/smoke/newton_checks.py)."
+                    if backend == "newton" else ""))
 
 
 def _add_rod(stage, hand):

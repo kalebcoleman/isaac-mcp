@@ -18,14 +18,26 @@ def _script(name):
 
 def test_scene_client_keeps_exported_tool_groups_and_still_pins_the_port(monkeypatch):
     client = _script("scene_mcp_client")
-    monkeypatch.delenv("ISAAC_MCP_LOCAL_TOOLS", raising=False)
+    monkeypatch.delenv("ISAAC_MCP_TOOLSETS", raising=False)
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
     monkeypatch.setenv("UR5E_DT_PORT", "1")
     env = client.parameters(18781).env
-    assert env["ISAAC_MCP_LOCAL_TOOLS"] == "gateway,screen_read,screen_capture,screen_control"
-    assert env["ISAAC_MCP_BUILTINS"] == "0" and env["UR5E_DT_PORT"] == "18781"
-    monkeypatch.setenv("ISAAC_MCP_LOCAL_TOOLS", "all,screen_input")
-    assert client.parameters(18781).env["ISAAC_MCP_LOCAL_TOOLS"] == "all,screen_input"
+    assert env["ISAAC_MCP_TOOLSETS"] == "default,-code"
+    assert env["UR5E_DT_PORT"] == "18781"
+    monkeypatch.setenv("ISAAC_MCP_TOOLSETS", "default,+input")
+    assert client.parameters(18781).env["ISAAC_MCP_TOOLSETS"] == "default,+input"
+
+
+def test_scene_client_sends_single_purpose_names_as_the_listed_group_with_an_action(monkeypatch):
+    client = _script("scene_mcp_client")
+    assert client.listed("sim__prim__create", {"path": "/World/A"}) == ("sim__prim", {"action": "create", "path": "/World/A"})
+    assert client.listed("sim__body__state", {"path": "/p"}) == ("sim__physics", {"action": "body_state", "path": "/p"})
+    assert client.listed("sim__ui__act", {"action": "click"}) == ("sim__ui", {"action": "act", "sub_action": "click"})
+    assert client.listed("sim__timeline__control", {"action": "stop"}) == ("sim__timeline__control", {"action": "stop"})
+    monkeypatch.delenv("ISAAC_MCP_TOOLSETS", raising=False)
+    assert client.parameters(1, "all,+launch").env["ISAAC_MCP_TOOLSETS"] == "all,+launch"
+    monkeypatch.setenv("ISAAC_MCP_TOOLSETS", "default,+input")
+    assert client.parameters(1, "all").env["ISAAC_MCP_TOOLSETS"] == "all"
 
 
 @pytest.mark.parametrize("argv, code", [(["--help"], 0), (["-h"], 0), (["live"], 2), (["typo"], 2)])

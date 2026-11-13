@@ -56,18 +56,8 @@ ASSET = dict(
 )
 add(
     "assets.info",
-    "Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies.",
+    'Inspect a USER-TRUSTED project on the selected Kit. Takes a snapshot of it. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies.',
     dict(**TARGET, **ASSET),
-)
-add(
-    "assets.prepare_workstation",
-    "Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox.",
-    dict(
-        **TARGET,
-        source_path=field(
-            "string", "Absolute local USD path inside an already approved trusted root."
-        ),
-    ),
 )
 add(
     "assets.import_path",
@@ -98,20 +88,20 @@ add(
 )
 add(
     "sim.stage.info",
-    "Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations.",
+    'Identify the open stage; call this first. Reads process incarnation, stage identity, units, timeline and bounded prim count.',
 )
 add(
     "sim.stage.open",
-    "Open a USD file (.usd/.usda/.usdc/.usdz, under your home or this simulator's output folder) as the current stage, like File > Open, with the timeline stopped. Refuses to drop unsaved edits unless discard_changes=true. Reports stale saved LiDAR render products and never changes the file. Returns the new session_id and stage_id for later sim__* calls; run_python sessions reset.",
+    "Open a USD file as the current stage. Accepts .usd/.usda/.usdc/.usdz under your home or this simulator's output folder, like File > Open, with the timeline stopped. Refuses to drop unsaved edits unless discard_changes=true. Reports stale saved LiDAR render products and never changes the file. Returns the new session_id and stage_id for later sim__* calls; run_python sessions reset.",
     dict(
         **TARGET,
-        path=field("string", "Absolute path of the USD file to open, under your home or this simulator's output folder, where sim__stage__save writes by default (a leading tilde for your home is expanded)."),
+        path=field("string", "USD file to open: absolute, under your home or this simulator's output folder. A leading ~ is expanded."),
         discard_changes=field("boolean", "Open even if the current stage has unsaved edits (they are lost).", False, default=False),
     ),
 )
 add(
     "sim.quick_start",
-    "One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns session_id, stage_id, paths and next steps. For the RISE lab UR5e twin, use ur5e_dt__quick_start.",
+    "One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer; sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns IDs, paths and next steps; on Newton a newton field (rate, buffers). For the RISE lab UR5e twin, use ur5e_dt__quick_start.",
     dict(
         robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.", False),
         fixed_base=field("boolean", "Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False),
@@ -138,7 +128,7 @@ add(
 )
 add(
     "sim.prim.get",
-    "Read local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown.",
+    "Read a prim's transforms and authored physics. Local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown.",
     dict(**TARGET, path=field("string", "Absolute prim path.")),
 )
 add(
@@ -156,7 +146,7 @@ add(
 )
 add(
     "sim.prim.bounds",
-    "World-space bounds of one prim at default USD time from UsdGeom.BBoxCache.ComputeWorldBound: axis-aligned min/max, centre and size, plus the oriented box's world corners. purpose selects default, render, proxy or guide geometry. Stage units; empty says the prim has no boundable content. Authored USD, not a runtime physics observation.",
+    "World-space bounds of one prim. At default USD time from UsdGeom.BBoxCache.ComputeWorldBound: axis-aligned min/max, centre and size, plus the oriented box's world corners; purpose selects default, render, proxy or guide geometry. Stage units; empty says the prim has no boundable content. Authored USD, not a runtime physics observation.",
     dict(
         **TARGET,
         path=field("string", "Absolute prim path."),
@@ -171,7 +161,7 @@ add(
 )
 add(
     "sim.prim.measure",
-    "Distance between two prims' world bounds at default USD time: centre-to-centre and the shortest gap (0 when the axis-aligned bounds overlap), in stage units, with each prim's axis-aligned bound. Refuses when either prim has no bounds, naming it and pointing to sim__prim__bounds. Authored USD, not runtime physics.",
+    "Distance between two prims' world bounds. At default USD time: centre-to-centre and the shortest gap (0 when the axis-aligned bounds overlap), in stage units, with each prim's axis-aligned bound. Refuses when either prim has no bounds, naming it and pointing to sim__prim__bounds. Authored USD, not runtime physics.",
     dict(
         **TARGET,
         path_a=field("string", "First absolute prim path."),
@@ -180,7 +170,7 @@ add(
 )
 add(
     "sim.camera.list",
-    "List Camera prims under root with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by limit and a 10,000-prim visit cap; truncated says which. No viewport (headless) reports viewport_available=false instead of guessing. Authored USD, not a rendered image.",
+    'List Camera prims. Under root with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by limit and a 10,000-prim visit cap; truncated says which. No viewport (headless) reports viewport_available=false instead of guessing. Authored USD, not a rendered image.',
     dict(
         **TARGET,
         root=field("string", "Absolute subtree root.", False, default="/"),
@@ -189,7 +179,7 @@ add(
 )
 add(
     "sim.prim.create",
-    "Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes.",
+    'Create a primitive in the session layer. A Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; optional mass or density authors PhysicsMassAPI on geometry. Undo a created prim with sim__prim__delete; sim__prim__revert undoes the attributes.',
     dict(
         **TARGET,
         path=field("string", "New absolute prim path; every ancestor must already exist (create them with kind=Xform)."),
@@ -218,12 +208,17 @@ add(
 )
 add(
     "sim.prim.set_transform",
-    "Set a static local or world pose on any Xformable prim in the session layer, and report the pose before and after; undo with sim__prim__revert. Refuses instance proxies (name the instance root), articulation links other than the root (moving a link breaks its joints), animated transforms, Kit runtime prims and a running or paused timeline. Authors one transform override, so source files never change. No claim of runtime teleportation.",
-    dict(**TARGET, path=field("string", "Absolute Xformable prim path."), **POSE),
+    'Set a static pose on any Xformable prim. Local or world, in the session layer; reports the pose before and after; undo with sim__prim__revert. Refuses instance proxies (name the instance root), articulation links other than the root (moving a link breaks its joints), animated transforms, Kit runtime prims and a running or paused timeline. Authors one transform override, so source files never change. No claim of runtime teleportation.',
+    dict(
+        **TARGET,
+        path=field("string", "Absolute Xformable prim path."),
+        scale=field("array", "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.", False),
+        **POSE,
+    ),
 )
 add(
     "sim.physics.inspect",
-    "Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics.",
+    'Report authored collision, body, mass and joints. A bounded report that includes articulations. Does not assert initialized or stable physics. On Newton it adds a newton section (configured buffers, active contacts and constraints against capacity, overflow flags) and warnings CONTACT_BUFFER_FULL, CONSTRAINT_BUFFER_FULL, NEWTON_SOLVER_OVERFLOW, NEWTON_SOLVER_NOT_CONVERGED.',
     dict(
         **TARGET,
         root=field("string", "Absolute subtree path.", False, default="/"),
@@ -232,7 +227,7 @@ add(
 )
 add(
     "sim.physics.raycast",
-    "Cast one ray into the PhysX scene: hits with position, normal, distance, collider and rigid-body paths. all=false returns the closest; all=true returns up to 32 sorted by distance. max_distance 0..100 stage units; direction is normalised and the result says so. scene_ready=false before physics initialises. Newton refuses RAYCAST_UNSUPPORTED. No app update is pumped.",
+    'Cast one ray into the PhysX scene. Hits with position, normal, distance, collider and rigid-body paths. all=false returns the closest; all=true returns up to 32 sorted by distance. max_distance 0..100 stage units; direction is normalised and the result says so; scene_ready=false before physics initialises. Newton refuses RAYCAST_UNSUPPORTED. No app update is pumped.',
     dict(
         **TARGET,
         origin=field("array", "Ray origin [x, y, z] in world stage units."),
@@ -243,7 +238,7 @@ add(
 )
 add(
     "sim.physics.contacts",
-    "Read current PhysX contact pairs and impulses for up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with PhysxContactReportAPI report; paths without it are listed with the fix, and a call where none report refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED. No app update is pumped.",
+    'Read current contact pairs: PhysX impulses, or on Newton the last step\'s summed world-frame force in N on collider_a (impulse is null). For up to 32 bodies from the last delivered contact report. Subscribes on first use or Play. Only colliders with PhysxContactReportAPI report; others are listed with the fix, and none reporting refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED only if forces are unavailable. No app update is pumped.',
     dict(
         **TARGET,
         paths=field("array", "1..32 absolute rigid-body or collider paths."),
@@ -251,7 +246,7 @@ add(
 )
 add(
     "sim.body.state",
-    "Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. render_pose compares the poses the renderer draws from (Fabric, USD) with the physics pose; a `warnings` entry means pictures and recordings do not show where the body is.",
+    "Read a rigid body's world pose while running. Initialized pose on the selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. render_pose compares the poses the renderer draws from (Fabric, USD) with the physics pose; a `warnings` entry means pictures and recordings do not show where the body is.",
     dict(
         **TARGET,
         path=field("string", "Absolute rigid body path; prim and prim_path are aliases. Supply one.", False),
@@ -268,13 +263,13 @@ add(
 )
 add(
     "sim.timeline.control",
-    "Play, pause, stop, initialize or reset. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline. Play reports physics_ready. reset is the call after a failed run: it cancels this pack's jobs and stops the timeline; safe to repeat. sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop.",
+    "Play, pause, stop, initialize or reset. initialize briefly plays a stopped timeline then pauses it, so physics may advance; it refuses a playing timeline. Play reports physics_ready. Reset is the call after a failed run: it cancels this pack's jobs and stops the timeline; safe to repeat. sim__simulation__step advances exact steps. Stop rewinds physics and awaits pending render/writer completion. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. The session edit target is leased until Stop.",
     dict(**TARGET, action=field("string", "play, pause, stop, initialize (briefly play then pause; physics may advance), or reset (cancel jobs, stop, back to the authored start)."),
-         resume=field("boolean", "With action=play: continue a timeline a project's own script or the GUI started and paused, without the stop that would end that script. Physics then writes where that script set it.", False)),
+         resume=field("boolean", "Continue a timeline a script or the GUI paused, without the stop that would end it. Physics then writes where the script set it. With action=play.", False)),
 )
 add(
     "sim.stage.save",
-    "Export a flattened copy, including session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home; or with format=urdf one robot as URDF plus meshes. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses.",
+    'Export a flattened copy of the stage to a new file. Includes session edits, to a new basename (.usda added if absent) in the output root or in `directory` under your home; with format=urdf one robot as URDF plus meshes. Never overwrites or switches the current stage. External texture paths remain dependencies; process-bound render pipelines are omitted, and unknown native pipeline content refuses.',
     dict(
         **TARGET,
         filename=field("string", "New basename, e.g. scene or scene.usda; no other extension, no folders."),
@@ -283,7 +278,7 @@ add(
         robot_path=field("string", "With format=urdf: the robot's articulation root or top prim. Default: the stage's default prim.", False),
         reset_camera_render_handles=field(
             "boolean",
-            "Explicitly remove validated session-only ROS camera and LiDAR viewportHandle fields from the copy so native textures can rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
+            "Remove session-only ROS camera and LiDAR viewportHandle fields from the copy, so native textures rebuild after restart. This tool's own capture products need no flag. Default false refuses affected saves; true still refuses authored, ambiguous, connected or unavailable bindings. Originals and live stage are unchanged; omitted property paths are returned. This is export policy, not proof of authorship.",
             False,
             default=False,
         ),
@@ -351,11 +346,11 @@ HOST_ONLY = {
 }
 add(
     "assets.packs",
-    "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs. With a Kit connected it also lists kit_environment and warns when Kit and this host use different project files, stores or strict mode.",
+    'List the asset packs in every store. Also the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs. With a Kit connected it also lists kit_environment and warns when Kit and this host use different project files, stores or strict mode.',
 )
 add(
     "assets.pack_doctor",
-    "Check a pack without changing it: corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until the file is added: assets__import_path refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
+    "Check a pack without changing it. Reports corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until the file is added: assets__import_path refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
     dict(
         pack=field("string", "Pack name. Default: the selected pack.", False),
         entries=field(
@@ -367,12 +362,12 @@ add(
 )
 add(
     "assets.dependencies",
-    "Compute dependency closures for files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.",
+    "Compute dependency closures of asset files. For files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.",
     dict(paths=field("array", "Absolute USD or URDF file paths, 1 to 64.")),
 )
 add(
     "assets.pack_adopt",
-    "Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in skipped_symlinks with a note. A different file already there is refused unless force=true; nothing is written inside the repository.",
+    "Create or fill a pack from a folder. Creates a pack in the primary asset folder, or copies a folder's asset files into it and pins them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in skipped_symlinks with a note. A different file already there is refused unless force=true; nothing is written inside the repository.",
     dict(
         pack=field("string", "Pack name: one folder name, no path separators."),
         source_path=field(
@@ -387,7 +382,7 @@ add(
 )
 add(
     "assets.pack_pin",
-    "Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true.",
+    "Pin a pack's files by SHA-256. Records the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true.",
     dict(
         pack=field("string", "Pack name. Default: the selected pack.", False),
         files=field("array", "Pin only these relative paths, accepting their changes.", False),
@@ -396,7 +391,7 @@ add(
 )
 add(
     "assets.pack_build",
-    "Copy USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on into a pack in the primary asset folder, keeping layout, and pin them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.",
+    'Copy asset files and their dependencies into a pack. USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on, keeping layout, and pins them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.',
     dict(
         pack=field("string", "Destination pack name: one folder name."),
         sources=field(
@@ -437,7 +432,7 @@ add(
 )
 add(
     "sim.prim.clone",
-    "Clone a pack-created simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations.",
+    'Clone a pack-created leaf primitive. A simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations.',
     dict(
         **TARGET,
         path=field("string", "Pack-created source leaf."),
@@ -446,12 +441,12 @@ add(
 )
 add(
     "sim.stage.clear_owned",
-    "Remove only pack-created non-sensor, non-articulated subtrees, preserving other scene content. Explicit stopped target and confirm required. Returns removed/refused lists.",
+    'Remove what these tools created. Only pack-created non-sensor, non-articulated subtrees; other scene content is kept. Explicit stopped target and confirm required. Returns removed/refused lists.',
     dict(**TARGET, confirm=field("boolean", "Explicit confirmation.")),
 )
 add(
     "sim.light.create",
-    "Create a SphereLight, DistantLight or DomeLight without asset-valued textures. Pose in stage units, orientation wxyz.",
+    'Create a Sphere, Distant or Dome light. A SphereLight, DistantLight or DomeLight without asset-valued textures. Pose in stage units, orientation wxyz.',
     dict(
         **TARGET,
         path=field("string", "New prim path."),
@@ -470,7 +465,7 @@ add(
 )
 add(
     "sim.light.modify",
-    "Set intensity and color (both required) of a pack-owned light on a stopped timeline.",
+    "Set a pack-owned light's intensity and color. Both required, on a stopped timeline.",
     dict(
         **TARGET,
         path=field("string", "Pack-owned light path."),
@@ -480,18 +475,22 @@ add(
 )
 add(
     "sim.material.create",
-    "Create a UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs.",
+    'Create a preview-surface or physics material. A UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs.',
     dict(
         **TARGET,
         path=field("string", "New Material path; parent must exist."),
         color=field("array", "RGB 0..1.", False, default=[0.5, 0.5, 0.5]),
         roughness=field("number", "0..1.", False, default=0.5),
         metallic=field("number", "0..1.", False, default=0),
+        kind=field("string", "pbr or physics.", False, default="pbr"),
+        static_friction=field("number", "Physics material static friction 0..10.", False, default=0.5),
+        dynamic_friction=field("number", "Physics material dynamic friction 0..10.", False, default=0.5),
+        restitution=field("number", "Physics material restitution 0..1.", False, default=0),
     ),
 )
 add(
     "sim.material.apply",
-    "Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. With paths (up to 128 prims) every prim is checked first, so a bad one binds nothing.",
+    'Bind a pack-created material to geometry. To an existing geometry prim in the session layer, preserving source files. With paths (up to 128 prims) every prim is checked first, so a bad one binds nothing.',
     dict(
         **TARGET,
         path=field("string", "Geometry prim. Give this or paths.", False),
@@ -501,7 +500,7 @@ add(
 )
 add(
     "sim.physics.configure",
-    "Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch.",
+    'Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver\'s contact and constraint buffers, reported as newton_buffers.',
     dict(
         **TARGET,
         path=field("string", "PhysicsScene prim path."),
@@ -514,11 +513,13 @@ add(
         dt=field(
             "number", "Physics timestep seconds, 1/1000..1/10.", False, default=1 / 60
         ),
+        nconmax=field("integer", "Newton only: MuJoCo-Warp contact buffer per world. Default: sized from the rigid-body count. Refused on PhysX.", False),
+        njmax=field("integer", "Newton only: constraint rows per world; same rules as nconmax.", False),
     ),
 )
 add(
     "sim.joints.inspect",
-    "Inspect bounded authored joint limits/drives of an articulation, reporting USD degrees versus stage units. No runtime-state claim. The path may be the articulation root (a joint such as <robot>/root_joint, or the link carrying the articulation API): the joints are then the ones reached through its rigid bodies.",
+    'Read authored joint limits and drives. Bounded, for an articulation, reporting USD degrees versus stage units. No runtime-state claim. The path may be the articulation root (a joint such as <robot>/root_joint, or the link carrying the articulation API): the joints are then the ones reached through its rigid bodies.',
     dict(
         **TARGET,
         path=field("string", "Subtree, articulation root (joint or link), or the robot prim."),
@@ -527,7 +528,7 @@ add(
 )
 add(
     "sim.joints.drive",
-    "Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention.",
+    "Set one joint's USD drive target and gains. One revolute/prismatic joint, in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention.",
     dict(
         **TARGET,
         path=field("string", "Revolute or prismatic joint prim, e.g. /World/UR5e/joints/elbow_joint; sim__joints__inspect lists them."),
@@ -539,12 +540,12 @@ add(
 )
 add(
     "sim.joints.state",
-    "While playing or paused, read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Stopped gives PHYSICS_NOT_READY: sim__timeline__control action=initialize briefly plays then pauses. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data.",
+    'Read joint positions and velocities while running. While playing or paused, initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Stopped gives PHYSICS_NOT_READY: sim__timeline__control action=initialize briefly plays then pauses. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data.',
     dict(**TARGET, path=field("string", "Exact articulation root path, e.g. /World/UR5e/root_joint: robot.articulation_root from sim__quick_start, or sim__physics__inspect.")),
 )
 add(
     "sim.simulation.step",
-    "Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.",
+    'Advance exact physics steps while paused. 1..120 steps on PhysX or qualified Newton, PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Returns measured time delta, poses for observe_prims, DOFs for observe_joints. A failure after stepping reports the clock and phase. No retry or rollback. On Newton it first refuses STEP_DT_SOURCES_DISAGREE if the scene\'s timestep differs from Newton\'s, and adds a newton section.',
     dict(
         **TARGET,
         steps=field("integer", "Number of physics steps 1..120."),
@@ -577,7 +578,7 @@ add(
 )
 add(
     "sim.trajectory.replay",
-    "Replay a saved trajectory into a labelled video, as a job: moves prims through the poses in a file and saves one camera frame per step. No physics runs and the prims go back afterwards; needs a stopped timeline. Returns job_id; job_status(job_id, wait_s=30) then gives video_path, an MP4 with the label drawn on it (works headless and on a locked screen). Without camera it shows the poses at wall-clock pace, for a screen recording.",
+    'Replay a saved trajectory into a labelled video. As a job: moves prims through the poses in a file and saves one camera frame per step. No physics runs and the prims go back afterwards; needs a stopped timeline. Returns job_id; job_status(job_id, wait_s=30) then gives video_path, an MP4 with the label drawn on it (works headless and on a locked screen). Without camera it shows the poses at wall-clock pace, for a screen recording.',
     dict(
         **TARGET,
         trajectory=field("string", "Absolute path under your home or the output folder. A CSV as sim__simulation__run writes it (time_s, px,py,pz, qw,qx,qy,qz; or t and x,y,z), or JSON / JSONL samples {time_s, position, orientation_wxyz} or {time_s, bodies: {prim: {...}}}."),
@@ -610,7 +611,7 @@ add(
 )
 add(
     "sim.camera.capture",
-    "Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true.",
+    'Capture an RTX camera image to a PNG. Camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true. The result has a physics_render field.',
     dict(
         **TARGET,
         path=field("string", "Camera from sim__camera__create or sim__quick_start, or any other Camera with adopt=true."),
@@ -633,7 +634,7 @@ add(
 )
 add(
     "sim.lidar.read",
-    "Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true.",
+    'Read LiDAR return points. CPU Cartesian points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true. The result has a physics_render field.',
     dict(
         **TARGET,
         path=field("string", "Pack-created LiDAR path, or an existing OmniLidar with adopt=true."),
@@ -661,7 +662,7 @@ add(
 )
 add(
     "sim.graph.node_types",
-    "Find OmniGraph node types in the running Isaac Sim by id or UI-name substring (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions. Only contains is required; a catalog read needs no session_id or stage_id.",
+    "Find OmniGraph node types and their ports. By id or UI-name substring in the running Isaac Sim (e.g. 'Make Array' -> omni.graph.nodes.ConstructArray, 'PublishClock'), with exact input/output port names, types, defaults and descriptions from the installed .ogn files. Use before building Action Graphs; port names differ between Isaac versions. Only contains is required; a catalog read needs no session_id or stage_id.",
     dict(
         **UNUSED_TARGET,
         contains=field("string", "Substring of the node type id or its UI name, case-insensitive (<=64 chars)."),
@@ -671,7 +672,7 @@ add(
 )
 add(
     "sim.graph.build",
-    "Create a whole OmniGraph (e.g. an Action Graph for ROS 2) in one call: nodes, input values, connections and prim targets. Find node types and ports first with sim__graph__node_types. Checks every port, lists the real ones on a typo, and rolls the graph back on any error. Timeline stopped. Returns it as sim__graph__inspect does.",
+    'Build a whole OmniGraph in one call. E.g. an Action Graph for ROS 2: nodes, input values, connections and prim targets. Find node types and ports first with sim__graph__node_types. Checks every port, lists the real ones on a typo, and rolls the graph back on any error. Timeline stopped. Returns it as sim__graph__inspect does.',
     dict(
         **TARGET,
         path=field("string", "Graph prim path to create, e.g. /World/ROS_Clock or /turtlebot3_burger/ROS_Drive."),
@@ -685,7 +686,7 @@ add(
 )
 add(
     "sim.graph.inspect",
-    "Read an OmniGraph: every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). ROS helpers report ros_render_status and writer_computes, which show a sensor that is not rendering; publisher count is not read here, so check with ros2 topic info. Read-only.",
+    "Read an OmniGraph's nodes and connections. Every node's type, input values or upstream connections, and output connections. Use to verify a hand-built Action Graph (missing wires, unset targets, ports created at runtime). ROS helpers report ros_render_status and writer_computes, which show a sensor that is not rendering; publisher count is not read here, so check with ros2 topic info. Read-only.",
     dict(
         **TARGET,
         path=field("string", "Graph prim path, e.g. /World/ROS_Clock."),
@@ -694,7 +695,7 @@ add(
 )
 add(
     "sim.graph.show",
-    "Open a graph in the Action Graph editor of a windowed Isaac Sim and zoom to fit, e.g. for a demo video. layout=true arranges nodes and writes positions into the stage, so stop first or use layout=false while playing; TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. Uses the editor's internal API and refuses cleanly if it changed.",
+    "Open a graph in the Action Graph editor. Of a windowed Isaac Sim and zoom to fit, e.g. for a demo video; layout=true arranges nodes and writes positions into the stage, so stop first or use layout=false while playing; TIMELINE_ACTIVE includes a retry_with call. TIMELINE_ACTIVE includes a retry_with call. close=true closes the editor. Uses the editor's internal API and refuses cleanly if it changed.",
     dict(
         **TARGET,
         path=field("string", "Graph prim path (not needed with close=true).", False, default=""),
@@ -706,7 +707,7 @@ add(
 )
 add(
     "sim.ui.find",
-    "List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views, and labels when a query is given) with their text, tooltip, current value, a ref, and their centre in pixels of the Isaac Sim window (the same pixels as screenshot(window_id=<Isaac Sim window>)), plus the visible Kit windows. Works while the desktop is locked or used remotely. Use the ref with sim__ui__act instead of guessing coordinates.",
+    "Find Isaac Sim UI widgets. Lists Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views, and labels when a query is given) with their text, tooltip, current value, a ref, and their centre in pixels of the Isaac Sim window (the same pixels as screenshot(window_id=<Isaac Sim window>)), plus the visible Kit windows. Works while the desktop is locked or used remotely. Use the ref with sim__ui__act instead of guessing coordinates.",
     dict(
         query=field("string", "Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only.", False, default=""),
         window=field("string", "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.", False, default=""),
@@ -715,7 +716,7 @@ add(
 )
 add(
     "sim.ui.act",
-    "Drive Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
+    "Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
     dict(
         action=field("string", "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab).", enum=["click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "tab", "close", "wait"]),
         ref=field("string", "Widget ref from sim__ui__find (its centre is used). For type/keypress it is clicked first to focus it.", False),
@@ -748,7 +749,7 @@ add(
 )
 add(
     "sim.logs.tail",
-    "Read a bounded tail of the selected Kit log file, never arbitrary files. Default: last 1 MiB, warnings/errors and [sim-tools] lines in `lines`. With min_level, channel, contains or cursor: parsed `entries` (timestamp, level, channel, message capped at 2 KB), `next_cursor` and `truncated`; a cursor comes from sim__logs__mark or a previous next_cursor. Reads at most 1 MiB per call and never installs a log callback. Redacts obvious secrets. Also returns recent scene_events. Needs no session_id or stage_id.",
+    'Read a bounded tail of the Kit log. Of the selected Kit log file, never arbitrary files. Default: last 1 MiB, warnings/errors and [sim-tools] lines in `lines`. With min_level, channel, contains or cursor: parsed `entries` (timestamp, level, channel, message capped at 2 KB), `next_cursor` and `truncated`; a cursor comes from sim__logs__mark or a previous next_cursor. Reads at most 1 MiB per call and never installs a log callback. Redacts obvious secrets. Also returns recent scene_events. Needs no session_id or stage_id.',
     dict(
         **UNUSED_TARGET,
         limit=field("integer", "Maximum entries or lines 1..100.", False, default=50),
@@ -770,12 +771,12 @@ add(
 )
 add(
     "sim.logs.mark",
-    "Cursor at the current end of Kit's log file: byte offset plus file identity (device, inode, size, mtime). Pass it to sim__logs__tail or sim__logs__summary to read only what happens next; rotation or truncation is reported instead of unrelated lines. Reads the log path only; installs no log callback. Needs no session_id or stage_id.",
+    "Mark the current end of Kit's log. A cursor: byte offset plus file identity (device, inode, size, mtime). Pass it to sim__logs__tail or sim__logs__summary to read only what happens next; rotation or truncation is reported instead of unrelated lines. Reads the log path only; installs no log callback. Needs no session_id or stage_id.",
     dict(**UNUSED_TARGET),
 )
 add(
     "sim.logs.summary",
-    "Counts by level and channel since a sim__logs__mark cursor (or the retained 1 MiB window when omitted), with the first and last error. Reads at most 1 MiB per call; `truncated` and `next_cursor` say whether more remains. Same file parser and secret redaction as sim__logs__tail; installs no log callback. Needs no session_id or stage_id.",
+    'Count log lines by level and channel. Since a sim__logs__mark cursor (or the retained 1 MiB window when omitted), with the first and last error. Reads at most 1 MiB per call; `truncated` and `next_cursor` say whether more remains. Same file parser and secret redaction as sim__logs__tail; installs no log callback. Needs no session_id or stage_id.',
     dict(
         **UNUSED_TARGET,
         cursor=field(
@@ -787,7 +788,7 @@ add(
 )
 add(
     "sim.controller.create",
-    "OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox.",
+    'OPT-IN CODE EXECUTION: create a script controller. Creates an OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox.',
     dict(
         **TARGET,
         path=field("string", "Path for the new graph, not in use yet."),
@@ -798,7 +799,7 @@ add(
 )
 add(
     "sim.controller.update",
-    "OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required.",
+    "OPT-IN CODE EXECUTION: replace a controller's code. Replaces inline code of this pack's controller and requests recompilation while stopped. Same explicit script enable required.",
     dict(
         **TARGET,
         path=field("string", "Pack controller path."),
@@ -808,7 +809,7 @@ add(
 
 add(
     "sim.arm.ik",
-    "Inverse kinematics for any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits.",
+    'Inverse kinematics for a link target. For any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits.',
     dict(
         **TARGET,
         path=field("string", "Articulation root, as for sim__joints__state."),
@@ -816,7 +817,7 @@ add(
         position=field("array", "Target [x, y, z] in stage units, in the world frame unless frame=base."),
         orientation=field("array", "Optional target orientation [w, x, y, z]. Omit to place the link by position only.", False),
         base_link=field("string", "Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).", False),
-        offset=field("array", "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.", False),
+        offset=field("array", "Optional [x, y, z] in the link's frame, stage units: place this point (a fingertip) instead of the link's origin.", False),
         frame=field("string", "world (default) or base: the frame position and orientation are given in.", False, default="world"),
         move=field("boolean", "Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.", False),
         speed=field("number", "With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended.", False),
@@ -826,19 +827,19 @@ add(
 )
 add(
     "sim.arm.fk",
-    "Forward kinematics: where a link (the hand) would be for given joint values, from the robot's own USD joints, in the world and base frames. Joints you leave out use their current values when the simulation runs, else zero. Commands nothing; pair it with sim__arm__ik. Works stopped or running; when running it first checks its model against physics.",
+    "Forward kinematics: where a link would be. Where a link (the hand) would be for given joint values, from the robot's own USD joints, in the world and base frames. Joints you leave out use their current values when the simulation runs, else zero. Commands nothing; pair it with sim__arm__ik. Works stopped or running; when running it first checks its model against physics.",
     dict(
         **TARGET,
         path=field("string", "Articulation root, as for sim__joints__state."),
         link=field("string", "The link: its name (such as panda_hand) or absolute path."),
         joints=field("object", "Optional {joint name: value}: radians for revolute, stage units for prismatic, e.g. sim__arm__ik's joint_targets.", False),
-        offset=field("array", "Optional [x, y, z] in the link's own frame, in stage units: place this point (a fingertip, a tool tip) instead of the link's origin.", False),
+        offset=field("array", "Optional [x, y, z] in the link's frame, stage units: place this point (a fingertip) instead of the link's origin.", False),
         base_link=field("string", "Chain start: a link name or path. Default: the articulation root's body.", False),
     ),
 )
 add(
     "sim.joints.command",
-    "Command initialized articulation position targets by name (targets) or in DOF order (positions), and/or velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless clamp=true, which reports what it clamped; unknown names list the valid ones. Returns applied targets and previous values, not achieved poses: compare sim__joints__state. Runtime only and lost on Stop; sim__joints__drive authors USD targets.",
+    'Command joint position or velocity targets. On an initialized articulation, by name (targets) or in DOF order (positions), and/or velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless clamp=true, which reports what it clamped; unknown names list the valid ones. Returns applied targets and previous values, not achieved poses: compare sim__joints__state. Runtime only and lost on Stop; sim__joints__drive authors USD targets.',
     dict(
         **TARGET,
         path=field("string", "Exact initialized articulation root path."),
@@ -867,7 +868,7 @@ add(
 )
 add(
     "sim.joints.gains",
-    "Read or set an initialized articulation's runtime drive gains: stiffness, damping and max_effort (the drive's torque/force cap) for named dofs or every DOF. These are PhysX/Newton runtime values, not USD: they are lost on Stop and never saved; sim__joints__drive authors USD gains. Omit every value to only read. Returns each DOF's values before and after. Needs a playing or paused timeline and a valid tensor view.",
+    "Read or set runtime drive gains. An initialized articulation's stiffness, damping and max_effort (the drive's torque/force cap) for named dofs or every DOF. These are PhysX/Newton runtime values, not USD: they are lost on Stop and never saved; sim__joints__drive authors USD gains. Omit every value to only read. Returns each DOF's values before and after. Needs a playing or paused timeline and a valid tensor view.",
     dict(
         **TARGET,
         path=field("string", "Exact initialized articulation root path."),
@@ -887,7 +888,7 @@ add(
 )
 add(
     "sim.joints.move",
-    "Step a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then report settled and each joint's error. From stopped, sim__timeline__control action=initialize briefly plays then pauses. A joint held by contact or a weak drive reports settled=false: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only; never pumps the app loop.",
+    "Step a paused simulation until joints settle. Steps a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then reports settled and each joint's error. From stopped, sim__timeline__control action=initialize briefly plays then pauses. A joint held by contact or a weak drive reports settled=false: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only; never pumps the app loop.",
     dict(
         **TARGET,
         path=field("string", "Exact initialized articulation root path."),
@@ -906,7 +907,7 @@ add(
 )
 add(
     "sim.joints.teleport",
-    "Set joint positions directly as a state reset, not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are {dof name: value}, radians for revolute and stage units for prismatic. Needs an initialized (playing or paused) articulation and returns each joint's value before and after. Out-of-limit values are refused.",
+    "Set joint positions directly (a state reset). Not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are {dof name: value}, radians for revolute and stage units for prismatic. Needs an initialized (playing or paused) articulation and returns each joint's value before and after. Out-of-limit values are refused.",
     dict(
         **TARGET,
         path=field("string", "Exact initialized articulation root path."),
@@ -917,7 +918,7 @@ add(
 )
 add(
     "sim.prim.set_attribute",
-    "Set one typed attribute on any prim in the session layer, reporting the composed value before and after, and undo it with sim__prim__revert. Refuses engine- and schema-owned attributes (points, normals, faceVertexIndices, faceVertexCounts, extent, xformOpOrder, xformOp:*, physics:*, physx*:*), instance proxies and Kit runtime prims. type creates a missing attribute; without it the attribute must exist. Values are JSON; quaternions are [w,x,y,z].",
+    'Set one typed attribute on any prim. In the session layer, reporting the composed value before and after; undo it with sim__prim__revert. Refuses engine- and schema-owned attributes (points, normals, faceVertexIndices, faceVertexCounts, extent, xformOpOrder, xformOp:*, physics:*, physx*:*), instance proxies and Kit runtime prims. type creates a missing attribute; without it the attribute must exist. Values are JSON; quaternions are [w,x,y,z].',
     dict(
         **TARGET,
         path=field("string", "Absolute prim path."),
@@ -935,7 +936,7 @@ add(
 )
 add(
     "sim.physics.apply",
-    "Add or remove a collider, rigid body and kinematic state, or set mass / density, on any prim; session layer only, and undo with sim__prim__revert. collider can set an approximation (convexHull, convexDecomposition, boundingSphere, boundingCube, meshSimplification, none). Refuses a rigid body under an existing rigid-body ancestor, a joint or articulation root as a body, both mass and density, and any change while the timeline is active.",
+    'Add or remove colliders and rigid bodies, set mass. Add or remove a collider, rigid body and kinematic state, or set mass / density, on any prim; session layer only, and undo with sim__prim__revert. collider can set an approximation (convexHull, convexDecomposition, boundingSphere, boundingCube, meshSimplification, none). Refuses a rigid body under an existing rigid-body ancestor, a joint or articulation root as a body, both mass and density, and any change while the timeline is active.',
     dict(
         **TARGET,
         path=field("string", "Absolute prim path."),
@@ -964,13 +965,13 @@ add(
         density=field(
             "number", "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.", False
         ),
-        impulse=field("array", "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing.", False),
+        impulse=field("array", "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing. On Newton it is applied as impulse/(dt/substeps) force in the next step's first substep.", False),
         at=field("array", "With impulse: the world point [x, y, z] to push at. Default: the body's centre.", False),
     ),
 )
 add(
     "sim.prim.revert",
-    "Remove the session-layer opinions these tools authored on one prim or its subtree, restoring composed values from the source files, and report what was removed and the values before and after. Source files never change. Prims the pack created stay: delete them with sim__prim__delete. Nothing recorded is a no-op, not an error. Only edits recorded in this session and stage can be undone.",
+    "Undo this session's edits on a prim or subtree. Removes the session-layer opinions these tools authored on one prim or its subtree, restoring composed values from the source files, and reports what was removed and the values before and after. Source files never change. Prims the pack created stay: delete them with sim__prim__delete. Nothing recorded is a no-op, not an error. Only edits recorded in this session and stage can be undone.",
     dict(
         **TARGET,
         path=field("string", "Absolute prim path whose recorded edits are undone."),
@@ -981,12 +982,12 @@ add(
 )
 add(
     "sim.prim.create_many",
-    "Create up to 200 prims in one call, all or none: a tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out, except keys that do not apply to its kind (an Xform skips rigid, mass and material; listed in defaults_skipped). Ancestors must exist, timeline stopped. A failing item removes the earlier ones; the error keeps its code and names index and path.",
+    "Create up to 200 prims in one call, all or none. A tower, wall, grid or room without one sim__prim__create per piece. Each item takes that tool's arguments plus an optional material path; defaults fills any key an item leaves out, except keys that do not apply to its kind (an Xform skips rigid, mass and material; listed in defaults_skipped). Ancestors must exist, timeline stopped. A failing item removes the earlier ones; the error keeps its code and names index and path.",
     dict(
         **TARGET,
         items=field(
             "array",
-            "1 to 200 objects, each like sim__prim__create's arguments: {path, kind, size, scale, position, orientation, frame, rigid, collision, mass, density, material}. path is required; kind may come from defaults.",
+            "1 to 200 objects taking create's arguments; path is required, kind may come from defaults.",
         ),
         defaults=field(
             "object",

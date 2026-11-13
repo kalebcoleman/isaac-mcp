@@ -1,7 +1,7 @@
-"""PhysX scene queries: raycasts and the last step's contact report.
+"""Scene queries: PhysX raycasts and contact reports, and Newton contact snapshots (newton_support).
 
 No app update, physics step or engine fallback. A backend without a verified equivalent refuses
-with a stable code. Nothing here invents a hit or an impulse.
+with a stable code (Newton has no raycast). Nothing here invents a hit, an impulse or a force.
 """
 
 import math
@@ -52,6 +52,13 @@ def raycast(origin, direction, max_distance=100, all_hits=False, timeline=None):
     length = math.sqrt(sum(x * x for x in direction))
     used_direction = [x / length for x in direction]
     engine = _engine().get_active_physics_engine()
+    if engine == "newton":
+        refuse("RAYCAST_UNSUPPORTED",
+               "Raycasting is not available under Newton. Isaac Sim 6.2's Newton extension registers its raycast handler as an "
+               "empty stub (it returns without any hit data), and Newton 1.6.1 offers no public ray query to call instead. "
+               "To see what a body touches use sim__physics action=contacts; for geometry use sim__prim__bounds or sim__prim__measure; "
+               "for a collision raycast use a session started on PhysX. No fallback was attempted.",
+               backend=engine, alternatives=["sim__physics action=contacts", "sim__prim__bounds / sim__prim__measure", "a PhysX session"])
     _physx_only(engine, "RAYCAST_UNSUPPORTED", "Raycasting")
     base = dict(
         origin=origin,
@@ -213,13 +220,17 @@ def contacts(paths, stage, timeline=None):
     if any(not isinstance(p, str) or not p.startswith("/") for p in paths):
         refuse("INVALID_VALUE", "Every path must be an absolute prim path.")
     engine = _engine().get_active_physics_engine()
-    _physx_only(engine, "CONTACT_QUERY_UNSUPPORTED", "Contact-report reading")
     if timeline is not None and timeline.is_stopped():
         refuse(
             "PHYSICS_NOT_READY",
             "The timeline is stopped, so there is no current contact report. Play and step, then call "
             "again while paused or playing.",
         )
+    if engine == "newton":
+        from .newton_support import contacts as newton_contacts
+
+        return newton_contacts(paths, stage)
+    _physx_only(engine, "CONTACT_QUERY_UNSUPPORTED", "Contact-report reading")
     try:
         from pxr import PhysxSchema
     except ImportError:

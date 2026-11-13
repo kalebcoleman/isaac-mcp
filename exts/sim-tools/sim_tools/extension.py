@@ -874,7 +874,7 @@ class Extension(omni.ext.IExt):
         if name in ("sim.stage.tree", "sim.physics.inspect"):
             nodes, truncated = bounded(stage, a.get("root", "/"), a.get("limit", 100), a.get("depth"),
                                        a.get("include_runtime", name == "sim.physics.inspect"))
-            return dict(
+            result = dict(
                 nodes=[
                     dict(
                         path=str(p.GetPath()),
@@ -886,6 +886,14 @@ class Extension(omni.ext.IExt):
                 ],
                 truncated=truncated,
             )
+            if name == "sim.physics.inspect":
+                from .newton_support import diagnostics, engine_name
+
+                if engine_name() == "newton":
+                    result["newton"] = diagnostics(stage)
+                    if result["newton"]["warnings"]:
+                        result["warnings"] = result["newton"]["warnings"]
+            return result
         if name == "sim.prim.find":
             contains = a.get("contains", "")
             kind = a.get("type_name", "")
@@ -960,8 +968,6 @@ class Extension(omni.ext.IExt):
                 return s.import_path(stage, **a)
             if name == "assets.info":
                 return s.inspect_asset(**a)[2]
-            if name == "assets.prepare_workstation":
-                return s.prepare_workstation(**a)
             raise RuntimeError("Unknown asset operation: " + name)
         if name == "sim.body.state":
             from .advanced import physics_manager

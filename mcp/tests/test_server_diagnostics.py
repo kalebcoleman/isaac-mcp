@@ -55,10 +55,10 @@ def test_unusable_log_dir_falls_back_to_stderr_only(tmp_path):
 
 def test_startup_line_records_identity_and_filters_but_no_other_env(tmp_path):
     path = dx.setup_server_log({"ISAAC_MCP_LOG_DIR": str(tmp_path)})
-    dx.log_startup("1.2.3", A, 127, {"ISAAC_MCP_LOCAL_TOOLS": "all", "SECRET_TOKEN": "hunter2"})
+    dx.log_startup("1.2.3", A, 127, {"ISAAC_MCP_TOOLSETS": "all", "SECRET_TOKEN": "hunter2"})
     text = _read(path)
     assert "process start" in text and f"ppid={os.getppid()}" in text and "version=1.2.3" in text
-    assert A[:12] in text and "tools=127" in text and "ISAAC_MCP_LOCAL_TOOLS" in text
+    assert A[:12] in text and "tools=127" in text and "ISAAC_MCP_TOOLSETS" in text
     assert "hunter2" not in text and "SECRET_TOKEN" not in text
 
 

@@ -24,11 +24,11 @@ LABELS = check_docs.TIER_ROWS
 # The three subtotal statements in the guide and the figure the code implies for each.
 PHRASES = {
     "host_isaaclab": (r"exactly \d+ tools", "exactly {} tools",
-                      lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"]),
+                      lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"] + c["robosim"]),
     "bridge": (r"The other \d+ tools", "The other {} tools",
                lambda c: c["builtins"]),
     "total": (r"there are \d+ tools in total", "there are {} tools in total",
-              lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic"))),
+              lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic", "robosim"))),
     "optional": (r"groups add \d+ more", "groups add {} more",
                  lambda c: c["desktop_input"] + c["sim_sessions"]),
 }
@@ -251,7 +251,7 @@ def test_architecture_generic_wording_is_checked():
     assert "generic sim" in text
     errors = []
     check_docs.check_generic_counts(
-        errors, pages={"docs/ARCHITECTURE.md": text.replace("71 generic sim", "55 generic sim")})
+        errors, pages={"docs/ARCHITECTURE.md": text.replace("70 generic sim", "55 generic sim")})
     assert any("55 generic sim" in error for error in errors)
     ignored = []
     check_docs.check_generic_counts(
@@ -260,21 +260,12 @@ def test_architecture_generic_wording_is_checked():
     assert ignored == []
 
 
-def test_scene_opt_out_count_matches_and_a_stale_value_fails():
-    errors = []
-    check_docs.check_scene_opt_out(errors)
-    assert errors == []
-    expected = check_docs.standard_without_generic()
-    agents = (ROOT / "AGENTS.md").read_text().replace(
-        f"leaving {expected} tools", f"leaving {expected + 1} tools")
-    host = (ROOT / "docs/TOOLS-HOST.md").read_text()
-    errors = []
-    check_docs.check_scene_opt_out(errors, pages={"AGENTS.md": agents, "docs/TOOLS-HOST.md": host})
-    assert len(errors) == 1 and "AGENTS.md" in errors[0] and str(expected + 1) in errors[0]
-    missing = agents.replace(f"leaving {expected + 1} tools", "hides the generic pack")
-    errors = []
-    check_docs.check_scene_opt_out(errors, pages={"AGENTS.md": missing})
-    assert any("says nothing" in error for error in errors)
+def test_default_tool_inventory_excludes_disabled_toolsets():
+    from isaac_mcp.toolsets import DEFAULT, owner
+    names = check_docs.default_tool_names()
+    assert names
+    assert all(owner(name) in DEFAULT for name in names)
+    assert not any(name.startswith("ur5e_dt__") for name in names)
 
 
 def test_vendoring_rejects_a_bundled_asset_claim():

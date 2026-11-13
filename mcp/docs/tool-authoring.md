@@ -59,16 +59,16 @@ MCP clients see the change after `refresh_tools`.
 
 Prefer a small tool over asking an agent to reach into your modules with `run_python`: the
 arguments are typed, the rules live in one place, and the tool still works when `run_python` is
-hidden (`ISAAC_MCP_BUILTINS=0`) or refused (read-only mode). The template's `project_state` and
+hidden (`ISAAC_MCP_TOOLSETS=default,-code`) or refused (read-only mode). The template's `project_state` and
 `set_threshold` show the shape.
 
 ## A narrower server for one project
 
-One bridge can serve several MCP servers. To give an agent only your project's tools:
+One bridge can serve several MCP servers. To give an agent core and uncatalogued project-extension tools:
 
 ```json
 { "mcpServers": { "robot_demo": { "command": "isaac-mcp",
-    "env": { "ISAAC_MCP_NAMESPACE": "robot_demo", "ISAAC_MCP_BUILTINS": "0", "ISAAC_MCP_LOCAL_TOOLS": "gateway" } } } }
+    "env": { "ISAAC_MCP_TOOLSETS": "minimal,+extensions" } } } }
 ```
 
 These settings choose what is listed. To stop changes for every client, start Kit read-only.
@@ -79,12 +79,6 @@ Tools run where Kit runs, so their code and assets must be on that machine. `put
 file there, `stat_file` reports its size and SHA-256, and `get_file` reads one back. A file
 travels in one message, so use them for code and small assets. `mcp/templates/remote_driver.py`
 copies a package by hash and reloads it.
-
-## The tools panel
-
-`isaac.mcp.panel` adds an "MCP Tools" window: a section per namespace and a Run button per tool,
-with a field for each argument. It is drawn from the same listing clients get, so your tools
-appear on Refresh, and a click is queued exactly like a client's call.
 
 ## Things Kit will surprise you with
 

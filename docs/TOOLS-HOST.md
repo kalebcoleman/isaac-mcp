@@ -1,10 +1,9 @@
 # Host and bridge tools
 
 The host `isaac-mcp` process speaks MCP to the client. It provides the gateway and desktop tools below even when
-Kit is disconnected. The 9 UR5e tools are also listed from a packaged catalog, even with Kit down; a live twin
-bridge is required to execute them. The seven bridge built-ins are listed the same way, from a packaged snapshot of the bridge's own
-verbs, and run on the selected bridge when called; they can be hidden from the host's MCP list with
-`ISAAC_MCP_BUILTINS=0`. Clients that ignore `tools/list_changed` (OpenCode) therefore see them from startup. Other packs are documented in the [UR5e](TOOLS-UR5E.md) and
+Kit is disconnected. The 10 UR5e tools are available with the `workcell` toolset, even with Kit down.
+The eight bridge built-ins use packaged schemas; `core` is always on and `code` is on by default.
+Other packs are documented in the [UR5e](TOOLS-UR5E.md) and
 [Isaac Lab](TOOLS-ISAACLAB.md) references. All arguments are listed in [Tool arguments](TOOLS-ARGUMENTS.md) and all settings in
 [Environment variables](ENVIRONMENT.md).
 
@@ -21,26 +20,16 @@ bridge is unavailable.
 
 | MCP tool | Arguments | Use and effects |
 |---|---|---|
-| `isaac_help` | `task` (optional text), `no_fit=false` | Start here. Names the isaac tools to load and call for what you want to do (record a video, find why a grasp failed, fly a drone with your own controller, train a policy, start a simulator). Topics are ranked by how many of their words the task uses, and a topic that shares only one common word is dropped when another fits clearly better. When nothing matches it says no tool is known to fit, gives the `run_python` pattern (one background call that runs the whole loop), and appends the question to `help-gaps.jsonl` in the server's log folder (`~/.local/state/isaac-mcp`, or `ISAAC_MCP_LOG_DIR`); `no_fit=true` does the same for a task whose named tools did not fit. The file stays on this machine, is capped at 1 MiB, and `ISAAC_MCP_LOG=0` turns it off. Reads nothing from the simulator and works with no bridge. |
+| `isaac_help` | `task` (optional text), `no_fit=false`, `tool` (optional tool name) | Start here. With `tool` it returns that tool's full description and arguments, as written before the tool list shortened them. Names the isaac tools to load and call for what you want to do (record a video, find why a grasp failed, fly a drone with your own controller, train a policy, start a simulator). Topics are ranked by how many of their words the task uses, and a topic that shares only one common word is dropped when another fits clearly better. When nothing matches it says no tool is known to fit, gives the `run_python` pattern (one background call that runs the whole loop), and appends the question to `help-gaps.jsonl` in the server's log folder (`~/.local/state/isaac-mcp`, or `ISAAC_MCP_LOG_DIR`); `no_fit=true` does the same for a task whose named tools did not fit. The file stays on this machine, is capped at 1 MiB, and `ISAAC_MCP_LOG=0` turns it off. Reads nothing from the simulator and works with no bridge. |
 | `refresh_tools` | `wait_s=0` (seconds, clamped to 0-180) | Rediscover the selected bridge's registry after a bridge starts or a module changes. If nothing listens on the selected port and exactly one managed session started by this server is live on another loopback port (its PID and readiness checked), it selects that session, says so and why, and the choice lasts until `use_bridge` or a restart; this applies with `wait_s=0` too. It never leaves a port that answers, and with several sessions it names them instead. Adds or updates visible tools and removes tools no longer advertised; catalog-listed tools remain visible as proxies. A failed or malformed discovery, or a collision between bridge tool names or with a host tool, leaves the existing list intact. The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after a refresh that changed the list; a client that ignores the notification still needs a reconnect (or `python3 mcp/isaac_mcp/client.py list_tools`). When no bridge answers, or one accepts the connection but `list_tools` times out, the error says Kit is probably still starting and names any managed `sim__launch` session with its age; with `wait_s` > 0 it polls every 3 s until the bridge answers or the time runs out (the last sleep is shorter, so it uses the whole wait). When nothing listens on the selected port and another bridge is advertised, the error names the endpoint it tried, lists each advertised bridge's port, PID and app with the `use_bridge` call, and does not suggest waiting; an explicit `wait_s` is still honored, since you may be starting a simulator on that port. It returns at once on an ambiguous "multiple bridges" error, and when nothing listens on the selected port and this server launched several simulators that are still live: it will not choose one, so call `use_bridge`. A failed call sets MCP `isError`, with the same text. A first Kit start took 172 s on a lab PC. |
 | `use_bridge` | `port` (integer, required) | Connect to a different bridge on that port, report its identity, and replace the previously discovered bridge tools. The choice lasts until the host server restarts. Sends `notifications/tools/list_changed` after replacing the tools. A failed connection or tool discovery sets MCP `isError`. |
+| `toolsets` | `action` (`list`, `enable`, `disable`), `names` (list of toolset names) | `list` returns what `status` reports under `toolsets`: the toolsets that are on, those that are off with a one-line summary, the number of tools each lists, the planned ones, and which can be enabled now. `enable` registers that toolset's tools exactly as startup would (host tools, catalog proxies, and the live bridge's tools when one answers), rebuilds the grouped tools and sends `notifications/tools/list_changed`; the result lists the tools that became available, so a client that ignores the notification can still call them by name. `disable` removes them. The change lasts for this server process only and is never written to a config file; `workcell` and `robosim` still register with no bridge or checkout and answer with their own errors. Refused, with nothing changed: `input` and `launch` (explicit-only, only the user can turn them on at startup), disabling `core`, unknown names, and every `enable` or `disable` when `[tools] runtime_enable = false` or `ISAAC_MCP_RUNTIME_ENABLE=0`. |
 
 `status` is the one check-in call: the selected bridge's PID, port and app, what else runs on this machine, and the
 stage IDs, or a plain "nothing is running" answer (see [built-ins](#kit-bridge-built-ins)). Call it once before the
-first simulator action. `list_bridges`
-lists advertised bridge instances (they are bridge built-ins: listed unless `ISAAC_MCP_BUILTINS=0`, but they need a reachable bridge to answer;
-`python3 mcp/isaac_mcp/client.py --list-bridges` works either way). Example MCP calls: `use_bridge` with `{"port":8766}`, followed by `status` with
-`{}` and `refresh_tools` with `{}`. Switching targets changes the selected simulation; verify the result before
-issuing scene-changing commands.
-
-Catalog-listed tools, built-ins included, do not prove a live bridge is available: `status` says whether one is, without failing when none is.
-`ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may hide bridge tools (including `status` and
-`list_bridges`), and tools of uncatalogued extensions appear only after discovery. Call `refresh_tools` and verify with the CLI below before starting another Kit.
-
-The bridge also has an internal `list_tools` discovery operation. It is intentionally hidden from the bridge's own
-advertised tool list, so it is not normally a dynamically registered MCP tool. Ask the MCP client to list tools, or
-use the standard-library bridge CLI from the checkout root. Discover the advertised bridges first and use the
-host and port from that listing; 8766 below is only the twin's default port:
+first simulator action. It also lists enabled, disabled and planned toolsets, even with no bridge.
+Uncatalogued extension tools appear after discovery when `extensions` is enabled.
+Use the CLI below to list advertised bridges without an MCP connection.
 
 ```bash
 python3 mcp/isaac_mcp/client.py --list-bridges
@@ -59,9 +48,15 @@ A client is shown one tool per subject, with an `action` argument, instead of on
 action it runs and returns that tool's own answer. An argument that belongs to another action is refused, and nothing
 runs. `action="help"` returns the full description and arguments of every action in the group.
 
+The listed text is short on purpose: a tool description of about 400 characters (a group of many actions may run a
+little over), an argument description of at most 120, and one short clause per action. Nothing is lost: `action="help"`
+returns the members' text as written, `isaac_help(tool="<name>")` returns the same for a tool listed on its own, and
+[Tool arguments](TOOLS-ARGUMENTS.md) is the long form. Sentences that say a tool executes code, is destructive, needs a
+confirm flag or uses the GPU stay in the listed text.
+
 The single-purpose names in brackets below still work when called, with the same arguments and answers, so existing
 prompts and scripts keep running. They are **deprecated**: they are no longer listed, and new work should use the
-grouped form. `ISAAC_MCP_GROUP_TOOLS=0` lists every tool singly, with no grouped tools. Tools that belong to no group
+grouped form. Only enabled members are callable, including by their single-purpose names. Tools that belong to no group
 (`status`, `run_python`, `sim__quick_start`, `sim__timeline__control`, `assets__import_path`, `screenshot` and others)
 are listed under their own names either way. Where a tool has an argument of its own called `action`, the grouped
 tool takes it as `sub_action`.
@@ -93,81 +88,71 @@ tool takes it as `sub_action`.
 | `ur5e_dt__eval` | Interface only. | `status` (`ur5e_dt__eval_status`) |
 | `files` | Files on the simulator's machine: write, read, check size and hash. | `put` (`put_file`), `get` (`get_file`), `stat` (`stat_file`) |
 | `jobs` | Every job, simulator or process: list, status (with wait_s), log tail, cancel. | `status` (`job_status`), `cancel` (`job_cancel`), `list` (`isaaclab__runs_list`), `tail` (`isaaclab__runs_tail`), `lab_status` (`isaaclab__runs_status`) |
-| `isaaclab__launch` | Start an Isaac Lab job and get its job_id: train, evaluate, play, record or check a task. | `train` (`isaaclab__train`), `eval` (`isaaclab__eval`), `play` (`isaaclab__play`), `record` (`isaaclab__record`), `env_check` (`isaaclab__env_check`) |
+| `isaaclab__launch` | Start an Isaac Lab job (uses the GPU) and get its job_id: train, evaluate, play, record or check a task. | `train` (`isaaclab__train`), `eval` (`isaaclab__eval`), `play` (`isaaclab__play`), `record` (`isaaclab__record`), `env_check` (`isaaclab__env_check`) |
 | `isaaclab__inspect` | Before launching: the Isaac Lab install, its tasks, GPU room, and checkpoints. | `install` (`isaaclab__install_info`), `envs` (`isaaclab__envs_list`), `preflight` (`isaaclab__preflight`), `checkpoints` (`isaaclab__checkpoints_list`) |
 | `isaaclab__metrics` | Training results: a summary of scalars or evaluation files, or one curve's last points. | `summary` (`isaaclab__metrics_summary`), `curve` (`isaaclab__tensorboard_tail`) |
 | `screen_recording` | Record the desktop or a window to MP4: start, stop, status. | `start` (`start_screen_recording`), `stop` (`stop_screen_recording`), `status` (`screen_recording_status`) |
-| `windows` | Desktop windows: list, raise, move, tile. | `list` (`list_windows`), `raise` (`raise_window`), `move` (`move_window`), `tile` (`tile_windows`) |
+| `windows` | Desktop display and windows. | `info` (`screen_info`), `list` (`list_windows`), `raise` (`raise_window`), `move` (`move_window`), `tile` (`tile_windows`) |
 | `window_input` | Mouse and keyboard into the focused window (opt-in group). | `click` (`window_click`), `drag` (`window_drag`), `scroll` (`window_scroll`), `type` (`window_type`), `key` (`window_key`) |
 | `sim__session` | Simulators this server manages (opt-in group): launch, list, status, stop. | `launch` (`sim__launch`), `list` (`sim__list`), `status` (`sim__status`), `stop` (`sim__stop`) |
 
-Three more tools are left out of the list because another does the same job, and still work when called:
-`list_bridges` (use `status`), `isaaclab__run_script` (use `run_script`), `isaaclab__runs_cancel` (use `jobs(action="cancel")`).
 
 ## Choosing which local tools a server exposes
 
-The 30 standard local tools (the thirteen host gateway and desktop tools and the seventeen `isaaclab__*` tools) are registered by
-default. Five desktop input tools and four simulator-session tools are opt-in. `ISAAC_MCP_LOCAL_TOOLS` selects groups for one server process, read once at startup. It is a
-comma-separated list of group names and aliases; unset or empty means `all`. An unknown name stops the server at
-startup with a message listing the valid names; it never registers nothing silently.
+Toolsets select both host and bridge tools before registration. Disabled toolsets register nothing,
+including hidden single-purpose members. Selection is read once at startup, from lowest to highest priority:
+built-in default, `~/.config/isaac-mcp/config.toml`, the nearest `isaac-mcp.toml` found walking up
+from the current directory, `ISAAC_MCP_TOOLSETS`, then `--toolsets`.
+Each source replaces the previous selection. Start with `default`, `all`, or `minimal`, then
+add bare names or `+name`, or remove `-name`. `core` cannot be disabled. `all` excludes the
+explicit-only `input` and `launch` toolsets; `minimal` selects only `core`.
 
-The number registered follows this setting: **121 tools** by default, **+5** with `screen_input` and **+4** with
-`sim_launch`, **130** with both. A client is shown **48 tools** of them ([grouped tools](#grouped-tools)). The server writes its tool count and filters to its log at startup; see
-[diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log).
+```toml
+[tools]
+toolsets = ["default", "+lab", "-screen"]
 
-| Group | Tools |
-|---|---|
-| `isaaclab_read` | `isaaclab__checkpoints_list`, `isaaclab__metrics_summary`, `isaaclab__tensorboard_tail`, `isaaclab__preflight` |
-| `isaaclab_probe` | `isaaclab__install_info`, `isaaclab__envs_list` |
-| `isaaclab_jobs` | `isaaclab__runs_list`, `isaaclab__runs_status`, `isaaclab__runs_tail` |
-| `isaaclab_run` | `isaaclab__train`, `isaaclab__eval`, `isaaclab__play`, `isaaclab__runs_cancel`, `isaaclab__env_check`, `isaaclab__record`, `isaaclab__run_script`, `isaaclab__checkpoint_register`, `run_script` |
-| `screen_read` | `screen_info`, `list_windows`, `screen_recording_status`, `isaac_help` |
-| `screen_capture` | `screenshot`, `start_screen_recording`, `stop_screen_recording`, `join_videos` |
-| `screen_control` | `raise_window`, `move_window`, `tile_windows` |
-| `screen_input` | `window_click`, `window_drag`, `window_scroll`, `window_type`, `window_key` (explicit opt-in) |
-| `sim_launch` | `sim__launch`, `sim__list`, `sim__status`, `sim__stop` (explicit opt-in) |
-| `gateway` | `refresh_tools`, `use_bridge` |
+[sim]
+physics_backend = "physx"
+```
 
-Aliases: `all` (standard groups, excluding `screen_input` and `sim_launch`; the default), `readonly` (`isaaclab_read,screen_read`: the local tools annotated as read-only)
-and `none` (no local tools; a pure Kit gateway, since bridge tools are still discovered). Groups and aliases can be mixed, for example
-`readonly,gateway`.
+`ISAAC_MCP_PHYSICS_BACKEND` overrides `[sim].physics_backend`; values are `physx` or `newton`, and the default is
+the one built into `isaac_mcp/config.py`. The managed launch (`sim__launch` without `physics_backend`), `run.sh` and
+`scripts/run_ur5e_dt.py` all read it from there: the `--physics-backend` flag or the launch argument first, then the
+environment variable, the project file, the user file and the built-in default. `python3 -m isaac_mcp.config --print
+physics_backend` prints it with the standard library only. It never switches a running simulator, and a session that
+cannot give the requested engine starts nothing. `status` reports `physics`: the engine of the selected bridge when
+one answers (`active`), the configured `default` and where it came from (`default_from`: built-in, user file, project
+file or environment).
+For example, `isaac-mcp --toolsets all,+input,+launch` enables every implemented toolset.
+Run `isaac-mcp toolsets` to print effective selection, counts and enable instructions without starting a server.
+The startup log, `status` and the `isaac-mcp://toolsets` resource report selection.
+`[tools] runtime_enable = false` (or `ISAAC_MCP_RUNTIME_ENABLE=0`) stops an agent from changing the selection with
+`toolsets(action="enable")`; the default is on. Run-time changes are not saved: a restart returns to the selection above.
+Unknown names and the five removed selection variables fail startup with migration instructions; no aliases remain.
 
-To enable input as well as the standard tools, set `ISAAC_MCP_LOCAL_TOOLS=all,screen_input` in the MCP client's
-server environment and reconnect. Selecting `screen_input` alone exposes only the five input tools; include
-`screen_read` and `screen_capture` if the client needs to identify and inspect a window. Input tools have
-conservative destructive and open-world annotations. To enable the separate simulator launcher, add `sim_launch`
-(for example, `all,screen_input,sim_launch`) and reconnect.
+| Toolset | Default | Summary |
+|---|---|---|
+| `core` | on | Connection, discovery, help and job tracking |
+| `scene` | on | Create and edit scenes and primitives |
+| `physics` | on | Physics, joints, arms and simulation |
+| `sensors` | on | Cameras, LiDAR and viewport framing |
+| `assets` | on | Import and manage robot and scene assets |
+| `code` | on | Execute code and scripts, transfer files |
+| `screen` | on | Capture, record and arrange desktop windows |
+| `lab` | off | Isaac Lab training and evaluation |
+| `ros2` | off | ROS 2 transforms, graphs and occupancy maps |
+| `kit_debug` | off | Inspect Kit logs and operate its UI |
+| `workcell` | off | UR5e workcell tools |
+| `robosim` | off | RoboSimStudio real-to-sim runs in its own private environment (see [ROBOSIM.md](ROBOSIM.md)) |
+| `input` | explicit only | Desktop mouse and keyboard input |
+| `launch` | explicit only | Launch and stop simulator processes |
+| `extensions` | on | Tools from uncatalogued extension namespaces |
 
-- `isaaclab_probe` runs the configured Python interpreter; its startup code can have side effects. `envs_list` also
-  imports configured task modules, which can run arbitrary code. Both tools use conservative non-read-only,
-  destructive, non-idempotent and open-world hints.
-- `isaaclab__train`, `isaaclab__eval`, and `isaaclab__play` also run configured Python and task modules, so they carry
-  the same conservative hints; those processes may write files or contact external systems.
-- `isaaclab_jobs` can write: `runs_list` and `runs_status` replace stored metadata when reconciling orphaned jobs,
-  and `runs_tail` can create the jobs directory. The first two have destructive hints; `runs_tail` has an additive hint.
-- `readonly` and `isaaclab_read` do not include these five tools. To add them, select `isaaclab_probe,isaaclab_jobs`
-  as well (for example, `readonly,isaaclab_probe,isaaclab_jobs`). The default `all` selection includes them.
-- The capture directories (`~/Pictures/screen-mcp`, `~/Videos/screen-mcp`) are created only when `screen_capture` is
-  enabled, so a profile without that group creates neither. Importing the Isaac Lab job module can still reconcile
-  orphaned job records in an existing jobs directory, whatever the groups. Thus even
-  `readonly` does not make server startup free of filesystem writes.
-- `gateway` only controls the two tools. Bridge discovery at startup is part of the server lifespan and still runs when
-  `gateway` is excluded; without the tools, a client cannot re-run or redirect it, so restart the MCP connection after
-  starting Kit.
-- `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS` keep their meaning and filter only bridge tools (discovered live or listed from the catalog).
-  `ISAAC_MCP_LOCAL_TOOLS` filters only the host's local tools. These compose with
-  `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 71 generic `sim`/`assets`
-  tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
-  and optional managed-session tools are unaffected. With standard local groups, opting out
-  keeps the other tiers, leaving 50 tools, offline or with a bridge. These are visibility controls, not isolation.
-- `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
-  server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
-  [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.
-- Every local tool carries MCP annotations. `readOnlyHint` is true for exactly the `isaaclab_read` and `screen_read`
-  groups. The capture tools are not read-only because they write files and return desktop pixels, and
-  the job reconciliation and Python probe tools are also not read-only, as described above. Annotations are hints,
-  not enforcement.
-  Bridge tools registered dynamically are not annotated.
+There are **85 tools** by default before grouping; a client is shown **31 tools**.
+The `all` profile registers 119 members, **128** with both explicit-only toolsets.
+Toolsets are visibility controls, not isolation: use `ISAAC_MCP_READ_ONLY=1` in Kit to reject scene writes.
+Job inspection can reconcile stored metadata; code and probe tools can execute arbitrary code.
+
 
 ## Desktop and window tools
 
@@ -212,7 +197,7 @@ second, with frames repeated to keep real time), so prefer `window_ids` for the 
 These tools use the existing `python-xlib` dependency and the X11 XTEST extension. No `xdotool` installation is needed.
 They work on the host's shared X11 desktop; native Wayland and headless sessions are not supported. They do not require
 a bridge and can operate windows other than Isaac Sim/Lab, so enable them only for a client you trust. They are off by
-default even when `ISAAC_MCP_LOCAL_TOOLS=all`. Window activation requires a window manager that implements
+default even when `ISAAC_MCP_TOOLSETS=all`. Window activation requires a window manager that implements
 `_NET_ACTIVE_WINDOW`.
 
 | MCP tool | Additional arguments | Use |
@@ -254,13 +239,13 @@ See the [working checklist](CHECKLIST.md#tool-surface-and-reliability) for remai
 
 ### Optional simulator sessions
 
-Select `sim_launch` explicitly to expose these local Linux tools. They launch this repository's `run.sh` and manage only
+Select the `launch` toolset explicitly to expose these local Linux tools. They launch this repository's `run.sh` and manage only
 processes they started; they do not attach to or stop unrelated simulators. This runs the configured simulator Python,
 creates files, and can affect the GPU and network. All four tools have conservative annotations.
 
 | MCP tool | Arguments | Use |
 |---|---|---|
-| `sim__launch` | `port=null`, `ros_domain=null`, `headless=false`, `allow_shared_domain=false`, `enable_motion_bvh=false`, `physics_backend="physx"` | Start a new process with a local bridge, workcell tools, chosen ROS domain and separate output/log and persistent Kit settings. Omit `port` and `ros_domain` to select free values. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the installed Newton engine without fallback. Returns a session ID and PID before the bridge is ready. |
+| `sim__launch` | `port=null`, `ros_domain=null`, `headless=false`, `allow_shared_domain=false`, `enable_motion_bvh=false`, `physics_backend=null` (the configured default) | Start a new process with a local bridge, workcell tools, chosen ROS domain and separate output/log and persistent Kit settings. Omit `port` and `ros_domain` to select free values. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the installed Newton engine without fallback, and the result says which engine and where the choice came from. Returns a session ID and PID before the bridge is ready. |
 | `sim__list` | `include_exited=false` | List simulators. Managed sessions have `managed: true`, including those started by an earlier server process; only the 3 newest exited ones are listed unless `include_exited=true` (their records and logs stay on disk). Advertised bridges started some other way have `managed: false`, an ID `external-<pid>-<port>`, and their PID, port, app and version from the portfile; the listing does not call them. |
 | `sim__status` | `session_id` | Managed session: check the original PID's identity, bridge and Kit readiness, and current memory snapshot. For a session launched with `physics_backend="newton"` that is running, `physics` reports whether Newton is the active engine and its tensor extension is on (`ready`, `engine`, `tensor_extension_enabled`); wait for `ready: true` before starting work on it. External ID: call that bridge's `status`, report its app, version and readiness, and report `port_conflict` if another PID answers. |
 | `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Without it, the error includes the exact retry call. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. It always refuses an external bridge, because isaac-mcp did not start it. |
@@ -362,15 +347,14 @@ exception: it is honored only for a project you named with `ISAAC_MCP_PROJECT` i
 
 These tools operate on the **bridge machine**, inside or alongside the Kit process. The host lists them from a packaged
 snapshot (`mcp/isaac_mcp/catalogs/builtins.json`, regenerated by `scripts/gen_host_catalog.py --write`) unless
-`ISAAC_MCP_BUILTINS=0`; each call is sent to the selected bridge, and without one it returns an error that says what to do.
+the `code` toolset for code and file operations; each call is sent to the selected bridge, and without one it returns an error that says what to do.
 
 | MCP tool | Arguments and defaults | Use and effects |
 |---|---|---|
 | `status` | `detail=false` | **Where am I, in one call.** The reply is short: `running`, the selected bridge's `pid`, `port`, `app`, `app_version`, `headless`, `app_ready` and `uptime_s`; `stage` with the `session_id` and `stage_id` the scene tools need, its `source`, `timeline` (playing, paused or stopped) and `physics_engine`; `jobs_running`; `bridges` when more than one is advertised on this machine; `managed_sessions` and `lab_jobs_running` when there are any; and a short `host`. With no bridge it is still an answer, not an error: `running: false`, a `message` naming the next call (`sim__launch`, or `use_bridge` when other bridges are advertised), and the same surroundings. Call it once before the first simulator action; a bridge that answers but is busy, and a timeout, are still errors. `detail=true` returns the full bridge identity instead: process identity, port, app version, Kit `app_ready` (`true`, `false`, or `null` if unknown), headless state, registry information, `busy` (what is running and waiting), `read_only`, `auth` and `jobs`. With `detail=true` the host adds `host`: `version`, `pid` and, from a checkout, `commit`, `checkout_commit`, `stale`, and a `warning` if the checkout moved on since this server started. Restart the MCP connection then. It compares commits only, so a docs-only pull warns and uncommitted edits do not. The bridge adds `extension`: the `root` of its tree, the `commit` Kit started from, the `checkout_commit` now, `dirty` (with `dirty_paths` and `dirty_count`), `hot_reload` (is Kit's folder watcher on) and `reloads` (extensions restarted inside this process: count and time). These come from git's files without starting a process; an exported tree with no `.git` reports commit `unknown` and `dirty: null`. `dirty` covers tracked files under `exts/` and `mcp/isaac_mcp/`, not new untracked files. The host then adds `bridge_match` (`true`, `false`, or `null` when either side does not know) and warns if the commits differ or the bridge's tree has uncommitted changes. |
-| `list_bridges` | none | List bridge instances advertised on the bridge machine. |
 | `run_python` | `code` (string, required); `session_id="default"`, `persistent=false`, `background=false`, `label=null` | Execute Python on Kit's main thread with `omni`, `carb` and common USD symbols preloaded. Assign `result` to return a value. Persistent sessions retain eligible variables for the same ID; a stage-open event clears session state when the subscription is available. The reply's `session_vars` lists only the names this call added or rebound, with `session_var_count` for the total, so a long session does not echo every variable each call. `background=true` runs the code as a [job](#background-jobs) and returns its `job_id` at once: the code must `await` (for example `next_update_async()` in its loop), gets a preloaded `job` (`job.report(fraction, text)`, `job.checkpoint()`), and its `result` and prints come back through `job_status`. Arbitrary code can change the scene or access files. |
 | `job_status` | `job_id=null`, `wait_s=0` | State of a [background job](#background-jobs): `running`, `succeeded`, `failed` or `cancelled`, `elapsed_s`, `progress`, the last 2000 characters of output, and the `result` or `error` when it has ended. `wait_s` (0–60) waits for the job to end instead of polling, and sets `wait_timed_out` if it is still running. Without `job_id` it lists the simulator's jobs, newest first. For a finished `sim__trajectory__replay`, or a `sim__simulation__run` recorded with `camera`, the host encodes the frames and adds `video_path`. It also takes the `job_id` of an Isaac Lab or script job (`isaaclab__train`, `run_script`, ...): the host answers that itself with what `isaaclab__runs_status` gives, no bridge needed, so one tool follows every job. |
-| `job_cancel` | `job_id` (string, required) | Ask a running job to stop. It ends at its next step and cleans up after itself; confirm with `job_status`. An Isaac Lab or script `job_id` is stopped as by `isaaclab__runs_cancel`. |
+| `job_cancel` | `job_id` (string, required) | Ask a running job to stop. It ends at its next step and cleans up after itself; confirm with `job_status`. An Isaac Lab or script `job_id` is stopped as by `jobs(action="cancel")`. |
 | `reload_tools` | `module` (string, required) | Reload an autoloaded tool package by module name, then call host `refresh_tools` to update the client-facing registry. If that pack has a call in flight, reload is refused until it finishes. |
 | `put_file` | `path`, `content_b64` (strings, required); `mkdirs=true` | Decode base64 and write or overwrite a file on the bridge machine; creates parents by default. |
 | `get_file` | `path` (string, required) | Read a file on the bridge machine and return base64 content. Regular files up to 45 MiB; larger ones and devices are refused. |
@@ -394,9 +378,8 @@ the simulator-side counterpart of the Isaac Lab job tools, which manage separate
 - A result larger than 16 KiB is cut and says so: write large data to a file and return its path.
 - `wait_s` is served inside Kit, off the main loop: the call returns when the job ends, with no polling and no
   simulator time spent, for the MCP host and a direct socket caller (`isaac_mcp.client`) alike.
-- `job_status` and `job_cancel` are bridge built-ins, so `ISAAC_MCP_BUILTINS=0` hides them with `status` and
-  `run_python`. A client set up that way can start `sim__simulation__run` and `sim__trajectory__replay` but cannot
-  follow them; leave the built-ins listed for an agent that uses those tools.
+- `job_status` and `job_cancel` belong to mandatory `core`, alongside host job tracking.
+  Select `code` for Python execution and file transfer; these selections are not access controls.
 
 ```python
 # run_python, background=true: one call that runs the whole loop
@@ -422,7 +405,7 @@ The bridge listens on loopback and requires a token on every connection. The tok
 can read, so your own clients connect without configuration and another local account cannot run Python in your
 simulator. The token is not encryption: do not expose the bridge to an untrusted network; use an SSH tunnel, or a
 private address with `ISAAC_MCP_TOKEN` given to the client. `ISAAC_MCP_READ_ONLY=1` starts a bridge that refuses every
-tool that changes something. `ISAAC_MCP_BUILTINS=0` only hides the built-ins from an MCP client's list. See
+tool that changes something. Toolsets control host registration, not direct bridge access. See
 [limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach).
 
 Desktop capture depends on the display session and permissions, and can contain sensitive information. Confirm the

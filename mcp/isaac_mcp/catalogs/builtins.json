@@ -77,13 +77,6 @@
       "namespace": null,
       "owner_id": "isaac.mcp.bridge"
     },
-    "list_bridges": {
-      "description": "List all isaac.mcp.bridge bridges advertised on this box (this Kit process and any siblings, e.g. a second instance on an ephemeral port). status lists them too, and also answers when no bridge is running.",
-      "parameters": {},
-      "fields": [],
-      "namespace": null,
-      "owner_id": "isaac.mcp.bridge"
-    },
     "reload_tools": {
       "description": "Hot-reload one of a project's own tool packages: unregister it, import it again and register its tools. Follow with refresh_tools so the new schemas are seen.",
       "parameters": {
@@ -108,7 +101,7 @@
       "owner_id": "isaac.mcp.bridge"
     },
     "put_file": {
-      "description": "Write a file on the bridge's box (content base64-encoded), so code and assets can be shipped without scp. Writing a .py clears the folder's bytecode cache. The content travels in one message: for code and tool-sized assets, not gigabytes.",
+      "description": "Write a file on the simulator's machine (base64 content). Ships code and assets without scp. Writing a .py clears the folder's bytecode cache. The content travels in one message: for code and tool-sized assets, not gigabytes.",
       "parameters": {
         "path": {
           "type": "string",
@@ -158,7 +151,7 @@
       "owner_id": "isaac.mcp.bridge"
     },
     "get_file": {
-      "description": "Read a file from the bridge box's disk, returned base64-encoded (content_b64). Pull half of put_file.",
+      "description": "Read a file from the simulator's machine. Returned base64-encoded (content_b64); the pull half of put_file.",
       "parameters": {
         "path": {
           "type": "string",
@@ -203,7 +196,7 @@
       "owner_id": "isaac.mcp.bridge"
     },
     "job_status": {
-      "description": "Status of background work in this Kit: run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, newest first. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed.",
+      "description": "Check a background job in this Kit; with no job_id, list the jobs. run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. The list is newest first. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed.",
       "parameters": {
         "job_id": {
           "type": "string",
@@ -238,7 +231,7 @@
       "owner_id": "isaac.mcp.bridge"
     },
     "job_cancel": {
-      "description": "Stop a background job (job_id from the call that started it). It ends at its next step and cleans up after itself; confirm with job_status. Through the MCP server it also stops an Isaac Lab or script job.",
+      "description": "Stop a background job. job_id comes from the call that started it. It ends at its next step and cleans up after itself; confirm with job_status. Through the MCP server it also stops an Isaac Lab or script job.",
       "parameters": {
         "job_id": {
           "type": "string",
@@ -261,7 +254,7 @@
       "owner_id": "isaac.mcp.bridge"
     },
     "stat_file": {
-      "description": "Existence, size, and sha256 of a file on the bridge's box, to skip unchanged pushes and verify assets.",
+      "description": "Check a file's existence, size and sha256 on the bridge's box. Skips unchanged pushes and verifies assets.",
       "parameters": {
         "path": {
           "type": "string",

@@ -29,7 +29,7 @@ UR5e twin, `ur5e_dt__quick_start`.
 
 - 18 layers of 3 dynamic blocks (54), twice real size: 15 x 5 x 3 cm, 120 g, friction 0.5/0.4, on a 34 cm table, tower centre at (0.7, 0). Odd layers run along x, towards the arm, and their middle block is 0.4 mm thinner, so it is loose, as the block a player looks for is.
 - a Franka on the floor beside the table, in a ready pose with its hand level at layer 9, holding a thin red push rod between open fingers. The rod is a collider on the hand's own body, so it adds no joint, and both fingers get a drive.
-- PhysX at 120 Hz with 32 solver iterations per block.
+- PhysX at 120 Hz with 32 solver iterations per block. Newton runs the tower at 500 Hz: at 120 Hz it falls apart (see `NEWTON_HZ` in `jenga.py`).
 
 The result's `environment.poke_example` has everything for one push: the `block`, the `approach`, `touch` and `through` points, and `ik` (the `link`, `offset` and `orientation` for `sim__arm__ik`). It is for layer 9. For another layer, change the `z` of each point by 3 cm a layer: the odd layers run along x, and only layers near 9 and above let the hand stay level.
 
@@ -145,11 +145,9 @@ A missing/different mount produces an error, never an implicit transfer via `put
 
 ## Tools
 
-All names below remain discoverable offline by default, subject to existing namespace filters.
-Set `ISAAC_MCP_SCENE_TOOLS=0` on the host server and restart that MCP connection to hide
-all generic tools, including live bridge discovery. This per-server preference preserves
-UR5e, Isaac Lab, desktop and managed-session tools; it is not an enforcement boundary.
-`ISAAC_MCP_LOCAL_TOOLS` does not select these catalogued tools. `assets__roots`,
+Names below are registered only when their toolset is enabled. Use `status` to inspect toolsets
+or `ISAAC_MCP_TOOLSETS=default,+ros2,+kit_debug` to include the optional scene integrations.
+`assets__roots`,
 `assets__scan`, `assets__search`, `assets__packs` and the `assets__pack_*` tools execute on the host even without Kit
 (`assets__dependencies` and the USD parts of the pack tools use a host USD helper if one is set, otherwise the
 selected Kit; see [asset packs](ASSETS.md#packs-from-mcp-tools)). Other tools explain an absent
@@ -166,7 +164,6 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `assets__pack_pin` | Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true. |
 | `assets__pack_build` | Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, and the result says `importable: false` with `import_blockers`. Files that differ need force=true. Checks the new pack afterwards. |
 | `assets__info` | Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. |
-| `assets__prepare_workstation` | Take an absolute USD path under an already approved trusted root, validate its bounded snapshot in the selected Kit, and prepare a private workstation cache without overwriting. Returns `loaded:false`; call `ur5e_dt__load_workstation` and inspect `/World/Vention` to verify. |
 | `assets__import_path` | The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF, or a folder that holds one. `format=auto` picks it from the name; xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. A USD composes with its own variant selections and payloads, and the result's `visuals` counts the geometry that will be drawn: a robot with physics but nothing to draw comes back with a warning instead of looking fine until you render it. See [ASSET-IMPORT.md](ASSET-IMPORT.md). |
 | `sim__stage__info` | Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations. Also returns `ros`: the simulator's ROS_DISTRO, ROS_DOMAIN_ID, RMW, localhost and Cyclone settings, plus the shell line that matches them. |
 | `sim__quick_start` | Build a ground plane, physics scene, lights and an aimed camera with no IDs, optionally with a robot and ROS 2. See [Start a scene](#start-a-scene). |
@@ -297,18 +294,6 @@ absolute USD path to `assets__import_path` (or use the approved root ID and rela
 approved project with relative layout intact. Kit checks the snapshot's USD layers, material
 and texture dependencies and returns the created prim path, units and dependency counts. Inspect
 the resulting prim or viewport before assuming physics is ready.
-
-For a workstation, after the same one-time trusted-root approval, call
-`assets__prepare_workstation` with the exact `session_id` and `stage_id` from `sim__stage__info`
-and `source_path` set to the absolute USD path under that root. The tool writes a private project
-copy and wrapper to `workstation/vention.usd` under the first store of `ISAAC_MCP_ASSET_PATH` (deprecated alias
-`UR5E_DT_ASSET_CACHE`, then `<workspace>/isaac-mcp-assets` when `ISAAC_MCP_WORKSPACE` is set, otherwise the `isaac-mcp-assets` folder next to the checkout), in its `ur5e-dt` pack folder, and reports the destination and dependency checks. It does **not** load the scene:
-call `ur5e_dt__load_workstation` or the appropriate workstation quick-start, then inspect
-`/World/Vention`. The twin and selected Kit must use the same asset folder. A project store
-(`isaac-mcp.json`) still takes precedence; check which file the twin actually used with
-`scripts/isaac_assets.py doctor`. Existing workstation files are never replaced. The asset folder
-must be outside the repository, not group- or world-writable, and disjoint from approved roots
-and staging.
 
 The user is responsible for trusting and having rights to the asset. Existing USD checks refuse
 missing or outside-snapshot dependencies, URLs and unsupported paths; native USD parsing can
@@ -777,11 +762,13 @@ until process restart. A native crash may bypass that guard. Inspect, save when 
 Stop, and restart only the owned disposable process. See the compatibility follow-up evidence
 for measured outcomes and retained earlier failures; no indefinite lifetime guarantee is made.
 
-Managed launches can select `physics_backend="newton"` (default `"physx"`); an unavailable
+Managed launches can select `physics_backend="newton"` (default: the configured backend, see
+[Choosing which local tools a server exposes](TOOLS-HOST.md#choosing-which-local-tools-a-server-exposes)); an unavailable
 requested engine fails instead of falling back. Newton uses its tensor adapter, explicit
 paused solver steps and Fabric publication; it does not report authored USD as runtime pose.
 On Sim 6.2 one GPU Newton exact-step probe returned `STEP_TIMING_MISMATCH`; inspect state and
 do not assume exact stepping succeeds on every Newton scene. See [compatibility](COMPATIBILITY.md#release-backend-scope).
+The likely cause is two timesteps on one scene; see [Newton in the generic tools](#newton-in-the-generic-tools).
 The older three releases need a scoped internal playing-flag adapter, restored even on error.
 Direct Newton steps invalidate captured CUDA graphs to avoid stale dt/state buffers.
 Newton requires meter stages and a qualified extension/library stack. Paused saves copy up to
@@ -949,13 +936,35 @@ run may not provide enough evidence to recover a missing target: set its target 
 Pause before saving an active scene; saving while playing remains refused. After Stop a
 native texture may have been torn down, so inspect a refusal rather than assuming it is live.
 
-The legacy `scripts/checks/export_reference.py` and `export_checkpoint.py` have a narrower
-contract: a root-layer reference copy plus the composed **local PhysicsScene** definition.
-Other session edits are excluded. They retain cache-relative asset references and refuse
-ambiguous/reference-derived physics definitions, unsupported scene properties and retained
-process-bound render state. They do not normalize camera handles. Publication never overwrites
-an existing file, including a timestamp collision. The UR5e verifier checks the known fixture's
-single CPU/MBP/120 Hz scene before export and after reopen, and its initialized timestep after
-motion; it stops before motion if the reopened physics configuration differs. The exporter
-preserves the source rate rather than forcing every scene to 120 Hz. Use the generic save tool
-for its composed snapshot contract above.
+### Newton in the generic tools
+
+Newton (Isaac Sim 6.2, MuJoCo-Warp) is experimental and PhysX is still the default. These are the differences in the
+generic scene tools, read from the installed extension; the live checks that prove them are in
+`scripts/smoke/newton_checks.py` (`python3 scripts/smoke.py physics --backend newton --discard-changes --check newton_checks`).
+
+- **Contact buffers.** MuJoCo-Warp holds a fixed number of contacts (`nconmax`, default 200 per world) and constraint rows
+  (`njmax`, default 1200 per world) and drops what does not fit. A 54-block tower needs far more. `sim__quick_start` (every Newton
+  quick scene, and the Jenga tower in particular) sizes both from the rigid-body count (32 contacts per body, 8 rows per contact, at
+  least 512 and 2048) and reports them as `newton_buffers`; `sim__physics action=configure` does the same on a stopped timeline,
+  and the handler takes `nconmax` / `njmax` there as overrides (the tool contract does not list them yet). The buffers are process-local (not saved in USD) and take effect on the next Play.
+- **Reading them.** `sim__physics action=inspect` adds a `newton` section: the configured buffers, the last step's active contacts and
+  constraints against their capacity, and MuJoCo-Warp's overflow flags. A full buffer or a set overflow bit adds a warning to `warnings`
+  with the code `CONTACT_BUFFER_FULL`, `CONSTRAINT_BUFFER_FULL` or `NEWTON_SOLVER_OVERFLOW`. The flags persist until the solver resets, so a
+  set bit means the buffer overflowed at some step since. Counters that cannot be read are reported as such, never as safe.
+- **Contacts.** `sim__physics action=contacts` reads Newton's contact snapshot of the last step: pairs with `contact_points` and a summed
+  world-frame `force` in newtons on `collider_a` (there is no impulse; `impulse` is null). It needs MuJoCo-Warp with contact outputs on.
+- **Raycast** is refused under Newton (`RAYCAST_UNSUPPORTED`): the extension's raycast handler is an empty stub and Newton 1.6.1 has no
+  public ray query. Use contacts, `sim__prim__bounds` or `sim__prim__measure`, or a PhysX session.
+- **Push.** `sim__physics action=apply impulse=[...]` on Newton applies `impulse / (dt / substeps)` as a force for the first substep of the
+  next step (Newton has no atomic impulse call) and reports `applied_force_n` and `force_duration_s`. A zero impulse reports `applied: false`.
+- **Timestep.** A MuJoCo scene has two timesteps: `mjc:option:timestep` (what `get_physics_dt`, exact stepping and controllers use; default
+  0.002 s) and `newton:timeStepsPerSecond` (what Newton and the clock follow; default 1000 Hz). Authored apart they disagree, which is the likely
+  cause of the Sim 6.2 `STEP_TIMING_MISMATCH` (20 steps of 0.002 s read as 0.020 s). `sim__quick_start` and `sim__physics action=configure` now
+  author both from one rate, and `sim__simulation action=step` (and the joint move) refuses with `STEP_DT_SOURCES_DISAGREE` before stepping if
+  they differ. The step result's `newton` section holds the cross-check and Newton's own clock before and after, so a remaining mismatch can be
+  diagnosed from one call.
+- **Pictures.** Newton writes poses to Fabric and leaves USD at the authored pose. `sim__camera action=capture` and `sim__lidar action=read` carry a
+  `physics_render` report (Fabric updates on or off); with them off the picture shows authored poses. A paused change made other than by
+  `sim__simulation` step or run is not published until the next step.
+- **Occupancy map.** The start-in-collider and colliders-in-volume checks are PhysX overlap queries and are skipped under Newton; the result says so in
+  `checks_skipped`. The generator itself (`isaacsim.asset.gen.omap`) was not verified under Newton.

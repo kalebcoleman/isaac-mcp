@@ -43,8 +43,7 @@ def test_stalled_bridge_keeps_sdk_initialization_and_host_tools_available(monkey
     worker.start()
     monkeypatch.setattr(gateway, "DISCOVERY_TIMEOUT_S", 0.15)
     env = {
-        "ISAAC_MCP_LOCAL_TOOLS": "gateway,sim_launch",
-        "ISAAC_MCP_GROUP_TOOLS": "0",
+        "ISAAC_MCP_TOOLSETS": "all,+launch",
         "ISAAC_MCP_PORT": str(listener.getsockname()[1]),
     }
     monkeypatch.setenv("ISAAC_MCP_PORT", env["ISAAC_MCP_PORT"])
@@ -59,12 +58,11 @@ def test_stalled_bridge_keeps_sdk_initialization_and_host_tools_available(monkey
             await client.initialize()
             names = {t.name for t in (await client.list_tools()).tools}
             assert {
-                "sim__stop",
-                "sim__list",
-                "sim__stage__info",
-                "ur5e_dt__workcell_status",
+                "sim__session",
+                "sim__stage",
+                "ur5e_dt__workcell",
             } <= names
-            response = await client.call_tool("sim__list", {})
+            response = await client.call_tool("sim__session", {"action": "list"})
             assert not response.isError
             assert time.monotonic() - started < 3
 

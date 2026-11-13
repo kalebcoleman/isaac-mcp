@@ -1410,12 +1410,12 @@ def register_screen_tools(
     port_provider: Callable[[], int | None] | None = None,
     groups: Iterable[str] | None = None,
 ) -> None:
-    """Register the screen tools whose group is in ``groups`` (default: all of them).
+    """Register screen tools when the screen toolset is enabled.
 
-    The capture directories are created only when ``screen_capture`` is enabled, so a profile
+    The capture directories are created only when ``screen`` is enabled, so a profile
     without it leaves the filesystem alone."""
     mcp = ScopedTools(server, groups)
-    if mcp.enabled("screen_capture"):
+    if mcp.enabled("screen"):
         SHOT_DIR.mkdir(parents=True, exist_ok=True)
         VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1430,7 +1430,7 @@ def register_screen_tools(
 
     @mcp.tool(annotations=READ_ONLY)
     def screen_info() -> str:
-        """Report the X11 display, monitors, capture directories and recording state."""
+        """Report the display, monitors and recording state. Also the X11 display and capture directories."""
         with mss.MSS() as sct:
             monitors = [
                 {
@@ -1478,7 +1478,7 @@ def register_screen_tools(
 
     @mcp.tool(annotations=READ_ONLY)
     def list_windows(filter: Annotated[str | None, Field(description="Keep windows whose title or WM class contains this.")] = None) -> str:
-        """List visible top-level windows with id, title, class, PID and size. Use it first to get the
+        """List visible windows with id, title, class and PID. Top-level windows, with size. Use it first to get the
         window_id other window tools need.
 
         Privacy: window titles are returned to the model.
@@ -1545,7 +1545,7 @@ def register_screen_tools(
                     height: Annotated[int, Field(description="Height in pixels.")],
                     window: _WindowTitle = None, window_id: _WindowId = None, expected_pid: _ExpectedPid = None,
                     frame: Annotated[bool, Field(description="true: place the outer frame with its title bar. Default: the client area that captures record.")] = False) -> str:
-        """Move and resize one window, e.g. to place Isaac Sim and RViz before a recording. Get its id
+        """Move and resize one window. E.g. to place Isaac Sim and RViz before a recording. Get its id
         from list_windows; for several windows use tile_windows. Un-maximizes it first, and returns the
         geometry applied and whether the window manager clamped it."""
         from .desktop_input import _action_lock
@@ -1567,7 +1567,7 @@ def register_screen_tools(
                      layout: Annotated[str, Field(description="left_right (one row), top_bottom (one column) or grid.")] = "left_right",
                      monitor: Annotated[int | None, Field(description="1-based index from screen_info. Default: the monitor holding the first window.")] = None,
                      gap: Annotated[int, Field(description="Pixels between tiles.")] = 0) -> str:
-        """Tile 2-6 windows over a monitor's work area, e.g. Isaac Sim left and RViz 2 right for a demo.
+        """Tile 2-6 windows over a monitor's work area. E.g. Isaac Sim left and RViz 2 right for a demo.
         Get ids from list_windows. Reports each window's final geometry and whether the window manager
         clamped it; then record them with start_screen_recording(window_ids=...)."""
         from .desktop_input import _action_lock
@@ -1694,7 +1694,7 @@ def register_screen_tools(
         stop_on_log_marker: Annotated[str | None, Field(description="End when this text is added to the selected bridge's Kit log or stop_log_file.")] = None,
         stop_log_file: Annotated[str | None, Field(description="A .log file in Kit's log folder or under ~/.local/share/isaac-mcp, for stop_on_log_marker.")] = None,
     ) -> str:
-        """Start a desktop MP4 recording, e.g. for a demo; one at a time, no audio. Stop it with
+        """Start a desktop MP4 recording; one at a time, no audio. E.g. for a demo. Stop it with
         stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window
         if one is open; a window recording works when covered or on a locked screen. The recording ends
         if this MCP server process exits, so keep one client connected from start to stop.
@@ -1991,7 +1991,7 @@ def register_screen_tools(
 
     @mcp.tool(annotations=ADDITIVE)
     def stop_screen_recording() -> str:
-        """Stop the active desktop recording and report the MP4 path, duration and size.
+        """Stop the desktop recording and report the MP4 path. Also its duration and size.
 
         Privacy: the MP4 stays on this machine; only its path, duration and size are returned.
         """

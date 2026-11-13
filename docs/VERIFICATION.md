@@ -37,70 +37,50 @@ Do not add it to a Sim environment as a substitute for Kit's USD bindings. From 
 `python3 scripts/gen_host_catalog.py --check` detects packaged twin-catalog drift.
 
 The GitHub Actions workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs these CPU-only checks
-plus the documentation check and `npm pack --dry-run` on pushes and pull requests. It does not launch Isaac Sim, train a policy, or test real
+plus the documentation check on pushes and pull requests. It does not launch Isaac Sim, train a policy, or test real
 hardware. A workflow is only verified on GitHub after its run actually completes.
 
 ## Live UR5e baseline
 
-These checks cover the complete lab scene, so they need [your own lab files](ASSETS.md#public-files-and-lab-files); without them `verify.sh`
-reports the missing gripper and bench. Kit uses the asset folder next to its checkout unless `ISAAC_MCP_ASSET_PATH` says otherwise.
-These checks modify the stage and move a simulated joint. Use a disposable simulator session and a free port, and
-confirm which bridge is selected before running them. This example reuses an already installed Sim 6.2 interpreter;
-set the path for your machine or omit `ISAAC_MCP_PYTHON` to use this repo's `.venv`.
-
-```bash
-export ISAAC_MCP_PYTHON=/path/to/isaacsim-env/bin/python
-export UR5E_DT_PORT=18766
-./run.sh --headless --port "$UR5E_DT_PORT"
-# In another terminal after the app is ready, with the same environment:
-./verify.sh
-"$ISAAC_MCP_PYTHON" scripts/smoke_tools.py
-```
-
-`verify.sh` checks the workstation baseline: UR5e, RG2, QuickChanger and Vention scene prims; observed
-robot-chain rigid bodies with gravity disabled; the six expected joint limits; and USD drive stiffness 100,
-damping 10 and max force 200 (the project's default drive values). It commands the elbow by -0.1 rad and requires
-the achieved displacement and return error to be within 0.02 rad, with finite observed joint positions. Joint limits
-and drive attributes use a 0.01 tolerance. These are regression checks for this shipped configuration, not a
-general test for arbitrary robots or proof of hardware fidelity; intentionally different drive settings require a
-different expected baseline.
-
-The motion check schedules a bounded Kit coroutine through the existing persistent
-`run_python` session, then polls for its measured result. It awaits ordinary Kit frames;
-it does not call nested `app.update()`. It requires the reopened stage to be stopped,
-waits for a previous native Stop to settle, and refuses stage/timeline changes,
-non-finite joints or a stalled clock. Use exclusive control of this disposable scene
-until the check finishes: the bridge runs one exclusive call at a time, but that does not cover the
-whole scheduled coroutine. A lost host connection does not automatically cancel a
-Kit task; the check also has its own 90-second and 12,000-frame bounds.
-
-The check exports a missing reference checkpoint from the current stage, checks that the exported file uses relative
-asset references, and requests an asynchronous reopen. A later scene check verifies the expected prims are present;
-the `opening` result itself only means the open was scheduled. A regenerated checkpoint's SHA-256 can differ between
-machines and is **informational**, not a required match. The checks do not prove every physical behavior, camera,
-ROS topic, or visual result. `scripts/smoke_tools.py` exercises additional twin tools and also rebuilds the stage;
-review its output for warnings and its documented exclusions.
-
-To check a different installed release, run `scripts/smoke_tools.py --sim-version 6.1` with a host Python that can
-import the MCP package and `UR5E_DT_PORT` pointing at the selected disposable session. The option changes only the
-expected app-version prefix; it does not establish compatibility or change the simulator installation. Check the
-package version separately: the app's reported version may omit a fourth version segment. See
-[compatibility](COMPATIBILITY.md) for the results obtained so far.
-
-The validator is [`scripts/validate_ur5e_check.py`](../scripts/validate_ur5e_check.py). It rejects missing,
-malformed, non-finite or out-of-range observations, and `verify.sh` exits nonzero if a check or its response fails.
-If a check fails, inspect the named result and the simulator log before changing limits.
-
-**If `verify.sh` stops with `FAILED: checkpoint`**, the git-ignored `checkpoints/ur5e-dt-workstation-person-view-portable-*.usda`
-it would reuse references files that no longer exist, usually because it predates the code-only asset migration. Reopened,
-`/World/UR5e` would be empty and the motion check would fail with `'NoneType' object has no attribute 'is_homogeneous'`.
-The verifier checks this before touching the scene (`scripts/check_checkpoint_refs.py`) and never changes the file. Inspect
-it, move it aside and re-run: `./verify.sh` exports a new one from your current assets. A clean clone is not affected.
+Use [`scripts/workcell_smoke.py`](../scripts/workcell_smoke.py) with an already-running,
+explicitly selected disposable Kit bridge and an absolute lab config path on the Kit host.
+It requires `--port`, `--config` and `--mutate-stage`; it rebuilds the workcell, so do not
+run it against a scene you need to preserve. It checks the ready/stopped PhysX report,
+units, gravity, Jenga dimensions/counts and part metadata. It does not replace the old
+workstation verifier’s joint-motion or checkpoint checks. See [assets](ASSETS.md) for lab files.
 
 ## Live checks
 
+Use `python3 scripts/smoke.py all --list` to list checks and their GPU/simulator
+requirements without connecting to anything. The entry point is
+`python3 scripts/smoke.py <toolset> --host <host> --port <port> --backend physx`
+(or `--backend newton` for an explicitly requested Newton check). It verifies the
+selected engine before each live check, refuses a mismatch with exit 2, and prints
+a results table and the path to a JSON report in a temporary directory. Use a host
+Python environment with this checkout's dependencies. No simulator is started by
+the scene runner; checks mutate an explicitly selected disposable bridge.
+
+Existing fixture prerequisites still apply. Use repeated `--check` to select individual validators.
+The runner starts each check's own MCP server with the toolsets that check needs (`ISAAC_MCP_TOOLSETS`,
+see `CHECK_TOOLSETS` in `scripts/smoke.py`; `--toolsets` overrides it for every check) and calls tools by
+their listed names. It waits, up to 60 s, for the simulator's reported engine to settle on the requested
+one before it refuses a mismatch with exit 2 (the bridge answers `status` a few seconds before Newton is the
+active engine). Validators that work on one shared stage (tools, equivalents, edges, sensors, camera
+freshness, clear) run together in that order, each prerequisite added when a later check is selected, with
+only the timeline stopped between them; every other check starts on a new empty stage with the timeline
+stopped. Sessions needs `--second-port`; prim-edit needs `--directory` for its existing fixture. Generic scene
+replaces the stage and requires `--discard-changes`. Reopen needs a simulator that already has a saved scene
+open (the launcher cannot open a file at startup): without `--saved`, `--body` and `--expected-z` it is
+reported as `needs_setup` with the exact commands. Workcell delegates unchanged to `workcell_smoke.py` and
+needs `--config` and `--mutate-stage`; it remains PhysX-only. Lab delegates to `smoke_test.py` (started with
+`default,+lab`), which starts GPU jobs rather than using the selected bridge; its backend/build are
+unavailable in the report and `--backend` is refused rather than claiming that the task engine was verified.
+Unmapped toolsets list no checks. A failed check is reported with its innermost exception and traceback and
+the run continues with the next independent check; a check whose prerequisite did not pass is `not_run`,
+and a backend mismatch stops the run.
+
 <a id="last-live-check"></a><a id="headless-physx-check"></a>
-On 2026-11-03, headless PhysX checks on Sim 6.2 passed `verify.sh`, the 20-check twin
+On 2026-11-03, headless PhysX checks on Sim 6.2 passed the legacy workstation verifier, the 20-check twin
 smoke, and generic scene checks with the stated test setup. They do not establish all tools,
 versions, windowed workflows, hardware or backends.
 
@@ -128,7 +108,7 @@ From the repository root, use an interpreter with Isaac Sim installed and an acc
     printf 'Could not create validation log.\n' >&2
     exit 1
   }
-  if OMNI_KIT_ACCEPT_EULA=YES "$ISAACSIM_PYTHON" scripts/validate_generic_scene.py > "$validation_log" 2>&1; then
+  if OMNI_KIT_ACCEPT_EULA=YES "$ISAACSIM_PYTHON" scripts/smoke/validate_generic_scene.py > "$validation_log" 2>&1; then
     validation_status=0
   else
     validation_status=$?
@@ -163,7 +143,7 @@ expectation printed the assertion and exited with status 1. This is one version 
 ## Other checks
 
 - For a windowed workflow, confirm the intended window and capture with the [host tools](TOOLS-HOST.md).
-- For ROS transforms, use `scripts/verify_tf.sh` with the matching `config/ros_dds.env` profile.
+- For ROS transforms, use `scripts/ros2_tf_doctor.py` with the matching `config/ros_dds.env` profile.
 - Before a training run, obtain operator authorization and check GPU capacity. Use the
   [Isaac Lab guide](TOOLS-ISAACLAB.md) for status, metrics, and guard behavior.
 - See [working checklist](CHECKLIST.md) for remaining work.
@@ -209,8 +189,7 @@ to stand in for Sim's bundled bridge.
 
 A timeout or client disconnect does not prove native cancellation. A successful import does
 not prove physics readiness. A successful save is not a solver checkpoint: reopen in a fresh
-process and verify the properties and effects you need. The legacy exporter is a root-reference
-copy plus eligible local PhysicsScene settings, not a full session snapshot; see [save contracts](TOOLS-SCENE.md).
+process and verify the properties and effects you need; see [save contracts](TOOLS-SCENE.md).
 
 Before sharing evidence, replace personal paths with neutral placeholders and visually inspect
 screenshots. Preserve original private records; publish a separate redacted summary with hashes.

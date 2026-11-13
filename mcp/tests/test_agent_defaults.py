@@ -15,7 +15,7 @@ def test_label_tag_is_filename_safe():
 
 
 def test_instructions_tell_agents_to_prefer_the_tools():
-    assert "Prefer these tools" in gw.SERVER_INSTRUCTIONS and "say why" in gw.SERVER_INSTRUCTIONS
+    assert "Prefer listed tools" in gw.SERVER_INSTRUCTIONS and "status" in gw.SERVER_INSTRUCTIONS
 
 
 def test_session_check_never_fails_and_nudges():
@@ -27,10 +27,10 @@ def test_session_check_never_fails_and_nudges():
 def test_isaac_help_routes_by_task_and_falls_back():
     one = gw._isaac_help("why did the grasp fail")
     assert "sim__physics__contacts" in one and "isaaclab__train" not in one
-    assert "isaaclab__train" in gw._isaac_help("train a policy")
+    assert "Toolsets off: lab" in gw._isaac_help("train a policy")
     both = gw._isaac_help("something odd")
-    assert "No isaac tool is known to fit" in both and "screenshot" in both and "isaaclab__train" in both
-    assert "sim__launch" in gw._isaac_help(None)
+    assert "No isaac tool is known to fit" in both and "screenshot" in both and "Toolsets off: lab" in both
+    assert "launch" in gw._isaac_help(None) and "sim__launch" not in gw._isaac_help(None)
 
 
 def test_session_check_survives_bad_port_env_and_args():
@@ -57,6 +57,6 @@ def test_screenshot_label_is_not_shadowed_by_the_window_caption():
 def test_isaac_help_finds_contact_sheets_and_job_workflow_tools():
     sheet = gw._isaac_help("make a contact sheet from two videos to attach to a message")
     assert 'join_videos(mode="sheet"' in sheet and "home folder" in sheet
-    work = gw._isaac_help("wait for a job, register a baseline and summarise pass counts")
+    work = gw._isaac_help("wait for a job, register a baseline and summarise pass counts", enabled=gw.toolsets.PROFILES["all"])
     for name in ("isaaclab__preflight", "isaaclab__runs_status(job_id, wait_s=45)", "isaaclab__checkpoint_register", "eval_json"):
         assert name in work

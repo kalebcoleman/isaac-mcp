@@ -59,6 +59,6 @@ def test_run_sh_warns_instead_of_exporting_a_missing_ros_folder(tmp_path):
 
 
 def test_no_launcher_still_assumes_the_pip_layout():
-    for name in ("run.sh", "scripts/probe_62.sh", "scripts/verify_tf.sh", "scripts/check_machine.sh"):
+    for name in ("run.sh", "scripts/check_machine.sh"):
         text = (ROOT / name).read_text()
         assert "isaac_ros_libs.sh" in text and "/exts/isaacsim.ros2." not in text, name

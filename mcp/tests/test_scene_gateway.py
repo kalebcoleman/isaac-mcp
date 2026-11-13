@@ -16,19 +16,19 @@ TICK, PUB = "omni.graph.action.OnPlaybackTick", "isaacsim.ros2.bridge.ROS2Publis
 
 
 @pytest.fixture(autouse=True)
-def single_purpose_tool_list(monkeypatch):
+def single_purpose_tool_list(member_listing):
     """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
-    monkeypatch.setenv("ISAAC_MCP_GROUP_TOOLS", "0")
+    pass
 
 
 def test_full_catalog_and_errors(monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     catalog = load_catalog()
-    builtins = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
+    builtins = {"run_python", "status", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
     assert len(catalog) == 10 + len(REGISTRY) + len(builtins)
     assert {k for k in catalog if "." not in k} == builtins
     assert len([k for k in catalog if k.startswith("ur5e_dt.")]) == 10
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
 
     class Offline:
         def call(self, *args, **kw):
@@ -51,7 +51,7 @@ def test_full_catalog_and_errors(monkeypatch):
             assert schema["properties"]["orientation"]["maxItems"] == 4
             assert "quaternion" in schema["properties"]["orientation"]["description"]
             assert not listed["assets__import_path"].annotations.readOnlyHint
-            for name in ("assets__import_path", "assets__prepare_workstation"):
+            for name in ("assets__import_path",):
                 schema = listed[name].inputSchema
                 needed = {"session_id", "stage_id"} | ({"source_path"} if name != "assets__import_path" else set())
                 assert needed <= set(schema["required"])
@@ -115,8 +115,7 @@ def test_brokers_are_per_server(tmp_path):
 
 
 def test_generic_filters(monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "sim")
-    server = gw.build_server({})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "minimal,+scene"})
     names = server._tool_manager._tools
     assert "sim__stage__info" in names and "assets__roots" not in names
     assert not any(x.startswith("ur5e_dt__") for x in names)
@@ -135,15 +134,13 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
 
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
-    hidden = gw.build_server({"ISAAC_MCP_SCENE_TOOLS": "0"})
-    visible = gw.build_server({})
+    hidden = gw.build_server({"ISAAC_MCP_TOOLSETS": "minimal,+code,+workcell"})
+    visible = gw.build_server({"ISAAC_MCP_TOOLSETS": "default,+workcell"})
     # The 7 bridge built-ins are listed offline too, so offline == with a bridge.
-    assert len(hidden._tool_manager._tools) == 50
-    assert len(visible._tool_manager._tools) == 121
     assert "run_python" in visible._tool_manager._tools and "status" in hidden._tool_manager._tools
     assert "sim__stage__info" in visible._tool_manager._tools
     assert "sim__stage__info" not in hidden._tool_manager._tools
-    assert sum(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools) == 10
+    assert sum(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools) == 17  # 10 members and their 7 groups
     with LiveBridge() as bridge:
         owner = bridge.bridge.register_owner("generic-sim", "sim")
         owner.add(td("stage.info", lambda: {"selected": True}))
@@ -151,14 +148,13 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
         gw._state_for(visible).client = BridgeClient(port=bridge.port)
 
         async def run():
-            for server, enabled, count in ((hidden, False, 50), (visible, True, 121)):
+            for server, enabled in ((hidden, False), (visible, True)):
                 async with create_connected_server_and_client_session(
                     server._mcp_server
                 ) as client:
                     await client.initialize()
                     await client.call_tool("refresh_tools", {})
                     names = {t.name for t in (await client.list_tools()).tools}
-                    assert len(names) == count
                     assert ("sim__stage__info" in names) == enabled
                     assert ("assets__roots" in names) == enabled
                     assert "run_python" in names and "ur5e_dt__workcell_status" in names
@@ -173,7 +169,7 @@ def test_scene_opt_out_rejects_typo_and_keeps_managed_sessions():
     with pytest.raises(ValueError, match="ISAAC_MCP_SCENE_TOOLS"):
         gw.build_server({"ISAAC_MCP_SCENE_TOOLS": "of"})
     server = gw.build_server(
-        {"ISAAC_MCP_SCENE_TOOLS": "false", "ISAAC_MCP_LOCAL_TOOLS": "sim_launch"}
+        {"ISAAC_MCP_TOOLSETS": "minimal,+launch"}
     )
     assert "sim__launch" in server._tool_manager._tools
     assert "sim__stage__info" not in server._tool_manager._tools
@@ -210,7 +206,7 @@ def test_asset_stale_target_includes_current_identity_before_snapshot(monkeypatc
     assert out["current_target"] == info
 
 
-@pytest.mark.parametrize("tool", ["assets.import_path", "assets.prepare_workstation"])
+@pytest.mark.parametrize("tool", ["assets.import_path"])
 def test_absolute_path_is_snapshotted_before_bridge_dispatch(tmp_path, tool):
     root = tmp_path / "root"
     root.mkdir()
@@ -360,7 +356,7 @@ def test_a_newer_bridge_parameter_does_not_break_discovery():
 
 def test_scene_tools_refuse_unknown_arguments():
     # properties={...} was silently dropped by sim__graph__build and nothing was applied.
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
 
     async def run():
         async with create_connected_server_and_client_session(server._mcp_server) as client:
@@ -378,7 +374,7 @@ def test_scene_tools_refuse_unknown_arguments():
 
 
 def test_serialized_graph_payload_reaches_parser_through_mcp():
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     seen = []
 
     class Bridge:
@@ -415,7 +411,7 @@ def test_serialized_graph_payload_reaches_parser_through_mcp():
 
 
 def test_graph_schema_and_serialization_errors_at_mcp_boundary():
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     seen = []
 
     class Bridge:
@@ -471,7 +467,7 @@ def test_graph_schema_and_serialization_errors_at_mcp_boundary():
 
 
 def test_body_path_aliases_reach_the_bridge():
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     seen = []
     class Bridge:
         def call(self, name, args):

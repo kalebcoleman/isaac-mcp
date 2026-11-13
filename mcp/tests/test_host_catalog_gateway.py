@@ -30,7 +30,7 @@ import mcp.types as types
 
 import isaac_mcp.screen as screen
 import isaac_mcp.server as gw
-from isaac_mcp import host_catalog, local_tools as lt, sim_sessions
+from isaac_mcp import host_catalog, local_tools as lt, sim_sessions, tool_groups
 from isaac_mcp_bridge.bridge import ToolDefinition
 from isaac_mcp_bridge.schema import field_specs
 from bridge_testing import LiveBridge
@@ -43,12 +43,14 @@ _spec.loader.exec_module(generator)
 
 PROXIES = {gw._mcp_name(canonical): canonical for canonical in host_catalog.catalog_tool_names() if canonical.startswith("ur5e_dt.")}
 STATUS = "ur5e_dt__workcell_status"
+# Registered host proxies: each catalogued member plus the grouped tools that list them.
+REGISTERED = len(PROXIES) + sum(name.startswith("ur5e_dt__") for name in tool_groups.GROUPS)
 
 
 @pytest.fixture(autouse=True)
-def single_purpose_tool_list(monkeypatch):
+def single_purpose_tool_list(member_listing):
     """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
-    monkeypatch.setenv("ISAAC_MCP_GROUP_TOOLS", "0")
+    pass
 
 
 @pytest.fixture(autouse=True)
@@ -59,7 +61,7 @@ def isolated(monkeypatch, tmp_path):
     full_catalog = host_catalog.load_catalog()
     monkeypatch.setattr(host_catalog, "load_catalog", lambda: __import__("copy").deepcopy({k:v for k,v in full_catalog.items() if k.startswith("ur5e_dt.")}))
     for var in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_PORT", "UR5E_DT_PORT",
-                "ISAAC_MCP_HOST", lt.ENV_VAR):
+                "ISAAC_MCP_HOST", "ISAAC_MCP_TOOLSETS"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(screen, "SHOT_DIR", tmp_path / "shots")
     monkeypatch.setattr(screen, "VIDEO_DIR", tmp_path / "videos")
@@ -89,7 +91,7 @@ _NO_REAL_SESSIONS = {"ISAAC_MCP_SIM_SESSIONS_DIR": tempfile.mkdtemp(prefix="isaa
 
 
 def build(env=None):
-    return gw.build_server({**_NO_REAL_SESSIONS, **({} if env is None else env)})
+    return gw.build_server({"ISAAC_MCP_TOOLSETS": "all", **_NO_REAL_SESSIONS, **({} if env is None else env)})
 
 
 def session(server, notes=None):
@@ -232,8 +234,8 @@ def test_every_tool_is_listed_with_no_bridge_and_matches_the_registry_schema():
     assert live_twin_tools(server) == []              # the roster of live bridge tools stays empty
 
 
-def test_the_default_server_lists_them_too():
-    assert set(PROXIES) <= set(gw.mcp._tool_manager._tools)
+def test_the_default_server_excludes_workcell():
+    assert not set(PROXIES) & set(gw.build_server({})._tool_manager._tools)
 
 
 def test_offline_tools_defaults_to_the_default_server_and_tracks_its_live_bridge(monkeypatch):
@@ -255,11 +257,11 @@ def test_a_client_that_never_refreshes_still_sees_them_after_a_failed_startup_di
     assert set(PROXIES) <= set(listed)
 
 
-@pytest.mark.parametrize("groups", ["all", "readonly", "none", "gateway", "screen_read", "isaaclab_run"])
+@pytest.mark.parametrize("groups", ["all", "minimal,+workcell", "default,+workcell"])
 def test_local_tool_groups_filter_only_local_tools(groups):
-    server = build({lt.ENV_VAR: groups})
+    server = build({"ISAAC_MCP_TOOLSETS": groups})
     assert set(PROXIES) <= set(server._tool_manager._tools)
-    assert set(server._tool_manager._tools) - set(PROXIES) <= set(lt.ALL_TOOLS)
+    assert all(__import__("isaac_mcp.toolsets", fromlist=["owner"]).owner(name) in gw._state_for(server).toolsets for name in server._tool_manager._tools)
 
 
 def test_every_offline_proxy_answers_with_an_actionable_error_and_starts_nothing():
@@ -399,14 +401,14 @@ def test_calls_after_the_bridge_stops_say_so(monkeypatch):
 def test_use_bridge_to_a_bridge_without_the_extension_keeps_every_proxy():
     server = build()
     with LiveBridge() as other:
-        other.bridge.register_owner("sim", "sim").add(ToolDefinition(
+        other.bridge.register_owner("demo", "demo").add(ToolDefinition(
             name="inspect", description="inspect", parameters={}, handler=lambda: {"seen": True}))
         switched, listed, play, inspect = run(
             server, call("use_bridge", {"port": other.port}), tools, call(STATUS),
-            call("sim__inspect"))
+            call("demo__inspect"))
     assert "switched to bridge" in switched
     assert "Note: ur5e_dt: 10 tool(s) are listed from the packaged catalog" in switched
-    assert set(PROXIES) <= set(listed) and "sim__inspect" in listed
+    assert set(PROXIES) <= set(listed) and "demo__inspect" in listed
     assert "did not register it" in play and f"port {other.port}" in play
     assert json.loads(inspect) == {"seen": True}
     assert gw.offline_tools(server) == sorted(PROXIES.values())
@@ -416,7 +418,7 @@ def test_switching_between_a_twin_bridge_and_a_plain_one_follows_the_selected_br
     server = build()
     with LiveBridge() as twin, LiveBridge() as plain:
         attach_twin(twin)
-        plain.bridge.register_owner("sim", "sim").add(ToolDefinition(
+        plain.bridge.register_owner("demo", "demo").add(ToolDefinition(
             name="inspect", description="inspect", parameters={}, handler=lambda: {}))
         notes = []
         to_twin, on_twin, to_plain, on_plain, back, again = run(
@@ -486,37 +488,32 @@ def test_bare_fastmcp_servers_do_not_grow_proxies(monkeypatch):
 
 # ---- filters, hooks, collisions ----------------------------------------------------------
 
-def test_the_namespace_filter_applies_to_proxies(monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "pm")
-    server = build()
+def test_toolsets_filter_proxies():
+    server = build({"ISAAC_MCP_TOOLSETS": "minimal"})
     assert not set(PROXIES) & set(server._tool_manager._tools)
     assert gw.offline_tools(server) == []
-    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "pm,ur5e_dt")
-    assert set(PROXIES) <= set(build()._tool_manager._tools)
-    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "ur5e_dt")
-    assert set(PROXIES) <= set(build()._tool_manager._tools)
+    assert set(PROXIES) <= set(build({"ISAAC_MCP_TOOLSETS": "minimal,+workcell"})._tool_manager._tools)
 
 
 def test_a_namespace_filter_that_hides_ur5e_keeps_other_tools_and_survives_switches(monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "sim")
-    monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
-    server = build()
+    server = build({"ISAAC_MCP_TOOLSETS": "minimal,+extensions"})
     with LiveBridge() as live:
         attach_twin(live)
-        live.bridge.register_owner("sim", "sim").add(ToolDefinition(
+        live.bridge.register_owner("demo", "demo").add(ToolDefinition(
             name="inspect", description="inspect", parameters={}, handler=lambda: {"ok": 1}))
         run(server, call("use_bridge", {"port": live.port}))
         (listed,) = run(server, tools)
-    assert "sim__inspect" in listed and not set(PROXIES) & set(listed)
-    assert gw.registered_tools(server) == ["sim.inspect"] and gw.offline_tools(server) == []
+    assert "demo__inspect" in listed and not set(PROXIES) & set(listed)
+    assert set(gw.registered_tools(server)) == {"demo.inspect", "status", "job_status", "job_cancel"}
+    assert gw.offline_tools(server) == []
 
 
 def test_changing_the_filter_is_applied_at_the_next_switch(monkeypatch):
     server = build()
     assert gw.offline_tools(server)
-    monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "sim")
+    gw._state_for(server).toolsets = frozenset({"core", "extensions"})
     with LiveBridge() as live:
-        live.bridge.register_owner("sim", "sim").add(ToolDefinition(
+        live.bridge.register_owner("demo", "demo").add(ToolDefinition(
             name="inspect", description="inspect", parameters={}, handler=lambda: {}))
         run(server, call("use_bridge", {"port": live.port}))
         (listed,) = run(server, tools)
@@ -546,19 +543,21 @@ def test_filter_changes_notify_for_catalog_tools(monkeypatch, action, one_live_t
         async with session(server, notes) as client:
             await client.initialize()
             before = await tools(client)
-            monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "sim")
+            gw._state_for(server).toolsets = frozenset({"core", "extensions"})
             hidden = await call(action, args)(client)
             hidden_names, hidden_notes = await tools(client), len(notes)
             again = await call(action, args)(client)
             unchanged_notes = len(notes)
-            monkeypatch.delenv("ISAAC_MCP_NAMESPACE")
+            gw._state_for(server).toolsets = frozenset({"core", "extensions", "workcell"})
             shown = await call(action, args)(client)
             return before, hidden, hidden_names, hidden_notes, again, unchanged_notes, shown, await tools(client)
 
     before, hidden, hidden_names, hidden_notes, again, unchanged_notes, shown, after = asyncio.run(go())
     assert set(PROXIES) <= set(before) and not set(PROXIES) & set(hidden_names)
     assert set(PROXIES) <= set(after)
-    assert "10 tool(s)" in hidden and "10 tool(s)" in shown
+    # refresh_tools counts catalogued members; use_bridge also counts the grouped tools that list them.
+    expected = len(PROXIES) if action == "refresh_tools" else REGISTERED
+    assert f"{expected} tool(s)" in hidden and f"{expected} tool(s)" in shown
     assert "0 tool(s)" in again or "registry unchanged" in again
     if action == "refresh_tools":
         assert all(f"{canonical} (removed)" in hidden for canonical in PROXIES.values())
@@ -614,18 +613,17 @@ def test_failed_switch_still_notifies_when_it_changes_offline_proxies(monkeypatc
     async def go():
         async with session(server, notes) as client:
             await client.initialize()
-            monkeypatch.setenv("ISAAC_MCP_NAMESPACE", "sim")
+            gw._state_for(server).toolsets = frozenset({"core", "extensions"})
             answer = await call("use_bridge", {"port": 9})(client)
             return answer, await tools(client)
 
     answer, listed = asyncio.run(go())
-    assert "tool discovery failed" in answer and "Changed 10 tool(s)" in answer
+    assert "tool discovery failed" in answer and f"Changed {REGISTERED} tool(s)" in answer
     assert not set(PROXIES) & set(listed) and len(notes) == 1
 
 
 def test_the_builtins_gate_does_not_hide_catalog_tools(monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_BUILTINS", "0")
-    server = build()
+    server = build({"ISAAC_MCP_TOOLSETS": "minimal,+workcell"})
     assert set(PROXIES) <= set(server._tool_manager._tools)
     with LiveBridge() as live:
         attach_twin(live)
@@ -674,19 +672,20 @@ def test_the_host_tool_collision_check_still_protects_local_tools(monkeypatch):
 
 
 def test_the_offline_proxies_carry_hints_from_their_own_table():
-    server = build({lt.ENV_VAR: "none"})
+    server = build({"ISAAC_MCP_TOOLSETS": "minimal,+workcell"})
     tool = server._tool_manager._tools[STATUS]
     assert tool.annotations.readOnlyHint is True and tool.annotations.destructiveHint is False
 
 
 def test_a_tool_from_a_projects_own_extension_gets_no_hints():
-    server = build({lt.ENV_VAR: "none"})
+    server = build({"ISAAC_MCP_TOOLSETS": "minimal,+workcell"})
     gw.register_dynamic_tool(server, "demo__ping", "demo.ping", {"description": "d", "parameters": {}, "fields": []})
     assert server._tool_manager._tools["demo__ping"].annotations is None
 
 
-def test_instructions_say_the_tools_are_always_listed():
-    assert "listed by default" in gw.SERVER_INSTRUCTIONS and "ur5e_dt__" in gw.SERVER_INSTRUCTIONS
+def test_instructions_explain_selection_without_advertising_optional_tools():
+    assert "status" in gw.SERVER_INSTRUCTIONS and "toolsets" in gw.SERVER_INSTRUCTIONS
+    assert "ur5e_dt__" not in gw.SERVER_INSTRUCTIONS
 
 
 def test_the_wheel_config_ships_the_whole_package_directory():
@@ -739,7 +738,7 @@ def dead_port():
 @pytest.fixture()
 def managed(monkeypatch, tmp_path):
     """A server with sim__launch whose launches are faked as session records of a live process."""
-    env = {"ISAAC_MCP_LOCAL_TOOLS": "gateway,sim_launch",
+    env = {"ISAAC_MCP_TOOLSETS": "all,+launch",
            "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "sessions")}
 
     def write_session(port, pid=None):
@@ -916,7 +915,7 @@ def test_a_remote_dial_host_is_not_redirected_to_a_local_session(managed, monkey
 def test_refresh_with_no_pin_and_no_bridge_reports_it(monkeypatch, tmp_path):
     # client.port raises when discovery finds nothing; the hint must not turn that into a crash.
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    server = build({"ISAAC_MCP_LOCAL_TOOLS": "gateway", "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")})
+    server = build({"ISAAC_MCP_TOOLSETS": "all", "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")})
     (message,) = run(server, call("refresh_tools"))
     assert message.startswith("Error: no Isaac Sim bridge is reachable") and "polls for you" in message
 
@@ -1038,6 +1037,8 @@ def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypa
         answer, short = run(build(), call("status", {"detail": True}), call("status"))
     payload = json.loads(answer)
     host = payload.pop("host")
+    assert "core" in payload.pop("toolsets")["on"]
+    assert {"default", "default_from"} <= set(payload.pop("physics"))      # the host adds the engine setting too
     assert set(payload) == set(direct) and payload["pid"] == direct["pid"] and payload["port"] == live.port
     assert host["stale"] is True and host["commit"] == COMMIT_B and "warning" in host
     assert str(tmp_path) not in answer, "status must not publish the checkout path"
@@ -1054,7 +1055,7 @@ def test_status_with_no_bridge_still_reports_the_host(monkeypatch, tmp_path):
     monkeypatch.setattr(gw, "_HOST_COMMIT", COMMIT_B)
     state = gw._state_for(build({"ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")}))
     answer = json.loads(gw._dispatch("status", {}, state))
-    assert answer["running"] is False and "sim__launch" in answer["message"], "no bridge is an answer, not an error"
+    assert answer["running"] is False and "toolsets" in answer["message"], "no bridge is an answer, not an error"
     assert answer["bridges"] == [] and "Restart the MCP connection" in answer["host"]["warning"]
     other = gw._dispatch("ur5e_dt.workcell_status", {}, state)
     assert "MCP host:" not in other
@@ -1067,11 +1068,13 @@ def test_bridge_listing_help_is_one_working_form(monkeypatch, tmp_path):
     assert bare not in gw.LIST_BRIDGES_HELP
     assert "python3 mcp/isaac_mcp/client.py --list-bridges" in gw.LIST_BRIDGES_HELP
     assert (ROOT / "mcp" / "isaac_mcp" / "client.py").is_file()
-    server = build({"ISAAC_MCP_LOCAL_TOOLS": "gateway", "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")})
+    server = build({"ISAAC_MCP_TOOLSETS": "all", "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")})
     state = gw._state_for(server)
     listed = {tool.name: tool for tool in asyncio.run(server.list_tools())}
     refused = ConnectionRefusedError("[Errno 111] Connection refused")
-    messages = [gw._BRIDGE_HELP, gw.SERVER_INSTRUCTIONS, listed["use_bridge"].description,
+    full_use_bridge = json.loads(gw._tool_help(server, "use_bridge"))["use_bridge"]["description"]   # the listing is short
+    assert "Find candidates with status" in listed["use_bridge"].description
+    messages = [gw._BRIDGE_HELP, full_use_bridge,
                 gw._catalog_error("status", refused, state), gw._catalog_error("ur5e_dt.workcell_status", refused, state),
                 gw._starting_hint(server, refused)]
     for message in messages:

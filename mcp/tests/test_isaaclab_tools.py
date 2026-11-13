@@ -7,13 +7,13 @@ from isaac_mcp.isaaclab import tools
 
 EXPECTED = {
     "isaaclab__install_info", "isaaclab__envs_list", "isaaclab__train", "isaaclab__eval", "isaaclab__play",
-    "isaaclab__runs_list", "isaaclab__runs_status", "isaaclab__runs_tail", "isaaclab__runs_cancel",
+    "isaaclab__runs_list", "isaaclab__runs_status", "isaaclab__runs_tail",
     "isaaclab__checkpoints_list", "isaaclab__metrics_summary", "isaaclab__tensorboard_tail",
 }
 
 
 def test_all_tools_registered_on_the_server():
-    assert EXPECTED <= set(server.mcp._tool_manager._tools), "registered and callable, whether or not listed"
+    assert EXPECTED <= set(server.build_server(env={"ISAAC_MCP_TOOLSETS": "all"})._tool_manager._tools), "registered and callable, whether or not listed"
 
 
 def test_launch_without_install_returns_a_hint(monkeypatch):

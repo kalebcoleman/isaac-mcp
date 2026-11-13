@@ -18,11 +18,6 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Check documentation
         run: python3 scripts/check_docs.py
 
@@ -50,12 +45,8 @@ jobs:
       # still import against the stated floor, mcp==1.22.0.
       - name: Check minimum supported MCP SDK
         working-directory: mcp
-        run: uv run --no-project --python 3.12 --with-editable '.[test,isaaclab]' --with 'mcp[cli]==1.22.0' pytest -q tests/test_packaging.py tests/test_tool_groups.py tests/test_desktop_input.py tests/test_sim_sessions.py tests/test_screen_windows.py tests/test_check_docs.py tests/test_host_catalog_gateway.py tests/test_scene_gateway.py tests/test_project_assets.py tests/test_host_lock.py
+        run: uv run --no-project --python 3.12 --with-editable '.[test,isaaclab]' --with 'mcp[cli]==1.22.0' pytest -q tests/test_packaging.py tests/test_toolsets.py tests/test_desktop_input.py tests/test_sim_sessions.py tests/test_screen_windows.py tests/test_check_docs.py tests/test_host_catalog_gateway.py tests/test_scene_gateway.py tests/test_project_assets.py tests/test_host_lock.py
 
       - name: Build wheel and sdist
         working-directory: mcp
         run: uv build
-
-      - name: Validate npm package contents
-        working-directory: npm
-        run: npm pack --dry-run

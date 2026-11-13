@@ -13,7 +13,6 @@ Kit Process (Isaac Sim 6.2.0.0)
                                     ▼
                         isaac-mcp (stdio MCP server)
                           ├── ur5e_dt__*        catalog-listed; execute through the twin bridge
-                          ├── list_bridges      running Kit bridge instances
                           ├── use_bridge        switch target port at runtime
                           ├── sim__* / assets__*  generic scene tools, from the sim-tools extension
                           ├── refresh_tools     rediscover tools; can wait for a starting Kit
@@ -78,7 +77,6 @@ are not registered by this pack.
 
 ### Bridge discovery and selection
 
-- `list_bridges`: Lists all running Kit bridge instances (PID, port, and app name). *Note: This is a Kit bridge built-in. It is listed from startup but answers only when a bridge is reachable.*
 - `use_bridge`: Points the host MCP server at a different bridge port at runtime without restarting the client.
 - `refresh_tools`: Forces rediscovery of tools from the currently connected bridge. `refresh_tools(wait_s=120)` waits (up to 180 s) for a Kit that is still starting.
 
@@ -89,13 +87,13 @@ are not registered by this pack.
 - `start_screen_recording`: Records window or desktop activity to MP4 at a specified framerate (default 15 fps). Window capture reads that window's buffer directly, so overlapping windows do not obscure it.
 - `stop_screen_recording`: Finalizes recording and returns the path to the MP4.
 - `screen_recording_status`: Reports elapsed recording time and captured frames.
-- `screen_info`: Reports active display, attached monitors, capture directories, and recording state.
+- `windows(action="info")` (`screen_info`): Reports active display, attached monitors, capture directories, and recording state.
 - `move_window` / `tile_windows`: Place one window, or lay out two to six, for a recording.
 - `join_videos`: Join clips into one new MP4, or (`mode=sheet`) write a PNG contact sheet of frames at chosen times.
 
 Captures are written to `~/Pictures/screen-mcp/` and `~/Videos/screen-mcp/`. Screen recordings do not contain audio.
 See the [host and bridge reference](TOOLS-HOST.md) for the complete list and arguments. The separate
-[Isaac Lab reference](TOOLS-ISAACLAB.md) covers the 18 host-side Lab and script-job tools.
+[Isaac Lab reference](TOOLS-ISAACLAB.md) covers the 16 host-side Lab and script-job tools.
 
 ### Agent workflow
 
@@ -105,7 +103,7 @@ the window and PID; `screenshot(window_id=...)` captures that window even when
 covered. Check the capture directory before writing if workspace rules restrict
 where files may be created. Screen tools are host-side and can work even when
 the simulator bridge is disconnected. Optional X11 mouse and keyboard controls can be enabled
-explicitly with `ISAAC_MCP_LOCAL_TOOLS=all,screen_input`; see the targeting rules and shared-desktop
+explicitly with `ISAAC_MCP_TOOLSETS=default,+input`; see the targeting rules and shared-desktop
 limitations in [host tools](TOOLS-HOST.md#optional-desktop-input).
 
 The host MCP server and the bridge inside Kit are separate processes. A working
@@ -113,7 +111,7 @@ The host MCP server and the bridge inside Kit are separate processes. A working
 client that lists the UR5e tools or `run_python` has not proved that a bridge exists: these are catalog-listed
 (call `status`). The client may have connected before Kit started (call `refresh_tools`, or
 `refresh_tools(wait_s=120)` while Kit boots),
-or `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS=0` may be hiding bridge tools
+or the selected toolsets may be disabling bridge tools
 (verify with the CLI below). Reuse the intended bridge when it meets the task; start another Kit
 only when explicitly needed and after the [parallel-launch checks](TOOLS-HOST.md#optional-simulator-sessions).
 If `refresh_tools` returns `Connection refused`, check for the intended Kit
@@ -181,7 +179,7 @@ python3 mcp/isaac_mcp/client.py status --port 18751
 python3 mcp/isaac_mcp/client.py status --port 18762
 ```
 
-In an MCP client, call `list_bridges`, then select and verify the intended process with `use_bridge(port=18762)` and `status`. The selection belongs to the host MCP server process and persists until its restart. For agents working simultaneously, give each its **own MCP server process** and select its port there; otherwise one agent's `use_bridge` can redirect the other's next call. Keep each scene's returned `session_id` and `stage_id` with its own agent and recheck them after a restart or stage change.
+In an MCP client, call `status`, then select and verify the intended process with `use_bridge(port=18762)` and `status`. The selection belongs to the host MCP server process and persists until its restart. For agents working simultaneously, give each its **own MCP server process** and select its port there; otherwise one agent's `use_bridge` can redirect the other's next call. Keep each scene's returned `session_id` and `stage_id` with its own agent and recheck them after a restart or stage change.
 
 Two headless processes, Sim 5.1 and 6.2, were exercised together on a 16 GB RTX 5080 with small robot-import and physics workloads. This is not a capacity guarantee: scene complexity, sensors, renderers and training can require much more memory. Check available GPU and system memory before starting, monitor both workloads, and stop only sessions you own. Headless still uses GPU resources.
 
@@ -295,7 +293,7 @@ config**. The file does not allow comments.
 
 Format from [Antigravity's MCP docs](https://antigravity.google/docs/mcp) and
 [Codex's MCP docs](https://developers.openai.com/codex/mcp). On the test machine, `codex exec`
-called `screen_info` through a Codex entry of this form (2026-10-31); the Antigravity entry has not
+called `windows(action="info")` through a Codex entry of this form (2026-10-31); the Antigravity entry has not
 been tested here.
 
 ### Agent skill
@@ -309,34 +307,21 @@ Bridge tools such as `run_python` and the `ur5e_dt__*` scene operations reach th
 exists, whatever the host's local tools are set to. Decide per client how much of the server it should see, and be
 clear about which of the settings below limit what.
 
-Server side (set in the client's `env` for this server; see [TOOLS-HOST.md](TOOLS-HOST.md)):
-
-- `ISAAC_MCP_LOCAL_TOOLS` selects groups of the host's own tools (30 standard screen, Isaac Lab, gateway tools, plus
-  five opt-in desktop input and four opt-in simulator-session tools). `readonly`
-  keeps only local tools annotated as read-only; `none` keeps none. The default is `all`. The Python probes and job
-  inspection tools are excluded because they can have side effects; see [TOOLS-HOST.md](TOOLS-HOST.md) for the groups. Importing the jobs module can still reconcile orphaned jobs at server startup,
-  regardless of the groups. The setting does **not** affect tools discovered from a Kit bridge, so `readonly` is a read-only *local tool selection*, not a read-only server: a client that can still see
-  bridge tools can change the scene.
-- `ISAAC_MCP_NAMESPACE` limits the bridge tools to the named namespaces, and `ISAAC_MCP_BUILTINS=0` hides the bare
-  bridge built-ins such as `run_python`. An empty `ISAAC_MCP_NAMESPACE` means no filter, not "no namespaces".
-- The three variables are independent and compose. With `ISAAC_MCP_LOCAL_TOOLS=readonly` alone, every bridge tool is
-  still registered; with `ISAAC_MCP_BUILTINS=0` added, the namespaced ones (for example `ur5e_dt__*`) still are.
-
-**Hiding bridge tools.** There is no dedicated switch. To hide both built-ins and namespaced tools, use
-`ISAAC_MCP_BUILTINS=0` together with an `ISAAC_MCP_NAMESPACE` naming a namespace that neither the bridge nor the
-packaged catalog advertises (the test suite covers this). Disabling built-ins alone does not hide the catalog-listed
-UR5e tools. This hides tools from the client's list; it is not a safety boundary. It relies on the chosen name staying
-unused, `use_bridge` and `refresh_tools` (if the `gateway` group is on) re-run discovery under the same filter, and
-anything that reaches the bridge socket directly (the `isaac_mcp.client` CLI, another process) is not affected by a
-host's filters at all.
+Server side: use `ISAAC_MCP_TOOLSETS=default,+lab` or `[tools] toolsets = ["default", "+lab"]`
+in `~/.config/isaac-mcp/config.toml`. Project `isaac-mcp.toml`, environment and `--toolsets` override
+user configuration in that order. `minimal` selects core only; `all` includes every non-explicit toolset.
+Desktop input and process launch require `+input` and `+launch`. Run `isaac-mcp toolsets` for the table,
+or call `status` for enabled, disabled and planned toolsets. Disabled sets register no tools, listed or hidden.
+The mandatory `core` set includes connection, help and job tracking. Toolsets are not a safety boundary:
+anything reaching the bridge socket directly is unaffected by host registration choices.
 
 **A simulator that cannot be changed.** Start Kit with `ISAAC_MCP_READ_ONLY=1`. The bridge then runs only the
 tools registered as read-only (stage and prim reads, joint and body state, logs, `status`, `job_status`, `get_file`,
-`stat_file`, and the twin's `get_recording_status`) and refuses every other with the code `READ_ONLY` before the tool
+`stat_file`, and other tools annotated read-only) and refuses every other with the code `READ_ONLY` before the tool
 is called: `run_python`, `put_file`, every scene edit and every other twin tool. Read-only protects the simulator, not
 the disk: `get_file` still reads any file your account can read. This is enforced inside Kit, so it does not
 depend on the client, on which tools a host lists, or on who dials the socket. `status` and the bridge listing report
-`read_only`. Pair it with `ISAAC_MCP_LOCAL_TOOLS=readonly` so the host's own tools cannot change things either.
+`read_only`. Toolsets are not a read-only host mode: even `minimal` includes job cancellation.
 
 **Who may connect.** The bridge requires a token on every connection. It writes a random one to a file only your
 account can read, and clients on that account (this server, the CLI, your scripts) read it from there, so nothing
@@ -355,14 +340,12 @@ Client side (these are client settings, not part of this server; check your clie
   prompts, and so do the scene, twin and built-in bridge tools. Annotations are hints, not an access control; the
   filters above decide what is registered at all, and only read-only mode is enforced at the bridge.
 
-### Tool counts depend on `ISAAC_MCP_LOCAL_TOOLS`
+### Tool counts depend on toolsets
 
-The server registers **121 tools** with the default groups, **+5** (`window_*`) when `screen_input` is selected and **+4**
-(`sim__*` session tools) when `sim_launch` is selected: **130** with both. A client is shown **48 tools**, because
-related tools are listed as one tool with an `action` argument (see [grouped tools](TOOLS-HOST.md#grouped-tools));
-`ISAAC_MCP_GROUP_TOOLS=0` lists all of them singly. `ISAAC_MCP_NAMESPACE`,
-`ISAAC_MCP_BUILTINS=0` and `ISAAC_MCP_SCENE_TOOLS=0` lower the count further. A client that shows a different number
-has a filter set in its server entry; the server logs its tool count and filters at startup (below).
+The server registers **85 tools** with the default toolsets. A client is shown **31 tools**, because related
+members are grouped behind an `action` argument. `all` registers 119 single-purpose tools (48 shown);
+`all,+input,+launch` registers **128** with both explicit-only toolsets. Disabled toolsets register nothing, including hidden members.
+Use `isaac-mcp toolsets`, the startup log or the `isaac-mcp://toolsets` resource to inspect selection.
 
 ### Diagnosing disconnects: the server log
 
@@ -450,11 +433,12 @@ the host only needs a bridge to dial. The mechanism, from `exts/isaac.mcp.bridge
    discovery of the advertisements **if exactly one bridge is advertised**. With several it refuses and lists them.
 
 So for a Kit started by your own script: set `ISAAC_MCP_PORT=<free port>` in that script's environment, enable the
-extension, wait for it to log `serving on`, then in the client call `list_bridges`, `use_bridge(port=<port>)` and
+extension, wait for it to log `serving on`, then in the client call `status`, `use_bridge(port=<port>)` and
 `status` and confirm the PID. `sim__list` shows such a bridge as `managed: false` (`external-<pid>-<port>`); `sim__stop`
 will not stop it. A host server started before Kit may need `refresh_tools(wait_s=120)`.
 
 ---
+
 
 ## 5. Verification
 

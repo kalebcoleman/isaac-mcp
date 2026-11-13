@@ -109,7 +109,7 @@ def test_a_live_job_that_wrote_recently_is_ok(tmp_path):
 def test_a_traceback_at_the_end_of_stderr_with_a_live_process_reads_crashed(tmp_path):
     health = jobs._liveness(logs(tmp_path, "step 1\n", TRACEBACK, stdout_age=30, stderr_age=20), True)
     assert health["health"] == "crashed" and "CUDA out of memory" in health["health_note"]
-    assert "runs_cancel" in health["health_note"] and "stderr" in health["health_note"]
+    assert "job_cancel" in health["health_note"] and "stderr" in health["health_note"]
 
 
 def test_a_job_that_kept_working_after_a_traceback_is_not_called_crashed(tmp_path):
@@ -179,15 +179,14 @@ def tool(name):
     return gw.mcp._tool_manager._tools[name]
 
 
-def test_run_script_is_listed_beside_the_lab_tool_and_needs_no_install(tmp_path, monkeypatch):
+def test_run_script_needs_no_install(tmp_path, monkeypatch):
     for variable in ("ISAACLAB_PYTHON", "ISAACLAB_ROOT", "ISAACLAB_INSTALLS", "ISAAC_MCP_PROJECT"):
         monkeypatch.delenv(variable, raising=False)
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [{"host": "127.0.0.1", "port": 8766, "pid": 1}])
-    general, lab = tool("run_script"), tool("isaaclab__run_script")
-    assert "no simulator and no Isaac Lab" in general.description and "jobs action=status" in general.description   # named as a client is shown it
+    general = tool("run_script")
+    assert "no simulator and no Isaac Lab" in general.description and "isaac_help(tool=" in general.description   # the full text is one call away
+    assert "jobs action=status" in gw._tool_help(gw.mcp, "run_script")   # named as a client is shown it
     assert general.parameters["properties"]["uses_gpu"]["default"] is False
-    assert "uses_gpu" not in lab.parameters["properties"], "the existing tool keeps its arguments"
-    assert set(lab.parameters["properties"]) - set(general.parameters["properties"]) == {"python_path", "allow_concurrent", "allow_concurrent_gpu"}
     body = "import sys\nprint('ISAAC_MCP_PROGRESS: 1/1 done')\nprint(sys.argv[1])\n"
     out = json.loads(asyncio.run(general.fn(script=str(script(tmp_path, body)), args=["hello"], label="convert")))
     assert "job_id" in out, out
@@ -195,7 +194,7 @@ def test_run_script_is_listed_beside_the_lab_tool_and_needs_no_install(tmp_path,
     status = wait_done(out["job_id"])
     assert status["state"] == "succeeded" and status["script_result"]["exit_code"] == 0 and status["label"] == "convert"
     assert status["progress"]["fraction"] == 1.0
-    assert jobs.runs_list(kind="script")["runs"][0]["job_id"] == out["job_id"], "one job system for both names"
+    assert jobs.runs_list(kind="script")["runs"][0]["job_id"] == out["job_id"], "one job system"
 
 
 def test_run_script_with_a_gpu_keeps_the_guards(tmp_path, monkeypatch):
