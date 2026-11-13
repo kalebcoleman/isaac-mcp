@@ -32,6 +32,9 @@ version.
   and Lab tools where they suffice; propose additions separately with clear inputs, device selection, resource limits and
   measured behaviour.
 - [ ] Per-engine friction and solver profiles for the work cell, tuned on each engine (the current values are provisional).
+- [ ] The sensors smoke check returned `PHYSICS_NOT_READY` once when it ran straight after the Newton checks in the same Kit;
+  it passed on a fresh session. Reproduce it and find the cause.
+- [ ] Run the scene reopen smoke check on both engines. It needs a saved scene opened by hand and has not been run yet.
 
 ### Work cell on Newton
 
@@ -76,6 +79,21 @@ What does not work or is not yet done:
 - [ ] Renders (cell, wrist, overhead) on Newton, and a PhysX re-check after the Newton changes.
 - [ ] Then: remove the refusal in `workcell/scene.py`, make `workcell_smoke.py` take the engine, and cover both engines in the tests.
 
+## Real-to-sim with RoboSimStudio
+
+The `robosim` tool reproduced a real push on the GPU (Newton's MuJoCo-Warp solver) and on the CPU: the block's image displacement
+matched the clip within the tool's tolerance. What it does not do yet:
+
+- [ ] Match the block's rotation. Only the displacement of its centre is tuned and judged; the overlap at the end frame was 0.39.
+- [ ] Fit mass and friction. The push path is tuned; the physics parameters are not.
+- [ ] Estimate the camera pose from the clip. The simulated view is set by hand, so only the block's mask is compared.
+- [ ] Take the pusher's path from the clip. `tune_push` searches a straight two-point path.
+- [ ] Make `report` say when the file is complete; it returns `running` and the caller cannot tell.
+- [ ] The RoboSimStudio viewer listens on every network interface and has no localhost-only option at the tested pin.
+- [ ] A hand-written scene that keeps RoboSimStudio's default physics runs free bodies on its VBD solver on a GPU, which
+  ignores the pusher. The tool reports this, but only the built-in template selects MuJoCo by itself.
+- [ ] Repeat the GPU and CPU comparison over more clips and seeds; one pair was run for the T block.
+
 ## Release and compatibility
 
 - [ ] Recheck guards and Jenga on both supported builds after the latest changes. Report failures separately; a passing host
@@ -83,6 +101,10 @@ What does not work or is not yet done:
 - [ ] Investigate the original 6.0.1 windowed PhysX step stall and fresh-Kit camera reuse; later non-reproduction is not a fix.
 - [ ] Validate clean-machine setup, the full installer, external Lab discovery, and the supported ROS and display combinations
   before making broader compatibility claims.
+- [ ] Re-run BrickSim on Isaac Sim 5.1 after the rename; it was skipped because its launcher has no headless option on the
+  test PC.
+- [ ] Run the work-cell smoke once from the new workspace layout (`<home>/robotics-workspace` with `assets/`); the work cell's
+  asset-root lookup for it is covered by unit tests only.
 - [ ] When a release is requested, review licensing and notices, name availability and PyPI installation using
   [publishing](PUBLISHING.md) and [provenance](VENDORING.md). A release states the engine and Isaac Sim build it was qualified on.
 
@@ -122,6 +144,9 @@ What does not work or is not yet done:
 
 ## Tool surface and reliability
 
+- [ ] Decide the seven shorter names proposed for listed tools during the rename (the list is in the rename pull request).
+- [ ] Regroup the host modules into subpackages; the rename left the flat layout.
+- [ ] Add live smoke checks for the `ros2`, `assets`, `screen`, `code` and `kit_debug` toolsets; `scripts/smoke.py` has none.
 - [ ] Inventory the registered tools, arguments, results, side effects and usage. Propose a keep, combine or remove list and a
   compatibility plan to the owner before changing public contracts.
 - [ ] Review the work-cell tool descriptions, partial outcomes, confirmations and destructive effects. Keep existing behaviour
