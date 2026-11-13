@@ -685,7 +685,7 @@ Read a rigid body's world pose while running. Initialized pose on the selected P
 
 Listed as `sim__camera(action="capture")`.
 
-Capture an RTX camera image to a PNG. Camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true. Requires session_id and stage_id from sim__stage__info.
+Capture an RTX camera image to a PNG. Camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true. The result has a physics_render field. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -909,7 +909,7 @@ Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. confi
 
 Listed as `sim__lidar(action="read")`.
 
-Read LiDAR return points. CPU Cartesian points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true. Requires session_id and stage_id from sim__stage__info.
+Read LiDAR return points. CPU Cartesian points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true. The result has a physics_render field. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -1017,6 +1017,10 @@ Create a preview-surface or physics material. A UsdPreviewSurface or physics mat
 - `color` (array, default `[0.5, 0.5, 0.5]`): RGB 0..1.
 - `roughness` (number, default `0.5`): 0..1.
 - `metallic` (number, default `0`): 0..1.
+- `kind` (string, default `"pbr"`): pbr or physics.
+- `static_friction` (number, default `0.5`): Physics material static friction 0..10.
+- `dynamic_friction` (number, default `0.5`): Physics material dynamic friction 0..10.
+- `restitution` (number, default `0`): Physics material restitution 0..1.
 
 ### `sim__physics__apply`
 
@@ -1033,26 +1037,28 @@ Add or remove colliders and rigid bodies, set mass. Add or remove a collider, ri
 - `kinematic` (boolean, optional): Kinematic flag (physics:kinematicEnabled); needs a rigid body on this prim.
 - `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density.
 - `density` (number, optional): Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.
-- `impulse` (array, optional): A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing.
+- `impulse` (array, optional): A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing. On Newton it is applied as impulse/(dt/substeps) force in the next step's first substep.
 - `at` (array, optional): With impulse: the world point [x, y, z] to push at. Default: the body's centre.
 
 ### `sim__physics__configure`
 
 Listed as `sim__physics(action="configure")`.
 
-Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. Requires session_id and stage_id from sim__stage__info.
+Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver's contact and constraint buffers, reported as newton_buffers. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): PhysicsScene prim path.
 - `gravity` (array, default `[0, 0, -9.81]`): Acceleration vector in stage units/s^2.
 - `dt` (number, default `0.016666666666666666`): Physics timestep seconds, 1/1000..1/10.
+- `nconmax` (integer, optional): Newton only: MuJoCo-Warp contact buffer per world. Default: sized from the rigid-body count. Refused on PhysX.
+- `njmax` (integer, optional): Newton only: constraint rows per world; same rules as nconmax.
 
 ### `sim__physics__contacts`
 
 Listed as `sim__physics(action="contacts")`.
 
-Read current PhysX contact pairs and impulses. For up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with PhysxContactReportAPI report; paths without it are listed with the fix, and a call where none report refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
+Read current contact pairs: PhysX impulses, or on Newton the last step's summed world-frame force in N on collider_a (impulse is null). For up to 32 bodies from the last delivered contact report. Subscribes on first use or Play. Only colliders with PhysxContactReportAPI report; others are listed with the fix, and none reporting refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED only if forces are unavailable. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -1062,7 +1068,7 @@ Read current PhysX contact pairs and impulses. For up to 32 bodies from the last
 
 Listed as `sim__physics(action="inspect")`.
 
-Report authored collision, body, mass and joints. A bounded report that includes articulations. Does not assert initialized or stable physics. Requires session_id and stage_id from sim__stage__info.
+Report authored collision, body, mass and joints. A bounded report that includes articulations. Does not assert initialized or stable physics. On Newton it adds a newton section (configured buffers, active contacts and constraints against capacity, overflow flags) and warnings CONTACT_BUFFER_FULL, CONSTRAINT_BUFFER_FULL, NEWTON_SOLVER_OVERFLOW, NEWTON_SOLVER_NOT_CONVERGED. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -1215,13 +1221,14 @@ Set a static pose on any Xformable prim. Local or world, in the session layer; r
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Absolute Xformable prim path.
+- `scale` (array, optional): Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.
 
 ### `sim__quick_start`
 
-One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns session_id, stage_id, paths and next steps. For the RISE lab UR5e twin, use ur5e_dt__quick_start.
+One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer; sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns IDs, paths and next steps; on Newton a newton field (rate, buffers). For the RISE lab UR5e twin, use ur5e_dt__quick_start.
 
 - `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.
 - `fixed_base` (boolean, optional): Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
@@ -1281,7 +1288,7 @@ Run your own controller in the physics loop as a job. Each step gets the body's 
 
 Listed as `sim__simulation(action="step")`.
 
-Advance exact physics steps while paused. 1..120 steps on the selected PhysX or qualified Newton backend, PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. Requires session_id and stage_id from sim__stage__info.
+Advance exact physics steps while paused. 1..120 steps on PhysX or qualified Newton, PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Returns measured time delta, poses for observe_prims, DOFs for observe_joints. A failure after stepping reports the clock and phase. No retry or rollback. On Newton it first refuses STEP_DT_SOURCES_DISAGREE if the scene's timestep differs from Newton's, and adds a newton section. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.

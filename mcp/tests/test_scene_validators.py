@@ -48,3 +48,19 @@ def test_equivalents_validator_names_the_missing_root():
     equivalents.require_root({"roots": [{"root_id": "agilebot"}]}, "agilebot")
     with pytest.raises(SystemExit, match="VENDORING.md"):
         equivalents.require_root({"roots": [{"root_id": "fixture"}]}, "agilebot")
+
+
+def test_tool_listing_check_compares_the_listing_with_the_toolset_registry():
+    tools = _validator("validate_scene_tools")
+    sys.path.insert(0, str(ROOT / "mcp"))
+    from isaac_mcp import config, toolsets
+
+    default = config.select("default")
+    listed = asyncio.run(tools.promised_tools(default))
+    assert {"sim__prim", "run_python", "status"} <= listed and not {"sim__logs", "ur5e_dt__workcell"} & listed
+    assert asyncio.run(tools.check_registry(listed, default))["listed"] == len(listed)
+    with pytest.raises(AssertionError, match="listed_but_not_promised"):
+        asyncio.run(tools.check_registry(listed | {"ur5e_dt__workcell"}, default))
+    with pytest.raises(AssertionError, match="promised_but_not_listed"):
+        asyncio.run(tools.check_registry(listed - {"sim__prim"}, default))
+    assert toolsets.owner("sim__prim") in default

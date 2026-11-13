@@ -7,6 +7,7 @@ fresh Sim. Records actual tool results; never uses run_python or bridge APIs.
 import argparse
 import asyncio
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -15,6 +16,31 @@ import time
 from scene_mcp_client import parameters, call
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client
+from isaac_mcp import config, toolsets, tool_groups
+
+
+async def promised_tools(enabled):
+    """What the toolset registry promises a client is shown for ``enabled``: every tool a full server
+    registers whose owner (mcp/isaac_mcp/toolsets.py) is an enabled toolset."""
+    from isaac_mcp import server
+
+    universe = server.build_server(env={**os.environ, "ISAAC_MCP_TOOLSETS": "all,+input,+launch"})
+    return {tool.name for tool in await universe.list_tools() if toolsets.owner(tool.name) in enabled}
+
+
+async def check_registry(listed_names, enabled):
+    """The listed tools equal what the enabled toolsets promise: nothing from a disabled toolset is
+    listed, nothing an enabled toolset owns is missing, and each toolset's root tools are present."""
+    listed_names = set(listed_names)
+    promised = await promised_tools(enabled)
+    extra, missing = sorted(listed_names - promised), sorted(promised - listed_names)
+    assert not extra and not missing, {"toolsets": sorted(enabled), "listed_but_not_promised": extra,
+                                       "promised_but_not_listed": missing}
+    for name in sorted(enabled):
+        roots = set(toolsets._ROOTS.get(name, "").split())
+        absent = sorted(roots - listed_names)
+        assert not absent, {"toolset": name, "roots_not_listed": absent}
+    return dict(enabled=sorted(enabled), listed=len(listed_names))
 
 
 async def validate(port, output, backend=None):
@@ -23,9 +49,10 @@ async def validate(port, output, backend=None):
         async with ClientSession(r, w) as c:
             await c.initialize()
             listed = await c.list_tools()
-            assert (
-                len([t for t in listed.tools if t.name.startswith("ur5e_dt__")]) == 23
-            )
+            enabled = config.select(parameters(port).env["ISAAC_MCP_TOOLSETS"])
+            registry = await check_registry([t.name for t in listed.tools], enabled)
+            on = (await call(c, "status", {}))["result"].get("toolsets", {}).get("on")
+            assert on is None or set(on) == enabled, {"status_toolsets_on": on, "expected": sorted(enabled)}
 
             async def invoke(name, args=None, expect_error=False):
                 item = await call(c, name, args or {})
@@ -183,6 +210,7 @@ async def validate(port, output, backend=None):
             dict(
                 passed=True,
                 calls=len(transcript),
+                registry=registry,
                 pid=info["pid"],
                 port=port,
                 gravity_before=before["world_position"],

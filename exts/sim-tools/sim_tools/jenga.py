@@ -22,6 +22,9 @@ TOWER_XY = (0.7, 0.0)
 BLOCK = (0.15, 0.05, 0.03)  # length, width, height
 BLOCK_MASS = 0.12
 LAYERS = 18
+# MuJoCo-Warp's contact softness does not hold a stack of 18 layers at PhysX's 120 Hz: measured on Sim 6.2 with Newton 1.6.1, the tower
+# flew apart within 0.13 s at 120 Hz (non-finite by 0.6 s), jittered at 240 Hz, and held for 10 s at 360 Hz (1.2 mm) and 500 Hz (1.7 mm).
+NEWTON_HZ = 500  # the quick scene's rate too, so a Newton session has one timestep
 SIDE_GAP = 0.0005  # between the blocks of a layer: a real tower's blocks are not jammed together
 LOOSE = 0.0004  # the middle block of an odd layer is this much thinner, so the layer above rests on its sides. Blocks of one height leave the
 # split of the load to the solver: on Sim 5.1 it put it on the middle block, and pushing that carried the whole upper tower with it.
@@ -141,7 +144,7 @@ def build(stage, backend="physx", timeline=None) -> dict:
             from .newton_support import apply_buffers, prepare_buffers, scene_settings
 
             try:
-                newton["newton_settings"] = scene_settings(scene, 120, tower=True)
+                newton["newton_settings"] = scene_settings(scene, NEWTON_HZ, tower=True)
                 config, newton["newton_buffers"] = prepare_buffers(stage, scene, timeline)
                 apply_buffers(config)
             except AssetError as exc:
@@ -149,9 +152,9 @@ def build(stage, backend="physx", timeline=None) -> dict:
     top = TABLE_TOP + LAYERS * BLOCK[2]
     return dict(prim=ROOT, blocks=LAYERS * 3, layers=LAYERS, block_size_m=list(BLOCK), block_mass_kg=BLOCK_MASS, table_top_z=TABLE_TOP,
                 tower_xy=list(TOWER_XY), tower_top_z=round(top, 4), top_block=block_path(LAYERS - 1, 1), robot_base=list(ROBOT_BASE),
-                hand_link=HAND_LINK, poke_example=poke_targets(), physics_hz=120, **newton,
+                hand_link=HAND_LINK, poke_example=poke_targets(), physics_hz=NEWTON_HZ if backend == "newton" else 120, **newton,
                 note="Blocks are twice real size so a fingertip fits one layer." + (
-                    " The Newton settings are untuned until a live tower-stability check (scripts/smoke/newton_checks.py) has passed."
+                    " The Newton settings come from the live tower check (scripts/smoke/newton_checks.py)."
                     if backend == "newton" else ""))
 
 
