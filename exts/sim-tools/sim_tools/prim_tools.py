@@ -337,6 +337,12 @@ class PrimTools:
 
     def physics_push(self, stage, a):
         """A one-off impulse on a body in the running simulation: edits nothing and needs no stopped timeline."""
+        from .physics import manager
+
+        if manager().get_active_physics_engine() == "newton":
+            refuse("IMPULSE_UNSUPPORTED", "Newton exposes tensor forces, not an atomic one-shot impulse. "
+                   "Use sim__simulation(action='run') with a force controller and explicit duration; "
+                   "no force, velocity change, or physics step was applied.", backend="newton")
         import carb
         import omni.physx
         import omni.usd
@@ -361,7 +367,7 @@ class PrimTools:
         omni.physx.get_physx_simulation_interface().apply_force_at_pos(
             stage_id, PhysicsSchemaTools.sdfPathToInt(prim.GetPath()), carb.Float3(*[float(v) for v in impulse]), carb.Float3(*[float(v) for v in at]), "Impulse")
         return dict(path=path, impulse=list(impulse), at=[float(v) for v in at], unit="N s (kg m/s)",
-                    note="One push; it takes effect on the next physics step. PhysX only: on Newton this may do nothing.")
+                    backend="physx", note="One push; it takes effect on the next physics step.")
 
     def physics_apply(self, stage, a):
         from pxr import UsdPhysics
@@ -718,6 +724,14 @@ class PrimTools:
             refuse("WRONG_TYPE", "Not a PhysicsScene.")
         gravity = vector(a.get("gravity", [0, 0, -9.81]), 3)
         dt = scalar(a.get("dt", 1 / 60), 0.001, 0.1)
+        engine = sm.get_active_physics_engine()
+        buffer_config, buffer_report = None, None
+        if engine == "newton":
+            from .newton_support import prepare_buffers
+
+            buffer_config, buffer_report = prepare_buffers(stage, prim, s.timeline, a.get("nconmax"), a.get("njmax"))
+        elif any(a.get(key) is not None for key in ("nconmax", "njmax")):
+            refuse("NEWTON_CONFIG_UNSUPPORTED", "nconmax/njmax are Newton MuJoCo settings, not PhysX settings.")
         length = math.sqrt(sum(x * x for x in gravity))
         direction = (
             Gf.Vec3f(*[x / length for x in gravity])
@@ -735,31 +749,16 @@ class PrimTools:
                     rate
                 )
             else:
-                if not prim.ApplyAPI("NewtonSceneAPI"):
-                    refuse(
-                        "PHYSICS_API_UNAVAILABLE",
-                        "NewtonSceneAPI is unavailable; gravity may already have been authored.",
-                    )
-                prim.GetAttribute("newton:timeStepsPerSecond").Set(rate)
-                solver_attr = prim.GetAttribute("newton:solver")
-                solver = solver_attr.Get() if solver_attr else None
-                if solver in (None, "", "mjcwarp", "mujoco"):
-                    # Newton parses its outer rate from NewtonSceneAPI,
-                    # while SimulationManager's MuJoCo wrapper reads this
-                    # solver-specific timestep. Author the public schema:
-                    # 6.0.0.0 ships the wrapper but does not export its class.
-                    if not prim.ApplyAPI("MjcSceneAPI"):
-                        refuse(
-                            "PHYSICS_API_UNAVAILABLE",
-                            "MjcSceneAPI unavailable; inspect partial scene configuration.",
-                        )
-                    attr = prim.GetAttribute("mjc:option:timestep")
-                    if not attr or not attr.Set(1 / rate):
-                        refuse(
-                            "PHYSICS_API_UNAVAILABLE",
-                            "MuJoCo timestep unavailable; inspect partial scene configuration.",
-                        )
-        return dict(path=a["path"], gravity=gravity, dt=1 / rate, requested_dt=dt)
+                from .newton_support import scene_settings
+
+                scene_settings(prim, rate)
+        result = dict(path=a["path"], gravity=gravity, dt=1 / rate, requested_dt=dt)
+        if buffer_config is not None:
+            from .newton_support import apply_buffers
+
+            apply_buffers(buffer_config)
+            result["newton_buffers"] = buffer_report
+        return result
 
     def tool_prim_set_attribute(self, name, stage, a, camera_frame=None):
         return self.set_attribute(stage, a)

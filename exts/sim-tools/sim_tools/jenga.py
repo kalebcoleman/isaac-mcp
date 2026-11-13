@@ -69,7 +69,7 @@ def poke_targets(layer: int = 9):
                 ik=dict(link=HAND_LINK, offset=[0.0, 0.0, ROD_TIP], orientation=HAND_LEVEL))
 
 
-def build(stage) -> dict:
+def build(stage, backend="physx", timeline=None) -> dict:
     """Author the table and the tower; returns what was built."""
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         UsdGeom.Xform.Define(stage, ROOT)
@@ -85,6 +85,10 @@ def build(stage) -> dict:
         xform.AddScaleOp().Set(Gf.Vec3f(TABLE_SIZE[0], TABLE_SIZE[1], TABLE_TOP))
         table.CreateDisplayColorAttr([Gf.Vec3f(0.3, 0.32, 0.36)])
         UsdPhysics.CollisionAPI.Apply(table.GetPrim())
+        if backend == "newton":
+            from .newton_support import collision_settings
+
+            collision_settings(table.GetPrim())
         UsdShade.MaterialBindingAPI.Apply(table.GetPrim()).Bind(material, UsdShade.Tokens.weakerThanDescendants, "physics")
         UsdGeom.Xform.Define(stage, f"{ROOT}/Tower")
         for layer, index, along_x, x, y, z in block_centers():
@@ -107,13 +111,23 @@ def build(stage) -> dict:
             collision = PhysxSchema.PhysxCollisionAPI.Apply(prim)
             collision.CreateContactOffsetAttr(0.004)
             collision.CreateRestOffsetAttr(0.0)
+            if backend == "newton":
+                collision_settings(prim)
         scene = stage.GetPrimAtPath("/World/PhysicsScene")
         if scene:
             PhysxSchema.PhysxSceneAPI.Apply(scene).CreateTimeStepsPerSecondAttr(120)
+        newton = {}
+        if backend == "newton":
+            from .newton_support import apply_buffers, prepare_buffers, scene_settings
+
+            config, buffers = prepare_buffers(stage, scene, timeline)
+            newton = dict(newton_settings=scene_settings(scene, 120, tower=True), newton_buffers=buffers)
+            apply_buffers(config)
     top = TABLE_TOP + LAYERS * BLOCK[2]
     return dict(prim=ROOT, blocks=LAYERS * 3, layers=LAYERS, block_size_m=list(BLOCK), block_mass_kg=BLOCK_MASS, table_top_z=TABLE_TOP,
                 tower_xy=list(TOWER_XY), tower_top_z=round(top, 4), top_block=block_path(LAYERS - 1, 1), robot_base=list(ROBOT_BASE),
-                hand_link=HAND_LINK, poke_example=poke_targets(), physics_hz=120, note="Blocks are twice real size so a fingertip fits one layer.")
+                hand_link=HAND_LINK, poke_example=poke_targets(), physics_hz=120, **newton,
+                note="Blocks are twice real size so a fingertip fits one layer; Newton tuning requires live stability qualification.")
 
 
 def _add_rod(stage, hand):

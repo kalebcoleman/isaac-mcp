@@ -52,6 +52,9 @@ def raycast(origin, direction, max_distance=100, all_hits=False, timeline=None):
     length = math.sqrt(sum(x * x for x in direction))
     used_direction = [x / length for x in direction]
     engine = _engine().get_active_physics_engine()
+    if engine == "newton":
+        refuse("RAYCAST_UNSUPPORTED", "Isaac Sim 6.2 Newton handle_raycast is a stub with no hit data. "
+               "Use an explicitly selected PhysX session for collision raycasts; no fallback was attempted.", backend=engine)
     _physx_only(engine, "RAYCAST_UNSUPPORTED", "Raycasting")
     base = dict(
         origin=origin,
@@ -213,13 +216,17 @@ def contacts(paths, stage, timeline=None):
     if any(not isinstance(p, str) or not p.startswith("/") for p in paths):
         refuse("INVALID_VALUE", "Every path must be an absolute prim path.")
     engine = _engine().get_active_physics_engine()
-    _physx_only(engine, "CONTACT_QUERY_UNSUPPORTED", "Contact-report reading")
     if timeline is not None and timeline.is_stopped():
         refuse(
             "PHYSICS_NOT_READY",
             "The timeline is stopped, so there is no current contact report. Play and step, then call "
             "again while paused or playing.",
         )
+    if engine == "newton":
+        from .newton_support import contacts as newton_contacts
+
+        return newton_contacts(paths, stage)
+    _physx_only(engine, "CONTACT_QUERY_UNSUPPORTED", "Contact-report reading")
     try:
         from pxr import PhysxSchema
     except ImportError:

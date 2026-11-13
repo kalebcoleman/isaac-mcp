@@ -417,7 +417,9 @@ async def run(ext, args):
     elif environment == "jenga":
         from . import jenga
 
-        environment_report = jenga.build(stage)
+        from .physics import manager
+
+        environment_report = jenga.build(stage, backend=manager().get_active_physics_engine(), timeline=scene.timeline)
     result = dict(
         **paths, up_axis=up_axis, meters_per_unit=meters_per_unit, stage_switched=not (reuse or add_to_scene),
         discarded_changes=discarded, **({"kept_scene": "The robot was added to the scene you had; nothing else changed."}
@@ -521,6 +523,12 @@ async def run(ext, args):
         except AssetError as exc:  # the scene exists: say why ROS is not up, and keep it
             result["ros"] = dict(error=exc.code, message=str(exc)[:600], shell=shell)
     ids = dict(session_id=info["session_id"], stage_id=info["stage_id"])
+    if environment == "jenga" and "newton_buffers" in environment_report:
+        from .newton_support import apply_buffers, prepare_buffers
+
+        config, buffers = prepare_buffers(stage, stage.GetPrimAtPath(PHYSICS_SCENE), scene.timeline)
+        apply_buffers(config)
+        result["environment"]["newton_buffers"] = buffers
     if play:
         await ext._timeline_control(dict(ids, action="play"))
         for _ in range(4):  # articulations initialize on the frames after Play

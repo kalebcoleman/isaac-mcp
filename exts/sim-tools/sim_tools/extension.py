@@ -874,7 +874,7 @@ class Extension(omni.ext.IExt):
         if name in ("sim.stage.tree", "sim.physics.inspect"):
             nodes, truncated = bounded(stage, a.get("root", "/"), a.get("limit", 100), a.get("depth"),
                                        a.get("include_runtime", name == "sim.physics.inspect"))
-            return dict(
+            result = dict(
                 nodes=[
                     dict(
                         path=str(p.GetPath()),
@@ -886,6 +886,14 @@ class Extension(omni.ext.IExt):
                 ],
                 truncated=truncated,
             )
+            if name == "sim.physics.inspect":
+                from .physics import manager
+
+                if manager().get_active_physics_engine() == "newton":
+                    from .newton_support import diagnostics
+
+                    result["newton"] = diagnostics(stage)
+            return result
         if name == "sim.prim.find":
             contains = a.get("contains", "")
             kind = a.get("type_name", "")
