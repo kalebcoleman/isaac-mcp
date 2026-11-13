@@ -23,7 +23,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Callable, Iterable
+from typing import Annotated, Any, Callable, Iterable
 
 from pydantic import Field
 
@@ -35,6 +35,8 @@ from Xlib.protocol import event as xevent
 
 from mcp.server.fastmcp import FastMCP, Image
 
+from . import toolsets
+from .client import BridgeClient, BridgeError
 from .local_tools import ADDITIVE, IDEMPOTENT_WRITE, READ_ONLY, ScopedTools
 
 _WindowTitle = Annotated[str | None, Field(description="Window title or WM class substring, from list_windows.")]
@@ -42,7 +44,8 @@ _WindowId = Annotated[int | None, Field(description="Window id from list_windows
 _ExpectedPid = Annotated[int | None, Field(description="Refuse unless the window belongs to this PID, from list_windows.")]
 _Monitor = Annotated[int | None, Field(description="1-based monitor index from screen_info; 0 means all monitors combined.")]
 
-DISPLAY = os.environ.get("DISPLAY") or ":0"
+ENV_DISPLAY = os.environ.get("DISPLAY")  # as the session gave it, before the default below
+DISPLAY = ENV_DISPLAY or ":0"
 os.environ.setdefault("DISPLAY", DISPLAY)
 
 MAX_WINDOW_WAIT_S = 600
@@ -50,6 +53,7 @@ WINDOW_WAIT_POLL_S = 0.5
 MAX_LOG_MARKER_CHARS = 256
 LOG_MARKER_WARN_S = 30.0
 SHOT_DIR = Path.home() / "Pictures" / "twinsmith"
+SHOT_MAX_WIDTH = 1600  # screenshot's inline width cap
 VIDEO_DIR = Path.home() / "Videos" / "twinsmith"
 
 
@@ -1436,7 +1440,7 @@ def map_point(coord_space: str | None, x: int, y: int, width: int, height: int) 
 
 
 def capture(monitor: int | None = None, window: str | None = None, window_id: int | None = None,
-            max_width: int = 1600, label: str | None = None, region: list[int] | None = None,
+            max_width: int = SHOT_MAX_WIDTH, label: str | None = None, region: list[int] | None = None,
             coord_space: str = "window", auto: Callable[[], dict | None] | None = None) -> list:
     """What the screenshot tool returns: [Image, caption]. Also used after an action (screenshot_after)
     and for zooms, so there is one capture path. ``auto`` picks the default window when none is named."""
@@ -1494,6 +1498,117 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
     return [Image(data=buf.getvalue(), format="png"), caption]
 
 
+# ---------------------------------------------------------------- readiness (doctor)
+
+BRIDGE_PROBE_S = 3.0
+
+
+def display_backend(session_type: str | None, wayland: str | None, x_display: str | None) -> str:
+    """x11, xwayland (an X server inside a Wayland session), wayland (no X server named) or none."""
+    if (session_type or "").lower() == "wayland" or wayland:
+        return "xwayland" if x_display else "wayland"
+    return "x11" if x_display else "none"
+
+
+def _x_extensions() -> dict:
+    """Whether the X server has XTEST (synthetic input) and SHAPE (the cursor badge). Never raises."""
+    try:
+        disp = _xdisplay()
+    except RuntimeError:
+        return {"error": f"cannot open X display {DISPLAY}"}
+    try:
+        return {"xtest": bool(disp.has_extension("XTEST")), "shape": bool(disp.has_extension("SHAPE"))}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"X server query failed: {type(exc).__name__}"}
+    finally:
+        disp.close()
+
+
+def _kit_window(port: int | None) -> dict:
+    """The selected bridge's own window, by its PID (never by title). Never raises."""
+    pid = _bridge_pid(port)
+    if not pid:
+        return {"found": False, "reason": "no live Kit advertises this bridge's port"}
+    win = window_for_pid(pid)
+    if not win:
+        return {"found": False, "pid": pid, "reason": "the Kit process has no visible window"}
+    return {"found": True, "id": win["id"], "pid": pid}
+
+
+def _bridge_reason(exc: Exception) -> str:
+    """A short cause, without the runtime paths some messages carry."""
+    if isinstance(exc, ConnectionRefusedError):
+        return "connection refused: no Kit listens on this port (stale or stopped bridge)"
+    if isinstance(exc, TimeoutError):
+        return f"no reply within {BRIDGE_PROBE_S:g} s: Kit is busy or still starting"
+    if isinstance(exc, RuntimeError):
+        return ("several bridges are advertised: pick one with use_bridge" if "multiple" in str(exc)
+                else "no bridge is advertised and no port is set")
+    return f"{type(exc).__name__}: {str(exc)[:100]}"
+
+
+def kit_readiness(host: str | None, port: int | None) -> dict:
+    """Kit's UI readiness from ``sim.ui.find(readiness=true)`` on a connection of its own, so a long call
+    on the shared one cannot hold it up. Never raises."""
+    try:
+        with BridgeClient(host=host, port=port, timeout=BRIDGE_PROBE_S) as client:
+            # limit=0: a sim-tools that predates readiness refuses LIMIT before it walks the widgets or
+            # enables omni.kit.ui_test, so the probe stays read-only on any version.
+            answer = client.call("sim.ui.find", {"readiness": True, "limit": 0})
+    except BridgeError as exc:
+        answer = {"status": "error", "code": exc.details.get("code"), "message": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - no bridge, stale portfile, refused, timed out
+        return {"reachable": False, "reason": _bridge_reason(exc)}
+    answer = answer if isinstance(answer, dict) else {}
+    if answer.get("code") == "NO_UI":   # an older sim-tools checks headless first
+        return {"reachable": True, "headless": True, "ui_test_enabled": "unknown"}
+    if answer.get("status") == "error" and answer.get("code") != "LIMIT":
+        return {"reachable": True, "readiness": "unknown",
+                "reason": f"{answer.get('code') or 'error'}: {str(answer.get('message', ''))[:100]}"}
+    if "ui_test_enabled" not in answer:
+        return {"reachable": True, "readiness": "unknown",
+                "reason": "this Kit's sim-tools predates the readiness probe: restart Kit from this checkout"}
+    keep = ("ui_test_enabled", "dpi_scale", "main_window", "headless")
+    return {"reachable": True, **{key: answer.get(key) for key in keep}}
+
+
+def doctor_report(port: int | None, host: str | None, enabled: Iterable[str], runtime_enable: bool,
+                  cursor_badge: bool) -> dict:
+    """What the doctor tool answers: each probe's value or short reason, and what to fix first."""
+    enabled = frozenset(enabled)
+    backend = display_backend(os.environ.get("XDG_SESSION_TYPE"), os.environ.get("WAYLAND_DISPLAY"), ENV_DISPLAY)
+    x11 = _x_extensions()
+    locked = _probe_locked()
+    bridge = kit_readiness(host, port)
+    if "error" in x11:
+        computer = ("pure Wayland: computer needs an X11 or XWayland session" if backend == "wayland"
+                    else f"{x11['error']}: computer needs a desktop session")
+    elif not x11["xtest"]:
+        computer = "the X server lacks XTEST, so computer cannot send input"
+    elif locked:
+        computer = "the screen is locked, so X11 input reaches the lock screen: use sim__ui for Isaac Sim"
+    elif "input" not in enabled:
+        computer = "the input toolset is off. " + toolsets.enable_hint(["input"], runtime_enable)
+    else:
+        computer = True
+    if not bridge["reachable"]:
+        sim_ui = f"no bridge answers, {bridge['reason']}. Start Isaac Sim or pick a bridge with use_bridge"
+    elif bridge.get("headless"):
+        sim_ui = "this Kit is headless: sim__ui needs a windowed Isaac Sim"
+    elif "reason" in bridge:
+        sim_ui = bridge["reason"]
+    elif "kit_debug" not in enabled:
+        sim_ui = "the kit_debug toolset is off. " + toolsets.enable_hint(["kit_debug"], runtime_enable)
+    else:
+        sim_ui = True
+    blockers = [f"{name}: {why.rstrip('.')}" for name, why in (("computer", computer), ("sim__ui", sim_ui)) if why is not True]
+    return {"backend": backend, "display": ENV_DISPLAY, "x11": x11, "locked": locked,
+            "input_toolset": "input" in enabled, "cursor_badge": bool(cursor_badge), "kit_window": _kit_window(port),
+            "bridge": {"port": port, **bridge}, "screenshot_max_width": SHOT_MAX_WIDTH,
+            "ready": {"computer": computer is True, "sim__ui": sim_ui is True},
+            "next": "; ".join(blockers) or "computer and sim__ui are ready"}
+
+
 # -------------------------------------------------------------------- tools
 
 
@@ -1501,11 +1616,13 @@ def register_screen_tools(
     server: FastMCP,
     port_provider: Callable[[], int | None] | None = None,
     groups: Iterable[str] | None = None,
+    state: Any = None,
 ) -> None:
     """Register screen tools when the screen toolset is enabled.
 
-    The capture directories are created only when ``screen`` is enabled, so a profile
-    without it leaves the filesystem alone."""
+    ``state`` is the server's bridge state: doctor reads its toolsets, client and config when called,
+    since toolsets can change at run time. The capture directories are created only when ``screen``
+    is enabled, so a profile without it leaves the filesystem alone."""
     mcp = ScopedTools(server, groups)
     if mcp.enabled("screen"):
         SHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1567,6 +1684,20 @@ def register_screen_tools(
         if _last:
             lines.append(f"last recording: {_last.get('path')} ({_last.get('duration_s')}s)")
         return "\n".join(lines)
+
+    @mcp.tool(annotations=READ_ONLY)
+    def doctor() -> str:
+        """Check whether desktop input (computer) and Isaac Sim UI control (sim__ui) can work here, and what to fix."""
+        port = host = None
+        try:
+            port = port_provider() if port_provider else None
+            client = getattr(state, "client", None)
+            host = client.host if client is not None else None
+        except Exception:  # noqa: BLE001 - nothing pinned and discovery found none or several
+            pass
+        return json.dumps(doctor_report(port, host, getattr(state, "toolsets", mcp.groups),
+                                        getattr(state, "runtime_enable", True),
+                                        getattr(getattr(state, "config", None), "cursor_badge", False)))
 
     @mcp.tool(annotations=READ_ONLY)
     def list_windows(filter: Annotated[str | None, Field(description="Keep windows whose title or WM class contains this.")] = None) -> str:
@@ -1714,7 +1845,7 @@ def register_screen_tools(
         monitor: _Monitor = None,
         window: _WindowTitle = None,
         window_id: _WindowId = None,
-        max_width: Annotated[int, Field(description="Inline image width cap in pixels, 320-3840. The saved PNG stays full size.")] = 1600,
+        max_width: Annotated[int, Field(description="Inline image width cap in pixels, 320-3840. The saved PNG stays full size.")] = SHOT_MAX_WIDTH,
         label: Annotated[str | None, Field(description="Short name added to the saved file, e.g. 'push_done'. Letters, digits, - and _ only; other characters become _; max 40.")] = None,
         region: Annotated[list[int] | None, Field(description="Zoom: [x, y, width, height] of the window to crop, in the space coord_space names; returned enlarged.")] = None,
         coord_space: Annotated[str, Field(description="window (default) or a coord_space token from an earlier screenshot, for region.")] = "window",
