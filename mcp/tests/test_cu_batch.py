@@ -88,12 +88,22 @@ def test_a_failed_capture_keeps_the_batch_failure(batch, monkeypatch):
     {"action": "key", "key": "a", "modifiers": ["hyper"]},
     {"action": "key", "key": "a", "modifiers": "ctrl"},
     {"action": "move", "x": 1, "y": 2},
+    {"action": "click", "x": 300, "y": 2},                       # outside the 300x200 window
+    {"action": "drag", "x": 1, "y": 1, "end_x": 1, "end_y": 200},
     "click",
 ])
 def test_a_malformed_later_step_sends_nothing(batch, bad):
     with pytest.raises(ValueError, match=r"actions\[1\]: .*nothing was sent"):
         batch.run([CLICK, bad])
     assert not batch.disp.events and not batch.locks
+
+
+def test_each_step_probes_the_screen_lock_again(batch, monkeypatch):
+    states = iter([False, True])
+    monkeypatch.setattr(desktop.screen, "_probe_locked", lambda: next(states))
+    with pytest.raises(RuntimeError, match=r"actions\[1\] \(type\) failed: the desktop is locked.*1 of 2"):
+        batch.run([CLICK, {"action": "type", "text": "secret"}])
+    assert events(batch.disp, X.ButtonPress) == [1] and not events(batch.disp, X.KeyPress)
 
 
 def test_batch_maps_every_point_before_input(batch):
@@ -200,11 +210,13 @@ def test_kit_batch_runs_each_step_and_reports_completed(kit):
 
 
 def test_kit_batch_stops_at_the_failing_step_and_says_input_was_sent(kit):
+    workspace = sys.modules["omni.ui"].Workspace
+    workspace.get_window, workspace.get_windows = lambda title: None, lambda: []  # found only when its step runs
     with pytest.raises(kit.ui.UIRefusal) as err:
-        kit.run({"actions": [{"action": "click", "x": 10, "y": 20}, {"action": "click", "x": 900, "y": 20},
+        kit.run({"actions": [{"action": "click", "x": 10, "y": 20}, {"action": "tab", "window": "Console"},
                              {"action": "type", "text": "never"}]})
     exc = err.value
-    assert exc.code == "OUT_OF_WINDOW" and str(exc).startswith("actions[1] (click):")
+    assert exc.code == "NO_WINDOW" and str(exc).startswith("actions[1] (tab):")
     assert exc.details["completed"] == 1 and exc.details["failed_index"] == 1 and len(exc.details["steps"]) == 1
     assert "No input was sent" not in exc.effects and "sent input" in exc.effects
     assert ("char", "n") not in kit.sent and sum(kind == "LEFT_BUTTON_DOWN" for kind, _ in kit.sent) == 1
@@ -212,7 +224,7 @@ def test_kit_batch_stops_at_the_failing_step_and_says_input_was_sent(kit):
 
 def test_kit_batch_failing_first_step_keeps_the_no_input_rule(kit):
     with pytest.raises(kit.ui.UIRefusal) as err:
-        kit.run({"actions": [{"action": "click", "x": 900, "y": 20}]})
+        kit.run({"actions": [{"action": "click", "ref": "Stage//Frame/Button[0]"}]})  # no fingerprint: refused
     assert err.value.effects is None and err.value.details["completed"] == 0  # extension.py: "No input was sent."
     assert not kit.sent
 
@@ -229,12 +241,14 @@ def test_kit_batch_failing_first_step_keeps_the_no_input_rule(kit):
     ({"x": 5, "actions": [{"action": "click", "x": 1, "y": 1}]}, "give x inside each step"),
     ({"scroll_y": 2, "actions": [{"action": "wait"}]}, "give scroll_y inside each step"),
     ({"find_after": "", "actions": [{"action": "wait"}]}, "find_after"),
+    ({"actions": [{"action": "click", "x": 1, "y": 1}, {"action": "click", "x": 900, "y": 1}]}, "actions[1]: (900, 1)"),
+    ({"actions": [{"action": "wait"}, {"action": "drag", "x": 1, "y": 1, "end_x": 1, "end_y": 600}]}, "actions[1]: (1, 600)"),
 ])
 def test_kit_batch_is_checked_whole_before_any_input(kit, a, needle):
     with pytest.raises(kit.ui.UIRefusal) as err:
         kit.run(a)
-    assert err.value.code == "INVALID_VALUE" and needle in str(err.value)
-    assert not kit.sent and not kit.frames
+    assert err.value.code in ("INVALID_VALUE", "OUT_OF_WINDOW") and needle in str(err.value)
+    assert err.value.effects is None and not kit.sent and not kit.frames  # extension.py: "No input was sent."
 
 
 def test_find_after_is_compact_and_a_find_error_is_only_a_note(kit, monkeypatch):
@@ -254,5 +268,5 @@ def test_find_after_is_compact_and_a_find_error_is_only_a_note(kit, monkeypatch)
     out = kit.run({"actions": [{"action": "wait"}], "find_after": "b"})
     assert out["completed"] == 1 and out["find_after"] == {"query": "b", "note": "find_after failed: headless"}
     with pytest.raises(kit.ui.UIRefusal) as err:   # a failed batch still reports what it finds
-        kit.run({"actions": [{"action": "wait"}, {"action": "click", "x": 900, "y": 1}], "find_after": "b"})
+        kit.run({"actions": [{"action": "wait"}, {"action": "click", "ref": "Stage//Frame/Button[0]"}], "find_after": "b"})
     assert err.value.details["find_after"]["note"] == "find_after failed: headless"

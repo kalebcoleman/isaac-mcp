@@ -401,6 +401,21 @@ def test_kit_badge_failure_never_stops_an_act(kit, monkeypatch):
     assert ui._badge_state == [None]
 
 
+def test_a_kit_badge_that_fails_while_shown_leaves_no_flag_to_block_screenshots(kit, badge_env):
+    ui = kit.ui
+    ui.badge(10, 10)
+    shown = ui._badge_state[0]
+    assert shown.window.visible and list(badge_env.glob("*.shown"))
+
+    def broken(*args):
+        raise RuntimeError("window gone")
+
+    shown.glide_to = broken
+    ui.badge(20, 20)
+    assert ui._badge_state == [None] and not shown.window.visible and shown.sub is None
+    assert not list(badge_env.glob("*.shown")), "a live Kit's flag would fail every later screenshot"
+
+
 def test_kit_badge_stays_off_without_the_no_input_flags(kit, badge_env):
     ui = kit.ui
     del kit.fake.WINDOW_FLAGS_NO_MOUSE_INPUTS

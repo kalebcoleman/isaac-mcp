@@ -12,7 +12,6 @@ import os
 import threading
 import time
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Annotated, Any, Iterable
 
 from pydantic import Field
@@ -31,14 +30,14 @@ from . import cursor_badge, screen
 from .local_tools import DESKTOP_INPUT, ScopedTools
 
 _input_lock = threading.Lock()
-_WindowId = Annotated[int, Field(description="Window id from windows(action=\"list\").")]
+_WindowId = Annotated[int, Field(description="Window id from list_windows.")]
 _Pid = Annotated[int, Field(description="The window's PID from list_windows; a different owner is refused.")]
 _X = Annotated[int, Field(description="X in window pixels (or image pixels, see coord_space), from a fresh screenshot.")]
 _Y = Annotated[int, Field(description="Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.")]
 _Width = Annotated[int, Field(description="The window width you inspected, in pixels; a changed size is refused.")]
 _Height = Annotated[int, Field(description="The window height you inspected, in pixels; a changed size is refused.")]
-_CoordSpace = Annotated[str, Field(description="window: x/y are original window pixels. Or the coord_space token a "
-                                               "screenshot printed: x/y are pixels of that image (also a zoomed crop).")]
+_CoordSpace = Annotated[str, Field(description="window (window pixels) or the coord_space token a screenshot "
+                                               "printed (x/y are then pixels of that image or crop).")]
 _ShotAfter = Annotated[bool, Field(description="Also return a screenshot of the window after the action.")]
 _Steps = Annotated[list[dict[str, Any]], Field(
     min_length=1, max_length=10,
@@ -73,8 +72,7 @@ def _desktop_lock():
     """Serialize cooperating MCP servers on this user's X display."""
     if fcntl is None:
         raise RuntimeError("desktop input requires a supported X11 Unix environment")
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/twinsmith-desktop-{os.getuid()}"
-    directory = Path(runtime) / "twinsmith-desktop"
+    directory = cursor_badge.desktop_dir()
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     name = hashlib.sha256(screen.DISPLAY.encode()).hexdigest()[:16] + ".lock"
     flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
@@ -92,7 +90,7 @@ def _desktop_lock():
         os.close(fd)
 
 
-_call_lock_state: list = []  # the lock probe's answer, once per tool call (set inside _action_lock)
+_call_lock_state: list = []  # the lock probe's answer, once per tool call or batch step
 
 
 @contextmanager
@@ -447,10 +445,11 @@ def _batch_plan(steps: list, coord_space: str, width: int, height: int) -> list[
                 _check_text(args["text"])
             elif name == "key":
                 _key_symbol(args["key"], args.get("modifiers", []))
-            if "x" in args:
-                args["x"], args["y"] = screen.map_point(coord_space, args["x"], args["y"], width, height)
-            if "end_x" in args:
-                args["end_x"], args["end_y"] = screen.map_point(coord_space, args["end_x"], args["end_y"], width, height)
+            for kx, ky in (("x", "y"), ("end_x", "end_y")):
+                if kx in args:
+                    args[kx], args[ky] = screen.map_point(coord_space, args[kx], args[ky], width, height)
+                    if not (0 <= args[kx] < width and 0 <= args[ky] < height):
+                        raise ValueError("coordinates are outside the selected window")
         except ValueError as exc:
             raise ValueError(f"actions[{i}]: {exc}; nothing was sent") from None
         plan.append((name, args))
@@ -563,6 +562,7 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         failure = None
         with _action_lock():
             for name, args in plan:
+                _call_lock_state.clear()  # a batch can run for minutes: each step probes the screen lock again
                 size = {"width": expected_width, "height": expected_height} if "x" in args else {}
                 try:
                     done.append(_STEPS[name](window_id, expected_pid, **args, **size))

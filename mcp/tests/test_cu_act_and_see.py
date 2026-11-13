@@ -128,3 +128,30 @@ def test_kit_act_without_screenshot_is_forwarded_unchanged(monkeypatch):
     result = computer_use.kit_ui("sim.ui.act", params, None, lambda c, p, s: sent.append(p) or OK,
                                  server._failed_tool_result)
     assert result == OK and sent == [{"path": "Window//Button", "action": "click"}]
+
+
+def test_grouped_sim_ui_act_returns_the_picture_through_a_client(monkeypatch, tmp_path):
+    """End to end: the catalog-built sim__ui__act behind the listed sim__ui group, over an MCP session."""
+    sent = []
+    answers = iter([OK, FAILED])
+    monkeypatch.setattr(server, "_dispatch", lambda canonical, params, state: sent.append((canonical, params))
+                        or next(answers))
+    monkeypatch.setattr(computer_use, "kit_window", lambda state: {"id": 7, "width": 400, "height": 300})
+    monkeypatch.setattr(screen, "capture", lambda **kwargs: [PNG, "caption"])
+    app = server.build_server({"TWINSMITH_TOOLSETS": "default,+kit_debug", "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)})
+    act = {"action": "act", "sub_action": "click", "x": 100, "y": 50, "screenshot_after": True,
+           "coord_space": "img:200x150@0,0,400x300/400x300"}
+
+    async def run():
+        async with create_connected_server_and_client_session(app._mcp_server) as client:
+            await client.initialize()
+            return [await client.call_tool("sim__ui", act) for _ in range(2)]
+
+    ok, failed = asyncio.run(run())
+    assert not ok.isError and [block.type for block in ok.content] == ["text", "image", "text"]
+    assert ok.content[0].text == OK and ok.content[1].data
+    assert failed.isError and [block.type for block in failed.content] == ["text", "image", "text"]
+    assert json.loads(failed.content[0].text)["code"] == "NOT_FOUND"
+    canonical, params = sent[0]
+    assert canonical == "sim.ui.act" and (params["x"], params["y"]) == (201, 101)   # image pixel centres
+    assert not {"coord_space", "screenshot_after", "badge"} & set(params), "host-only arguments reached Kit"

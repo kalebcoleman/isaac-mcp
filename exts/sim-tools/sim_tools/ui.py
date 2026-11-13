@@ -553,13 +553,13 @@ def check_step(a):
 
 
 def _batch_steps(a):
-    """The batch's steps, every one checked before the first is run. Top-level keys that are not an
-    action's own (internal flags the host adds) are passed to each step."""
+    """The batch's steps, every one checked before the first is run (its x/y points too; a ref or a window
+    title is resolved when its step runs, since an earlier step may open it). Top-level keys that are not
+    an action's own (internal flags the host adds) are passed to each step."""
     steps = a["actions"]
     if not isinstance(steps, list) or not 1 <= len(steps) <= MAX_BATCH:
         raise UIRefusal("INVALID_VALUE", f"actions: 1..{MAX_BATCH} action objects.")
-    # scroll_x/scroll_y arrive as 0 when unset (their default); the top-level action is required by the
-    # host's schema and is ignored here.
+    # scroll_x/scroll_y arrive as 0 when unset (their default); a top-level action is ignored here.
     given = [k for k in STEP_FIELDS if a.get(k) is not None and not (k in ("scroll_x", "scroll_y") and a[k] == 0)]
     if given:
         raise UIRefusal("INVALID_VALUE", f"With actions, give {', '.join(given)} inside each step, not at the top level.")
@@ -571,6 +571,10 @@ def _batch_steps(a):
                                              f"({', '.join(STEP_FIELDS)}, frames) only.")
         try:
             frames += max(check_step(step), 2)
+            if step["action"] in POINTER_ACTIONS and not step.get("ref"):
+                _check_point(step["x"], step["y"])
+            if step["action"] == "drag":
+                _check_point(step["end_x"], step["end_y"])
         except UIRefusal as exc:
             raise UIRefusal(exc.code, f"actions[{i}]: {exc}") from None
         out.append({**shared, **step})
@@ -688,6 +692,14 @@ class _KitBadge:
                 self._update, name="twinsmith cursor badge")
         return True
 
+    def close(self):
+        """After a failure: no badge left on screen and no flag left to hold up every screenshot."""
+        self.sub = None
+        try:
+            self.window.visible = False
+        finally:
+            self.flag.unlink(missing_ok=True)
+
     def _update(self, _event=None):
         import time
 
@@ -716,8 +728,10 @@ def badge(x, y, jump=False):
             _badge_state.append(_KitBadge())
         _badge_state[0].glide_to(x, y, jump)
     except Exception as exc:  # noqa: BLE001
-        _badge_state[:] = [None]
+        failed, _badge_state[:] = (_badge_state or [None])[0], [None]
         try:
+            if failed is not None:
+                failed.close()
             import carb
 
             carb.log_warn(f"twinsmith cursor badge off: {exc}")
