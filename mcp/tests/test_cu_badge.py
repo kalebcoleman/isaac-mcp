@@ -19,6 +19,7 @@ from twinsmith import desktop_input as desktop
 from test_desktop_input import desktop_setup  # noqa: F401 - the fake X display fixture
 
 ROOT = Path(__file__).resolve().parents[2]
+WATCH = cursor_badge._X11Badge._watch
 
 
 @pytest.fixture(autouse=True)
@@ -128,7 +129,7 @@ def test_capture_hold_deletes_flags_of_dead_processes(monkeypatch, badge_env):
 
 def test_capture_hold_fails_closed_on_timeout(badge_env):
     flag = _flag(badge_env, os.getppid())  # alive, and never hides
-    with pytest.raises(RuntimeError, match="screenshot was not taken.*retry"):
+    with pytest.raises(RuntimeError, match="screenshot was not taken.*already sent.*rather than repeat"):
         with cursor_badge.capture_hold(wait_s=0.05):
             pytest.fail("captured while a badge was on screen")
     assert flag.exists()
@@ -273,6 +274,30 @@ def test_x11_badge_stays_hidden_while_a_capture_runs(monkeypatch, badge_env):
     os.close(fd)
 
 
+def test_watcher_hides_for_another_servers_capture_and_after_the_linger(monkeypatch, badge_env):
+    monkeypatch.setattr(cursor_badge._X11Badge, "_watch", WATCH)
+    monkeypatch.setattr(cursor_badge, "POLL_S", 0.005)
+    disp = FakeBadgeDisplay()
+    monkeypatch.setattr(cursor_badge, "_open_display", lambda: disp)
+    cursor_badge.configure(True)
+    flag = badge_env / f"badge-{os.getpid()}-x11.shown"
+
+    def hidden_within(seconds):
+        deadline = time.monotonic() + seconds
+        while flag.exists() and time.monotonic() < deadline:
+            time.sleep(0.005)
+        return not flag.exists() and disp.log[-1] == ("unmap",)
+
+    cursor_badge.glide(5, 5)
+    fd = cursor_badge._open_lock(badge_env)
+    fcntl.flock(fd, fcntl.LOCK_SH)  # another server's screenshot: no direct hide, only the lock
+    assert hidden_within(0.5)
+    os.close(fd)
+    monkeypatch.setattr(cursor_badge, "LINGER_S", 0.05)
+    cursor_badge.glide(9, 9)
+    assert flag.exists() and hidden_within(0.5)
+
+
 def test_no_shape_extension_turns_the_badge_off_and_says_why(monkeypatch, badge_env):
     disp = FakeBadgeDisplay(shape=False)
     opened = []
@@ -324,7 +349,8 @@ def kit(monkeypatch):
             fake.windows.append(self)
 
     fake.Window, fake.Circle = Window, lambda **kw: None
-    fake.WINDOW_FLAGS_NO_TITLE_BAR, fake.WINDOW_FLAGS_NO_MOUSE_INPUTS = 1, 2  # others missing: getattr fallback
+    fake.WINDOW_FLAGS_NO_MOUSE_INPUTS, fake.WINDOW_FLAGS_NO_FOCUS_ON_APPEARING = 1, 2
+    fake.WINDOW_FLAGS_NO_TITLE_BAR = 4  # the other cosmetic flags are missing: getattr fallback
     subs = []
     stream = SimpleNamespace(create_subscription_to_pop=lambda fn, name: (subs.append(fn), object())[1])
     app = ModuleType("omni.kit.app")
@@ -350,7 +376,7 @@ def test_kit_badge_glides_then_hides_for_a_capture(kit, badge_env):
     ui.badge(100, 60)
     badge = ui._badge_state[0]
     flag = badge_env / f"badge-{os.getpid()}-kit.shown"
-    assert badge.window.visible and flag.exists() and badge.window.flags == 3
+    assert badge.window.visible and flag.exists() and badge.window.flags == 7
     assert badge.end == (50 + ui.BADGE_OFFSET, 30 + ui.BADGE_OFFSET)  # window pixels / dpi, off the hotspot
     badge.t0 -= 1.0  # the glide is over
     kit.subs[0]()
@@ -373,3 +399,10 @@ def test_kit_badge_failure_never_stops_an_act(kit, monkeypatch):
     ui.badge(1, 1)
     ui.badge(2, 2)
     assert ui._badge_state == [None]
+
+
+def test_kit_badge_stays_off_without_the_no_input_flags(kit, badge_env):
+    ui = kit.ui
+    del kit.fake.WINDOW_FLAGS_NO_MOUSE_INPUTS
+    ui.badge(1, 1)
+    assert ui._badge_state == [None] and kit.fake.windows == [] and not list(badge_env.glob("*.shown"))

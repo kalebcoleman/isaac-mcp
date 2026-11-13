@@ -44,6 +44,7 @@ FRAME_S = 0.04       # after an unmap, time for the compositor to put the hidden
 CAPTURE_WAIT_S = 1.0
 LOCK_NAME = "capture.lock"
 _COLOR = (0xFFFF, 0x8C00, 0x0000)
+_RETRY = ("Any input this call sent was already sent: take a new screenshot rather than repeat the action.")
 
 _enabled = False
 _badge: "_X11Badge | None" = None
@@ -125,8 +126,8 @@ def capture_hold(wait_s: float = CAPTURE_WAIT_S):
                 break
             except BlockingIOError:  # an overlay is probing the lock at this instant
                 if time.monotonic() > deadline:
-                    raise RuntimeError("the screenshot was not taken: the cursor badge lock stayed busy; "
-                                       "retry the screenshot") from None
+                    raise RuntimeError(f"the screenshot was not taken: the cursor badge lock stayed busy. "
+                                       f"{_RETRY}") from None
                 time.sleep(0.002)
         if _badge is not None:
             _badge.hide_for_capture(deadline)
@@ -137,7 +138,7 @@ def capture_hold(wait_s: float = CAPTURE_WAIT_S):
             if time.monotonic() > deadline:
                 raise RuntimeError(f"the screenshot was not taken: the cursor badge of process "
                                    f"{', '.join(map(str, sorted(set(live))))} did not hide within {wait_s:g} s, "
-                                   "so it would have been in the picture; retry the screenshot")
+                                   f"so it would have been in the picture. {_RETRY}")
             time.sleep(0.01)
         yield
     finally:

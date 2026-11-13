@@ -536,11 +536,14 @@ class _KitBadge:
 
         import omni.ui as ui
 
-        flags = 0
+        # Without these it could take the next click or the keyboard focus (_shown() ignores it): stay off.
+        missing = [n for n in ("NO_MOUSE_INPUTS", "NO_FOCUS_ON_APPEARING") if not hasattr(ui, f"WINDOW_FLAGS_{n}")]
+        if missing:
+            raise RuntimeError(f"omni.ui has no WINDOW_FLAGS_{' or WINDOW_FLAGS_'.join(missing)}")
+        flags = ui.WINDOW_FLAGS_NO_MOUSE_INPUTS | ui.WINDOW_FLAGS_NO_FOCUS_ON_APPEARING
         for name in ("NO_TITLE_BAR", "NO_RESIZE", "NO_MOVE", "NO_SCROLLBAR", "NO_SCROLL_WITH_MOUSE", "NO_COLLAPSE",
-                     "NO_CLOSE", "NO_SAVED_SETTINGS", "NO_FOCUS_ON_APPEARING", "NO_MOUSE_INPUTS", "NO_BACKGROUND",
-                     "NO_DOCKING"):
-            flags |= getattr(ui, f"WINDOW_FLAGS_{name}", 0)
+                     "NO_CLOSE", "NO_SAVED_SETTINGS", "NO_BACKGROUND", "NO_DOCKING"):
+            flags |= getattr(ui, f"WINDOW_FLAGS_{name}", 0)  # cosmetic
         directory = badge_dir()
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.flag = directory / f"badge-{os.getpid()}-kit.shown"
