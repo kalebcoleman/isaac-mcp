@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import stat
 import threading
 import time
 from contextlib import contextmanager
@@ -64,9 +65,27 @@ def enabled() -> bool:
 
 
 def desktop_dir() -> Path:
-    """Where the desktop input lock, the capture lock and the flag files live."""
+    """Where the desktop input lock, the capture lock and the flag files live. Kit is told this folder
+    with each act, so both sides use the same one whatever their environments say."""
     runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/twinsmith-desktop-{os.getuid()}"
     return Path(runtime) / "twinsmith-desktop"
+
+
+def trusted(directory: Path) -> bool:
+    """A folder this account owns and nobody else can write to. Another local user could otherwise make
+    the predictable /tmp folder first, and hold its lock or plant a flag to stop every screenshot."""
+    try:
+        info = os.lstat(directory)
+    except OSError:
+        return False
+    return stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
+
+
+def write_flag(path: Path) -> None:
+    """The flag with its process's start time, put in place whole: a reader never sees it half written."""
+    draft = path.with_suffix(".draft")
+    draft.write_text(process_start(os.getpid()))
+    os.replace(draft, path)
 
 
 def _open_lock(directory: Path) -> int:
@@ -86,8 +105,8 @@ def capture_held(fd: int) -> bool:
 def process_start(pid: int) -> str:
     """When the process started (clock ticks since boot, from /proc), or "" if it is gone or there is no /proc."""
     try:
-        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
-    except (OSError, IndexError):
+        return Path(f"/proc/{pid}/stat").read_bytes().rsplit(b")", 1)[1].split()[19].decode()
+    except (OSError, IndexError, ValueError):
         return ""
 
 
@@ -103,7 +122,7 @@ def _alive(pid: int) -> bool:
 
 def _live_flags(directory: Path) -> list[Path]:
     """Flag files of badges still on screen. A flag whose process is gone, or whose PID now belongs to
-    another process (the start time it holds differs), is deleted."""
+    another process (the start time it holds is not that process's), is deleted."""
     live = []
     for path in directory.glob("badge-*.shown"):
         try:
@@ -111,7 +130,7 @@ def _live_flags(directory: Path) -> list[Path]:
             started = path.read_text().strip()
         except (IndexError, ValueError, OSError):
             continue
-        if _alive(pid) and started in ("", process_start(pid)):
+        if _alive(pid) and started == process_start(pid):
             live.append(path)
         else:
             path.unlink(missing_ok=True)
@@ -125,7 +144,7 @@ def capture_hold(wait_s: float = CAPTURE_WAIT_S):
     With no badge ever shown on this desktop it adds no waiting. A badge that does not hide within
     ``wait_s`` fails the capture closed rather than return a picture with the badge in it."""
     directory = desktop_dir()
-    if fcntl is None or not directory.is_dir():
+    if fcntl is None or not trusted(directory):  # no folder: no badge was ever shown on this desktop
         yield
         return
     fd = _open_lock(directory)
@@ -191,6 +210,8 @@ class _X11Badge:
         self.disp = _open_display()
         try:
             directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if not trusted(directory):
+                raise RuntimeError(f"{directory} is not a private folder of this account")
             self.fd = _open_lock(directory)
             if not self.disp.has_extension("SHAPE"):
                 raise RuntimeError("the X server has no SHAPE extension, so the badge cannot be made click-through")
@@ -227,7 +248,7 @@ class _X11Badge:
 
     def _show(self) -> bool:
         """Flag, then probe, then map: a capturer that locks after the probe still sees the flag."""
-        self.flag.write_text(process_start(os.getpid()))
+        write_flag(self.flag)
         if capture_held(self.fd):
             self.flag.unlink(missing_ok=True)
             return False

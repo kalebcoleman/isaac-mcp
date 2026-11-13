@@ -56,21 +56,21 @@ def test_server_passes_the_flag(monkeypatch, tmp_path):
     assert not cursor_badge.enabled()
 
 
-def test_badge_args_adds_the_kit_flag_only_when_enabled():
+def test_badge_args_tells_kit_the_hosts_folder_only_when_enabled(badge_env):
     params = {"action": "click", "x": 1, "y": 2}
     off = computer_use.badge_args(params, SimpleNamespace(config=config.Config()))
     assert off == params and "badge" not in off
     assert computer_use.badge_args(params, SimpleNamespace()) == params
     on = computer_use.badge_args(params, SimpleNamespace(config=config.Config(cursor_badge=True)))
-    assert on == {**params, "badge": True} and "badge" not in params
+    assert on == {**params, "badge": str(badge_env)} and "badge" not in params
 
 
 # ---------------------------------------------------------------- capture lock protocol
 
 def _flag(directory, pid, kind="kit"):
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)  # private, as the tools make it
     path = directory / f"badge-{pid}-{kind}.shown"
-    path.touch()
+    path.write_text(cursor_badge.process_start(pid))  # as a shown badge writes it
     return path
 
 
@@ -86,7 +86,7 @@ def test_capture_hold_adds_no_wait_when_idle(monkeypatch, badge_env):
     with cursor_badge.capture_hold():
         pass
     assert not badge_env.exists()  # never shown on this desktop: nothing created
-    badge_env.mkdir(parents=True)
+    badge_env.mkdir(mode=0o700, parents=True)
     with cursor_badge.capture_hold():
         pass
     assert calls == []
@@ -159,10 +159,38 @@ def test_screenshot_reads_pixels_inside_the_hold(monkeypatch, tmp_path):
     assert held == ["in", "out"]
 
 
-def test_kit_and_host_use_the_same_files(badge_env):
-    ui = _ui_module("sim_tools_ui_badge_paths")
-    assert ui.badge_dir() == cursor_badge.desktop_dir() == badge_env
-    assert ui.BADGE_LOCK == cursor_badge.LOCK_NAME
+def test_kit_uses_the_folder_the_host_names(kit, badge_env, tmp_path, monkeypatch):
+    """Not its own environment's: a server started without XDG_RUNTIME_DIR and a Kit with it would otherwise
+    lock different folders, and the badge would be in the host's screenshots."""
+    ui = kit.ui
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "kits-own"))
+    ui.badge(10, 10, str(badge_env))
+    assert ui._badge_state[0].flag.parent == badge_env and ui.BADGE_LOCK == cursor_badge.LOCK_NAME
+    other = tmp_path / "other-host" / "twinsmith-desktop"
+    ui.badge(10, 10, str(other))  # another server asks: its lock is the one to watch now
+    assert ui._badge_state[0].flag.parent == other and not list(badge_env.glob("*.shown"))
+
+
+@pytest.mark.parametrize("make", [
+    lambda base: base / "somewhere-else",                                    # not a twinsmith-desktop folder
+    lambda base: (base / "twinsmith-desktop").mkdir(mode=0o777) or (base / "twinsmith-desktop").chmod(0o777)
+    or base / "twinsmith-desktop",                                           # others can write to it
+])
+def test_kit_badge_stays_off_in_a_folder_that_is_not_private(kit, tmp_path, make):
+    kit.ui.badge(10, 10, str(make(tmp_path)))
+    assert kit.ui._badge_state == [None] and kit.fake.windows == []
+
+
+def test_a_folder_others_can_write_to_is_not_used(badge_env, monkeypatch):
+    badge_env.mkdir(parents=True)
+    badge_env.chmod(0o777)
+    _flag(badge_env, os.getpid()).write_text(cursor_badge.process_start(os.getpid()))  # planted: would block
+    with cursor_badge.capture_hold(wait_s=0.05):
+        pass
+    monkeypatch.setattr(cursor_badge, "_open_display", FakeBadgeDisplay)
+    cursor_badge.configure(True)
+    cursor_badge.glide(5, 5)
+    assert "not a private folder" in cursor_badge.note()
 
 
 # ---------------------------------------------------------------- X11 badge in desktop input
@@ -266,7 +294,7 @@ def test_x11_badge_is_click_through_offset_and_hidden_for_captures(monkeypatch, 
 def test_x11_badge_stays_hidden_while_a_capture_runs(monkeypatch, badge_env):
     disp = FakeBadgeDisplay()
     monkeypatch.setattr(cursor_badge, "_open_display", lambda: disp)
-    badge_env.mkdir(parents=True)
+    badge_env.mkdir(mode=0o700, parents=True)
     fd = cursor_badge._open_lock(badge_env)
     fcntl.flock(fd, fcntl.LOCK_SH)  # a screenshot in another server
     cursor_badge.configure(True)
@@ -374,7 +402,7 @@ def test_kit_badge_is_left_out_of_windows_and_never_covers_a_widget(kit):
 
 def test_kit_badge_glides_then_hides_for_a_capture(kit, badge_env):
     ui = kit.ui
-    ui.badge(100, 60)
+    ui.badge(100, 60, str(badge_env))
     badge = ui._badge_state[0]
     flag = badge_env / f"badge-{os.getpid()}-kit.shown"
     assert badge.window.visible and flag.exists() and badge.window.flags == 7
@@ -390,21 +418,21 @@ def test_kit_badge_glides_then_hides_for_a_capture(kit, badge_env):
     kit.subs[0]()
     assert not flag.exists() and badge.sub is None  # ...and the flag goes once that frame is drawn
     os.close(fd)
-    ui.badge(10, 10)  # the next act shows it again
+    ui.badge(10, 10, str(badge_env))  # the next act shows it again
     assert badge.window.visible and flag.exists()
 
 
-def test_kit_badge_failure_never_stops_an_act(kit, monkeypatch):
+def test_kit_badge_failure_never_stops_an_act(kit, monkeypatch, badge_env):
     ui = kit.ui
-    monkeypatch.setattr(ui, "_KitBadge", lambda: (_ for _ in ()).throw(RuntimeError("no omni.ui")))
-    ui.badge(1, 1)
-    ui.badge(2, 2)
+    monkeypatch.setattr(ui, "_KitBadge", lambda directory: (_ for _ in ()).throw(RuntimeError("no omni.ui")))
+    ui.badge(1, 1, str(badge_env))
+    ui.badge(2, 2, str(badge_env))
     assert ui._badge_state == [None]
 
 
 def test_a_kit_badge_that_fails_while_shown_leaves_no_flag_to_block_screenshots(kit, badge_env):
     ui = kit.ui
-    ui.badge(10, 10)
+    ui.badge(10, 10, str(badge_env))
     shown = ui._badge_state[0]
     assert shown.window.visible and list(badge_env.glob("*.shown"))
 
@@ -412,7 +440,7 @@ def test_a_kit_badge_that_fails_while_shown_leaves_no_flag_to_block_screenshots(
         raise RuntimeError("window gone")
 
     shown.glide_to = broken
-    ui.badge(20, 20)
+    ui.badge(20, 20, str(badge_env))
     assert ui._badge_state == [None] and not shown.window.visible and shown.sub is None
     assert not list(badge_env.glob("*.shown")), "a live Kit's flag would fail every later screenshot"
 
@@ -420,16 +448,17 @@ def test_a_kit_badge_that_fails_while_shown_leaves_no_flag_to_block_screenshots(
 def test_kit_badge_stays_off_without_the_no_input_flags(kit, badge_env):
     ui = kit.ui
     del kit.fake.WINDOW_FLAGS_NO_MOUSE_INPUTS
-    ui.badge(1, 1)
+    ui.badge(1, 1, str(badge_env))
     assert ui._badge_state == [None] and kit.fake.windows == [] and not list(badge_env.glob("*.shown"))
 
 
 # ---------------------------------------------------------------- stale flags, and where the badge may go
 
 
-def test_a_flag_whose_pid_was_reused_is_deleted(badge_env):
+@pytest.mark.parametrize("content", ["1", ""])  # another process's start time; a flag left by an old version
+def test_a_flag_whose_pid_was_reused_is_deleted(badge_env, content):
     stale = _flag(badge_env, os.getpid())
-    stale.write_text("1")  # the start time of the process that wrote it: not this one
+    stale.write_text(content)
     with cursor_badge.capture_hold(wait_s=0.05):
         pass
     assert not stale.exists()
@@ -445,7 +474,7 @@ def test_a_shown_badge_writes_its_start_time(monkeypatch, badge_env, kit):
     monkeypatch.setattr(cursor_badge, "_open_display", FakeBadgeDisplay)
     cursor_badge.configure(True)
     cursor_badge.glide(5, 5)
-    kit.ui.badge(10, 10)
+    kit.ui.badge(10, 10, str(badge_env))
     started = cursor_badge.process_start(os.getpid())
     assert {path.name.split("-")[2]: path.read_text() for path in badge_env.glob("*.shown")} == {
         "x11.shown": started, "kit.shown": started}
@@ -486,12 +515,12 @@ def test_the_badge_is_not_drawn_over_a_possible_lock_screen(monkeypatch, desktop
 
 def test_a_kit_badge_asked_to_show_while_it_hides_keeps_its_flag(kit, badge_env):
     ui = kit.ui
-    ui.badge(10, 10)
+    ui.badge(10, 10, str(badge_env))
     badge = ui._badge_state[0]
     fd = cursor_badge._open_lock(badge_env)
     fcntl.flock(fd, fcntl.LOCK_SH)  # a host screenshot
     kit.subs[0]()  # hidden, but that frame is not drawn yet
-    ui.badge(20, 20)  # the next act asks for it during the capture
+    ui.badge(20, 20, str(badge_env))  # the next act asks for it during the capture
     assert not badge.window.visible and badge.flag.exists(), "the capture must still wait for the hidden frame"
     kit.subs[0]()
     kit.subs[0]()

@@ -485,16 +485,20 @@ def _failed_after(window_id: int, text: str):
                           structuredContent={"result": text}, isError=True)
 
 
+def _refused(window_id: int, screenshot_after: bool, exc: Exception):
+    """A refusal or failure: raised as it is, or with screenshot_after returned as an error with the picture."""
+    if not screenshot_after:
+        raise exc
+    return _failed_after(window_id, str(exc))
+
+
 def _run(window_id: int, screenshot_after: bool, step: Callable[[], str]):
-    """One action as a tool call: ``step`` under both locks, then its answer. A refusal or failure is
-    raised as it is, or with screenshot_after returned as an error with the picture."""
+    """One action as a tool call: ``step`` under both locks, then its answer."""
     try:
         with _action_lock():
             text = step()
     except Exception as exc:  # noqa: BLE001
-        if not screenshot_after:
-            raise
-        return _failed_after(window_id, str(exc))
+        return _refused(window_id, screenshot_after, exc)
     return _after(window_id, text, screenshot_after)
 
 
@@ -585,23 +589,24 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         covering windows. It stops at the first failing step and says how many ran.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        plan = _batch_plan(actions, coord_space, expected_width, expected_height)
-        done: list[str] = []
-        failure = None
-        with _action_lock():
+        try:
+            plan = _batch_plan(actions, coord_space, expected_width, expected_height)
+        except ValueError as exc:  # nothing was sent, and no lock was taken
+            return _refused(window_id, screenshot_after, exc)
+
+        def steps():
+            done: list[str] = []
             for name, args in plan:
                 _call_lock_state.clear()  # a batch can run for minutes: each step probes the screen lock again
                 size = {"width": expected_width, "height": expected_height} if "x" in args else {}
                 try:
                     done.append(_STEPS[name](window_id, expected_pid, **args, **size))
                 except Exception as exc:  # noqa: BLE001 - reported with the steps that ran
-                    failure = f"actions[{len(done)}] ({name}) failed: {str(exc).rstrip('.')}"
-                    break
-        ran = "; ".join(f"{i}: {text}" for i, text in enumerate(done))
-        if failure:
-            text = (f"batch stopped: {failure}. {len(done)} of {len(plan)} step(s) ran before it"
-                    f"{': ' + ran if ran else ''}. Capture the window before retrying.")
-            if not screenshot_after:
-                raise RuntimeError(text)
-            return _failed_after(window_id, text)
-        return _after(window_id, f"batch ran all {len(plan)} step(s): {ran}", screenshot_after)
+                    ran = "; ".join(f"{i}: {text}" for i, text in enumerate(done))
+                    raise RuntimeError(
+                        f"batch stopped: actions[{len(done)}] ({name}) failed: {str(exc).rstrip('.')}. {len(done)} "
+                        f"of {len(plan)} step(s) ran before it{': ' + ran if ran else ''}. Capture the window "
+                        "before retrying.") from exc
+            return f"batch ran all {len(plan)} step(s): " + "; ".join(f"{i}: {text}" for i, text in enumerate(done))
+
+        return _run(window_id, screenshot_after, steps)

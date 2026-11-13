@@ -384,10 +384,10 @@ def menu_walk(path):
 
     found = [_ui_test().get_menubar().widget]
     for part in (p for p in path.split("/") if p):
-        nxt = next((c for c in ui.Inspector.get_children(found[-1]) if getattr(c, "text", "") == part), None)
-        if nxt is None:
+        named = [c for c in ui.Inspector.get_children(found[-1]) if getattr(c, "text", "") == part]
+        if not named:
             break
-        found.append(nxt)
+        found.append(next((c for c in named if getattr(c, "visible", True)), named[0]))  # the one a person sees
     return found
 
 
@@ -637,26 +637,17 @@ def _find_after(query):
 
 
 # ---------------------------------------------------------------- cursor badge (opt-in: the host passes badge=True)
-# The protocol of the host's mcp/twinsmith/cursor_badge.py, which Kit cannot import: while shown, the badge
-# keeps the flag file badge-<pid>-kit.shown (holding this process's start time, as cursor_badge.process_start
-# reads it), hides while a host screenshot holds capture.lock (probed with a non-blocking exclusive flock)
-# and deletes the flag once the hidden frame is drawn, so no screenshot shows it. Recordings take no lock
-# and show it.
+# The protocol of the host's mcp/twinsmith/cursor_badge.py, which Kit cannot import: in the folder the host
+# names (its own, so both use the same whatever their environments say), the shown badge keeps the flag file
+# badge-<pid>-kit.shown (holding this process's start time, as cursor_badge.process_start reads it), hides
+# while a host screenshot holds capture.lock (probed with a non-blocking exclusive flock) and deletes the
+# flag once the hidden frame is drawn, so no screenshot shows it. Recordings take no lock and show it.
 
 BADGE_TITLE = "twinsmith cursor badge"
 BADGE_SIZE, BADGE_OFFSET = 14, 6  # UI points; its corner sits below and right of the hotspot, never on it
 BADGE_GLIDE_S, BADGE_LINGER_S = 0.15, 1.5
 BADGE_LOCK = "capture.lock"
 _badge_state = []  # [the _KitBadge], or [None] once it failed
-
-
-def badge_dir():
-    """Where the host keeps its capture lock and flag files (cursor_badge.desktop_dir on the host)."""
-    import os
-    from pathlib import Path
-
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/twinsmith-desktop-{os.getuid()}"
-    return Path(runtime) / "twinsmith-desktop"
 
 
 def _capture_held(fd):
@@ -674,8 +665,9 @@ class _KitBadge:
     """A borderless omni.ui window without inputs, moved over frames by an update subscription that
     exists only while it is shown."""
 
-    def __init__(self):
+    def __init__(self, directory):
         import os
+        import stat
         from pathlib import Path
 
         import omni.ui as ui
@@ -688,12 +680,16 @@ class _KitBadge:
         for name in ("NO_TITLE_BAR", "NO_RESIZE", "NO_MOVE", "NO_SCROLLBAR", "NO_SCROLL_WITH_MOUSE", "NO_COLLAPSE",
                      "NO_CLOSE", "NO_SAVED_SETTINGS", "NO_BACKGROUND", "NO_DOCKING"):
             flags |= getattr(ui, f"WINDOW_FLAGS_{name}", 0)  # cosmetic
-        directory = badge_dir()
+        self.directory = directory = Path(directory)
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        info = os.lstat(directory)  # the host's cursor_badge.trusted: a private folder of this account
+        if directory.name != "twinsmith-desktop" or not (
+                stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022):
+            raise RuntimeError(f"{directory} is not a private twinsmith-desktop folder of this account")
         self.flag = directory / f"badge-{os.getpid()}-kit.shown"
         try:  # the host's cursor_badge.process_start: a reused PID is then not mistaken for this Kit
-            self.started = Path(f"/proc/{os.getpid()}/stat").read_text().rsplit(")", 1)[1].split()[19]
-        except (OSError, IndexError):
+            self.started = Path(f"/proc/{os.getpid()}/stat").read_bytes().rsplit(b")", 1)[1].split()[19].decode()
+        except (OSError, IndexError, ValueError):
             self.started = ""
         self.fd = os.open(directory / BADGE_LOCK, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
         self.window = ui.Window(BADGE_TITLE, width=BADGE_SIZE, height=BADGE_SIZE, flags=flags, visible=False)
@@ -726,7 +722,11 @@ class _KitBadge:
 
     def _show(self):
         """Flag, then probe, then show: a capture that locks after the probe still sees the flag."""
-        self.flag.write_text(self.started)
+        import os
+
+        draft = self.flag.with_suffix(".draft")
+        draft.write_text(self.started)
+        os.replace(draft, self.flag)  # put in place whole: a capture never reads it half written
         if _capture_held(self.fd):
             if not self.hiding:  # while hiding, the last shown frame may still be on screen: _update drops the flag
                 self.flag.unlink(missing_ok=True)
@@ -767,13 +767,16 @@ class _KitBadge:
         self.window.position_x, self.window.position_y = self.pos
 
 
-def badge(x, y, jump=False):
-    """Show the cursor badge at window pixel (x, y). Best effort: a failure turns it off, never the act."""
+def badge(x, y, directory, jump=False):
+    """Show the cursor badge at window pixel (x, y), hiding for the screenshots of the host whose folder
+    ``directory`` is. Best effort: a failure turns it off, never the act."""
     if _badge_state and _badge_state[0] is None:
         return
     try:
+        if _badge_state and str(_badge_state[0].directory) != directory:  # another host asks: follow its lock
+            _badge_state.pop().close()
         if not _badge_state:
-            _badge_state.append(_KitBadge())
+            _badge_state.append(_KitBadge(directory))
         _badge_state[0].glide_to(x, y, jump)
     except Exception as exc:  # noqa: BLE001
         failed, _badge_state[:] = (_badge_state or [None])[0], [None]
@@ -850,7 +853,7 @@ async def act(a):
         if hit is not None and not hit["enabled"] and action != "move":
             raise UIRefusal("DISABLED", "That widget is disabled (greyed out); it would ignore the input.")
         if a.get("badge"):  # internal: the host's [screen] cursor_badge; adds no wait to the action
-            badge(target[0], target[1])
+            badge(target[0], target[1], a["badge"])
 
     menu = menu_path(a.get("menu")) if action == "menu" else None
     result = dict(action=action)
@@ -904,22 +907,25 @@ async def act(a):
             except Exception:  # noqa: BLE001
                 return False
 
-        def not_found(closed, effects):
+        def not_found(closed, effects, hint=""):
             try:
                 level, items = menu_children(path)
             except Exception:  # noqa: BLE001
                 level, items = "", []
             where = f"under '{level}'" if level else "on the menu bar"
-            hint = (f" Items {where}: {', '.join(items)}." if items else
-                    f" Nothing is listed {where}: its extension may not be loaded yet (for the Action Graph "
-                    "editor use sim__graph__show).")
+            hint = hint or (f" Items {where}: {', '.join(items)}." if items else
+                            f" Nothing is listed {where}: its extension may not be loaded yet (for the Action "
+                            "Graph editor use sim__graph__show).")
             state = "" if closed else (" A menu may still be open: action=menu with its top-level name "
                                        "(e.g. 'Window') opens and closes it.")
             return UIRefusal("MENU_NOT_FOUND", f"Could not open menu {path!r}.{hint}{state}", effects=effects)
 
         levels = menu_walk(path)[1:]
+        item = next((name for name, level in zip(path.split("/")[:-1], levels) if not isinstance(level, ui.Menu)), None)
+        if item:  # a walk down the path would click it on its way
+            raise not_found(True, "No input was sent.", f" '{item}' is an item, not a menu: nothing is under it.")
         if any(not getattr(level, "visible", True) for level in levels):
-            # A hidden entry (its extension or layout is off): nothing was opened.
+            # A hidden entry (its extension or layout is off): nothing is opened.
             raise not_found(True, "No input was sent.")
         try:
             await ui_test.menu_click(path)
@@ -1012,7 +1018,7 @@ async def act(a):
         px, py = round(x + (ex - x) * i / 12), round(y + (ey - y) * i / 12)
         mouse_event(MouseEventType.MOVE, px, py, w, h)
         if a.get("badge"):
-            badge(px, py, jump=True)
+            badge(px, py, a["badge"], jump=True)
         await tick(1)
     mouse_event(MouseEventType.LEFT_BUTTON_UP, ex, ey, w, h)
     await tick(frames)

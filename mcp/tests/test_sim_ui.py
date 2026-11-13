@@ -280,6 +280,20 @@ def test_a_hidden_menu_entry_is_refused_before_anything_opens(menus):
     assert menus.clicks == [], "nothing was opened"
 
 
+def test_a_path_that_runs_on_through_an_item_clicks_nothing(menus):
+    """Kit's menu_click clicks each level on its way: "Window/Console/Foo" would toggle Console, then fail."""
+    with pytest.raises(menus.ui.UIRefusal) as err:
+        menus.act("Window/Console/Foo")
+    assert menus.clicks == [] and menus.ui.refusal("sim.ui.act", err.value)["effects"] == "No input was sent."
+    assert "'Console' is an item, not a menu" in str(err.value)
+
+
+def test_a_visible_menu_entry_wins_over_a_hidden_one_of_the_same_name(menus):
+    window = menus.bar.children[0]
+    window.children.insert(0, Menu("Browsers", visible=False))
+    assert menus.act("Window/Browsers")["items"] == ["Content"]
+
+
 def test_a_failed_menu_path_closes_the_menu_it_opened(menus):
     with pytest.raises(menus.ui.UIRefusal) as err:
         menus.act("Window/Nope")

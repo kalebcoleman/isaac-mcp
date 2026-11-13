@@ -300,3 +300,12 @@ def test_a_token_from_before_a_resize_is_refused(kit):
 ])
 def test_bad_kit_points_are_refused_before_dispatch(kit, params, message):
     refused(kit, params, message)
+
+
+def test_a_refused_kit_point_with_screenshot_after_brings_the_picture(kit, monkeypatch):
+    """The token is stale: the picture of the window as it is now carries the one to use instead."""
+    kit.window["value"] = {**ISAAC, "width": 1280, "height": 720}
+    monkeypatch.setattr(screen, "capture", lambda **kw: ["coord_space: img:1280x720@0,0,1280x720/1280x720"])
+    result = kit.run({"action": "click", "x": 5, "y": 6, "coord_space": HALF, "screenshot_after": True})
+    assert result.isError and json.loads(result.content[0].text)["effects"] == "No input was sent."
+    assert result.content[1].text.startswith("coord_space: img:1280x720") and kit.sent == []

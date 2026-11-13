@@ -198,12 +198,12 @@ def test_kit_batch_runs_each_step_and_reports_completed(kit):
         return await act(step)
 
     kit.ui.act = spy
-    out = kit.run({"action": "click", "frames": 3, "scroll_x": 0, "scroll_y": 0, "badge": True, "actions": [
+    out = kit.run({"action": "click", "frames": 3, "scroll_x": 0, "scroll_y": 0, "badge": "/run/x", "actions": [
         {"action": "click", "x": 10, "y": 20}, {"action": "type", "text": "hi", "frames": 0},
         {"action": "keypress", "keys": ["ctrl", "s"]}]})
     assert out["action"] == "batch" and out["completed"] == 3 and [s["action"] for s in out["steps"]] == [
         "click", "type", "keypress"]
-    assert [s.get("badge") for s in seen] == [True] * 3, "internal host keys reach every step"
+    assert [s.get("badge") for s in seen] == ["/run/x"] * 3, "internal host keys reach every step"
     assert ("LEFT_BUTTON_DOWN", (10.0, 20.0)) in kit.sent and ("char", "h") in kit.sent
     assert kit.sent[-1] == ("KEY_RELEASE", "LEFT_CONTROL")
     assert "find_after" not in out
@@ -291,3 +291,10 @@ def test_kit_scroll_sends_whole_wheel_steps(kit):
     omni.kit.ui_test does) five steps moved a tree by a pixel."""
     kit.run({"action": "scroll", "x": 10, "y": 10, "scroll_y": -5})
     assert kit.sent[-1] == ("SCROLL", (0.0, -5.0))
+
+
+def test_a_batch_refused_before_any_input_still_brings_the_picture(batch):
+    result = batch.run([CLICK], coord_space="img:150x100@0,0,600x400/600x400", screenshot_after=True)
+    assert isinstance(result, CallToolResult) and result.isError and "this one is 300x200" in result.content[0].text
+    assert [block.type for block in result.content] == ["text", "image", "text"]
+    assert not batch.disp.events and not batch.locks

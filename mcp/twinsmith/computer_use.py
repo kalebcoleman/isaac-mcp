@@ -64,9 +64,12 @@ def map_coords(params: Dict[str, Any], coord_space: str, state: Any) -> Dict[str
 
 
 def badge_args(params: Dict[str, Any], state: Any) -> Dict[str, Any]:
-    """With ``[screen] cursor_badge`` on, ask Kit to draw its cursor badge (Kit's ``act`` reads ``badge``)."""
+    """With ``[screen] cursor_badge`` on, ask Kit to draw its cursor badge: Kit's ``act`` reads ``badge``,
+    the folder of this server's capture lock, so its badge hides for this server's screenshots."""
+    from . import cursor_badge
+
     if getattr(getattr(state, "config", None), "cursor_badge", False):
-        return {**params, "badge": True}
+        return {**params, "badge": str(cursor_badge.desktop_dir())}
     return params
 
 
@@ -118,8 +121,11 @@ def kit_ui(canonical: str, params: Dict[str, Any], state: Any,
     try:
         params = map_coords(params, coord_space, state)
     except ValueError as error:
-        raise ToolError(json.dumps({"status": "error", "code": "INVALID_VALUE", "message": str(error),
-                                    "effects": "No input was sent."})) from None
+        refusal = json.dumps({"status": "error", "code": "INVALID_VALUE", "message": str(error),
+                              "effects": "No input was sent."})
+        if screenshot_after:  # the picture brings the token to use instead
+            return attach_capture(refusal, True, state)
+        raise ToolError(refusal) from None
     if canonical == "sim.ui.act":
         params = badge_args(params, state)
     result = dispatch(canonical, params, state)
