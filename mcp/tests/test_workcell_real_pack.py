@@ -50,58 +50,39 @@ def cell():
     return config, stage, report, camera_report, pack
 
 
-def _in_frame(stage, frame, roots):
+def _vertices_in_frame(stage, frame, roots):
+    """Visible mesh vertices of ``roots`` in ``frame`` (USD matrices are row-vector: v * M)."""
     cache = UsdGeom.XformCache()
     inverse = cache.GetLocalToWorldTransform(stage.GetPrimAtPath(frame)).GetInverse()
-    triangles = []
+    chunks = []
     for root in roots:
         for prim in Usd.PrimRange(stage.GetPrimAtPath(root)):
             if not prim.IsA(UsdGeom.Mesh) or UsdGeom.Imageable(prim).ComputePurpose() not in ("default", "render"):
                 continue
-            mesh = UsdGeom.Mesh(prim)
-            points = np.array(mesh.GetPointsAttr().Get(), dtype=float)
-            matrix = np.array(cache.GetLocalToWorldTransform(prim) * inverse).T
-            points = (np.c_[points, np.ones(len(points))] @ matrix)[:, :3]
-            offset, indices = 0, mesh.GetFaceVertexIndicesAttr().Get()
-            for count in mesh.GetFaceVertexCountsAttr().Get():
-                for k in range(1, count - 1):
-                    triangles.append((points[indices[offset]], points[indices[offset + k]],
-                                      points[indices[offset + k + 1]]))
-                offset += count
-    return np.array(triangles)
-
-
-def _first_hit(origin, direction, triangles):
-    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
-    e1, e2 = b - a, c - a
-    pv = np.cross(direction, e2)
-    det = (e1 * pv).sum(1)
-    ok = np.abs(det) > 1e-12
-    inv = np.where(ok, 1 / np.where(ok, det, 1), 0)
-    tv = origin - a
-    u = (tv * pv).sum(1) * inv
-    qv = np.cross(tv, e1)
-    v = (qv * direction).sum(1) * inv
-    t = (e2 * qv).sum(1) * inv
-    return bool((ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 0) & (t < 2.0)).any())
+            points = np.array(UsdGeom.Mesh(prim).GetPointsAttr().Get(), dtype=float)
+            matrix = np.array(cache.GetLocalToWorldTransform(prim) * inverse)
+            chunks.append((np.c_[points, np.ones(len(points))] @ matrix)[:, :3])
+    return np.vstack(chunks)
 
 
 def test_wrist_view_is_clear_of_the_gripper_stack(cell):
     config, stage, report, *_ = cell
     section = config["wrist_camera"]
-    origin = np.array(section["offset_in_tool0_m"])
-    rx = math.radians(section["rotation_in_tool0_deg"][0])
     assert section["rotation_in_tool0_deg"][1:] == [0.0, 0.0]
-    rotation = np.array([[1, 0, 0], [0, math.cos(rx), -math.sin(rx)], [0, math.sin(rx), math.cos(rx)]])
-    margin = 3.0  # degrees of extra field of view on each side
-    half_x = math.tan(math.radians(section["color_fov_deg"][0] / 2 + margin))
-    half_y = math.tan(math.radians(section["color_fov_deg"][1] / 2 + margin))
-    triangles = _in_frame(stage, report["tool0_path"], [report["gripper_path"], f"{report['assembly_path']}/quick_changer",
-                                                          report["bota_body_path"]])
-    assert len(triangles) > 1000
-    blocked = [(x, y) for x in np.linspace(-half_x, half_x, 21) for y in np.linspace(-half_y, half_y, 13)
-               if _first_hit(origin, rotation @ np.array([x, y, 1.0]), triangles)]
-    assert not blocked, f"{len(blocked)} wrist rays hit the RG2/Quick Changer/Bota"
+    tilt = math.radians(section["rotation_in_tool0_deg"][0])
+    margin = 3.0  # degrees beyond the colour field of view that must also stay clear
+    points = _vertices_in_frame(stage, report["tool0_path"], [
+        report["gripper_path"], f"{report['assembly_path']}/quick_changer", report["bota_body_path"]])
+    assert len(points) > 100_000
+    # Rx(tilt) rotates the optical frame; optical coordinates are R^T (p - offset).
+    rotation = np.array([[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]])
+    optical = (points - np.array(section["offset_in_tool0_m"])) @ rotation
+    ahead = optical[:, 2] > cameras.DEFAULT_CLIPPING_RANGE_M[0]  # nearer than the clip plane is not drawn
+    angle_x = np.degrees(np.arctan2(np.abs(optical[ahead, 0]), optical[ahead, 2]))
+    angle_y = np.degrees(np.arctan2(np.abs(optical[ahead, 1]), optical[ahead, 2]))
+    half_x, half_y = section["color_fov_deg"][0] / 2 + margin, section["color_fov_deg"][1] / 2 + margin
+    inside = (angle_x < half_x) & (angle_y < half_y)
+    assert not inside.any(), f"{int(inside.sum())} RG2/Quick Changer/Bota vertices fall in the wrist frame"
 
 
 def test_wrist_camera_prim_carries_the_configured_tilt_once(cell):
@@ -136,12 +117,17 @@ def test_overhead_camera_is_attached_to_the_gantry_through_its_release_stack(cel
     assert release[1][2] <= mount[1][2]
 
 
-def test_gantry_posts_stand_on_the_bench_footprint(cell):
+PANEL = "imported_PANEL_B2F52AEB2A0D_804849_271/Mesh_91"
+
+
+def test_gantry_posts_stand_on_the_bench_top_panel(cell):
     config, stage, _, _, pack = cell
     root = cameras.OVERHEAD_ROOT
     bench = Usd.Stage.Open(str(pack.asset(config["assets"]["bench"])))
-    box = UsdGeom.BBoxCache(Usd.TimeCode.Default(), ["default"]).ComputeWorldBound(
-        bench.GetDefaultPrim()).ComputeAlignedRange()
+    panel = next((prim for prim in bench.Traverse() if str(prim.GetPath()).endswith(PANEL)), None)
+    if panel is None:
+        pytest.skip("bench top panel prim not found in this pack")
+    box = UsdGeom.BBoxCache(Usd.TimeCode.Default(), ["default"]).ComputeWorldBound(panel).ComputeAlignedRange()
     scale = config["world"]["bench_scale"]
     ox, oy = config["world"]["workstation_xy_m"]
     low = (box.GetMin()[0] * scale + ox, box.GetMin()[1] * scale + oy)
@@ -150,13 +136,17 @@ def test_gantry_posts_stand_on_the_bench_footprint(cell):
         post = _bounds(stage, f"{root}/mount/{name}")
         assert post[0][2] == pytest.approx(config["world"]["tabletop_z_m"], abs=1e-6)
         for axis in (0, 1):
-            assert low[axis] <= post[0][axis] and post[1][axis] <= high[axis], (name, axis)
+            assert low[axis] <= post[0][axis] and post[1][axis] <= high[axis], (name, axis, low, high)
 
 
 def test_rg2_has_no_geometry_free_body_and_all_joint_frames_agree(cell):
     config, stage, report, *_ = cell
     assert report["frame_bodies_neutralized"] == [f"{report['gripper_path']}/gripper_center"]
     assert report["joints_deactivated"] == [f"{report['robot_path']}/joints/robot_gripper_joint"]
+    assert report["velocity_iterations_clamped"] == [report["gripper_path"]]
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(report["assembly_path"])):
+        count = prim.GetAttribute("physxArticulation:solverVelocityIterationCount")
+        assert not count or (count.Get() or 0) <= 4, prim.GetPath()
     cache = UsdGeom.XformCache()
     for prim in Usd.PrimRange(stage.GetPrimAtPath(report["assembly_path"])):
         if prim.HasAPI(UsdPhysics.RigidBodyAPI):

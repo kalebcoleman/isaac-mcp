@@ -411,6 +411,8 @@ def test_frame_only_body_and_dangling_disabled_joint_are_neutralized(cell):
     joint = UsdPhysics.FixedJoint.Define(source, "/khi_rs080n/gripper_center_joint")
     joint.CreateBody0Rel().SetTargets([Sdf.Path("/khi_rs080n/onrobot_rg2_base_link")])
     joint.CreateBody1Rel().SetTargets([center.GetPath()])
+    source.GetPrimAtPath("/khi_rs080n").CreateAttribute(
+        "physxArticulation:solverVelocityIterationCount", Sdf.ValueTypeNames.Int).Set(16)
     source.GetRootLayer().Save()
     arm = Usd.Stage.Open(str(pack.paths["pack/robot"]))
     leftover = UsdPhysics.FixedJoint.Define(arm, "/Asset/robot_gripper_joint")
@@ -423,6 +425,9 @@ def test_frame_only_body_and_dangling_disabled_joint_are_neutralized(cell):
 
     assert report["frame_bodies_neutralized"] == [f"{report['gripper_path']}/gripper_center"]
     assert report["joints_deactivated"] == [f"{report['robot_path']}/robot_gripper_joint"]
+    assert report["velocity_iterations_clamped"] == [report["gripper_path"]]
+    assert stage.GetPrimAtPath(report["gripper_path"]).GetAttribute(
+        "physxArticulation:solverVelocityIterationCount").Get() == 4
     frame = stage.GetPrimAtPath(report["frame_bodies_neutralized"][0])
     assert frame and not frame.HasAPI(UsdPhysics.RigidBodyAPI) and not frame.HasAPI(UsdPhysics.MassAPI)
     assert not stage.GetPrimAtPath(f"{report['gripper_path']}/gripper_center_joint").IsActive()

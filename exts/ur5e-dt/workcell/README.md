@@ -181,19 +181,22 @@ The current candidate contains:
 - No genuine Bota Rokubi, D415, wrist bracket or gantry CAD is available. These are
   dimensioned, unconfirmed proxies.
 - The overhead support is the pack's three-member gantry (two posts and a cross-member).
-  The posts stand on the bench top, outside the arm's reach, and the camera hangs under the
+  The posts stand on the bench top panel (inside its measured footprint, x up to 0.9436 m,
+  y -0.811..-0.091 m), outside the arm's reach, and the camera hangs under the
   beam through the stacked pack proxies (camera, printed shelf, KB3X3 release plate, beam
   underside), each touching the next within 2 mm. The stack heights come from the proxy
   dimensions, the pack scales member thickness with the post span, and the real attachment
   details are unconfirmed, so this does not establish mounting feasibility. The KB3X3 is a
   camera-only release, not a load-bearing gantry base. Printed mounts and shelf remain proxies.
-- The wrist D415 is 75 mm below the tool axis and tilted 6 degrees away from it. A ray test
-  against the pack's RG2, Quick Changer and Bota meshes finds no occlusion inside the colour
-  frustum plus a 3 degree margin; the previous 38 mm offset blocked 28% of the rays.
+- The wrist D415 is 90 mm below the tool axis and tilted 8 degrees away from it. Projecting
+  every RG2, Quick Changer and Bota vertex through the camera finds none inside the colour
+  frustum plus a 3 degree margin (3.7 degrees clear of the edge). A render of the previous
+  75 mm / 6 degree pose still showed the finger tips at the bottom edge of the frame.
 - The assembly builder drops two pack leftovers that PhysX warned about: the geometry-free
   `gripper_center` rigid body becomes a plain frame (no mass, no inertia, no joint), and the
   UR5e asset's disabled `robot_gripper_joint`, whose world anchor never matched the wrist, is
-  deactivated. Both edits live in the session layer; the pack is untouched. The RG2 stays the
+  deactivated. The RG2's authored 16 solver velocity iterations are capped at the 4 that TGS
+  supports. These edits live in the session layer; the pack is untouched. The RG2 stays the
   standard 110 mm gripper.
 - A plain Jenga block proxy without measured chamfers.
 
@@ -215,11 +218,11 @@ configuration or a design envelope and are not vendor drawings.
 | RG2 maximum opening | 0.110 m | `confirmed` |
 | Finger pad size | 0.012 x 0.008 x 0.025 m | Provisional proxy; installed dimensions `unconfirmed` |
 | D415 body | 0.099 x 0.020 x 0.023 m | `unconfirmed` |
-| Wrist camera offset | -0.012, -0.075, -0.005 m in tool0 (design pose; Max's measured value was y = -0.038) | `unconfirmed` |
-| Wrist camera tilt | 6 degrees about the optical X axis (design value) | `unconfirmed` |
-| Overhead camera position | 0.93, -0.1333, 1.02 m, under the gantry beam | `unconfirmed` |
-| Gantry post positions and height | (0.93, -0.65) and (0.93, 0.20) m; 1.0915 m | `unconfirmed` |
-| Shelf and release stack offsets | +0.0176 m and +0.0276 m above the camera (from proxy dimensions) | `unconfirmed` |
+| Wrist camera offset | -0.012, -0.09, -0.005 m in tool0 (design pose; Max's measured value was y = -0.038) | `unconfirmed` |
+| Wrist camera tilt | 8 degrees about the optical X axis (design value) | `unconfirmed` |
+| Overhead camera position | 0.91, -0.2, 1.02 m, under the gantry beam | `unconfirmed` |
+| Gantry post positions and height | (0.91, -0.79) and (0.91, -0.10) m; 1.0944 m | `unconfirmed` |
+| Shelf and release stack offsets | +0.0205 m and +0.0305 m above the camera (from proxy dimensions) | `unconfirmed` |
 | Printed shelf | 0.1 x 0.06 x 0.008 m | `placeholder` |
 | Jenga nominal block size | 0.072 x 0.024 x 0.014 m (72 x 24 x 14 mm) | Nominal dimensions `confirmed`; tolerances `unconfirmed` |
 | Jenga block mass and friction | Not measured | `unconfirmed` |

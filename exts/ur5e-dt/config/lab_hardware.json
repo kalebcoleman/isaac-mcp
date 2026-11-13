@@ -340,11 +340,11 @@
     "offset_in_tool0_m": {
       "value": [
         -0.012,
-        -0.075,
+        -0.09,
         -0.005
       ],
       "status": "unconfirmed",
-      "source": "Design pose, not a lab measurement. Max's localizer_bridge.py gives (-0.012,-0.038,-0.005), but at y=-0.038 the D415 frustum is 28% blocked by the RG2 body (ray test against the pack meshes). y is moved to -0.075 so the view is clear of the RG2 with a 3 degree margin; x and z keep Max's values. Re-measure on the real bracket. Max's camera_model.py has z=-0.010; Aldrin hard-codes a D455 at wrist_3 (0.045,-0.05,0.07), a different camera and mount."
+      "source": "Design pose, not a lab measurement. Max's localizer_bridge.py gives (-0.012,-0.038,-0.005), but there the RG2 fingers and body fill the D415 frustum (projecting the pack's RG2, Quick Changer and Bota vertices through the camera). y is moved to -0.09 and the camera tilted (rotation_in_tool0_deg) so no gripper-stack vertex lies inside the colour frustum plus a 3 degree margin; x and z keep Max's values. Re-measure on the real bracket. Max's camera_model.py has z=-0.010; Aldrin hard-codes a D455 at wrist_3 (0.045,-0.05,0.07), a different camera and mount."
     },
     "offset_in_tool0_alternatives_m": {
       "value": {
@@ -369,12 +369,12 @@
     },
     "rotation_in_tool0_deg": {
       "value": [
-        6.0,
+        8.0,
         0.0,
         0.0
       ],
       "status": "unconfirmed",
-      "source": "Design tilt, not a lab measurement: 6 degrees about the optical X axis tilts the view away from the tool axis (toward the offset side) so the RG2 stays out of the frustum; the on-axis grasp point is visible from about 0.3 m ahead of tool0. Max's code uses identity (camera OPTICAL frame, z forward, y down, equals tool0). Extrinsic XYZ degrees. The USD camera looks along -Z, so the builder adds Rx(180) internally."
+      "source": "Design tilt, not a lab measurement: 8 degrees about the optical X axis tilts the view away from the tool axis (toward the offset side) so the RG2 fingertips stay out of the frustum (3.7 degrees clear of its edge); the tool axis enters the view about 0.4 m ahead of tool0. Max's code uses identity (camera OPTICAL frame, z forward, y down, equals tool0). Extrinsic XYZ degrees. The USD camera looks along -Z, so the builder adds Rx(180) internally."
     },
     "mount_position": {
       "value": "under the arm",
@@ -419,12 +419,12 @@
     },
     "position_m": {
       "value": [
-        0.93,
-        -0.1333,
+        0.91,
+        -0.2,
         1.02
       ],
       "status": "unconfirmed",
-      "source": "Proposed overhead D415 optical origin, hung under the gantry beam (x = beam plane) and looking back at the tower; outside 850 mm spherical reach. Design value, not a lab measurement."
+      "source": "Proposed overhead D415 optical origin, hung under the gantry beam (x = beam plane, y within the beam span) and looking back at the tower; outside 850 mm spherical reach. Design value, not a lab measurement."
     },
     "look_at_m": {
       "value": [
@@ -485,16 +485,16 @@
     "post_xy_m": {
       "value": [
         [
-          0.93,
-          -0.65
+          0.91,
+          -0.79
         ],
         [
-          0.93,
-          0.2
+          0.91,
+          -0.1
         ]
       ],
       "status": "unconfirmed",
-      "source": "Proposed gantry posts, standing on the bench top (pack bench footprint x -0.97..0.97, y -0.84..0.21 m) and outside the 850 mm radial reach. Design value, not a lab measurement."
+      "source": "Proposed gantry posts, standing on the bench top panel (pack panel Mesh_91 footprint, home-PC measured: x up to 0.9436, y -0.811..-0.091 m) and outside the 850 mm radial reach. Design value, not a lab measurement."
     },
     "removable": {
       "value": true,
@@ -516,7 +516,7 @@
       "source": "Placeholder: Printed camera shelf / tilt arm stand-in."
     },
     "height_m": {
-      "value": 1.0915,
+      "value": 1.0944,
       "status": "unconfirmed",
       "source": "Design height: the beam underside rests on the release plate stacked over the shelf and camera (asset_layout.overhead_release / overhead_shelf mount_pose); overhead rails stay above the 850 mm reach. Not a lab measurement."
     }
@@ -857,7 +857,7 @@
       "value": {
         "bom_id": "overhead_shelf",
         "mount_pose": {
-          "position_m": [0, 0, 0.0176],
+          "position_m": [0, 0, 0.0205],
           "orientation_wxyz": [0.7071067811865476, 0, 0, 0.7071067811865476]
         }
       },
@@ -868,7 +868,7 @@
       "value": {
         "bom_id": "overhead_release",
         "mount_pose": {
-          "position_m": [0, 0, 0.0276],
+          "position_m": [0, 0, 0.0305],
           "orientation_wxyz": [1, 0, 0, 0]
         }
       },
