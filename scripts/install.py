@@ -3,10 +3,10 @@
 
 A Kit app keeps what its Extensions window is told to autoload in ``user.config.json``. This
 script edits that file: it adds this repository's ``exts`` folder to the extension search path,
-enables the bridge and its panel, and stores the bridge's port. A tool package of your own is
+enables the bridge, and stores the bridge's port. A tool package of your own is
 registered the same way, so the bridge imports it when it starts.
 
-    python3 scripts/install.py                 # register the bridge and the panel
+    python3 scripts/install.py                 # register the bridge
     python3 scripts/install.py --remove        # undo that
     python3 scripts/install.py add-project --path <dir holding the package> --module my_tools
     python3 scripts/install.py remove-project --module my_tools [--path <dir>]
@@ -32,7 +32,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "exts", "isaac.mcp.bridge"))
 from isaac_mcp_bridge.knobs import BIND, PORT, SETTINGS_SUBTREE, TOOL_MODULES, TOOL_PATHS  # noqa: E402
 
-EXTENSIONS = ["isaac.mcp.bridge", "isaac.mcp.panel"]
+EXTENSIONS = ["isaac.mcp.bridge"]
 DEFAULT_PORT = 8766
 BRIDGE_KEY = SETTINGS_SUBTREE.rsplit("/", 1)[1]
 

@@ -1,16 +1,15 @@
-# Publishing isaac-mcp (PyPI and npm)
+# Publishing isaac-mcp (PyPI)
 
-Not published to PyPI or npm yet. Names `isaac-mcp` on both were unclaimed on 2026-10-29: re-check first
-(`curl -s -o /dev/null -w "%{http_code}\n" https://pypi.org/pypi/isaac-mcp/json` and
-`https://registry.npmjs.org/isaac-mcp`; 404 = free).
+Publishing targets PyPI only. The removed npm launcher was a 24-line wrapper around `uvx`
+and required uv to be installed anyway. Check PyPI name availability before publishing.
 
 ## Before publishing
 1. `cd mcp && uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test pytest -q`.
    Record the current count and commit.
    From the repo root also run `python3 scripts/check_docs.py` and review the latest CI result.
-2. Decide the version in `mcp/pyproject.toml` and `npm/package.json` (keep them equal).
-3. Check `docs/VENDORING.md` and the LICENSE files: the UR5e twin contains Aldrin Inbaraj's MIT code. The bridge,
-   client and panel, first built on his unlicensed `omni-kit-mcp`, were rewritten here.
+2. Decide the version in `mcp/pyproject.toml`.
+3. Check `docs/VENDORING.md` and the LICENSE files: the UR5e twin contains Aldrin Inbaraj's MIT code. The bridge
+   and client, first built on his unlicensed `omni-kit-mcp`, were rewritten here.
 4. Verify the bundled-asset cleanup with `python3 scripts/check_assets.py`. The NVIDIA robot,
    sensor and material files, the Vention bench, the unused Kawasaki/RG2 scene and the Poliigon oak
    textures must not be in the public tree or its history. The Apache-2.0 and CC BY 4.0 notices are
@@ -26,16 +25,6 @@ uvx --from isaac-mcp isaac-mcp --version
 ```
 Do a TestPyPI dry run first: `uv publish --publish-url https://test.pypi.org/legacy/ --token <testpypi-token>`.
 Install check: `uv tool install isaac-mcp` then `isaac-mcp --version`. Optional Isaac Lab extra: `isaac-mcp[isaaclab]`.
-
-## npm (npx launcher)
-`npm/` is only a launcher: it runs the Python server through `uvx`. Publish it after PyPI, then set
-`DEFAULT_FROM` in `npm/bin/isaac-mcp.js` to `isaac-mcp` (the PyPI name) instead of the GitHub URL.
-```bash
-cd npm
-npm pack --dry-run                 # check the file list (bin, README, LICENSE)
-npm login && npm publish
-npx -y isaac-mcp --version
-```
 
 ## Client config after publishing
 ```json

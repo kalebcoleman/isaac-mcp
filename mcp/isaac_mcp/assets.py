@@ -468,20 +468,6 @@ class Resolver:
         found = self._locate(relpath)
         return found[0] if found else None
 
-    def _store_base(self, path: Path) -> Path | None:
-        """Return the store folder that holds *path*, or None for a file outside every store."""
-        resolved = path.resolve()
-        best: Path | None = None
-        for store in self.stores():
-            for base in self._bases(store):
-                try:
-                    resolved.relative_to(base)
-                except ValueError:
-                    continue
-                if best is None or len(base.parts) > len(best.parts):
-                    best = base
-        return best
-
     def fetch_group(self, relpath: str) -> dict | None:
         """Return the manifest fetch group that contains *relpath*, if any."""
         for group in self.manifest().get("fetch", []):

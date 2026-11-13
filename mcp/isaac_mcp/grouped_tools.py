@@ -235,7 +235,3 @@ def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
         for name, tool in manager._tools.items():
             if name not in hide:
                 _describe_in_listed_form(tool)
-
-
-def listed_names(server: Any) -> List[str]:
-    return [tool.name for tool in server._tool_manager.list_tools()]

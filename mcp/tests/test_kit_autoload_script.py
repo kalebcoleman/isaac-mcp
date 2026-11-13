@@ -32,7 +32,7 @@ def test_install_registers_the_bridge_once_and_remove_undoes_exactly_that(script
     script.main(["--config", str(config)])
     after = stored(config)
     enabled = list(after["app"]["exts"]["enabled"].values())
-    assert enabled[0] == "other.ext-1.0.0" and len(enabled) == 3, "an older version of ours is replaced, others are kept"
+    assert enabled[0] == "other.ext-1.0.0" and len(enabled) == 2, "an older version of ours is replaced, others are kept"
     assert any(item.startswith("isaac.mcp.bridge-") and item != "isaac.mcp.bridge-0.0.1" for item in enabled)
     assert list(after["app"]["exts"]["userFolders"].values()) == [str(REPO / "exts")]
     assert after["exts"]["isaac.mcp.bridge"] == {"autostartPort": 8766}

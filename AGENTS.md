@@ -42,7 +42,7 @@ per-tool reference lives in `docs/` ([index](docs/README.md), [every tool's argu
   nothing running it says so and names the next call. Do not repeat it before each call or after a
   context reset: a scene tool that meets a changed stage answers `STALE_TARGET` with the new IDs. Offline tool listings do not prove a running or compatible simulator.
   `scripts/check_machine.sh` is a **6.2-specific** preflight and can run a real CUDA kernel; use the
-  version-specific checks for earlier builds. `./verify.sh` changes the UR5e scene and is 6.2-specific.
+  version-specific checks for earlier builds.
 
 Native ROS camera/LiDAR render handles can make `sim__stage__save` refuse with
 `SAVE_UNSUPPORTED`. Inspect its `properties` and `retry_with`; retry with

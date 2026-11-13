@@ -32,8 +32,7 @@ start. It offers three kinds of tool:
 | Bridge | `exts/isaac.mcp.bridge/` | A Kit extension inside Isaac Sim: a TCP server that runs tool calls on Kit's main thread. Robot-agnostic. |
 | Scene tools | `exts/sim-tools/` | A Kit extension that registers the 71 generic sim and assets tools on the bridge. |
 | UR5e twin | `exts/ur5e-dt/` | One lab's digital twin: 23 `ur5e_dt.*` tools on the same bridge. Optional. |
-| Panel | `exts/isaac.mcp.panel/` | An optional in-app window listing the registered tools. |
-| Launch and checks | `run.sh`, `install.sh`, `verify.sh`, `scripts/` | Start Isaac Sim with the extensions, install the host, run checks. |
+| Launch and checks | `run.sh`, `install.sh`, `scripts/` | Start Isaac Sim with the extensions, install the host, run checks. |
 
 They are separate on purpose. The host must start instantly and must never need the 20 GB simulator environment just
 to take a screenshot or manage a job. The bridge knows nothing about robots, so any Kit app and any tool pack can use
@@ -115,9 +114,8 @@ with its PID and port. The server picks the bridge to dial in this order:
 
 | Port | Used by |
 |---|---|
-| 8766 | The default bridge port of `run.sh`, `verify.sh` and client configurations. |
+| 8766 | The default bridge port of `run.sh` and client configurations. |
 | 8767 | Convention for a second bridge, such as the Isaac Lab bridge example. |
-| 8799 | `scripts/probe_62.sh`, so its probes do not disturb a running simulator. |
 | any | `./run.sh --port 0` asks the OS for a free port; `sim__launch` picks one in `ISAAC_MCP_PORT_RANGE`. |
 
 A configured port that is already taken refuses at startup rather than moving somewhere no client could predict.
@@ -177,7 +175,7 @@ Kit (set them where `run.sh` runs; `sim__launch` passes the server's on), or an 
 
 | Entity | Rule | Examples |
 |---|---|---|
-| Kit extension ID and folder | The folder under `exts/` is the extension ID | `ur5e-dt`, `sim-tools`, `isaac.mcp.bridge`, `isaac.mcp.panel` |
+| Kit extension ID and folder | The folder under `exts/` is the extension ID | `ur5e-dt`, `sim-tools`, `isaac.mcp.bridge` |
 | Python package | The ID with underscores | `ur5e_dt`, `sim_tools`, `isaac_mcp_bridge`, `isaac_mcp` |
 | Command and server name | One name, no aliases | `isaac-mcp` |
 | Tool | `<namespace>.<tool>` in Kit, `<namespace>__<tool>` in MCP | `sim.stage.info`, `sim__stage__info` |
@@ -200,7 +198,7 @@ source config/ros_dds.env
 3. `CYCLONEDDS_URI=file://.../config/cyclonedds.xml`: Explicitly disables multicast in the Cyclone DDS XML configuration (`<Multicast>disabled</Multicast>`).
 
 > [!IMPORTANT]
-> If a ROS client does not source `config/ros_dds.env`, Cyclone DDS default multicast settings will fail to discover the localhost-confined simulation publisher. The nodes will report no errors, but messages publish into the void and subscribers receive 0 messages. Both `./run.sh` and `./scripts/verify_tf.sh` automatically source `config/ros_dds.env`.
+> If a ROS client does not source `config/ros_dds.env`, Cyclone DDS default multicast settings will fail to discover the localhost-confined simulation publisher. The nodes will report no errors, but messages publish into the void and subscribers receive 0 messages. `./run.sh` automatically sources `config/ros_dds.env`.
 
 ---
 
