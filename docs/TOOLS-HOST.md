@@ -80,8 +80,10 @@ the **host server** machine. Mouse and keyboard tools need the separate opt-in b
   crop with its own token. Both are used by the input tools below and by `sim__ui`; they work without input enabled.
 
 - X11 reuses window IDs after a window closes. On a shared desktop, call `windows(action="list")` again right before a
-  `screenshot` or `screen_recording(action="start")` with a `window_id`. Window capture reads the selected window's pixels, so it
-  works when another window covers it. `windows(action="info")` reports the display, monitors, capture locations and recording state.
+  `screenshot` or `screen_recording(action="start")` with a `window_id`. Window capture reads the selected window's pixels, so
+  with a compositing window manager (GNOME, KDE) it works when another window covers it. Without one, the covered part and
+  any open menu are black: `doctor` says so, and raising the window first helps. `windows(action="info")` reports the display,
+  monitors, capture locations and recording state.
 - A recording lives in the MCP server process. If that client exits first it leaves a very short MP4, and a later
   `screen_recording(action="stop")` from another process reports none active. Keep one client connected from start to stop.
 - For a demo with Isaac Sim and RViz 2 together: `windows(action="tile", window_ids=[...])`, then
@@ -117,7 +119,9 @@ The same steps work for Isaac Sim, FreeCAD or any other X11 application.
 1. **Check readiness:** `doctor` (toolset `screen`) answers with compact JSON: display backend (X11 or Wayland), `DISPLAY`,
    XTEST, whether the session is locked, whether the `input` toolset is on, whether the Kit window was found and
    `omni.kit.ui_test` is enabled, the DPI scale, the screenshot `max_width`, the cursor badge, a `ready` summary and the next
-   call to make. It acts on nothing.
+   call to make. `notes` lists what works with a limit: a lock state no screen saver service reported (`locked` is `null`;
+   input is then refused only while another client holds the keyboard, as a lock screen does), XWayland, or a desktop without
+   a compositing manager. It acts on nothing.
 2. **Pick the window:** `windows(action="list")` gives each window's `window_id` and PID. Every input call needs both, as
    integer `window_id` and `expected_pid`. Identify the actual client window, not an unrelated frame or dialog; some desktops
    list both. Raise a covered window with `windows(action="raise", window_id=12345, expected_pid=6789)`.
@@ -127,14 +131,15 @@ The same steps work for Isaac Sim, FreeCAD or any other X11 application.
 4. **Act and see:** pass that token as `coord_space` and give `x`, `y` (and `end_x`, `end_y` for a drag) in the inline image's
    pixels; the server maps them to window pixels in one place, using pixel centres. With the default `coord_space="window"`,
    x and y are original window pixels, relative to the window's top-left corner. `expected_width` and `expected_height` are
-   always the window's size, the token's last field (`/WxH`; for a full-window screenshot also its saved size), and are still
-   checked. Add `screenshot_after=true` to get the window's picture after
-   the action in the same answer, with a new `coord_space` line for the next step. For a 1200×800 window with ID 12345 and PID
+   always the window's size, the token's last field (`/WxH`; for a full-window screenshot also its saved size), not the
+   inline image's size, and are still checked. Add `screenshot_after=true` to get the window's picture after the action in the
+   same answer, with a new `coord_space` line for the next step. That picture is taken once the window has stopped changing
+   (two equal reads 0.12 s apart), or after 1 s with a note when it never does, as with a running simulation. For a 1200×800 window with ID 12345 and PID
    6789, a click in window pixels is
    `{"action":"click","window_id":12345,"expected_pid":6789,"x":200,"y":100,"expected_width":1200,"expected_height":800,"screenshot_after":true}`.
 5. **Zoom on small text or controls:** `screenshot(window_id=..., region=[x, y, w, h], coord_space=...)` returns that part of
-   the window enlarged, with its own `coord_space` token. A click measured on the crop and sent with the crop's token lands
-   on the same window pixel.
+   the window enlarged (up to 4 times), with its own `coord_space` token. The crop holds every window pixel the region's
+   image pixels show. A click measured on the crop and sent with the crop's token lands on the same window pixel.
 6. **Batch known steps:** `computer` with action `batch` takes `actions`, a list of up to 10 steps (each an action and its own
    arguments). All steps are checked before any input is sent; an invalid step sends nothing. At run time it stops at the first
    failed step and reports how many completed. With `screenshot_after=true`, one screenshot is taken at the end. It is a list,
@@ -143,8 +148,15 @@ The same steps work for Isaac Sim, FreeCAD or any other X11 application.
 
 Take a new screenshot after a resize: a token from before the resize names the old size and is refused, and nothing is sent.
 Success means events were sent, not that the app processed them; a busy simulator can take several seconds to show the result,
-so read the `screenshot_after` picture rather than assuming. A failed action still returns the picture when one can be taken,
-and a failed capture never hides a successful action.
+so read the `screenshot_after` picture rather than assuming. With `screenshot_after=true` a refused or failed action, single
+or batch, is an error that still carries the picture when one can be taken (and so the token to use next), and a failed
+capture never hides a successful action. A token is checked against the window's size, not its ID: do not use one window's
+token with another window of the same size.
+
+`key` takes one letter or digit, or `enter`, `tab`, `escape`, `backspace`, `delete`, `left`, `right`, `up`, `down`, `home`,
+`end`, `pageup`, `pagedown`, `space` or `f1` to `f12`, with `modifiers` from `ctrl`, `shift`, `alt` and `super`. Punctuation
+goes through `type`. A menu or popup an action opens is a window of its own in `windows(action="list")`: capture and click it
+by its own ID, and send keys such as `escape` to its parent window.
 
 #### Cursor badge
 
@@ -153,11 +165,19 @@ An optional small marker shows people watching the desktop where the agent is po
 server.
 
 - For `computer` `click`, `drag` and `scroll`, a small click-through X11 window glides to the target. `computer` then waits
-  about 150 ms for the glide; with the badge off there is no wait.
+  about 150 ms for the glide; with the badge off there is no wait. It is not drawn for a point that is refused as outside
+  the window or for a resized window, on a locked desktop, or while the lock state is unknown and another client holds the
+  keyboard.
 - For `sim__ui` `act`, the badge is drawn inside Isaac Sim as an `omni.ui` overlay, because Kit input does not move the OS
   pointer. It adds no delay.
 - Screenshots never show it. Captures take a shared lock (a file in `$XDG_RUNTIME_DIR/twinsmith-desktop/`), and the overlays
-  hide while it is held.
+  hide while it is held, so a screenshot also ends the badge's 1.5 s on screen early. Each shown badge keeps a flag file
+  there (`badge-<pid>-<kind>.shown`, holding its process's start time); a capture waits up to 1 s for the flags to go and
+  takes no picture if one stays, which happens while an Isaac Sim that shows its badge is too busy to draw a frame: take the
+  screenshot again a few seconds later. A flag left by a process that has ended, or whose PID now belongs to another
+  process, is deleted.
+- A monitor recording shows both badges. A window recording shows Kit's badge, which is drawn inside that window, but not
+  the X11 badge, which is a window of its own.
 
 #### Limits and safety
 
