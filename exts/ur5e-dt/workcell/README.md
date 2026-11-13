@@ -1,8 +1,9 @@
 # UR5e Jenga work cell BOM and private asset pack
 
-Status: **candidate, not qualified.** This slice adds procurement metadata, pack
-documentation and a pure BOM/stage audit. It does not add loader code, run PhysX, render a
-scene or claim a smoke pass.
+Status: **candidate, not runtime-qualified.** The pack-backed Workcell API is integrated
+at baseline `aff668a` on `workcell/lab-hardware`. Integration and CPU fixture checks do
+not establish a PhysX, render, sensor or lab-fidelity pass. This documentation update
+does not run the simulator or inspect private assets.
 
 ## Scope
 
@@ -13,9 +14,37 @@ gantry. The Jenga tower is 54 blocks of 72 x 24 x 14 mm.
 Machine-readable data:
 
 - BOM: `<repo>/exts/ur5e-dt/workcell/bom.csv`
+- Human-readable BOM: [BOM.md](BOM.md) (the same 13 logical rows and quantities)
 - Hardware configuration: `<repo>/exts/ur5e-dt/config/lab_hardware.json`
 - Audit helper: `<repo>/exts/ur5e-dt/ur5e_dt/bom.py`
 - Audit test: `<repo>/mcp/tests/test_workcell_bom.py`
+
+## Pack-backed Workcell API
+
+The baseline exposes seven grouped tools with nine actions through `isaac.mcp.bridge`:
+
+| Group | Actions | Purpose |
+| --- | --- | --- |
+| `ur5e_dt__workcell` | `quick_start`, `status`, `shutdown` | Build a stopped pack-backed scene, read its report, or release workcell state without clearing the stage |
+| `ur5e_dt__robot` | `status` | Read the robot build report |
+| `ur5e_dt__perception` | `status` | Read camera configuration, not captured sensor data |
+| `ur5e_dt__jenga` | `status` | Read the tower build report |
+| `ur5e_dt__real2sim` | `status` | Report synchronization as not implemented |
+| `ur5e_dt__planning` | `status` | Report planning as not implemented |
+| `ur5e_dt__eval` | `status` | Report evaluation as not implemented |
+
+`quick_start` accepts `config_path`, `mode` (`physics` or `mirror_real`) and
+`discard_changes`. Physics mode uses gravity; mirror mode uses zero gravity, not a
+real-robot connection. Replacing an unsaved stage requires explicit consent. There is no
+extension panel or legacy ROS graph setup, and no implemented force capture, planning,
+real-hardware control or evaluation. Generic scene tools remain separate. See the
+[tool reference](../../../docs/TOOLS-UR5E.md) for the baseline contract.
+
+A seeded Jenga build action is pending integration by the lead; it is not part of this
+nine-action baseline. The planned variation concept is reproducible, seeded variation
+around nominal blocks and tower placement, with physical uncertainty kept distinct from
+confirmed nominal dimensions. The exact variation schema and supported ranges are pending
+and will be supplied by the lead; no configuration keys or runtime guarantees are defined here.
 
 ## Hardware configuration and provenance
 
@@ -60,11 +89,11 @@ fewer blocks than the BOM quantity, but each instantiated block maps to `jenga_b
 - `price_status=quote_required`: no verified public price for the required configuration.
   `unit_price` is intentionally blank, never zero and never invented.
 
-The verified rows are the D415 body (272.00 USD each) and the Thorlabs KB3X3 release
-(117.27 USD each). The 80/20 1515 profile has a verified public rate of 0.98 USD per inch,
-but the gantry cut list and fasteners are unresolved, so the gantry remains
-`quote_required`. The UR5e, Bota, OnRobot items, Vention bench, printed parts and Jenga
-blocks require quotes. No total is implied.
+The only known item prices recorded for this BOM are the D415 body (272.00 USD each,
+two units) and the Thorlabs KB3X3 release (117.27 USD, one unit). These are recorded
+list prices, not newly checked prices or procurement quotes. Every other row, including
+the complete overhead gantry, remains `quote_required`. No complete workcell total is
+available; missing prices are not zero.
 
 No purchase, order or financial action is performed by this documentation or its tests.
 
@@ -101,7 +130,7 @@ files:
 pack declares it for every file. Every referenced file needs `path`, `sha256`, `source`,
 `license` and a boolean `redistributable`.
 
-Loader contract, without changes in this slice:
+Loader contract:
 
 - `asset_pack.AssetPack.asset(logical_id)` returns the absolute path for a logical ID.
 - `asset_pack.resolve_pack(config)` resolves the configured pack ID and version.
@@ -127,7 +156,7 @@ previous checkout or a path in the configuration.
    references and no unresolved references. A dependency failure blocks the pack; it is not
    worked around with a fallback path.
 7. Load the pack through `AssetPack.asset` and `resolve_pack`, then run the BOM audit and the
-   PhysX smoke before making any old-store report.
+   PhysX smoke before claiming runtime qualification or making any old-store report.
 
 The BOM audit checks structural manifest fields and, when given a pack root, the actual file
 hashes. It also requires every non-`materials` pack asset to have a BOM row and every BOM
@@ -142,6 +171,10 @@ The current candidate contains:
   appearance is not vendor-accurate.
 - No genuine Bota Rokubi, D415, wrist bracket or gantry CAD is available. These are
   dimensioned, unconfirmed proxies.
+- The planned overhead support is a three-member gantry (two posts and a cross-member),
+  not a slab. The cantilever and real attachment details are missing or unconfirmed;
+  proxy geometry does not establish mounting feasibility. The KB3X3 is a camera-only
+  release, not a load-bearing gantry base. Printed mounts and shelf remain proxies.
 - A plain Jenga block proxy without measured chamfers.
 
 This is not a high-fidelity-qualified model. Flattening preserves mesh and articulation
@@ -155,21 +188,28 @@ configuration or a design envelope and are not vendor drawings.
 | --- | --- | --- |
 | Bench height | 0.885 m default; 0.801 m alternative | `conflict` |
 | Bench top | 1.4 x 0.9 m | `unconfirmed` |
-| Base plate thickness | 0.0 m | `unconfirmed` |
+| Base plate thickness | 0.005 m (5 mm), replacing the old zero placeholder | Provisional; installed thickness `unconfirmed` |
 | Bota diameter / length / mass | 0.048 m / 0.032 m / 0.12 kg | `unconfirmed` |
-| Quick Changer standoff | 0.01592 m | `confirmed` |
+| Quick Changer standoff | 0.01592 m (15.92 mm) in CAD | CAD `confirmed`; installed size `unconfirmed` |
 | Quick Changer mass | 0.41 kg | `unconfirmed` |
 | RG2 maximum opening | 0.110 m | `confirmed` |
-| Finger pad size | 0.030 x 0.018 x 0.008 m | `placeholder` |
+| Finger pad size | 0.012 x 0.008 x 0.025 m | Provisional proxy; installed dimensions `unconfirmed` |
 | D415 body | 0.099 x 0.020 x 0.023 m | `unconfirmed` |
 | Wrist camera offset | -0.012, -0.038, -0.005 m in tool0 | `conflict` |
 | Overhead camera position | 0.7, -0.1333, 1.02 m | `unconfirmed` |
 | Gantry post positions and height | 1.05, +/-0.55 m; 1.1 m | `unconfirmed` |
 | Printed shelf | 0.1 x 0.06 x 0.008 m | `placeholder` |
-| Jenga block size | 0.072 x 0.024 x 0.014 m | `unconfirmed` |
+| Jenga nominal block size | 0.072 x 0.024 x 0.014 m (72 x 24 x 14 mm) | Nominal dimensions `confirmed`; tolerances `unconfirmed` |
+| Jenga block mass and friction | Not measured | `unconfirmed` |
 | Jenga tower | 54 blocks, 18 layers | `confirmed` |
 
-Measure the bench, base plate, Bota envelope and mass, Quick Changer mass, pad geometry,
+The lead's pending CSV updates distinguish the provisional 5 mm plate and confirmed
+15.92 mm Quick Changer CAD standoff from unmeasured installed hardware. Older CSV notes
+may still show a zero plate or an unqualified standoff confirmation until those updates
+land; this documentation does not edit the CSV. Confirmed nominal Jenga dimensions do not
+confirm manufacturing tolerances, mass, friction or chamfers.
+
+Measure the bench, base plate, Bota envelope and mass, Quick Changer installed size and mass, pad geometry,
 camera offsets and gantry before calling the model dimensionally faithful.
 
 ## BOM audit
@@ -205,11 +245,11 @@ audit on the returned parts before claiming a pass.
 
 ## Current status and gaps
 
-- The private pack has 14 declared files. Its manifest schema and SHA-256 values were
-  checked, and each file's dependency closure reported one layer, zero external assets and
-  zero unresolved references. This is a structural check, not a PhysX or render pass.
-- The BOM contract and stage-mapping audit pass on CPU fixtures. No real stage or PhysX
-  smoke, render review or full BOM pass is claimed in this slice.
+- Earlier pack preparation reported 14 declared files with checked manifest fields,
+  hashes and dependency closure. This documentation update does not recheck that private
+  pack; those structural results do not establish a PhysX or render pass.
+- The integrated baseline includes a BOM contract and stage-mapping audit with CPU
+  fixtures. No real-stage BOM audit, PhysX smoke or render pass is claimed here.
 - No genuine Bota, D415 or mount CAD is available; those parts remain unconfirmed proxies.
 - The old-store unreferenced report must wait until the pack loads, PhysX smoke passes,
   renders are reviewed and the BOM audit passes on the real stage. It is intentionally not
