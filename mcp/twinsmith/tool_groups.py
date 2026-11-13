@@ -82,9 +82,9 @@ GROUPS: Dict[str, tuple] = {
         "start": "start_screen_recording", "stop": "stop_screen_recording", "status": "screen_recording_status"}),
     "windows": ("Desktop windows: info, list, raise, move, tile.", {
         "info": "screen_info", "list": "list_windows", "raise": "raise_window", "move": "move_window", "tile": "tile_windows"}),
-    "window_input": ("Mouse and keyboard into the focused window (opt-in group).", {
-        "click": "window_click", "drag": "window_drag", "scroll": "window_scroll", "type": "window_type",
-        "key": "window_key"}),
+    "computer": ("Mouse and keyboard into the focused window (opt-in group).", {
+        "click": "computer_click", "drag": "computer_drag", "scroll": "computer_scroll", "type": "computer_type",
+        "key": "computer_key"}),
     "sim__session": ("Simulators this server manages (opt-in group): launch, list, status, stop.", {
         "launch": "sim__launch", "list": "sim__list", "status": "sim__status", "stop": "sim__stop"}),
 }
@@ -132,7 +132,7 @@ def _names(tools) -> str:
 
 
 # A name with a namespace (sim__prim__get) is only ever a tool. A bare one (get_file, job_status,
-# window_type) is also an ordinary word for a file, a prim or a JSON key, so it is rewritten only
+# computer_type) is also an ordinary word for a file, a prim or a JSON key, so it is rewritten only
 # where prose names a tool: after a space, a backtick or a bracket, and not inside a path or a key.
 _NAMESPACED = re.compile(r"(?<![A-Za-z0-9_/.\-])(" + _names(t for t in list(members()) if "__" in t)
                          + r")(?![A-Za-z0-9_*-])")

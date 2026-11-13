@@ -43,6 +43,7 @@ from .tool_hints import CATALOG_HINTS
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
 from .local_tools import IDEMPOTENT_WRITE, READ_ONLY, ScopedTools, strip_schema_titles
+from . import computer_use
 from .desktop_input import register_desktop_input_tools
 from .sim_sessions import live_sessions, register_sim_session_tools
 from .screen import register_screen_tools
@@ -587,7 +588,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                            or (canonical == "sim.ui.act" and f["name"] == "keys")
                            or canonical in _PACK_TOOLS)  # every array in these tools holds paths or names
                 annotation = list[str] if strings else list[float]
-                if canonical == "sim.prim.create_many" and f["name"] == "items":
+                if (canonical, f["name"]) in (("sim.prim.create_many", "items"), ("sim.ui.act", "actions")):
                     annotation = list[dict[str, Any]]  # prim specs: objects, not numbers
                 if canonical == "sim.map.occupancy" and f["name"] == "clear":
                     # A list of [x, y, radius] circles; list[float] rejected every valid value.
@@ -598,7 +599,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
                 if f["name"] in lengths:
                     bounds = {"min_length": lengths[f["name"]], "max_length": lengths[f["name"]]}
                 else:
-                    bounds = {"max_length": {"extra_frames": 16, "observe_prims": 16, "observe_joints": 8, "observe": 8, "clear": 16, "keys": 5, "nodes": 64, "connections": 256, "items": 200}.get(f["name"], 128)}
+                    bounds = {"max_length": {"extra_frames": 16, "observe_prims": 16, "observe_joints": 8, "observe": 8, "clear": 16, "keys": 5, "actions": 10, "nodes": 64, "connections": 256, "items": 200}.get(f["name"], 128)}
             if bounds and not graph_container:
                 annotation = Annotated[annotation, Field(**bounds)]
         graph_field = canonical == "sim.graph.build" and f["name"] in (
@@ -630,7 +631,8 @@ def _build_tool_function(name: str, canonical: str, description: str,
         exec(f"async def {name}({', '.join(signature)}) -> str:\n    return await _call({canonical!r}, locals())\n", scope)
     else:
         scope = {"_call": call}
-        exec(f"def {name}({', '.join(signature)}) -> str:\n    return _call({canonical!r}, locals())\n", scope)
+        returns = "" if canonical in computer_use.KIT_UI else " -> str"   # these can add an image
+        exec(f"def {name}({', '.join(signature)}){returns}:\n    return _call({canonical!r}, locals())\n", scope)
     function = scope[name]
     function.__doc__ = description
     function.__annotations__.update(annotations)
@@ -643,6 +645,8 @@ def _tool_implementation(canonical: str, params: Dict[str, Any],
     """What every catalogued or discovered tool runs: forward the call, and mark a failure as one."""
     # Unset optional arguments are left out so the tool's own defaults apply.
     params = {k: v for k, v in params.items() if v is not None}
+    if canonical in computer_use.KIT_UI:
+        return computer_use.kit_ui(canonical, params, state, _dispatch, _failed_tool_result)
     result = _dispatch(canonical, params, state)
     failed = _failed_tool_result(result)
     from .scene_contracts import REGISTRY

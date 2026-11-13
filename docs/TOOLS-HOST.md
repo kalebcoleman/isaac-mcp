@@ -94,7 +94,7 @@ the **host server** machine. Mouse and keyboard tools need the separate opt-in b
 
 ### Optional desktop input
 
-These tools (`window_input`, toolset `input`) use the existing `python-xlib` dependency and the X11 XTEST extension; no `xdotool`
+These tools (`computer`, toolset `input`) use the existing `python-xlib` dependency and the X11 XTEST extension; no `xdotool`
 is needed. They work on the host's shared X11 desktop; native Wayland and headless sessions are not supported. They do not
 require a bridge and can operate windows other than Isaac Sim and Isaac Lab, so enable them only for a client you trust. They are
 off even when `TWINSMITH_TOOLSETS=all`. Window activation requires a window manager that implements `_NET_ACTIVE_WINDOW`.

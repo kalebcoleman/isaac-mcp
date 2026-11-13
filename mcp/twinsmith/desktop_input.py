@@ -30,12 +30,15 @@ from . import screen
 from .local_tools import DESKTOP_INPUT, ScopedTools
 
 _input_lock = threading.Lock()
-_WindowId = Annotated[int, Field(description="Window id from list_windows.")]
+_WindowId = Annotated[int, Field(description="Window id from windows(action=\"list\").")]
 _Pid = Annotated[int, Field(description="The window's PID from list_windows; a different owner is refused.")]
-_X = Annotated[int, Field(description="X in original window pixels, from a fresh screenshot.")]
-_Y = Annotated[int, Field(description="Y in original window pixels, from a fresh screenshot.")]
+_X = Annotated[int, Field(description="X in window pixels (or image pixels, see coord_space), from a fresh screenshot.")]
+_Y = Annotated[int, Field(description="Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.")]
 _Width = Annotated[int, Field(description="The window width you inspected, in pixels; a changed size is refused.")]
 _Height = Annotated[int, Field(description="The window height you inspected, in pixels; a changed size is refused.")]
+_CoordSpace = Annotated[str, Field(description="window: x/y are original window pixels. Or the coord_space token a "
+                                               "screenshot printed: x/y are pixels of that image (also a zoomed crop).")]
+_ShotAfter = Annotated[bool, Field(description="Also return a screenshot of the window after the action.")]
 
 _MAX_TEXT = 200
 _MAX_SCROLL = 10
@@ -265,146 +268,193 @@ def _click(disp, button: int) -> None:
         disp.sync()
 
 
+def _step_click(window_id: int, pid: int, x: int, y: int, width: int, height: int,
+                button: str = "left", clicks: int = 1) -> str:
+    if button not in _BUTTONS or clicks not in (1, 2):
+        raise ValueError("button must be left, middle or right; clicks must be 1 or 2")
+    for _ in range(clicks):
+        with _target(window_id, pid) as (disp, window, geom):
+            _point(disp, window, geom, x, y, width, height)
+            _click(disp, _BUTTONS[button])
+    return f"sent click to window {window_id} at ({x}, {y})"
+
+
+def _step_drag(window_id: int, pid: int, x: int, y: int, end_x: int, end_y: int, width: int, height: int) -> str:
+    with _target(window_id, pid) as (disp, window, geom):
+        # Check the entire sampled path before pressing, including any covered areas.
+        for i in range(1, 13):
+            px = round(x + (end_x - x) * i / 12)
+            py = round(y + (end_y - y) * i / 12)
+            _point(disp, window, geom, px, py, width, height)
+        _point(disp, window, geom, x, y, width, height)
+        root = disp.screen().root
+        try:
+            xtest.fake_input(disp, X.ButtonPress, 1)
+            disp.sync()
+            disp.ungrab_server()
+            disp.sync()
+            time.sleep(0.08)
+            for i in range(1, 13):
+                px = round(x + (end_x - x) * i / 12) + geom[0]
+                py = round(y + (end_y - y) * i / 12) + geom[1]
+                xtest.fake_input(disp, X.MotionNotify, root=root.id, x=px, y=py)
+                disp.sync()
+                time.sleep(0.01)
+        finally:
+            xtest.fake_input(disp, X.ButtonRelease, 1)
+            disp.sync()
+    return f"sent drag in window {window_id} from ({x}, {y}) to ({end_x}, {end_y})"
+
+
+def _step_scroll(window_id: int, pid: int, x: int, y: int, width: int, height: int,
+                 direction: str, steps: int = 1) -> str:
+    buttons = {"up": 4, "down": 5, "left": 6, "right": 7}
+    if direction not in buttons or not 1 <= steps <= _MAX_SCROLL:
+        raise ValueError("direction must be up, down, left or right and steps must be 1–10")
+    for _ in range(steps):
+        with _target(window_id, pid) as (disp, window, geom):
+            _point(disp, window, geom, x, y, width, height)
+            _click(disp, buttons[direction])
+    return f"sent {steps} scroll step(s) {direction} to window {window_id}"
+
+
+def _step_type(window_id: int, pid: int, text: str) -> str:
+    if not text or len(text) > _MAX_TEXT or any(not 32 <= ord(c) <= 126 for c in text):
+        raise ValueError("text must contain 1–200 printable ASCII characters")
+    with _target(window_id, pid) as (disp, window, _):
+        if _keyboard_grabbed(disp):  # a menu, or a lock screen the lock probe did not detect
+            raise RuntimeError("another client holds the keyboard grab (an open menu or a lock screen), so "
+                               "typed text would go there, not to the window. Close the menu "
+                               "(computer action=key, key=escape) or unlock the desktop, then capture again.")
+        _focus(disp, window)
+        if disp.screen().root.query_pointer().mask & X.LockMask:
+            raise ValueError("turn off Caps Lock before typing")
+        keys = [_lookup(disp, ord(char)) for char in text]
+        shift, _ = _lookup(disp, XK.string_to_keysym("Shift_L"))
+        sent = 0
+        try:
+            for code, shifted in keys:
+                if sent:
+                    disp.grab_server()
+                    disp.sync()
+                    _window_geometry(disp, window, pid)
+                    _check_idle(disp)
+                    _focus(disp, window)
+                _send_key(disp, code, [shift] if shifted else [])
+                sent += 1
+        except Exception as exc:
+            raise RuntimeError(f"typing stopped after {sent} character(s): {exc}") from exc
+    return f"sent {len(text)} character(s) to window {window_id}"
+
+
+def _step_key(window_id: int, pid: int, key: str, modifiers: list[str] | None = None) -> str:
+    name = key.lower()
+    modifiers = modifiers or []
+    if len(set(modifiers)) != len(modifiers) or any(m not in _MODIFIERS for m in modifiers):
+        raise ValueError("modifiers may contain ctrl, shift, alt and super, at most once each")
+    if name in _KEYS:
+        symbol = XK.string_to_keysym(_KEYS[name])
+    elif len(key) == 1 and key.isascii() and key.isalnum():
+        symbol = ord(key)
+    else:
+        raise ValueError("unsupported key; use a navigation key, F1–F12, or a letter/digit")
+    with _target(window_id, pid) as (disp, window, _):
+        _focus(disp, window)
+        if len(key) == 1 and key.isascii() and key.isalpha() and (
+                disp.screen().root.query_pointer().mask & X.LockMask):
+            raise ValueError("turn off Caps Lock before sending a letter")
+        code, shifted = _lookup(disp, symbol)
+        modifier_codes = [_lookup(disp, XK.string_to_keysym(_MODIFIERS[m]))[0]
+                          for m in modifiers]
+        if shifted and "shift" not in modifiers:
+            modifier_codes.append(_lookup(disp, XK.string_to_keysym("Shift_L"))[0])
+        _send_key(disp, code, modifier_codes)
+    return f"sent key {key} to window {window_id}"
+
+
+def _after(window_id: int, text: str, screenshot_after: bool):
+    """The action's answer, and with screenshot_after the window as it looks now (taken after every lock
+    and server grab is released, with the same capture as the screenshot tool)."""
+    if not screenshot_after:
+        return f"{text}; verify the resulting UI"
+    return [text, *screen.capture(window_id=window_id)]
+
+
 def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None = None) -> None:
-    """Register input only when the caller explicitly selects screen_input."""
+    """Register input only when the caller explicitly selects the input toolset."""
     mcp = ScopedTools(server, groups)
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_click(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
-                     expected_width: _Width, expected_height: _Height,
-                     button: Annotated[str, Field(description="left, middle or right.")] = "left",
-                     clicks: Annotated[int, Field(description="1 or 2.")] = 1) -> str:
-        """Click a visible point in one selected X11 window. Coordinates are original window pixels.
+    def computer_click(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
+                       expected_width: _Width, expected_height: _Height,
+                       button: Annotated[str, Field(description="left, middle or right.")] = "left",
+                       clicks: Annotated[int, Field(description="1 or 2.")] = 1,
+                       coord_space: _CoordSpace = "window", screenshot_after: _ShotAfter = False):
+        """Click a visible point in one selected X11 window.
 
-        Obtain window_id, PID and size from list_windows; inspect a fresh screenshot first.
+        Obtain window_id, PID and size from windows(action="list"); inspect a fresh screenshot first.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        if button not in _BUTTONS or clicks not in (1, 2):
-            raise ValueError("button must be left, middle or right; clicks must be 1 or 2")
+        x, y = screen.map_point(coord_space, x, y, expected_width, expected_height)
         with _action_lock():
-            for _ in range(clicks):
-                with _target(window_id, expected_pid) as (disp, window, geom):
-                    _point(disp, window, geom, x, y, expected_width, expected_height)
-                    _click(disp, _BUTTONS[button])
-        return f"sent click to window {window_id} at ({x}, {y}); verify the resulting UI"
+            text = _step_click(window_id, expected_pid, x, y, expected_width, expected_height, button, clicks)
+        return _after(window_id, text, screenshot_after)
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_drag(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
-                    end_x: Annotated[int, Field(description="Drag end X in original window pixels.")],
-                    end_y: Annotated[int, Field(description="Drag end Y in original window pixels.")],
-                    expected_width: _Width, expected_height: _Height) -> str:
+    def computer_drag(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
+                      end_x: Annotated[int, Field(description="Drag end X, in the same space as x.")],
+                      end_y: Annotated[int, Field(description="Drag end Y, in the same space as y.")],
+                      expected_width: _Width, expected_height: _Height,
+                      coord_space: _CoordSpace = "window", screenshot_after: _ShotAfter = False):
         """Drag with the left mouse button between two points in the same X11 window.
 
-        Coordinates are original window pixels; inspect a fresh screenshot and size first.
+        Inspect a fresh screenshot and size first.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        with _action_lock(), _target(window_id, expected_pid) as (disp, window, geom):
-            # Check the entire sampled path before pressing, including any covered areas.
-            for i in range(1, 13):
-                px = round(x + (end_x - x) * i / 12)
-                py = round(y + (end_y - y) * i / 12)
-                _point(disp, window, geom, px, py, expected_width, expected_height)
-            _point(disp, window, geom, x, y, expected_width, expected_height)
-            root = disp.screen().root
-            try:
-                xtest.fake_input(disp, X.ButtonPress, 1)
-                disp.sync()
-                disp.ungrab_server()
-                disp.sync()
-                time.sleep(0.08)
-                for i in range(1, 13):
-                    px = round(x + (end_x - x) * i / 12) + geom[0]
-                    py = round(y + (end_y - y) * i / 12) + geom[1]
-                    xtest.fake_input(disp, X.MotionNotify, root=root.id, x=px, y=py)
-                    disp.sync()
-                    time.sleep(0.01)
-            finally:
-                xtest.fake_input(disp, X.ButtonRelease, 1)
-                disp.sync()
-        return f"sent drag in window {window_id} from ({x}, {y}) to ({end_x}, {end_y}); verify the resulting UI"
+        x, y = screen.map_point(coord_space, x, y, expected_width, expected_height)
+        end_x, end_y = screen.map_point(coord_space, end_x, end_y, expected_width, expected_height)
+        with _action_lock():
+            text = _step_drag(window_id, expected_pid, x, y, end_x, end_y, expected_width, expected_height)
+        return _after(window_id, text, screenshot_after)
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_scroll(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
-                      expected_width: _Width, expected_height: _Height,
-                      direction: Annotated[str, Field(description="up, down, left or right.")],
-                      steps: Annotated[int, Field(description="Scroll steps, 1-10.")] = 1) -> str:
+    def computer_scroll(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
+                        expected_width: _Width, expected_height: _Height,
+                        direction: Annotated[str, Field(description="up, down, left or right.")],
+                        steps: Annotated[int, Field(description="Scroll steps, 1-10.")] = 1,
+                        coord_space: _CoordSpace = "window", screenshot_after: _ShotAfter = False):
         """Scroll up, down, left or right at a visible window point, at most ten steps per call.
 
-        Coordinates are original window pixels; inspect a fresh screenshot and size first.
+        Inspect a fresh screenshot and size first.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        buttons = {"up": 4, "down": 5, "left": 6, "right": 7}
-        if direction not in buttons or not 1 <= steps <= _MAX_SCROLL:
-            raise ValueError("direction must be up, down, left or right and steps must be 1–10")
+        x, y = screen.map_point(coord_space, x, y, expected_width, expected_height)
         with _action_lock():
-            for _ in range(steps):
-                with _target(window_id, expected_pid) as (disp, window, geom):
-                    _point(disp, window, geom, x, y, expected_width, expected_height)
-                    _click(disp, buttons[direction])
-        return f"sent {steps} scroll step(s) {direction} to window {window_id}; verify the resulting UI"
+            text = _step_scroll(window_id, expected_pid, x, y, expected_width, expected_height, direction, steps)
+        return _after(window_id, text, screenshot_after)
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_type(window_id: _WindowId, expected_pid: _Pid,
-                    text: Annotated[str, Field(description="Up to 200 printable ASCII characters.")]) -> str:
+    def computer_type(window_id: _WindowId, expected_pid: _Pid,
+                      text: Annotated[str, Field(description="Up to 200 printable ASCII characters.")],
+                      screenshot_after: _ShotAfter = False):
         """Type up to 200 printable ASCII characters into the focused selected X11 window.
 
         It does not use the clipboard. Caps Lock and unsupported key mappings are rejected.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        if not text or len(text) > _MAX_TEXT or any(not 32 <= ord(c) <= 126 for c in text):
-            raise ValueError("text must contain 1–200 printable ASCII characters")
-        with _action_lock(), _target(window_id, expected_pid) as (disp, window, _):
-            if _keyboard_grabbed(disp):  # a menu, or a lock screen the lock probe did not detect
-                raise RuntimeError("another client holds the keyboard grab (an open menu or a lock screen), so "
-                                   "typed text would go there, not to the window. Close the menu "
-                                   "(window_key escape) or unlock the desktop, then capture again.")
-            _focus(disp, window)
-            if disp.screen().root.query_pointer().mask & X.LockMask:
-                raise ValueError("turn off Caps Lock before typing")
-            keys = [_lookup(disp, ord(char)) for char in text]
-            shift, _ = _lookup(disp, XK.string_to_keysym("Shift_L"))
-            sent = 0
-            try:
-                for code, shifted in keys:
-                    if sent:
-                        disp.grab_server()
-                        disp.sync()
-                        _window_geometry(disp, window, expected_pid)
-                        _check_idle(disp)
-                        _focus(disp, window)
-                    _send_key(disp, code, [shift] if shifted else [])
-                    sent += 1
-            except Exception as exc:
-                raise RuntimeError(f"typing stopped after {sent} character(s): {exc}") from exc
-        return f"sent {len(text)} character(s) to window {window_id}; wait for the UI and verify the text"
+        with _action_lock():
+            sent = _step_type(window_id, expected_pid, text)
+        return _after(window_id, sent, screenshot_after)
 
     @mcp.tool(annotations=DESKTOP_INPUT)
-    def window_key(window_id: _WindowId, expected_pid: _Pid,
-                   key: Annotated[str, Field(description="A navigation or editing key name, or an ASCII letter or digit, e.g. enter, tab, a.")],
-                   modifiers: Annotated[list[str] | None, Field(description="Any of ctrl, shift, alt, super.")] = None) -> str:
+    def computer_key(window_id: _WindowId, expected_pid: _Pid,
+                     key: Annotated[str, Field(description="A navigation or editing key name, or an ASCII letter or digit, e.g. enter, tab, a.")],
+                     modifiers: Annotated[list[str] | None, Field(description="Any of ctrl, shift, alt, super.")] = None,
+                     screenshot_after: _ShotAfter = False):
         """Send one navigation/editing key or ASCII letter/digit to the focused X11 window.
 
         Modifiers may contain ctrl, shift, alt and super. Input can trigger destructive or external actions.
         """
-        name = key.lower()
-        modifiers = modifiers or []
-        if len(set(modifiers)) != len(modifiers) or any(m not in _MODIFIERS for m in modifiers):
-            raise ValueError("modifiers may contain ctrl, shift, alt and super, at most once each")
-        if name in _KEYS:
-            symbol = XK.string_to_keysym(_KEYS[name])
-        elif len(key) == 1 and key.isascii() and key.isalnum():
-            symbol = ord(key)
-        else:
-            raise ValueError("unsupported key; use a navigation key, F1–F12, or a letter/digit")
-        with _action_lock(), _target(window_id, expected_pid) as (disp, window, _):
-            _focus(disp, window)
-            if len(key) == 1 and key.isascii() and key.isalpha() and (
-                    disp.screen().root.query_pointer().mask & X.LockMask):
-                raise ValueError("turn off Caps Lock before sending a letter")
-            code, shifted = _lookup(disp, symbol)
-            modifier_codes = [_lookup(disp, XK.string_to_keysym(_MODIFIERS[m]))[0]
-                              for m in modifiers]
-            if shifted and "shift" not in modifiers:
-                modifier_codes.append(_lookup(disp, XK.string_to_keysym("Shift_L"))[0])
-            _send_key(disp, code, modifier_codes)
-        return f"sent key {key} to window {window_id}"
+        with _action_lock():
+            text = _step_key(window_id, expected_pid, key, modifiers)
+        return _after(window_id, text, screenshot_after)

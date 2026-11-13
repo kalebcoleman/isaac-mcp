@@ -217,14 +217,14 @@ Never hand-build TF or clock graphs with `run_python`; use the tools so the tree
 ## Using Isaac Sim's UI (works on a locked or remote PC)
 
 Lab PCs are often used remotely with the screen locked: monitor screenshots are then composed from window pixels, and desktop input
-(`window_input`) is refused. Isaac Sim's own UI still works through Kit's input:
+(`computer`) is refused. Isaac Sim's own UI still works through Kit's input:
 
 1. `sim__ui__find(query="play")` or `window="Stage"` returns widgets with text, value, a `ref` and their centre in window pixels.
 2. `sim__ui__act` with that `ref` (or `x`, `y`): `click`, `double_click`, `right_click`, `move`, `drag`, `scroll`, `type`,
    `keypress`, `menu` (`"Create/Mesh/Cube"`; a wrong path lists the real items), `tab`, `close` or `wait`.
 3. Check with `screenshot(window_id=<Isaac Sim window>)` or `sim__ui__find`.
 
-Prefer a dedicated tool when one exists. Use `window_input` only for other apps (RViz 2) on an unlocked desktop.
+Prefer a dedicated tool when one exists. Use `computer` only for other apps (RViz 2) on an unlocked desktop.
 
 ## Troubleshooting
 
@@ -235,7 +235,7 @@ Prefer a dedicated tool when one exists. Use `window_input` only for other apps 
 | `refresh_tools` reports connection refused | No bridge on that port | Check the listing; start Kit with `twinsmith.bridge` only if none is advertised and the user agrees |
 | `refresh_tools` refused right after a `sim__session` launch | The server dials its configured port, not the new session's | `use_bridge(port=<the launched port>)` (the session status `next` says so) |
 | Monitor recording looks choppy; result says "composed" | Screen locked or blanked: frames are composed from window pixels | Record the windows that matter with `window_id=` or `window_ids=[...]` |
-| `window_input` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find` and `sim__ui__act`; other apps need the desktop unlocked |
+| `computer` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find` and `sim__ui__act`; other apps need the desktop unlocked |
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use the bridge CLI `... list_tools --port <port>` |
 | The client says the server "disconnected" and reconnected | Each client owns one server process; it ended and a new one started | Read `~/.local/state/twinsmith/server-<pid>.log` (newest first). `status` shows `host.code_drift: true` when the checkout changed under a running server: reconnect |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |

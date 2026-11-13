@@ -28,7 +28,7 @@ rows for the server you have installed, with the current state of each.
 | `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
 | `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__eval`, `workcell__jenga`, `workcell__perception`, `workcell__planning`, `workcell__real2sim`, `workcell__robot` |
 | `robosim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
-| `input`: Desktop mouse and keyboard input | explicit only | `window_input` |
+| `input`: Desktop mouse and keyboard input | explicit only | `computer` |
 | `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
 | `extensions`: Tools from uncatalogued extension namespaces | on | none |
 <!-- /generated -->

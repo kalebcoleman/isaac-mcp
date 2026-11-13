@@ -1009,7 +1009,7 @@ LOCKED_RECORD_NOTE = ("\nnote: the screen is locked or blanked, so each frame is
                       "few windows, window_id=... or window_ids=[...] is cheaper and sharper.")
 COMPOSITE_NOTE = ("\nnote: the screen is locked or blanked (the PC is probably used remotely), so this image "
                   "was composed from the visible windows' own pixels in stacking order; window decorations, "
-                  "panels and the wallpaper are not shown. Desktop input (window_*) is refused while locked; "
+                  "panels and the wallpaper are not shown. Desktop input (computer) is refused while locked; "
                   "for Isaac Sim's UI use sim__ui__find and sim__ui__act.")
 
 
@@ -1402,6 +1402,73 @@ def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
 
 
+def map_point(coord_space: str | None, x: int, y: int, width: int, height: int) -> tuple[int, int]:
+    """The one place image pixels become window pixels: (x, y) in ``coord_space`` -> original window pixels.
+
+    ``window`` (or None) means x and y already are window pixels. Any other value is the coord_space
+    token a capture printed; the window must still be ``width`` x ``height``."""
+    if coord_space in (None, "", "window"):
+        return x, y
+    raise ValueError("coord_space must be 'window' or a coord_space token printed by screenshot")
+
+
+def capture(monitor: int | None = None, window: str | None = None, window_id: int | None = None,
+            max_width: int = 1600, label: str | None = None, region: list[int] | None = None,
+            coord_space: str = "window", auto: Callable[[], dict | None] | None = None) -> list:
+    """What the screenshot tool returns: [Image, caption]. Also used after an action (screenshot_after)
+    and for zooms, so there is one capture path. ``auto`` picks the default window when none is named."""
+    if region is not None:
+        raise ValueError("region is not supported yet")
+    SHOT_DIR.mkdir(parents=True, exist_ok=True)
+    max_width = max(320, min(int(max_width), 3840))
+    target = None
+    composed = False
+    if window or window_id is not None:
+        target = _match_window(window, window_id)
+    elif monitor is None:
+        target = auto() if auto else None
+    if target is not None:
+        win = target
+        full = _grab_window_image(win)
+        source = f"{win['width']}x{win['height']}+{win['x']}+{win['y']}"
+        target_label = f"{win['title']} (id={win['id']})"
+    else:
+        bbox = _bbox(1 if monitor is None else monitor)
+        composed = _screen_locked()
+        if composed:
+            full, painted = _composite(bbox)
+        else:
+            with mss.MSS() as sct:
+                raw = sct.grab(bbox)
+            full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+        source = f"{bbox['width']}x{bbox['height']}+{bbox['left']}+{bbox['top']}"
+        target_label = f"monitor {1 if monitor is None else monitor}" + (
+            f" (composed from {painted} window(s))" if composed else "")
+    path = SHOT_DIR / f"screen-{_stamp()}{_label_tag(label)}.png"
+    full.save(path, "PNG", optimize=True)
+    inline = full
+    if full.width > max_width:
+        height = max(1, round(full.height * max_width / full.width))
+        inline = full.resize((max_width, height), PILImage.LANCZOS)
+    caption = (
+        f"saved: {path}\n"
+        f"saved size: {full.width}x{full.height}\n"
+        f"inline size: {inline.width}x{inline.height}\n"
+        f"source: {source}\n"
+        f"window: {target_label}"
+    )
+    if inline.width != full.width:
+        # OpenAI's computer-use guide: map coordinates from a downscaled screenshot back to the
+        # environment's pixels. Input tools take original pixels.
+        caption += (f"\nscale: input tools take original pixels; multiply a point in this image by "
+                    f"{full.width / inline.width:.3f}")
+    if target is None and composed:
+        caption += COMPOSITE_NOTE
+    buf = io.BytesIO()
+    inline.save(buf, "PNG", optimize=True)
+    return [Image(data=buf.getvalue(), format="png"), caption]
+
+
 # -------------------------------------------------------------------- tools
 
 
@@ -1624,6 +1691,8 @@ def register_screen_tools(
         window_id: _WindowId = None,
         max_width: Annotated[int, Field(description="Inline image width cap in pixels, 320-3840. The saved PNG stays full size.")] = 1600,
         label: Annotated[str | None, Field(description="Short name added to the saved file, e.g. 'push_done'. Letters, digits, - and _ only; other characters become _; max 40.")] = None,
+        region: Annotated[list[int] | None, Field(description="Zoom: [x, y, width, height] of the window to crop, in the space coord_space names; returned enlarged.")] = None,
+        coord_space: Annotated[str, Field(description="window (default) or a coord_space token from an earlier screenshot, for region.")] = "window",
     ):
         """Capture the screen, a monitor or a window to see the result of your work. Returns the image
         and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise
@@ -1631,53 +1700,7 @@ def register_screen_tools(
 
         Privacy: the image (and any text visible in it) is sent to the model and saved on this machine.
         """
-        max_width = max(320, min(int(max_width), 3840))
-        target = None
-        composed = False
-        if window or window_id is not None:
-            target = _match_window(window, window_id)
-        elif monitor is None:
-            target = auto_target()
-        if target is not None:
-            win = target
-            full = _grab_window_image(win)
-            source = f"{win['width']}x{win['height']}+{win['x']}+{win['y']}"
-            target_label = f"{win['title']} (id={win['id']})"
-        else:
-            bbox = _bbox(1 if monitor is None else monitor)
-            composed = _screen_locked()
-            if composed:
-                full, painted = _composite(bbox)
-            else:
-                with mss.MSS() as sct:
-                    raw = sct.grab(bbox)
-                full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
-            source = f"{bbox['width']}x{bbox['height']}+{bbox['left']}+{bbox['top']}"
-            target_label = f"monitor {1 if monitor is None else monitor}" + (
-                f" (composed from {painted} window(s))" if composed else "")
-        path = SHOT_DIR / f"screen-{_stamp()}{_label_tag(label)}.png"
-        full.save(path, "PNG", optimize=True)
-        inline = full
-        if full.width > max_width:
-            height = max(1, round(full.height * max_width / full.width))
-            inline = full.resize((max_width, height), PILImage.LANCZOS)
-        caption = (
-            f"saved: {path}\n"
-            f"saved size: {full.width}x{full.height}\n"
-            f"inline size: {inline.width}x{inline.height}\n"
-            f"source: {source}\n"
-            f"window: {target_label}"
-        )
-        if inline.width != full.width:
-            # OpenAI's computer-use guide: map coordinates from a downscaled screenshot back to the
-            # environment's pixels. Input tools take original pixels.
-            caption += (f"\nscale: input tools take original pixels; multiply a point in this image by "
-                        f"{full.width / inline.width:.3f}")
-        if target is None and composed:
-            caption += COMPOSITE_NOTE
-        buf = io.BytesIO()
-        inline.save(buf, "PNG", optimize=True)
-        return [Image(data=buf.getvalue(), format="png"), caption]
+        return capture(monitor, window, window_id, max_width, label, region, coord_space, auto=auto_target)
 
     @mcp.tool(annotations=ADDITIVE)
     def start_screen_recording(

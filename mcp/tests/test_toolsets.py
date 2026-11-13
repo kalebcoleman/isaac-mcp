@@ -287,9 +287,9 @@ def test_explicit_only_toolsets_can_never_be_enabled_at_run_time(name):
 
 def test_explicit_only_ones_stay_available_at_startup():
     instance, state = offline_build("minimal,+input,+launch")
-    assert {"window_input", "sim__session"} <= registered(instance)
+    assert {"computer", "sim__session"} <= registered(instance)
     change(instance, "disable", ["input"])          # a user's own startup choice can be dropped again
-    assert "window_input" not in registered(instance)
+    assert "computer" not in registered(instance)
     from mcp.server.fastmcp.exceptions import ToolError
     with pytest.raises(ToolError, match="explicit-only"):
         change(instance, "enable", ["input"])

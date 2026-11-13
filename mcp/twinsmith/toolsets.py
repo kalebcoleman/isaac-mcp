@@ -49,7 +49,7 @@ _ROOTS = {
     "screen": "screenshot screen_recording windows join_videos",
     "ros2": "sim__ros2__tf_setup sim__graph sim__map__occupancy",
     "kit_debug": "sim__ui sim__logs",
-    "input": "window_input",
+    "input": "computer",
     "launch": "sim__session",
     "robosim": "robosim",
 }

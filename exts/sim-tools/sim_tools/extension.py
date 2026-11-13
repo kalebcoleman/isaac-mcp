@@ -659,10 +659,10 @@ class Extension(omni.ext.IExt):
                         result = await quick_start(self, args)
                     elif name in ("sim.ui.find", "sim.ui.act"):
                         # Kit UI, not the stage: no session/stage target (the UI outlives stage changes).
-                        from .ui import UIRefusal, act, find
+                        from .ui import UIRefusal, find, run_act
 
                         try:
-                            result = find(args) if name == "sim.ui.find" else await act(args)
+                            result = find(args) if name == "sim.ui.find" else await run_act(args)
                         except UIRefusal as exc:
                             return dict(status="error", code=exc.code, message=str(exc),
                                         effects="No input was sent." if name == "sim.ui.find" or exc.code in (

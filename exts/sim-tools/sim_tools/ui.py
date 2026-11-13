@@ -1,7 +1,7 @@
 """Kit-native UI computer use: find Isaac Sim widgets by name and drive them through Kit's input.
 
 Why: on a machine that is used remotely, the X11 session is often locked. The lock screen holds the X
-keyboard and pointer grabs, so X11 input (window_click/window_type) would reach the lock screen,
+keyboard and pointer grabs, so X11 input (the computer tool) would reach the lock screen,
 not Isaac Sim, and monitor screenshots are black. Kit's own input provider (``carb.input``, the
 path ``omni.kit.ui_test`` uses) feeds events straight into the app, so these tools keep working
 while the desktop is locked, and window screenshots (XComposite) still show the result.
@@ -369,8 +369,12 @@ def find(a):
 
     from .graph import _headless
 
+    if a.get("readiness"):  # internal: the host's doctor tool; reads, never enables anything
+        return readiness()
     if _headless():  # no layout to report, and walking every widget took about 38 s per call on 6.1
         raise UIRefusal("NO_UI", "This Kit has no application window (headless); finding widgets needs a windowed Isaac Sim.")
+    if a.get("zoom_ref"):
+        return zoom_rect(a["zoom_ref"])
     query = a.get("query", "") or ""
     window = a.get("window", "") or ""
     limit = a.get("limit", 40)
@@ -418,6 +422,16 @@ def find(a):
                     "screenshot(window_id=<Isaac Sim window>). Pass ref to sim__ui__act to target a widget; "
                     "widgets scrolled out of view, outside their window or under a floating window are left out.",
     )
+
+
+def readiness():
+    """Item 4 (doctor): omni.kit.ui_test enabled?, dpi scale, main window size, headless. Read-only."""
+    raise UIRefusal("NOT_SUPPORTED", "readiness is not implemented yet.")
+
+
+def zoom_rect(ref):
+    """Item 6 (zoom): the widget's rectangle in window pixels, for the host to crop around."""
+    raise UIRefusal("NOT_SUPPORTED", "zoom_ref is not implemented yet.")
 
 
 def _resolve(a):
@@ -478,6 +492,12 @@ def _check_point(x, y):
     if not (0 <= x < w and 0 <= y < h):
         raise UIRefusal("OUT_OF_WINDOW", f"({x}, {y}) is outside the Isaac Sim window ({round(w)}x{round(h)} pixels).")
     return w, h
+
+
+async def run_act(a):
+    """What sim.ui.act runs: one action, or (item 5) a batch, then (item 5) an optional compact find_after.
+    Item 2 draws the cursor badge here when the host asks for it."""
+    return await act(a)
 
 
 async def act(a):

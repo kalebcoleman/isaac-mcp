@@ -706,6 +706,7 @@ add(
         query=field("string", "Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only.", False, default=""),
         window=field("string", "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.", False, default=""),
         limit=field("integer", "Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).", False, default=40),
+        zoom_ref=field("string", "Zoom on this widget ref instead of listing: returns an enlarged crop of the Isaac Sim window around it, with its own coord_space token.", False),
     ),
 )
 add(
@@ -725,6 +726,10 @@ add(
         scroll_x=field("integer", "Horizontal wheel steps for action=scroll (-20..20).", False, default=0),
         scroll_y=field("integer", "Vertical wheel steps for action=scroll (-20..20; negative scrolls down).", False, default=0),
         frames=field("integer", "Frames to wait after the action so the UI updates (0..600).", False, default=3),
+        actions=field("array", "Batch: up to 10 action objects (each with action and its own arguments) run in order, stopping at the first failure; replaces the top-level action fields.", False),
+        coord_space=field("string", "window (default): x/y are Isaac Sim window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image.", False, default="window"),
+        screenshot_after=field("boolean", "Also return a screenshot of the Isaac Sim window after the action(s).", False, default=False),
+        find_after=field("string", "Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query).", False),
     ),
 )
 add(

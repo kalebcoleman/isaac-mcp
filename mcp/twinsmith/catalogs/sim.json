@@ -4473,6 +4473,11 @@
           "description": "Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).",
           "required": false,
           "default": 40
+        },
+        "zoom_ref": {
+          "type": "string",
+          "description": "Zoom on this widget ref instead of listing: returns an enlarged crop of the Isaac Sim window around it, with its own coord_space token.",
+          "required": false
         }
       },
       "fields": [
@@ -4502,6 +4507,15 @@
           "default": 40,
           "has_default": true,
           "description": "Maximum widgets returned, 1..100 (the reply is also capped near 48 KB)."
+        },
+        {
+          "name": "zoom_ref",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Zoom on this widget ref instead of listing: returns an enlarged crop of the Isaac Sim window around it, with its own coord_space token."
         }
       ],
       "namespace": "sim",
@@ -4591,6 +4605,28 @@
           "description": "Frames to wait after the action so the UI updates (0..600).",
           "required": false,
           "default": 3
+        },
+        "actions": {
+          "type": "array",
+          "description": "Batch: up to 10 action objects (each with action and its own arguments) run in order, stopping at the first failure; replaces the top-level action fields.",
+          "required": false
+        },
+        "coord_space": {
+          "type": "string",
+          "description": "window (default): x/y are Isaac Sim window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image.",
+          "required": false,
+          "default": "window"
+        },
+        "screenshot_after": {
+          "type": "boolean",
+          "description": "Also return a screenshot of the Isaac Sim window after the action(s).",
+          "required": false,
+          "default": false
+        },
+        "find_after": {
+          "type": "string",
+          "description": "Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query).",
+          "required": false
         }
       },
       "fields": [
@@ -4723,6 +4759,42 @@
           "default": 3,
           "has_default": true,
           "description": "Frames to wait after the action so the UI updates (0..600)."
+        },
+        {
+          "name": "actions",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Batch: up to 10 action objects (each with action and its own arguments) run in order, stopping at the first failure; replaces the top-level action fields."
+        },
+        {
+          "name": "coord_space",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "window",
+          "has_default": true,
+          "description": "window (default): x/y are Isaac Sim window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image."
+        },
+        {
+          "name": "screenshot_after",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Also return a screenshot of the Isaac Sim window after the action(s)."
+        },
+        {
+          "name": "find_after",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query)."
         }
       ],
       "namespace": "sim",
