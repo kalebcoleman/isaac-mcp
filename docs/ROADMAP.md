@@ -1,0 +1,284 @@
+# Roadmap
+
+Where twinsmith is going, as phased milestones. Each phase has a goal, a scope, exit criteria that can be checked, and what it
+depends on. The target tool layout is in [How it works](ARCHITECTURE.md#target-layout-planned); the next pull requests are
+specified in [plans/](plans/README.md); unfinished details stay in [open items](OPEN-ITEMS.md).
+
+Checked against `origin/main` at `33ff56e` on 2026-11-13. A phase is a goal, not a queue position: the order of work is the
+[pull request queue](#pull-request-queue).
+
+## The thesis in one paragraph
+
+A UR5e plays Jenga. The simulated cell is the lab's cell: the Vention bench, the Bota force-torque sensor, the OnRobot RG2 with
+its finger pads, a wrist and an overhead D415, and 54 blocks that each differ a little in size, mass and friction, as real
+blocks do. It runs on Newton's MuJoCo-Warp solver. Perception is markerless. Real recordings tune the simulation offline
+(system identification), a planner and a benchmark run in simulation, and the loop closes on the real robot only through ROS 2
+code the owner has approved.
+
+## Ground rules
+
+These hold in every phase. A plan that breaks one is wrong.
+
+| Rule | What it means here |
+|---|---|
+| Lean code | Unused code is deleted, not moved aside. One name per thing: no aliases, no "legacy" folder, no stub that answers "not implemented". |
+| Off by default | Every group of tools is off until asked for, except `core`. |
+| Assets outside the repository | Versioned packs, referenced by id. A changed asset is a new pack version. |
+| Newton first | Newton is the default engine; PhysX is an opt-in fallback, never a silent one ([statement](COMPATIBILITY.md#target-engine)). |
+| Markerless | No AprilTags or other fiducials, in the cell or in the scene. |
+| No agent on the real robot | The robot runs only approved ROS 2 code. Real data improves the simulation offline. The owner approves each export. |
+| Wrap what moves fast | Young research tools are pinned sibling checkouts with their own environments under `<workspace>/tools/`. Nothing is vendored. |
+| Replicate what is mature | Stable patterns (desktop and computer use, mesh preparation, validation) are built natively. |
+| Attribute | MIT code copied in is recorded in [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md). Ideas from unlicensed projects are re-implemented, never copied. |
+
+## Where things stand
+
+What `origin/main` shows today. Each line is from the code or a recorded result, not a plan.
+
+| Area | State |
+|---|---|
+| Tool surface | 15 toolsets, 8 of them on by default. Three work-cell tools are stubs that answer "not implemented". |
+| Generic scenes on Newton | The 54-block tower holds for 10 s at 500 Hz (1.7 mm; Isaac Sim 6.2, Newton 1.6.1). Raycast is refused; a Franka joint move does not settle yet. |
+| Work cell on Newton | Refused. A probe that bypassed the refusal found the blockers: the bench's 385 triangle-mesh colliders (1.63 M triangles) ask for 7,500,052 triangle pairs against a buffer of 1,000,000; the RG2's zero-force drives, its separate articulation and the pack's drive gains fail in MuJoCo-Warp. With those adapted the tower drifted 0.2 to 0.3 mm in 11 s. The RG2 fingers do not move yet ([details](OPEN-ITEMS.md#work-cell-on-newton)). |
+| Jenga variation | Seeded per-block variation of size, mass and friction exists (`measured_pending` profile); every number in it is unconfirmed. |
+| Real-to-sim | `robosim` reproduced one real push by image displacement on CPU and GPU. It does not fit mass or friction, match rotation, or estimate the camera. Pinned to RoboSimStudio `87b5e32`. |
+| Perception, planning, evaluation | Nothing. The work cell reads its camera configuration only. |
+| Real robot | Nothing in this repository drives one, by design. |
+
+## The phases
+
+```mermaid
+flowchart LR
+    P0[0 Clean surface] --> P1[1 Assets for Newton]
+    P1 --> P2[2 Work cell on Newton]
+    P2 --> P3[3 Jenga player in sim]
+    P2 --> P4[4 Real-to-sim and sysid]
+    P2 --> P5[5 Markerless perception]
+    P0 --> P6[6 Planning and evaluation]
+    P3 --> P6
+    P1 --> P7[7 Parts beyond Jenga]
+    P4 --> P8[8 The real loop]
+    P5 --> P8
+    P6 --> P8
+```
+
+### Phase 0: a clean surface
+
+**Goal.** One naming pass and one grouping pass, so every later tool lands in its final place and nothing is renamed twice.
+
+**Scope.**
+- Land the computer-use pull request (act-and-see, cursor badge, scale mapping, `doctor`, batching, zoom, standard computer-use
+  names). It defines the `computer` group; nothing here edits its files.
+- Regroup every tool into off-by-default groups and delete the three work-cell stubs
+  ([plan](plans/02-toolset-groups.md)).
+- Decide the seven shorter tool names from the rename in the same pass.
+- Remove the one-release name aliases in the release after 0.3.x, as [MIGRATING.md](MIGRATING.md) already promises.
+
+**Exit criteria.**
+- A fresh install lists only `core`; `status` names every other group and how to turn it on.
+- No registered tool answers "not implemented". No toolset is listed as "planned" without a plan in `docs/plans/`.
+- The README has one generated table of group to tools. `check_docs.py`, `check_names.py --enforce` and the host suite pass.
+- The listed size of each group is measured with `scripts/measure_tool_list.py` and recorded in [TOOLSETS.md](TOOLSETS.md).
+
+**Depends on.** The computer-use pull request merging first.
+
+### Phase 1: assets that load on Newton
+
+**Goal.** An asset keeps its detailed mesh for rendering and gets a separate, simple collision layer, and a check says whether
+it will load on Newton before a simulator is started.
+
+**Scope.**
+- `mesh` in the `assets` group: inspect, decimate, convex hulls (CoACD) or fitted boxes, and split into render and collision
+  layers. `validate` in the same group: USD structure plus the Newton limits found in the probe
+  ([plan](plans/01-assets-mesh-collision.md)).
+- Rebuild the work-cell pack as a new version: the bench renders from its full mesh and collides with boxes or hulls.
+
+**Exit criteria.**
+- On a CPU, with no simulator: `validate` fails pack `v1` for the bench's triangle count, the zero-force drives and the nested
+  articulation, and passes the new version.
+- Live, recorded: the new pack's bench loads on a Newton session with no triangle-pair overflow, and a render of the bench is
+  visually unchanged from `v1`.
+- The collision layer's shape count and triangle count are in the pack manifest's `fidelity` field.
+
+**Depends on.** Nothing in Phase 0 blocks it; the `assets` group already exists.
+
+### Phase 2: the work cell on Newton
+
+**Goal.** The lab-faithful cell (bench, arm, sensor, gripper, both cameras, tower) builds and runs on Newton, and the refusal
+is deleted.
+
+**Scope.** The open list in [Work cell on Newton](OPEN-ITEMS.md#work-cell-on-newton): one articulation for arm and gripper,
+explicit drive gains, an RG2 closed chain that Newton can move (equality or mimic constraints), the flange force and torque
+read, finger contact reads from Newton's contact snapshot, per-engine friction profiles in the hardware configuration,
+wrist and overhead renders, then `workcell_smoke.py` on both engines.
+
+**Exit criteria.**
+- `workcell__cell(action="quick_start")` builds on a Newton session; the refusal in `workcell/scene.py` is gone.
+- The tower in the cell holds 10 s at 500 Hz with at most 1 mm block drift and no contact overflow (the probe measured 0.2 to
+  0.3 mm).
+- The gripper reaches measured finger widths at open, mid and closed within 1 mm.
+- At rest the flange wrench equals the weight below the sensor within 5 percent, on both engines.
+- Cell, wrist and overhead renders exist for Newton; the PhysX smoke still passes; both run reports are kept.
+
+**Depends on.** Phase 1 (the bench must load).
+
+### Phase 3: a Jenga player in simulation
+
+**Goal.** A full turn (choose a block, push, extract, place on top) in the Newton cell, measured across seeds with realistic
+block variation.
+
+**Scope.**
+- Replace the unconfirmed variation numbers with measured ones: weigh and measure a sample of real blocks; friction comes from
+  Phase 4.
+- Define the thresholds the open items ask for: push and extraction success, tower stability, settling time.
+- A scripted baseline turn, and a gripper command by width and force. The player itself (policies, checkpoints, run data)
+  lives in its own project, not in this repository; twinsmith provides the cell, the tower, the reads and the job tools.
+
+**Exit criteria.**
+- The variation profile's fields are `confirmed` with a source, or explicitly still `unconfirmed`.
+- The scripted baseline reports a success rate over at least 30 seeds, with failures classified (missed push, tower
+  collapse, dropped block), on a recorded Newton run.
+- One held-out variation set (geometry, pose, friction) is evaluated and reported separately.
+
+**Depends on.** Phase 2.
+
+### Phase 4: real-to-sim and system identification
+
+**Goal.** Recorded real data sets the simulation's physical parameters, offline, with a number that says how much closer the
+simulation got.
+
+**Scope.**
+- Bump RoboSimStudio from `87b5e32` and call its module entry point; add `sysid` in the `real2sim` group on MuJoCo's official
+  system identification module ([plan](plans/04-robosim-bump-and-sysid.md)).
+- First target: the arm's joint parameters (damping, armature, friction loss, gains) from recorded joint trajectories, because
+  that data needs no perception. Second target: block mass and friction from push recordings, once Phase 5 gives object poses.
+- A data contract for approved exports: a folder of episodes the owner copies off the robot PC. No tool reads the robot.
+
+**Exit criteria.**
+- On synthetic data with known parameters, `sysid` recovers each within 5 percent, in a CPU test.
+- On real joint logs, the fitted model's tracking error is lower than the default model's on held-out episodes, and the
+  fitted values enter `lab_hardware.json` as `confirmed` with their source.
+- `robosim` runs at the new pin on CPU with the same push result as before, within its own tolerance.
+
+**Depends on.** Phase 2 for the simulated arm to compare against. The `robosim` bump depends on nothing.
+
+### Phase 5: markerless perception
+
+**Goal.** Block poses and the tower's state from the two D415s, with no fiducials, tested in simulation first, where the truth
+is known.
+
+**Scope.**
+- A pose service in its own process and environment (FoundationPose has a research-only licence, so no code or weights enter
+  this repository). twinsmith holds a small client: `perception` in the `real2sim` group.
+- The block mesh comes from the pack. Rendered frames from the cell's cameras are the first test set; recorded real frames are
+  the second, offline.
+- Tower state: which of the 54 blocks are present, and each pose.
+
+**Exit criteria.**
+- On rendered frames with ground truth: median block pose error at most 2 mm and 2 degrees for visible blocks (proposed
+  thresholds; set them from what a push tolerates in Phase 3).
+- On recorded real frames: reprojected block outlines overlap the image masks (reported as IoU), with failures listed.
+- The service runs, stops and reports its version from one tool; with the service absent the tool says so and nothing else
+  breaks.
+
+**Depends on.** Phase 2 (the cameras) and Phase 1 (the block mesh in a pack).
+
+### Phase 6: planning and evaluation
+
+**Goal.** Graph-as-Policy plans in simulation and VABAR scores it, both wrapped at pinned commits, with a Jenga task of our
+own evaluated the same way.
+
+**Scope.**
+- `gap` in the `planning` group and `vabar` in the `eval` group: one grouped tool each, the upstream command line in its own
+  environment, simulation only ([plan](plans/03-planning-eval-wrappers.md)).
+- Reproduce one published VABAR cell to prove the stack before measuring anything of ours.
+- Express a Jenga turn as a skill graph and evaluate it with the Phase 3 protocol.
+
+**Exit criteria.**
+- `gap` refuses every real-robot option by name, proven by a test; no free-form arguments reach the command line.
+- One VABAR cell reruns from the tool with a result recorded next to the published number.
+- A Jenga skill graph runs in simulation and its results sit in the same table as the scripted baseline.
+
+**Depends on.** Phase 0 (the groups) and Phase 3 (the task). Note the hardware limit in
+[decisions needed](#decisions-needed), item 5.
+
+### Phase 7: parts beyond Jenga
+
+**Goal.** A new part goes from CAD to a validated pack to the cell without hand editing.
+
+**Scope.** STEP and IGES through Isaac Sim's own CAD converter as a format on `assets__import_path`; then the Phase 1 mesh
+preparation and validation; then a pack. CAD authoring stays in separate servers (FreeCAD, build123d) beside twinsmith. Parts
+without CAD can come from an image-to-mesh model run outside the repository.
+
+**Exit criteria.** One fixture designed in FreeCAD is exported, imported, validated for Newton, packed and used in the cell,
+with every step a listed tool call.
+
+**Depends on.** Phase 1.
+
+### Phase 8: the real loop
+
+**Goal.** Real to sim to real: the simulation is tuned from real data, behaviour is developed and scored in simulation, and
+the real robot runs the result as approved ROS 2 code.
+
+**Scope.**
+- The same ROS 2 interfaces in simulation and on the robot, so approved code is the only thing that crosses.
+- An export step the owner runs and approves each time, in each direction: recordings out of the lab, code into it.
+- A comparison of the same turn in simulation and on the robot, feeding Phases 4 and 5 again.
+
+**Exit criteria.**
+- A complete Jenga turn on the real UR5e, started by the owner, running code that passed in simulation first.
+- A written record of each export: what, when, who approved it.
+- The simulated and real outcomes of the same turn compared in one report.
+
+**Depends on.** Phases 4, 5 and 6.
+
+## Pull request queue
+
+| Order | Pull request | Phase | Plan |
+|--:|---|---|---|
+| 0 | Computer use (open, another branch) | 0 | Not specified here |
+| 1 | Mesh preparation, validation, and the work-cell pack rebuild | 1 | [01-assets-mesh-collision](plans/01-assets-mesh-collision.md) |
+| 2 | Toolset groups, stubs deleted, README table | 0 | [02-toolset-groups](plans/02-toolset-groups.md) |
+| 3 | `gap` and `vabar` wrappers | 6 | [03-planning-eval-wrappers](plans/03-planning-eval-wrappers.md) |
+| 4 | RoboSimStudio bump and `sysid` | 4 | [04-robosim-bump-and-sysid](plans/04-robosim-bump-and-sysid.md) |
+
+Items 3 and 4 do not depend on each other. Later candidates, not yet specified: a bridge lease so parallel agents cannot
+interleave changes in one Kit (`use_bridge` with `hold` and `release`), a step that returns observations in the same call,
+semantic clicks through the desktop accessibility tree, the CAD format, the pose service, and dataset export.
+
+## Where the survey and the repository disagree
+
+The plan was drafted from a survey dated 2026-11-13. Where it and the code differ, the code wins:
+
+| Survey | Repository |
+|---|---|
+| Decimate the bench so 1.63 M triangles fit Newton's 1 M buffer | The buffer counts triangle **pairs**: 7,500,052 were needed against 1,000,000, across 385 mesh colliders. Convex hulls per mesh are what the probe showed to work. Decimation helps rendering cost, not this limit; the fix is the collision layer. |
+| The work cell's perception tool is a stub | It is implemented: it reports the camera configuration. Only the `real2sim`, `planning` and `eval` tools of the work cell are stubs. |
+| Add smoke checks for `screen` and `kit_debug` | Five toolsets have none: `ros2`, `assets`, `screen`, `code` and `kit_debug`. |
+| Fit with `sysid` on RoboSimStudio's CPU runs | RoboSimStudio's own project file notes MuJoCo 3.15 in its lock; the system identification module arrives with MuJoCo 4.0.1. `sysid` needs its own environment. |
+| Extend `doctor` | No `doctor` tool exists on `main`; it arrives with the computer-use pull request. |
+| Toolsets are off by default (owner's rule) | Eight toolsets are on by default today. Plan 02 changes that. |
+| No aliases (owner's rule) | `mcp/twinsmith/legacy.py` keeps old setting names for one release and one permanent alias for the asset-root setting; single-purpose tool names stay callable behind each grouped tool. |
+
+Confirmed as the survey said, on 2026-11-13: RoboSimStudio `main` is `4e52e1a`, 13 commits past the pin, and requires
+`newton[sim]>=1.7,<1.8` and `coacd==1.0.11`; Newton `v1.8.0` was released on 2026-11-11; Graph-as-Policy's `gap run` has a
+`--real` option with `franka` and `ur_zed`; VABAR's README pins forks of Graph-as-Policy (`06dd619`) and its skill library
+(`b15859a`).
+
+## Decisions needed
+
+1. **`cad` as a group.** Nothing native belongs in it: CAD authoring is done by separate servers, and STEP import is a format
+   on the existing import tool. Recommended: `cad` is a row in the README table that names those servers and the import
+   format, with no toolset behind it.
+2. **`default` lists only `core`.** That follows the off-by-default rule and makes the `minimal` profile redundant, so it is
+   deleted. It also turns `extensions` off. Recommended: yes to all three.
+3. **One Graph-as-Policy checkout or two.** VABAR pins forks; the planner could follow upstream. Recommended: one checkout at
+   VABAR's pins for both groups until a planning need forces a second.
+4. **`ros2` stays its own group** instead of joining `sim`, because DDS traffic is a boundary worth one explicit switch.
+   Recommended: keep it separate.
+5. **Graph-as-Policy asks for 24 GB of GPU memory.** The GPU in this repository's recorded runs is an RTX 5080 (16 GB). Decide
+   where planning runs before Phase 6 starts; the wrapper reports the shortfall and does not work around it.
+6. **Old toolset names in user configurations** (`scene`, `physics`, `screen`, ...) stop the server at startup with the list of
+   valid names, as any unknown name does today. Recommended: no aliases, one table in [MIGRATING.md](MIGRATING.md).
+7. **The `planned` list in `status`.** `planning`, `real2sim` and `eval` become real groups; `backend`, `params` and `compare`
+   have no plan. Recommended: delete the list.
