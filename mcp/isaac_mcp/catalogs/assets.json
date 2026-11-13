@@ -63,7 +63,7 @@
       "owner_id": "generic-assets"
     },
     "assets.info": {
-      "description": "Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Inspect a USER-TRUSTED project on the selected Kit. Takes a snapshot of it. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -469,14 +469,14 @@
       "owner_id": "generic-assets"
     },
     "assets.packs": {
-      "description": "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs. With a Kit connected it also lists kit_environment and warns when Kit and this host use different project files, stores or strict mode.",
+      "description": "List the asset packs in every store. Also the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs. With a Kit connected it also lists kit_environment and warns when Kit and this host use different project files, stores or strict mode.",
       "parameters": {},
       "fields": [],
       "namespace": "assets",
       "owner_id": "generic-assets"
     },
     "assets.pack_doctor": {
-      "description": "Check a pack without changing it: corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until the file is added: assets__import_path refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
+      "description": "Check a pack without changing it. Reports corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until the file is added: assets__import_path refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
       "parameters": {
         "pack": {
           "type": "string",
@@ -513,7 +513,7 @@
       "owner_id": "generic-assets"
     },
     "assets.dependencies": {
-      "description": "Compute dependency closures for files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.",
+      "description": "Compute dependency closures of asset files. For files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.",
       "parameters": {
         "paths": {
           "type": "array",
@@ -536,7 +536,7 @@
       "owner_id": "generic-assets"
     },
     "assets.pack_adopt": {
-      "description": "Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in skipped_symlinks with a note. A different file already there is refused unless force=true; nothing is written inside the repository.",
+      "description": "Create or fill a pack from a folder. Creates a pack in the primary asset folder, or copies a folder's asset files into it and pins them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in skipped_symlinks with a note. A different file already there is refused unless force=true; nothing is written inside the repository.",
       "parameters": {
         "pack": {
           "type": "string",
@@ -645,7 +645,7 @@
       "owner_id": "generic-assets"
     },
     "assets.pack_pin": {
-      "description": "Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true.",
+      "description": "Pin a pack's files by SHA-256. Records the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true.",
       "parameters": {
         "pack": {
           "type": "string",
@@ -697,7 +697,7 @@
       "owner_id": "generic-assets"
     },
     "assets.pack_build": {
-      "description": "Copy USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on into a pack in the primary asset folder, keeping layout, and pin them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.",
+      "description": "Copy asset files and their dependencies into a pack. USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on, keeping layout, and pins them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.",
       "parameters": {
         "pack": {
           "type": "string",

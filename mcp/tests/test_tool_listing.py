@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -16,8 +17,9 @@ from isaac_mcp.tool_hints import CATALOG_HINTS
 
 REPO = Path(__file__).resolve().parents[2]
 MAX_TOOL_DESCRIPTION = 600
-MAX_GROUP_DESCRIPTION = 1500
-MAX_PARAMETER_DESCRIPTION = 450
+MAX_GROUP_DESCRIPTION = 600      # a group of many actions may go a little past about 400; see grouped_tools
+MAX_PARAMETER_DESCRIPTION = 450  # a single-purpose tool behind a group: its full text
+MAX_LISTED_PARAMETER_DESCRIPTION = 120  # what a client is shown
 # Tool or "tool.parameter": a limit that must be exceeded for a safety rule to stay in the listing.
 # Keep this small, and say why next to each entry.
 EXCEPTIONS: dict[str, int] = {}
@@ -74,8 +76,9 @@ def test_every_listed_tool_has_a_description_within_the_limit(either):
     assert not too_long, f"Move detail to docs/TOOLS-*.md: {too_long}"
 
 
-def test_every_listed_parameter_has_a_top_level_description_within_the_limit(either):
+def test_every_listed_parameter_has_a_top_level_description_within_the_limit(either, request):
     listed = either
+    grouped = request.node.callspec.params["either"] == "grouped"
     """At the top level: nested under anyOf, many clients never show it."""
     missing, too_long = [], {}
     for tool in listed:
@@ -83,7 +86,7 @@ def test_every_listed_parameter_has_a_top_level_description_within_the_limit(eit
             text = spec.get("description") or ""
             if not text.strip():
                 missing.append(f"{tool.name}.{name}")
-            elif len(text) > limit(f"{tool.name}.{name}", MAX_PARAMETER_DESCRIPTION):
+            elif len(text) > limit(f"{tool.name}.{name}", MAX_LISTED_PARAMETER_DESCRIPTION if grouped else MAX_PARAMETER_DESCRIPTION):
                 too_long[f"{tool.name}.{name}"] = len(text)
     assert not missing, missing
     assert not too_long, too_long
@@ -198,7 +201,7 @@ def test_every_single_purpose_tool_is_reachable_through_a_listed_one(listed, sin
         assert action in schema["properties"]["action"]["enum"], (group, action)
         mine = {grouped_tools.OWN_ACTION if name == "action" else name for name in tool.inputSchema.get("properties", {})}
         assert mine <= set(schema["properties"]), (tool.name, mine - set(schema["properties"]))
-        assert f"- {action}:" in by_name[group].description
+        assert re.search(rf"^- {action}\b", by_name[group].description, re.M), (group, action)
 
 
 def test_a_group_s_hints_are_the_most_cautious_of_its_members(listed):
@@ -213,7 +216,7 @@ def test_shared_arguments_are_described_once_and_scoped_ones_say_where_they_appl
     camera = next(t for t in listed if t.name == "sim__camera").inputSchema["properties"]
     assert camera["session_id"]["description"].startswith("Exact session_id"), "the same for every action: said once"
     assert camera["filename"]["description"].startswith("[capture] ")
-    assert camera["path"]["description"].startswith("[create, capture] create: ") and " capture: " in camera["path"]["description"]
+    assert camera["path"]["description"].startswith("[all but list] "), "scoped, in the shorter of two forms"
     assert "anyOf" not in camera["focal_length"], "an optional argument is not also typed as null"
 
 

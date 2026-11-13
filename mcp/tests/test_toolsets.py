@@ -110,7 +110,7 @@ def test_live_visibility_uses_same_selection():
         toolsets.owner("sim.unknown", "sim")
 
 
-@pytest.mark.parametrize("profile,budget", [("minimal", 4000), ("default", 22000), ("all", 35000)])
+@pytest.mark.parametrize("profile,budget", [("minimal", 1670), ("default", 15900), ("all", 23350)])   # measured 1,590 / 15,134 / 22,201, plus about 5 percent
 def test_listing_size(profile, budget):
     instance = build(profile)
     tools = asyncio.run(instance.list_tools())
@@ -184,3 +184,232 @@ def test_workcell_owns_the_whole_ur5e_dt_namespace():
     owned = {name for name in build("minimal,+workcell")._tool_manager._tools if toolsets.owner(name) == "workcell"}
     assert owned and all(name.startswith("ur5e_dt__") for name in owned)
     assert {"ur5e_dt__jenga", "ur5e_dt__jenga_build", "ur5e_dt__workcell"} <= owned
+
+
+# ---- enabling and disabling toolsets at run time ----
+
+RUNTIME = [name for name, spec in toolsets.TOOLSETS.items() if name != "core" and not spec.explicit_only]
+
+
+def offline_build(selection="default", extra=None):
+    """A server with no bridge to find, so run-time changes use only host tools and the catalog."""
+    instance = server.build_server({"ISAAC_MCP_TOOLSETS": selection, **(extra or {})})
+    state = server._state_for(instance)
+    state.get_client = lambda: (_ for _ in ()).throw(ConnectionRefusedError("Connection refused"))
+    return instance, state
+
+
+def change(instance, action, names=None, ctx=None):
+    return asyncio.run(server._change_toolsets(instance, action, names, ctx))
+
+
+def registered(instance):
+    return set(instance._tool_manager._tools)
+
+
+class FakeSession:
+    def __init__(self):
+        self.sent = 0
+
+    async def send_tool_list_changed(self):
+        self.sent += 1
+
+
+class FakeContext:
+    def __init__(self):
+        self.session = FakeSession()
+        self.request_context = self
+
+
+@pytest.mark.parametrize("name", RUNTIME)
+def test_enable_registers_exactly_what_startup_would(name):
+    instance, _ = offline_build("minimal")
+    before = set(server.grouped_tools.listed_names(instance))
+    result = change(instance, "enable", [name])
+    expected = build("minimal,+" + name)
+    assert registered(instance) == registered(expected)
+    assert set(server.grouped_tools.listed_names(instance)) == set(server.grouped_tools.listed_names(expected))
+    assert set(result["tools_available"]) == set(server.grouped_tools.listed_names(instance)) - before
+    assert result["changed"] == [name] and name in result["on"]
+    assert "nothing was written" in result["scope"]
+
+
+@pytest.mark.parametrize("name", RUNTIME)
+def test_disable_removes_exactly_that_toolsets_tools(name):
+    instance, _ = offline_build("all")
+    result = change(instance, "disable", [name])
+    assert registered(instance) == registered(build("all,-" + name))
+    assert (result["tools_removed"] or name == "extensions") and name not in result["on"]   # extensions list nothing offline
+    assert not any(toolsets.owner(tool) == name for tool in registered(instance) if tool not in tool_groups.GROUPS)
+
+
+def test_enabled_tools_are_callable_and_disabled_ones_are_not():
+    instance, _ = offline_build("minimal")
+    with pytest.raises(Exception):
+        asyncio.run(instance.call_tool("windows", {"action": "help"}))
+    change(instance, "enable", ["screen"])
+    answer = asyncio.run(instance.call_tool("windows", {"action": "help"}))
+    assert "list_windows" in json.dumps(str(answer)) or "windows" in str(answer)
+    change(instance, "disable", ["screen"])
+    with pytest.raises(Exception):
+        asyncio.run(instance.call_tool("windows", {"action": "help"}))
+
+
+def test_enable_twice_is_harmless():
+    instance, _ = offline_build("minimal")
+    change(instance, "enable", ["lab", "workcell"])
+    once = registered(instance)
+    listed = set(server.grouped_tools.listed_names(instance))
+    again = change(instance, "enable", ["lab", "workcell"])
+    assert again["changed"] == [] and again["unchanged"] == ["lab", "workcell"]
+    assert "tools_available" in again and again["tools_available"] == []
+    assert registered(instance) == once and set(server.grouped_tools.listed_names(instance)) == listed
+    change(instance, "disable", ["lab"])
+    change(instance, "enable", ["lab"])
+    assert registered(instance) == once
+
+
+@pytest.mark.parametrize("name", ["input", "launch"])
+def test_explicit_only_toolsets_can_never_be_enabled_at_run_time(name):
+    from mcp.server.fastmcp.exceptions import ToolError
+    instance, state = offline_build("minimal")
+    before = registered(instance)
+    with pytest.raises(ToolError) as error:
+        change(instance, "enable", ["lab", name])
+    assert "explicit-only" in str(error.value) and "ISAAC_MCP_TOOLSETS" in str(error.value)
+    assert "restart" in str(error.value) and "Nothing changed" in str(error.value)
+    assert registered(instance) == before and state.toolsets == {"core"}      # refused whole, "lab" too
+    assert name not in server._where_am_i({}, state)["toolsets"]["can_enable"]
+    assert name in server._where_am_i({}, state)["toolsets"]["off"]
+
+
+def test_explicit_only_ones_stay_available_at_startup():
+    instance, state = offline_build("minimal,+input,+launch")
+    assert {"window_input", "sim__session"} <= registered(instance)
+    change(instance, "disable", ["input"])          # a user's own startup choice can be dropped again
+    assert "window_input" not in registered(instance)
+    from mcp.server.fastmcp.exceptions import ToolError
+    with pytest.raises(ToolError, match="explicit-only"):
+        change(instance, "enable", ["input"])
+
+
+def test_core_cannot_be_disabled_and_unknown_names_are_refused():
+    from mcp.server.fastmcp.exceptions import ToolError
+    instance, state = offline_build("default")
+    before = registered(instance)
+    for action, names, text in (("disable", ["scene", "core"], "core cannot be disabled"),
+                                ("enable", ["nonsense"], "Unknown toolset"),
+                                ("enable", [], "needs names"), ("enable", None, "needs names"),
+                                ("disable", ["lab-ish"], "Unknown toolset")):
+        with pytest.raises(ToolError, match=text):
+            change(instance, action, names)
+    assert registered(instance) == before and "scene" in state.toolsets and "toolsets" in registered(instance)
+
+
+@pytest.mark.parametrize("how", ["env", "env_false", "user_file", "project_file"])
+def test_runtime_enable_switch_turns_the_feature_off(how, tmp_path, monkeypatch):
+    from mcp.server.fastmcp.exceptions import ToolError
+    home = tmp_path / "home"
+    (home / ".config/isaac-mcp").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(tmp_path)
+    extra = {}
+    if how == "env":
+        extra = {"ISAAC_MCP_RUNTIME_ENABLE": "0"}
+    elif how == "env_false":
+        extra = {"ISAAC_MCP_RUNTIME_ENABLE": "false"}
+    elif how == "user_file":
+        (home / ".config/isaac-mcp/config.toml").write_text("[tools]\nruntime_enable = false\n")
+    else:
+        (tmp_path / "isaac-mcp.toml").write_text("[tools]\nruntime_enable = false\n")
+    instance, state = offline_build("minimal", extra)
+    assert state.runtime_enable is False
+    for action in ("enable", "disable"):
+        with pytest.raises(ToolError, match="switched off"):
+            change(instance, action, ["lab"])
+    assert registered(instance) == registered(build("minimal"))
+    listing = change(instance, "list")                       # reading is always allowed
+    assert listing["runtime_enable"] is False and listing["can_enable"] == []
+    assert "off" in listing["enable"].lower() and "startup" in listing["enable"] or "ISAAC_MCP_TOOLSETS" in listing["enable"]
+
+
+def test_runtime_enable_default_and_bad_value():
+    assert config.resolve({}).runtime_enable is True
+    assert config.resolve({"ISAAC_MCP_RUNTIME_ENABLE": "1"}).runtime_enable is True
+    with pytest.raises(ValueError, match="ISAAC_MCP_RUNTIME_ENABLE"):
+        config.resolve({"ISAAC_MCP_RUNTIME_ENABLE": "maybe"})
+
+
+def test_a_tool_list_change_is_announced_once_and_only_when_something_changed():
+    instance, _ = offline_build("minimal")
+    ctx = FakeContext()
+    change(instance, "enable", ["lab"], ctx)
+    assert ctx.session.sent == 1
+    change(instance, "enable", ["lab"], ctx)                  # nothing changed: no notification
+    change(instance, "list", None, ctx)
+    assert ctx.session.sent == 1
+    change(instance, "disable", ["lab"], ctx)
+    assert ctx.session.sent == 2
+
+
+def test_server_advertises_list_changed_for_the_tool():
+    instance = build("minimal")
+    options = instance._mcp_server.create_initialization_options()
+    assert options.capabilities.tools.listChanged is True
+    tool = instance._tool_manager._tools["toolsets"]
+    assert tool.parameters["properties"]["action"]["enum"] == ["list", "enable", "disable"]
+    assert toolsets.owner("toolsets") == "core"
+
+
+def test_workcell_and_robosim_register_without_a_bridge_or_checkout(tmp_path, monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("ISAAC_MCP_ROBOSIM_ROOT", str(tmp_path / "no-checkout"))
+    instance, _ = offline_build("minimal")
+    result = change(instance, "enable", ["workcell", "robosim"])
+    assert {"robosim", "ur5e_dt__workcell", "ur5e_dt__jenga"} <= set(result["tools_available"])
+    assert "dial the selected bridge" in result["note"]
+    answer = asyncio.run(instance.call_tool("ur5e_dt__workcell", {"action": "status"}))
+    text = str(answer)
+    assert "not available" in text and "no Isaac Sim bridge could be reached" in text
+    answer = asyncio.run(instance.call_tool("robosim", {"action": "status"}))
+    assert "missing or unreadable" in str(answer) and "never installs" in str(answer)
+
+
+def test_enable_also_reads_the_live_bridge_tools(monkeypatch):
+    instance, state = offline_build("minimal")
+    seen = []
+    monkeypatch.setattr(server, "discover_and_register_tools", lambda srv: seen.append(sorted(state.toolsets)) or [])
+    change(instance, "enable", ["scene"])
+    assert seen and "scene" in seen[0]
+
+
+def test_status_toolsets_field_says_how_to_enable():
+    instance, state = offline_build("default")
+    field = server._where_am_i({}, state)["toolsets"]
+    assert 'toolsets(action="enable", names=[...])' in field["enable"]
+    assert "input" in field["enable"] and "launch" in field["enable"] and "startup" in field["enable"]
+    assert field["can_enable"] == [name for name in toolsets.TOOLSETS if name not in state.toolsets
+                                   and name not in toolsets.explicit_only()]
+    assert field["tools"]["scene"] == 6 and field["tools"]["lab"] == 4 and field["tools"]["workcell"] == 7
+    contents = asyncio.run(instance.read_resource("isaac-mcp://toolsets"))
+    assert json.loads(list(contents)[0].content) == field
+    change(instance, "enable", ["lab"])
+    assert "lab" in json.loads(list(asyncio.run(instance.read_resource("isaac-mcp://toolsets")))[0].content)["on"]
+
+
+def test_listed_tool_counts_match_what_a_full_server_lists():
+    instance = build("all,+input,+launch")
+    listed = server.grouped_tools.listed_names(instance)
+    for name in toolsets.TOOLSETS:
+        count = toolsets.listed_count(name)
+        if count is not None:
+            assert count == sum(toolsets.owner(tool) == name for tool in listed), name
+
+
+def test_help_names_the_enable_call_for_a_toolset_that_is_off():
+    answer = server._isaac_help("train a policy")
+    assert 'toolsets(action="enable", names=["lab"])' in answer
+    switched_off = server._isaac_help("train a policy", runtime_enable=False)
+    assert 'toolsets(action="enable"' not in switched_off and "switched off" in switched_off
+    assert 'names=["launch"]' not in server._isaac_help("start a simulator")
+    assert "Explicit-only" in server._isaac_help("start a simulator")

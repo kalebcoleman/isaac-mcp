@@ -221,10 +221,9 @@ def cmd_run_python(bridge, code: str, session_id: str = "default", persistent: b
 # ---- jobs --------------------------------------------------------------------------------
 
 _JOB_STATUS_DESCRIPTION = (
-    "Status of background work in this Kit: run_python(background=true), sim__simulation__run and "
-    "sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, "
-    "progress, the last output and, when finished, the result or error. With no job_id it lists the jobs, "
-    "newest first. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, "
+    "Check a background job in this Kit; with no job_id, list the jobs. run_python(background=true), "
+    "sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, "
+    "progress, the last output and, when finished, the result or error. The list is newest first. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, "
     "run_script, ...), with no bridge needed."
 )
 _JOB_STATUS_PARAMETERS = {
@@ -419,8 +418,8 @@ def builtin_tools(bridge) -> List:
             handler=bound(cmd_reload_tools)),
         ToolDefinition(
             name="put_file",
-            description="Write a file on the bridge's box (content base64-encoded), so code and assets can be "
-                        "shipped without scp. Writing a .py clears the folder's bytecode cache. The content "
+            description="Write a file on the simulator's machine (base64 content). Ships code and assets without "
+                        "scp. Writing a .py clears the folder's bytecode cache. The content "
                         "travels in one message: for code and tool-sized assets, not gigabytes.",
             parameters={"path": {"type": "string", "required": True,
                                  "description": "Destination path on the bridge's box (~ expands)."},
@@ -429,7 +428,7 @@ def builtin_tools(bridge) -> List:
             handler=bound(cmd_put_file), inline=True),
         ToolDefinition(
             name="get_file",
-            description="Read a file from the bridge box's disk, returned base64-encoded (content_b64). Pull "
+            description="Read a file from the simulator's machine. Returned base64-encoded (content_b64); the pull "
                         "half of put_file.",
             # The file tools touch only the disk, so they run on the caller's socket thread: a large
             # file is read, hashed or written without holding up a frame.
@@ -451,15 +450,15 @@ def builtin_tools(bridge) -> List:
             handler=bound(cmd_job_status), read_only=True, inline=True),
         ToolDefinition(
             name="job_cancel",
-            description="Stop a background job (job_id from the call that started it). It ends at its next step "
+            description="Stop a background job. job_id comes from the call that started it. It ends at its next step "
                         "and cleans up after itself; confirm with job_status. Through the MCP server it also "
                         "stops an Isaac Lab or script job.",
             parameters={"job_id": {"type": "string", "required": True, "description": "job_id of a running job."}},
             handler=bound(cmd_job_cancel)),
         ToolDefinition(
             name="stat_file",
-            description="Existence, size, and sha256 of a file on the bridge's box, to skip unchanged pushes "
-                        "and verify assets.",
+            description="Check a file's existence, size and sha256 on the bridge's box. Skips unchanged pushes "
+                        "and verifies assets.",
             parameters=path, handler=bound(cmd_stat_file), read_only=True, inline=True),
         ToolDefinition(name="list_tools", description="List all tools registered on this bridge.",
                        handler=bound(cmd_list_tools), internal=True, read_only=True, inline=True),

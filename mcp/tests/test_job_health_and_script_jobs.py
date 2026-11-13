@@ -184,7 +184,8 @@ def test_run_script_needs_no_install(tmp_path, monkeypatch):
         monkeypatch.delenv(variable, raising=False)
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [{"host": "127.0.0.1", "port": 8766, "pid": 1}])
     general = tool("run_script")
-    assert "no simulator and no Isaac Lab" in general.description and "jobs action=status" in general.description   # named as a client is shown it
+    assert "no simulator and no Isaac Lab" in general.description and "isaac_help(tool=" in general.description   # the full text is one call away
+    assert "jobs action=status" in gw._tool_help(gw.mcp, "run_script")   # named as a client is shown it
     assert general.parameters["properties"]["uses_gpu"]["default"] is False
     body = "import sys\nprint('ISAAC_MCP_PROGRESS: 1/1 done')\nprint(sys.argv[1])\n"
     out = json.loads(asyncio.run(general.fn(script=str(script(tmp_path, body)), args=["hello"], label="convert")))
