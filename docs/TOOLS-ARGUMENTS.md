@@ -1009,6 +1009,10 @@ Create a UsdPreviewSurface or physics material with finite numeric parameters. N
 - `color` (array, default `[0.5, 0.5, 0.5]`): RGB 0..1.
 - `roughness` (number, default `0.5`): 0..1.
 - `metallic` (number, default `0`): 0..1.
+- `kind` (string, default `"pbr"`): pbr or physics.
+- `static_friction` (number, default `0.5`): Physics material static friction 0..10.
+- `dynamic_friction` (number, default `0.5`): Physics material dynamic friction 0..10.
+- `restitution` (number, default `0`): Physics material restitution 0..1.
 
 ### `sim__physics__apply`
 
@@ -1207,6 +1211,7 @@ Set a static local or world pose on any Xformable prim in the session layer, and
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): Absolute Xformable prim path.
+- `scale` (array, optional): Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.
 - `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
 - `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
 - `frame` (string, default `"local"`): Pose frame: local or world.

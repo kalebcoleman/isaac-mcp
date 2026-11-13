@@ -935,6 +935,11 @@
           "description": "Absolute Xformable prim path.",
           "required": true
         },
+        "scale": {
+          "type": "array",
+          "description": "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.",
+          "required": false
+        },
         "position": {
           "type": "array",
           "description": "Three finite coordinates in stage units.",
@@ -990,6 +995,15 @@
           "default": null,
           "has_default": false,
           "description": "Absolute Xformable prim path."
+        },
+        {
+          "name": "scale",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it."
         },
         {
           "name": "position",
@@ -2157,6 +2171,30 @@
           "description": "0..1.",
           "required": false,
           "default": 0
+        },
+        "kind": {
+          "type": "string",
+          "description": "pbr or physics.",
+          "required": false,
+          "default": "pbr"
+        },
+        "static_friction": {
+          "type": "number",
+          "description": "Physics material static friction 0..10.",
+          "required": false,
+          "default": 0.5
+        },
+        "dynamic_friction": {
+          "type": "number",
+          "description": "Physics material dynamic friction 0..10.",
+          "required": false,
+          "default": 0.5
+        },
+        "restitution": {
+          "type": "number",
+          "description": "Physics material restitution 0..1.",
+          "required": false,
+          "default": 0
         }
       },
       "fields": [
@@ -2217,6 +2255,42 @@
           "default": 0,
           "has_default": true,
           "description": "0..1."
+        },
+        {
+          "name": "kind",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "pbr",
+          "has_default": true,
+          "description": "pbr or physics."
+        },
+        {
+          "name": "static_friction",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 0.5,
+          "has_default": true,
+          "description": "Physics material static friction 0..10."
+        },
+        {
+          "name": "dynamic_friction",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 0.5,
+          "has_default": true,
+          "description": "Physics material dynamic friction 0..10."
+        },
+        {
+          "name": "restitution",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 0,
+          "has_default": true,
+          "description": "Physics material restitution 0..1."
         }
       ],
       "namespace": "sim",

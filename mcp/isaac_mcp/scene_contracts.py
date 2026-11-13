@@ -209,7 +209,12 @@ add(
 add(
     "sim.prim.set_transform",
     "Set a static local or world pose on any Xformable prim in the session layer, and report the pose before and after; undo with sim__prim__revert. Refuses instance proxies (name the instance root), articulation links other than the root (moving a link breaks its joints), animated transforms, Kit runtime prims and a running or paused timeline. Authors one transform override, so source files never change. No claim of runtime teleportation.",
-    dict(**TARGET, path=field("string", "Absolute Xformable prim path."), **POSE),
+    dict(
+        **TARGET,
+        path=field("string", "Absolute Xformable prim path."),
+        scale=field("array", "Positive XYZ scale in the requested pose frame. Omitted: keep the prim's current local scale, so moving a scaled table does not resize it.", False),
+        **POSE,
+    ),
 )
 add(
     "sim.physics.inspect",
@@ -477,6 +482,10 @@ add(
         color=field("array", "RGB 0..1.", False, default=[0.5, 0.5, 0.5]),
         roughness=field("number", "0..1.", False, default=0.5),
         metallic=field("number", "0..1.", False, default=0),
+        kind=field("string", "pbr or physics.", False, default="pbr"),
+        static_friction=field("number", "Physics material static friction 0..10.", False, default=0.5),
+        dynamic_friction=field("number", "Physics material dynamic friction 0..10.", False, default=0.5),
+        restitution=field("number", "Physics material restitution 0..1.", False, default=0),
     ),
 )
 add(
