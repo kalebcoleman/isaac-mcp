@@ -269,22 +269,27 @@ def _plan_wrist(config, robot, assets, assets_cfg, limitations):
     cam_path = f"{root}/D415_color"
     optical_q = _euler_xyz_deg_to_quat(rotation)
     optical = _pose_block(offset, optical_q)
-    usd_q = _quat_mul(optical_q, USD_CAMERA_ROTATION)
-    usd = _usd_block(cam_path, root, [0.0, 0.0, 0.0], usd_q)
+    # The wrist root prim already carries the optical pose; the camera prim under it only
+    # needs the optical-to-USD conversion (applying optical_q again would double the tilt).
+    usd = _usd_block(cam_path, root, [0.0, 0.0, 0.0], list(USD_CAMERA_ROTATION))
 
     body_size = _vector(section.get("body_size_m"), 3, "wrist_camera.body_size_m") or list(D415_BODY_SIZE_M)
     bracket_size = _vector(section.get("bracket_size_m"), 3, "wrist_camera.bracket_size_m") or list(WRIST_BRACKET_SIZE_M)
     # In the wrist root frame, tool0 sits at -R^T * offset; centre the proxy bracket between them.
     bridge = [-0.5 * value for value in _rotate_vector(_quat_conjugate(optical_q), offset)]
+    # The pack bracket is a unit proxy; stretch it along its long axis so it spans the
+    # lateral gap between the tool axis and the camera instead of leaving the camera floating.
     gap = math.hypot(offset[0], offset[1])
-    if gap > max(bracket_size[0], bracket_size[1]) / 2:
+    stretch = max(1.0, gap / bracket_size[1])
+    if stretch > 1.0:
         limitations.append(
-            f"Wrist bracket proxy ({bracket_size[0]:.3f} x {bracket_size[1]:.3f} m) may not span the "
+            f"Wrist bracket proxy is stretched x{stretch:.2f} along its long axis to span the "
             f"{gap:.3f} m lateral tool0 offset; confirm the real bracket CAD before lab use.")
 
     parts = []
     bracket = _part(config, assets, assets_cfg, "wrist_mount", f"{root}/bracket", root,
-                    bridge, optical_q, "printed wrist bracket", limitations)
+                    bridge, optical_q, "printed wrist bracket", limitations,
+                    scale=[1.0, stretch, 1.0] if stretch > 1.0 else None)
     if bracket:
         parts.append(bracket)
     body = _part(config, assets, assets_cfg, "d415", f"{root}/body", root,
@@ -405,8 +410,9 @@ def _plan_overhead(config, assets, assets_cfg, limitations):
     if shelf_size:
         camera["mount"]["printed_shelf_size_m"] = shelf_size
     limitations.append(
-        "Overhead release and shelf proxies are placed at the camera optical position with world axes; "
-        "use asset_layout mount_pose entries to separate their stack once the pack declares it.")
+        "Overhead release and shelf proxies start at the camera optical position with world axes; "
+        "asset_layout mount_pose entries stack them between the camera and the gantry beam, and the "
+        "stack heights come from the pack's proxy dimensions, not a measured assembly.")
     root_entry = {"name": "overhead", "prim_path": OVERHEAD_ROOT, "parent": None,
                   "translation_m": [0.0, 0.0, 0.0], "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0]}
     return camera, parts, root_entry

@@ -124,6 +124,7 @@ def test_intrinsics_follow_config_resolution_and_fov(config, tmp_path):
 
 
 def test_wrist_offset_and_optical_to_usd_conversion(config, tmp_path):
+    config["wrist_camera"]["rotation_in_tool0_deg"] = [0.0, 0.0, 0.0]
     wrist = build(config, tmp_path)["cameras"]["wrist"]
     offset = config["wrist_camera"]["offset_in_tool0_m"]
     assert wrist["optical"]["translation_m"] == pytest.approx(offset)
@@ -140,7 +141,8 @@ def test_wrist_offset_and_optical_to_usd_conversion(config, tmp_path):
     camera = build(rotated, tmp_path)["cameras"]["wrist"]
     half = math.sqrt(0.5)
     assert camera["optical"]["quaternion_wxyz"] == pytest.approx([half, 0, 0, half])
-    assert camera["usd_camera"]["quaternion_wxyz"] == pytest.approx([0, half, half, 0])
+    # The wrist root carries the optical rotation; the camera prim keeps only Rx(180 deg).
+    assert camera["usd_camera"]["quaternion_wxyz"] == pytest.approx([0, 1, 0, 0])
 
     shifted = copy.deepcopy(config)
     shifted["wrist_camera"]["offset_in_tool0_m"] = [-0.1, -0.2, -0.3]
@@ -156,10 +158,16 @@ def test_overhead_look_at_pose_and_reach_clearance(config, tmp_path):
     position = config["overhead_camera"]["position_m"]
     assert overhead["optical"]["translation_m"] == pytest.approx(position)
     matrix = overhead["optical"]["matrix4x4_row_major"]
-    # Looking straight down: optical +Z is world -Z; down (+Y) is -up_hint = -X.
-    assert [matrix[row][2] for row in range(3)] == pytest.approx([0, 0, -1])
-    assert [matrix[row][1] for row in range(3)] == pytest.approx([-1, 0, 0])
-    assert [matrix[row][0] for row in range(3)] == pytest.approx([0, -1, 0])
+    # Optical +Z looks from the camera at look_at; down (+Y) opposes the projected up_hint.
+    target = config["overhead_camera"]["look_at_m"]
+    forward = [t - p for t, p in zip(target, position)]
+    norm = math.sqrt(sum(v * v for v in forward))
+    assert [matrix[row][2] for row in range(3)] == pytest.approx([v / norm for v in forward])
+    assert forward[2] < 0
+    right = [matrix[row][0] for row in range(3)]
+    down = [matrix[row][1] for row in range(3)]
+    assert sum(r * f for r, f in zip(right, forward)) == pytest.approx(0, abs=1e-9)
+    assert down[0] < 0
     reach = overhead["mount"]["reach_check"]
     assert reach["ok"] is True
     assert reach["arm_reach_m"] == pytest.approx(0.85)
@@ -205,10 +213,16 @@ def test_parts_carry_asset_id_and_bom_tag(config, tmp_path):
         assert part["prim_path"].startswith("/")
         assert part["local"]["matrix4x4_row_major"][3] == [0, 0, 0, 1]
     mount = next(part for part in parts if part["role"] == "overhead_mount")
-    assert mount["local"]["scale"] == pytest.approx([0.0381, 1.1, 1.1])
-    assert mount["local"]["translation_m"] == pytest.approx([1.05, 0.0, 0.55])
+    posts = config["overhead_mount"]["post_xy_m"]
+    height = config["overhead_mount"]["height_m"]
+    span_y = abs(posts[0][1] - posts[1][1])
+    assert mount["local"]["scale"] == pytest.approx([0.0381, span_y, height])
+    assert mount["local"]["translation_m"] == pytest.approx(
+        [posts[0][0], (posts[0][1] + posts[1][1]) / 2, height / 2])
     bracket = next(part for part in parts if part["role"] == "wrist_mount")
-    assert bracket["local"]["translation_m"] == pytest.approx([0.006, 0.019, 0.0025])
+    offset = config["wrist_camera"]["offset_in_tool0_m"]
+    assert bracket["local"]["scale"][1] > 1.0  # stretched to span the tool0-to-camera gap
+    assert bracket["local"]["translation_m"][0] == pytest.approx(0.5 * -offset[0] * 1.0, abs=0.02)
     assert str(tmp_path) not in json.dumps(report)
 
 
@@ -329,7 +343,8 @@ def test_required_config_and_provenance_are_returned(config, tmp_path):
                 "interfaces.wrist_camera_topics", "interfaces.overhead_camera_topics"):
         assert key in required
     assert required["assets.d415"] == "d415"
-    assert required["wrist_camera.offset_in_tool0_m"] == pytest.approx([-0.012, -0.038, -0.005])
+    assert required["wrist_camera.offset_in_tool0_m"] == pytest.approx(
+        config["wrist_camera"]["offset_in_tool0_m"])
     assert report["provenance"]["pack"] == {"id": "ur5e-jenga-workcell", "version": "v1"}
     assert report["provenance"]["assets"]["loader"] == "Pack"
     assert set(report["provenance"]["assets"]["resolved_roles"]) == set(cameras.REQUIRED_ASSET_ROLES)
@@ -432,7 +447,9 @@ def test_authoring_creates_referenced_parts_and_cameras(config, tmp_path):
     mount_path = next(part["prim_path"] for part in report["parts"]
                       if part["role"] == "overhead_mount")
     mount_ops = {op.GetOpName(): op for op in UsdGeom.Xformable(stage.GetPrimAtPath(mount_path)).GetOrderedXformOps()}
-    assert tuple(mount_ops["xformOp:scale"].Get()) == pytest.approx((0.0381, 1.1, 1.1))
+    posts = config["overhead_mount"]["post_xy_m"]
+    assert tuple(mount_ops["xformOp:scale"].Get()) == pytest.approx(
+        (0.0381, abs(posts[0][1] - posts[1][1]), config["overhead_mount"]["height_m"]))
 
     assert {path: path.read_bytes() for path in asset_paths} == before
 
