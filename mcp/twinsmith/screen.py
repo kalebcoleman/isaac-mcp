@@ -1402,14 +1402,37 @@ def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
 
 
+_TOKEN = re.compile(r"img:(\d+)x(\d+)@(\d+),(\d+),(\d+)x(\d+)/(\d+)x(\d+)")
+
+
+def coord_token(image_w: int, image_h: int, rect: tuple[int, int, int, int], window_w: int, window_h: int) -> str:
+    """The coord_space a window capture prints: an image of ``image_w`` x ``image_h`` showing ``rect``
+    (x, y, width, height in window pixels) of a ``window_w`` x ``window_h`` window."""
+    x, y, w, h = rect
+    return f"img:{image_w}x{image_h}@{x},{y},{w}x{h}/{window_w}x{window_h}"
+
+
 def map_point(coord_space: str | None, x: int, y: int, width: int, height: int) -> tuple[int, int]:
     """The one place image pixels become window pixels: (x, y) in ``coord_space`` -> original window pixels.
 
     ``window`` (or None) means x and y already are window pixels. Any other value is the coord_space
-    token a capture printed; the window must still be ``width`` x ``height``."""
+    token a capture printed; the window must still be ``width`` x ``height`` (the size it had then)."""
     if coord_space in (None, "", "window"):
         return x, y
-    raise ValueError("coord_space must be 'window' or a coord_space token printed by screenshot")
+    match = _TOKEN.fullmatch(str(coord_space).strip())
+    if not match:
+        raise ValueError("coord_space must be 'window' or the coord_space token a screenshot printed, "
+                         "e.g. img:1600x900@0,0,2560x1440/2560x1440")
+    iw, ih, rx, ry, rw, rh, ww, wh = map(int, match.groups())
+    if (ww, wh) != (width, height):
+        raise ValueError(f"that screenshot showed a {ww}x{wh} window, but it is {width}x{height} now; "
+                         "capture it again")
+    if not (iw and ih and rw and rh) or rx + rw > ww or ry + rh > wh:
+        raise ValueError("coord_space token is inconsistent; capture the window again")
+    if not (0 <= x < iw and 0 <= y < ih):
+        raise ValueError(f"({x}, {y}) is outside that {iw}x{ih} image")
+    # Pixel centres: the last image pixel lands inside the rectangle, never on its far edge.
+    return rx + int((x + 0.5) * rw / iw), ry + int((y + 0.5) * rh / ih)
 
 
 def capture(monitor: int | None = None, window: str | None = None, window_id: int | None = None,
@@ -1457,11 +1480,13 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
         f"source: {source}\n"
         f"window: {target_label}"
     )
-    if inline.width != full.width:
-        # OpenAI's computer-use guide: map coordinates from a downscaled screenshot back to the
-        # environment's pixels. Input tools take original pixels.
-        caption += (f"\nscale: input tools take original pixels; multiply a point in this image by "
-                    f"{full.width / inline.width:.3f}")
+    if target is not None:
+        # Input tools map points in this image back to window pixels themselves (OpenAI's computer-use
+        # guide: map coordinates from a downscaled screenshot to the environment's pixels).
+        token = coord_token(inline.width, inline.height, (0, 0, full.width, full.height), full.width, full.height)
+        caption += f"\ncoord_space: {token} (pass it with x/y measured in this image)"
+    elif inline.width != full.width:
+        caption += f"\nscale: multiply a point in this image by {full.width / inline.width:.3f} for screen pixels"
     if target is None and composed:
         caption += COMPOSITE_NOTE
     buf = io.BytesIO()
