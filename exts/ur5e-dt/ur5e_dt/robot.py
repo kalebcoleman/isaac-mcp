@@ -101,6 +101,58 @@ def _mount_world(prim, layout):
                  pose.get("orientation_wxyz", [1, 0, 0, 0])) * _world(prim)
 
 
+def _neutralize_frame_bodies(stage, root, keep):
+    """Turn geometry-free rigid bodies held only by fixed joints into plain frames.
+
+    A body without collision shapes has no valid mass or inertia; PhysX reports it and
+    falls back to unit inertia. Such a pack body (the RG2 ``gripper_center`` tool frame)
+    keeps its transform but loses RigidBodyAPI/MassAPI, and the fixed joint that only
+    attached it is deactivated. The declared role body (``keep``) is never touched. Edits
+    stay in the session layer; the pack is untouched.
+    """
+    frames = []
+    for prim in list(Usd.PrimRange(root)):
+        if prim.GetPath() == keep or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            continue
+        if any(item.IsA(UsdGeom.Gprim)
+               for item in Usd.PrimRange(prim, Usd.TraverseInstanceProxies())):
+            continue
+        joints = [item for item in Usd.PrimRange(root) if item.IsA(UsdPhysics.Joint)
+                  and prim.GetPath() in (UsdPhysics.Joint(item).GetBody0Rel().GetTargets()
+                                         + UsdPhysics.Joint(item).GetBody1Rel().GetTargets())]
+        if not joints or any(not item.IsA(UsdPhysics.FixedJoint) for item in joints):
+            continue  # a moving link or an unattached body is not a frame marker
+        for item in joints:
+            item.SetActive(False)
+        for schema in (UsdPhysics.MassAPI, UsdPhysics.RigidBodyAPI):
+            prim.RemoveAPI(schema)
+        for name in prim.GetAppliedSchemas():
+            if name.startswith("Physx") and "RigidBody" in name:
+                prim.RemoveAppliedSchema(name)
+        frames.append(str(prim.GetPath()))
+    return frames
+
+
+def _deactivate_dangling_joints(stage, root):
+    """Deactivate disabled pack joints that name no second body.
+
+    The UR5e asset ships a disabled ``robot_gripper_joint`` whose world-frame anchor does
+    not coincide with the wrist, so PhysX warns about disjointed body transforms. The
+    work cell mounts its own tool, so the leftover joint is dropped. Enabled joints with a
+    missing body (the base ``root_joint``) are anchors and stay.
+    """
+    removed = []
+    for prim in list(Usd.PrimRange(root)):
+        if not prim.IsA(UsdPhysics.Joint):
+            continue
+        joint = UsdPhysics.Joint(prim)
+        dangling = not joint.GetBody0Rel().GetTargets() or not joint.GetBody1Rel().GetTargets()
+        if dangling and joint.GetJointEnabledAttr().Get() is False:
+            prim.SetActive(False)
+            removed.append(str(prim.GetPath()))
+    return removed
+
+
 def _fixed(stage, path, parent, child, world_frame, separate):
     joint = UsdPhysics.FixedJoint.Define(stage, path)
     for side, body in enumerate((parent, child)):
@@ -186,6 +238,7 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
     _set_world(assembly, _pose(placement.get("position_m", [0, 0, 0]),
                               placement.get("orientation_wxyz", [1, 0, 0, 0])))
     parts, roots, bodies, mounts = [], {}, {}, {}
+    frame_bodies, dropped_joints = [], []
     limitations = ["Pack fidelity is declared, not independently verified; no runtime validation performed.",
                    "Pack collision geometry, inertia, joint limits and drives are preserved; no synthetic drives.",
                    "Closed-chain RG2 dynamics and separate-articulation mounting require PhysX validation.",
@@ -225,6 +278,13 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
 
     for role in ["robot", *order]:
         roots[role] = reference(role, root.AppendChild(role))
+        if role == "robot":
+            dropped_joints += _deactivate_dangling_joints(stage, roots[role])
+        else:
+            declared = sources[role][1]["body"]
+            frame_bodies += _neutralize_frame_bodies(
+                stage, roots[role],
+                roots[role].GetPath() if declared == "." else roots[role].GetPath().AppendPath(declared))
         layout = sources[role][1]
         bodies[role] = _relative(stage, roots[role].GetPath(), layout["body"])
         mounts[role] = _relative(stage, roots[role].GetPath(), layout["mount_frame"])
@@ -328,7 +388,8 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
             "bota_joint_path": str(bota_joint.GetPath()), "bota_body_path": str(bodies["bota"].GetPath()),
             "bota_sensor_path": str(sensor.GetPath()), "pad_paths": pad_paths,
             "parts": parts, "limitations": limitations, "max_opening_m": 0.110,
-            "stack_order": list(order), "assembly_path": str(root)}
+            "stack_order": list(order), "assembly_path": str(root),
+            "frame_bodies_neutralized": frame_bodies, "joints_deactivated": dropped_joints}
 
 
 def _pads(stage, root, gripper, config, reference):
