@@ -1773,6 +1773,12 @@ _HELP_TOPICS = (
      "isaaclab__env_check (NaNs, resets, memory). isaaclab__runs_status(job_id, wait_s=45) waits for a job to end; "
      "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises your evaluation-result files against criteria you give; isaaclab__checkpoint_register protects a baseline; run_script runs your own script as a job. "
      "isaaclab__record gives an MP4 with no window. No bridge needed."),
+    ("rebuild a real scene from a video and compare it with the real clip (real-to-sim)",
+     ("real-to-sim", "real to sim", "real2sim", "reference video", "video", "clip", "robosim", "robosimstudio", "match the real"),
+     "robosim, in the robosim toolset (off by default: toolsets action=enable names=[\"robosim\"]). It needs no simulator bridge. "
+     "Order: robosim action=start with a template (plain data), reference (frames from the clip), compare, update_scene, "
+     "tune_push (makes the simulated block move like the real one), rollout, compare_take, report, stop. It compares images; "
+     "it does not fit mass or friction."),
     ("start, check or recover a simulator", ("start", "launch", "bridge", "kit", "hang", "stuck kit", "status", "connect", "where am i", "running"),
      "status (one call: the bridge, what is running, the stage IDs; says so when nothing runs), refresh_tools(wait_s=120), "
      "use_bridge, sim__launch, sim__status, sim__stop, sim__logs__tail."),
