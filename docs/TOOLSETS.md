@@ -14,6 +14,23 @@ The table is generated from the code (`scripts/gen_tool_reference.py --write`); 
 rows for the server you have installed, with the current state of each.
 
 <!-- generated:toolsets-full -->
+| Toolset | Default | Listed tools |
+|---|---|---|
+| `core`: Connection, discovery, help and job tracking | on | `isaac_help`, `jobs`, `refresh_tools`, `status`, `use_bridge` |
+| `scene`: Create and edit scenes and primitives | on | `sim__light`, `sim__material`, `sim__prim`, `sim__quick_start`, `sim__stage`, `sim__timeline__control` |
+| `physics`: Physics, joints, arms and simulation | on | `sim__arm`, `sim__joints`, `sim__physics`, `sim__simulation` |
+| `sensors`: Cameras, LiDAR and viewport framing | on | `sim__camera`, `sim__lidar`, `sim__viewport__frame` |
+| `assets`: Import and manage robot and scene assets | on | `assets__import_path`, `assets__library`, `assets__pack` |
+| `code`: Execute code and scripts, transfer files | on | `files`, `reload_tools`, `run_python`, `run_script`, `sim__controller` |
+| `screen`: Capture, record and arrange desktop windows | on | `join_videos`, `screen_recording`, `screenshot`, `windows` |
+| `lab`: Isaac Lab training and evaluation | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics` |
+| `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
+| `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
+| `workcell`: UR5e workcell tools | off | `ur5e_dt__eval`, `ur5e_dt__jenga`, `ur5e_dt__perception`, `ur5e_dt__planning`, `ur5e_dt__real2sim`, `ur5e_dt__robot`, `ur5e_dt__workcell` |
+| `robosim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
+| `input`: Desktop mouse and keyboard input | explicit only | `window_input` |
+| `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
+| `extensions`: Tools from uncatalogued extension namespaces | on | none |
 <!-- /generated -->
 
 - `core` is always on and cannot be turned off.
@@ -101,6 +118,12 @@ The counts below are generated from the code; the sizes were measured with
 characters of what `tools/list` returns. Tokens are estimated as characters divided by four.
 
 <!-- generated:profiles -->
+| Profile | Toolsets | Listed tools |
+|---|---|--:|
+| `minimal` | `core` | 5 |
+| `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 30 |
+| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 47 |
+| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 49 |
 <!-- /generated -->
 
 | Selection | Listed tools | Characters | Estimated tokens |

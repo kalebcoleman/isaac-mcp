@@ -24,6 +24,9 @@ RETIRED_TOOLS = frozenset({"list_bridges", "screen_info", "assets__prepare_works
 # Sentences that were true once and are not any more: Newton is the stated target engine.
 RETIRED_PHRASES = ("PhysX is the release target", "Newton is experimental")
 
+# Generated from the tool descriptions in the code: a stale name there is fixed in the description, not in the page.
+GENERATED_PAGES = frozenset({"docs/TOOLS-ARGUMENTS.md"})
+
 NAMESPACED = re.compile(r"(?<![A-Za-z0-9_])((?:sim|assets|isaaclab|ur5e_dt)__[a-z][a-z0-9_]*)(\*?)")
 # `windows(action="info")`, `windows action=info`, `jobs` with action `tail`, in code or prose.
 GROUP_CALL = re.compile(r"(?<![A-Za-z0-9_])(?P<group>[a-z][a-z0-9_]*)(?:\(|\s+)action=[\"']?(?P<action>[a-z_0-9]+)")
@@ -57,6 +60,8 @@ def check_tool_names(errors, files=None, names=None, groups=None, retired=None):
             where = path.relative_to(ROOT)
         except ValueError:
             where = path.name
+        if str(where) in GENERATED_PAGES:
+            continue
         seen = set()
         for name, star in NAMESPACED.findall(text):
             if name in names and not star:

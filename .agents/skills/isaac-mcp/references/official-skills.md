@@ -52,7 +52,7 @@ repository. If they are not installed, read the `SKILL.md` on GitHub instead.
 | ROS 2 | `isaac-sim-ros2-bridge`, `isaac-sim-ros-workspaces` | `sim__ros2__tf_setup` |
 | Navigation | `navigation-primitives`, `occupancy-map`, `isaac-sim-robot-navigation`, `mobility-gen` | `run_python` |
 | Synthetic data | `data-collection-sim`, `action-and-event-data-generation` and the `actor-sdg-*` skills | `sim__camera__capture`, `sim__stage__save`, `get_file` for outputs |
-| Headless or remote runs | `isaac-sim-headless-deployment`, `isaac-sim-web-viewer` | `sim__launch` with `headless=true` |
+| Headless or remote runs | `isaac-sim-headless-deployment`, `isaac-sim-web-viewer` | `sim__session(action="launch", headless=true)` |
 | Rendering quality | `isaac-sim-rendering`, `validation-diff-gifs` | `sim__camera__capture`, `screenshot`, `get_file` |
 | Hangs, crashes, slowness | `isaac-sim-troubleshooting`, `profile-isaac-sim` | `status`, `sim__logs__tail`, `screenshot`, `run_python` for `carb` settings |
 | Install or upgrade | `isaac-sim-installation`, `isaac-sim-migration` | `status` reports the running app version |

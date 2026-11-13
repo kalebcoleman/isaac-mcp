@@ -82,6 +82,23 @@ which keeps the tool list small. The counts below are listed tools; related tool
 `action` argument.
 
 <!-- generated:toolsets-compact -->
+| Toolset | Default | Tools | What it holds |
+|---|---|--:|---|
+| `core` | on | 5 | Connection, discovery, help and job tracking |
+| `scene` | on | 6 | Create and edit scenes and primitives |
+| `physics` | on | 4 | Physics, joints, arms and simulation |
+| `sensors` | on | 3 | Cameras, LiDAR and viewport framing |
+| `assets` | on | 3 | Import and manage robot and scene assets |
+| `code` | on | 5 | Execute code and scripts, transfer files |
+| `screen` | on | 4 | Capture, record and arrange desktop windows |
+| `lab` | off | 4 | Isaac Lab training and evaluation |
+| `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
+| `kit_debug` | off | 2 | Inspect Kit logs and operate its UI |
+| `workcell` | off | 7 | UR5e workcell tools |
+| `robosim` | off | 1 | RoboSimStudio real-to-sim runs in its own private environment |
+| `input` | explicit only | 1 | Desktop mouse and keyboard input |
+| `launch` | explicit only | 1 | Launch and stop simulator processes |
+| `extensions` | on | 0 | Tools from uncatalogued extension namespaces |
 <!-- /generated -->
 
 Turn one on in `~/.config/isaac-mcp/config.toml`, with `ISAAC_MCP_TOOLSETS` or with `--toolsets`:

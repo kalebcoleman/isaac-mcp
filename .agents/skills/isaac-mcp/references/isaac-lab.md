@@ -109,6 +109,6 @@ Judge a run the way NVIDIA's `isaaclab-debugging-rl-training` skill recommends:
 
 `isaaclab__play` opens a window. `isaaclab__runs_status` reports `window: {id, title, width,
 height}` once it is up. Take `screenshot` `{"window_id": <id>}`, or record with
-`start_screen_recording` `{"window_id": <id>, "max_seconds": 20, "full_screen": false}` followed
-by `stop_screen_recording`. Stop play with `jobs(action="cancel")` when done; it is interactive and
+`screen_recording` `{"action": "start", "window_id": <id>, "max_seconds": 20, "full_screen": false}` followed
+by `{"action": "stop"}`. Stop play with `jobs(action="cancel")` when done; it is interactive and
 does not exit on its own.

@@ -1425,6 +1425,8 @@ List Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree 
 - `window` (string, default `""`): Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.
 - `limit` (integer, default `40`): Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).
 
+<a id="ur5e-twin-ur5e_dt__"></a>
+
 ## `workcell`: UR5e workcell tools
 
 Toolset `workcell` is off until you select it with `+workcell`. Reference: [README.md](../exts/ur5e-dt/workcell/README.md). 10 tools, listed as 7: `ur5e_dt__eval` (status), `ur5e_dt__jenga` (build, status), `ur5e_dt__perception` (status), `ur5e_dt__planning` (status), `ur5e_dt__real2sim` (status), `ur5e_dt__robot` (status), `ur5e_dt__workcell` (quick_start, status, shutdown).

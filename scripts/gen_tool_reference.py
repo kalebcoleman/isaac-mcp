@@ -191,7 +191,9 @@ def render():
         state = ("on by default" if spec.default else
                  f"off until you select it with `+{toolset}`" + (" (never enabled by `all`)" if spec.explicit_only else ""))
         link = REFERENCE[toolset]
-        lines += [f"## `{toolset}`: {spec.summary}", "",
+        # The work cell's own docs link to the anchor this section replaced.
+        anchor = ['<a id="ur5e-twin-ur5e_dt__"></a>', ""] if toolset == "workcell" else []
+        lines += anchor + [f"## `{toolset}`: {spec.summary}", "",
                   f"Toolset `{toolset}` is {state}. Reference: [{link.split('#')[0].split('/')[-1]}]({link}). "
                   f"{len(members)} tools, listed as {len(listed[toolset])}: "
                   + ", ".join(_actions(name) for name in listed[toolset]) + ".", ""]

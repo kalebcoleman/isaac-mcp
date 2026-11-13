@@ -303,14 +303,9 @@ and [third-party notices](../THIRD-PARTY-NOTICES.md).
 
 ## One workspace folder
 
-Keep the isaac-mcp checkout, your asset stores and your Isaac Sim / Isaac Lab Python
-environments together in one folder. This page says how, and how the tool finds things
-that are already installed somewhere else.
-
-**Platform: Linux x86_64 only** (Ubuntu 24.04 or 22.04; see this page).
-This page documents no Windows or macOS paths. A Windows install, for example one under
-`C:` and reached from WSL as `/mnt/c/...`, cannot be used. That is not supported and
-untested.
+Keep the isaac-mcp checkout, your asset stores and your Isaac Sim / Isaac Lab Python environments together in one folder.
+This section says how, and how the tool finds things that are already installed somewhere else. It documents no Windows or
+macOS paths: a Windows install, for example one under `C:` and reached from WSL as `/mnt/c/...`, cannot be used.
 
 ### Why one folder
 
