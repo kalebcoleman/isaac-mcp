@@ -54,7 +54,7 @@ shape, or `window_ids=[...]` to record several windows into one video. Monitor c
 Inside Kit, the `isaac.mcp.bridge` extension keeps a registry of tools and listens on one local
 port per Kit process. Tool packs register under a namespace, so two projects can each have a
 `play_scene` (`arm.play_scene`, `rover.play_scene`). This server is a client of that socket; so
-are the tools panel inside Kit and any script using `isaac_mcp.client`.
+is any script using `isaac_mcp.client`.
 
 ```mermaid
 flowchart LR
@@ -64,7 +64,6 @@ flowchart LR
     subgraph kit["Kit process"]
         BRIDGE["isaac.mcp.bridge<br/>registry, queue, jobs"]
         PACKS["scene tools, UR5e twin,<br/>your tool package"] -->|register| BRIDGE
-        PANEL["tools panel"] --> BRIDGE
     end
 ```
 
@@ -90,7 +89,7 @@ python3 scripts/install.py            # --dry-run to preview, --remove to undo
 ```
 
 This edits the app's `user.config.json`, as the Extensions window's autoload checkbox does: it
-adds `exts/` to the search path, enables `isaac.mcp.bridge` and `isaac.mcp.panel`, and stores the
+adds `exts/` to the search path, enables `isaac.mcp.bridge`, and stores the
 port (8766). Close the app first; with several Kit apps installed, name one with `--config`.
 
 Then register the server with your client (Claude Code, Cursor and others read `.mcp.json`):
@@ -123,7 +122,7 @@ python3 scripts/install.py add-project --path <folder holding my_tools> --module
 # or, for one launch: ISAAC_MCP_TOOL_PATHS=<folder> ISAAC_MCP_TOOL_MODULES=my_tools
 ```
 
-Clients then have `robot_demo__spawn_robot`, the panel has a button for it, and scripts can call
+Clients then have `robot_demo__spawn_robot`, and scripts can call
 `robot_demo.spawn_robot`. Copy `mcp/templates/demo_tools/` to start, and see
 [docs/tool-authoring.md](docs/tool-authoring.md) for arguments, errors, reloading without a
 restart, and the flags that mark a tool read-only or exclusive.
@@ -149,7 +148,7 @@ python3 mcp/isaac_mcp/client.py <tool> ['{"json": "arguments"}'] [--port N]
 ## More
 
 - [docs/protocol.md](docs/protocol.md): messages, finding a bridge, the token, scheduling, read-only mode, jobs, several simulators, access from another machine.
-- [docs/tool-authoring.md](docs/tool-authoring.md): writing, reloading and narrowing tools; the panel.
+- [docs/tool-authoring.md](docs/tool-authoring.md): writing, reloading and narrowing tools.
 - [Environment variables](../docs/ENVIRONMENT.md): every setting. [The bridge inside an Isaac Lab script](../docs/TOOLS-ISAACLAB.md#the-bridge-inside-an-isaac-lab-script).
 
 ## Layout
@@ -160,7 +159,6 @@ mcp/templates/            a tool package to copy, a remote driver, an Isaac Lab 
 mcp/tests/                host tests; the bridge is tested here too, outside Kit
 mcp/docs/                 the bridge: protocol, writing tools
 exts/isaac.mcp.bridge/    the bridge extension
-exts/isaac.mcp.panel/     the tools panel (optional)
 exts/sim-tools/           generic scene and asset tools
 exts/ur5e-dt/             the UR5e digital twin
 scripts/install.py        load the bridge in a Kit app on every launch

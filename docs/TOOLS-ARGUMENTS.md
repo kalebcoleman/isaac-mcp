@@ -146,7 +146,7 @@ Switch this MCP server to another running Kit bridge on this machine.
 
 - `port` (int, required): Bridge TCP port from --list-bridges or status.
 
-## Desktop input (opt-in: `screen_input`)
+## Desktop input (opt-in: `input` toolset)
 
 Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 5 tools.
 
@@ -216,7 +216,7 @@ Type up to 200 printable ASCII characters into the focused selected X11 window.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `text` (str, required): Up to 200 printable ASCII characters.
 
-## Simulator sessions (opt-in: `sim_launch`)
+## Simulator sessions (opt-in: `launch` toolset)
 
 Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-simulator-sessions). 4 tools.
 

@@ -37,9 +37,9 @@ bridge's own metadata takes precedence over these snapshots once discovered.
 LOCAL_SECTIONS = (
     ("Host gateway and desktop", "TOOLS-HOST.md",
      ("server.py", "screen.py")),
-    ("Desktop input (opt-in: `screen_input`)", "TOOLS-HOST.md#optional-desktop-input",
+    ("Desktop input (opt-in: `input` toolset)", "TOOLS-HOST.md#optional-desktop-input",
      ("desktop_input.py",)),
-    ("Simulator sessions (opt-in: `sim_launch`)", "TOOLS-HOST.md#optional-simulator-sessions",
+    ("Simulator sessions (opt-in: `launch` toolset)", "TOOLS-HOST.md#optional-simulator-sessions",
      ("sim_sessions.py",)),
     ("Isaac Lab", "TOOLS-ISAACLAB.md", ("isaaclab/tools.py",)),
 )

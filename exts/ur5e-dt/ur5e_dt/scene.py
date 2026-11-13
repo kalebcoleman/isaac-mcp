@@ -61,6 +61,15 @@ def _preflight(config_path, mode):
     return config, raw, pack, assets
 
 
+def _configure_robot_gravity(stage, assembly_path, disabled):
+    from pxr import PhysxSchema, Usd, UsdPhysics
+
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        for prim in Usd.PrimRange(stage.GetPrimAtPath(assembly_path)):
+            if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                PhysxSchema.PhysxRigidBodyAPI.Apply(prim).CreateDisableGravityAttr().Set(disabled)
+
+
 def _tag_parts(stage, parts):
     from pxr import Sdf
 
@@ -181,6 +190,7 @@ class Workcell:
             stage = context.get_stage()
             UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
             UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+            UsdPhysics.SetStageKilogramsPerUnit(stage, 1.0)
             world = UsdGeom.Xform.Define(stage, "/World")
             stage.SetDefaultPrim(world.GetPrim())
             physics = UsdPhysics.Scene.Define(stage, "/World/PhysicsScene")
@@ -197,11 +207,7 @@ class Workcell:
             bench.AddTranslateOp().Set(Gf.Vec3d(xy[0], xy[1], -config["world"]["bench_asset_top_z_m"]))
             bench.AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
             robot_report = robot.build_robot(stage, pack, config)
-            if mode == "mirror_real":
-                from pxr import PhysxSchema, Usd
-                for prim in Usd.PrimRange(stage.GetPrimAtPath(robot_report["assembly_path"])):
-                    if prim.HasAPI(UsdPhysics.RigidBodyAPI):
-                        PhysxSchema.PhysxRigidBodyAPI.Apply(prim).CreateDisableGravityAttr().Set(True)
+            _configure_robot_gravity(stage, robot_report["assembly_path"], mode == "mirror_real")
             camera_report = cameras.build_cameras(stage, assets, config, robot_report)
             block_report = jenga.build(stage, assets["jenga_block"], config)
             parts = ([{"prim_path": "/World/Bench", "asset_id": config["assets"]["bench"], "bom_id": "bench"}]

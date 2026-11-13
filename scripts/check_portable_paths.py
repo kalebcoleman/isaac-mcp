@@ -47,7 +47,7 @@ HOME_REF = re.compile(
     r"|expanduser\(\s*[\"']~[\"']\s*\)\s*,\s*[\"']([A-Za-z0-9_.@-]+)"
 )
 SUFFIXES = (".py", ".sh")
-EXTRA_FILES = {"run.sh", "install.sh", "verify.sh"}
+EXTRA_FILES = {"run.sh", "install.sh"}
 # The checker's own patterns and fixtures that must name bad paths.
 SKIP = {"scripts/check_portable_paths.py", "scripts/check_private_paths.py", "scripts/check_assets.py"}
 SKIP_PREFIXES = ("mcp/tests/", "docs/evidence/")

@@ -1,4 +1,4 @@
-"""Offline UR5e tool discovery: the host lists all 23 ``ur5e_dt__*`` tools with no bridge running.
+"""Offline UR5e tool discovery: the host lists all 10 ``ur5e_dt__*`` tools with no bridge running.
 
 A server built by ``build_server`` registers callable proxies for every tool in the packaged
 catalog (``isaac_mcp/catalogs/ur5e_dt.json``). A call dials the selected bridge and, when there
@@ -30,7 +30,7 @@ import mcp.types as types
 
 import isaac_mcp.screen as screen
 import isaac_mcp.server as gw
-from isaac_mcp import host_catalog, local_tools as lt, sim_sessions
+from isaac_mcp import host_catalog, local_tools as lt, sim_sessions, tool_groups
 from isaac_mcp_bridge.bridge import ToolDefinition
 from isaac_mcp_bridge.schema import field_specs
 from bridge_testing import LiveBridge
@@ -42,7 +42,9 @@ generator = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(generator)
 
 PROXIES = {gw._mcp_name(canonical): canonical for canonical in host_catalog.catalog_tool_names() if canonical.startswith("ur5e_dt.")}
-PLAY = "ur5e_dt__play_scene"
+STATUS = "ur5e_dt__workcell_status"
+# Registered host proxies: each catalogued member plus the grouped tools that list them.
+REGISTERED = len(PROXIES) + sum(name.startswith("ur5e_dt__") for name in tool_groups.GROUPS)
 
 
 @pytest.fixture(autouse=True)
@@ -132,22 +134,22 @@ def live_twin_tools(server):
 # ---- the snapshot ----------------------------------------------------------------------
 
 def test_the_snapshot_is_packaged_valid_and_complete():
-    assert len(PROXIES) == 23
+    assert len(PROXIES) == 10
     catalog = host_catalog.load_catalog()
-    assert len(catalog) == 23 and all(name.startswith("ur5e_dt.") for name in catalog)
+    assert len(catalog) == 10 and all(name.startswith("ur5e_dt.") for name in catalog)
     assert {meta["owner_id"] for meta in catalog.values()} == {OWNER}
     # It is data inside the package, read through importlib.resources (what a wheel ships).
     from importlib import resources
     assert resources.files("isaac_mcp").joinpath("catalogs/ur5e_dt.json").is_file()
     # A caller cannot corrupt the cache.
-    catalog["ur5e_dt.play_scene"]["description"] = "tampered"
-    assert host_catalog.load_catalog()["ur5e_dt.play_scene"]["description"] != "tampered"
+    catalog["ur5e_dt.workcell_status"]["description"] = "tampered"
+    assert host_catalog.load_catalog()["ur5e_dt.workcell_status"]["description"] != "tampered"
 
 
 def test_the_snapshot_matches_the_extension_registry_exactly():
     """Drift guard: a registry edit without a regenerated snapshot fails here."""
     registry = twin_registry()
-    assert len(registry) == 23
+    assert len(registry) == 10
     expected = {f"ur5e_dt.{name}": {
         "description": schema["description"],
         "parameters": schema.get("parameters", {}),
@@ -164,7 +166,7 @@ def test_the_snapshot_matches_the_extension_registry_exactly():
 def test_the_generator_check_fails_on_drift(tmp_path, capsys):
     stale = tmp_path / "ur5e_dt.json"
     document = generator.build_ur5e_catalog()
-    document["tools"]["ur5e_dt.play_scene"]["description"] = "an old description"
+    document["tools"]["ur5e_dt.workcell_status"]["description"] = "an old description"
     stale.write_text(generator.render(document), encoding="utf-8")
     assert generator.main(["--check", "--output", str(stale)]) == 1
     assert "stale" in capsys.readouterr().err
@@ -174,10 +176,10 @@ def test_the_generator_check_fails_on_drift(tmp_path, capsys):
 
 @pytest.mark.parametrize("mutate, message", [
     (lambda d: d.update(version=99), "version"),
-    (lambda d: d["tools"]["ur5e_dt.play_scene"].update(namespace="other"), "namespace"),
-    (lambda d: d["tools"]["ur5e_dt.assemble_objects"]["fields"][0].update(kind="blob"), "malformed"),
-    (lambda d: d["tools"]["ur5e_dt.assemble_objects"]["fields"][0].update(name="renamed"), "do not match"),
-    (lambda d: d["tools"].update({"elsewhere.tool": d["tools"]["ur5e_dt.play_scene"]}), "namespace"),
+    (lambda d: d["tools"]["ur5e_dt.workcell_status"].update(namespace="other"), "namespace"),
+    (lambda d: d["tools"]["ur5e_dt.jenga_build"]["fields"][0].update(kind="blob"), "malformed"),
+    (lambda d: d["tools"]["ur5e_dt.jenga_build"]["fields"][0].update(name="renamed"), "do not match"),
+    (lambda d: d["tools"].update({"elsewhere.tool": d["tools"]["ur5e_dt.workcell_status"]}), "namespace"),
 ])
 def test_a_malformed_catalog_is_refused_loudly(monkeypatch, tmp_path, mutate, message):
     document = generator.build_ur5e_catalog()
@@ -226,9 +228,8 @@ def test_every_tool_is_listed_with_no_bridge_and_matches_the_registry_schema():
         for f in fields:
             if f["kind"] == "enum":
                 assert enum_of(properties[f["name"]]) == f["enum"], (name, f["name"])
-    assert listed[PLAY].inputSchema.get("properties", {}) == {}
-    assert enum_of(listed["ur5e_dt__assemble_objects"].inputSchema["properties"]["assembly"]) == [
-        "fmb1", "fmb2", "fmb3", "fmb4", "jenga", "fmb_jenga"]
+    assert listed[STATUS].inputSchema.get("properties", {}) == {}
+    assert set(listed["ur5e_dt__jenga_build"].inputSchema["properties"]) == {"profile", "seed"}
     assert gw.offline_tools(server) == sorted(PROXIES.values())
     assert live_twin_tools(server) == []              # the roster of live bridge tools stays empty
 
@@ -295,7 +296,7 @@ def test_a_failure_after_connecting_is_not_reported_as_not_run(monkeypatch):
 
         server = build()
         gw._state_for(server).client = Dies()
-        answer = gw._tool_implementation("ur5e_dt.play_scene", {}, gw._state_for(server))
+        answer = gw._tool_implementation("ur5e_dt.workcell_status", {}, gw._state_for(server))
         assert answer == f"Error: {error}", answer
 
 
@@ -304,7 +305,7 @@ def test_several_bridges_and_no_choice_points_at_use_bridge(monkeypatch, tmp_pat
     import isaac_mcp.client as client_module
     monkeypatch.setattr(client_module, "discover_bridges", lambda: [
         {"pid": 1, "port": 8001, "app": "a"}, {"pid": 2, "port": 8002, "app": "b"}])
-    (answer,) = run(build(), call(PLAY))
+    (answer,) = run(build(), call(STATUS))
     assert "multiple bridges running" in answer and "use_bridge(port)" in answer
 
 
@@ -316,10 +317,10 @@ def test_a_proxy_call_reaches_a_bridge_that_appeared_after_startup(monkeypatch):
         attach_twin(live)
         monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
         play, assembled = run(
-            server, call(PLAY),                                   # no refresh_tools first
-            call("ur5e_dt__assemble_objects", {"assembly": "fmb2"}))
-    assert json.loads(play) == {"handler": "play_scene", "args": {}}
-    assert json.loads(assembled) == {"handler": "assemble_objects", "args": {"assembly": "fmb2"}}
+            server, call(STATUS),                                   # no refresh_tools first
+            call("ur5e_dt__jenga_build", {"profile": "lab_unconfirmed", "seed": 42}))
+    assert json.loads(play) == {"handler": "workcell_status", "args": {}}
+    assert json.loads(assembled) == {"handler": "jenga_build", "args": {"profile": "lab_unconfirmed", "seed": 42}}
 
 
 def test_refresh_makes_the_tools_live_without_telling_the_client_nothing_changed(monkeypatch):
@@ -342,7 +343,7 @@ def test_refresh_makes_the_tools_live_without_telling_the_client_nothing_changed
 def test_the_live_bridges_metadata_is_authoritative(monkeypatch):
     server = build()
     registry = twin_registry()
-    registry["play_scene"] = {"description": "LIVE play", "parameters": {
+    registry["workcell_status"] = {"description": "LIVE play", "parameters": {
         "speed": {"type": "number", "required": True}}}
     registry["brand_new"] = {"description": "only on this bridge", "parameters": {}}
     with LiveBridge() as live:
@@ -350,14 +351,14 @@ def test_the_live_bridges_metadata_is_authoritative(monkeypatch):
         monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
         changed = gw.discover_and_register_tools(server)
         notes = []
-        listed, played = run(server, tools, call(PLAY, {"speed": 2.5}), notes=notes)
+        listed, played = run(server, tools, call(STATUS, {"speed": 2.5}), notes=notes)
         refreshed, = run(server, call("refresh_tools"))
-    assert "ur5e_dt.play_scene (updated)" in changed and "ur5e_dt.brand_new" in changed
+    assert "ur5e_dt.workcell_status (updated)" in changed and "ur5e_dt.brand_new" in changed
     assert sorted(c for c in changed if c.startswith("ur5e_dt.")) == [   # the other 22 are unchanged
-        "ur5e_dt.brand_new", "ur5e_dt.play_scene (updated)"]
+        "ur5e_dt.brand_new", "ur5e_dt.workcell_status (updated)"]
     assert "No new or changed tools" in refreshed
-    assert listed[PLAY].description == "LIVE play"
-    assert listed[PLAY].inputSchema["required"] == ["speed"]
+    assert listed[STATUS].description == "LIVE play"
+    assert listed[STATUS].inputSchema["required"] == ["speed"]
     assert "ur5e_dt__brand_new" in listed
     assert json.loads(played)["args"] == {"speed": 2.5}
 
@@ -365,16 +366,16 @@ def test_the_live_bridges_metadata_is_authoritative(monkeypatch):
 def test_a_bridge_that_drops_the_extension_reverts_tools_to_their_proxies(monkeypatch):
     server = build()
     with LiveBridge() as live:
-        attach_twin(live, {**twin_registry(), "play_scene": {"description": "LIVE", "parameters": {}},
+        attach_twin(live, {**twin_registry(), "workcell_status": {"description": "LIVE", "parameters": {}},
                            "brand_new": {"description": "extra", "parameters": {}}})
         monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
         gw.discover_and_register_tools(server)
         assert gw.offline_tools(server) == [] and "ur5e_dt.brand_new" in live_twin_tools(server)
         live.bridge.unregister_owner(OWNER)               # the twin extension is unloaded
         changed = gw.discover_and_register_tools(server)
-        listed, answer = run(server, tools, call(PLAY))
-    assert sorted(changed) == ["ur5e_dt.brand_new (removed)", "ur5e_dt.play_scene (offline)"]
-    assert listed[PLAY].description == twin_registry()["play_scene"]["description"]
+        listed, answer = run(server, tools, call(STATUS))
+    assert sorted(changed) == ["ur5e_dt.brand_new (removed)", "ur5e_dt.workcell_status (offline)"]
+    assert listed[STATUS].description == twin_registry()["workcell_status"]["description"]
     assert set(PROXIES) <= set(listed) and "ur5e_dt__brand_new" not in listed
     assert gw.offline_tools(server) == sorted(PROXIES.values())
     assert "did not register it" in answer and "extension" in answer
@@ -388,10 +389,10 @@ def test_calls_after_the_bridge_stops_say_so(monkeypatch):
         attach_twin(live)
         monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
         ok, = run(server, call("refresh_tools"))
-        live_answer, = run(server, call(PLAY))
-    assert json.loads(live_answer)["handler"] == "play_scene"
+        live_answer, = run(server, call(STATUS))
+    assert json.loads(live_answer)["handler"] == "workcell_status"
     # The bridge is gone. The tools stay listed, a refresh reports the failure and changes nothing.
-    stopped, refreshed, listed = run(server, call(PLAY), call("refresh_tools"), tools)
+    stopped, refreshed, listed = run(server, call(STATUS), call("refresh_tools"), tools)
     assert "no Isaac Sim bridge could be reached" in stopped
     assert refreshed.startswith("Error:")
     assert set(PROXIES) <= set(listed)
@@ -403,10 +404,10 @@ def test_use_bridge_to_a_bridge_without_the_extension_keeps_every_proxy():
         other.bridge.register_owner("demo", "demo").add(ToolDefinition(
             name="inspect", description="inspect", parameters={}, handler=lambda: {"seen": True}))
         switched, listed, play, inspect = run(
-            server, call("use_bridge", {"port": other.port}), tools, call(PLAY),
+            server, call("use_bridge", {"port": other.port}), tools, call(STATUS),
             call("demo__inspect"))
     assert "switched to bridge" in switched
-    assert "Note: ur5e_dt: 23 tool(s) are listed from the packaged catalog" in switched
+    assert "Note: ur5e_dt: 10 tool(s) are listed from the packaged catalog" in switched
     assert set(PROXIES) <= set(listed) and "demo__inspect" in listed
     assert "did not register it" in play and f"port {other.port}" in play
     assert json.loads(inspect) == {"seen": True}
@@ -421,13 +422,13 @@ def test_switching_between_a_twin_bridge_and_a_plain_one_follows_the_selected_br
             name="inspect", description="inspect", parameters={}, handler=lambda: {}))
         notes = []
         to_twin, on_twin, to_plain, on_plain, back, again = run(
-            server, call("use_bridge", {"port": twin.port}), call(PLAY),
-            call("use_bridge", {"port": plain.port}), call(PLAY),
-            call("use_bridge", {"port": twin.port}), call(PLAY), notes=notes)
+            server, call("use_bridge", {"port": twin.port}), call(STATUS),
+            call("use_bridge", {"port": plain.port}), call(STATUS),
+            call("use_bridge", {"port": twin.port}), call(STATUS), notes=notes)
         assert "Note:" not in to_twin and "Note:" not in back
-        assert json.loads(on_twin)["handler"] == "play_scene"
+        assert json.loads(on_twin)["handler"] == "workcell_status"
         assert "did not register it" in on_plain
-        assert json.loads(again)["handler"] == "play_scene"
+        assert json.loads(again)["handler"] == "workcell_status"
         assert gw.offline_tools(server) == []
     assert notes                                          # each switch told the client
 
@@ -463,10 +464,10 @@ def test_servers_keep_independent_bridges_and_independent_proxies(monkeypatch):
     with LiveBridge() as twin:
         attach_twin(twin)
         # One session: closing it drops the connection, and a server's choice lasts as long as it.
-        _, on_a = run(a, call("use_bridge", {"port": twin.port}), call(PLAY))
+        _, on_a = run(a, call("use_bridge", {"port": twin.port}), call(STATUS))
         assert gw.offline_tools(a) == [] and gw.offline_tools(b) == sorted(PROXIES.values())
-        (on_b,) = run(b, call(PLAY))
-    assert json.loads(on_a)["handler"] == "play_scene"
+        (on_b,) = run(b, call(STATUS))
+    assert json.loads(on_a)["handler"] == "workcell_status"
     assert "not available" in on_b
     assert gw._state_for(a) is not gw._state_for(b)
 
@@ -528,7 +529,7 @@ def test_filter_changes_notify_for_catalog_tools(monkeypatch, action, one_live_t
         def call(self, tool, params=None, **kwargs):
             if tool == "list_tools":
                 catalog = host_catalog.load_catalog()
-                return {"tools": {"ur5e_dt.play_scene": catalog["ur5e_dt.play_scene"]} if one_live_tool else {}}
+                return {"tools": {"ur5e_dt.workcell_status": catalog["ur5e_dt.workcell_status"]} if one_live_tool else {}}
             return {"pid": 1, "port": self.port}
 
         def close(self):
@@ -554,7 +555,9 @@ def test_filter_changes_notify_for_catalog_tools(monkeypatch, action, one_live_t
     before, hidden, hidden_names, hidden_notes, again, unchanged_notes, shown, after = asyncio.run(go())
     assert set(PROXIES) <= set(before) and not set(PROXIES) & set(hidden_names)
     assert set(PROXIES) <= set(after)
-    assert "23 tool(s)" in hidden and "23 tool(s)" in shown
+    # refresh_tools counts catalogued members; use_bridge also counts the grouped tools that list them.
+    expected = len(PROXIES) if action == "refresh_tools" else REGISTERED
+    assert f"{expected} tool(s)" in hidden and f"{expected} tool(s)" in shown
     assert "0 tool(s)" in again or "registry unchanged" in again
     if action == "refresh_tools":
         assert all(f"{canonical} (removed)" in hidden for canonical in PROXIES.values())
@@ -571,7 +574,7 @@ def test_switch_to_identical_client_surface_does_not_notify(monkeypatch):
             if tool == "status":
                 return {"pid": 1, "port": self.port}
             catalog = host_catalog.load_catalog()
-            return {"tools": {"ur5e_dt.play_scene": catalog["ur5e_dt.play_scene"]}}
+            return {"tools": {"ur5e_dt.workcell_status": catalog["ur5e_dt.workcell_status"]}}
 
         def close(self):
             pass
@@ -615,7 +618,7 @@ def test_failed_switch_still_notifies_when_it_changes_offline_proxies(monkeypatc
             return answer, await tools(client)
 
     answer, listed = asyncio.run(go())
-    assert "tool discovery failed" in answer and "Changed 23 tool(s)" in answer
+    assert "tool discovery failed" in answer and f"Changed {REGISTERED} tool(s)" in answer
     assert not set(PROXIES) & set(listed) and len(notes) == 1
 
 
@@ -637,7 +640,7 @@ def test_a_live_tool_may_not_take_an_offline_proxys_name_under_another_canonical
 
     class Fake:
         def call(self, tool, params=None, **kw):
-            return {"tools": {"ur5e_dt__play_scene": clash}}   # same MCP name, other canonical
+            return {"tools": {"ur5e_dt__workcell_status": clash}}   # same MCP name, other canonical
 
     state.client = Fake()
     with pytest.raises(RuntimeError, match="collides with host tool"):
@@ -670,8 +673,8 @@ def test_the_host_tool_collision_check_still_protects_local_tools(monkeypatch):
 
 def test_the_offline_proxies_carry_hints_from_their_own_table():
     server = build({"ISAAC_MCP_TOOLSETS": "minimal,+workcell"})
-    tool = server._tool_manager._tools[PLAY]
-    assert tool.annotations.readOnlyHint is False and tool.annotations.destructiveHint is False
+    tool = server._tool_manager._tools[STATUS]
+    assert tool.annotations.readOnlyHint is True and tool.annotations.destructiveHint is False
 
 
 def test_a_tool_from_a_projects_own_extension_gets_no_hints():
@@ -703,23 +706,22 @@ def test_the_wheel_config_ships_the_whole_package_directory():
 
 
 
-@pytest.mark.parametrize("name", ["add_objects", "assemble_objects"])
-@pytest.mark.parametrize("assembly", ["fmb4", "jenga", "fmb_jenga"])
-def test_jenga_is_accepted_by_real_mcp_schema_and_forwarded(monkeypatch, name, assembly):
-    """Regression: the handler supported Jenga while Pydantic rejected it."""
+@pytest.mark.parametrize("arguments", [{}, {"profile": "lab_unconfirmed"}, {"seed": 42},
+                                        {"profile": "lab_unconfirmed", "seed": 42}])
+def test_jenga_is_accepted_by_real_mcp_schema_and_forwarded(monkeypatch, arguments):
+    """Optional variation arguments survive the real MCP schema and gateway."""
     with LiveBridge() as live:
         attach_twin(live)
         server = build({"ISAAC_MCP_PORT": str(live.port)})
 
         async def exercise(client):
             listed = await tools(client)
-            schema = listed["ur5e_dt__" + name].inputSchema["properties"]["assembly"]
-            assert assembly in enum_of(schema)
-            response = await client.call_tool("ur5e_dt__" + name, {"assembly": assembly})
+            assert set(listed["ur5e_dt__jenga_build"].inputSchema["properties"]) == {"profile", "seed"}
+            response = await client.call_tool("ur5e_dt__jenga_build", arguments)
             assert not response.isError, response
             data = json.loads(response.content[0].text)
-            assert data == {"handler": name, "args": {"assembly": assembly}}
-            refused = await client.call_tool("ur5e_dt__" + name, {"assembly": "unknown-assembly"})
+            assert data == {"handler": "jenga_build", "args": arguments}
+            refused = await client.call_tool("ur5e_dt__jenga_build", {"seed": "not-an-integer"})
             assert refused.isError
 
         run(server, exercise)
@@ -1054,7 +1056,7 @@ def test_status_with_no_bridge_still_reports_the_host(monkeypatch, tmp_path):
     answer = json.loads(gw._dispatch("status", {}, state))
     assert answer["running"] is False and "toolsets" in answer["message"], "no bridge is an answer, not an error"
     assert answer["bridges"] == [] and "Restart the MCP connection" in answer["host"]["warning"]
-    other = gw._dispatch("ur5e_dt.play_scene", {}, state)
+    other = gw._dispatch("ur5e_dt.workcell_status", {}, state)
     assert "MCP host:" not in other
 
 
@@ -1070,7 +1072,7 @@ def test_bridge_listing_help_is_one_working_form(monkeypatch, tmp_path):
     listed = {tool.name: tool for tool in asyncio.run(server.list_tools())}
     refused = ConnectionRefusedError("[Errno 111] Connection refused")
     messages = [gw._BRIDGE_HELP, listed["use_bridge"].description,
-                gw._catalog_error("status", refused, state), gw._catalog_error("ur5e_dt.play_scene", refused, state),
+                gw._catalog_error("status", refused, state), gw._catalog_error("ur5e_dt.workcell_status", refused, state),
                 gw._starting_hint(server, refused)]
     for message in messages:
         assert gw.LIST_BRIDGES_HELP in message and bare not in message

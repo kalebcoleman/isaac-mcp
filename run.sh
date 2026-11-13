@@ -1,7 +1,6 @@
 #!/bin/bash
 # run.sh — primary entry point to launch Isaac Sim 6.2 with the MCP bridge.
 #
-# Replaces the old 5.1 launcher (scripts/launch_ur5e_dt.sh is now a shim to this file).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

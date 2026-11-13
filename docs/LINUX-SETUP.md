@@ -301,7 +301,6 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
 | `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; for the twin that is `/World/UR5e/root_joint`. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
-| `./verify.sh` stops with `FAILED: checkpoint` | A pre-migration `checkpoints/*.usda` has dead references. Inspect it and move it aside. See [Verification](VERIFICATION.md#live-ur5e-baseline) |
 | `/scan` missing after reopening a saved scene | Open it with `sim__stage__open`, which repairs stale LiDAR products. See [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan) |
 | `refresh_tools` selected another port | It found no bridge on the pinned port and one session this server launched. The result names it; verify with `status` |
 | `status` shows `host.stale: true` | This MCP server predates your `git pull`. Restart the MCP connection |
@@ -335,7 +334,7 @@ no mouse or keyboard control by default; the X11 input tools can be explicitly e
 If a Kit module or renderer extension appears missing, first check the selected Sim interpreter and the
 running Kit extension manager/startup log. Do not try to fix a Kit import by installing `omni` or `.pyi` files
 into the host Python. The supplied launcher requests `isaac.mcp.bridge`, `sim-tools`, `ur5e-dt` and
-`isaacsim.ros2.bridge`; the UR5e panel is optional. After connecting the correct bridge, `status` and
+`isaacsim.ros2.bridge`. After connecting the correct bridge, `status` and
 `sim__stage__info` help verify the running process and build; listing catalog tools by itself does not.
 
 ## Optional Lab, desktop controls and project assets

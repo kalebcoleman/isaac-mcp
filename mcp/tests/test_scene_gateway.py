@@ -25,8 +25,9 @@ def test_full_catalog_and_errors(monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     catalog = load_catalog()
     builtins = {"run_python", "status", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
-    assert len(catalog) == sum(name.startswith("ur5e_dt.") for name in catalog) + len(REGISTRY) + len(builtins)
+    assert len(catalog) == 10 + len(REGISTRY) + len(builtins)
     assert {k for k in catalog if "." not in k} == builtins
+    assert len([k for k in catalog if k.startswith("ur5e_dt.")]) == 10
     server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
 
     class Offline:
@@ -133,13 +134,13 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
 
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
-    hidden = gw.build_server({"ISAAC_MCP_TOOLSETS": "minimal,+code"})
-    visible = gw.build_server({})
+    hidden = gw.build_server({"ISAAC_MCP_TOOLSETS": "minimal,+code,+workcell"})
+    visible = gw.build_server({"ISAAC_MCP_TOOLSETS": "default,+workcell"})
     # The 7 bridge built-ins are listed offline too, so offline == with a bridge.
     assert "run_python" in visible._tool_manager._tools and "status" in hidden._tool_manager._tools
     assert "sim__stage__info" in visible._tool_manager._tools
     assert "sim__stage__info" not in hidden._tool_manager._tools
-    assert not any(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools)
+    assert sum(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools) == 17  # 10 members and their 7 groups
     with LiveBridge() as bridge:
         owner = bridge.bridge.register_owner("generic-sim", "sim")
         owner.add(td("stage.info", lambda: {"selected": True}))
@@ -156,7 +157,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
                     names = {t.name for t in (await client.list_tools()).tools}
                     assert ("sim__stage__info" in names) == enabled
                     assert ("assets__roots" in names) == enabled
-                    assert "run_python" in names and "ur5e_dt__play_scene" not in names
+                    assert "run_python" in names and "ur5e_dt__workcell_status" in names
                     if not enabled:
                         refused = await client.call_tool("sim__stage__info", {})
                         assert refused.isError

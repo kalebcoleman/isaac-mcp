@@ -20,7 +20,8 @@ Xform prim at the local origin, no joints):
 * ``wrist_mount``: centred proxy box 0.030 x 0.060 x 0.012 m, local axes equal
   to the optical frame. It is centred between tool0 and the camera optical
   origin; the manifest may refine that with ``asset_layout.wrist_mount.mount_pose``.
-* ``overhead_mount``: unit cube centred at the origin, axes equal to the world.
+* ``overhead_mount``: open three-member frame with a unit envelope, centred at
+  the origin, axes equal to the world. Member proportions are provisional.
   It is scaled to the gantry envelope: extrusion thickness x post span x height,
   centred at the post midpoint and half the configured height.
 * ``overhead_release`` / ``overhead_shelf``: centred boxes with world axes,
@@ -644,7 +645,7 @@ def _asset_conventions(config):
                  "forbidden_substitute": "D455/rsd455"},
         "wrist_mount": {"kind": "centred proxy box", "dimensions_m": bracket,
                         "axes": "optical frame", "placement": "centre between tool0 and the camera optical origin"},
-        "overhead_mount": {"kind": "unit cube proxy", "dimensions_m": [1.0, 1.0, 1.0],
+        "overhead_mount": {"kind": "unconfirmed open gantry proxy", "dimensions_m": [1.0, 1.0, 1.0],
                            "scale": "extrusion thickness x post span x height, centred at the post midpoint",
                            "axes": "world / Z-up"},
         "overhead_release": {"kind": "centred proxy box", "dimensions_m": None,

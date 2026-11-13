@@ -80,12 +80,6 @@ file there, `stat_file` reports its size and SHA-256, and `get_file` reads one b
 travels in one message, so use them for code and small assets. `mcp/templates/remote_driver.py`
 copies a package by hash and reloads it.
 
-## The tools panel
-
-`isaac.mcp.panel` adds an "MCP Tools" window: a section per namespace and a Run button per tool,
-with a field for each argument. It is drawn from the same listing clients get, so your tools
-appear on Refresh, and a click is queued exactly like a client's call.
-
 ## Things Kit will surprise you with
 
 - Kit takes `--enable <extension>` with a space. `--enable=<extension>` is ignored without an error.

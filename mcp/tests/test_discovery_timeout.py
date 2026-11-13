@@ -58,12 +58,11 @@ def test_stalled_bridge_keeps_sdk_initialization_and_host_tools_available(monkey
             await client.initialize()
             names = {t.name for t in (await client.list_tools()).tools}
             assert {
-                "sim__stop",
-                "sim__list",
-                "sim__stage__info",
-                "ur5e_dt__play_scene",
+                "sim__session",
+                "sim__stage",
+                "ur5e_dt__workcell",
             } <= names
-            response = await client.call_tool("sim__list", {})
+            response = await client.call_tool("sim__session", {"action": "list"})
             assert not response.isError
             assert time.monotonic() - started < 3
 

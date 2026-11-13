@@ -76,17 +76,3 @@ def test_launcher_always_enables_twin_tools(tmp_path):
     assert "defer=1" in lines
     assert "arg=isaac.mcp.bridge" in lines
     assert "arg=ur5e-dt" in lines
-
-
-def test_dedicated_twin_launcher_requests_extension(tmp_path):
-    scripts = tmp_path / "scripts"
-    scripts.mkdir()
-    repo = Path(__file__).resolve().parents[2]
-    shim = scripts / "launch_ur5e_dt.sh"
-    shim.write_bytes((repo / "scripts/launch_ur5e_dt.sh").read_bytes())
-    launcher = tmp_path / "run.sh"
-    launcher.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
-    launcher.chmod(0o755)
-    result = subprocess.run(["bash", str(shim), "--headless"], text=True, capture_output=True)
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines() == ["--headless"]

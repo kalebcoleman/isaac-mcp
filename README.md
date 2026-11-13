@@ -393,8 +393,7 @@ want the 20 GB simulator environment. See [AGENTS.md](AGENTS.md) for agent rules
 ## Credits and license
 
 MIT licensed. This project grew out of work by Aldrin Inbaraj, a lab mate at the RISE lab: the UR5e twin began as a
-fork of his MIT-licensed [isaac-sim-mcp](https://github.com/inbarajaldrin/isaac-sim-mcp), and the bridge, client and
-panel were first built on his [omni-kit-mcp](https://github.com/inbarajaldrin/omni-kit-mcp) before being rewritten
+fork of his MIT-licensed [isaac-sim-mcp](https://github.com/inbarajaldrin/isaac-sim-mcp), and the bridge and client were first built on his [omni-kit-mcp](https://github.com/inbarajaldrin/omni-kit-mcp) before being rewritten
 here. Thank you, Aldrin. Component and asset terms differ, so read [VENDORING](docs/VENDORING.md) and the
 [asset notices](docs/provenance/ASSETS.md) before redistributing.
 NVIDIA's installed runtime packages remain subject to their own terms.

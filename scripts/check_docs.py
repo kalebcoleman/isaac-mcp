@@ -303,7 +303,7 @@ def main():
 
     errors = check_tracked(ROOT)
     files = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md")),
-             ROOT / "mcp/README.md", ROOT / "npm/README.md", *sorted((ROOT / "mcp/docs").glob("*.md")),
+             ROOT / "mcp/README.md", *sorted((ROOT / "mcp/docs").glob("*.md")),
              *sorted((ROOT / "exts").glob("*/README.md")), *sorted((ROOT / "exts").glob("*/docs/*.md")),
              *sorted(SKILLS_DIR.rglob("*.md"))]
     for path in files:

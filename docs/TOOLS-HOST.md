@@ -75,7 +75,7 @@ tool takes it as `sub_action`.
 | `ur5e_dt__workcell` | Build and inspect the workcell. | `quick_start` (`ur5e_dt__workcell_quick_start`), `status` (`ur5e_dt__workcell_status`), `shutdown` (`ur5e_dt__workcell_shutdown`) |
 | `ur5e_dt__robot` | Robot report. | `status` (`ur5e_dt__robot_status`) |
 | `ur5e_dt__perception` | Camera report. | `status` (`ur5e_dt__perception_status`) |
-| `ur5e_dt__jenga` | Build and inspect the tower. | `build` (`ur5e_dt__jenga_build`), `status` (`ur5e_dt__jenga_status`) |
+| `ur5e_dt__jenga` | Tower report and seeded rebuild. | `status` (`ur5e_dt__jenga_status`), `build` (`ur5e_dt__jenga_build`) |
 | `ur5e_dt__real2sim` | Interface only. | `status` (`ur5e_dt__real2sim_status`) |
 | `ur5e_dt__planning` | Interface only. | `status` (`ur5e_dt__planning_status`) |
 | `ur5e_dt__eval` | Interface only. | `status` (`ur5e_dt__eval_status`) |
